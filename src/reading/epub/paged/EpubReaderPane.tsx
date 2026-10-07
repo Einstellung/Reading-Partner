@@ -8,6 +8,7 @@ import { memo, useCallback, useEffect, useRef } from "react";
 import type {
   Annotation,
   AnnotationPopupParams,
+  ReaderSelection,
   ViewInstance,
   ViewState,
   ViewStats,
@@ -30,6 +31,8 @@ export interface EpubReaderPaneProps {
   onSelectAnnotations: (ids: string[]) => void;
   onSetAnnotationPopup: (params?: AnnotationPopupParams) => void;
   onQuoteHighlightChange?: (active: boolean) => void;
+  /** A finger's selection appeared, moved on screen, or went (docs/82). */
+  onSelection?: (selection: ReaderSelection | null) => void;
   className?: string;
 }
 
@@ -63,6 +66,7 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
         onSaveAnnotations: (anns) => propsRef.current.onSaveAnnotations(anns),
         onSelectAnnotations: (ids) => propsRef.current.onSelectAnnotations(ids),
         onAnnotationPopup: (params) => propsRef.current.onSetAnnotationPopup(params),
+        onSelection: (selection) => propsRef.current.onSelection?.(selection),
       },
     })
       .then((controller) => {

@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPluginRegistration } from "@embedpdf/core";
 import { EmbedPDF } from "@embedpdf/core/react";
 import type { PluginRegistry } from "@embedpdf/core";
-import type { PdfAnnotationObject, PdfEngine } from "@embedpdf/models";
+import type { PdfAnnotationObject, PdfEngine, Rect } from "@embedpdf/models";
 import { getPdfiumEngine } from "./engine-singleton";
 
 import { DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager/react";
@@ -39,6 +39,7 @@ import { PAGE_WASH_GROUP_STYLE, PAGE_WASH_STYLE } from "./page-wash";
 import { attachTouchRouter } from "./gesture/attach-touch";
 import { attachWheelZoom } from "./gesture/wheel-zoom";
 import { perfMark, wireEngine } from "./wire-engine";
+import { FINGER_PAGE_ATTR } from "./pdf-select";
 import type {
   AnnotationAnchor,
   EmbedLayout,
@@ -151,6 +152,47 @@ function QuoteHighlightLayer(props: {
   );
 }
 
+// The blue a finger's selection is drawn in, the phone's (epub/flow/flow-marks.ts).
+const FINGER_SELECTION_COLOR = "#3f7ff0";
+
+// A finger's selection on one page (docs/82, pdf-select.ts). Always mounted:
+// its box is the page's box on screen, which is how pdf-select.ts turns a
+// viewport point into a page point. Non-interactive, so every press still
+// reaches the page below.
+function FingerSelectionLayer(props: {
+  pageIndex: number;
+  pageWidthPx: number;
+  pageSize: { width: number; height: number } | undefined;
+  rects: Rect[] | undefined;
+}): ReactNode {
+  const { pageIndex, pageWidthPx, pageSize, rects } = props;
+  const scale = pageSize && pageSize.width > 0 ? pageWidthPx / pageSize.width : 0;
+  return (
+    <div
+      {...{ [FINGER_PAGE_ATTR]: pageIndex }}
+      aria-hidden
+      style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 4 }}
+    >
+      {scale > 0 &&
+        rects?.map((r, i) => (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              left: `${r.origin.x * scale}px`,
+              top: `${r.origin.y * scale}px`,
+              width: `${r.size.width * scale}px`,
+              height: `${r.size.height * scale}px`,
+              backgroundColor: FINGER_SELECTION_COLOR,
+              opacity: 0.4,
+              borderRadius: "1px",
+            }}
+          />
+        ))}
+    </div>
+  );
+}
+
 // Rendered into the AnnotationLayer's selectionMenu slot: measures the menu
 // wrapper (absolutely positioned over the selected annotation) and reports the
 // annotation's viewport rect. Mount-only by design — a re-render while the same
@@ -247,6 +289,10 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   const [quoteHl, setQuoteHl] = useState<QuoteHighlight | null>(null);
   const setQuoteHlRef = useRef(setQuoteHl);
   setQuoteHlRef.current = setQuoteHl;
+  // A finger's selection, page-space rects by page (pdf-select.ts paints it).
+  const [fingerSel, setFingerSel] = useState<Map<number, Rect[]> | null>(null);
+  const setFingerSelRef = useRef(setFingerSel);
+  setFingerSelRef.current = setFingerSel;
   // Page sizes (unscaled PDF points) so the overlay can scale page-space rects
   // to the current page box. Filled once the document opens.
   const pageSizesRef = useRef<{ width: number; height: number }[]>([]);
@@ -262,12 +308,10 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     paged: initialLayoutRef.current === "paged",
     tool: "pointer",
     zoomedIn: false,
-    // Off until the shell applies the setting, which it does in the same effect
-    // that applies the tool.
-    fingerDraw: false,
     scroll: null,
     interaction: null,
     selection: null,
+    textSelect: null,
     setTouchLock: null,
     viewport: null,
     indicator: null,
@@ -336,7 +380,7 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     // `!engine` guard, so engine is non-null here.
     if (!engine) return;
     try {
-      await wireEngine(registry, propsRef, engine, setQuoteHlRef, pageSizesRef, pagedRef);
+      await wireEngine(registry, propsRef, engine, setQuoteHlRef, setFingerSelRef, pageSizesRef, pagedRef);
     } catch (e) {
       propsRef.current.onError?.(e as Error);
     }
@@ -459,6 +503,12 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
                       documentId={activeDocumentId}
                       pageIndex={pageIndex}
                       selectionMenu={selectionMenu}
+                    />
+                    <FingerSelectionLayer
+                      pageIndex={pageIndex}
+                      pageWidthPx={width}
+                      pageSize={pageSizesRef.current[pageIndex]}
+                      rects={fingerSel?.get(pageIndex)}
                     />
                     <QuoteHighlightLayer
                       pageIndex={pageIndex}

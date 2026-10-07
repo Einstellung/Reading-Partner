@@ -23,7 +23,7 @@ import { epubPositionOf, markKind } from "../annotation";
 import { caretAtPoint, rangeBetween, type CaretPoint } from "../caret";
 import { parseCfiStart, parseEpubRangeCfi, resolveRange } from "../file/cfi";
 import type { FlowMarkPopup, FlowMarkSpec, FlowRect, FlowSelection, FlowTool } from "./flow-contract";
-import { wordBoundsAt } from "./flow-gesture";
+import { movedEnd, spanTo, wordOf, type HeldWord } from "../word";
 import { colorOf, createMarkPainter, rangeForMark, type MarkRangeSource, type SpineText } from "../mark-draw";
 import { popupRect, rectsHit, unionRect, type PageRect } from "../mark-geometry";
 import { textMarkOf } from "../mark-write";
@@ -78,7 +78,7 @@ interface PaintedMark {
 interface Selecting {
   doc: FlowDoc;
   /** The word the hold began on, which a drag grows from. */
-  startWord: { start: CaretPoint; end: CaretPoint };
+  startWord: HeldWord;
   range: Range | null;
 }
 
@@ -240,38 +240,11 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
       : caretAtPoint(doc.shadow, doc.root, clientX, clientY);
   }
 
-  function wordOf(caret: CaretPoint): { start: CaretPoint; end: CaretPoint } {
-    const w = wordBoundsAt(caret.node.data, caret.offset);
-    return { start: { node: caret.node, offset: w.start }, end: { node: caret.node, offset: w.end } };
-  }
-
-  // The selection from the word a hold began on to the word under a point, in
-  // whichever direction the point is: the far edge of each word, so a drag
-  // never cuts one.
-  function spanTo(from: { start: CaretPoint; end: CaretPoint }, to: CaretPoint): Range | null {
-    const target = wordOf(to);
-    const probe = owner.createRange();
-    try {
-      probe.setStart(from.start.node, from.start.offset);
-      probe.collapse(true);
-      if (probe.comparePoint(to.node, to.offset) < 0) return rangeBetween(owner, target.start, from.end);
-    } catch {
-      return null;
-    }
-    return rangeBetween(owner, from.start, target.end);
-  }
-
   function moveSelectionEnd(end: "start" | "end", clientX: number, clientY: number): void {
     if (!sel?.range) return;
     const caret = caretIn(sel.doc, clientX, clientY);
     if (!caret) return;
-    const r = sel.range;
-    // The end that stays, as a point: the moving one grows from it the way a
-    // drag grows from the held word.
-    const node = end === "start" ? r.endContainer : r.startContainer;
-    if (node.nodeType !== Node.TEXT_NODE) return;
-    const at: CaretPoint = { node: node as Text, offset: end === "start" ? r.endOffset : r.startOffset };
-    const next = spanTo({ start: at, end: at }, caret);
+    const next = movedEnd(owner, sel.range, end, caret);
     if (!next) return;
     sel.range = next;
     paintSelection();
@@ -387,7 +360,7 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     if (!sel || !dragging) return;
     const end = caretIn(sel.doc, clientX, clientY);
     if (!end) return;
-    const next = spanTo(sel.startWord, end);
+    const next = spanTo(owner, sel.startWord, end);
     if (!next) return;
     sel.range = next;
     paintSelection();

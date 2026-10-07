@@ -27,15 +27,15 @@ import { caretAtPoint } from "../caret";
 import { epubCfi, parseCfiStart, pointSteps, resolvePointRange } from "../file/cfi";
 import type { FlowReaderView, FlowTool } from "./flow-contract";
 import { FLOW_PAPERS, flowPaperSwatch, type FlowDisplay } from "./flow-display";
+import { PAGED_TAP_SLOP_PX } from "./flow-gesture";
 import {
   IDLE,
   LONG_PRESS_MS,
-  PAGED_TAP_SLOP_PX,
   PRESS_SLOP_PX,
   pressStep,
   type PressEvent,
   type PressState,
-} from "./flow-gesture";
+} from "../../engine/gesture/press";
 import { createFlowMarks, flowRangeSource, rectsIn, type FlowDoc, type PressPoint } from "./flow-marks";
 import { flowBaselineCss, mountFlowDocument } from "./flow-mount";
 import type { FlowReaderOptions } from "./flow-view";
@@ -572,26 +572,21 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     paged: true,
     tool: "pointer",
     zoomedIn: false,
-    fingerDraw: false,
     scroll: {
       getCurrentPage: () => (windowPageOf(win, cur, column) ?? 0) + 1,
       getTotalPages: () => Math.max(1, win.total),
     },
     interaction: null,
     selection: null,
+    // The column reads its own holds (the press reducer below); the router only
+    // takes a dwelling finger off the page flip.
+    textSelect: null,
     setTouchLock: null,
     viewport: null,
     indicator: null,
     resetGestures: null,
     turnToPage: null,
   };
-  function syncGestureTool(): void {
-    // With the pen in hand the finger marks, and a turn starts from the
-    // screen's edge, as on the iPad.
-    gestures.tool = tool.type === "highlight" ? "highlight" : "pointer";
-    gestures.fingerDraw = tool.type === "highlight";
-  }
-  syncGestureTool();
   // The router ends every drag here, a spring back included (the page it
   // started on). One that turned was the finger's gesture, and its lift is not
   // a tap as well: it arrives at the frame after this.
@@ -879,7 +874,6 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     setTool: (next) => {
       tool = next;
       marks.setTool(next);
-      syncGestureTool();
       if (next.type === "none" && press.phase === "marking") {
         feed({ kind: "cancel", pointerId: press.pointerId });
       }

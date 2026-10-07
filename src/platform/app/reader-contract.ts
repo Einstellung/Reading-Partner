@@ -178,6 +178,31 @@ export interface AnnotationPopupParams {
   annotation: Annotation;
 }
 
+// A box in viewport coordinates.
+export interface ScreenRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+// The words a finger's hold selected (docs/82): what the shell draws its two
+// handles and the Highlight / Ask popup against. The selection itself is the
+// view's, painted on the page; this is only where it is on screen now. One
+// rect per line, in reading order.
+export interface ReaderSelection {
+  rects: ScreenRect[];
+  text: string;
+}
+
+// What a selection is saved as: a highlight, or the underline an Ask leaves,
+// which carries the id of the conversation it opens.
+export interface SelectionMarkSpec {
+  stroke: "highlight" | "underline";
+  color: string;
+  aiThreadId?: string;
+}
+
 // The view handle the shell drives.
 export interface ViewInstance {
   zoomIn: () => void;
@@ -196,14 +221,19 @@ export interface ViewInstance {
   clearQuoteHighlight: () => void;
   // undefined deactivates the active tool (reverts to pointer).
   setTool: (tool?: Tool) => void;
-  // Whether a finger may mark the page (the "draw with your finger" setting).
-  // Off — the default — means the finger only ever moves the page, whatever
-  // tool is selected, and the stylus does the marking.
-  setFingerDraw: (on: boolean) => void;
   // Upsert by id and re-render; does not fire onSaveAnnotations (host is source
   // of truth), so use it to reflect host-side color/comment edits.
   setAnnotations: (annotations: Annotation[]) => void;
   // Remove by id and re-render.
   unsetAnnotations: (ids: string[]) => void;
   selectAnnotations: (ids: string[]) => void;
+  // A handle of the finger's selection was dragged: that end follows the point
+  // to the edge of the word under it, and the other end stays.
+  moveSelectionEnd: (end: "start" | "end", clientX: number, clientY: number) => void;
+  // Write the finger's selection as marks and let it go: one per page it
+  // touches, the first carrying spec.aiThreadId, as the host will be handed
+  // them (onSaveAnnotations follows, possibly later). Empty when it covers no
+  // words.
+  saveSelection: (spec: SelectionMarkSpec) => Annotation[];
+  clearSelection: () => void;
 }

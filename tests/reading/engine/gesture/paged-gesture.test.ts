@@ -7,7 +7,6 @@ import { test, expect } from "bun:test";
 import {
   accumulateEdgePull,
   canTurn,
-  edgeOf,
   initGestureState,
   lockAxis,
   pageCenterAlign,
@@ -30,7 +29,6 @@ import {
 
 const WIDTH = 800;
 const base = (over: Partial<PagedGestureConfig> = {}): PagedGestureConfig => ({
-  tool: "pointer",
   zoomedIn: false,
   width: WIDTH,
   ...over,
@@ -87,15 +85,7 @@ test("resolveSwipe: fling wins over displacement (flick-back cancels a long drag
   expect(resolveSwipe(-0.4 * WIDTH, 0.6, WIDTH, 0.22, 0.45)).toBe(-1);
 });
 
-// --- edgeOf ---------------------------------------------------------------
-
-test("edgeOf: near left / right / middle", () => {
-  expect(edgeOf(10, WIDTH, 32)).toBe("left");
-  expect(edgeOf(WIDTH - 5, WIDTH, 32)).toBe("right");
-  expect(edgeOf(WIDTH / 2, WIDTH, 32)).toBeNull();
-});
-
-// --- machine: pointer-tool swipe turns page -------------------------------
+// --- machine: a swipe turns the page --------------------------------------
 
 test("horizontal swipe left captures, follows the finger, commits next", () => {
   const { commands } = run(
@@ -189,35 +179,6 @@ test("long press hands off to native selection; a later drag does not turn", () 
   );
   expect(state.phase).toBe("idle");
   expect(commands.length).toBe(0);
-});
-
-// --- machine: pen tool ----------------------------------------------------
-
-test("pen tool: one-finger drag in the page body draws (hands-off, no turn)", () => {
-  const { commands } = run(
-    [
-      { type: "pointerdown", id: 1, x: 400, y: 400, t: 0 },
-      { type: "pointermove", id: 1, x: 340, y: 402, t: 16 },
-      { type: "pointerup", id: 1, x: 340, y: 402, t: 60 },
-    ],
-    base({ tool: "pen" }),
-  );
-  expect(commands.length).toBe(0);
-});
-
-test("pen tool: edge swipe from the left turns the page", () => {
-  const { commands } = run(
-    [
-      { type: "pointerdown", id: 1, x: 12, y: 400, t: 0 }, // inside left edge band
-      { type: "pointermove", id: 1, x: 120, y: 402, t: 16 },
-      { type: "pointermove", id: 1, x: 320, y: 404, t: 60 }, // dragged right
-      { type: "pointerup", id: 1, x: 320, y: 404, t: 76 },
-    ],
-    base({ tool: "pen" }),
-  );
-  expect(types(commands)).toContain("capture");
-  const end = commands.find((c) => c.type === "dragEnd") as { turn: number };
-  expect(end.turn).toBe(-1); // rightward drag -> previous page
 });
 
 // --- machine: zoomed-in pans, never turns ---------------------------------

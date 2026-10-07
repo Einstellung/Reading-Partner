@@ -1,19 +1,18 @@
 // What a finger on the reflow column means, without a column under it.
 
 import { describe, expect, test } from "bun:test";
+import { PAGED_TAP_SLOP_PX, intrinsicHeightEstimate } from "../../../../src/reading/epub/flow/flow-gesture";
 import {
   IDLE,
   LONG_PRESS_MS,
-  PAGED_TAP_SLOP_PX,
   PRESS_SLOP_PX,
   claimsTouch,
-  intrinsicHeightEstimate,
   pressStep,
   stayedATap,
-  wordBoundsAt,
   type PressEvent,
   type PressState,
-} from "../../../../src/reading/epub/flow/flow-gesture";
+} from "../../../../src/reading/engine/gesture/press";
+import { wordBoundsAt } from "../../../../src/reading/epub/word";
 import { FLOW_DISPLAY_DEFAULT } from "../../../../src/reading/epub/flow/flow-display";
 
 const down = (over: Partial<Extract<PressEvent, { kind: "down" }>> = {}): PressEvent => ({

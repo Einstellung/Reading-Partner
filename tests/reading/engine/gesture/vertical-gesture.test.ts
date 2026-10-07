@@ -30,11 +30,10 @@ import {
 } from "../../../../src/reading/engine/gesture/vertical-gesture";
 import { pinchHandsOff, planPointer } from "../../../../src/reading/engine/gesture/touch-routing";
 
-// The four plans that can reach (or be refused by) the machine.
-const FINGER = planPointer("none", "touch", false); // no tool: finger scrolls
-const ANNOTATE = planPointer("annotate", "touch", false); // tool, finger still scrolls, pauses at down
-const DRAW = planPointer("annotate", "touch", true); // "draw with your finger" on: finger draws
-const NAVLOCK_PEN = planPointer("navlock", "pen", false); // palm toggle: the stylus is a finger
+// The three plans that reach the machine.
+const FINGER = planPointer("none", "touch"); // no tool: finger scrolls
+const ANNOTATE = planPointer("annotate", "touch"); // tool, finger still scrolls, pauses at down
+const NAVLOCK_PEN = planPointer("navlock", "pen"); // palm toggle: the stylus is a finger
 
 // A stand-in scroll container: the machine reads its geometry, the harness
 // writes back every scrollTo, exactly as the host does on the real element.
@@ -456,24 +455,6 @@ test("with no tool the pause waits for the commit, so a stationary tap reaches t
   expect(types(r.commands)).not.toContain("pause");
 });
 
-test("a pointer planned as draw never enters the machine", () => {
-  const vp = viewport();
-  const r = run([down(100, 100, 0, DRAW), move(100, 20, 16), up()], vp);
-  expect(r.commands).toEqual([]);
-  expect(r.state).toEqual(initVerticalState());
-  expect(vp.top).toBe(0);
-});
-
-test("a draw pointer landing does not stop a coast in flight", () => {
-  // Current behaviour, kept deliberately: the draw branch returns before the
-  // machine sees anything. Only reachable if the tool changes mid-fling.
-  const vp = viewport({ top: 2000 });
-  const flung = run([down(100, 300), move(100, 280, 16), move(100, 200, 32), up()], vp);
-  const r = run([down(100, 400, 100, DRAW)], vp, flung.state);
-  expect(r.commands).toEqual([]);
-  expect(r.state.fling).not.toBeNull();
-});
-
 test("under the navigation lock a stylus is routed exactly like a finger", () => {
   const pen = viewport();
   const finger = viewport();
@@ -821,14 +802,6 @@ test("a finger landing on a bouncing document picks the band up where it was", (
   const held = run([move(100, 500, 116)], vp, grab.state);
   expect(held.state.over.y).toBe(springing.over.y);
   expect(types(held.commands)).not.toContain("band");
-});
-
-test("a pointer planned as draw never takes a coast over", () => {
-  const vp = viewport({ top: 2000 });
-  const flung = run([down(100, 300), move(100, 280, 16), move(100, 200, 32), upAt(100, 120, 48)], vp);
-  const r = run([down(100, 400, 100, DRAW)], vp, flung.state);
-  expect(r.commands).toEqual([]);
-  expect(r.state.fling).not.toBeNull();
 });
 
 // --- the finger a pinch leaves behind ----------------------------------------

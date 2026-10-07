@@ -9,6 +9,11 @@
 
 import type * as React from "react";
 import type { PdfAnnotationObject, PdfDocumentObject, Rect } from "@embedpdf/models";
+import type {
+  Annotation,
+  ReaderSelection,
+  SelectionMarkSpec,
+} from "../../platform/app/reader-contract";
 import type { ZoteroAnnotation } from "./convert";
 import type { EmbedTool } from "./gesture/context";
 
@@ -72,9 +77,6 @@ export interface EmbedViewStats {
 
 export interface EmbedPdfHandle {
   setTool(tool: EmbedTool): void;
-  // The "draw with your finger" setting. Off (the default) means a finger only
-  // ever moves the page and the stylus does the marking.
-  setFingerDraw(on: boolean): void;
   setColor(color: string): void;
   zoomIn(): void;
   zoomOut(): void;
@@ -97,6 +99,11 @@ export interface EmbedPdfHandle {
   upsertAnnotations(anns: ZoteroAnnotation[]): void;
   deleteAnnotation(id: string): void;
   selectAnnotation(id: string): void;
+  // A finger's selection (docs/82, pdf-select.ts): move one end, save it as
+  // marks, or let it go.
+  moveSelectionEnd(end: "start" | "end", clientX: number, clientY: number): void;
+  saveSelection(spec: SelectionMarkSpec): Annotation[];
+  clearSelection(): void;
   getState(): EmbedViewState;
   // Spike/introspection surface: closes items 3 (coords) and 7 (custom) live.
   _debug: {
@@ -125,6 +132,8 @@ export interface EmbedPdfViewProps {
   // Fired when the transient AI-quote overlay appears (true) or is dismissed
   // (false), so the shell can route Escape to dismiss it.
   onQuoteHighlight?: (active: boolean) => void;
+  // A finger's selection appeared, moved on screen, or went (docs/82).
+  onSelection?: (selection: ReaderSelection | null) => void;
   className?: string;
   style?: React.CSSProperties;
 }

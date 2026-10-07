@@ -119,6 +119,7 @@ describe("a text mark is painted where its words are, not only on the page it is
       onSave: () => {},
       onSelect: () => {},
       onPopup: () => {},
+      onSelection: () => {},
     });
 
     // A mark saved while the sheet was up: the sheet for page 1 repaints.

@@ -7,9 +7,15 @@
 // call's own ways in (openThread, reopenThread, openChatAside), which is the
 // whole reason the marks are two hooks rather than one.
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { HIGHLIGHT_COLOR } from "../../platform/app/annotations";
-import { isPageMark, type Annotation, type AnnotationPopupParams, type ViewInstance } from "../../platform/app/reader-contract";
+import {
+  isPageMark,
+  type Annotation,
+  type AnnotationPopupParams,
+  type SelectionMarkSpec,
+  type ViewInstance,
+} from "../../platform/app/reader-contract";
 import {
   createAsideThread,
   createThread,
@@ -66,6 +72,10 @@ export interface MarkDoorsHost {
 
 export interface MarkDoors {
   onSaveAnnotations(incoming: Annotation[]): void;
+  // A finger's selection (docs/82) saved as a highlight, or as the AI
+  // underline an Ask leaves, whose conversation opens at `anchor`.
+  highlightSelection(): void;
+  askAboutSelection(anchor: { x: number; y: number }): void;
   hasThread(threadId: string): boolean;
   onSetAnnotationPopup(params?: AnnotationPopupParams): void;
   drawChatMark(draw: ChatMarkDraw): void;
@@ -111,6 +121,57 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
     aiPenRef.current = aiPen;
   }, [aiPen, aiPenRef]);
 
+  // Marks a finger's selection is saved as. What they open is the button's to
+  // say, not the pen's in the rack: a Highlight made with the AI pen in hand is
+  // a highlight. The EPUB sheets hand them over inside the save, the PDF engine
+  // a moment later, so both the call and the ids are remembered.
+  const savingSelectionRef = useRef(false);
+  const selectionMarksRef = useRef(new Set<string>());
+
+  // A mark that is a door into a new conversation: the thread is written down
+  // now and the bubble opens on it at `anchor`, with nothing sent until an
+  // opening is pressed (docs/03).
+  const openNewMarkThread = useCallback(
+    (annotation: Annotation, threadId: string, anchor: { x: number; y: number }) => {
+      const docId = docIdRef.current;
+      const bookId = bookIdRef.current;
+      // Drawn while the lesson is live: this is a side conversation off it
+      // (docs/09), not an independent one. Everything else about the mark is
+      // unchanged — it keeps its thread back-pointer and its place in the
+      // trace list, and the bubble opens beside it exactly as it does with no
+      // lesson running. With no lesson, nothing here changes at all: 19 of 23
+      // of this reader's marked conversations happen hours or days from one.
+      const lesson = currentCall();
+      const parentThreadId = lesson?.isBook ? lesson.threadId : null;
+      // An aside lives in the file its parent does — the book-level thread's,
+      // wherever the reader is standing (reading/session/documents.ts).
+      if (bookId && parentThreadId) {
+        createAsideThread(bookId, threadId, { parentThreadId, annotationId: annotation.id });
+      } else if (docId) {
+        createThread(docId, annotation.id, threadId);
+      }
+      setPopup(null);
+      openThreadCall(
+        {
+          threadId,
+          annotationId: annotation.id,
+          // Through asideFraming like every other door, so the span is the
+          // one shape everywhere: one line, cut to the same length.
+          // `parentView` is what the reader had the lesson in when they drew —
+          // the corner card, in the flow this is for — and going back restores
+          // it rather than putting chat over the page they were reading.
+          ...(parentThreadId
+            ? asideFramingFor({ annotationId: annotation.id, parentThreadId }, lesson?.view)
+            : {}),
+          view: "bubble",
+          anchor,
+        },
+        [],
+      );
+    },
+    [docIdRef, bookIdRef, currentCall, setPopup, openThreadCall, asideFramingFor],
+  );
+
   // Engine created/modified annotations (drag-to-highlight, AI-pen underline, etc.).
   // A brand-new annotation drawn while the AI pen is active starts a thread and
   // opens the call bubble.
@@ -125,7 +186,8 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
         if (isNew) newMark = true;
         const prev = annsRef.current.get(clean.id);
         let entry = prev ? { ...prev, ...clean } : clean;
-        if (isNew && aiPenRef.current && !entry.aiThreadId) {
+        const fromSelection = savingSelectionRef.current || selectionMarksRef.current.delete(clean.id);
+        if (isNew && aiPenRef.current && !entry.aiThreadId && !fromSelection) {
           const threadId = crypto.randomUUID();
           entry = { ...entry, aiThreadId: threadId };
           aiCreated = { annotation: entry, threadId };
@@ -142,72 +204,58 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
         // A chat mark has no page anchor and is never the engine's to draw.
         if (isPageMark(aiCreated.annotation)) viewRef.current?.setAnnotations([aiCreated.annotation]);
-        const docId = docIdRef.current;
-        const bookId = bookIdRef.current;
-        // Drawn while the lesson is live: this is a side conversation off it
-        // (docs/09), not an independent one. Everything else about the mark is
-        // unchanged — it keeps its thread back-pointer and its place in the
-        // trace list, and the bubble opens beside it exactly as it does with no
-        // lesson running. With no lesson, nothing here changes at all: 19 of 23
-        // of this reader's marked conversations happen hours or days from one.
-        const lesson = currentCall();
-        const parentThreadId = lesson?.isBook ? lesson.threadId : null;
-        // An aside lives in the file its parent does — the book-level thread's,
-        // wherever the reader is standing (reading/session/documents.ts).
-        if (bookId && parentThreadId) {
-          createAsideThread(bookId, aiCreated.threadId, {
-            parentThreadId,
-            annotationId: aiCreated.annotation.id,
-          });
-        } else if (docId) {
-          createThread(docId, aiCreated.annotation.id, aiCreated.threadId);
-        }
         const up = penUpRef.current;
         const rect = readerPaneRef.current?.getBoundingClientRect();
         const anchor = up
           ? { x: up.x, y: up.y }
           : { x: (rect?.left ?? 0) + (rect?.width ?? 480) / 2, y: (rect?.top ?? 0) + 240 };
-        setPopup(null);
-        // A brand-new thread has nothing stored: the bubble opens on the
-        // opening intents and sends nothing until one is pressed (docs/03).
-        openThreadCall(
-          {
-            threadId: aiCreated.threadId,
-            annotationId: aiCreated.annotation.id,
-            // Through asideFraming like every other door, so the span is the
-            // one shape everywhere: one line, cut to the same length.
-            // `parentView` is what the reader had the lesson in when they drew —
-            // the corner card, in the flow this is for — and going back restores
-            // it rather than putting chat over the page they were reading.
-            ...(parentThreadId
-              ? asideFramingFor(
-                  { annotationId: aiCreated.annotation.id, parentThreadId },
-                  lesson?.view,
-                )
-              : {}),
-            view: "bubble",
-            anchor,
-          },
-          [],
-        );
+        openNewMarkThread(aiCreated.annotation, aiCreated.threadId, anchor);
       }
     },
     [
       annsRef,
       aiPenRef,
       penUpRef,
-      asideFramingFor,
-      docIdRef,
-      bookIdRef,
       readerPaneRef,
-      setPopup,
       viewRef,
       persistAnnotations,
       syncTraceList,
-      openThreadCall,
-      currentCall,
       onMarkPrepTrigger,
+      openNewMarkThread,
     ],
+  );
+
+  const saveSelection = useCallback(
+    (spec: SelectionMarkSpec): Annotation[] => {
+      savingSelectionRef.current = true;
+      let saved: Annotation[] = [];
+      try {
+        saved = viewRef.current?.saveSelection(spec) ?? [];
+      } finally {
+        savingSelectionRef.current = false;
+      }
+      // The EPUB sheets have handed theirs over already; the PDF engine's
+      // arrive after this.
+      for (const a of saved) if (!annsRef.current.has(a.id)) selectionMarksRef.current.add(a.id);
+      return saved;
+    },
+    [viewRef, annsRef],
+  );
+
+  const highlightSelection = useCallback(() => {
+    saveSelection({ stroke: "highlight", color: HIGHLIGHT_COLOR });
+  }, [saveSelection]);
+
+  // Ask: the words become an AI underline carrying a new thread's id, and that
+  // conversation opens beside them — the phone's Ask, and the iPad's AI pen
+  // reached by a hold instead of a stroke.
+  const askAboutSelection = useCallback(
+    (anchor: { x: number; y: number }) => {
+      const threadId = crypto.randomUUID();
+      const [first] = saveSelection({ stroke: "underline", color: AI_PEN_COLOR, aiThreadId: threadId });
+      if (first) openNewMarkThread(first, threadId, anchor);
+    },
+    [saveSelection, openNewMarkThread],
   );
 
   // The conversation a mark is a door into, when this device still has it
@@ -424,6 +472,8 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
 
   return {
     onSaveAnnotations,
+    highlightSelection,
+    askAboutSelection,
     hasThread,
     onSetAnnotationPopup,
     drawChatMark,

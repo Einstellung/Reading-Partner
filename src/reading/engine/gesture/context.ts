@@ -37,6 +37,30 @@ export interface GestureSelection {
   clear(documentId: string): void;
 }
 
+/**
+ * The words a held finger selects (docs/82), the view's half of the hold the
+ * router times. Coordinates are the viewport's. The router decides when a press
+ * is a hold and takes the finger off the scroll; this side finds the words and
+ * paints the selection.
+ */
+export interface GestureTextSelect {
+  /** Whether there are words under the point, so a hold there would select. */
+  wordsAt(clientX: number, clientY: number): boolean;
+  /** Select the word under the point. False when there is none after all. */
+  begin(clientX: number, clientY: number): boolean;
+  /** Grow the selection from the held word to the word under the point. */
+  extend(clientX: number, clientY: number): void;
+  /** The finger lifted: the selection stays, for the handles and the popup. */
+  commit(): void;
+  /** The finger was taken away (a second finger, a pen): nothing stays. */
+  cancel(): void;
+  /** Whether a selection is up, from this hold or an earlier one. */
+  active(): boolean;
+  clear(): void;
+  /** The pages scrolled under a selection that stays: say where it is now. */
+  moved(): void;
+}
+
 // Live gesture context, shared by a ref between the imperative engine wiring
 // (which fills in the engine handles) and the TouchInputRouter touch component
 // (which reads the current mode each event). A ref so mode changes never
@@ -45,14 +69,14 @@ export interface PagedGestureCtx {
   paged: boolean;
   tool: ToolType;
   zoomedIn: boolean;
-  // The "draw with your finger" setting, mirrored here so the touch router can
-  // read it synchronously on every event. Off by default: the finger only moves
-  // the page and the stylus marks it.
-  fingerDraw: boolean;
   scroll: GestureScroll | null;
   interaction: GestureInteraction | null;
   // Used by the touch router to drop a text selection its own gesture caused.
   selection: GestureSelection | null;
+  // What a held finger selects with. Null where nothing under the router reads
+  // a hold (the phone's paged column reads its own): a dwelling finger in the
+  // paged flip is then only taken off the page turn.
+  textSelect: GestureTextSelect | null;
   // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;

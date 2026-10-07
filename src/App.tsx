@@ -3,6 +3,7 @@ import {
   isPageMark,
   type Annotation,
   type MarkPen,
+  type ReaderSelection,
   type ViewInstance,
   type ViewState,
   type ViewStats,
@@ -56,6 +57,8 @@ import {
   type FiguresIndex,
 } from "./reading/figures";
 import BookPane from "./ui/components/reader/BookPane";
+import PhoneSelection from "./ui/components/phone/reader/PhoneSelection";
+import type { ScreenFrame } from "./ui/components/phone/reader/PhonePopup";
 import PrepPanel from "./ui/components/reader/PrepPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
@@ -236,6 +239,21 @@ export default function App() {
     viewState: ViewState | null;
   } | null>(null);
 
+  // A finger's selection on the page (docs/82), with the reader pane's box as it
+  // was when the view reported it: the handles and Highlight / Ask are the
+  // phone's, drawn over the pane.
+  const [fingerSel, setFingerSel] = useState<{ selection: ReaderSelection; frame: ScreenFrame } | null>(null);
+  const onFingerSelection = useCallback((selection: ReaderSelection | null) => {
+    const box = readerPaneRef.current?.getBoundingClientRect();
+    setFingerSel(
+      selection && box
+        ? { selection, frame: { top: box.top, bottom: box.bottom, left: box.left, right: box.right } }
+        : null,
+    );
+  }, []);
+  // A new book starts with nothing selected.
+  useEffect(() => setFingerSel(null), [embedDoc]);
+
   const [stats, setStats] = useState<ViewStats | null>(null);
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -325,7 +343,6 @@ export default function App() {
   } = useShellBootstrap({ settingsOpen: settingsShowing || readerSettings, pushToast });
   // A downloaded desktop update, drawn as a row in the sidebar (docs/76).
   const appUpdateState = useAppUpdate();
-  const fingerDraw = !!device?.fingerDraw;
 
 
   // Prewarm the PDFium engine so the wasm is compiled before the first book
@@ -429,14 +446,6 @@ export default function App() {
     refreshTopics().catch(() => {});
   }, [refreshTopics]);
   useBackgroundServices({ form: "desktop", settingsRef, onShelfPulled });
-
-  // Whether a finger may mark the page. Applied alongside the tool, and again
-  // whenever the setting changes, so the reader never routes a finger by a stale
-  // copy of it.
-  useEffect(() => {
-    if (!viewReady) return;
-    viewRef.current?.setFingerDraw(fingerDraw);
-  }, [fingerDraw, viewReady]);
 
   // The reader moved. The debounce, the flush on the way out and the failure
   // that must not be silent (pitfall 09) are all reading-position.ts's.
@@ -716,6 +725,8 @@ export default function App() {
     hasThread,
     onPositionClick,
     onSaveAnnotations,
+    highlightSelection,
+    askAboutSelection,
     onSetAnnotationPopup,
     onTraceSelect,
     openChatMark,
@@ -1262,14 +1273,11 @@ export default function App() {
             pen: chatPen,
             color: chatPen === "ai" ? AI_PEN_COLOR : HIGHLIGHT_COLOR,
             marks: traceAnns,
-            // The same setting the page is routed by, so a finger does the same
-            // thing in the classroom as it does on the book.
-            fingerDraw,
             onDraw: drawChatMark,
             onOpen: openChatMark,
           }
         : null,
-    [call?.view, call?.threadId, chatPen, fingerDraw, traceAnns, drawChatMark, openChatMark],
+    [call?.view, call?.threadId, chatPen, traceAnns, drawChatMark, openChatMark],
   );
 
   // The empty state, and whether there is a lesson to go back to.
@@ -1450,7 +1458,7 @@ export default function App() {
           // Hidden rather than unmounted outside the reader: the ref is handed
           // to the gesture hooks, and a flex sibling with no content would still
           // take half the row away from the home screens beside the sidebar.
-          className={inReader ? "flex-1 min-w-0 h-full" : "hidden"}
+          className={inReader ? "relative flex-1 min-w-0 h-full" : "hidden"}
           onPointerDownCapture={dismissOnPaneTouch}
           onPointerUpCapture={onPanePointerUp}
         >
@@ -1467,6 +1475,25 @@ export default function App() {
               onSelectAnnotations={onEmbedSelect}
               onSetAnnotationPopup={onSetAnnotationPopup}
               onQuoteHighlightChange={setQuoteHlActive}
+              onSelection={onFingerSelection}
+            />
+          )}
+          {embedDoc && fingerSel && (
+            <PhoneSelection
+              selection={fingerSel.selection}
+              frame={fingerSel.frame}
+              onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
+              onHighlight={highlightSelection}
+              onAsk={() => {
+                // Inside a side conversation no new one opens: the AI pen's rule
+                // (reading/turn/call-state.ts), said the way the rack says it.
+                if (gate.aiPen !== null) {
+                  pushToast("warn", gate.aiPen);
+                  return;
+                }
+                const last = fingerSel.selection.rects[fingerSel.selection.rects.length - 1];
+                askAboutSelection({ x: last.left + last.width / 2, y: last.top + last.height });
+              }}
             />
           )}
         </div>

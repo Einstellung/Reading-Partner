@@ -19,15 +19,15 @@ import { acquireEpub, ensurePagination, releaseEpub } from "../book-cache";
 import { caretAtPoint } from "../caret";
 import { epubCfi, parseCfiStart, resolvePointRange } from "../file/cfi";
 import type { FlowMarkPopup, FlowReaderView, FlowSelection, FlowTool } from "./flow-contract";
+import { intrinsicHeightEstimate } from "./flow-gesture";
 import {
   IDLE,
   LONG_PRESS_MS,
   claimsTouch,
-  intrinsicHeightEstimate,
   pressStep,
   type PressEvent,
   type PressState,
-} from "./flow-gesture";
+} from "../../engine/gesture/press";
 import { FLOW_PAPERS, type FlowDisplay } from "./flow-display";
 import { createFlowMarks, flowRangeSource, rectsIn, type FlowDoc, type PressPoint } from "./flow-marks";
 import { flowBaselineCss, mountFlowDocument } from "./flow-mount";

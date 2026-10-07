@@ -5,6 +5,9 @@
 import type {
   Annotation,
   AnnotationPopupParams,
+  ReaderSelection,
+  ScreenRect,
+  SelectionMarkSpec,
   ViewState,
   ViewStats,
 } from "../../../platform/app/reader-contract";
@@ -16,23 +19,13 @@ export interface FlowTool {
 }
 
 /** A box in viewport coordinates. */
-export interface FlowRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
+export type FlowRect = ScreenRect;
 
 /**
- * The words a hold selected (docs/82): what the shell draws its handles and the
- * Highlight / Ask popup against. The selection itself is the view's, painted
- * in the book's overlay; this is only where it is on screen now.
+ * The words a hold selected (docs/82), the same shape the iPad's pages report
+ * (platform/app/reader-contract.ts).
  */
-export interface FlowSelection {
-  /** One box per line, in reading order, in viewport coordinates. */
-  rects: FlowRect[];
-  text: string;
-}
+export type FlowSelection = ReaderSelection;
 
 /**
  * A mark was tapped. Where an AI underline runs through a highlight, the tap
@@ -44,11 +37,7 @@ export interface FlowMarkPopup extends AnnotationPopupParams {
 }
 
 /** What a selection is saved as: a highlight, or the underline an Ask leaves. */
-export interface FlowMarkSpec {
-  stroke: "highlight" | "underline";
-  color: string;
-  aiThreadId?: string;
-}
+export type FlowMarkSpec = SelectionMarkSpec;
 
 export interface FlowReaderView {
   goToCfi(cfi: string): void;

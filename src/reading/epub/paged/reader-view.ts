@@ -17,6 +17,7 @@
 import type {
   Annotation,
   AnnotationPopupParams,
+  ReaderSelection,
   Tool,
   ViewInstance,
   ViewState,
@@ -83,6 +84,8 @@ export interface EpubReaderCallbacks {
   onSaveAnnotations(annotations: Annotation[]): void;
   onSelectAnnotations(ids: string[]): void;
   onAnnotationPopup(params?: AnnotationPopupParams): void;
+  /** The finger's selection appeared, moved on screen, or went (null). */
+  onSelection(selection: ReaderSelection | null): void;
 }
 
 export interface EpubReaderController extends ViewInstance {
@@ -188,16 +191,16 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
 
   // The touch router's live context (reading/engine/gesture). The same object
   // the PDF side fills in from its plugins: the desk answers the five methods
-  // itself, and has no interaction manager or selection plugin to hand over
-  // because nothing under it selects text.
+  // itself, and has no interaction manager or selection plugin to hand over.
+  // A held finger's words are the mark layer's (textSelect, below).
   const gestures: PagedGestureCtx = {
     paged: layout === "paged",
     tool: "pointer",
     zoomedIn: false,
-    fingerDraw: false,
     scroll: { getCurrentPage: () => pageIndex + 1, getTotalPages: () => pagesCount },
     interaction: null,
     selection: null,
+    textSelect: null,
     setTouchLock: null,
     viewport: null,
     indicator: null,
@@ -316,8 +319,10 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     onSave: (annotations) => callbacks.onSaveAnnotations(annotations),
     onSelect: (ids) => callbacks.onSelectAnnotations(ids),
     onPopup: (params) => callbacks.onAnnotationPopup(params),
+    onSelection: (selection) => callbacks.onSelection(selection),
   });
   marks.reset(opts.annotations);
+  gestures.textSelect = marks.textSelect;
 
   function visibleRange(): { first: number; last: number } {
     if (layout === "vertical") {
@@ -372,6 +377,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     if (to.scrollTop !== null) scroller.scrollTop = to.scrollTop;
     readPosition();
     syncMounted();
+    marks.textSelect.moved();
     emit();
   }
 
@@ -604,6 +610,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     setLayout: (mode) => {
       if (mode === layout) return;
       const keep = pageIndex;
+      marks.clearSelection();
       layout = mode;
       zoom = { kind: "lock", lock: LAYOUT_SETTINGS[layout].zoom };
       // Nothing the old layout had in flight — a drag, a fling, a rubber band,
@@ -641,19 +648,18 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
 
     // The marks are the layer's (mark-layer.ts); the desk only says which sheet
     // is which page and hands the pointers on.
-    // The tool and the setting go to both halves: the marks decide whether to
-    // start a stroke, the touch router whether the pointer was ever theirs.
+    // The tool goes to both halves: the marks decide whether to start a stroke,
+    // the touch router whether the pointer was ever theirs.
     setTool: (tool?: Tool) => {
       gestures.tool = tool?.type ?? "pointer";
       marks.setTool(tool);
     },
-    setFingerDraw: (on: boolean) => {
-      gestures.fingerDraw = on;
-      marks.setFingerDraw(on);
-    },
     setAnnotations: (anns: Annotation[]) => marks.setAnnotations(anns),
     unsetAnnotations: (ids: string[]) => marks.unsetAnnotations(ids),
     selectAnnotations: (ids: string[]) => marks.selectAnnotations(ids),
+    moveSelectionEnd: (end, clientX, clientY) => marks.moveSelectionEnd(end, clientX, clientY),
+    saveSelection: (spec) => marks.saveSelection(spec),
+    clearSelection: () => marks.clearSelection(),
 
     // A pointer the pens take is captured to the desk, not to the pane above
     // it: the touch router listens on the desk in the capture phase, and a
@@ -707,6 +713,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     destroy: () => {
       destroyed = true;
       marks.pointerCancel();
+      marks.clearSelection();
       detachPinch();
       detachWheel();
       detachTouch();

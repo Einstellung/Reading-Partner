@@ -15,6 +15,7 @@ import { popupEffect } from "./annotation-selection";
 import {
   type Annotation,
   type AnnotationPopupParams,
+  type ReaderSelection,
   type Tool,
   type ViewInstance,
   type ViewState,
@@ -39,6 +40,8 @@ export interface EmbedReaderPaneProps {
   onSelectAnnotations: (ids: string[]) => void;
   onSetAnnotationPopup: (params?: AnnotationPopupParams) => void;
   onQuoteHighlightChange?: (active: boolean) => void;
+  // A finger's selection appeared, moved on screen, or went (docs/82).
+  onSelection?: (selection: ReaderSelection | null) => void;
   className?: string;
 }
 
@@ -152,7 +155,6 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
       },
       highlightQuote: (pageIndex, req) => h.highlightQuote(pageIndex, req),
       clearQuoteHighlight: () => h.clearQuoteHighlight(),
-      setFingerDraw: (on: boolean) => h.setFingerDraw(on),
       setTool: (tool?: Tool) => {
         toolChanging.current = true;
         try {
@@ -184,6 +186,9 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
       selectAnnotations: (ids: string[]) => {
         if (ids[0]) h.selectAnnotation(ids[0]);
       },
+      moveSelectionEnd: (end, clientX, clientY) => h.moveSelectionEnd(end, clientX, clientY),
+      saveSelection: (spec) => h.saveSelection(spec),
+      clearSelection: () => h.clearSelection(),
     }),
     [],
   );
@@ -212,6 +217,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
         onSelectAnnotation={onSelectAnnotation}
         onAnnotationAnchor={onAnnotationAnchor}
         onQuoteHighlight={(active) => propsRef.current.onQuoteHighlightChange?.(active)}
+        onSelection={(selection) => propsRef.current.onSelection?.(selection)}
         onViewState={(s: EmbedViewState) =>
           props.onChangeViewState({
             pageIndex: s.pageIndex,

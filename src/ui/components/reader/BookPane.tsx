@@ -52,6 +52,7 @@ export default function BookPane({ book, ...on }: BookPaneProps) {
     onSelectAnnotations: on.onSelectAnnotations,
     onSetAnnotationPopup: on.onSetAnnotationPopup,
     onQuoteHighlightChange: on.onQuoteHighlightChange,
+    onSelection: on.onSelection,
   };
   return book.format === "epub" ? (
     <EpubReaderPane key={book.docId} {...shared} bookId={book.docId} className="block" />

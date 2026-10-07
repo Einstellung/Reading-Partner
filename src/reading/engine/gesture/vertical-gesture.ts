@@ -11,10 +11,9 @@
 // and the scroll has to be driven in JS. That makes the follow, the bounce and
 // the inertia our physics, not the browser's, and this is where they live.
 //
-// Which pointers reach this machine is decided elsewhere: touch-routing.ts says
-// whether a pointer scrolls or draws, and the host swallows everything that is
-// multi-touch or locked out by a working stylus. A pointer planned as "draw" is
-// left to the annotation layer and never enters the machine.
+// Which pointers reach this machine is decided elsewhere: the host drives a
+// finger, or a stylus under the navigation lock, and swallows everything that is
+// multi-touch or locked out by a working stylus.
 //
 // Sign convention: scroll velocity is the finger's, negated — a finger moving
 // up (negative dy) scrolls the content down (scrollTop grows).
@@ -122,9 +121,9 @@ function resolve(config: VerticalGestureConfig): Cfg {
 }
 
 export type VerticalInput =
-  // The plan comes from planPointer at the moment the pointer lands: a "draw"
-  // plan is ignored outright, and an annotation tool's plan pauses the engine
-  // here and now, before the stroke's lead-in can leave ink (docs/pitfall/37).
+  // The plan comes from planPointer at the moment the pointer lands: an
+  // annotation tool's plan pauses the engine here and now, before the stroke's
+  // lead-in can leave ink (docs/pitfall/37).
   // `takeover` is the host saying this finger is inheriting a gesture already in
   // progress (the survivor of a pinch): it follows at once, no slop.
   | {
@@ -374,9 +373,6 @@ export function stepVertical(
 
   switch (input.type) {
     case "pointerdown": {
-      // A pointer the routing table hands to the annotation layer never enters
-      // this machine — it does not even stop a fling in flight.
-      if (input.plan.action !== "scroll") break;
       if (input.plan.pauseAtDown) cmds.push({ type: "pause" });
       // Landing on content that is still moving grabs it: the inertia stops but
       // the band it may be riding stays, and the follow starts on this frame

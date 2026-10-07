@@ -327,7 +327,6 @@ function mount(over: Partial<PagedGestureCtx> = {}): Harness {
       paged: false,
       tool: "pointer",
       zoomedIn: false,
-      fingerDraw: false,
       scroll: null,
       interaction: {
         pause: () => void h.pauses++,
@@ -340,6 +339,7 @@ function mount(over: Partial<PagedGestureCtx> = {}): Harness {
           h.rects = [];
         },
       },
+      textSelect: null,
       setTouchLock: null,
       viewport: null,
       indicator: null,
@@ -1329,10 +1329,10 @@ test("pushing a magnified page past its edge turns it and drops the gesture", ()
   h.detach();
 });
 
-// The long press is the router's own timer, not the machine's: it hands a
-// finger that dwells in place to native text selection, so a later drag of a
-// selection handle is not stolen as a page turn.
-test("a finger that dwells in paged mode is given up to native text selection", () => {
+// With nothing under the router reading holds (the phone's paged column, which
+// reads its own), the router's timer still takes a finger that dwells in place
+// off the page flip, so the reader's own hold never has a turn under it.
+test("a finger that dwells in paged mode is taken off the page flip", () => {
   const { h, turns } = pagedMount(6, 12);
   const t = h.target;
 
@@ -1372,8 +1372,8 @@ test("a drag that commits cancels the long press, so a slow swipe still turns", 
 
 // pitfall 37's second rule, on the paged path: an annotation tool's engine
 // pipeline is shut off at pointerdown, before the stroke's lead-in can leave
-// ink. The finger still turns the page — with "draw with your finger" off, an
-// annotation tool means the stylus marks and the finger moves the book.
+// ink. The finger still turns the page: an annotation tool means the stylus
+// marks and the finger moves the book.
 test("an annotation tool shuts the engine off at the paged pointerdown", () => {
   const { h, turns } = pagedMount(6, 12, { tool: "ink" });
   const t = h.target;
@@ -1394,34 +1394,6 @@ test("an annotation tool shuts the engine off at the paged pointerdown", () => {
   h.el.fire("pointerup", ev(1, 200, 500, 32, t));
   expect(turns).toEqual([7]);
   expect(h.resumes).toBe(1);
-
-  h.detach();
-});
-
-// With "draw with your finger" on, the finger marks the page, so a turn has to
-// announce itself: it must start inside a 32px band at the screen edge. A swipe
-// from the middle is a stroke and is left to the annotation layer untouched.
-test("with the finger set to draw, only a swipe from the screen edge turns the page", () => {
-  const { h, turns } = pagedMount(6, 12, { tool: "ink", fingerDraw: true });
-  const t = h.target;
-
-  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
-  const m = ev(1, 200, 500, 16, t);
-  h.el.fire("pointermove", m);
-  expect(h.el.captured).toEqual([]);
-  expect(h.el.scrollLeft).toBe(4000);
-  // Nothing claimed: the browser and the engine keep the whole sequence.
-  expect(m.prevented).toBe(0);
-  h.el.fire("pointerup", ev(1, 200, 500, 32, t));
-  expect(turns).toEqual([]);
-
-  // The same swipe, started inside the left edge band.
-  h.el.fire("pointerdown", ev(2, 20, 500, 48, t));
-  h.el.fire("pointermove", ev(2, 100, 500, 64, t));
-  expect(h.el.captured).toEqual([2]);
-  expect(h.el.scrollLeft).toBe(3920);
-  h.el.fire("pointerup", ev(2, 300, 500, 80, t));
-  expect(turns).toEqual([5]);
 
   h.detach();
 });
@@ -1461,5 +1433,166 @@ test("a document that fits the screen shows no indicator at all", () => {
   h.el.fireBubble("scroll", {});
   expect(bar.style.opacity).toBe("0");
   expect(bar.style.height).toBeUndefined();
+  h.detach();
+});
+
+// --- the hold (docs/82) -------------------------------------------------------
+//
+// A finger held still on the words selects them, in both layouts and with any
+// tool but the navigation lock; the drag that follows grows the selection and
+// moves nothing; the lift keeps it; the next press only puts it away.
+
+interface FakeSelect {
+  log: string[];
+  up: boolean;
+  words: boolean;
+}
+
+function textSelectFor(s: FakeSelect): NonNullable<PagedGestureCtx["textSelect"]> {
+  return {
+    wordsAt: () => s.words,
+    begin: (x, y) => {
+      s.log.push(`begin ${x},${y}`);
+      s.up = true;
+      return true;
+    },
+    extend: (x, y) => void s.log.push(`extend ${x},${y}`),
+    commit: () => void s.log.push("commit"),
+    cancel: () => {
+      s.log.push("cancel");
+      s.up = false;
+    },
+    active: () => s.up,
+    clear: () => {
+      s.log.push("clear");
+      s.up = false;
+    },
+    moved: () => {},
+  };
+}
+
+function holdMount(over: Partial<PagedGestureCtx> = {}): { h: Harness; s: FakeSelect } {
+  const s: FakeSelect = { log: [], up: false, words: true };
+  const h = mount({ textSelect: textSelectFor(s), ...over });
+  return { h, s };
+}
+
+test("a finger held on the words selects them, and the drag grows the selection without scrolling", () => {
+  const { h, s } = holdMount();
+  const t = h.target;
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  expect(fireTimers()).toEqual([{ ms: 500 }]);
+  expect(s.log).toEqual(["begin 100,500"]);
+  // The finger is the selection's now: captured, and the engine is handed the
+  // up it is owed for the down it heard.
+  expect(h.el.captured).toEqual([1]);
+  expect(t.dispatched).toEqual([{ type: "pointerup", pointerId: 1 }]);
+
+  const m = ev(1, 100, 300, 600, t);
+  h.el.fire("pointermove", m);
+  expect(s.log).toEqual(["begin 100,500", "extend 100,300"]);
+  expect(h.el.scrollTop).toBe(0);
+  expect(m.stopped).toBe(1);
+  expect(m.prevented).toBe(1);
+
+  const u = ev(1, 100, 300, 700, t);
+  h.el.fire("pointerup", u);
+  expect(s.log).toEqual(["begin 100,500", "extend 100,300", "commit"]);
+  // The lift is no tap on the page below.
+  expect(u.stopped).toBeGreaterThan(0);
+  h.detach();
+});
+
+test("a hold selects in the paged flip too, and the drag after it turns no page", () => {
+  const { h, turns } = pagedMount(3, 10);
+  const s: FakeSelect = { log: [], up: false, words: true };
+  h.ctx.current.textSelect = textSelectFor(s);
+  const t = h.target;
+  h.el.fire("pointerdown", ev(1, 400, 500, 0, t));
+  // Only the hold's timer: the router reads the hold itself here.
+  expect(fireTimers()).toEqual([{ ms: 500 }]);
+  h.el.fire("pointermove", ev(1, 100, 500, 600, t));
+  h.el.fire("pointerup", ev(1, 100, 500, 700, t));
+  expect(s.log).toEqual(["begin 400,500", "extend 100,500", "commit"]);
+  expect(turns).toEqual([]);
+  expect(h.el.scrollLeft).toBe(1600);
+  h.detach();
+});
+
+test("a hold selects whatever tool is in the rack", () => {
+  const { h, s } = holdMount({ tool: "highlight" });
+  const t = h.target;
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  fireTimers();
+  expect(s.log).toEqual(["begin 100,500"]);
+  h.detach();
+});
+
+test("under the navigation lock a held finger selects nothing", () => {
+  const { h, s } = holdMount({ tool: "navlock" });
+  const t = h.target;
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  expect(fireTimers()).toEqual([]);
+  expect(s.log).toEqual([]);
+  h.detach();
+});
+
+test("a hold off the words, or a finger that moved first, selects nothing", () => {
+  const { h, s } = holdMount();
+  const t = h.target;
+  s.words = false;
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  expect(fireTimers()).toEqual([]);
+  h.el.fire("pointerup", ev(1, 100, 500, 100, t));
+
+  s.words = true;
+  h.el.fire("pointerdown", ev(2, 100, 500, 200, t));
+  // Past the scroll's slop: the follow has the finger, the hold is over.
+  h.el.fire("pointermove", ev(2, 100, 470, 216, t));
+  expect(h.el.scrollTop).toBe(30);
+  expect(fireTimers()).toEqual([]);
+  expect(s.log).toEqual([]);
+  h.detach();
+});
+
+test("with a selection up, the next press only puts it away", () => {
+  const { h, s } = holdMount();
+  const t = h.target;
+  s.up = true;
+  const d = ev(1, 100, 500, 0, t);
+  h.el.fire("pointerdown", d);
+  expect(s.log).toEqual(["clear"]);
+  // Kept from the engine whole, and no hold starts under it.
+  expect(d.stopped).toBe(1);
+  expect(fireTimers()).toEqual([]);
+  const u = ev(1, 100, 500, 50, t);
+  h.el.fire("pointerup", u);
+  expect(u.stopped).toBeGreaterThan(0);
+  h.detach();
+});
+
+test("a press that puts a selection away turns no page", () => {
+  const { h, turns } = pagedMount(3, 10);
+  const s: FakeSelect = { log: [], up: true, words: true };
+  h.ctx.current.textSelect = textSelectFor(s);
+  const t = h.target;
+  h.el.fire("pointerdown", ev(1, 600, 500, 0, t));
+  h.el.fire("pointermove", ev(1, 300, 500, 16, t));
+  h.el.fire("pointerup", ev(1, 300, 500, 32, t));
+  expect(s.log).toEqual(["clear"]);
+  // Sprung back onto the page it started on.
+  expect(turns).toEqual([3]);
+  h.detach();
+});
+
+test("a second finger takes the selection's drag away", () => {
+  const { h, s } = holdMount();
+  const t = h.target;
+  h.el.fire("pointerdown", ev(1, 100, 500, 0, t));
+  fireTimers();
+  h.el.fire("pointerdown", ev(2, 300, 500, 600, t));
+  expect(s.log).toEqual(["begin 100,500", "cancel"]);
+  h.el.fire("pointermove", ev(1, 100, 300, 616, t));
+  expect(s.log).toEqual(["begin 100,500", "cancel"]);
   h.detach();
 });

@@ -13,6 +13,9 @@
 // never fight over the same gesture; a second pointerdown that does reach it
 // still yields, as a safety net.
 //
+// Every pointer this machine sees moves the page: a finger, or a stylus under
+// the navigation lock. A finger never draws (docs/82), so there is no tool mode.
+//
 // Coordinate convention: dragging the finger LEFT (dx < 0) pulls the NEXT page
 // in (turn = +1); dragging RIGHT (dx > 0) brings the PREVIOUS page (turn = -1).
 //
@@ -29,12 +32,7 @@ import { velocityStep } from "./physics";
 import { rubberBand } from "./rubber-band";
 export { rubberBand };
 
-export type GestureTool = "pointer" | "pen";
-
 export interface PagedGestureConfig {
-  // "pen" = a drawing tool is active (highlight / underline / ink / AI pen):
-  // one finger draws, so a page turn must start from a screen edge band.
-  tool: GestureTool;
   // Zoomed past fit-page (temporary magnification): one finger pans the page
   // instead of turning it, until the pan runs into the horizontal edge.
   zoomedIn: boolean;
@@ -50,7 +48,6 @@ export interface PagedGestureConfig {
   canPanRight?: boolean;
   slop?: number; // movement before a one-finger gesture commits (default 10)
   axisRatio?: number; // dominant axis must beat the other by this (default 1.2)
-  edgeZone?: number; // edge band width for pen-mode edge swipe (default 32)
   commitFraction?: number; // fraction of width to commit a turn (default 0.22)
   commitVelocity?: number; // fling speed px/ms that commits a turn (default 0.45)
   bandLimit?: number; // px the rubber band asymptotically approaches (default 48)
@@ -67,7 +64,6 @@ function resolve(config: PagedGestureConfig): Cfg {
     canPanRight: true,
     slop: 10,
     axisRatio: 1.2,
-    edgeZone: 32,
     commitFraction: 0.22,
     commitVelocity: 0.45,
     bandLimit: 48,
@@ -174,13 +170,6 @@ export function resolveSwipe(
   if (dx <= -commit) return 1;
   if (dx >= commit) return -1;
   return 0;
-}
-
-// The screen edge a point started from, for pen-mode edge-swipe turns.
-export function edgeOf(x: number, width: number, edgeZone: number): "left" | "right" | null {
-  if (x <= edgeZone) return "left";
-  if (x >= width - edgeZone) return "right";
-  return null;
 }
 
 // Which page a horizontal drag is reaching for, and whether it exists: -1 the
@@ -314,17 +303,6 @@ export function stepGesture(
           cmds.push(bandCommand(dx, dy, a, cfg.bandLimit));
         };
 
-        if (cfg.tool === "pen") {
-          // One finger with a pen draws; a turn must start inside an edge band.
-          if (edgeOf(d.x, cfg.width, cfg.edgeZone) && axis === "x") {
-            startTurnOrBand("x");
-          } else if (Math.abs(dx) >= cfg.slop || Math.abs(dy) >= cfg.slop) {
-            s.phase = "off"; // hand the stroke to the annotation layer
-          }
-          break;
-        }
-
-        // pointer tool at fit-page.
         if (axis !== "none") startTurnOrBand(axis);
         break;
       }
@@ -366,8 +344,8 @@ export function stepGesture(
     }
 
     case "longpress": {
-      // The primary finger dwelled: hand off to native text selection so a later
-      // handle drag is never hijacked as a page turn.
+      // The primary finger dwelled: whoever reads holds has it now (a selection
+      // under the finger), and a drag from here is never a page turn.
       if (s.phase === "pending" && input.id === s.primary) s.phase = "off";
       break;
     }

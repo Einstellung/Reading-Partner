@@ -9,11 +9,23 @@
 // the words they were drawn on. Ink is the exception: a free stroke is on no
 // words, so it is stored as page coordinates and painted as it was drawn.
 //
+// A finger marks only by a hold (docs/82): the touch router times it and hands
+// this layer the words (textSelect), which stay selected after the lift until
+// the shell saves them as a mark or the next press puts them away.
+//
 // Every coordinate that leaves this file for the shell is a viewport
 // coordinate, and every coordinate inside it is a page coordinate
 // (mark-geometry.ts). The card converts between them.
 
-import type { Annotation, AnnotationPopupParams, Tool } from "../../../platform/app/reader-contract";
+import type {
+  Annotation,
+  AnnotationPopupParams,
+  ReaderSelection,
+  ScreenRect,
+  SelectionMarkSpec,
+  Tool,
+} from "../../../platform/app/reader-contract";
+import type { GestureTextSelect } from "../../engine/gesture/context";
 import { pointerKindOf, routePointer, toolKindOf, type ToolKind } from "../../engine/gesture/touch-routing";
 import {
   DEFAULT_MARK_COLOR,
@@ -45,6 +57,7 @@ import {
   type PageRect,
 } from "../mark-geometry";
 import { textMarkOf } from "../mark-write";
+import { movedEnd, spanTo, wordOf, type HeldWord } from "../word";
 import type { Pagination } from "../paginate";
 import { blockInfo, sheetMayShowMark, sheetsForMark } from "../reader-logic";
 
@@ -66,6 +79,21 @@ export interface MarkHost {
   onSave(annotations: Annotation[]): void;
   onSelect(ids: string[]): void;
   onPopup(params?: AnnotationPopupParams): void;
+  /** The finger's selection appeared, moved on screen, or went (null). */
+  onSelection(selection: ReaderSelection | null): void;
+}
+
+/** The blue a finger's selection is drawn in, the phone's (flow-marks.ts). */
+const SELECTION_COLOR = "#3f7ff0";
+
+/** The words a hold selected, on the sheet it was held on. */
+interface Selecting {
+  card: PageCard;
+  /** The page the sheet showed when the hold began. */
+  pageIndex: number;
+  /** The word the hold began on, which the drag grows from. */
+  word: HeldWord;
+  range: Range;
 }
 
 /** One mark as it was last painted on a page: what a press is tested against. */
@@ -102,7 +130,6 @@ export interface MarkLayer {
   unsetAnnotations(ids: readonly string[]): void;
   selectAnnotations(ids: readonly string[]): void;
   setTool(tool?: Tool): void;
-  setFingerDraw(on: boolean): void;
   /** Paint one card, which is showing this page. */
   paint(card: PageCard, pageIndex: number): void;
   /** The page a mark sits on, or null when this book has no such mark. */
@@ -116,6 +143,11 @@ export interface MarkLayer {
   pointerCancel(): void;
   /** A press that was not a drag: open the mark under it, if there is one. */
   tapAt(clientX: number, clientY: number): boolean;
+  /** The finger's half of a hold, for the touch router. */
+  textSelect: GestureTextSelect;
+  moveSelectionEnd(end: "start" | "end", clientX: number, clientY: number): void;
+  saveSelection(spec: SelectionMarkSpec): Annotation[];
+  clearSelection(): void;
 }
 
 export function createMarkLayer(host: MarkHost): MarkLayer {
@@ -124,8 +156,12 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
   const selected = new Set<string>();
   let toolId: string | null = null;
   let toolColor = DEFAULT_MARK_COLOR;
-  let fingerDraw = false;
   let drag: Drag | null = null;
+  let sel: Selecting | null = null;
+  // Between the hold and the lift.
+  let selecting = false;
+  // The last press asked about, so the hold does not look for the words twice.
+  let probe: { x: number; y: number; card: PageCard; caret: CaretPoint } | null = null;
 
   const owner = host.owner;
   const painter = createMarkPainter(owner);
@@ -355,7 +391,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     if (drag) return false;
     const tool = activeToolKind();
     if (tool !== "annotate") return false;
-    if (routePointer(tool, pointerKindOf(e.pointerType), fingerDraw) !== "draw") return false;
+    if (routePointer(tool, pointerKindOf(e.pointerType)) !== "draw") return false;
     const card = host.cardAt(e.clientX, e.clientY);
     if (!card || card.spine === null || !card.mounted) return false;
     if (host.pageOfCard(card) === null) return false;
@@ -413,6 +449,147 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     drag = null;
   }
 
+  // --- the finger's selection ----------------------------------------------
+
+  function paintSelection(): void {
+    if (!sel) return;
+    const layer = sublayer(sel.card, "rp-select");
+    if (!layer) return;
+    layer.replaceChildren();
+    painter.drawStroke(layer, "highlight", clipRects(sel.card.rectsOf(sel.range)), SELECTION_COLOR);
+  }
+
+  function dropSelection(): void {
+    if (!sel) return;
+    sel.card.overlay?.querySelector<HTMLElement>(".rp-select")?.replaceChildren();
+    sel = null;
+    selecting = false;
+  }
+
+  // Where the selection is on screen: its line boxes cut to the text block,
+  // in viewport coordinates. Null while the finger is still growing it.
+  function report(): ReaderSelection | null {
+    if (!sel || selecting) return null;
+    const card = sel.card;
+    const rects: ScreenRect[] = [];
+    for (const r of clipRects(card.rectsOf(sel.range))) {
+      const a = card.toViewport({ x: r.left, y: r.top });
+      const b = card.toViewport({ x: r.left + r.width, y: r.top + r.height });
+      if (b.x - a.x < 0.5 || b.y - a.y < 0.5) continue;
+      rects.push({ left: a.x, top: a.y, width: b.x - a.x, height: b.y - a.y });
+    }
+    return rects.length > 0 ? { rects, text: sel.range.toString() } : null;
+  }
+
+  function caretOn(card: PageCard, clientX: number, clientY: number): CaretPoint | null {
+    const root = card.mounted?.root;
+    return root ? caretAtPoint(card.shadow, root, clientX, clientY) : null;
+  }
+
+  function wordsAt(clientX: number, clientY: number): boolean {
+    probe = null;
+    const card = host.cardAt(clientX, clientY);
+    if (!card || card.spine === null || host.pageOfCard(card) === null) return false;
+    const caret = caretOn(card, clientX, clientY);
+    if (caret) probe = { x: clientX, y: clientY, card, caret };
+    return caret !== null;
+  }
+
+  const textSelect: GestureTextSelect = {
+    wordsAt,
+    begin(clientX, clientY) {
+      const same = probe !== null && probe.x === clientX && probe.y === clientY;
+      const hit = same || wordsAt(clientX, clientY) ? probe : null;
+      const pageIndex = hit ? host.pageOfCard(hit.card) : null;
+      if (!hit || pageIndex === null) return false;
+      dropSelection();
+      const word = wordOf(hit.caret);
+      const range = rangeBetween(owner, word.start, word.end);
+      if (!range) return false;
+      sel = { card: hit.card, pageIndex, word, range };
+      selecting = true;
+      paintSelection();
+      host.onSelection(null);
+      return true;
+    },
+    extend(clientX, clientY) {
+      if (!sel || !selecting) return;
+      const caret = caretOn(sel.card, clientX, clientY);
+      if (!caret) return;
+      const next = spanTo(owner, sel.word, caret);
+      if (!next) return;
+      sel.range = next;
+      paintSelection();
+    },
+    commit() {
+      if (!sel) return;
+      selecting = false;
+      if (sel.range.toString().trim() === "") {
+        dropSelection();
+        host.onSelection(null);
+        return;
+      }
+      host.onSelection(report());
+    },
+    cancel() {
+      dropSelection();
+      host.onSelection(null);
+    },
+    active: () => sel !== null,
+    clear() {
+      if (!sel) return;
+      dropSelection();
+      host.onSelection(null);
+    },
+    moved: () => selectionMoved(),
+  };
+
+  function selectionMoved(): void {
+    if (!sel) return;
+    // The sheet went back to the pool, or now shows another page: the words
+    // it held are gone from the screen with it.
+    if (host.pageOfCard(sel.card) !== sel.pageIndex || !sel.card.mounted) {
+      textSelect.clear();
+      return;
+    }
+    if (!selecting) host.onSelection(report());
+  }
+
+  function moveSelectionEnd(end: "start" | "end", clientX: number, clientY: number): void {
+    if (!sel || selecting) return;
+    const caret = caretOn(sel.card, clientX, clientY);
+    if (!caret) return;
+    const next = movedEnd(owner, sel.range, end, caret);
+    if (!next) return;
+    sel.range = next;
+    paintSelection();
+    host.onSelection(report());
+  }
+
+  // The selection becomes a mark the way a pen stroke does (commitText), with
+  // the thread an Ask opens already on it.
+  function saveSelection(spec: SelectionMarkSpec): Annotation[] {
+    const s = sel;
+    if (!s || selecting || s.card.spine === null) return [];
+    const mark = textMarkOf(s.range, {
+      spine: s.card.spine,
+      stroke: spec.stroke,
+      color: spec.color,
+      spineOf: host.spineOf,
+      pagination: host.pagination,
+      authorName: host.authorName,
+      now: new Date().toISOString(),
+      id: crypto.randomUUID(),
+    });
+    textSelect.clear();
+    if (!mark) return [];
+    const saved = spec.aiThreadId ? ({ ...mark, aiThreadId: spec.aiThreadId } as Annotation) : mark;
+    marks.set(saved.id, saved);
+    host.onSave([saved]);
+    repaintSheetsOf([saved]);
+    return [saved];
+  }
+
   // --- what the shell drives ----------------------------------------------
 
   return {
@@ -461,10 +638,8 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
       toolId = tool?.type ?? null;
       if (tool?.color) toolColor = tool.color;
       if (activeToolKind() !== "annotate") pointerCancel();
-    },
-
-    setFingerDraw(on) {
-      fingerDraw = on;
+      // Nothing selects under the navigation lock.
+      if (activeToolKind() === "navlock") textSelect.clear();
     },
 
     paint,
@@ -487,11 +662,15 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
       paint(card, pageIndex);
     },
 
-    isDrawing: () => drag !== null,
+    isDrawing: () => drag !== null || selecting,
     pointerDown,
     pointerMove,
     pointerUp,
     pointerCancel,
     tapAt,
+    textSelect,
+    moveSelectionEnd,
+    saveSelection,
+    clearSelection: () => textSelect.clear(),
   };
 }

@@ -23,7 +23,6 @@ import {
   pointerKindOf,
   routesAsContact,
   toolKindOf,
-  pagedGestureTool,
   touchGestureMode,
   multiTouchLatch,
   pinchHandsOff,
@@ -50,10 +49,13 @@ import {
   type BandOffset,
 } from "./rubber-band";
 import { INDICATOR_FADE_AFTER_MS, thumbMetrics } from "./scroll-indicator";
+import { IDLE, LONG_PRESS_MS, pressStep, type PressEvent, type PressState } from "./press";
 import type { PagedGestureCtx } from "./context";
 
-// Long press (ms) before a stationary finger in paged mode is handed to native
-// text selection instead of being watched for a page swipe.
+// Where nothing under the router reads a hold (ctx.textSelect is null: the
+// phone's paged column, which runs its own press reducer), a finger that dwells
+// this long in the paged flip is taken off the page turn, so the reader's own
+// hold, which fires later, never has a turn under it.
 const PAGED_LONG_PRESS_MS = 450;
 
 // Pointer events on the scroll container are routed by device type and finger
@@ -105,6 +107,16 @@ const PAGED_LONG_PRESS_MS = 450;
 // on finger pointers — follow-finger drags set scrollLeft, a committed turn goes
 // through turnToPage (centre the page, re-lock fit-page), a magnified page pans,
 // and a swipe with nowhere to go rubber-bands instead of freezing.
+//
+// The hold, in both layouts (docs/82): a finger that stays put on the words for
+// LONG_PRESS_MS selects them, through the same press reducer the phone's column
+// runs (press.ts), whatever tool is in the rack — except the navigation lock,
+// under which nothing selects. The hold is taken here because the finger is:
+// it has to come off the follow, the page flip and the engine before the drag
+// that grows the selection can move anything. What the words are and how the
+// selection is painted is the view's (ctx.textSelect). While a selection is up,
+// the next press only puts it away: the engine never hears of it, a tap under
+// it does nothing else, and a swipe in the paged flip springs back.
 export function attachTouchRouter(
   el: HTMLDivElement,
   { documentId, ctx }: { documentId: string; ctx: MutableRefObject<PagedGestureCtx> },
@@ -147,6 +159,8 @@ export function attachTouchRouter(
   let dragStartScrollLeft = 0;
   let dragStartPage = 1;
   let lpTimer = 0;
+  // A drag that began by putting a selection away: it turns no page.
+  let dragDismisses = false;
   // Rubber band: a CSS translate on the scroll content, sprung back by rAF.
   let band: BandOffset = BAND_REST;
   let bandRaf = 0;
@@ -162,6 +176,17 @@ export function attachTouchRouter(
   // a pinch): the engine never saw their pointerdown, so it must not see
   // their pointerup either.
   const orphaned = new Set<number>();
+
+  // --- the hold --------------------------------------------------------
+  // The press under the finger (press.ts), and where it went down: the word a
+  // hold selects is the one it was held on.
+  let press: PressState = IDLE;
+  let pressAt: { x: number; y: number } | null = null;
+  let holdTimer = 0;
+  // The finger growing a selection, from the hold to its lift.
+  let selecting: number | null = null;
+  // Fingers whose down only put a selection away.
+  const dismissing = new Set<number>();
 
   const clearLp = () => {
     if (lpTimer) {
@@ -268,6 +293,8 @@ export function attachTouchRouter(
     if (bar) bar.style.opacity = "0";
   };
   const paintIndicator = () => {
+    // A selection that stays rides along with the pages; its handles follow.
+    ctx.current.textSelect?.moved();
     const bar = ctx.current.indicator;
     if (!bar) return;
     const m = thumbMetrics(el.scrollTop, el.clientHeight, el.scrollHeight);
@@ -355,6 +382,7 @@ export function attachTouchRouter(
         dropGestureSelection();
         dragStartScrollLeft = el.scrollLeft;
         dragStartPage = scroll?.getCurrentPage() ?? 1;
+        dragDismisses = dismissing.has(c.id);
       } else if (c.type === "dragMove") {
         el.scrollLeft = dragStartScrollLeft - c.dx;
       } else if (c.type === "panMove") {
@@ -366,7 +394,8 @@ export function attachTouchRouter(
         springBand();
       } else if (c.type === "dragEnd") {
         const total = scroll?.getTotalPages() ?? 1;
-        const target = Math.min(Math.max(dragStartPage + c.turn, 1), total);
+        const turn = dragDismisses ? 0 : c.turn;
+        const target = Math.min(Math.max(dragStartPage + turn, 1), total);
         // Always through turnToPage: it centres the page and re-locks
         // fit-page, so a turn out of a temporary magnification lands on one
         // whole page again.
@@ -381,7 +410,6 @@ export function attachTouchRouter(
     const page = scroll?.getCurrentPage() ?? 1;
     const total = scroll?.getTotalPages() ?? 1;
     const r = stepGesture(state, input, {
-      tool: pagedGestureTool(toolKindOf(ctx.current.tool), ctx.current.fingerDraw),
       zoomedIn: ctx.current.zoomedIn,
       width: el.clientWidth || window.innerWidth,
       canTurnPrev: page > 1,
@@ -476,6 +504,94 @@ export function attachTouchRouter(
     feedVertical({ type: "flingFrame", dt });
     if (verticalNeedsFrames(vState)) flingRaf = requestAnimationFrame(flingFrame);
   }
+  // --- the hold -----------------------------------------------------------
+  const clearHold = () => {
+    if (holdTimer) {
+      window.clearTimeout(holdTimer);
+      holdTimer = 0;
+    }
+  };
+  // The finger is taken away mid-hold or mid-drag (a second finger, a pen, a
+  // layout switch): nothing it began stays.
+  function cancelHold(): void {
+    clearHold();
+    if (selecting !== null) {
+      selecting = null;
+      ctx.current.textSelect?.cancel();
+    }
+    press = IDLE;
+    pressAt = null;
+  }
+  // The hold fired on the words: the finger selects from here on. It leaves
+  // both machines (the follow and the flip may not move the page under the
+  // drag) and the engine, which heard it go down and would otherwise begin a
+  // text selection of its own from the drag (docs/pitfall/38).
+  function startSelecting(id: number): void {
+    const ts = ctx.current.textSelect;
+    const at = pressAt;
+    if (!ts || !at || !fingers.has(id) || !ts.begin(at.x, at.y)) {
+      press = IDLE;
+      return;
+    }
+    selecting = id;
+    if (ctx.current.paged) feed({ type: "longpress", id });
+    else feedVertical({ type: "pointercancel", id });
+    handEngineTheUp(id);
+    dropGestureSelection();
+    try {
+      el.setPointerCapture(id);
+    } catch {
+      // The pointer may already be gone; its up still ends the selection.
+    }
+  }
+  function feedPress(event: PressEvent, at?: { x: number; y: number }): void {
+    const ts = ctx.current.textSelect;
+    const next = pressStep(press, event);
+    press = next.state;
+    if (press.phase !== "pressed") clearHold();
+    switch (next.effect) {
+      case "arm": {
+        // Only a down arms the hold.
+        if (event.kind !== "down") break;
+        const id = event.pointerId;
+        // The timer is what measured the wait, so the hold is stamped with it;
+        // a millisecond over, because a fractional timestamp plus the wait
+        // does not always subtract back to exactly the wait.
+        const due = event.t + LONG_PRESS_MS + 1;
+        holdTimer = window.setTimeout(() => {
+          holdTimer = 0;
+          feedPress({ kind: "hold", pointerId: id, t: due });
+        }, LONG_PRESS_MS);
+        break;
+      }
+      case "start-mark":
+        startSelecting(event.pointerId);
+        break;
+      case "extend-mark":
+        if (at) ts?.extend(at.x, at.y);
+        break;
+      case "commit-mark":
+        selecting = null;
+        ts?.commit();
+        break;
+      case "abandon-mark":
+        selecting = null;
+        ts?.cancel();
+        break;
+      default:
+        // A tap is the page's and the engine's to read, as it always was.
+        break;
+    }
+    if (press.phase === "idle") pressAt = null;
+  }
+  // One of the machines took the finger (a scroll or a turn committed, or the
+  // finger grabbed a coasting page): it is not a hold any more.
+  const yieldIfTaken = (id: number) => {
+    if (press.phase !== "pressed" || press.pointerId !== id) return;
+    const taken = ctx.current.paged ? captured : vState.phase === "scroll" && vState.id === id;
+    if (taken) feedPress({ kind: "yield", pointerId: id });
+  };
+
   // Everything the two one-finger machines hold: inertia, the long-press
   // timer, the paged machine's phase, the rubber band, the pointer capture
   // and the engine pause. Dropped as one unit, unconditionally — a caller
@@ -484,6 +600,7 @@ export function attachTouchRouter(
   // inherits.
   const resetGestures = () => {
     clearLp();
+    cancelHold();
     state = initGestureState();
     captured = false;
     // A band in flight is dropped outright: leaving a transform on the
@@ -523,10 +640,6 @@ export function attachTouchRouter(
     const f = fingers.get(id);
     if (f === undefined) return;
     const plan = f.plan;
-    // With "draw with your finger" on, a lone finger marks the page; it has
-    // no page-moving gesture to inherit, and the engine never saw its down,
-    // so it stays out of the way until it lifts.
-    if (plan.action !== "scroll") return;
     // The pinch already dropped whatever the fingers selected on the way in;
     // whatever is on screen now predates this gesture and must survive it.
     hadSelectionAtStart = hasSelection();
@@ -597,12 +710,18 @@ export function attachTouchRouter(
     // One plan for both layouts and both devices: what this pointer is for,
     // whether the engine has to be shut off before it can mark the page, and
     // whether the engine may watch it move at all.
-    const plan = planPointer(tool, kind, ctx.current.fingerDraw);
+    const plan = planPointer(tool, kind);
+    // A selection is up from an earlier hold: any press puts it away (docs/82).
+    // A finger's does nothing else; a stylus or a mouse goes on as it would.
+    const ts = ctx.current.textSelect;
+    const putsAway = selecting === null && ts !== null && ts.active();
+    if (putsAway) ts.clear();
     if (!routesAsContact(tool, kind)) {
       if (kind === "pen") onPenDown();
       return;
     }
     fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, plan });
+    if (putsAway) dismissing.add(e.pointerId);
     const wasMulti = multiTouch;
     multiTouch = multiTouchLatch(multiTouch, fingers.size);
     if (fingerVerdict(touchGestureMode(fingers.size), multiTouch, penLock) === "swallow") {
@@ -618,21 +737,22 @@ export function attachTouchRouter(
       return;
     }
     hadSelectionAtStart = hasSelection();
+    // The engine never hears of a press that only puts a selection away.
+    const dismiss = dismissing.has(e.pointerId);
+    if (dismiss) swallow(e);
     if (ctx.current.paged) {
       if (plan.pauseAtDown) pauseEngine();
       feed({ type: "pointerdown", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
       clearLp();
-      // The long press hands off to native text selection: only with no tool
-      // selected, at fit-page (an annotation tool's engine pipeline is
-      // already shut off, the navigation lock selects nothing, a zoomed page
-      // is panning).
-      if (plan.longPressSelect && !ctx.current.zoomedIn) {
+      // With nothing here reading holds, a dwelling finger at fit-page with
+      // no tool in hand is only taken off the page turn (PAGED_LONG_PRESS_MS).
+      if (!ts && !dismiss && tool === "none" && !ctx.current.zoomedIn) {
         const id = e.pointerId;
         lpTimer = window.setTimeout(() => feed({ type: "longpress", id }), PAGED_LONG_PRESS_MS);
       }
     } else {
-      // The vertical machine takes the plan with the pointer: a "draw" plan
-      // never enters it, an annotation tool's plan pauses the engine there.
+      // The vertical machine takes the plan with the pointer: an annotation
+      // tool's plan pauses the engine there.
       feedVertical({
         type: "pointerdown",
         id: e.pointerId,
@@ -642,8 +762,22 @@ export function attachTouchRouter(
         plan,
       });
     }
+    if (ts && !dismiss && plan.holdSelects) {
+      pressAt = { x: e.clientX, y: e.clientY };
+      feedPress({
+        kind: "down",
+        pointerId: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        t: e.timeStamp,
+        onWords: ts.wordsAt(e.clientX, e.clientY),
+        tool: "none",
+        primary: true,
+      });
+      yieldIfTaken(e.pointerId);
+    }
     // Only a down the engine actually received owes it an up.
-    if (!enginePaused && e.target) {
+    if (!dismiss && !enginePaused && e.target) {
       engineSaw.set(e.pointerId, {
         target: e.target,
         type: e.pointerType,
@@ -669,10 +803,21 @@ export function attachTouchRouter(
       if (mode === "pinch" && !penLock) panStep();
       return;
     }
+    // The finger growing a selection is the selection's alone.
+    if (selecting === e.pointerId) {
+      swallow(e);
+      if (e.cancelable) e.preventDefault();
+      feedPress(
+        { kind: "move", pointerId: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp },
+        { x: e.clientX, y: e.clientY },
+      );
+      return;
+    }
     // Under the navigation lock the engine never sees the drag, so it cannot
     // pull a text selection along behind the scroll. Its pointerdown and
-    // pointerup still go through, so a tap under the lock still works.
-    if (!f.plan.engineMayDrag) swallow(e);
+    // pointerup still go through, so a tap under the lock still works. A press
+    // that put a selection away is kept from the engine whole.
+    if (!f.plan.engineMayDrag || dismissing.has(e.pointerId)) swallow(e);
     if (ctx.current.paged) {
       feed({ type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }, e);
     } else {
@@ -680,6 +825,10 @@ export function attachTouchRouter(
         { type: "pointermove", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp },
         e,
       );
+    }
+    if (press.phase === "pressed" && press.pointerId === e.pointerId) {
+      feedPress({ kind: "move", pointerId: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp });
+      yieldIfTaken(e.pointerId);
     }
   };
 
@@ -694,6 +843,8 @@ export function attachTouchRouter(
     }
     resetPanBase();
     const owedToEngine = engineSaw.delete(e.pointerId);
+    const wasSelecting = selecting === e.pointerId;
+    const putAway = dismissing.delete(e.pointerId);
     // A pinch coming down to one finger hands that finger the gesture right
     // here: from the next event on it is an ordinary one-finger contact.
     // The finger that just lifted is still judged as part of the pinch
@@ -734,6 +885,16 @@ export function attachTouchRouter(
             { type: "pointerup", id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp },
       );
     }
+    // The lift that ends a selection's drag, or a press that put one away, is
+    // nobody else's: not the engine's, and not a tap on the page below.
+    if (wasSelecting || putAway) swallow(e);
+    if (press.phase !== "idle") {
+      feedPress(
+        cancelled
+          ? { kind: "cancel", pointerId: e.pointerId }
+          : { kind: "up", pointerId: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp },
+      );
+    }
     // Belt to the navigation lock's braces: the engine saw this pointer's
     // down even though it never saw it move, and a bare down can still leave
     // a caret behind. A selection that predates the gesture is kept.
@@ -767,6 +928,7 @@ export function attachTouchRouter(
   el.addEventListener("scroll", paintIndicator, { passive: true });
   return () => {
     clearLp();
+    clearHold();
     if (indicatorTimer) window.clearTimeout(indicatorTimer);
     hideIndicator();
     el.removeEventListener("scroll", paintIndicator);

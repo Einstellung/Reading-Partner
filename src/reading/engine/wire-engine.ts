@@ -29,6 +29,7 @@ import {
   type ZoteroAnnotation,
 } from "./convert";
 import { selectionChanged } from "./annotation-selection";
+import { createPdfSelect } from "./pdf-select";
 import { pageCenterAlign } from "./gesture/paged-gesture";
 import {
   atResetZoom,
@@ -111,6 +112,7 @@ export async function wireEngine(
   propsRef: React.MutableRefObject<EmbedPdfViewProps>,
   engine: PdfEngine,
   setQuoteHlRef: React.MutableRefObject<(v: QuoteHighlight | null) => void>,
+  setFingerSelRef: React.MutableRefObject<(v: Map<number, Rect[]> | null) => void>,
   pageSizesRef: React.MutableRefObject<{ width: number; height: number }[]>,
   pagedRef: React.MutableRefObject<PagedGestureCtx>,
 ): Promise<void> {
@@ -186,6 +188,24 @@ export async function wireEngine(
   pagedRef.current.scroll = scrollScope;
   pagedRef.current.interaction = interaction;
   pagedRef.current.selection = selection;
+
+  // A finger's hold selects words whatever tool is in the rack (docs/82). It
+  // keeps its own selection rather than the plugin's: one the plugin held would
+  // be turned into a mark by the active drawing tool the moment it ended.
+  const fingerSelect = createPdfSelect({
+    viewport: () => pagedRef.current.viewport,
+    geometry: (page) => selScope.getState().geometry[page],
+    pageSize: (page) => pageSizesRef.current[page],
+    paint: (rects) => setFingerSelRef.current(rects),
+    text: (slices) => {
+      const d = doc();
+      return d ? engine.getTextSlices(d, slices).toPromise() : Promise.resolve([]);
+    },
+    create: (pageIndex, obj) => annScope.createAnnotation(pageIndex, obj),
+    authorName: () => propsRef.current.authorName ?? "Reading-Partner",
+    onSelection: (sel) => propsRef.current.onSelection?.(sel),
+  });
+  pagedRef.current.textSelect = fingerSelect;
   // The numeric scale of the fit-page baseline, tracked so a pinch past it flips
   // the machine into pan mode and a pinch back down re-locks fit-page. Updated
   // whenever the zoom level is observed at fit-page.
@@ -877,11 +897,11 @@ export async function wireEngine(
       const drawing = tool !== "pointer" && tool !== "navlock";
       annScope.setActiveTool(drawing ? tool : null);
       pagedRef.current.tool = tool;
-    },
-    setFingerDraw(on) {
-      pagedRef.current.fingerDraw = on;
+      // Nothing selects under the navigation lock.
+      if (tool === "navlock") fingerSelect.clear();
     },
     setLayout(mode) {
+      fingerSelect.clear();
       // Every field of LAYOUT_SETTINGS is applied, in both directions and on
       // every call — no early return when the mode looks unchanged. Entering and
       // leaving are the same operation with a different target, so nothing can
@@ -1046,6 +1066,9 @@ export async function wireEngine(
       pageOf.delete(id);
       propsRef.current.onDeleteAnnotations?.([id]);
     },
+    moveSelectionEnd: (end, clientX, clientY) => fingerSelect.moveEnd(end, clientX, clientY),
+    saveSelection: (spec) => fingerSelect.save(spec),
+    clearSelection: () => fingerSelect.clear(),
     selectAnnotation(id) {
       const pageIndex = pageOf.get(id);
       if (pageIndex !== undefined) annScope.selectAnnotation(pageIndex, id);
@@ -1056,13 +1079,11 @@ export async function wireEngine(
       pageHeight,
       doc,
       registry,
-      // Touch-routing introspection for the harness/Playwright: the setting, the
-      // tool, what a finger would do, and whether the engine's pointer pipeline
-      // is paused.
+      // Touch-routing introspection for the harness/Playwright: the tool, what a
+      // finger would do, and whether the engine's pointer pipeline is paused.
       routing: () => ({
-        fingerDraw: pagedRef.current.fingerDraw,
         tool: pagedRef.current.tool,
-        fingerPlan: planFinger(toolKindOf(pagedRef.current.tool), pagedRef.current.fingerDraw).action,
+        fingerPlan: planFinger(toolKindOf(pagedRef.current.tool)).action,
         paused: interaction.isPaused(),
       }),
       // Everything the settle judges a layout on, and its verdict. The failure
