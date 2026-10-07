@@ -139,7 +139,7 @@ export default {
   "ingest.removedSupplement": "Дополнительный материал удалён",
   "ingest.sourceTooLarge": "источник слишком большой ({mb} МБ)",
   "ingest.fetchFailed": "не удалось загрузить ссылку (HTTP {status})",
-  "ingest.noReadableContent": "по этой ссылке нет читаемого содержимого статьи",
+  "ingest.unreadable": "не удалось получить читаемый текст с {url}: {reason}",
 
   "translate.label": "Перевод этого документа",
   "translate.labelNamed": "Перевод «{title}»",

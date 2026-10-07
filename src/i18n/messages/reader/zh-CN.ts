@@ -132,7 +132,7 @@ export default {
   "ingest.removedSupplement": "已移除一份辅助资料",
   "ingest.sourceTooLarge": "源文件太大（{mb}MB）",
   "ingest.fetchFailed": "无法抓取该链接（HTTP {status}）",
-  "ingest.noReadableContent": "这个链接里没有可读的文章内容",
+  "ingest.unreadable": "无法从 {url} 取得可读正文：{reason}",
 
   "translate.label": "正在翻译这份文档",
   "translate.labelNamed": "正在翻译「{title}」",

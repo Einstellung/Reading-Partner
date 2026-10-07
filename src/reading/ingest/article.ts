@@ -1,11 +1,13 @@
 // Taking a URL the reader pasted and making a document out of it (docs/67).
 //
-// One URL produces one document. A web page is fetched, its body extracted, its
-// pictures downloaded and packed, and the result is an EPUB in the library —
-// from there it is a book like any other, and the reader, the pagination, the
-// marks and the prep have nothing new to learn. A link that turns out to be a
-// PDF or an EPUB skips all of that: the bytes are already a document, so they go
-// straight into the library.
+// One URL produces one document. A web page is fetched and handed to the
+// bindery (workshop/bindery, docs/85), which cuts out its body, downloads its
+// pictures and builds an EPUB — or turns the page back when there is nothing to
+// read in it, and then nothing is filed. From the library on it is a book like
+// any other, and the reader, the pagination, the marks and the prep have
+// nothing new to learn. A link that turns out to be a PDF or an EPUB skips all
+// of that: the bytes are already a document, so they go straight into the
+// library.
 //
 // Where it is then listed is the target's: a book's supplements, or a topic's
 // documents. The bytes and everything derived from them are the same either way.
@@ -19,23 +21,11 @@ import { contentHash } from "../../platform/app/content-hash";
 import type { ImportMeta, LibraryEntry, LibraryKind } from "../../platform/app/library";
 import type { ExtractReadable } from "../../workshop/extract/readable-select";
 import { t } from "../../i18n";
-import { buildArticleEpub, type ArticleImage } from "../../workshop/bindery/build-article";
+import { bind, siteAdapterFor, type BindResult, type FetchedBytes } from "../../workshop/bindery";
+import { articleFileName } from "../../workshop/bindery/page-meta";
 import { resolveUrlSource, sniffContentType } from "../sources";
-import {
-  articleFileName,
-  collectImageSrcs,
-  decodeDataImage,
-  pageLanguage,
-  readPageMeta,
-} from "../../workshop/bindery/page-meta";
 
-/** What a fetch gave back, stripped to what this path reads. */
-export interface FetchedBytes {
-  ok: boolean;
-  status: number;
-  bytes: Uint8Array;
-  contentType: string | null;
-}
+export type { FetchedBytes };
 
 /**
  * Where an ingested document is filed (docs/67 「辅助资料」).
@@ -90,11 +80,6 @@ export interface IngestedDocument {
 
 // The page itself, matching what prep's own link ingestion allows.
 const MAX_PAGE_BYTES = 30 * 1024 * 1024;
-// The pictures. Per image and in total, and a count: an article with two hundred
-// images is a gallery, and the reader is waiting on this fetch.
-const MAX_IMAGES = 30;
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_IMAGES_TOTAL = 20 * 1024 * 1024;
 
 function charsetOf(contentType: string | null): string {
   const m = /charset\s*=\s*"?([a-z0-9_:.+-]+)"?/i.exec(contentType ?? "");
@@ -126,51 +111,6 @@ async function fetchWithin(
 }
 
 /**
- * Download the body's pictures, in document order, within the caps. An image
- * that fails, is too big, or falls past a cap is simply left out: the <img> that
- * pointed at it becomes a fixed-height placeholder when the EPUB is built, which
- * keeps the pagination the same on a device that could not reach the CDN.
- *
- * The key of each is the src string exactly as the HTML spells it, because that
- * is what buildArticleEpub matches on.
- */
-export async function fetchArticleImages(
-  html: string,
-  pageUrl: string,
-  deps: ArticleIngestDeps,
-): Promise<{ images: ArticleImage[]; requested: number }> {
-  const wanted = collectImageSrcs(html, pageUrl);
-  const images: ArticleImage[] = [];
-  let total = 0;
-  for (const { src, url } of wanted.slice(0, MAX_IMAGES)) {
-    const inline = decodeDataImage(src);
-    if (inline) {
-      if (inline.bytes.length > MAX_IMAGE_BYTES || total + inline.bytes.length > MAX_IMAGES_TOTAL) {
-        continue;
-      }
-      total += inline.bytes.length;
-      images.push({ src, bytes: inline.bytes, mediaType: inline.mediaType });
-      continue;
-    }
-    let res: FetchedBytes;
-    try {
-      res = await deps.fetch(url);
-    } catch {
-      continue;
-    }
-    if (!res.ok || res.bytes.length === 0) continue;
-    if (res.bytes.length > MAX_IMAGE_BYTES || total + res.bytes.length > MAX_IMAGES_TOTAL) continue;
-    total += res.bytes.length;
-    images.push({
-      src,
-      bytes: res.bytes,
-      mediaType: (res.contentType ?? "").split(";")[0].trim() || "application/octet-stream",
-    });
-  }
-  return { images, requested: wanted.length };
-}
-
-/**
  * The reference a document is listed under in a topic.
  *
  * FileRef.path is an identifier here rather than somewhere to read: the bytes
@@ -197,6 +137,15 @@ export async function ingestArticleUrl(
   deps: ArticleIngestDeps,
 ): Promise<IngestedDocument> {
   const source = resolveUrlSource(url);
+  const binderyDeps = { fetch: deps.fetch, extractReadable: deps.extractReadable };
+
+  // A site the bindery has an adapter for is read by that adapter, which knows
+  // how to fetch it; a plain fetch of such a page is what returns a shell.
+  const bare = { kind: "url", url: source.url } as const;
+  if (siteAdapterFor(bare)) {
+    return await fileBound(deps, target, url, source.slugBase, await bind(bare, binderyDeps));
+  }
+
   const res = await fetchWithin(deps, source.url, MAX_PAGE_BYTES);
   if (!res.ok) throw new Error(t("reader.ingest.fetchFailed", { status: res.status }));
 
@@ -215,42 +164,41 @@ export async function ingestArticleUrl(
   }
 
   const page = decodePage(res.bytes, res.contentType);
-  const extraction = deps.extractReadable(page, source.url);
-  if (!extraction || extraction.textContent.trim() === "") {
-    throw new Error(t("reader.ingest.noReadableContent"));
-  }
-  const meta = readPageMeta(page);
-  const title = extraction.title.trim() || source.title;
-  const { images, requested } = await fetchArticleImages(
-    extraction.contentHtml,
-    source.url,
-    deps,
+  const bound = await bind(
+    { kind: "web", url: source.url, html: page, fallbackTitle: source.title },
+    binderyDeps,
   );
-  const bytes = await buildArticleEpub({
-    title,
-    byline: meta.byline,
-    sourceUrl: source.url,
-    publishedAt: meta.publishedAt,
-    html: extraction.contentHtml,
-    images,
-    language: pageLanguage(page),
-  });
+  return await fileBound(deps, target, url, source.slugBase, bound);
+}
+
+// File what the bindery built, or say why there is nothing to file. A rejection
+// names the link as the model passed it, so the sentence it reads back is about
+// the link it knows.
+async function fileBound(
+  deps: ArticleIngestDeps,
+  target: IngestTarget,
+  url: string,
+  slugBase: string,
+  bound: BindResult,
+): Promise<IngestedDocument> {
+  if (!bound.ok) throw new Error(t("reader.ingest.unreadable", { url, reason: bound.message }));
+  const meta = bound.metadata;
   return await file(
     deps,
     target,
-    bytes,
-    articleFileName(title, source.slugBase),
+    bound.epub,
+    articleFileName(meta.title, slugBase),
     {
       kind: "article",
-      sourceUrl: source.url,
-      byline: meta.byline,
+      ...(meta.sourceUrl === undefined ? {} : { sourceUrl: meta.sourceUrl }),
+      byline: meta.author,
       publishedAt: meta.publishedAt,
     },
     {
       kind: "article",
-      chars: extraction.textContent.trim().length,
-      imagesEmbedded: images.length,
-      imagePlaceholders: requested - images.length,
+      chars: meta.chars,
+      imagesEmbedded: meta.imagesEmbedded,
+      imagePlaceholders: meta.imagesMissing,
     },
   );
 }

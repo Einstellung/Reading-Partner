@@ -18,6 +18,8 @@ import { isEpub } from "../../../src/reading/epub/file/sniff";
 import { openZip } from "../../../src/workshop/bindery/zip";
 import { parseEpub } from "../../../src/reading/epub/file/parse";
 import type { Extraction } from "../../../src/workshop/extract/readable-select";
+import { buildArticleEpub } from "../../../src/workshop/bindery/build-article";
+import { registerSiteAdapter } from "../../../src/workshop/bindery";
 import { PNG } from "../epub/fixture";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
@@ -198,11 +200,74 @@ test("a link that cannot be fetched or read leaves nothing behind", async () => 
   await expect(ingestArticleUrl(PAGE_URL, topic("t1"), dead.deps)).rejects.toThrow(/HTTP 404/);
 
   const empty = recorder({ [PAGE_URL]: ok("<html><head></head></html>", "text/html") });
-  await expect(ingestArticleUrl(PAGE_URL, topic("t1"), empty.deps)).rejects.toThrow(/no readable article/);
+  await expect(ingestArticleUrl(PAGE_URL, topic("t1"), empty.deps)).rejects.toThrow(
+    `could not get readable text from ${PAGE_URL}: no readable article text was found on the page`,
+  );
 
   expect(disk.files.has(LIBRARY_FILE)).toBe(false);
   expect(dead.attached).toEqual([]);
   expect(empty.attached).toEqual([]);
+});
+
+test("the article is the file buildArticleEpub wrote for the same page before the bindery", async () => {
+  const got = await ingestArticleUrl(PAGE_URL, topic("t1"), recorder(HTML_PAGE).deps);
+  const before = await buildArticleEpub({
+    title: "How a web page becomes a book",
+    byline: "A Writer",
+    sourceUrl: PAGE_URL,
+    publishedAt: "2026-09-12T08:30:00Z",
+    html: BODY,
+    images: [{ src: GOOD_IMAGE, bytes: PNG, mediaType: "image/png" }],
+    language: "en",
+  });
+  expect(disk.blobs.get(libraryBookPath(got.entry.hash, "epub"))).toEqual(before);
+});
+
+test("a sign-in shell is turned back with its reason, and nothing is fetched after it or filed", async () => {
+  const xUrl = "https://x.com/someone/status/1";
+  const shell =
+    "<html><body><p>JavaScript is not available.</p><p>We've detected that JavaScript is " +
+    "disabled in this browser. Please enable JavaScript or switch to a supported browser " +
+    `to continue using x.com.</p><img src="${GOOD_IMAGE}"></body></html>`;
+  const r = recorder({ [xUrl]: ok(shell, "text/html"), [GOOD_IMAGE]: ok(PNG, "image/png") });
+  await expect(ingestArticleUrl(xUrl, book("b1"), r.deps)).rejects.toThrow(
+    /^could not get readable text from https:\/\/x\.com\/someone\/status\/1: the page is a sign-in or script wall/,
+  );
+  expect(r.fetched).toEqual([xUrl]);
+  expect(r.supplements).toEqual([]);
+  expect(disk.files.has(LIBRARY_FILE)).toBe(false);
+});
+
+test("a body too short to be the article is turned back", async () => {
+  const page = `<html><body><p>${"word ".repeat(20)}</p></body></html>`;
+  const r = recorder({ [PAGE_URL]: ok(page, "text/html") });
+  await expect(ingestArticleUrl(PAGE_URL, book("b1"), r.deps)).rejects.toThrow(/fewer than the 500/);
+  expect(r.supplements).toEqual([]);
+  expect(disk.files.has(LIBRARY_FILE)).toBe(false);
+});
+
+test("a site adapter that claims the link reads it instead of the plain fetch", async () => {
+  const undo = registerSiteAdapter({
+    name: "test-site",
+    claims: (m) => m.kind === "url" && m.url.startsWith("https://site.test/"),
+    toManuscript: async (m) => ({
+      title: "Read by the adapter",
+      sourceUrl: m.kind === "url" ? m.url : undefined,
+      sections: [{ html: `<p>${PROSE}${PROSE}</p>` }],
+      images: [],
+    }),
+  });
+  try {
+    const r = recorder({});
+    const got = await ingestArticleUrl("https://site.test/post/1", book("b1"), r.deps);
+    expect(got.kind).toBe("article");
+    expect(got.title).toBe("Read by the adapter");
+    expect(got.entry.sourceUrl).toBe("https://site.test/post/1");
+    expect(r.fetched).toEqual([]);
+    expect(r.supplements).toHaveLength(1);
+  } finally {
+    undo();
+  }
 });
 
 test("a link that is not http(s) is refused before anything is fetched", async () => {

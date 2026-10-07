@@ -134,7 +134,7 @@ export default {
   "ingest.removedSupplement": "補足資料を削除しました",
   "ingest.sourceTooLarge": "ソースが大きすぎます（{mb}MB）",
   "ingest.fetchFailed": "リンクを取得できませんでした（HTTP {status}）",
-  "ingest.noReadableContent": "このリンクには読み取れる記事の内容がありません",
+  "ingest.unreadable": "{url} から読める本文を取得できませんでした：{reason}",
 
   "translate.label": "このドキュメントを翻訳しています",
   "translate.labelNamed": "「{title}」を翻訳しています",

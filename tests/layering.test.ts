@@ -167,10 +167,10 @@ const LAYER: Record<string, Layer> = {
   // A web page to its readable body: the fetch, Readability with the defuddle
   // fallback, the article sanitizer and the hidden-webview fetchers.
   "workshop/extract": "capability",
-  // Material to an EPUB (docs/85): the article builder, the XHTML and CSS
-  // sanitizers and the zip it packs with, the typographic cover, and what a page
-  // says about itself. Reading's EPUB reader imports the sanitizer and the zip
-  // from here.
+  // Material to an EPUB (docs/85): the generic adapters and the registry the
+  // domains put their site adapters in, the quality gate, the builder, the
+  // XHTML and CSS sanitizers and the zip it packs with, and the typographic
+  // cover. Reading's EPUB reader imports the sanitizer and the zip from here.
   "workshop/bindery": "capability",
 
   info: "domain",

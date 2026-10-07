@@ -151,7 +151,7 @@ export default {
   "ingest.removedSupplement": "Removed a supplement",
   "ingest.sourceTooLarge": "the source is too large ({mb}MB)",
   "ingest.fetchFailed": "could not fetch the link (HTTP {status})",
-  "ingest.noReadableContent": "no readable article content at the link",
+  "ingest.unreadable": "could not get readable text from {url}: {reason}",
 
   // reading/translate: tool progress labels, and the status line the reader
   // watches while a translation runs.

@@ -134,7 +134,7 @@ export default {
   "ingest.removedSupplement": "Material complementario eliminado",
   "ingest.sourceTooLarge": "el origen es demasiado grande ({mb}MB)",
   "ingest.fetchFailed": "no se pudo obtener el enlace (HTTP {status})",
-  "ingest.noReadableContent": "no hay contenido de artículo legible en el enlace",
+  "ingest.unreadable": "no se pudo obtener texto legible de {url}: {reason}",
 
   "translate.label": "Traduciendo este documento",
   "translate.labelNamed": "Traduciendo «{title}»",

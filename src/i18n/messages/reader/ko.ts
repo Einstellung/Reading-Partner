@@ -134,7 +134,7 @@ export default {
   "ingest.removedSupplement": "보충 자료를 제거했습니다",
   "ingest.sourceTooLarge": "원본이 너무 큽니다 ({mb}MB)",
   "ingest.fetchFailed": "링크를 가져오지 못했습니다 (HTTP {status})",
-  "ingest.noReadableContent": "이 링크에는 읽을 수 있는 기사 내용이 없습니다",
+  "ingest.unreadable": "{url}에서 읽을 수 있는 본문을 가져오지 못했습니다: {reason}",
 
   "translate.label": "이 문서를 번역하는 중",
   "translate.labelNamed": "“{title}” 번역 중",
