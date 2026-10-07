@@ -30,10 +30,14 @@ import { isLastReference, removeFromTopic } from "../../../reading/delete/delete
 import { deleteTopic } from "../../../reading/delete/delete-topic";
 import {
   loadSavedArticles,
-  removeSavedArticle,
   savedArticlesForTopic,
   type SavedArticle,
 } from "../../../reading/saved/saved-articles";
+import {
+  forgetKeptArticlesOfDocument,
+  recordsWithoutListedDocument,
+} from "../../../reading/saved/kept-document";
+import { unkeepArticle } from "../../../reading/delete/unkeep";
 import { createRetell } from "../../../reading/retell";
 import RetellView from "../retell/RetellView";
 import CoachView from "../rehearsal/CoachView";
@@ -176,7 +180,8 @@ export default function LibraryScreen(props: {
       return;
     }
     const all = await loadSavedArticles().catch((): SavedArticle[] => []);
-    setSavedArticles(savedArticlesForTopic(all, activeTopic.id));
+    // A kept article whose document this topic lists is that document's row.
+    setSavedArticles(recordsWithoutListedDocument(savedArticlesForTopic(all, activeTopic.id), activeTopic));
   }, [activeTopic]);
 
   useEffect(() => {
@@ -325,8 +330,17 @@ export default function LibraryScreen(props: {
                   onRetell={(f) => void startRetellOn(f)}
                   onRemoveFile={(p) =>
                     void settleDelete({
-                      act: () => removeFileFromTopic(activeTopic.id, p),
-                      refresh: props.onTopicsChanged,
+                      // An unlink deletes nothing, but a kept article whose
+                      // document this was leaves the topic with its row.
+                      act: async () => {
+                        const hash = activeTopic.files.find((f) => f.path === p)?.hash;
+                        await removeFileFromTopic(activeTopic.id, p);
+                        if (hash) await forgetKeptArticlesOfDocument(activeTopic.id, hash);
+                      },
+                      refresh: async () => {
+                        await refreshSavedArticles();
+                        await props.onTopicsChanged();
+                      },
                       failed: t("library.screen.removeFileFailed"),
                       onFail: props.onSay,
                     })
@@ -344,8 +358,11 @@ export default function LibraryScreen(props: {
                   onOpenSavedArticle={setOpenSavedArticle}
                   onRemoveSavedArticle={(id) =>
                     void settleDelete({
-                      act: () => removeSavedArticle(id),
-                      refresh: refreshSavedArticles,
+                      act: () => unkeepArticle(id),
+                      refresh: async () => {
+                        await refreshSavedArticles();
+                        await props.onTopicsChanged();
+                      },
                       failed: t("library.screen.removeArticleFailed"),
                       onFail: props.onSay,
                     })

@@ -42,6 +42,22 @@ export function libraryBookPath(bookId: string, format?: BookFormat): string {
   return `${LIBRARY_DIR}/${bookId}.${bookExtension(format)}`;
 }
 
+/**
+ * The reference a document taken in from the web is listed under in a topic.
+ *
+ * FileRef.path is an identifier here rather than somewhere to read: the bytes
+ * live in the library under the book id, and that is where every open of an
+ * ingested document reads them (session/open-file.ts takes the library route
+ * whenever the id is known). What the path has to do is be unique per document
+ * and end in the name the reader should see, because the shelf's row title is
+ * derived from its basename (shelf/file-title.ts). Here rather than in the
+ * ingest so a kept article can be filed again under the same reference by code
+ * that does not reach the ingest (reading/saved/kept-document.ts).
+ */
+export function documentPath(hash: string, fileName: string): string {
+  return `${LIBRARY_DIR}/${hash}/${fileName}`;
+}
+
 // What kind of document this is. Absent means a book: every entry written
 // before web articles were ingested is one, and library.json is a synced file
 // that is never migrated in place — the same rule `format` follows above.

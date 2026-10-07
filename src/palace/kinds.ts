@@ -848,6 +848,7 @@ export const PALACE = [
     refs: [
       { kind: "topics", via: "topicId", onDelete: "reassign" },
       { kind: "article-body", via: "bodyHash" },
+      { kind: "library", via: "documentHash" },
     ],
     sync: "data",
     merge: "records",
@@ -855,6 +856,7 @@ export const PALACE = [
     deleteWith: "never",
     retention: NEVER,
     desk: true,
+    note: "documentHash is optional and additive: a record kept before documents were built has none and is not migrated, and an older build carries the field through a move",
   },
   {
     kind: "article-body",

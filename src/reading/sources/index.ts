@@ -1,9 +1,11 @@
-// Public surface of the source-reading module (docs/09 link ingestion): fetching
-// and extracting only. Everything here is pure and knows nothing about the
-// pipelines that call it — deciding what to do with a source, and recording it,
-// belongs to the domain that owns the source list.
+// Public surface of the source-reading module (docs/09 link ingestion): reading
+// a pasted link and a fetched response. Everything here is pure and knows nothing
+// about the pipelines that call it — deciding what to do with a source, and
+// recording it, belongs to the domain that owns the source list. The article
+// body itself is cut out by workshop/bindery, not here.
 
 export {
+  decodePage,
   looksLikeHttpUrl,
   provisionalTitleFromUrl,
   resolveUrlSource,
@@ -12,10 +14,3 @@ export {
   type SniffedKind,
   type UrlSource,
 } from "./url";
-export {
-  extractArticle,
-  extractArticleTitle,
-  ARTICLE_MAX_CHARS,
-  TRUNCATION_MARKER,
-  type ExtractedArticle,
-} from "./article";

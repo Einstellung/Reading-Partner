@@ -1,12 +1,15 @@
-// Live deps for the URL ingest: the app's own fetch, the readable extractor out
-// of its lazy chunk, the library and the topic store.
+// Live deps for the URL ingest and for keeping a briefing article: the app's own
+// fetch, the readable extractor out of its lazy chunk, the library, the topic
+// store and the kept-article records.
 //
 // Separate from article.ts so that file stays testable: everything here reaches
 // the host, and none of it can run in bun.
 
-import { importBook } from "../../platform/app/library";
+import { getLibraryEntry, importBook } from "../../platform/app/library";
 import { addSupplement } from "../../platform/app/supplements";
 import { addFileToTopic } from "../../platform/app/topics";
+import { loadSavedArticles, saveArticle } from "../saved/saved-articles";
+import type { KeepDeps } from "./keep";
 import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { fetchWithRetry } from "../../platform/http/throttled-fetch";
 import {
@@ -45,6 +48,22 @@ export async function liveIngestDeps(): Promise<ArticleIngestDeps> {
     attachToBook: async (bookId, ref) => {
       await addSupplement(bookId, { ...ref, addedAt: Date.now() });
     },
+  };
+}
+
+/**
+ * The keep's deps with the real host behind them (keep.ts), all but `retire`:
+ * taking a document off a topic is reading/delete's, which already depends on
+ * this directory, so the caller hands it in (ui/components/info/saveArticle.ts).
+ */
+export function liveKeepDeps(): Omit<KeepDeps, "retire"> {
+  return {
+    fetch: fetchBytes,
+    importBook,
+    attachToTopic: (topicId, path, hash) => addFileToTopic(topicId, path, hash),
+    save: (input) => saveArticle(input),
+    existing: async (id) => (await loadSavedArticles()).find((a) => a.id === id) ?? null,
+    libraryEntry: getLibraryEntry,
   };
 }
 

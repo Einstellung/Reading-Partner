@@ -4,7 +4,7 @@
 // Run: bash scripts/t.sh tests/workshop/bindery/bind.test.ts
 
 import { expect, test } from "bun:test";
-import { bind, manuscriptEpubInput } from "../../../src/workshop/bindery/bind";
+import { bind, manuscriptEpubInput, readMaterial } from "../../../src/workshop/bindery/bind";
 import {
   buildArticleEpub,
   buildSectionedEpub,
@@ -257,4 +257,29 @@ test("pictures the fetch could not get are counted as missing", async () => {
   );
   expect(got.ok && got.metadata.imagesEmbedded).toBe(1);
   expect(got.ok && got.metadata.imagesMissing).toBe(1);
+});
+
+// --- reading without building -------------------------------------------------
+
+test("readMaterial hands back the gated manuscript and fetches no picture", async () => {
+  const fetched: string[] = [];
+  const got = await readMaterial(
+    { kind: "html", title: "T", html: `<p>${PROSE}</p><img src="https://e.com/a.png">` },
+    {
+      fetch: async (url) => {
+        fetched.push(url);
+        return { ok: false, status: 404, bytes: new Uint8Array(), contentType: null };
+      },
+    },
+  );
+  expect(got.ok).toBe(true);
+  expect(got.ok && got.adapter).toBe("html");
+  expect(got.ok && got.manuscript.title).toBe("T");
+  expect(fetched).toEqual([]);
+});
+
+test("readMaterial turns back what bind would", async () => {
+  const got = await readMaterial({ kind: "text", text: "JavaScript is not available." });
+  expect(got.ok).toBe(false);
+  expect(!got.ok && got.reason).toBe("login-wall");
 });

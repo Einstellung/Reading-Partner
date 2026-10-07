@@ -31,13 +31,12 @@ import type { BriefingItemMeta } from "../../../info/boxes/types";
 import { ensureBriefTopic } from "../../../platform/app/topics";
 import {
   loadSavedArticles,
-  saveArticle,
   savedArticleId,
-  setSavedArticleTopic,
   type SavedArticle,
   type SavedArticleInput,
 } from "../../../reading/saved/saved-articles";
-import { toSavedArticleInput } from "./saveArticle";
+import { moveKeptArticle } from "../../../reading/saved/kept-document";
+import { keepArticleLive, toSavedArticleInput } from "./saveArticle";
 import { appendFeedback } from "../../../memory/profile/feedback";
 import { assembleReaderSection } from "../../../memory/live/assemble";
 import {
@@ -89,12 +88,14 @@ export interface KeepArticlePorts {
   // Read the item's body when the screen has not already got it.
   article(itemId: string): Promise<ArticleState | undefined>;
   ensureTopic(): Promise<{ id: string }>;
+  // The record and the document built from the body (reading/ingest/keep.ts).
   save(input: SavedArticleInput): Promise<SavedArticle | null>;
 }
 
 /**
- * Keep the open article: file it under the Brief topic with its body snapshot
- * (docs/21, store-and-display slice). The body is whatever the briefing view
+ * Keep the open article: file it under the Brief topic with its body snapshot,
+ * and the EPUB the bindery builds from that body beside it (docs/21, docs/85
+ * step 4). The body is whatever the briefing view
  * answered with — the day's cache on a collector, the published bodies on a
  * reader — already sanitized, and with its external image URLs intact (the img:
  * proxy is applied in the view). A saved article is rendered with
@@ -397,7 +398,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
       const savedId = await keepBriefingArticle(itemId, meta, articleState, {
         article: (id) => Promise.resolve(viewRef.current?.article(id)),
         ensureTopic: ensureBriefTopic,
-        save: saveArticle,
+        save: keepArticleLive,
       });
       if (!savedId) return;
       setKeptIds((s) => new Set(s).add(savedId));
@@ -474,7 +475,8 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
           // address and the title, and moving one that was never kept writes
           // nothing (reading/saved-articles.ts).
           savedId: savedArticleId(meta.url, meta.title),
-          fileArticle: setSavedArticleTopic,
+          // The record and the document it was built into move together.
+          fileArticle: moveKeptArticle,
         }),
       );
     },

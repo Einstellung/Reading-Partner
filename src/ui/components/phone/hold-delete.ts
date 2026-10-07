@@ -14,7 +14,7 @@ import {
   deleteLesson,
 } from "../../../reading/delete/delete-thread";
 import { deleteTopic } from "../../../reading/delete/delete-topic";
-import { removeSavedArticle } from "../../../reading/saved/saved-articles";
+import { unkeepArticle } from "../../../reading/delete/unkeep";
 import { topicDeleteWords } from "../shelf/topic-delete";
 import {
   holdDoneLine,
@@ -44,7 +44,8 @@ export const liveHoldDeleteDeps: HoldDeleteDeps = {
   removeFromTopic: (topicId, file) => removeFromTopic(topicId, file),
   deleteLesson: (target) => deleteLesson(target),
   deleteBookConversation: (target) => deleteBookConversation(target),
-  removeSavedArticle: (id) => removeSavedArticle(id),
+  // The record, and the document a keep built from it (reading/delete/unkeep.ts).
+  removeSavedArticle: (id) => unkeepArticle(id),
   deleteAside: (target, asideId) => deleteAside(target, asideId),
   deleteTopic: (topicId, alsoDeleteFiles) => deleteTopic(topicId, undefined, { alsoDeleteFiles }),
 };

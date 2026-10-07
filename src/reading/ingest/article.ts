@@ -18,14 +18,26 @@
 // placeholders and the metadata are pinned at all.
 
 import { contentHash } from "../../platform/app/content-hash";
-import type { ImportMeta, LibraryEntry, LibraryKind } from "../../platform/app/library";
+import {
+  documentPath,
+  type ImportMeta,
+  type LibraryEntry,
+  type LibraryKind,
+} from "../../platform/app/library";
 import type { ExtractReadable } from "../../workshop/extract/readable-select";
 import { t } from "../../i18n";
-import { bind, siteAdapterFor, type BindResult, type FetchedBytes } from "../../workshop/bindery";
+import {
+  bind,
+  siteAdapterFor,
+  type BindResult,
+  type Bound,
+  type FetchedBytes,
+} from "../../workshop/bindery";
 import { articleFileName } from "../../workshop/bindery/page-meta";
-import { resolveUrlSource, sniffContentType } from "../sources";
+import { decodePage, resolveUrlSource, sniffContentType } from "../sources";
 
 export type { FetchedBytes };
+export { documentPath };
 
 /**
  * Where an ingested document is filed (docs/67 「辅助资料」).
@@ -81,23 +93,6 @@ export interface IngestedDocument {
 // The page itself, matching what prep's own link ingestion allows.
 const MAX_PAGE_BYTES = 30 * 1024 * 1024;
 
-function charsetOf(contentType: string | null): string {
-  const m = /charset\s*=\s*"?([a-z0-9_:.+-]+)"?/i.exec(contentType ?? "");
-  return (m?.[1] ?? "utf-8").toLowerCase();
-}
-
-// The page as text. A declared charset is honoured — a GB18030 page decoded as
-// UTF-8 is a document of replacement characters — and a label no decoder knows
-// falls back to UTF-8 rather than failing the ingest.
-function decodePage(bytes: Uint8Array, contentType: string | null): string {
-  const charset = charsetOf(contentType);
-  try {
-    return new TextDecoder(charset).decode(bytes);
-  } catch {
-    return new TextDecoder("utf-8").decode(bytes);
-  }
-}
-
 async function fetchWithin(
   deps: ArticleIngestDeps,
   url: string,
@@ -108,20 +103,6 @@ async function fetchWithin(
     throw new Error(t("reader.ingest.sourceTooLarge", { mb: Math.round(res.bytes.length / 1e6) }));
   }
   return res;
-}
-
-/**
- * The reference a document is listed under in a topic.
- *
- * FileRef.path is an identifier here rather than somewhere to read: the bytes
- * live in the library under the book id, and that is where every open of an
- * ingested document reads them (session/open-file.ts takes the library route
- * whenever the id is known). What the path has to do is be unique per document
- * and end in the name the reader should see, because the shelf's row title is
- * derived from its basename (shelf/file-title.ts).
- */
-export function documentPath(hash: string, fileName: string): string {
-  return `library/${hash}/${fileName}`;
 }
 
 /**
@@ -175,13 +156,31 @@ export async function ingestArticleUrl(
 // names the link as the model passed it, so the sentence it reads back is about
 // the link it knows.
 async function fileBound(
-  deps: ArticleIngestDeps,
+  deps: FilingDeps,
   target: IngestTarget,
   url: string,
   slugBase: string,
   bound: BindResult,
 ): Promise<IngestedDocument> {
   if (!bound.ok) throw new Error(t("reader.ingest.unreadable", { url, reason: bound.message }));
+  return fileBuilt(deps, target, bound, slugBase);
+}
+
+/** The stores filing a built document writes to. */
+export type FilingDeps = Pick<ArticleIngestDeps, "importBook" | "attachToTopic" | "attachToBook">;
+
+/**
+ * Put an EPUB the bindery built into the library as an article and list it where
+ * the target says. For a caller that bound the material itself — a kept briefing
+ * article, whose body is already in hand (keep.ts). `slugBase` names the file
+ * when the manuscript had no title.
+ */
+export async function fileBuilt(
+  deps: FilingDeps,
+  target: IngestTarget,
+  bound: Bound,
+  slugBase: string,
+): Promise<IngestedDocument> {
   const meta = bound.metadata;
   return await file(
     deps,
@@ -209,7 +208,7 @@ async function fileBound(
 // listed here is still filed, which is what makes "ingest it again, for this
 // book" work.
 async function file(
-  deps: ArticleIngestDeps,
+  deps: FilingDeps,
   target: IngestTarget,
   bytes: Uint8Array,
   fileName: string,

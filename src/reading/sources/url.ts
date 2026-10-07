@@ -120,3 +120,20 @@ function indexOfAscii(haystack: Uint8Array, needle: string): number {
   }
   return -1;
 }
+
+function charsetOf(contentType: string | null): string {
+  const m = /charset\s*=\s*"?([a-z0-9_:.+-]+)"?/i.exec(contentType ?? "");
+  return (m?.[1] ?? "utf-8").toLowerCase();
+}
+
+// A fetched page as text. A declared charset is honoured — a GB18030 page
+// decoded as UTF-8 is a document of replacement characters — and a label no
+// decoder knows falls back to UTF-8 rather than failing the fetch.
+export function decodePage(bytes: Uint8Array, contentType: string | null): string {
+  const charset = charsetOf(contentType);
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+}

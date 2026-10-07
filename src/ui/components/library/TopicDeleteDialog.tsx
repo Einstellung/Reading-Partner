@@ -11,6 +11,7 @@ import { listLibraryEntries, type LibraryEntry } from "../../../platform/app/lib
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import { listFilesOnlyInTopic } from "../../../reading/delete/delete-book";
 import { loadSavedArticles, savedArticlesForTopic } from "../../../reading/saved/saved-articles";
+import { filesLeavingWithTopic } from "../../../reading/saved/kept-document";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
@@ -44,7 +45,13 @@ export default function TopicDeleteDialog(props: {
       loadSavedArticles().catch(() => []),
     ]).then(([only, entries, saved]) => {
       if (!cancelled) {
-        setCounted({ only, entries, saved: savedArticlesForTopic(saved, topic.id).length });
+        setCounted({
+          // A kept article's document moves to Brief with its record, so it is
+          // not one of the files offered for deletion.
+          only: filesLeavingWithTopic(only, saved, topic.id),
+          entries,
+          saved: savedArticlesForTopic(saved, topic.id).length,
+        });
       }
     });
     return () => {

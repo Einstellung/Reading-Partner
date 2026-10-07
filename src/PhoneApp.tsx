@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID, listTopics, type Topic } from "./platform/app/topics";
-import { listLibraryEntries, type LibraryEntry } from "./platform/app/library";
+import { libraryHas, listLibraryEntries, type LibraryEntry } from "./platform/app/library";
 import {
   libraryFilePath,
   openIn,
@@ -30,6 +30,7 @@ import {
   savedArticlesForTopic,
   type SavedArticle,
 } from "./reading/saved/saved-articles";
+import { keptArticleOpening } from "./reading/saved/kept-document";
 import { registerPlaces } from "./desk";
 import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
@@ -271,6 +272,17 @@ export default function PhoneApp({
     setStack((s) => push(s, { kind: "reader", bookId: book.bookId, name: book.name }));
   }, []);
 
+  // A kept article opens as the document its keep built when this phone has the
+  // bytes, and as its kept snapshot otherwise (reading/saved/kept-document.ts).
+  const openKeptArticle = useCallback(
+    async (article: SavedArticle) => {
+      const doc = keptArticleOpening(article, topics ?? []);
+      if (doc && (await libraryHas(doc.bookId).catch(() => false))) return openReader(doc);
+      setStack((s) => push(s, { kind: "savedArticle", article }));
+    },
+    [topics, openReader],
+  );
+
   // Into a lesson (docs/70). The first one on this phone is explained before it
   // opens: the tap the reader made was on a book cover, and what comes up is a
   // conversation. The sheet holds the book it was opened on until the reader
@@ -402,9 +414,13 @@ export default function PhoneApp({
           {base.kind === "saved" && (
             <SavedList
               articles={savedArticles ?? []}
-              onOpen={(article) => setStack((s) => push(s, { kind: "savedArticle", article }))}
+              onOpen={(article) => void openKeptArticle(article)}
               onBack={goBack}
-              onChanged={refreshSavedArticles}
+              // Un-keeping takes the document off the shelf too.
+              onChanged={async () => {
+                await refreshSavedArticles();
+                await refreshShelf();
+              }}
               onNotice={pushToast}
             />
           )}

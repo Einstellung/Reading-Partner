@@ -1,8 +1,10 @@
 // Saved articles (docs/21): an info article the reader kept, filed under a topic. The
 // store — reading it, writing it, keeping it mergeable. What reaches the AI is one
 // step further out: from the open book's chat the model can list these records and
-// put one of them on the open book's prep list (saved-article-tools.ts). No
-// TopicMaterial is involved either way; a kept article is not a book.
+// put one of them on the open book's prep list (saved-article-tools.ts). Since
+// docs/85 step 4 a keep also builds the body into an EPUB in the library, listed
+// in the record's topic like any document (reading/ingest/keep.ts); the record
+// names it by `documentHash` and stays the article's metadata and its snapshot.
 //
 // Read through readGuardedJson, for the reason the shelf and settings are: the
 // briefing a record came from is a day old and gone, keep/un-keep are both
@@ -95,6 +97,17 @@ export interface SavedArticle {
   // prints it on every row (saved-article-tools.ts) — and reading thirty body
   // files to draw a list would put the bodies back in the hot path.
   textChars: number;
+  // The library document the keep built out of the body (docs/85 step 4): the
+  // EPUB's book id, which the record's topic lists alongside its books. The
+  // record and the document are one kept article — moving it moves both
+  // (kept-document.ts), and the shelf shows the document instead of the record.
+  // Absent on a record kept before documents were built (not migrated), and on
+  // one whose body the bindery turned back; such a record is read through its
+  // body file as before. Optional and additive: a build that predates the field
+  // reads past it and carries it through a move, because those writes spread the
+  // record they read; only its own re-keep of the same article writes the record
+  // anew without it, and the next keep or move here links it again.
+  documentHash?: string;
 }
 
 // The two forms of one article's body, as they are stored together.
@@ -199,7 +212,15 @@ export function buildSavedArticle(
     summaryOnly: input.summaryOnly,
     bodyHash: stored.hash,
     textChars: stored.chars,
+    ...(input.documentHash ? { documentHash: input.documentHash } : {}),
   };
+}
+
+// The library document this record was built into, or "" for none. Synced like
+// bodyHash, so held to the same shape before anything looks it up.
+export function savedArticleDocumentOf(article: SavedArticle): string {
+  const hash = asString(article.documentHash);
+  return BODY_HASH.test(hash) ? hash : "";
 }
 
 // How long this article's text is, for a caller drawing a list. The
@@ -233,12 +254,19 @@ export function parseArticleBody(raw: unknown): SavedArticleBody {
 // Add one article, or refresh the one already there. Saving the same article
 // twice must not produce a second record; the earlier savedAt is kept so the
 // list does not reshuffle on a re-save, and the newer body/topic wins (the
-// second save may have caught a full text the first one missed).
+// second save may have caught a full text the first one missed). A re-save that
+// built no document keeps the one the first save linked: the document is still
+// on the shelf, and dropping the link would split one kept article into two.
 export function upsertSavedArticle(list: SavedArticle[], article: SavedArticle): SavedArticle[] {
   const at = list.findIndex((a) => a.id === article.id);
   if (at < 0) return [...list, article];
   const next = [...list];
-  next[at] = { ...article, savedAt: list[at].savedAt };
+  const earlier = list[at];
+  const linked =
+    article.documentHash === undefined && earlier.documentHash !== undefined
+      ? { documentHash: earlier.documentHash }
+      : {};
+  next[at] = { ...article, ...linked, savedAt: earlier.savedAt };
   return next;
 }
 

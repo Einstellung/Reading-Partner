@@ -72,12 +72,24 @@ async function withImages(
   return { manuscript: { ...m, images }, srcs };
 }
 
+/** A manuscript that passed the gate, and the adapter that read it. */
+export interface ReadManuscript {
+  ok: true;
+  manuscript: Manuscript;
+  adapter: string;
+}
+
 /**
- * Make material into an EPUB, or say why it cannot be one. A rejection is a
- * normal answer (a sign-in wall, an empty page) and carries a sentence the
- * caller can pass on; a thrown error is a wiring or build fault.
+ * The first two steps without the third: the adapter reads the material and the
+ * gate looks at what it made. For a caller that needs the text and not a
+ * document (prep's add-link reads a page into its notes and files nothing), so
+ * the page is read by the same adapter and turned back by the same gate as one
+ * that becomes a document. No picture is fetched.
  */
-export async function bind(material: Material, deps: BinderyDeps = {}): Promise<BindResult> {
+export async function readMaterial(
+  material: Material,
+  deps: BinderyDeps = {},
+): Promise<ReadManuscript | Rejection> {
   const adapter = siteAdapterFor(material) ?? builtInAdapter(material);
   if (!adapter) {
     return rejection("no-adapter", "nothing here knows how to read a bare link to that site");
@@ -88,8 +100,19 @@ export async function bind(material: Material, deps: BinderyDeps = {}): Promise<
 
   const turnedBack = gateManuscript(made, { minChars: adapter.minChars });
   if (turnedBack) return turnedBack;
+  return { ok: true, manuscript: made, adapter: adapter.name };
+}
 
-  const { manuscript, srcs } = await withImages(made, deps);
+/**
+ * Make material into an EPUB, or say why it cannot be one. A rejection is a
+ * normal answer (a sign-in wall, an empty page) and carries a sentence the
+ * caller can pass on; a thrown error is a wiring or build fault.
+ */
+export async function bind(material: Material, deps: BinderyDeps = {}): Promise<BindResult> {
+  const read = await readMaterial(material, deps);
+  if (!read.ok) return read;
+
+  const { manuscript, srcs } = await withImages(read.manuscript, deps);
   const epub = await buildSectionedEpub(manuscriptEpubInput(manuscript));
   const have = new Set(manuscript.images.map((i) => i.src));
   return {
@@ -101,7 +124,7 @@ export async function bind(material: Material, deps: BinderyDeps = {}): Promise<
       ...(manuscript.publishedAt === undefined ? {} : { publishedAt: manuscript.publishedAt }),
       ...(manuscript.sourceUrl === undefined ? {} : { sourceUrl: manuscript.sourceUrl }),
       language: oneLine(manuscript.language ?? "") || "en",
-      adapter: adapter.name,
+      adapter: read.adapter,
       sections: manuscript.sections.length,
       chars: manuscriptText(manuscript).length,
       imagesEmbedded: manuscript.images.length,

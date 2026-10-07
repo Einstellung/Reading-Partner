@@ -11,6 +11,8 @@
 import { expect, test } from "bun:test";
 import {
   deleteBook,
+  removeDocumentFromTopic,
+  removeFromTopic,
   type DeleteBookDeps,
 } from "../../../src/reading/delete/delete-book";
 import type { Observation } from "../../../src/memory/observations/types";
@@ -234,4 +236,42 @@ test("a shelf that cannot be rewritten stops the delete before anything else", a
   // The tombstone is already down, so the next attempt — or the next pass on
   // any device — finishes what this one started.
   expect(log.calls).toEqual(["tombstone " + BOOK]);
+});
+
+// --- a kept article's document (docs/85 step 4) -----------------------------
+
+test("taking a document's row off a topic un-keeps the article kept there, and still counts references", async () => {
+  const log: Log = { calls: [] };
+  const deleted = await removeFromTopic(
+    "t1",
+    TOPICS[0].files[0],
+    deps(log, {
+      forgetKeptArticles: async (topicId, hash) => {
+        log.calls.push(`forget ${topicId} ${hash}`);
+      },
+    }),
+  );
+  // t2 still lists the book, so only the row goes.
+  expect(deleted).toBe(false);
+  expect(log.calls).toEqual(["unlink t1 /books/a.pdf", `forget t1 ${BOOK}`]);
+});
+
+test("a kept record that will not go does not stop the row's removal", async () => {
+  const log: Log = { calls: [] };
+  await removeFromTopic(
+    "t1",
+    TOPICS[0].files[1],
+    deps(log, {
+      forgetKeptArticles: async () => {
+        throw new Error("saved-articles.json could not be read");
+      },
+    }),
+  );
+  expect(log.calls).toEqual(["unlink t1 /books/b.pdf"]);
+});
+
+test("removeDocumentFromTopic takes every row of that document off the one topic", async () => {
+  const log: Log = { calls: [] };
+  await removeDocumentFromTopic("t2", BOOK, deps(log));
+  expect(log.calls).toEqual(["unlink t2 /shared/a.pdf"]);
 });

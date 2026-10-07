@@ -3,6 +3,7 @@
 
 import { expect, test } from "bun:test";
 import {
+  decodePage,
   looksLikeHttpUrl,
   provisionalTitleFromUrl,
   resolveUrlSource,
@@ -59,4 +60,13 @@ test("sniffContentType: HTML bytes are html", () => {
 test("sniffContentType: application/pdf header without magic bytes still pdf", () => {
   const bytes = new TextEncoder().encode("not-a-pdf-prefix");
   expect(sniffContentType(bytes, "application/pdf")).toBe("pdf");
+});
+
+test("decodePage honours a declared charset and falls back to UTF-8", () => {
+  // "中文" in GB18030.
+  const gb = new Uint8Array([0xd6, 0xd0, 0xce, 0xc4]);
+  expect(decodePage(gb, 'text/html; charset="GB18030"')).toBe("中文");
+  const utf8 = new TextEncoder().encode("中文");
+  expect(decodePage(utf8, null)).toBe("中文");
+  expect(decodePage(utf8, "text/html; charset=no-such-charset")).toBe("中文");
 });

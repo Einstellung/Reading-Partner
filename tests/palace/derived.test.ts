@@ -198,6 +198,9 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "reading/desk-tools.ts",
   "reading/rehearsal/store.ts",
   "reading/retell/store.ts",
+  // Opening a kept article's document names the topic its row is in; the
+  // record that stores a topic is saved-articles.ts.
+  "reading/saved/kept-document.ts",
   "reading/session/hangup.ts",
   // The topic whose event log records a conversation delete; passed in, not stored.
   "reading/delete/delete-thread.ts",

@@ -44,6 +44,7 @@ import { deleteRetell, listAllRetells } from "../retell/store";
 import type { Retell } from "../retell/types";
 import { talkOutlineOfRetell } from "../talk/store";
 import { deleteOutlineWithRehearsals, deleteRetellWithTalk } from "./delete-retell";
+import { forgetKeptArticlesOfDocument } from "../saved/kept-document";
 import { prepPaperCacheFiles } from "./prep-files";
 import {
   deadLocalPathsFor,
@@ -82,6 +83,12 @@ export interface DeleteBookDeps {
   removeThreadImages: (threadId: string) => Promise<void>;
   /** The downloaded papers' caches of a book's prep, read before prep goes. */
   prepCacheFiles: (bookId: string) => Promise<string[]>;
+  /**
+   * Un-keep the articles kept in a topic whose document was just taken off it
+   * (saved/kept-document.ts). Optional so a test that has no kept articles
+   * need not say so.
+   */
+  forgetKeptArticles?: (topicId: string, hash: string) => Promise<void>;
 }
 
 // A file or directory that is not there is already in the state this asks for.
@@ -115,6 +122,7 @@ export const liveDeleteBookDeps: DeleteBookDeps = {
   threadIdsOf: liveThreadIds,
   removeThreadImages: deleteThreadImages,
   prepCacheFiles: (bookId) => prepPaperCacheFiles(bookId),
+  forgetKeptArticles: (topicId, hash) => forgetKeptArticlesOfDocument(topicId, hash),
 };
 
 // Every supplements-<bookId>.json at the AppData root. An unreadable one
@@ -307,14 +315,43 @@ export async function deleteIfUnreferenced(
   return true;
 }
 
-/** Take a file off a topic, and the document with it when that was the last reference. */
+/**
+ * Take a file off a topic, and the document with it when that was the last
+ * reference. A kept article whose document this was goes with the row (docs/85
+ * step 4): the record and the document are one item, and a record left behind
+ * would come back as a row of its own. Best-effort — the row is already gone.
+ */
 export async function removeFromTopic(
   topicId: string,
   file: FileRef,
   deps: DeleteBookDeps = liveDeleteBookDeps,
 ): Promise<boolean> {
   await deps.unlinkFile(topicId, file.path);
+  if (file.hash && deps.forgetKeptArticles) {
+    try {
+      await deps.forgetKeptArticles(topicId, file.hash);
+    } catch (e) {
+      console.warn("failed to un-keep the article of a removed document", file.hash, e);
+    }
+  }
   return file.hash ? deleteIfUnreferenced(file.hash, deps) : false;
+}
+
+/**
+ * Take a document off a topic by its id rather than its row: every row of the
+ * topic that lists it goes through removeFromTopic. For a caller that knows
+ * which document it is replacing and not the reference it was listed under (a
+ * re-keep superseding the summary it first built, ingest/keep.ts).
+ */
+export async function removeDocumentFromTopic(
+  topicId: string,
+  hash: string,
+  deps: DeleteBookDeps = liveDeleteBookDeps,
+): Promise<void> {
+  const topic = (await deps.listTopics()).find((t) => t.id === topicId);
+  for (const file of topic?.files ?? []) {
+    if (file.hash === hash) await removeFromTopic(topicId, file, deps);
+  }
 }
 
 /** Whether removeFromTopic would delete the document: what the confirmation says. */

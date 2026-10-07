@@ -44,7 +44,8 @@ import { listAllTalkOutlines, talkOutlineOfRetell } from "../talk/store";
 import type { TalkOutline } from "../talk/types";
 import { deleteRehearsal, listAllRehearsals } from "../rehearsal/store";
 import type { Rehearsal } from "../rehearsal/types";
-import { loadSavedArticles, setSavedArticleTopic } from "../saved/saved-articles";
+import { loadSavedArticles } from "../saved/saved-articles";
+import { moveKeptArticle } from "../saved/kept-document";
 import type { SavedArticle } from "../saved/saved-articles";
 
 /** One conversation file, reduced to what clearing a filed topic needs. */
@@ -100,8 +101,10 @@ export const liveDeleteTopicDeps: DeleteTopicDeps = {
   listRehearsals: listAllRehearsals,
   deleteRehearsal,
   listSavedArticles: () => loadSavedArticles(),
+  // The document a keep built goes with its record (saved/kept-document.ts), so
+  // a kept article survives its topic whole.
   setArticleTopic: async (articleId, topicId) => {
-    await setSavedArticleTopic(articleId, topicId);
+    await moveKeptArticle(articleId, topicId);
   },
   listThreadFiles: liveThreadFiles,
   clearThreadTopic: async (fileKey, threadId) => {

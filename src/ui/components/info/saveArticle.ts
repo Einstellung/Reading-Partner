@@ -14,10 +14,18 @@
 // published body on a device that only reads, which has none. Both are already
 // sanitized, and both know whether the article itself was ever read — so there
 // is no guessing left to do here.
+//
+// The keep itself also builds that body into a document (reading/ingest/keep.ts,
+// docs/85 step 4). Its live deps are assembled here because one of them, taking
+// a superseded document off its topic, is reading/delete's, and reading/delete
+// already depends on the ingest.
 
 import type { ArticleBody } from "../../../info/briefer/reader";
 import type { BriefingItemMeta } from "../../../info/boxes/types";
-import type { SavedArticleInput } from "../../../reading/saved/saved-articles";
+import { removeDocumentFromTopic } from "../../../reading/delete/delete-book";
+import { keepArticle } from "../../../reading/ingest/keep";
+import { liveKeepDeps } from "../../../reading/ingest/live";
+import type { SavedArticle, SavedArticleInput } from "../../../reading/saved/saved-articles";
 
 export function toSavedArticleInput(ctx: {
   topicId: string;
@@ -35,4 +43,13 @@ export function toSavedArticleInput(ctx: {
     text: ctx.body.text,
     html: ctx.body.html,
   };
+}
+
+/** Keep an article with the real host behind it. Answers the record written. */
+export async function keepArticleLive(input: SavedArticleInput): Promise<SavedArticle | null> {
+  const deps = {
+    ...liveKeepDeps(),
+    retire: (topicId: string, hash: string) => removeDocumentFromTopic(topicId, hash),
+  };
+  return (await keepArticle(input, deps)).record;
 }

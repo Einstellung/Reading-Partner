@@ -11,7 +11,9 @@ import { FULLTEXT_VERSION, type Fulltext } from "../../../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../../figures";
 import { loadSettings } from "../../../platform/app/settings";
 import { recordParse } from "../../../platform/app/structured-output";
-import { extractArticle, looksLikeHttpUrl, sniffContentType } from "../../sources";
+import { decodePage, looksLikeHttpUrl, sniffContentType } from "../../sources";
+import { loadExtractReadable } from "../../../workshop/extract/readable-lazy";
+import { readWebSource } from "./web-source";
 import { fetchFromArxiv, normalizeArxivId } from "../../../info/sources/plugins/arxiv-client";
 import { fetchFromOpenAlex } from "../../../info/sources/plugins/openalex-client";
 import { fetchWithRetry } from "../../../platform/http/throttled-fetch";
@@ -49,8 +51,9 @@ const MAX_SOURCE_BYTES = 30 * 1024 * 1024;
 // enforces the size cap, sniffs PDF vs HTML, and returns a FetchOutcome whose
 // full text is already extracted and cached — so the chat can read it the moment
 // the fetch stage ends, before digestion. A PDF is stored and text-extracted; an
-// HTML page's main content becomes a single-"page" full text. Throws a clear
-// error on 404 / oversize / an empty article.
+// HTML page is read by the bindery's web adapter and gate (web-source.ts), and
+// its article becomes a single-"page" full text. Throws a clear error on 404 /
+// oversize / a page with no article in it.
 async function fetchSource(surveyHash: string, paper: PrepPaper): Promise<FetchOutcome> {
   const url = paper.sourceUrl!;
   const res = await fetchWithRetry(url);
@@ -86,8 +89,10 @@ async function fetchSource(surveyHash: string, paper: PrepPaper): Promise<FetchO
     };
   }
 
-  const article = extractArticle(new TextDecoder("utf-8").decode(bytes));
-  if (!article.text.trim()) throw new Error("no readable article content at the link");
+  const article = await readWebSource(
+    { url, html: decodePage(bytes, res.headers.get("content-type")) },
+    { extractReadable: await loadExtractReadable() },
+  );
   const ft: Fulltext = {
     version: FULLTEXT_VERSION,
     status: "ok",
@@ -102,7 +107,7 @@ async function fetchSource(surveyHash: string, paper: PrepPaper): Promise<FetchO
     pdfBytes: null,
     fulltext: ft,
     kind: "article",
-    title: article.title ?? undefined,
+    title: article.title,
   };
 }
 

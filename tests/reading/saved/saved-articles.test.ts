@@ -17,6 +17,7 @@ import {
   normalizeArticleUrl,
   parseSavedArticles,
   removeSavedArticleById,
+  savedArticleDocumentOf,
   savedArticleId,
   savedArticlesForTopic,
   upsertSavedArticle,
@@ -184,6 +185,47 @@ test("upsertSavedArticle re-saves in place: one record, first savedAt, newer bod
   expect(list[0].savedAt).toBe(10);
   expect(list[0].bodyHash).toBe("0123456789abcdef0123456789abcdef");
   expect(list[0].textChars).toBe(9);
+});
+
+// --- the document a keep built (docs/85 step 4) ------------------------------
+
+const DOC_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const DOC_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+test("buildSavedArticle carries the document hash when there is one, and no key when not", () => {
+  expect(saved(input({ documentHash: DOC_A }), 1).documentHash).toBe(DOC_A);
+  // Absent rather than undefined: the records file is one sync unit, and a key
+  // that appears with no value is still a revision.
+  expect("documentHash" in saved(input(), 1)).toBe(false);
+});
+
+test("a re-save that built no document keeps the document the first save linked", () => {
+  const first = saved(input({ documentHash: DOC_A }), 10);
+  const list = upsertSavedArticle([first], saved(input(), 20));
+  expect(list[0].documentHash).toBe(DOC_A);
+});
+
+test("a re-save that built a document links the new one", () => {
+  const first = saved(input({ documentHash: DOC_A }), 10);
+  const list = upsertSavedArticle([first], saved(input({ documentHash: DOC_B }), 20));
+  expect(list[0].documentHash).toBe(DOC_B);
+  expect(list[0].savedAt).toBe(10);
+});
+
+test("savedArticleDocumentOf answers only a hash this build would have written", () => {
+  expect(savedArticleDocumentOf(saved(input({ documentHash: DOC_A }), 1))).toBe(DOC_A);
+  expect(savedArticleDocumentOf(saved(input(), 1))).toBe("");
+  // The field arrives over sync from anywhere.
+  const odd = { ...saved(input(), 1), documentHash: "../library.json" };
+  expect(savedArticleDocumentOf(odd)).toBe("");
+});
+
+test("a record written by an older build reads back with no document, and a newer field survives the parse", () => {
+  const older = { ...saved(input(), 1) };
+  const newer = { ...saved(input({ url: "https://example.com/b", documentHash: DOC_A }), 2) };
+  const parsed = parseSavedArticles([older, newer]);
+  expect(parsed?.articles.map((a) => a.documentHash)).toEqual([undefined, DOC_A]);
+  expect(parsed?.repaired).toBe(false);
 });
 
 test("removeSavedArticleById removes only the named record", () => {
