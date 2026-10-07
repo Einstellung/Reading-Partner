@@ -45,6 +45,9 @@ function given(meta: MaterialMeta): Omit<Manuscript, "title" | "sections" | "ima
  */
 export const webAdapter: Adapter<Of<"web">> = {
   name: "web",
+  // A short news item in Chinese runs to a couple of hundred characters; a JS
+  // shell or a login wall is caught by the gate's patterns, not by length.
+  minChars: 200,
   async toManuscript(material, deps) {
     if (!deps.extractReadable) throw new Error("the web adapter needs extractReadable");
     const extraction = deps.extractReadable(material.html, material.url);
@@ -75,6 +78,8 @@ const FIRST_HEADING = /<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/i;
  */
 export const htmlAdapter: Adapter<Of<"html">> = {
   name: "html",
+  // Handed over by the reader, not scraped: anything not empty is content.
+  minChars: 1,
   async toManuscript(material) {
     const meta = readPageMeta(material.html);
     const titleFrom = (re: RegExp) => oneLine(htmlToText(re.exec(material.html)?.[1] ?? ""));
@@ -118,6 +123,8 @@ export function textToHtml(text: string): string {
 /** Plain text. Untitled text is named by its first line. */
 export const textAdapter: Adapter<Of<"text">> = {
   name: "text",
+  // Handed over by the reader, not scraped: anything not empty is content.
+  minChars: 1,
   async toManuscript(material) {
     const title = oneLine(material.title ?? "") || derivedTitle(material.text);
     return {
@@ -146,6 +153,8 @@ const LEADING_H1 = /^\s*#[ \t]+(.+?)[ \t#]*(?:\n|$)/;
  */
 export const markdownAdapter: Adapter<Of<"markdown">> = {
   name: "markdown",
+  // Handed over by the reader, not scraped: anything not empty is content.
+  minChars: 1,
   async toManuscript(material) {
     let source = material.markdown.replace(/\r\n?/g, "\n");
     let title = oneLine(material.title ?? "");

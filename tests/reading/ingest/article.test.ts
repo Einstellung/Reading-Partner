@@ -241,7 +241,7 @@ test("a sign-in shell is turned back with its reason, and nothing is fetched aft
 test("a body too short to be the article is turned back", async () => {
   const page = `<html><body><p>${"word ".repeat(20)}</p></body></html>`;
   const r = recorder({ [PAGE_URL]: ok(page, "text/html") });
-  await expect(ingestArticleUrl(PAGE_URL, book("b1"), r.deps)).rejects.toThrow(/fewer than the 500/);
+  await expect(ingestArticleUrl(PAGE_URL, book("b1"), r.deps)).rejects.toThrow(/fewer than the 200/);
   expect(r.supplements).toEqual([]);
   expect(disk.files.has(LIBRARY_FILE)).toBe(false);
 });
