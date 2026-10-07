@@ -130,7 +130,7 @@
 - [38-embedpdf-pinch-selection-global-pause](./touch/38-embedpdf-pinch-selection-global-pause.md) — 缩放走原生 touch 通道、选区 handler 不分 pointerId、pause 是全局的；多指/手掌/笔占用期间要逐指针 stopPropagation 而不是 pause。附：`setPointerCapture` 重定向掉引擎的 pointerup，每次滚动都留活 anchor，之后任意一个 move 就把整页选蓝；接管时要补发合成 pointerup
 - [39-ios-no-web-palm-rejection](./touch/39-ios-no-web-palm-rejection.md) — iPad 上笔手互斥由系统强制且关不掉，接触面积也拿不到；web 层的掌抑制做不了也不用做，按面积判掌反而会掐死 pinch
 - [41-zoom-wrapper-owns-content-transform](./touch/41-zoom-wrapper-owns-content-transform.md) — 内容元素的 transform 归缩放预览所有，橡皮筋只能用 rAF 回弹、不能留 CSS transition
-- [44-finger-draw-heuristic-kills-scrolling](./touch/44-finger-draw-heuristic-kills-scrolling.md) — "没见过笔就让手指画"让选了标注工具的手指在 vertical 下彻底滑不动；删掉启发式，改成默认关闭的 fingerDraw 设置项
+- [44-finger-draw-heuristic-kills-scrolling](./touch/44-finger-draw-heuristic-kills-scrolling.md) — "没见过笔就让手指画"让选了标注工具的手指在 vertical 下彻底滑不动；删掉启发式。后来连 fingerDraw 设置也删了，手指只靠长按选词标注
 - [45-vertical-band-cannot-move-scroll-content](./touch/45-vertical-band-cannot-move-scroll-content.md) — 平移滚动内容会改可滚溢出区，浏览器夹紧 scrollTop 正好抵消掉偏移；纵向橡皮筋要平移滚动容器自己
 - [46-navlock-pen-still-drags-selection](./touch/46-navlock-pen-still-drags-selection.md) — navlock 下笔的 move 仍放行给引擎，滚动正常但照样拖出选区；逐指针拦 move、放行 down/up，保住 tap
 - [49-webkit-native-selection-over-page](./touch/49-webkit-native-selection-over-page.md) — 阅读区没 DOM 文本也照样能起原生选区（WebKit 只看 `user-select` 用值），整页变蓝加系统 callout；阅读区根节点关掉 user-select 和 touch-callout，引擎选区不受影响。preflight 不含 user-select，这条手写规则引入 preflight 之后仍然必需（与坑 43 同族、结局相反）

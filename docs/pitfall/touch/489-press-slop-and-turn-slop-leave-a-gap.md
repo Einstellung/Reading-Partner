@@ -6,7 +6,7 @@
 
 ## 原因
 
-同一根手指有两个读者。按压状态机（`flow-gesture.ts`）的 `PRESS_SLOP_PX` 是 8：一超就进 released，抬手不算点击。翻页路由（`reading/engine/gesture/paged-gesture.ts`）的 slop 是 10，超了才接管跟手，要拖过 22% 屏宽或 0.45px/ms 才翻，否则弹回。8px 以上、够不上一次翻页的按压，两边都不认。
+同一根手指有两个读者。按压状态机（`engine/gesture/press.ts`）的 `PRESS_SLOP_PX` 是 8：一超就进 released，抬手不算点击。翻页路由（`reading/engine/gesture/paged-gesture.ts`）的 slop 是 10，超了才接管跟手，要拖过 22% 屏宽或 0.45px/ms 才翻，否则弹回。8px 以上、够不上一次翻页的按压，两边都不认。
 
 这个 reducer 最早是给滚动模式写的：那里走出 slop 就是浏览器的滚动，浏览器接着会 `pointercancel`，所以按距离放手是对的。翻页模式没有原生滚动，拖动是路由的，距离不能代替「有人接管了」。
 

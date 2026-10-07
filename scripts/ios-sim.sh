@@ -349,7 +349,7 @@ cmd_open() {
 
 # The engine harness (embedpdf-spike.html) mounts EmbedPdfView on public/demo.pdf
 # with no shell around it, and hands the whole EmbedPdfHandle to window.__spike —
-# tool, layout, finger-draw and page are all reachable from the bridge, which is
+# tool, layout and page are all reachable from the bridge, which is
 # what makes the reader's gestures scriptable without a library or a file picker.
 cmd_reader() {
   cmd_open /embedpdf-spike.html >/dev/null
@@ -399,9 +399,9 @@ cmd_rec_install() { sim_eval <"$JS/recorder.js"; }
 # state is set through the engine handle rather than the UI so a scenario cannot
 # fail for a reason that has nothing to do with the gesture.
 
-setup() { # setup <layout> <tool> <fingerDraw 0|1> <page>
-  printf '(async () => { const h = window.__spike.handle; h.setLayout("%s"); h.setTool("%s"); h.setFingerDraw(%s); h.navigateToPage(%s); await new Promise(r => setTimeout(r, 1200)); return JSON.stringify(window.__spike.lastStats); })()' \
-    "$1" "$2" "$3" "$4" | sim_eval
+setup() { # setup <layout> <tool> <page>
+  printf '(async () => { const h = window.__spike.handle; h.setLayout("%s"); h.setTool("%s"); h.navigateToPage(%s); await new Promise(r => setTimeout(r, 1200)); return JSON.stringify(window.__spike.lastStats); })()' \
+    "$1" "$2" "$3" | sim_eval
 }
 
 record_swipe() { # record_swipe <x1> <y1> <x2> <y2> [dur] [delta]
@@ -414,14 +414,14 @@ record_swipe() { # record_swipe <x1> <y1> <x2> <y2> [dur] [delta]
 }
 
 scenario_vertical_top() {
-  setup vertical pointer false 0 >/dev/null
+  setup vertical pointer 0 >/dev/null
   # Pull down from the first page: there is nothing above it, so this is the
   # rubber band's top edge.
   record_swipe 417 400 417 900 0.6 4
 }
 
 scenario_vertical_bottom() {
-  setup vertical pointer false 0 >/dev/null
+  setup vertical pointer 0 >/dev/null
   # Park on the last page's bottom, then keep pulling up past it. This is the
   # edge docs/pitfall/45 says a content translate cannot reach.
   printf '(async () => { const s = [...document.querySelectorAll("[data-reader-surface] *")].find(e => /(auto|scroll)/.test(getComputedStyle(e).overflowY)); s.scrollTop = s.scrollHeight; await new Promise(r => setTimeout(r, 1500)); s.scrollTop = s.scrollHeight; await new Promise(r => setTimeout(r, 600)); return JSON.stringify({st: s.scrollTop, max: s.scrollHeight - s.clientHeight}); })()' | sim_eval
@@ -429,9 +429,9 @@ scenario_vertical_bottom() {
 }
 
 scenario_ink_finger() {
-  # The pen tool with finger-draw off: a finger must move the page and leave no
+  # The pen tool in hand: a finger must move the page and leave no
   # stroke behind (docs/pitfall/37, 44).
-  setup vertical ink false 3 >/dev/null
+  setup vertical ink 3 >/dev/null
   printf 'window.__spike.saves.length = 0; window.__spike.saves.length' | sim_eval >/dev/null
   record_swipe 417 800 417 400 0.5 4
   printf 'JSON.stringify({saves: window.__spike.saves.length, embed: window.__spike.handle._debug.dumpEmbed().length, sel: String(getSelection()).length})' | sim_eval
@@ -440,7 +440,7 @@ scenario_ink_finger() {
 scenario_ink_finger_horizontal() {
   # The horizontal half of the same rule: a sideways drag must commit as a
   # scroll, not leak into the annotation layer.
-  setup vertical ink false 3 >/dev/null
+  setup vertical ink 3 >/dev/null
   printf 'window.__spike.saves.length = 0; window.__spike.saves.length' | sim_eval >/dev/null
   record_swipe 200 700 700 700 0.5 4
   printf 'JSON.stringify({saves: window.__spike.saves.length, embed: window.__spike.handle._debug.dumpEmbed().length, sel: String(getSelection()).length})' | sim_eval
@@ -451,7 +451,7 @@ scenario_ink_finger_horizontal() {
 # selection by the two fingers doing the zooming.
 scenario_pinch() { # [out|in] [scale]
   cmd_rec_install >/dev/null
-  setup vertical pointer false 0 >/dev/null
+  setup vertical pointer 0 >/dev/null
   printf 'JSON.stringify({zoomBefore: window.__spike.lastStats.zoom, selBefore: String(getSelection()).length})' | sim_eval
   printf 'JSON.stringify(window.__rec.start())' | sim_eval >/dev/null
   cmd_pinch "${1:-out}" "${2:-2.0}" >/dev/null
@@ -460,7 +460,7 @@ scenario_pinch() { # [out|in] [scale]
 }
 
 scenario_paged_flip() {
-  setup paged pointer false 2 >/dev/null
+  setup paged pointer 2 >/dev/null
   record_swipe 700 600 150 600 0.4 4
   printf 'JSON.stringify(window.__spike.lastStats)' | sim_eval
 }
