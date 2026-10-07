@@ -3,7 +3,7 @@
 // The bar owns the overflow menu's contents; every other control reports up to
 // App.
 
-import type { RefObject } from "react";
+import { useMemo, type RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
 import type { LevelGate } from "../../../reading/turn/call-state";
 import { useT } from "../../../i18n";
@@ -21,6 +21,7 @@ import MoreMenu, { type MoreItem } from "./MoreMenu";
 import { readerPageText } from "./reader-page-text";
 import { zoomResetLabel } from "./reader-zoom-keys";
 import PenToolbar from "./PenToolbar";
+import { hasTouchInput, rackOmits } from "./reader-tool";
 import { Button } from "../ui/button";
 import lumenIcon from "../lumen/lumen-icon.webp";
 import { Separator } from "../ui/separator";
@@ -67,6 +68,8 @@ export default function ReaderTopBar(props: {
 }) {
   const t = useT();
   const { view, stats, sidebarOpen, gate } = props;
+  // Read once: the pointers a device has do not change under a reading session.
+  const omit = useMemo(() => rackOmits(hasTouchInput(typeof window === "undefined" ? undefined : window)), []);
   const BOOK_THREAD = t("reader.top.learnBook");
 
   const pageText = readerPageText(stats, t);
@@ -174,6 +177,7 @@ export default function ReaderTopBar(props: {
           tool={props.tool}
           onToolChange={props.onToolChange}
           disabled={gate.aiPen === null ? undefined : { ai: gate.aiPen }}
+          omit={omit}
         />
         <Separator orientation="vertical" className="flex-none data-[orientation=vertical]:h-5" />
         <span className="flex-none [font-variant-numeric:tabular-nums] text-[13px] text-muted-foreground whitespace-nowrap px-0.5">
