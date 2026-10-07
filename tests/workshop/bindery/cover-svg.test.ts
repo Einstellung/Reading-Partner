@@ -1,5 +1,5 @@
 // The typographic cover the app draws for its own documents (docs/67 「封面」).
-// Run: bash scripts/t.sh tests/reading/epub/cover-svg.test.ts
+// Run: bash scripts/t.sh tests/workshop/bindery/cover-svg.test.ts
 
 import { expect, test } from "bun:test";
 import {

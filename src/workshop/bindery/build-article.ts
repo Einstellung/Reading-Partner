@@ -4,6 +4,11 @@
 // beside them, `library/<hash>.epub`. From that moment the reader, the
 // pagination, the CFIs, the marks and the prep have nothing new to learn.
 //
+// A document made of several sections (a thread, a bound volume, docs/85) is the
+// same build with one spine document per section, each starting on a page of
+// its own. One section is written exactly as an article always was: the same
+// entry names, the same manifest, the same bytes.
+//
 // Two properties are load-bearing, and both are about the page numbers.
 //
 // Nothing remote survives. Two devices have to lay the same text out on the
@@ -73,8 +78,26 @@ export interface ArticleEpubInput extends ArticleMetadata {
   cover?: ArticleCover;
 }
 
+/** One section of a sectioned document: a spine document of its own. */
+export interface ArticleSection {
+  /** Written as the section's first line and its entry in the outline. */
+  heading?: string;
+  /** Body HTML, in the same form ArticleEpubInput.html takes. */
+  html: string;
+}
+
+export interface SectionedEpubInput extends ArticleMetadata {
+  /** In reading order. At least one. */
+  sections: readonly ArticleSection[];
+  /** The images any of the sections reference, matched by src as for an article. */
+  images: readonly ArticleImage[];
+  cover?: ArticleCover;
+}
+
 /** Archive layout. The spine document's images resolve one level up. */
 export const ARTICLE_ENTRY = "text/article.xhtml";
+// The manifest id of the one spine document of an article.
+const ARTICLE_ID = "article";
 const NAV_ENTRY = "nav.xhtml";
 const OPF_ENTRY = "package.opf";
 export const IMAGE_DIR = "images";
@@ -262,7 +285,7 @@ export function collectHeadings(root: Element): Heading[] {
 // URL is written as text and not only as a link, because a page read offline
 // still has to say where its words came from; as text it also references
 // nothing.
-function prependHeader(doc: Document, body: Element, input: ArticleEpubInput): void {
+function prependHeader(doc: Document, body: Element, input: ArticleMetadata): void {
   const header = doc.createElement("header");
   header.setAttribute("class", "rp-header");
   const line = (tag: string, className: string, text: string): Element => {
@@ -284,8 +307,21 @@ function prependHeader(doc: Document, body: Element, input: ArticleEpubInput): v
     time.textContent = /^\d{4}-\d{2}-\d{2}T/.test(published) ? published.slice(0, 10) : published;
     p.appendChild(time);
   }
-  line("p", "rp-source", oneLine(input.sourceUrl));
+  // A document with no address (text the reader pasted, a note the app wrote)
+  // says nothing here rather than an empty line.
+  const source = oneLine(input.sourceUrl);
+  if (source !== "") line("p", "rp-source", source);
   body.insertBefore(header, body.firstChild);
+}
+
+// A section's own heading, as the first thing in its spine document. An h1, so
+// that in the outline every section stands beside the document's title rather
+// than under the first section.
+function prependSectionHeading(doc: Document, body: Element, heading: string): void {
+  const h = doc.createElement("h1");
+  h.setAttribute("class", "rp-section-heading");
+  h.textContent = heading;
+  body.insertBefore(h, body.firstChild);
 }
 
 // The article's own sheet of CSS. Deliberately almost nothing: the page card
@@ -300,7 +336,14 @@ const ARTICLE_CSS = [
 
 // --- the archive ------------------------------------------------------------
 
-function navBranch(items: readonly Heading[], start: number, depth: number): {
+/** A nav entry: where it points, what it says, how deep it sits. */
+interface NavItem {
+  href: string;
+  title: string;
+  depth: number;
+}
+
+function navBranch(items: readonly NavItem[], start: number, depth: number): {
   html: string;
   next: number;
 } {
@@ -315,19 +358,27 @@ function navBranch(items: readonly Heading[], start: number, depth: number): {
       children = sub.html;
       i = sub.next;
     }
-    const href = `${ARTICLE_ENTRY}#${item.id}`;
-    html += `<li><a href="${escapeXml(href)}">${escapeXml(item.title)}</a>${children}</li>`;
+    html += `<li><a href="${escapeXml(item.href)}">${escapeXml(item.title)}</a>${children}</li>`;
   }
   return { html: `${html}</ol>`, next: i };
 }
 
-function navDocument(headings: readonly Heading[], language: string, title: string): string {
+function navDocument(
+  documents: readonly SpineDocument[],
+  language: string,
+  title: string,
+): string {
+  // Each document's headings, pointing into that document. Depths are relative
+  // within a document, so every document's first heading sits at the top level.
+  const items: NavItem[] = documents.flatMap((d) =>
+    d.headings.map((h) => ({ href: `${d.entry}#${h.id}`, title: h.title, depth: h.depth })),
+  );
   // A nav with no list at all is not a table of contents; an article with no
   // headings still gets one entry, which is the article.
   const list =
-    headings.length > 0
-      ? navBranch(headings, 0, headings[0].depth).html
-      : `<ol><li><a href="${ARTICLE_ENTRY}">${escapeXml(oneLine(title) || "Untitled")}</a></li></ol>`;
+    items.length > 0
+      ? navBranch(items, 0, items[0].depth).html
+      : `<ol><li><a href="${documents[0].entry}">${escapeXml(oneLine(title) || "Untitled")}</a></li></ol>`;
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${escapeXml(language)}">
@@ -340,6 +391,7 @@ function packageDocument(
   input: ArticleMetadata,
   language: string,
   identifier: string,
+  documents: readonly SpineDocument[],
   images: ReadonlyMap<string, Uint8Array>,
   imageTypes: ReadonlyMap<string, string>,
   hasCover: boolean,
@@ -351,7 +403,8 @@ function packageDocument(
   if (byline !== "") meta.push(`<dc:creator>${escapeXml(byline)}</dc:creator>`);
   const published = oneLine(input.publishedAt ?? "");
   if (published !== "") meta.push(`<dc:date>${escapeXml(published)}</dc:date>`);
-  meta.push(`<dc:source>${escapeXml(oneLine(input.sourceUrl))}</dc:source>`);
+  const source = oneLine(input.sourceUrl);
+  if (source !== "") meta.push(`<dc:source>${escapeXml(source)}</dc:source>`);
   meta.push(`<meta property="dcterms:modified">${FIXED_MODIFIED}</meta>`);
   // EPUB 2's way of naming the cover, beside EPUB 3's properties="cover-image"
   // below. Our own reader finds either (package.ts), and a reader that only
@@ -365,7 +418,9 @@ function packageDocument(
         ]
       : []),
     `<item id="nav" href="${NAV_ENTRY}" media-type="application/xhtml+xml" properties="nav"/>`,
-    `<item id="article" href="${ARTICLE_ENTRY}" media-type="application/xhtml+xml"/>`,
+    ...documents.map(
+      (d) => `<item id="${d.id}" href="${d.entry}" media-type="application/xhtml+xml"/>`,
+    ),
   ];
   for (const entry of [...images.keys()].sort()) {
     const id = `img-${entry.slice(IMAGE_DIR.length + 1).replace(/\./g, "-")}`;
@@ -376,7 +431,7 @@ function packageDocument(
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">${meta.join("")}</metadata>
   <manifest>${manifest.join("")}</manifest>
-  <spine><itemref idref="article"/></spine>
+  <spine>${documents.map((d) => `<itemref idref="${d.id}"/>`).join("")}</spine>
 </package>`;
 }
 
@@ -395,43 +450,69 @@ const CONTAINER = `<?xml version="1.0" encoding="utf-8"?>
  * and a caller that gets bytes back can trust them the way it trusts a book's.
  */
 export async function buildArticleEpub(input: ArticleEpubInput): Promise<Uint8Array> {
+  const { html, ...rest } = input;
+  return buildSectionedEpub({ ...rest, sections: [{ html }] });
+}
+
+// Where a section's spine document is written. A document of one section is an
+// article and keeps the article's name, which is what keeps its bytes.
+function sectionEntry(index: number, count: number): { entry: string; id: string } {
+  if (count === 1) return { entry: ARTICLE_ENTRY, id: ARTICLE_ID };
+  const n = String(index + 1).padStart(3, "0");
+  return { entry: `text/section-${n}.xhtml`, id: `section-${n}` };
+}
+
+/**
+ * A document of one or more sections as an EPUB: one spine document per
+ * section, in order, the header on the first. One section without a heading is
+ * byte for byte the article buildArticleEpub writes. Same guarantees and the
+ * same refusal as buildArticleEpub.
+ */
+export async function buildSectionedEpub(input: SectionedEpubInput): Promise<Uint8Array> {
   if (typeof DOMParser === "undefined") {
     throw new Error("no DOMParser: an article cannot be built unsanitized");
   }
+  if (input.sections.length === 0) throw new Error("a document needs at least one section");
   const language = oneLine(input.language ?? "") || "en";
   const packed = await packImages(input.images);
 
-  // The body comes in as a fragment. Parsing it as a document is what the
-  // reader would do to it anyway, and it keeps this side from ever assigning
-  // untrusted markup to an innerHTML.
-  const parsed = new DOMParser().parseFromString(input.html, "text/html");
-  const body = parsed.body;
-  if (!body) throw new Error("the article HTML parsed to no body");
-  // Images first: their src is the remote URL the caller fetched them by, and
-  // it is the key they are matched on, so it has to still be there. What the
-  // pass after it removes is every remote reference that is left.
-  rewriteImages(parsed, packed);
-  stripRemoteRefs(body);
-  prependHeader(parsed, body, input);
-  const headings = collectHeadings(body);
+  const documents: SpineDocument[] = input.sections.map((section, index) => {
+    const { entry, id } = sectionEntry(index, input.sections.length);
+    // The body comes in as a fragment. Parsing it as a document is what the
+    // reader would do to it anyway, and it keeps this side from ever assigning
+    // untrusted markup to an innerHTML.
+    const parsed = new DOMParser().parseFromString(section.html, "text/html");
+    const body = parsed.body;
+    if (!body) throw new Error("the article HTML parsed to no body");
+    // Images first: their src is the remote URL the caller fetched them by, and
+    // it is the key they are matched on, so it has to still be there. What the
+    // pass after it removes is every remote reference that is left.
+    rewriteImages(parsed, packed);
+    stripRemoteRefs(body);
+    const heading = oneLine(section.heading ?? "");
+    if (heading !== "") prependSectionHeading(parsed, body, heading);
+    if (index === 0) prependHeader(parsed, body, input);
+    const headings = collectHeadings(body);
+    const title = index === 0 || heading === "" ? oneLine(input.title) || "Untitled" : heading;
 
-  const source = `<?xml version="1.0" encoding="utf-8"?>
+    const source = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" lang="${escapeXml(language)}">
-<head><title>${escapeXml(oneLine(input.title) || "Untitled")}</title>
+<head><title>${escapeXml(title)}</title>
 <style>${ARTICLE_CSS}</style></head>
 <body>${body.innerHTML}</body>
 </html>`;
-  // The serialization above is HTML, not XHTML — an <img> in it has no closing
-  // slash — so the sanitizer reads it with its text/html fallback. What it
-  // writes is well-formed XML either way, and that is what goes in the archive.
-  const sanitized = sanitizeDocument(source, ARTICLE_ENTRY, (entry) => packed.entries.has(entry));
-  if (!sanitized) throw new Error("the article markup could not be sanitized");
+    // The serialization above is HTML, not XHTML (an <img> in it has no closing
+    // slash), so the sanitizer reads it with its text/html fallback. What it
+    // writes is well-formed XML either way, and that is what goes in the archive.
+    const sanitized = sanitizeDocument(source, entry, (e) => packed.entries.has(e));
+    if (!sanitized) throw new Error("the article markup could not be sanitized");
+    return { entry, id, html: sanitized.html, headings };
+  });
 
-  return packArticleEpub({
+  return packEpub({
     meta: input,
-    articleHtml: sanitized.html,
-    headings,
+    documents,
     images: packed.entries,
     imageTypes: packed.typeByEntry,
     cover: input.cover,
@@ -461,16 +542,52 @@ export interface ArticlePackInput {
  * paginates the same way.
  */
 export async function packArticleEpub(input: ArticlePackInput): Promise<Uint8Array> {
+  return packEpub({
+    meta: input.meta,
+    documents: [
+      { entry: ARTICLE_ENTRY, id: ARTICLE_ID, html: input.articleHtml, headings: input.headings },
+    ],
+    images: input.images,
+    imageTypes: input.imageTypes,
+    cover: input.cover,
+  });
+}
+
+/** One sanitized spine document and where it goes. */
+interface SpineDocument {
+  entry: string;
+  /** Manifest id. */
+  id: string;
+  /** The sanitized document, without the XML declaration and doctype. */
+  html: string;
+  headings: readonly Heading[];
+}
+
+interface PackInput {
+  meta: ArticleMetadata;
+  /** In spine order. */
+  documents: readonly SpineDocument[];
+  images: ReadonlyMap<string, Uint8Array>;
+  imageTypes: ReadonlyMap<string, string>;
+  cover?: ArticleCover;
+}
+
+async function packEpub(input: PackInput): Promise<Uint8Array> {
   const language = oneLine(input.meta.language ?? "") || "en";
-  const article = `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n${input.articleHtml}`;
+  const written = input.documents.map((d) => ({
+    entry: d.entry,
+    text: `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n${d.html}`,
+  }));
 
   // The publication's identity is its content, like everything else on the
   // shelf: the same article built twice is the same publication, and a new
   // snapshot of a page that changed is a new one.
   // A cover is part of what the file is, so it is part of what the file is
   // called. Left out of the digest when there is none, which keeps an article
-  // built today identical to the one built before covers existed.
-  const identity = input.cover ? `${article}\n${input.cover.svg}` : article;
+  // built today identical to the one built before covers existed. The same for
+  // sections: one document is digested alone, as an article always was.
+  const content = written.map((d) => d.text).join("\n");
+  const identity = input.cover ? `${content}\n${input.cover.svg}` : content;
   const identifier = `urn:rp:article:${await contentHash(strToU8(identity))}`;
 
   const files: Zippable = {};
@@ -484,13 +601,14 @@ export async function packArticleEpub(input: ArticlePackInput): Promise<Uint8Arr
         input.meta,
         language,
         identifier,
+        input.documents,
         input.images,
         input.imageTypes,
         input.cover !== undefined,
       ),
     ),
-    [NAV_ENTRY]: strToU8(navDocument(input.headings, language, input.meta.title)),
-    [ARTICLE_ENTRY]: strToU8(article),
+    [NAV_ENTRY]: strToU8(navDocument(input.documents, language, input.meta.title)),
+    ...Object.fromEntries(written.map((d) => [d.entry, strToU8(d.text)])),
     ...(input.cover ? { [COVER_ENTRY]: strToU8(input.cover.svg) } : {}),
     ...Object.fromEntries(input.images),
   };

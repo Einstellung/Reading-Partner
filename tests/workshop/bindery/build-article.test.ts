@@ -1,6 +1,6 @@
 // Building an EPUB out of a web article (docs/67), and reading the result back
 // through the pipeline a book goes through: unpack, parse, paginate.
-// Run: bash scripts/t.sh tests/reading/epub/build-article.test.ts
+// Run: bash scripts/t.sh tests/workshop/bindery/build-article.test.ts
 
 import { expect, test } from "bun:test";
 import { buildArticleEpub, MISSING_IMAGE_HEIGHT } from "../../../src/workshop/bindery/build-article";
