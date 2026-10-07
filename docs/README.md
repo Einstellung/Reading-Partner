@@ -84,6 +84,7 @@
 - [76 桌面自动更新](./platform/76-桌面自动更新.md) — 桌面版从 GitHub Releases 自更新
 - [78 分享](./platform/78-分享.md) — iOS 双向分享：Share Extension 进 Lumen 对话和书库，openin 往外交文字和链接
 - [80 回收](./platform/80-回收：retention、garbage marker 与 housekeeper.md) — palace 行的 retention、领域登记的 garbage marker、每晚执行的 housekeeper
+- [85 workshop与bindery](./platform/85-workshop与bindery.md) — 材料加工能力的 capability 目录；bindery 把任何材料装订成 EPUB
 
 ## pitfall
 
