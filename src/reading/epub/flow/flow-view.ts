@@ -38,7 +38,7 @@ import type { Pagination } from "../paginate";
 import type { EpubBook } from "../file/parse";
 import { bookLinkTarget, labelForBlock, locateQuote, pageIndexOfCfi, spineStartsOf } from "../reader-logic";
 import { topEdgeSteps } from "./top-edge";
-import { hrefFragment, resolveZipPath } from "../file/zip";
+import { hrefFragment, resolveZipPath } from "../../../workshop/bindery/zip";
 
 export interface FlowReaderCallbacks {
   onChangeViewState(state: ViewState): void;

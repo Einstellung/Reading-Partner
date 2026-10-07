@@ -15,7 +15,7 @@
 import { throwIfAborted } from "../../../platform/app/abort";
 import { fetchWithRetry, HttpStatusError, interactiveRetry } from "../../../platform/http/throttled-fetch";
 import { parseS2Search, s2TopicSearchUrl, S2_INDEX_FIELDS, type S2Hit } from "./s2-client";
-import { itemId } from "../../extract/id";
+import { itemId } from "../../../workshop/extract/id";
 import type { SourceDescriptor } from "../descriptor";
 import { daysBefore, queryInt, queryStrings, type PluginDeps, type SourcePlugin, type IndexQuery } from "../plugin";
 import type { InfoItem, ItemSignals } from "../item";

@@ -1,4 +1,4 @@
-// Article-HTML sanitizer (src/info/extract/sanitize.ts). Run: bun test.
+// Article-HTML sanitizer (src/workshop/extract/sanitize.ts). Run: bun test.
 //
 // The sanitizer parses with a DOMParser; bun has none, so tests/support/preload.ts hands it
 // jsdom's (parse5, the same HTML5 spec WebKit implements) and the real code path
@@ -12,7 +12,7 @@
 // spells the handler some other way.
 
 import { expect, test } from "bun:test";
-import { htmlToText, sanitizeArticleHtml, stripDataImages } from "../../../src/info/extract/sanitize";
+import { htmlToText, sanitizeArticleHtml, stripDataImages } from "../../../src/workshop/extract/sanitize";
 
 // --- oracle -----------------------------------------------------------------
 

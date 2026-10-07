@@ -5,7 +5,7 @@
 import { expect, test } from "bun:test";
 import type { ImportMeta, LibraryEntry } from "../../../src/platform/app/library";
 import type { Thread } from "../../../src/platform/app/threads";
-import { buildArticleEpub } from "../../../src/reading/epub/file/build-article";
+import { buildArticleEpub } from "../../../src/workshop/bindery/build-article";
 import { parseEpub } from "../../../src/reading/epub/file/parse";
 import {
   newEpubMark,

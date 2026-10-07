@@ -11,8 +11,8 @@
 
 import { PAGINATION_VERSION, blockNumberAt, type Pagination } from "../epub/paginate";
 import type { EpubBook, SpineDocument } from "../epub/file/parse";
-import { SVG_NS, XLINK_NS } from "../epub/file/sanitize";
-import { resolveZipPath } from "../epub/file/zip";
+import { SVG_NS, XLINK_NS } from "../../workshop/bindery/sanitize";
+import { resolveZipPath } from "../../workshop/bindery/zip";
 import { figureCaptionId } from "./extract";
 import { canonicalFigureId, compareFigureIds, issuedFigureId } from "./lookup";
 import { FIGURES_VERSION, type CaptionSource, type Figure, type FiguresIndex } from "./types";

@@ -13,7 +13,7 @@ import {
   type MealsPhotoAsk,
 } from "../../../../src/info/meals/photos/photo-run";
 import { mealsPhotosWorker } from "../../../../src/info/meals/photos/photo-worker";
-import type { WebviewPage } from "../../../../src/info/extract/webview-page";
+import type { WebviewPage } from "../../../../src/workshop/extract/webview-page";
 import type { DishPhotoEntry, Meal, WeekPlan } from "../../../../src/info/meals/plan/types";
 import type { Run } from "../../../../src/legion/run/types";
 import type { WorkerContext } from "../../../../src/legion/execute/worker";

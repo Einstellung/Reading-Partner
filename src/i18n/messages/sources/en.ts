@@ -3,7 +3,7 @@
 // phrase shared by the page and the add-source chat cards (info/sources/
 // probe.ts), the add-source AI tools' progress labels and receipts
 // (info/sources/source-tools.ts), the tasking sub-agent's progress labels
-// (info/tasking/), the page-reading tool's label (info/extract/
+// (info/tasking/), the page-reading tool's label (info/sources/
 // read-page-tool.ts), and the errors a source plugin can surface into a
 // source's health (info/sources/plugins/). The source every other locale is
 // typed against.

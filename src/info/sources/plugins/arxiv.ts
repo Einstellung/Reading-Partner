@@ -11,7 +11,7 @@
 import { throwIfAborted } from "../../../platform/app/abort";
 import { arxivQueryTerms, parseArxivAtom, type ArxivEntry } from "./arxiv-client";
 import { fetchWithRetry, HttpStatusError, interactiveRetry } from "../../../platform/http/throttled-fetch";
-import { itemId } from "../../extract/id";
+import { itemId } from "../../../workshop/extract/id";
 import type { SourceDescriptor } from "../descriptor";
 import {
   daysBefore,

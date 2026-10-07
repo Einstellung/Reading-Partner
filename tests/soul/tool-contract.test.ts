@@ -32,7 +32,7 @@ import { buildRetellTools } from "../../src/reading/retell/tools";
 import { buildArrangeTools } from "../../src/reading/talk/tools";
 import { buildSourceTools } from "../../src/info/sources/source-tools";
 import { buildCompanionTools } from "../../src/info/briefer/companion-tools";
-import { buildReadPageTool } from "../../src/info/extract/read-page-tool";
+import { buildReadPageTool } from "../../src/info/sources/read-page-tool";
 import { buildTaskingTools } from "../../src/info/tasking/tools";
 import { subagentTool } from "../../src/legion/subagent/tool";
 import { normalizeToolResult, toolLabel } from "../../src/legion/execute/tool-result";
@@ -161,7 +161,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[] }[] = [
     names: ["probe_source", "trial_source", "add_source"],
   },
   {
-    where: "info/extract",
+    where: "info/sources/read-page-tool",
     tools: [buildReadPageTool(any({ fetchFn: async () => new Response("") }))],
     names: ["read_page"],
   },

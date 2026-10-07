@@ -22,7 +22,7 @@
 // allows, and the program registers the set (sources/plugins/all.ts).
 
 import { addDays } from "../../platform/std/day";
-import type { FetchFn } from "../extract/http";
+import type { FetchFn } from "../../workshop/extract/http";
 import type { SourceDescriptor } from "./descriptor";
 import type { InfoItem, ItemSignals } from "./item";
 

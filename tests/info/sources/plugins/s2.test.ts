@@ -12,7 +12,7 @@ import {
 } from "../../../../src/info/sources/plugin";
 import { s2IndexUrl, s2Plugin, s2SearchTerms } from "../../../../src/info/sources/plugins/s2";
 import type { SourceDescriptor } from "../../../../src/info/sources/descriptor";
-import { itemId } from "../../../../src/info/extract/id";
+import { itemId } from "../../../../src/workshop/extract/id";
 import { jsonResponse } from "../../../support/fetch";
 
 afterEach(() => resetSourcePluginsForTests());

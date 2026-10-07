@@ -4,7 +4,7 @@
 // one small inflate and one image decode per book, once.
 
 import { parsePackage, readContainer } from "./package";
-import { openZip } from "./zip";
+import { openZip } from "../../../workshop/bindery/zip";
 
 export type EpubCoverResult =
   | { kind: "ok"; jpeg: Uint8Array; author: string | null }

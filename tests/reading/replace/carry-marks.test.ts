@@ -9,7 +9,7 @@ import {
   quoteSelectorAt,
   rangeAtSpan,
 } from "../../../src/reading/epub/annotation";
-import { buildArticleEpub } from "../../../src/reading/epub/file/build-article";
+import { buildArticleEpub } from "../../../src/workshop/bindery/build-article";
 import {
   epubCfi,
   parseCfiStart,

@@ -47,7 +47,7 @@ import {
 } from "../../platform/app/guarded-file";
 import { asString } from "../../platform/std/json";
 import { requestRemotePurge } from "../../platform/sync";
-import { sanitizeArticleHtml, stripDataImages } from "../../info/extract/sanitize";
+import { sanitizeArticleHtml, stripDataImages } from "../../workshop/extract/sanitize";
 
 export const SAVED_ARTICLES_FILE = "saved-articles.json";
 

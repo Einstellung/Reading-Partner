@@ -11,7 +11,7 @@
 
 ## 原因
 
-`src/info/extract/http.ts` 的 `fetchText` 对 5xx/429 重试两次，退避 0.5s 再 1s，睡在
+`src/workshop/extract/http.ts` 的 `fetchText` 对 5xx/429 重试两次，退避 0.5s 再 1s，睡在
 真定时器上。测试里六个用例故意发 `textResponse("boom", 500)`——它们要验的是一次失败的
 抓取降级成什么（该源标红、别的源不受牵连、item 退回摘要），退避阶梯不是它们的题目。
 可代码不知道这件事，照走 1.5 秒。六个用例，7.5 秒。

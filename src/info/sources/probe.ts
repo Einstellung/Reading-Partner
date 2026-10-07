@@ -13,9 +13,9 @@
 
 import { errMsg } from "../../platform/std/errors";
 import { parseFeed, type FeedEntry } from "./feed";
-import { htmlToText } from "../extract/sanitize";
+import { htmlToText } from "../../workshop/extract/sanitize";
 import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
-import type { FetchFn } from "../extract/http";
+import type { FetchFn } from "../../workshop/extract/http";
 import type { Fulltext, SourceDescriptor } from "./descriptor";
 import { pluginOf } from "./plugin";
 import { t } from "../../i18n";

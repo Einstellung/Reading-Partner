@@ -27,7 +27,7 @@ import { addFileToTopic } from "../../platform/app/topics";
 import { pushBook } from "../../platform/sync";
 import { parsePackage, readContainer } from "../epub/file/package";
 import { isEpub } from "../epub/file/sniff";
-import { openZip } from "../epub/file/zip";
+import { openZip } from "../../workshop/bindery/zip";
 import { sniffContentType } from "../sources/url";
 
 /** Everything filing a picked path needs: read the bytes, store them, list it. */

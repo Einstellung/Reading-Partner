@@ -2,7 +2,7 @@
 
 ## 现象
 
-EPUB 的 spine 文档清洗器照 `src/info/extract/sanitize.ts` 的经验，把坑 127 那条 `<pre>` 补偿也抄了过来：输出的第一个字符是 LF 就多写一个 LF。`sanitize(sanitize(x)) === sanitize(x)` 立刻红，每过一趟多一个换行。
+EPUB 的 spine 文档清洗器照 `src/workshop/extract/sanitize.ts` 的经验，把坑 127 那条 `<pre>` 补偿也抄了过来：输出的第一个字符是 LF 就多写一个 LF。`sanitize(sanitize(x)) === sanitize(x)` 立刻红，每过一趟多一个换行。
 
 ```
 <pre>

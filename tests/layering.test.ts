@@ -159,11 +159,24 @@ const LAYER: Record<string, Layer> = {
   // whatever desk it speaks over; info/briefer holds the wiring of one caller.
   "soul/voice": "capability",
   "soul/voice/speech": "capability",
+  // Turning raw material into usable material (docs/85), grouped by what is
+  // done to it rather than by who asks: the secretary, reading and the meals
+  // line are all callers, and nothing here knows any of them. Siblings may use
+  // each other as long as the graph stays acyclic.
+  workshop: "capability",
+  // A web page to its readable body: the fetch, Readability with the defuddle
+  // fallback, the article sanitizer and the hidden-webview fetchers.
+  "workshop/extract": "capability",
+  // Material to an EPUB (docs/85): the article builder, the XHTML and CSS
+  // sanitizers and the zip it packs with, the typographic cover, and what a page
+  // says about itself. Reading's EPUB reader imports the sanitizer and the zip
+  // from here.
+  "workshop/bindery": "capability",
 
   info: "domain",
   // The nouns the info side is cut along (docs/63), in the order they may depend
   // on each other: cable and labs are leaves and reach for nothing else under
-  // info, then picture (which may read labs), then extract and sources, then
+  // info, then picture (which may read labs), then sources, then
   // collect (what the sources published and what survived screening), analysis
   // (what a room makes of its cables), boxes (what is assembled out of it),
   // briefer (everything the AI says about it) and program (the day's wiring).
@@ -173,7 +186,6 @@ const LAYER: Record<string, Layer> = {
   "info/briefer": "domain",
   "info/cable": "domain",
   "info/collect": "domain",
-  "info/extract": "domain",
   "info/labs": "domain",
   // The meals line (docs/73): a research room by the reasoning of docs/63,
   // with its own store rather than a Lab record, because it claims no sources
@@ -239,9 +251,10 @@ const LAYER: Record<string, Layer> = {
   // A peer of reading/engine rather than a corner of it: that directory is
   // PDFium geometry all the way down, and the two share the shell's contract.
   "reading/epub": "domain",
-  // The headless ingestion: unpack, sanitize, parse, the CFI grammar, and the
-  // cover an app-built document draws. Everything both reading areas below
-  // build on, and the only one of the three that may not import either.
+  // The headless ingestion: the package, the nav, parse, the CFI grammar and
+  // the document text, on top of workshop/bindery's sanitizer and zip.
+  // Everything both reading areas below build on, and the only one of the three
+  // that may not import either.
   "reading/epub/file": "domain",
   // The paged desk (docs/64): sheets scaled and clipped on a scrolling
   // viewport, one PDFium-style page at a time.
@@ -253,10 +266,10 @@ const LAYER: Record<string, Layer> = {
   "reading/epub/flow": "domain",
   "reading/figures": "domain",
   // Turning a pasted URL into a document on the shelf (docs/67). A domain of its
-  // own rather than a corner of reading/epub: the building of the file is that
-  // directory's, and this is the fetching, the extraction and the filing around
-  // it — it reaches for info/extract, the library and the topic store, and
-  // reading/epub reaches for none of them.
+  // own rather than a corner of reading/epub: the building of the file is
+  // workshop/bindery's, and this is the fetching, the extraction and the filing
+  // around it — it reaches for workshop/extract, the library and the topic
+  // store, and reading/epub reaches for none of them.
   "reading/ingest": "domain",
   "reading/lecture": "domain",
   // The phone's lesson (docs/71): a PDF taught in text, with no reader under

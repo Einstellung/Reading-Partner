@@ -6,9 +6,9 @@
 import { expect, test } from "bun:test";
 import { buildSourceTools, trialSource } from "../../../src/info/sources/source-tools";
 import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
-import type { ExtractReadable } from "../../../src/info/extract/readable-select";
+import type { ExtractReadable } from "../../../src/workshop/extract/readable-select";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
-import type { WebviewArticle } from "../../../src/info/extract/webview-article";
+import type { WebviewArticle } from "../../../src/workshop/extract/webview-article";
 import { textResponse } from "../../support/fetch";
 import { toolText } from "../../support/tool-text";
 

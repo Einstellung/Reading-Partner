@@ -15,7 +15,7 @@
 // and hides Keep and the article chat while it is.
 
 import type { PullMatcher } from "../../platform/sync/pull-routes";
-import { sanitizeArticleHtml } from "../extract/sanitize";
+import { sanitizeArticleHtml } from "../../workshop/extract/sanitize";
 import {
   bodiesMatch,
   loadPublishedBodies,

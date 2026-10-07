@@ -10,12 +10,12 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
-import { buildReadPageTool } from "../extract/read-page-tool";
+import { buildReadPageTool } from "../sources/read-page-tool";
 import { listCableDates, loadCableDay } from "../cable/store";
 import type { Cable, CableDay } from "../cable/types";
 import { CABLE_DAYS, loadArticle, type CachedArticle } from "../collect/store";
 import { loadPublishedBodies, type PublishedBodies } from "../boxes/publish";
-import { infoFetch, type FetchFn } from "../extract/http";
+import { infoFetch, type FetchFn } from "../../workshop/extract/http";
 import { activeLabs, loadLabs } from "../labs/store";
 import type { Lab } from "../labs/types";
 import { loadPicture } from "../picture/store";

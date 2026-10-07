@@ -1,9 +1,9 @@
-// read_page as a tool, beside the extraction it is a thin wrapper over.
+// read_page as a tool, a thin wrapper over workshop/extract's page reader.
 //
-// It sits here rather than with the companion's own tools because two different
-// agents mount it: the secretary, to scout a site before subscribing to it, and
-// a tasking run, to open a page the cables pointed at. Both read the web the
-// same way or they would disagree about what a page says.
+// It sits here, beside probe_source, rather than with the companion's own tools
+// because two different agents mount it: the secretary, to scout a site before
+// subscribing to it, and a tasking run, to open a page the cables pointed at.
+// Both read the web the same way or they would disagree about what a page says.
 //
 // A query tool: no consent gate (docs/17, "queries flow, writes gate"). Network
 // is injected; the parsing is the pure readPage. Fetched content is reference,
@@ -11,8 +11,8 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
-import type { FetchFn } from "./http";
-import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "./read-page";
+import type { FetchFn } from "../../workshop/extract/http";
+import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "../../workshop/extract/read-page";
 import { errMsg } from "../../platform/std/errors";
 import { t } from "../../i18n";
 

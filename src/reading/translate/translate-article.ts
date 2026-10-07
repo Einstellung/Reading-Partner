@@ -40,9 +40,9 @@ import {
   packArticleEpub,
   type ArticleMetadata,
   type Heading,
-} from "../epub/file/build-article";
+} from "../../workshop/bindery/build-article";
 import { parseEpub, type EpubBook } from "../epub/file/parse";
-import { sanitizeDocument } from "../epub/file/sanitize";
+import { sanitizeDocument } from "../../workshop/bindery/sanitize";
 import { applyTranslations } from "./apply";
 import { planBatches, type BatchLimits } from "./batch";
 import { glossaryRequestFor } from "./glossary";

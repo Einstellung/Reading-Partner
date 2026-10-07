@@ -478,7 +478,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     //
     // The desk is laid inside a catch: opening
     // the briefing builds those tools, which awaits the article extractor's
-    // chunk (info/extract/readable-lazy). That is a fetch, and a fetch can fail
+    // chunk (workshop/extract/readable-lazy). That is a fetch, and a fetch can fail
     // — a chunk 404ing after a redeploy, a dropped connection, a CSP that turns
     // it down. Nothing upstream would catch it.
     // `send` is handed to the composer as a void-returning prop and the

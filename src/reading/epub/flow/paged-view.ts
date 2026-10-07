@@ -69,7 +69,7 @@ import {
   spineStartsOf,
 } from "../reader-logic";
 import { topEdgeSteps } from "./top-edge";
-import { hrefFragment, resolveZipPath } from "../file/zip";
+import { hrefFragment, resolveZipPath } from "../../../workshop/bindery/zip";
 
 export interface PagedReaderOptions extends FlowReaderOptions {
   /**

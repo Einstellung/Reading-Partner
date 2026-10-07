@@ -22,7 +22,7 @@ import { WEBVIEW_FETCH } from "../../../legion/claim";
 import { StoppedError } from "../../../legion/stop";
 import { appData } from "../../../platform/app/appdata";
 import { hasWebviewFetch } from "../../../platform/app/platform";
-import { fetchPageViaWebview, type WebviewPage } from "../../extract/webview-page";
+import { fetchPageViaWebview, type WebviewPage } from "../../../workshop/extract/webview-page";
 import { BING_RESULTS_SCRIPT, bingImageQuery, parseBingImages, pickPhoto } from "./photo-search";
 import { savePhotoEntries } from "./photo-store";
 import { MEALS_PHOTOS_KIND, parsePhotoAsk, photoOutputLine, type PhotoQuery } from "./photo-run";

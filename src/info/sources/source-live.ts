@@ -3,7 +3,7 @@
 // injected deps (probe.ts, source-tools.ts); this is only where the app hands it
 // the real thing.
 
-import { fetchArticleViaWebview } from "../extract/webview-article";
+import { fetchArticleViaWebview } from "../../workshop/extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import type { WebviewFetch } from "./engine";
 

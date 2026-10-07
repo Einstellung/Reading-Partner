@@ -10,8 +10,8 @@
 import { extractDocumentText, type DocumentText } from "./text";
 import { parseNavDocument, parseNcx, type NavLists } from "./nav";
 import { parsePackage, readContainer, type EpubPackage } from "./package";
-import { sanitizeDocument, type ResourceRefs } from "./sanitize";
-import { openZip, type EpubZip } from "./zip";
+import { sanitizeDocument, type ResourceRefs } from "../../../workshop/bindery/sanitize";
+import { openZip, type EpubZip } from "../../../workshop/bindery/zip";
 
 export interface SpineDocument {
   /** Position in the spine, 0-based. Half of every locator. */

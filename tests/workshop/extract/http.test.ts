@@ -1,4 +1,4 @@
-// fetchText's retry policy (src/info/extract/http.ts): what it waits when a
+// fetchText's retry policy (src/workshop/extract/http.ts): what it waits when a
 // source names a Retry-After, what it waits when it does not, that the cap
 // holds, and that a stopped run does not sit out the cooldown. The loop is
 // platform's (tests/platform/http/throttled-fetch.test.ts covers the header
@@ -13,7 +13,7 @@ import { expect, test } from "bun:test";
 import { isAbortError } from "../../../src/platform/app/abort";
 import type { FetchFn } from "../../../src/platform/app/host";
 import { MAX_RETRY_WAIT_MS } from "../../../src/platform/http/retry-after";
-import { fetchText, retryBackoffMs } from "../../../src/info/extract/http";
+import { fetchText, retryBackoffMs } from "../../../src/workshop/extract/http";
 
 // A fixed wall clock, so an HTTP-date Retry-After has something to be relative to.
 const NOW = Date.UTC(2026, 0, 1, 12, 0, 0);

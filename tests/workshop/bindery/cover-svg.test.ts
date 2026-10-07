@@ -8,7 +8,7 @@ import {
   typographicCover,
   volumeCover,
   wrapCoverText,
-} from "../../../../src/reading/epub/file/cover-svg";
+} from "../../../src/workshop/bindery/cover-svg";
 
 const DRAFT = {
   kicker: "能源研究室",

@@ -2,7 +2,7 @@
 // content is served to the app same-origin, so a book's inline script would run
 // with the app's own privileges (docs/39 §2). Nothing here trusts the archive.
 //
-// The shape is the one src/info/extract/sanitize.ts arrived at, adapted to
+// The shape is the one src/workshop/extract/sanitize.ts arrived at, adapted to
 // XHTML: parse with the platform parser, walk the tree against an allowlist,
 // and write the survivors out from the parsed names and values rather than from
 // the source text. No regex ever looks at a tag — `[^>]*>` ends a tag at the
@@ -34,7 +34,7 @@
 // removes what reaches out of the archive or out of the page box. What a page
 // card lays over the app's baseline is exactly this tree's CSS.
 
-import { escapeHtmlText } from "../../../platform/std/text";
+import { escapeHtmlText } from "../../platform/std/text";
 import { sanitizeCss, sanitizeDeclarations, type CssUrlResolver } from "./css-sanitize";
 import { hrefFragment, resolveZipPath } from "./zip";
 

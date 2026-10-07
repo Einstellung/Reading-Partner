@@ -20,7 +20,7 @@ import {
   loadDeviceSettings,
   type DeviceRole,
 } from "../../platform/app/device";
-import { sanitizeArticleHtml } from "../extract/sanitize";
+import { sanitizeArticleHtml } from "../../workshop/extract/sanitize";
 import {
   InfoReader,
   type ArticleState,
@@ -33,10 +33,10 @@ import { observeAppExit, observeAppLifecycle } from "../../platform/app/lifecycl
 import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/wake-lock";
 import { collectAll, fetchBodies as fetchArticleBodies } from "../sources/engine";
 import { registerAllSourcePlugins } from "../sources/plugins/all";
-import { fetchArticleViaWebview } from "../extract/webview-article";
+import { fetchArticleViaWebview } from "../../workshop/extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { setTrayStatus } from "../../platform/app/tray";
-import { loadExtractReadable } from "../extract/readable-lazy";
+import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import {
   loadSiteSessions,
   loadSources,

@@ -1,9 +1,9 @@
 // Reading a hidden-webview fetch as a body, a reason to try again, or a body
-// that is not there (src/info/extract/webview-article.ts). Pure — the fetch
+// that is not there (src/workshop/extract/webview-article.ts). Pure — the fetch
 // itself is a Tauri command and does not run here. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { webviewBody, type WebviewArticle } from "../../../src/info/extract/webview-article";
+import { webviewBody, type WebviewArticle } from "../../../src/workshop/extract/webview-article";
 
 function result(patch: Partial<WebviewArticle>): WebviewArticle {
   return {

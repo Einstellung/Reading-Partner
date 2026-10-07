@@ -14,7 +14,7 @@
 // REST calls an hour, so the provider never enriches through api.github.com.
 
 import { isAbortError, throwIfAborted } from "../../../platform/app/abort";
-import { itemId } from "../../extract/id";
+import { itemId } from "../../../workshop/extract/id";
 import type { SourceDescriptor } from "../descriptor";
 import {
   daysBefore,

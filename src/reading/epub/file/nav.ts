@@ -7,9 +7,9 @@
 // puts the table of contents in an NCX and the page list in that same file's
 // pageList. Both are read here and both come out in the same shape.
 
-import { EPUB_NS } from "./sanitize";
+import { EPUB_NS } from "../../../workshop/bindery/sanitize";
 import { parseXml } from "./package";
-import { hrefFragment, resolveZipPath } from "./zip";
+import { hrefFragment, resolveZipPath } from "../../../workshop/bindery/zip";
 
 export interface NavEntry {
   title: string;

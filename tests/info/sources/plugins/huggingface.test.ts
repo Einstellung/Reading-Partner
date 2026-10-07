@@ -16,7 +16,7 @@ import {
   type PluginDeps,
 } from "../../../../src/info/sources/plugin";
 import { collectSource } from "../../../../src/info/sources/engine";
-import { itemId } from "../../../../src/info/extract/id";
+import { itemId } from "../../../../src/workshop/extract/id";
 import type { SourceDescriptor } from "../../../../src/info/sources/descriptor";
 import { jsonResponse, textResponse } from "../../../support/fetch";
 

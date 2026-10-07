@@ -5,9 +5,9 @@
 // The extractor is loaded on first use (readable-lazy) rather than imported
 // here, so Readability/defuddle stay off the boot path.
 
-import { infoFetch } from "../extract/http";
-import { loadExtractReadable } from "../extract/readable-lazy";
-import { checkSiteSession, openSiteSignIn } from "../extract/webview-session";
+import { infoFetch } from "../../workshop/extract/http";
+import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
+import { checkSiteSession, openSiteSignIn } from "../../workshop/extract/webview-session";
 import { hasWebviewSignIn } from "../../platform/app/platform";
 import {
   addSource,

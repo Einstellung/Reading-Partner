@@ -3,9 +3,9 @@
 // reflow column — build on.
 
 export { isEpub, looksLikeZip } from "./file/sniff";
-export { openZip, resolveZipPath, hrefFragment, type EpubZip, type ZipEntry } from "./file/zip";
-export { sanitize, sanitizeDocument, type ResourceRefs, type SanitizedDocument } from "./file/sanitize";
-export { sanitizeCss, sanitizeDeclarations, rewriteCssUrls } from "./file/css-sanitize";
+export { openZip, resolveZipPath, hrefFragment, type EpubZip, type ZipEntry } from "../../workshop/bindery/zip";
+export { sanitize, sanitizeDocument, type ResourceRefs, type SanitizedDocument } from "../../workshop/bindery/sanitize";
+export { sanitizeCss, sanitizeDeclarations, rewriteCssUrls } from "../../workshop/bindery/css-sanitize";
 export { extractDocumentText, indexRuns, offsetOfPoint, runAt, type DocumentText } from "./file/text";
 export {
   elementSteps,
@@ -25,7 +25,7 @@ export {
   MISSING_IMAGE_HEIGHT,
   type ArticleEpubInput,
   type ArticleImage,
-} from "./file/build-article";
+} from "../../workshop/bindery/build-article";
 export {
   PAGINATION_VERSION,
   blockNumberAt,

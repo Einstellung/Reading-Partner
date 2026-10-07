@@ -24,6 +24,6 @@ PerimeterX 不是只读 UA 字符串，是拿它和客户端其他所有可测�
 
 UA 显式 pin 成引擎默认值那一整条（`webview_fetch::policy::USER_AGENT`）：显式写是为了不随发行版升级 webkit2gtk 而漂移，取值必须是引擎真实的那条。
 
-裸 HTTP 抓取用的是另一条 UA（`src/info/extract/user-agent.ts`，Chrome on Windows），那条给的是 feed 和 API，没有 JS 引擎可对账，不要合并。
+裸 HTTP 抓取用的是另一条 UA（`src/workshop/extract/user-agent.ts`，Chrome on Windows），那条给的是 feed 和 API，没有 JS 引擎可对账，不要合并。
 
 改这条字符串等于改一次反爬对抗结果，必须重测，不能当成清理。

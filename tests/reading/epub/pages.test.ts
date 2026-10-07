@@ -12,7 +12,7 @@ import {
   parseEpubCfi,
   compareLocal,
 } from "../../../src/reading/epub/file/cfi";
-import { cssUrls, rewriteCssUrls, sanitizeCss, sanitizeDeclarations } from "../../../src/reading/epub/file/css-sanitize";
+import { cssUrls, rewriteCssUrls, sanitizeCss, sanitizeDeclarations } from "../../../src/workshop/bindery/css-sanitize";
 import { remapEpubAnnotations } from "../../../src/reading/epub/migrate";
 import {
   BODY_HEIGHT,
@@ -43,7 +43,7 @@ import {
   storedVersionOf,
 } from "../../../src/reading/epub/pagination-store";
 import { parseEpub } from "../../../src/reading/epub/file/parse";
-import { sanitize } from "../../../src/reading/epub/file/sanitize";
+import { sanitize } from "../../../src/workshop/bindery/sanitize";
 import { makeEpubSortIndex } from "../../../src/reading/epub/annotation";
 import { createPageCard } from "../../../src/reading/epub/paged/page-card";
 import { createPageResources, mountDocument } from "../../../src/reading/epub/page-mount";

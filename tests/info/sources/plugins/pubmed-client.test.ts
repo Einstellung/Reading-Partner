@@ -142,7 +142,7 @@ test("a status PubMed cannot answer with throws instead of reading as no results
   ).rejects.toThrow(/400/);
 });
 
-// Entity decoding is shared with info/extract/sanitize. The local copy here
+// Entity decoding is shared with workshop/extract/sanitize. The local copy here
 // knew every entity but &nbsp;, which PubMed titles do carry.
 test("titles and abstracts decode &nbsp;", () => {
   const xml = `<PubmedArticleSet><PubmedArticle><MedlineCitation>

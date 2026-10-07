@@ -183,7 +183,7 @@ test("fetchWithRetry does not retry a 404 and throws after exhausting retries", 
   ).rejects.toThrow("network down");
 });
 
-// Entity decoding is shared with info/extract/sanitize. Before that, the local
+// Entity decoding is shared with workshop/extract/sanitize. Before that, the local
 // copy here knew neither &nbsp; nor the hex form, so an em dash written
 // &#x2014; — which arXiv abstracts do — reached the reader as its own source.
 test("abstracts decode hex entities and &nbsp;", () => {

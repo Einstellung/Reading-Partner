@@ -8,7 +8,7 @@
 // document; matching the qualified name would read one of them and not the
 // other.
 
-import { resolveZipPath, type EpubZip } from "./zip";
+import { resolveZipPath, type EpubZip } from "../../../workshop/bindery/zip";
 
 export interface ManifestItem {
   id: string;

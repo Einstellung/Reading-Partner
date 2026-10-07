@@ -5,8 +5,8 @@
 import { expect, test } from "bun:test";
 import { buildEpub, PNG, prose } from "./fixture";
 import { isEpub, looksLikeZip } from "../../../src/reading/epub/file/sniff";
-import { openZip, resolveZipPath } from "../../../src/reading/epub/file/zip";
-import { sanitize, sanitizeDocument } from "../../../src/reading/epub/file/sanitize";
+import { openZip, resolveZipPath } from "../../../src/workshop/bindery/zip";
+import { sanitize, sanitizeDocument } from "../../../src/workshop/bindery/sanitize";
 import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { blockTexts, characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { fulltextFrom, outlineHrefAt } from "../../../src/reading/epub/fulltext";

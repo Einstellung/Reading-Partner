@@ -16,7 +16,7 @@ afterEach(cleanup);
 
 import { useInfoCall, type InfoCallOptions } from "../../../../src/ui/components/info/use-info-call";
 import * as agent from "../../../../src/legion/execute/turn";
-import * as readableLazy from "../../../../src/info/extract/readable-lazy";
+import * as readableLazy from "../../../../src/workshop/extract/readable-lazy";
 import * as settings from "../../../../src/platform/app/settings";
 import * as threads from "../../../../src/platform/app/threads";
 import { DEFAULT_SETTINGS } from "../../../../src/platform/app/settings";

@@ -12,9 +12,9 @@ import {
   SOURCE_CONCURRENCY,
   type SourceSettled,
 } from "../../../src/info/sources/engine";
-import type { ExtractReadable } from "../../../src/info/extract/readable-select";
+import type { ExtractReadable } from "../../../src/workshop/extract/readable-select";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
-import type { WebviewArticle } from "../../../src/info/extract/webview-article";
+import type { WebviewArticle } from "../../../src/workshop/extract/webview-article";
 import { textResponse } from "../../support/fetch";
 
 // fetchText retries a 5xx twice, waiting 0.5s then 1s on a real timer. Half a

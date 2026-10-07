@@ -1,5 +1,5 @@
-// What a fetched page says about itself (src/reading/ingest/page-meta.ts).
-// Run: bash scripts/t.sh tests/reading/ingest/page-meta.test.ts
+// What a fetched page says about itself (src/workshop/bindery/page-meta.ts).
+// Run: bash scripts/t.sh tests/workshop/bindery/page-meta.test.ts
 
 import { expect, test } from "bun:test";
 import {
@@ -10,7 +10,7 @@ import {
   normalizeDate,
   pageLanguage,
   readPageMeta,
-} from "../../../src/reading/ingest/page-meta";
+} from "../../../src/workshop/bindery/page-meta";
 
 test("meta tags are read by name, property and itemprop", () => {
   const tags = metaTags(`<head>

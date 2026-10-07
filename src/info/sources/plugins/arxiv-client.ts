@@ -5,7 +5,7 @@
 // we only need five fields per entry.
 
 import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
-import { decodeEntities } from "../../extract/sanitize";
+import { decodeEntities } from "../../../workshop/extract/sanitize";
 import { pickByTitle } from "./match";
 
 export interface ArxivEntry {

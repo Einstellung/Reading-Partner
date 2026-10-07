@@ -1,4 +1,4 @@
-// The deferred readable extractor (src/info/extract/readable-lazy.ts).
+// The deferred readable extractor (src/workshop/extract/readable-lazy.ts).
 //
 // Two things are being protected. One is the bundle shape: Readability and
 // defuddle are ~355 kB minified and used only when a fetched page is turned into
@@ -20,11 +20,11 @@ import { useDom } from "../../support/dom";
 // dynamic import happens inside the test, after this has run.
 await useDom();
 
-import { cacheUntilFailure, loadExtractReadable } from "../../../src/info/extract/readable-lazy";
+import { cacheUntilFailure, loadExtractReadable } from "../../../src/workshop/extract/readable-lazy";
 
 const SRC = fileURLToPath(new URL("../../../src", import.meta.url));
-const TARGET = resolve(SRC, "info/extract/readable.ts");
-const DOOR = resolve(SRC, "info/extract/readable-lazy.ts");
+const TARGET = resolve(SRC, "workshop/extract/readable.ts");
+const DOOR = resolve(SRC, "workshop/extract/readable-lazy.ts");
 
 // Same shape as tests/layering.test.ts's scanner, plus the one distinction that
 // matters here: whether the specifier came through `import(` or not.

@@ -33,7 +33,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
-import { stripDataImages } from "../extract/sanitize";
+import { stripDataImages } from "../../workshop/extract/sanitize";
 import { loadArticles, loadItems, type CachedArticle } from "../collect/store";
 import { parseBriefing } from "./briefing";
 import { loadLatestBriefing } from "./store";

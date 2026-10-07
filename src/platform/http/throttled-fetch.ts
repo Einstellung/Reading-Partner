@@ -1,6 +1,6 @@
 // HTTP for the literature clients and the prep pipeline, and the one retry loop
 // every outbound request in the app goes through — info's briefing fetch
-// (info/extract/http.ts) wraps it with its own budget. Inside Tauri, requests
+// (workshop/extract/http.ts) wraps it with its own budget. Inside Tauri, requests
 // go through the http plugin (same posture as the AI fetch bridge): the
 // webview's CORS never sees them, and the allowed hosts live in
 // src-tauri/capabilities/default.json

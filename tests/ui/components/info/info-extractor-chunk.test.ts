@@ -1,6 +1,6 @@
 // What the info chat does when the article extractor's chunk never arrives.
 //
-// Deferring readable.ts behind a dynamic import (src/info/extract/
+// Deferring readable.ts behind a dynamic import (src/workshop/extract/
 // readable-lazy.ts) put a network fetch on a path that had none: an `import()`
 // rejects when the chunk 404s after a redeploy, when the connection drops
 // mid-fetch, or when a CSP refuses it. buildLiveCompanionTools awaits that
@@ -22,7 +22,7 @@ afterEach(cleanup);
 
 import { useInfoCall, type InfoCallOptions } from "../../../../src/ui/components/info/use-info-call";
 import * as agent from "../../../../src/legion/execute/turn";
-import * as readableLazy from "../../../../src/info/extract/readable-lazy";
+import * as readableLazy from "../../../../src/workshop/extract/readable-lazy";
 import * as settings from "../../../../src/platform/app/settings";
 import * as threads from "../../../../src/platform/app/threads";
 import { DEFAULT_SETTINGS } from "../../../../src/platform/app/settings";

@@ -15,7 +15,7 @@
 // that six fields per article need no real parser.
 
 import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
-import { decodeEntities } from "../../extract/sanitize";
+import { decodeEntities } from "../../../workshop/extract/sanitize";
 
 const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 // NCBI asks every unauthenticated caller to identify itself with tool= and

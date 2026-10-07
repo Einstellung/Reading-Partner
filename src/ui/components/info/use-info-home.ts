@@ -77,7 +77,7 @@ import {
   checkSiteSession,
   clearSiteCookies,
   openSiteSignIn,
-} from "../../../info/extract/webview-session";
+} from "../../../workshop/extract/webview-session";
 import { hasWebviewSignIn } from "../../../platform/app/platform";
 import type { CollectorSites } from "../../../info/briefer/reader";
 import type { ComposerVoice } from "../chat/composer-voice";

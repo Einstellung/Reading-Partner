@@ -1,4 +1,4 @@
-// The pure page reader (src/info/extract/read-page.ts): HTML → title / readable
+// The pure page reader (src/workshop/extract/read-page.ts): HTML → title / readable
 // text / full link list; non-HTML bodies passed back raw with their content-type.
 // DOM-free, so it runs in bun. Run: bun test.
 
@@ -10,7 +10,7 @@ import {
   isHtmlPage,
   READ_PAGE_TEXT_CHARS,
   READ_PAGE_MAX_LINKS,
-} from "../../../src/info/extract/read-page";
+} from "../../../src/workshop/extract/read-page";
 
 test("extractTitle decodes and collapses whitespace, empty when absent", () => {
   expect(extractTitle("<html><head><title>  Jiemian &amp;\n News </title></head></html>")).toBe("Jiemian & News");

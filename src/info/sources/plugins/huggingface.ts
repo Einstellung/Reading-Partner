@@ -13,8 +13,8 @@
 import { throwIfAborted } from "../../../platform/app/abort";
 import { asString } from "../../../platform/std/json";
 import { oneLine } from "../../../platform/std/text";
-import { fetchText } from "../../extract/http";
-import { itemId } from "../../extract/id";
+import { fetchText } from "../../../workshop/extract/http";
+import { itemId } from "../../../workshop/extract/id";
 import type { SourceDescriptor } from "../descriptor";
 import {
   daysBefore,

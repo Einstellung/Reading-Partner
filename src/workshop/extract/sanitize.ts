@@ -35,8 +35,8 @@
 // The text helpers below (htmlToText, stripTagsToText, decodeEntities,
 // stripDataImages) stay string-based and DOM-free: they feed prompts, length
 // measurements and a file-size guard, not innerHTML, and their callers
-// (info/sources/*, info/extract/read-page.ts, reading/sources/article.ts) run in
-// bun tests without a DOM.
+// (info/sources/*, workshop/extract/read-page.ts, reading/sources/article.ts)
+// run in bun tests without a DOM.
 //
 // Remote images are kept (news pages are mostly images) and left to load
 // lazily. They used to be given referrerpolicy="no-referrer". That attribute no
@@ -111,8 +111,8 @@ const DROP_WITH_CONTENT = new Set([
 //                                   the element already open and creates no
 //                                   node, so neither is ever a child of body
 //
-// tests/info/extract/sanitize.test.ts walks that list and puts the two shapes that
-// catch an unwrapped boundary through the sanitizer twice. AUTO_CLOSES below
+// tests/workshop/extract/sanitize.test.ts walks that list and puts the two
+// shapes that catch an unwrapped boundary through the sanitizer twice. AUTO_CLOSES below
 // keeps a boundary that lands in neither set stable anyway, at the price of a
 // second parse; what this list decides is what the reader is left with, which
 // for a form control and a scrolling banner is nothing.

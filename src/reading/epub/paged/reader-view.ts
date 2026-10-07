@@ -70,7 +70,7 @@ import {
   viewStateOf,
 } from "../reader-logic";
 import { extractDocumentText, runAt } from "../file/text";
-import { hrefFragment, resolveZipPath } from "../file/zip";
+import { hrefFragment, resolveZipPath } from "../../../workshop/bindery/zip";
 
 // Sheets kept mounted beyond the visible ones, each side.
 const MOUNT_MARGIN = 1;

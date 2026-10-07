@@ -18,11 +18,11 @@
 // full text) is kept either way: it cost nothing to bring back.
 
 import { isAbortError, throwIfAborted } from "../../platform/app/abort";
-import { fetchText, infoFetch, type FetchFn } from "../extract/http";
-import { itemId } from "../extract/id";
-import { htmlToText } from "../extract/sanitize";
-import type { ExtractReadable } from "../extract/readable-select";
-import { webviewBody, type WebviewArticle } from "../extract/webview-article";
+import { fetchText, infoFetch, type FetchFn } from "../../workshop/extract/http";
+import { itemId } from "../../workshop/extract/id";
+import { htmlToText } from "../../workshop/extract/sanitize";
+import type { ExtractReadable } from "../../workshop/extract/readable-select";
+import { webviewBody, type WebviewArticle } from "../../workshop/extract/webview-article";
 import { parseFeed, feedFieldBody, type FeedEntry } from "./feed";
 import { Gate } from "../../platform/std/gate";
 import { mapSettled } from "./pool";
@@ -38,7 +38,7 @@ import type { InfoItem } from "./item";
 import { errMsg } from "../../platform/std/errors";
 
 // Render one article in a hidden webview and hand back what its DOM held
-// (src/info/extract/webview-article.ts). Injected like every other capability
+// (src/workshop/extract/webview-article.ts). Injected like every other capability
 // the engine uses, so the engine stays runnable in bun — and so a platform
 // without one simply does not pass it.
 export type WebviewFetch = (url: string) => Promise<WebviewArticle>;

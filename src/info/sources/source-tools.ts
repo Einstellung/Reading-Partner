@@ -14,8 +14,8 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
-import type { FetchFn } from "../extract/http";
-import type { ExtractReadable } from "../extract/readable-select";
+import type { FetchFn } from "../../workshop/extract/http";
+import type { ExtractReadable } from "../../workshop/extract/readable-select";
 import type { SourceDescriptor } from "./descriptor";
 import { validateDescriptor } from "./descriptor";
 import { collectSource, fetchBodies, type WebviewFetch } from "./engine";

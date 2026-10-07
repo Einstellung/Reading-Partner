@@ -7,7 +7,7 @@
 // by name. The zip magic is checked first only because it is free and rules out
 // every PDF without inflating anything.
 
-import { openZip } from "./zip";
+import { openZip } from "../../../workshop/bindery/zip";
 
 const MIMETYPE_ENTRY = "mimetype";
 const EPUB_MIMETYPE = "application/epub+zip";

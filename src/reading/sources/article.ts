@@ -9,11 +9,11 @@
 // to the whole cleaned body. Block tags become paragraph breaks; the rest is
 // stripped to text, entity-decoded, and whitespace-collapsed.
 
-// decodeEntities and the plain-text tail come from info/extract/sanitize: the
+// decodeEntities and the plain-text tail come from workshop/extract/sanitize: the
 // same entity table and the same whitespace rules, written once. The extractor
 // itself stays here — this one returns capped plain text plus a title, while
 // extractReadable returns HTML and needs a DOMParser.
-import { decodeEntities, stripTagsToText } from "../../info/extract/sanitize";
+import { decodeEntities, stripTagsToText } from "../../workshop/extract/sanitize";
 
 // Cap on the extracted text so a huge page can't blow up the digest prompt or
 // the fulltext cache. Longer content is cut with a visible marker.

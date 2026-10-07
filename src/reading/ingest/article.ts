@@ -17,9 +17,9 @@
 
 import { contentHash } from "../../platform/app/content-hash";
 import type { ImportMeta, LibraryEntry, LibraryKind } from "../../platform/app/library";
-import type { ExtractReadable } from "../../info/extract/readable-select";
+import type { ExtractReadable } from "../../workshop/extract/readable-select";
 import { t } from "../../i18n";
-import { buildArticleEpub, type ArticleImage } from "../epub/file/build-article";
+import { buildArticleEpub, type ArticleImage } from "../../workshop/bindery/build-article";
 import { resolveUrlSource, sniffContentType } from "../sources";
 import {
   articleFileName,
@@ -27,7 +27,7 @@ import {
   decodeDataImage,
   pageLanguage,
   readPageMeta,
-} from "./page-meta";
+} from "../../workshop/bindery/page-meta";
 
 /** What a fetch gave back, stripped to what this path reads. */
 export interface FetchedBytes {

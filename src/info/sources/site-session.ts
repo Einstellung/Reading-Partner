@@ -9,7 +9,7 @@
 //
 // Pure: the descriptors go in, the rows the sources page draws come out. What
 // the state means and where it is stored is below; the calls that change it are
-// in info/extract/webview-session.ts.
+// in workshop/extract/webview-session.ts.
 
 import type { SourceDescriptor } from "./descriptor";
 import { t } from "../../i18n";
