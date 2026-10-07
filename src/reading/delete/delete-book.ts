@@ -337,23 +337,6 @@ export async function removeFromTopic(
   return file.hash ? deleteIfUnreferenced(file.hash, deps) : false;
 }
 
-/**
- * Take a document off a topic by its id rather than its row: every row of the
- * topic that lists it goes through removeFromTopic. For a caller that knows
- * which document it is replacing and not the reference it was listed under (a
- * re-keep superseding the summary it first built, ingest/keep.ts).
- */
-export async function removeDocumentFromTopic(
-  topicId: string,
-  hash: string,
-  deps: DeleteBookDeps = liveDeleteBookDeps,
-): Promise<void> {
-  const topic = (await deps.listTopics()).find((t) => t.id === topicId);
-  for (const file of topic?.files ?? []) {
-    if (file.hash === hash) await removeFromTopic(topicId, file, deps);
-  }
-}
-
 /** Whether removeFromTopic would delete the document: what the confirmation says. */
 export async function isLastReference(
   topics: readonly Topic[],

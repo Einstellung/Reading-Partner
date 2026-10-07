@@ -11,7 +11,6 @@
 import { expect, test } from "bun:test";
 import {
   deleteBook,
-  removeDocumentFromTopic,
   removeFromTopic,
   type DeleteBookDeps,
 } from "../../../src/reading/delete/delete-book";
@@ -268,10 +267,4 @@ test("a kept record that will not go does not stop the row's removal", async () 
     }),
   );
   expect(log.calls).toEqual(["unlink t1 /books/b.pdf"]);
-});
-
-test("removeDocumentFromTopic takes every row of that document off the one topic", async () => {
-  const log: Log = { calls: [] };
-  await removeDocumentFromTopic("t2", BOOK, deps(log));
-  expect(log.calls).toEqual(["unlink t2 /shared/a.pdf"]);
 });

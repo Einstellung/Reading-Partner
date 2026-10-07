@@ -8,8 +8,13 @@
 import { getLibraryEntry, importBook } from "../../platform/app/library";
 import { addSupplement } from "../../platform/app/supplements";
 import { addFileToTopic } from "../../platform/app/topics";
-import { loadSavedArticles, saveArticle } from "../saved/saved-articles";
-import type { KeepDeps } from "./keep";
+import {
+  loadSavedArticles,
+  saveArticle,
+  type SavedArticle,
+  type SavedArticleInput,
+} from "../saved/saved-articles";
+import { keepArticle, type KeepDeps } from "./keep";
 import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { fetchWithRetry } from "../../platform/http/throttled-fetch";
 import {
@@ -51,12 +56,8 @@ export async function liveIngestDeps(): Promise<ArticleIngestDeps> {
   };
 }
 
-/**
- * The keep's deps with the real host behind them (keep.ts), all but `retire`:
- * taking a document off a topic is reading/delete's, which already depends on
- * this directory, so the caller hands it in (ui/components/info/saveArticle.ts).
- */
-export function liveKeepDeps(): Omit<KeepDeps, "retire"> {
+/** The keep's deps with the real host behind them (keep.ts). */
+export function liveKeepDeps(): KeepDeps {
   return {
     fetch: fetchBytes,
     importBook,
@@ -65,6 +66,11 @@ export function liveKeepDeps(): Omit<KeepDeps, "retire"> {
     existing: async (id) => (await loadSavedArticles()).find((a) => a.id === id) ?? null,
     libraryEntry: getLibraryEntry,
   };
+}
+
+/** Keep a briefing article with the real host behind it. Answers the record written. */
+export async function keepArticleLive(input: SavedArticleInput): Promise<SavedArticle | null> {
+  return (await keepArticle(input, liveKeepDeps())).record;
 }
 
 /** Ingest a URL with the real host behind it. */

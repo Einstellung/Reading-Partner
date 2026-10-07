@@ -36,7 +36,8 @@ import {
   type SavedArticleInput,
 } from "../../../reading/saved/saved-articles";
 import { moveKeptArticle } from "../../../reading/saved/kept-document";
-import { keepArticleLive, toSavedArticleInput } from "./saveArticle";
+import { keepArticleLive } from "../../../reading/ingest/live";
+import { toSavedArticleInput } from "./saveArticle";
 import { appendFeedback } from "../../../memory/profile/feedback";
 import { assembleReaderSection } from "../../../memory/live/assemble";
 import {

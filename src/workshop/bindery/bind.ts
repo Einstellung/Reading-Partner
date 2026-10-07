@@ -18,6 +18,7 @@ import { builtInAdapter } from "./adapters";
 import { buildSectionedEpub, type SectionedEpubInput } from "./build-article";
 import { gateManuscript, isRejection, rejection, type Rejection } from "./gate";
 import { fetchImages } from "./images";
+import { detectLanguage } from "./language";
 import { manuscriptText, type Manuscript } from "./manuscript";
 import { isWholeDocument, type BinderyDeps, type Material, type WholeDocument } from "./material";
 import { collectImageSrcs } from "./page-meta";
@@ -143,7 +144,16 @@ export async function readMaterial(
 
   const turnedBack = gateManuscript(made, { minChars: adapter.minChars });
   if (turnedBack) return turnedBack;
-  return { ok: true, manuscript: made, adapter: adapter.name };
+  return { ok: true, manuscript: withLanguage(made), adapter: adapter.name };
+}
+
+// A manuscript that declares no language is given the one its text shows, when
+// the text shows one (language.ts). A declared language is never second-guessed,
+// so a page that says what it is builds to the bytes it always did.
+function withLanguage(m: Manuscript): Manuscript {
+  if (oneLine(m.language ?? "") !== "") return m;
+  const detected = detectLanguage(manuscriptText(m));
+  return detected === undefined ? m : { ...m, language: detected };
 }
 
 /**

@@ -6,7 +6,7 @@
 
 > 补记（2026-09-12）：「收藏的文章算不算书」在 [67](../reading/67-HTML文档.md) 答完：阅读层同一种文档，摄入时构建成 EPUB 走纸页；topic 里和书并排，没有第二个列表。存量的 `saved-articles.json` 和 `SavedArticleView` 先留着，等新路跑稳再按同一函数重建。
 
-> 补记（2026-10-07）：Keep 已改走 bindery（[85](../platform/85-workshop与bindery.md) 第 4 步）。收下时简报手里的正文建成 EPUB，以文章入库并列进记录的 topic，记录多一个可选的 `documentHash` 指向它；能在阅读器里打开、划线、进全文和 prep。记录照旧写，Saved 列表、文章对话的 Apply、删 topic 的 reassign 都动记录，文档跟着走。正文过不了质量关的只留记录。存量记录不迁移。
+> 补记（2026-10-07）：Keep 已改走 bindery（[85](../platform/85-workshop与bindery.md) 第 4 步）。收下时简报手里的正文建成 EPUB，以文章入库并列进记录的 topic，记录多一个可选的 `documentHash` 指向它；能在阅读器里打开、划线、进全文和 prep。记录照旧写，Saved 列表、文章对话的 Apply、删 topic 的 reassign 都动记录，文档跟着走。正文过不了质量关的、只有摘要的都只留记录，后者守的是下面「证据不全」那条。存量记录不迁移。
 
 ---
 

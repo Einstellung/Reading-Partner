@@ -122,7 +122,7 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 - 合订本构建：先有零散文章，再看「合成一本」的频率。
 - 分享面板：见 [78](../platform/78-分享.md)。
 - 盒内浏览模式：info 侧的 Red Box 还没生在 palace 里（61 第 6 步）。
-- 收藏文章的存量迁移：新收的已经建成 EPUB 进 topic（[85](../platform/85-workshop与bindery.md) 第 4 步），存量记录没有 `documentHash`，照旧由 `SavedArticleView` 打开，等新路跑稳再按同一函数重建。
+- 收藏文章的存量迁移：新收的已经建成 EPUB 进 topic（[85](../platform/85-workshop与bindery.md) 第 4 步），只有摘要的除外。存量记录和只有摘要的记录没有 `documentHash`，照旧由 `SavedArticleView` 打开，等新路跑稳再按同一函数重建。
 - 稿：编辑部还没做，没有稿。
 - 只看译文和双语切换：先只出双语对照，等用过再说。
 - 翻整本书：形态一样，量级不一样，先只翻文章。

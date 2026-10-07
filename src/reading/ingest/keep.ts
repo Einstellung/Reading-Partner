@@ -17,10 +17,15 @@
 // filing fails: the reader pressed Keep, and the record is the part that
 // cannot be had again once the briefing is gone.
 //
-// A summary-only body is built when the gate passes it, like any other: a
-// truncated feed body or a paywall preview is still text the reader chose to
-// keep and may want to mark. What makes it different rides on the record
-// (`summaryOnly`), the same as before.
+// A summary-only body is not built at all, and the record is the whole keep.
+// A document of a truncated feed body or a paywall preview would sit in the
+// reader, the full text and search_topic looking like the article, and nothing
+// on the way to the model says it is not (docs/21 「证据不全」); the record
+// carries `summaryOnly` everywhere it is read. Keeping the same article again
+// once the full body is in hand builds the document then.
+//
+// The briefing does not say what language an article is in, so the bindery
+// tells it from the text (workshop/bindery/language.ts).
 //
 // Existing records are not rebuilt here (docs/85): a record kept before this
 // carries no document until it is kept again.
@@ -45,8 +50,6 @@ export interface KeepDeps extends Omit<FilingDeps, "attachToBook"> {
   existing(id: string): Promise<SavedArticle | null>;
   /** The library's entry for a document, or null when it is not in the library. */
   libraryEntry(hash: string): Promise<LibraryEntry | null>;
-  /** Take a document this keep supersedes off the topic (and the library, if last). */
-  retire(topicId: string, hash: string): Promise<void>;
 }
 
 export interface KeepOutcome {
@@ -79,12 +82,13 @@ export function keptMaterial(input: SavedArticleInput): Material | null {
  * Keep one article: build its document when it can be built, then write the
  * record pointing at it.
  *
+ * A summary-only body builds nothing (see the head of this file).
+ *
  * Keeping the same article again reuses the document the first keep linked,
  * when the library still has it, rather than building a second copy of one
  * article (pictures fetched a second time can come out differently, and the
- * bytes with them). The exception is a keep that now has the full text where
- * the first had only a summary: that builds the new document, and the summary
- * document is retired once the record points away from it. A second keep also
+ * bytes with them). A record that has none yet — its first keep had only a
+ * summary — gets one now if this keep has the full body. A second keep also
  * leaves the record in the topic it was filed under since.
  */
 export async function keepArticle(input: SavedArticleInput, deps: KeepDeps): Promise<KeepOutcome> {
@@ -93,14 +97,13 @@ export async function keepArticle(input: SavedArticleInput, deps: KeepDeps): Pro
   const earlier = await deps.existing(id);
   const topicId = earlier?.topicId ?? input.topicId;
   const earlierDoc = earlier ? savedArticleDocumentOf(earlier) : "";
-  const upgrade = earlier?.summaryOnly === true && !input.summaryOnly;
 
   let documentHash = "";
   let document: IngestedDocument | null = null;
   let rejection: Rejection | null = null;
-  if (earlierDoc !== "" && !upgrade && (await deps.libraryEntry(earlierDoc)) !== null) {
+  if (earlierDoc !== "" && (await deps.libraryEntry(earlierDoc)) !== null) {
     documentHash = earlierDoc;
-  } else {
+  } else if (!input.summaryOnly) {
     const material = keptMaterial(input);
     if (material) {
       try {
@@ -133,12 +136,5 @@ export async function keepArticle(input: SavedArticleInput, deps: KeepDeps): Pro
     topicId,
     ...(documentHash === "" ? {} : { documentHash }),
   });
-  if (record && earlierDoc !== "" && documentHash !== "" && earlierDoc !== documentHash) {
-    try {
-      await deps.retire(topicId, earlierDoc);
-    } catch (e) {
-      console.warn("could not retire the document a keep superseded", e);
-    }
-  }
   return { record, document, rejection };
 }

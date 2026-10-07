@@ -46,12 +46,11 @@ interface Recorded {
   deps: KeepDeps;
   records: SavedArticle[];
   attached: { topicId: string; path: string; hash: string }[];
-  retired: { topicId: string; hash: string }[];
   fetched: string[];
 }
 
 function recorder(start: SavedArticle[] = []): Recorded {
-  const r: Recorded = { records: [...start], attached: [], retired: [], fetched: [], deps: null! };
+  const r: Recorded = { records: [...start], attached: [], fetched: [], deps: null! };
   let clock = 100;
   r.deps = {
     fetch: async (url): Promise<FetchedBytes> => {
@@ -71,9 +70,6 @@ function recorder(start: SavedArticle[] = []): Recorded {
     },
     existing: async (id) => r.records.find((a) => a.id === id) ?? null,
     libraryEntry: getLibraryEntry,
-    retire: async (topicId, hash) => {
-      r.retired.push({ topicId, hash });
-    },
   };
   return r;
 }
@@ -135,16 +131,30 @@ test("keeping the same article again reuses its document and leaves the record w
   expect(r.records).toHaveLength(1);
 });
 
-test("a full text kept after a summary builds a new document and retires the summary's", async () => {
+test("a summary-only body is a record alone, however long; the full body kept later builds the document", async () => {
   const r = recorder();
-  const summary = await keepArticle(input({ summaryOnly: true, html: "<p>Only the summary.</p>" }), r.deps);
-  const full = await keepArticle(input(), r.deps);
+  const summary = await keepArticle(input({ summaryOnly: true }), r.deps);
+  expect(summary.document).toBeNull();
+  expect(summary.rejection).toBeNull();
+  expect(summary.record?.summaryOnly).toBe(true);
+  expect(summary.record && "documentHash" in summary.record).toBe(false);
+  expect(r.attached).toEqual([]);
+  expect(r.fetched).toEqual([]);
 
-  expect(summary.document).not.toBeNull();
+  const full = await keepArticle(input(), r.deps);
   expect(full.document).not.toBeNull();
+  expect(full.record?.summaryOnly).toBe(false);
   expect(full.record?.documentHash).toBe(full.document!.entry.hash);
-  expect(full.record?.documentHash).not.toBe(summary.record?.documentHash);
-  expect(r.retired).toEqual([{ topicId: "brief", hash: summary.record!.documentHash! }]);
+  expect(r.records).toHaveLength(1);
+});
+
+test("a Chinese article is built as Chinese, though the briefing names no language", async () => {
+  const zh = "这是一篇关于大语言模型推理效率的文章，讨论了 Transformer 的注意力机制。".repeat(6);
+  const r = recorder();
+  const out = await keepArticle(input({ html: `<p>${zh}</p>`, text: zh }), r.deps);
+  const bytes = disk.blobs.get(libraryBookPath(out.document!.entry.hash, "epub"))!;
+  const opf = openZip(bytes).entries.map((e) => e.name).find((n) => n.endsWith(".opf"))!;
+  expect(openZip(bytes).text(opf)).toContain("<dc:language>zh</dc:language>");
 });
 
 test("a body the bindery turns back is kept as a record alone", async () => {
