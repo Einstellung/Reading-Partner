@@ -16,7 +16,7 @@ Collecting means polling every source around the clock, opening article pages in
 
 The collector publishes the finished briefing and the text of the articles in it into your Drive folder, and every reader picks them up from there. On a reader, asking for a fresh briefing hands the request to the collector rather than running it locally. Subscribing to a source and signing in to a site are the collector's too, because both have to prove they can actually fetch an article before they mean anything.
 
-A phone with no desktop behind it gets an app with no briefing in it. Books are the other half and need no collector: the phone opens the EPUBs in your Drive on its own (see [Reading on the phone](#reading-on-the-phone)).
+A phone with no desktop behind it gets an app with no briefing in it. Books are the other half and need no collector: the phone reads the EPUBs in your Drive and teaches the PDFs on its own, AI included (see [Reading on the phone](#reading-on-the-phone)).
 
 The iPhone app needs **iOS 26 or later, on an iPhone 14 or newer**. It listens on the device — hold the composer's bar and speak, and the transcript is written by the phone with nothing uploaded — and the framework behind that (`SpeechAnalyzer`) is iOS 26 API whose availability is also a hardware answer: it is false on a Neural Engine below a certain size, and always false in the simulator. Measured reports put the real cutoff at iPhone 12; the stated floor keeps a notch of margin. Either way it is the whole app's floor, not the feature's.
 
@@ -89,15 +89,19 @@ On an iPad, open a book through Files; on the desktop the file picker takes `.ep
 
 ## Reading on the phone
 
-The phone reads EPUBs. Its home has a Library card carrying the book you were reading, and behind it your topics with the same covers the tablet shows. A book opens as one reflowed column at phone width, scrolled natively, and the top bar counts the pages the tablet counts — with the printed page label when the book carries one — so a page cited on one device is that page on the other. The outline comes up as a sheet.
+The phone reads EPUBs and teaches PDFs. Its home has a Library card carrying the book you were reading, and behind it your topics with the same covers the tablet shows. A book comes down when you open it: one that is in your Drive but not on the device shows as in the cloud, and tapping it fetches that book alone.
 
 ![The topic shelf on the phone](docs/assets/phone-shelf.png)
 
-Press and hold a word to highlight it, drag to extend, lift to keep it; the highlight pen and a drag do the same. Tap a mark to delete it. Marks and the reading position are the same files the tablet writes, so a line drawn on the phone is there on the iPad, and a book left open on the iPad opens at that page on the phone.
+An EPUB opens as one reflowed column at phone width, scrolled natively or turned a page at a time; the Display sheet switches between Scroll and Pages and sets type size, line spacing, margins, one of four papers including a dark one, and whether Lumen shows. The screen is the text and a faint page line. Tap the middle for the bars: back, title and page on top, Outline, Display and Learn below. The page numbers are the ones the tablet counts, with the printed page label when the book carries one, so a page cited on one device is that page on the other. Marks and the reading position are the same files the tablet writes, so a line drawn on the phone is there on the iPad, and a book left open on the iPad opens at that page on the phone.
 
-![An EPUB on the phone, with a highlight](docs/assets/phone-reading.png)
+Hold a word to select it, drag to extend, and move either end by its handle. Highlight keeps the words in yellow; Ask underlines them and opens a conversation about the passage, the same thread the iPad's AI pen makes, so it opens from there too. Tap a highlight for Delete and Ask, an underline for Open and Delete; deleting an underline that has a conversation asks first and takes the conversation with it. The Outline sheet has three tabs. Outline is the contents. Marks lists every highlight and underline in reading order with its chapter and page; tap one to jump to it, swipe left to delete it. Prep shows the chapter graph and chapter notes the iPad or desktop prepared and synced, and says so when there are none, since the phone does not prepare a book itself.
 
-A book comes down when you open it: one that is in your Drive but not on the device shows as in the cloud, and tapping it fetches that book alone. PDFs stay on the iPad and desktop — their covers are on the phone's shelf, and tapping one says so. The AI is not on the phone yet; the AI pen and Learn this book with AI are drawn and disabled, each with its reason for a label.
+Learn opens the book's lesson as a sheet over the page: the same book-level conversation the iPad and desktop have, synced between them, with citations that jump back into the text and mark the quote. A dot on the page says a reply is being written or is waiting. When a book opens, the phone extracts its full text and figure index itself, and until that is done the lesson says it is still reading.
+
+A PDF has no pages on the phone. Tapping one goes straight into its lesson: the phone extracts the text, and the AI takes you through the paper station by station, quoting it with page numbers. The first time, a sheet says so and offers Open in… to hand the file to another app (iPhone only for now). The lesson's top bar has the chapter list, and two chips, I don't follow and Skip, say it for you. Hold a paragraph of a reply and choose Ask about this to take it aside and come back to the lesson. The shelf card shows where the lesson stands.
+
+Not on the phone yet: voice in lessons (they are text only), PDF pages and figures, a note on a highlight, search inside a book, a dictionary, and preparing a lesson, which stays on the iPad and desktop.
 
 ## Marking and asking
 
