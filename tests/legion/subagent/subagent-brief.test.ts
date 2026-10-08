@@ -146,8 +146,8 @@ test("a brief over its cap is cut and says it was cut", () => {
 });
 
 test("clipping is script-aware, so a Chinese brief is not measured as English", () => {
-  // pi charges chars/4 for every script; the estimator this uses charges dense
-  // scripts by the character, so 50 tokens is about 50 characters, not 200.
+  // pi charges chars/3.5 for every script; the estimator this uses charges dense
+  // scripts by the character, so 50 tokens is about 50 characters, not 175.
   const chinese = "综".repeat(400);
   const clipped = clipToTokens(chinese, 50);
   expect(clipped.clipped).toBe(true);

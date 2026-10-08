@@ -610,7 +610,7 @@ function sizedModel(contextWindow: number): Model<Api> {
 }
 
 // A tool that hands back as much Chinese text as it is asked for: the shape that
-// makes the two estimates disagree, since pi charges every script chars/4.
+// makes the two estimates disagree, since pi charges every script chars/3.5.
 const pagesTool: AgentTool = {
 	name: "read_pages",
 	label: () => "Running the fake tool",

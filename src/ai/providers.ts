@@ -164,12 +164,17 @@ export interface StreamChatOptions {
 	onError(message: string, assistant?: StreamOutcome): void;
 }
 
+// pi 0.99 renamed openai-codex to "OpenAI Codex (legacy)" because its own
+// openai provider gained ChatGPT sign-in. This app still signs in through the
+// Codex backend, so the settings label stays what it was.
+const openaiCodex: Provider = { ...openaiCodexProvider(), name: "OpenAI Codex" };
+
 // Exported so the agent turn (src/legion/execute/turn.ts) reuses the exact same provider
 // instances, model lookup, and OAuth/api-key resolution as streamChat. The keys
 // are this app's ids, not pi's: our "openai" is pi's openai-codex.
 export const providers: Record<ProviderId, Provider> = {
 	anthropic: anthropicProvider(),
-	openai: openaiCodexProvider(),
+	openai: openaiCodex,
 	deepseek: deepseekProvider(),
 	opencode: opencodeProvider(),
 	"opencode-go": opencodeGoProvider(),

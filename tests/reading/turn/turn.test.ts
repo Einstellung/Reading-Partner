@@ -710,7 +710,7 @@ const tiny: Settings = {
   defaultModelId: "gpt-5.3-codex-spark",
 };
 
-// A Chinese survey, the shape that actually overflows: pi prices it at chars/4
+// A Chinese survey, the shape that actually overflows: pi prices it at chars/3.5
 // and sees room to spare, the script-aware estimate prices it by the character
 // and does not.
 function cjkSurvey(pages: number, charsPerPage = 1000): Fulltext {

@@ -10,9 +10,10 @@ import { fitToBudget } from "../../src/budget/fit";
 import type { Rung } from "../../src/budget/ladder";
 
 const WINDOW = 200_000;
-// Latin text at 4 chars a token, so a section's size in characters is four
-// times its size in tokens and the arithmetic below is readable.
-const CHARS_PER_TOKEN = 4;
+// Latin text at pi's 3.5 chars a token, so a section's size in characters is
+// a fixed multiple of its size in tokens and the arithmetic below is readable.
+// Every size below is even, so the multiple stays a whole number of characters.
+const CHARS_PER_TOKEN = 3.5;
 
 function model(contextWindow = WINDOW): Model<Api> {
   return { id: "m", name: "m", contextWindow, maxTokens: 64_000 } as unknown as Model<Api>;

@@ -14,9 +14,12 @@
     "preview": "vite preview",
     "tauri": "tauri"
   },
+  "overrides": {
+    "@earendil-works/pi-ai": "1.1.0"
+  },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.87.1",
-    "@earendil-works/pi-ai": "0.87.1",
+    "@earendil-works/pi-ai": "1.1.0",
     "@embedpdf/core": "2.14.4",
     "@embedpdf/engines": "2.14.4",
     "@embedpdf/models": "2.14.4",

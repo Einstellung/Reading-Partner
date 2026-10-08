@@ -14,8 +14,8 @@
 //   - pi's own, reverse-solved out of clampMaxTokensToContext (see piBudget).
 //     Using pi's number means we can never be in the position of thinking a call
 //     fits while pi thinks it does not.
-//   - a script-aware one. pi charges chars/4 for every script, which under-counts
-//     CJK by 2.5-4x, so it waves through exactly the contexts that need holding
+//   - a script-aware one. pi charges chars/3.5 for every script, which under-counts
+//     CJK by 2.5-3.5x, so it waves through exactly the contexts that need holding
 //     back. estimateTextTokens charges dense scripts by the character.
 
 import { clampMaxTokensToContext } from "@earendil-works/pi-ai/api/simple-options";
@@ -39,9 +39,9 @@ const PI_MIN_MAX_TOKENS = 1;
 const DENSE_CHARS_PER_TOKEN = 1;
 const SPARSE_CHARS_PER_TOKEN = 4;
 
-// What one image block costs. Mirrors pi's stand-in of 4800 characters, so the
-// two estimates price a picture the same way.
-const IMAGE_TOKENS = 1200;
+// What one image block costs. Mirrors pi's stand-in of 4800 characters at its
+// 3.5 characters a token, so the two estimates price a picture the same way.
+const IMAGE_TOKENS = Math.ceil(4800 / 3.5);
 
 // Code units that tokenize densely: CJK ideographs and their punctuation, kana,
 // hangul, fullwidth forms, and every surrogate — the astral planes hold rare

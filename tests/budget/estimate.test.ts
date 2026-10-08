@@ -36,9 +36,9 @@ function user(text: string): Context["messages"][number] {
 // loudly instead of quietly making every budget wrong.
 test("pi's context estimate is exactly recoverable from clampMaxTokensToContext", () => {
   const m = model(200_000);
-  // 40,000 ASCII chars of system prompt + 400 of user text: pi charges chars/4,
-  // so 10,000 + 100 tokens.
-  const c = ctx({ systemPrompt: "x".repeat(40_000), messages: [user("y".repeat(400))] });
+  // 35,000 ASCII chars of system prompt + 350 of user text: pi charges
+  // chars/3.5, so 10,000 + 100 tokens.
+  const c = ctx({ systemPrompt: "x".repeat(35_000), messages: [user("y".repeat(350))] });
 
   const allowed = clampMaxTokensToContext(m, normalizeContext(c), Number.MAX_SAFE_INTEGER);
   expect(allowed).toBe(200_000 - 10_100 - PI_CONTEXT_SAFETY_TOKENS);
@@ -53,7 +53,7 @@ test("piBudget reports saturation when the clamp bottoms out", () => {
   const m = model(200_000);
   // 196,000 tokens of prompt: pi allows 200000 - 196000 - 4096 < 0 -> floored
   // at 1. This is the failure that emits one token and calls it a success.
-  const pi = piBudget(m, ctx({ systemPrompt: "x".repeat(4 * 196_000) }));
+  const pi = piBudget(m, ctx({ systemPrompt: "x".repeat(3.5 * 196_000) }));
   expect(pi.allowedOutput).toBe(1);
   expect(pi.saturated).toBe(true);
 });
@@ -75,7 +75,7 @@ test("estimateTextTokens charges CJK by the character and Latin by four", () => 
   expect(estimateTextTokens("ひらがな")).toBe(4);
 });
 
-test("a Chinese book is priced 2.5-4x above pi's chars/4", () => {
+test("a Chinese book is priced 2.5-3.5x above pi's chars/3.5", () => {
   // The shape of the user's own library: 84.9% CJK by character.
   const chars = 221_328;
   const cjk = Math.round(chars * 0.849);
@@ -84,10 +84,10 @@ test("a Chinese book is priced 2.5-4x above pi's chars/4", () => {
 
   const pi = piBudget(model(200_000), c);
   const scriptAware = estimateContextTokens(c);
-  expect(pi.tokens).toBe(Math.ceil(chars / 4));
+  expect(pi.tokens).toBe(Math.ceil(chars / 3.5));
   expect(scriptAware / pi.tokens).toBeGreaterThan(3);
 
-  // pi sees 55k tokens and a comfortable 140k of room; the script-aware number
+  // pi sees 63k tokens and a comfortable 132k of room; the script-aware number
   // sees a book that leaves nothing to answer with. This gap is the whole point:
   // pi waves through the one call that has no chance of producing a reply.
   expect(pi.saturated).toBe(false);
@@ -103,10 +103,10 @@ test("contextBudget plans against the larger of the two estimates", () => {
   expect(Math.abs(latin.used - latin.pi.tokens)).toBeLessThan(latin.used * 0.1);
 
   // CJK: the script-aware number takes over.
-  const cjk = contextBudget(m, ctx({ systemPrompt: "张".repeat(60_000) }));
+  const cjk = contextBudget(m, ctx({ systemPrompt: "张".repeat(52_500) }));
   expect(cjk.pi.tokens).toBe(15_000);
-  expect(cjk.used).toBe(60_000);
-  expect(cjk.allowedOutput).toBe(200_000 - 60_000 - PI_CONTEXT_SAFETY_TOKENS);
+  expect(cjk.used).toBe(52_500);
+  expect(cjk.allowedOutput).toBe(200_000 - 52_500 - PI_CONTEXT_SAFETY_TOKENS);
 });
 
 test("tool schemas and images are part of the estimate", () => {
@@ -120,8 +120,8 @@ test("tool schemas and images are part of the estimate", () => {
       { role: "user", content: [{ type: "image", data: "AAAA", mimeType: "image/png" }], timestamp: 0 },
     ],
   });
-  // Priced the same as pi's 4800-character stand-in.
-  expect(estimateContextTokens(withImage)).toBe(1200);
+  // Priced the same as pi's 4800-character stand-in at 3.5 characters a token.
+  expect(estimateContextTokens(withImage)).toBe(1372);
 });
 
 test("assistant turns count text, thinking and tool-call arguments", () => {
@@ -153,13 +153,14 @@ test("assistant turns count text, thinking and tool-call arguments", () => {
 test("the output floor gates the call before it is sent", () => {
   const m = model(200_000);
   // 190,000 tokens in: 5,904 of output allowed. Enough for chat, not for a plan.
-  const tight = contextBudget(m, ctx({ systemPrompt: "x".repeat(4 * 190_000) }));
+  const tight = contextBudget(m, ctx({ systemPrompt: "x".repeat(3.5 * 190_000) }));
   expect(tight.allowedOutput).toBe(5_904);
   expect(fitsBudget(tight, "chat")).toBe(true);
   expect(fitsBudget(tight, "digest")).toBe(false);
   expect(fitsBudget(tight, "overview")).toBe(false);
 
-  // 196,000 tokens in: pi allows 1. Nothing may be sent.
+  // 196,000 tokens in even at four characters a token: pi allows 1. Nothing
+  // may be sent.
   const over = contextBudget(m, ctx({ systemPrompt: "x".repeat(4 * 196_000) }));
   expect(over.pi.saturated).toBe(true);
   expect(over.allowedOutput).toBe(0);
