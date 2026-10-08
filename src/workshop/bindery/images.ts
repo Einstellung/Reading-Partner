@@ -11,6 +11,11 @@ export interface FetchedBytes {
   status: number;
   bytes: Uint8Array;
   contentType: string | null;
+  /**
+   * The Content-Disposition header, where the host passes it on: a download
+   * (a Drive file) names itself there and nowhere else.
+   */
+  contentDisposition?: string | null;
 }
 
 export type FetchBytes = (url: string) => Promise<FetchedBytes>;

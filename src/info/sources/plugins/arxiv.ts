@@ -22,6 +22,7 @@ import {
   type ArxivPaperRef,
 } from "./arxiv-client";
 import {
+  isPdfBytes,
   rejection,
   type FetchBytes,
   type FetchedBytes,
@@ -134,12 +135,6 @@ function byline(authors: string[]): string | undefined {
   return `${authors[0]} et al.`;
 }
 
-// "%PDF": arXiv answers some PDF links with an HTML page (a paper still being
-// processed, a withdrawn one), and that is not the document.
-function isPdf(bytes: Uint8Array): boolean {
-  return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
-}
-
 // The paper's entry in the export API, or null when the lookup failed or found
 // nothing. Never throws: the PDF is the document, and without its metadata it is
 // still filed, under its id.
@@ -177,7 +172,9 @@ export const arxivSiteAdapter: SiteAdapter = {
     if (!pdf.ok) {
       return rejection("unreachable", `arXiv answered HTTP ${pdf.status} for the PDF of ${versioned}`);
     }
-    if (!isPdf(pdf.bytes)) return rejection("unreachable", `arXiv served no PDF for ${versioned}`);
+    // arXiv answers some PDF links with an HTML page (a paper still being
+    // processed, a withdrawn one), and that is not the document.
+    if (!isPdfBytes(pdf.bytes)) return rejection("unreachable", `arXiv served no PDF for ${versioned}`);
 
     const entry = await lookupEntry(ref, deps.fetch);
     const author = entry ? byline(entry.authors) : undefined;

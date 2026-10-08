@@ -22,6 +22,7 @@ import { detectLanguage } from "./language";
 import { manuscriptText, type Manuscript } from "./manuscript";
 import { isWholeDocument, type BinderyDeps, type Material, type WholeDocument } from "./material";
 import { collectImageSrcs } from "./page-meta";
+import { pdfLinkAdapter } from "./pdf";
 import { siteAdapterFor } from "./registry";
 
 /** What the built document is, for the caller to file it by. */
@@ -133,7 +134,9 @@ export async function readMaterial(
   material: Material,
   deps: BinderyDeps = {},
 ): Promise<ReadManuscript | PassedThrough | Rejection> {
-  const adapter = siteAdapterFor(material) ?? builtInAdapter(material);
+  // A bare link no site adapter claims is fetched once for a PDF (pdf.ts).
+  const adapter =
+    siteAdapterFor(material) ?? (material.kind === "url" ? pdfLinkAdapter : builtInAdapter(material));
   if (!adapter) {
     return rejection("no-adapter", "nothing here knows how to read a bare link to that site");
   }
@@ -142,7 +145,8 @@ export async function readMaterial(
   if (isWholeDocument(made)) return passThrough(made, adapter.name);
   if (made.sections.length === 0) return rejection("empty", "the page has no body text");
 
-  const turnedBack = gateManuscript(made, { minChars: adapter.minChars });
+  const minChars = "minChars" in adapter ? adapter.minChars : undefined;
+  const turnedBack = gateManuscript(made, { minChars });
   if (turnedBack) return turnedBack;
   return { ok: true, manuscript: withLanguage(made), adapter: adapter.name };
 }

@@ -136,16 +136,48 @@ export const textAdapter: Adapter<Of<"text">> = {
   },
 };
 
+export interface MarkdownOptions {
+  /**
+   * Pass raw HTML in the source through instead of escaping it, for Markdown
+   * whose authors write HTML on purpose (a GitHub README's centred logo). The
+   * build sanitizes every section, so this decides only what is shown.
+   */
+  allowHtml?: boolean;
+}
+
 /**
  * Markdown as HTML, CommonMark with GFM (tables, strikethrough, task lists,
- * autolinks). Raw HTML in the source is escaped, not passed through.
+ * autolinks). Raw HTML in the source is escaped, not passed through, unless the
+ * caller allows it.
  */
-export function markdownToHtml(markdown: string): string {
-  return micromark(markdown, { extensions: [gfm()], htmlExtensions: [gfmHtml()] });
+export function markdownToHtml(markdown: string, opts: MarkdownOptions = {}): string {
+  return micromark(markdown, {
+    extensions: [gfm()],
+    htmlExtensions: [gfmHtml()],
+    ...(opts.allowHtml ? { allowDangerousHtml: true } : {}),
+  });
 }
 
 // A leading level-one heading, which in a Markdown document is its title.
 const LEADING_H1 = /^\s*#[ \t]+(.+?)[ \t#]*(?:\n|$)/;
+
+/**
+ * The title a Markdown document names itself by, and the source with that line
+ * taken off so it is not repeated under a header that already says it. A
+ * document that does not open with `# A title` is named by its first line, and
+ * nothing is taken off.
+ */
+export function resolveMarkdownTitle(markdown: string): { title: string; body: string } {
+  const source = markdown.replace(/\r\n?/g, "\n");
+  const h1 = LEADING_H1.exec(source);
+  if (h1) {
+    return {
+      title: oneLine(htmlToText(markdownToHtml(h1[1]))),
+      body: source.slice(h1[0].length),
+    };
+  }
+  return { title: derivedTitle(htmlToText(markdownToHtml(source))), body: source };
+}
 
 /**
  * Markdown. Untitled Markdown that opens with `# A title` is named by it, and
@@ -158,15 +190,7 @@ export const markdownAdapter: Adapter<Of<"markdown">> = {
   async toManuscript(material) {
     let source = material.markdown.replace(/\r\n?/g, "\n");
     let title = oneLine(material.title ?? "");
-    if (title === "") {
-      const h1 = LEADING_H1.exec(source);
-      if (h1) {
-        title = oneLine(htmlToText(markdownToHtml(h1[1])));
-        source = source.slice(h1[0].length);
-      } else {
-        title = derivedTitle(htmlToText(markdownToHtml(source)));
-      }
-    }
+    if (title === "") ({ title, body: source } = resolveMarkdownTitle(source));
     return {
       title,
       ...given(material),

@@ -12,6 +12,9 @@
 // Requests go straight through deps.fetchFn, one per query (or one per topic
 // in search mode). Anonymous GitHub search allows 10 requests a minute and 60
 // REST calls an hour, so the provider never enriches through api.github.com.
+//
+// A pasted github.com link is read by the site adapter in github-site.ts: a
+// README, a whole book repo, or one Markdown file (docs/85).
 
 import { isAbortError, throwIfAborted } from "../../../platform/app/abort";
 import { itemId } from "../../../workshop/extract/id";
@@ -26,6 +29,7 @@ import {
 } from "../plugin";
 import type { InfoItem, ItemSignals } from "../item";
 import { t } from "../../../i18n";
+import { githubSiteAdapter } from "./github-site";
 
 const OSSINSIGHT_HOST = "api.ossinsight.io";
 const GITHUB_HOST = "api.github.com";
@@ -355,6 +359,8 @@ export const githubPlugin: SourcePlugin = {
   name: "GitHub",
   hosts: [OSSINSIGHT_HOST, GITHUB_HOST, OPENDIGGER_HOST],
   defaultLimit: 30,
+  // A pasted repo, book repo or Markdown file link, read as its document (github-site.ts).
+  site: githubSiteAdapter,
 
   validateQuery(query: IndexQuery): string | null {
     const read = readQuery(query);

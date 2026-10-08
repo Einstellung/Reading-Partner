@@ -28,6 +28,18 @@ export {
   type WholeDocument,
 } from "./material";
 export {
+  markdownToHtml,
+  resolveMarkdownTitle,
+  type MarkdownOptions,
+} from "./adapters";
+export {
+  contentDispositionFilename,
+  isPdfBytes,
+  looksLikeHtml,
+  pdfDocument,
+  titleFromFilename,
+} from "./pdf";
+export {
   registerSiteAdapter,
   registeredSiteAdapters,
   siteAdapterFor,

@@ -36,6 +36,7 @@ async function fetchBytes(url: string): ReturnType<ArticleIngestDeps["fetch"]> {
     status: res.status,
     bytes,
     contentType: res.headers.get("content-type"),
+    contentDisposition: res.headers.get("content-disposition"),
   };
 }
 
