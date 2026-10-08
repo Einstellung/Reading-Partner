@@ -178,7 +178,6 @@ const STORES_A_TOPIC_ID: Record<string, readonly PalaceKind[]> = {
   "reading/retell/types.ts": ["retell"],
   "reading/saved/saved-articles.ts": ["saved-articles"],
   "reading/talk/types.ts": ["outline"],
-  "soul/sequence.ts": ["soul-sequence"],
 };
 
 // The rest: a topic id in flight — what is on the desk, what a call is in, what

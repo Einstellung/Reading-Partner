@@ -20,9 +20,6 @@ import type { AgentTool } from "../legion/execute/turn";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
 import type { BoxOrigin, BoxStore } from "../box";
 import type { CatalogueIo } from "./catalogue";
-import { appSequenceIo, readSequence, type SequenceIo } from "./sequence";
-import { soulTail, TAIL_RUNG, TAIL_RUNG_ID, TURN_KEEP } from "./tail";
-import { appConversationIo, type ConversationIo } from "../conversations";
 import { logUsage, type TopicProposalSurface } from "../memory";
 
 export interface AssembleInput {
@@ -32,10 +29,6 @@ export interface AssembleInput {
   // Which budget this call is spent out of (src/budget). Chat unless the caller
   // says otherwise, because a turn the reader is waiting for is the default.
   purpose?: BudgetPurpose;
-  // The two stores the soul's tail is read out of (tail.ts). Injected for the
-  // tests; the ones on disk otherwise.
-  sequenceIo?: SequenceIo;
-  conversationIo?: ConversationIo;
   // The store the catalogue tools walk (catalogue.ts). Injected for the tests;
   // the one on disk otherwise. Nothing is walked while a turn is assembled — the
   // tools are built here and only read the store if the model calls one.
@@ -100,13 +93,7 @@ export function configuredModel(s: Settings, tier: ModelTier = "talk"): Model<Ap
  * soul was being read — the caller has already been superseded.
  */
 export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn | null> {
-  const {
-    desk,
-    messages = [],
-    purpose = "chat",
-    sequenceIo = appSequenceIo,
-    conversationIo = appConversationIo,
-  } = input;
+  const { desk, messages = [], purpose = "chat" } = input;
   const { items, env } = desk;
   const anchor = items.find((i) => i.memory !== undefined);
   const teller = items.find((i) => i.history !== undefined);
@@ -189,36 +176,15 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
     return [duty, ...blocks].filter((p) => p !== "").join("\n\n");
   }
 
-  function ownMessages(dropped: ReadonlySet<string>): DeskMessage[] {
+  // A turn replays only the conversation it is held in: the item carrying the
+  // history composes it, trimmed by its own ladder, and with no such item the
+  // caller's messages stand in. What was said over another desk reaches the
+  // model through memory and retrieval, never as replayed messages.
+  function composeMessages(dropped: ReadonlySet<string>): DeskMessage[] {
     return teller ? teller.history!.compose(dropped) : [...messages];
   }
 
-  // What the reader last said anywhere, whatever desk they said it over
-  // (tail.ts). It fills what the item's own span leaves of the forty messages a
-  // turn replays, so a desk carrying a long conversation gets none of it — and
-  // on a device with nothing else on it there is none to be had, which is what
-  // keeps a fresh install's call byte for byte what it was.
-  const own = ownMessages(new Set());
-  const sequence = await readSequence(sequenceIo);
-  if (env.signal?.aborted) return null;
-  const tail = await soulTail({
-    spans: sequence.spans,
-    exclude: { fileKey: env.thread.key, threadId: env.thread.id },
-    keep: Math.max(0, TURN_KEEP - own.length),
-    io: conversationIo,
-  });
-  if (env.signal?.aborted) return null;
-
-  function composeMessages(dropped: ReadonlySet<string>): DeskMessage[] {
-    const span = ownMessages(dropped);
-    // The tight rung takes the tail with it: a turn cutting into what the reader
-    // said here has no business carrying what they said somewhere else.
-    if (tail.length === 0 || dropped.has(TAIL_RUNG_ID) || dropped.has("history-trim")) return span;
-    return [...tail, ...span];
-  }
-
-  const rungs: readonly Rung<string>[] =
-    tail.length === 0 ? (teller?.rungs ?? []) : [TAIL_RUNG, ...(teller?.rungs ?? [])];
+  const rungs: readonly Rung<string>[] = teller?.rungs ?? [];
   const skip = new Set<string>();
   for (const item of items) for (const id of item.skip ?? []) skip.add(id);
 

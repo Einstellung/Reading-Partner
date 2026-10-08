@@ -584,15 +584,15 @@ export const PALACE = [
   // -- derived caches -------------------------------------------------------
   {
     kind: "soul-sequence",
-    domain: "platform",
+    domain: "legacy",
     match: fixed("soul-sequence.json"),
     samples: ["soul-sequence.json"],
     id: "fixed",
-    refs: [{ kind: "topics", via: "spans[].topicId", onDelete: "keep" }],
+    refs: [],
     sync: "local",
     deleteWith: "never",
-    retention: inline(flow("src/soul/sequence.ts", "rebuildSequence")),
-    note: "the time index over every conversation file, rebuilt by scanning them; a cache, so it does not travel, and a span's topic is whatever the file it was read off says now",
+    retention: { rule: "age", days: 7, from: "mtime" },
+    note: "orphan: the time index the soul's cross-conversation replay read, retired with it (docs/71) — nothing writes it, so a week after its last write the housekeeper takes it",
   },
   {
     kind: "fulltext",

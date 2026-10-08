@@ -1,6 +1,5 @@
 // What the soul can see of the palace (src/soul/catalogue.ts, docs/71). The
-// walk is run against a literal store rather than a disk, the same way the
-// sequence index is. Run: bun test.
+// walk is run against a literal store rather than a disk. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
 import {

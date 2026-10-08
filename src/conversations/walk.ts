@@ -1,11 +1,11 @@
 // One walk over every conversation file the app holds, and the read cache that
 // makes walking it affordable.
 //
-// Searching and the time index (src/soul/sequence.ts) both want the same pass:
-// list the root, keep the names the catalogue calls a conversation, read each
-// file's threads. Written once here because two walkers would answer "every
-// conversation" differently the moment a kind is added to the table — which is
-// exactly what the door conversation was.
+// Searching and deleting a topic both want the same pass: list the root, keep
+// the names the catalogue calls a conversation, read each file's threads.
+// Written once here because two walkers would answer "every conversation"
+// differently the moment a kind is added to the table — which is exactly what
+// the door conversation was.
 
 import { threadFileKey, type ConversationIo } from "./io";
 import { threadKindOf, type ThreadKind } from "./topic-of";

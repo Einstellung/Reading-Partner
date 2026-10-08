@@ -81,12 +81,13 @@ test("a turn at the door assembles over an empty desk", async () => {
   expect(turn!.refusal).toBe("");
 });
 
-test("the conversation the reader is holding is replayed, and its own file is not replayed twice", async () => {
+test("the conversation the reader is holding is replayed, and nothing said elsewhere", async () => {
   // The door's conversation, on disk under the day's key.
   seed(doorKey("2026-09-10"), {
     d1: { messages: [{ role: "user", text: "I have ten minutes", ts: 10 }] },
   });
-  // And something said elsewhere, which is what the tail is for.
+  // Something said over another desk reaches the model through memory, never
+  // as a replayed message.
   seed("info-2026-07-21", { t1: { messages: [{ role: "user", text: "the debt cycle", ts: 5 }] } });
 
   const turn = await openDoorTurn({
@@ -95,10 +96,7 @@ test("the conversation the reader is holding is replayed, and its own file is no
     date: "2026-09-10",
     messages: [{ role: "user", text: "I have ten minutes" }],
   });
-  expect(turn!.messages).toEqual([
-    { role: "user", text: "[over the briefing of 2026-07-21]\nthe debt cycle" },
-    { role: "user", text: "I have ten minutes" },
-  ]);
+  expect(turn!.messages).toEqual([{ role: "user", text: "I have ten minutes" }]);
 });
 
 // The soul carries its memory to the door like everywhere else, but a topic is

@@ -3,9 +3,9 @@
 // The catalogue table says what every kind of data is; nothing until now let the
 // soul ask what there is of it. So a turn could sit at the door and not know
 // which books the reader has imported, which topics they keep, whether anything
-// was ever retold. This walks the store the way sequence.ts walks the
-// conversation files — list, resolve each path through the palace, group by kind
-// — and hands back one entry per item with a label a person would recognise.
+// was ever retold. This walks the store — list, resolve each path through the
+// palace, group by kind — and hands back one entry per item with a label a
+// person would recognise.
 //
 // It answers "what is there", never "what does it say". No body is read: a book
 // is a title and an id, a kept article is a headline, an observation is a
@@ -176,7 +176,7 @@ interface Book {
   addedAt: number;
 }
 
-/** The shelf: a title and an arrival per book id, as sequence.ts reads it. */
+/** The shelf: a title and an arrival per book id, as the shelf file holds it. */
 async function readBooks(io: CatalogueIo): Promise<Map<string, Book>> {
   const books = new Map<string, Book>();
   const raw = parsed(await io.conversations.readText(LIBRARY_FILE)) as {

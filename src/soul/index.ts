@@ -72,33 +72,3 @@ export {
   type CatalogueIo,
   type CatalogueKind,
 } from "./catalogue";
-export {
-  SEQUENCE_FILE,
-  SEQUENCE_VERSION,
-  appSequenceIo,
-  currentStamp,
-  deskOfFile,
-  isStale,
-  orderSpans,
-  readSequence,
-  rebuildSequence,
-  spanOf,
-  type ConversationSpan,
-  type DeskOf,
-  type Sequence,
-  type SequenceIo,
-  type SpanKind,
-  type Stamp,
-} from "./sequence";
-export {
-  TAIL_RUNG,
-  TAIL_RUNG_ID,
-  TURN_KEEP,
-  assembleTail,
-  bookTitles,
-  deskLabel,
-  soulTail,
-  type TailInput,
-  type TailMessage,
-  type TailSpan,
-} from "./tail";

@@ -613,6 +613,33 @@ test("history is replayed after the kickoff and trimmed to the cap", async () =>
   expect(turn!.messages[turn!.messages.length - 1].text).toBe(`m${HISTORY_KEEP + 4}`);
 });
 
+// A new book starts from zero. Its lesson thread is empty, and another book's
+// lesson sits on disk, the most recent conversation in the app: none of it is
+// replayed, or the model keeps teaching the book the reader left.
+test("a turn over a book with an empty thread replays nothing from another book", async () => {
+  const disk = installAppData();
+  rebuildThreadStoreForTests();
+  const old = [
+    { id: "o1", role: "user", text: "teach me chapter three of the old book", ts: Date.now() - 2000 },
+    { id: "o2", role: "ai", text: "chapter three of the old book is about loops", ts: Date.now() - 1000 },
+  ];
+  disk.files.set(
+    "threads-old-book.json",
+    JSON.stringify({
+      threads: { "old-lesson": { id: "old-lesson", annotationId: "", path: "", book: true, createdAt: 1, messages: old } },
+    }),
+  );
+  disk.mtimes.set("threads-old-book.json", Date.now());
+  createBookThread(BOOK, "lesson-new");
+
+  const turn = await buildReadingTurn(
+    input({ threadId: "lesson-new", annotationId: "", annotation: undefined }),
+  );
+  const sent = turn!.messages.map((m) => m.text).join("\n");
+  expect(sent).not.toContain("old book");
+  expect(turn!.messages.length).toBe(1);
+});
+
 // The chips (reading/intents.ts) mean a thread now opens on whatever the reader
 // picked, and that line is already a user message. Prefixing the explain kickoff
 // in front of it would tell the model to explain the passage when the reader
