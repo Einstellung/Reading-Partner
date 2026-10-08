@@ -216,6 +216,10 @@ const LAYER: Record<string, Layer> = {
   // bodies, a room's picture — and the briefer only names its kind, so the edge
   // runs briefer -> tasking and never back.
   "info/tasking": "domain",
+  // An X link read as a lead (docs/84): the embed endpoint, the permalink page
+  // in the hidden webview, which links to follow, and the record of the post.
+  // A leaf under info; reading's ingest calls it and files what it found.
+  "info/x": "domain",
   reading: "domain",
   "reading/chapters": "domain",
   // A reading turn's own corner: the desk assembly's tool set and history

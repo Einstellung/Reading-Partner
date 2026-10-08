@@ -54,6 +54,7 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
   "info-labs.json": "the roster is read from disk each time it is wanted — a run, a prompt, a card",
+  "info-x-posts.json": "the X post records are read from disk and written back in one go, at the end of an ingest",
   "info-picture-":
     "a room's picture is read at the start of its analysis run and written by the collector alone",
   "info-cables-":
