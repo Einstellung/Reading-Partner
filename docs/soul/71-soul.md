@@ -46,26 +46,24 @@ topic 是数据侧的归档键：一本书列在哪个 topic 下（一本书总�
 
 一本书的对话在书的文件里，info 的按天，retell 的在自己那份。在门口说的话（桌上没东西）有自己的 palace kind `conversation`，一天一个文件，`conversation-<date>.json`；key 到文件名的对应是线程库里的一张表，palace 的守卫测试盯着它和登记行一致。删一本书不该去翻日期文件；就着划线问的那一句属于这本书。
 
-连续性是派生的时间索引 sequence（`src/soul/sequence.ts`）：每个文件的每条线程切成一段 span，按时间排。它是本地缓存，登记在 palace 里，丢了重建，实测 36 个文件 1.3 MB 679 条消息冷建 14 ms。
+一个回合只回放当前条目自己的对话，条数由条目自己的历史裁剪定（`HISTORY_KEEP`）。新开的书从零开始。跨桌的连续性走记忆和检索，不回放别处的原始对话。
 
-回放两段：soul 的尾（跨 place 最近说过的话）加条目自己的 span，合计 40 条，条目那段优先。尾是预算梯上自己的一级，最先掉。
-
-thread 是旧名字，概念是 conversation 和 span，存储里的标识符还没改名。
+thread 是旧名字，概念是 conversation，存储里的标识符还没改名。
 
 没归 topic 的对话不蒸馏；读者点头之后整段都算。攒够数据再决定这堆没 topic 的对话要不要别的处置。
 
-session 不同步。它是本机的运行时——soul 和它派出的 worker 这一轮在想什么——palace 登记一行 `session`，sync 为 local。进程启动先另起一个新 session 给本进程用；上个进程没答完的那个回合在旧 session 上后台接着跑完（resume），答案写回当初提问的那段对话，跑完才关掉它（docs/55、坑 308）。该组只留最新五个文件。对话文件是 session 的单向投影：soul 说的每一句落地时写进归属文件；反向不投影，另一台设备写的对话到了本机，下回合装配上下文时从数据层读，走 sequence。压缩摘要不跨设备。本地 worker 的过程不进对话文件，对话里只有 soul 对用户说的话。两台设备各跑一个 soul 进程，共享 memory 和对话即同一个人，各自一份「此刻在想什么」；PC 不在线时 iPad 照样有 soul。
+session 不同步。它是本机的运行时——soul 和它派出的 worker 这一轮在想什么——palace 登记一行 `session`，sync 为 local。进程启动先另起一个新 session 给本进程用；上个进程没答完的那个回合在旧 session 上后台接着跑完（resume），答案写回当初提问的那段对话，跑完才关掉它（docs/55、坑 308）。该组只留最新五个文件。对话文件是 session 的单向投影：soul 说的每一句落地时写进归属文件；反向不投影，另一台设备写的对话到了本机，下回合装配上下文时从数据层读。压缩摘要不跨设备。本地 worker 的过程不进对话文件，对话里只有 soul 对用户说的话。两台设备各跑一个 soul 进程，共享 memory 和对话即同一个人，各自一份「此刻在想什么」；PC 不在线时 iPad 照样有 soul。
 
 ## 顺序
 
-做完的：palace 登记表落地，五张表改成派生，守卫测试上（纯搬运，不改行为）；info 接记忆——读 statement 和观察，五处 `loadProfile()` 全部改读 statement（`assembleReaderSection`），`update_profile` 换成阅读侧那个 `statement_write`（2026-09-13；`threads-info-<date>.json` 进蒸馏源已做，见 `src/info/briefer/distill-source.ts`）；desk 登记表加那一次装配，五个 AI 入口收成上桌的登记；topic 确认卡（现在归记忆）；门口对话加 sequence 加双段回放。
+做完的：palace 登记表落地，五张表改成派生，守卫测试上（纯搬运，不改行为）；info 接记忆——读 statement 和观察，五处 `loadProfile()` 全部改读 statement（`assembleReaderSection`），`update_profile` 换成阅读侧那个 `statement_write`（2026-09-13；`threads-info-<date>.json` 进蒸馏源已做，见 `src/info/briefer/distill-source.ts`）；desk 登记表加那一次装配，五个 AI 入口收成上桌的登记；topic 确认卡（现在归记忆）；门口对话。
 
 2026-09-11 又做完的：登记表的工具（`soul/catalogue.ts`，`list_palace` 和 `list_kind`）、places 和 `go_to`、秘书角色登记进 soul、语音从 `info/briefer` 搬到 `soul/voice`（`voice-call-live.ts` 是 info 桌的接线，留在 info）。
 
 接着：
 
 1. 第一屏的交互，待议。
-2. 存储标识符从 thread 改名 conversation：还没做，代码里仍是 `threadId`（`src/soul/sequence.ts`）。
+2. 存储标识符从 thread 改名 conversation：还没做，代码里仍是 `threadId`（`src/platform/app/threads.ts`）。
 3. 记忆与检索重做。
 
 已落地：Red Box 和 cable 作为第一个生在 palace 里的新东西——盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方（2026-09-15，见 [68](../companion/68-Lumen与盒子的交互.md)）；soul 搬上 pi harness——soul 一条常驻 lane（`legion/execute/held.ts`），本地 worker 各一条，见 [55](./55-legion.md)。

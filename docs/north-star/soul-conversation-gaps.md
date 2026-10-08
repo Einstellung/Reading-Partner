@@ -14,7 +14,7 @@
 - 图片不能随 steer 一起发；答铃（自己起的回合）不走流式；silent 回合结束但没有交出结果时不自动续跑。72 尾巴。
 - Outline 刷新只认 `local` 档 run 的完成状态，`synced` 档的完成不认。
 - `openThread` 读文件和 `callRef` 更新之间有竞态，偶尔少显示一条消息。
-- 存储层的标识符 `threadId` 改名 `conversation` 没做：`src/soul/sequence.ts` 里的字段仍叫 `threadId`。[71](../soul/71-soul.md)。
+- 存储层的标识符 `threadId` 改名 `conversation` 没做：`src/platform/app/threads.ts` 里的字段仍叫 `threadId`。[71](../soul/71-soul.md)。
 
 ## 待定
 

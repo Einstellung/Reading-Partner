@@ -220,7 +220,7 @@ soul 的那条 lane 已经常驻：`legion/execute/held.ts` 把一个 harness �
 
 session 是 agent 派活过程的运行时数据，对用户不重要，不同步。palace 登记一行 `session`，sync 为 `local`，目录 `session/`。
 
-对话文件是数据，照旧按归属存、照旧同步（[71](./71-soul.md)）。两者之间是单向投影：soul 说的每一句落地时写进归属文件；反向不投影——另一台设备写的对话到了本机，soul 下回合装配上下文时从数据层读，走 sequence。
+对话文件是数据，照旧按归属存、照旧同步（[71](./71-soul.md)）。两者之间是单向投影：soul 说的每一句落地时写进归属文件；反向不投影——另一台设备写的对话到了本机，soul 下回合装配上下文时从数据层读。
 
 压缩摘要不跨设备，值得留的写成 observation 进 memory。本地 worker 的过程不进对话文件，对话里只有 soul 对用户说的话。
 

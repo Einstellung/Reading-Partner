@@ -48,7 +48,7 @@ palace 行上的 `retention` 字段（`src/palace/kinds.ts`），取代原来只
 
 | marker | 行 | 判据 |
 |---|---|---|
-| 通用 | `cover-failure-unreadable`、`housekeeper-log`、`events` | 封面失败标记 30 天；日志和 `events-*.jsonl` 各留尾部（2000 / 5000 行）。`events` 没有代码回读，是给人看的仪表 |
+| 通用 | `cover-failure-unreadable`、`soul-sequence`、`housekeeper-log`、`events` | 封面失败标记 30 天；`soul-sequence.json` 已没人读写，最后一次写入后 7 天；日志和 `events-*.jsonl` 各留尾部（2000 / 5000 行）。`events` 没有代码回读，是给人看的仪表 |
 | `legion-run-files` | `run`、`run-brief`、`run-output` | run 文件：ledger 有它的行（`tombstonedRunIds`）。brief / output：没有任何 hot run 指向它，且 mtime 超过 7 天；折叠过的和孤儿一条规则 |
 | `legion-bell` | `bell` | 已 ack 且 ack 后 14 天。重响只发生在 run 还热或 tick 响铃未记账时，run 最迟 ack 后 7 天折叠 |
 | `info-daily-files` | `info-cables`、`info-daily-{briefing,articles,items,run}` | 今天以外的日切文件；cables 30 天 |
