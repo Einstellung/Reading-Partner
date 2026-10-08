@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 491）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 493）。
 
 ## EmbedPDF 引擎
 
@@ -459,3 +459,4 @@
 - [382-ios-sim-port-is-only-where-the-script-looks](./dev-env/382-ios-sim-port-is-only-where-the-script-looks.md) — `IOS_SIM_PORT` 只改 bridge 往哪敲 `eval`，vite 的端口在 `vite.config.ts` 的 `strictPort` 里；设了它 app 起来也永远 `waiting for the app to answer the bridge`。附：`cmd_up` 会 `pkill -f "tauri ios dev"`，并行会话互相收掉对方的 dev server
 - [418-a-failed-null-check-on-a-dom-node-prints-for-half-a-minute](./dev-env/418-a-failed-null-check-on-a-dom-node-prints-for-half-a-minute.md) — `expect(queryByText(...)).toBeNull()` 失败时 bun 把 happy-dom 元素连同整棵树格式化出来，一个用例 29 秒、日志 233 万行，断言那行埋在最后；"文字不在"改比 `container.textContent`
 - [432-two-pages-on-one-dev-server-share-the-sim-bridge](./dev-env/432-two-pages-on-one-dev-server-share-the-sim-bridge.md) — sim bridge 按端口寻址不按设备：同一个 vite 上 Safari 和 app 两个页面都在长轮询，`ios-sim.sh eval` 交给先来取的那个，`IOS_SIM_UDID` 管不到；一个 dev server 同时只留一个页面，读数时带上页面自己的标记核对
+- [492-deleting-process-env-tz-does-not-restore-the-zone](./dev-env/492-deleting-process-env-tz-does-not-restore-the-zone.md) — `bun test` 起手 `TZ` 是 `undefined` 而时区是 UTC；测试里设过 `process.env.TZ` 再 `delete` 不会切回，进程停在最后一个时区，后面的文件全在里面跑（`article-bytes-pin` 只在全量里红，坑 293）。结尾把加载时的 `Intl.DateTimeFormat().resolvedOptions().timeZone` 赋回去；`"Etc/UTC"` 探针里没切回，`"UTC"` 切回了

@@ -2,14 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { addDays, dayNumber, daysBetween, isoWeekday, localDate } from "../../../src/platform/std/day";
 
 // Run the zone-dependent cases in a zone with daylight saving, then put the
-// process's zone back so no other file sees it.
-const ORIGINAL_TZ = process.env.TZ;
+// process's zone back so no other file sees it. Restore by assigning the zone
+// that was in effect at load: under bun test TZ is undefined but the zone is
+// UTC, and `delete process.env.TZ` leaves the last assigned zone in place.
+const ORIGINAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 function inZone(tz: string): void {
   process.env.TZ = tz;
 }
 afterEach(() => {
-  if (ORIGINAL_TZ === undefined) delete process.env.TZ;
-  else process.env.TZ = ORIGINAL_TZ;
+  process.env.TZ = ORIGINAL_ZONE;
 });
 
 describe("localDate", () => {
