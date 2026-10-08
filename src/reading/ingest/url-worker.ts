@@ -29,6 +29,7 @@ import type { Fulltext } from "../../fulltext/types";
 import { ensureDocumentFulltext } from "./fulltext";
 import { ingestUrlLive } from "./live";
 import type { IngestedDocument } from "./article";
+import { isIngestBatch, type IngestBatch } from "./x-post";
 import { prepareCapturedDocument, type PreparedSource } from "../prep/papers/captured-source";
 import { peekPrepPipeline } from "../prep/papers/live";
 import type { PrepPaper } from "../prep/papers/types";
@@ -40,8 +41,11 @@ export { INGEST_URL_KIND };
 export interface IngestUrlWorkerDeps {
   /** The ask, read back off its path. */
   readAsk?: (path: string) => Promise<string>;
-  /** Fetch the URL and file it as a supplement of the book. */
-  ingest?: (url: string, bookId: string) => Promise<IngestedDocument>;
+  /**
+   * Fetch the URL and file it as a supplement of the book: one document, or for
+   * a link that leads to others (an X post, docs/84) a batch of them.
+   */
+  ingest?: (url: string, bookId: string) => Promise<IngestedDocument | IngestBatch>;
   /** The document's text, cut into the pages the reader will see. Null when there is none. */
   fulltext?: (hash: string) => Promise<Fulltext | null>;
   /** This book's live prep pipeline, or null where the book has none. */
@@ -91,44 +95,52 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
       const ask = parseIngestAsk(await readAsk(brief));
       stopped();
       await ctx.report(t("reader.ingest.fetching", { host: hostOf(ask.url) }));
-      const ingested = await ingest(ask.url, ask.bookId);
+      const taken = await ingest(ask.url, ask.bookId);
       stopped();
+      const batch = isIngestBatch(taken) ? taken : null;
+      const documents = batch ? batch.documents : [taken as IngestedDocument];
 
-      await ctx.report(t("reader.ingest.extractingText"));
-      const kind = ingested.kind === "article" ? ("article" as const) : ("pdf" as const);
-      const ft = await fulltext(ingested.entry.hash);
-      stopped();
+      const lines: string[] = batch ? [batch.lead] : [];
+      for (const ingested of documents) {
+        await ctx.report(t("reader.ingest.extractingText"));
+        const kind = ingested.kind === "article" ? ("article" as const) : ("pdf" as const);
+        const ft = await fulltext(ingested.entry.hash);
+        stopped();
 
-      let slug: string | undefined;
-      const prep = pipeline(ask.bookId);
-      if (prep && ft && ft.status === "ok") {
-        await ctx.report(t("reader.ingest.filingUnderBook"));
-        const prepared = prepareCapturedDocument(
-          {
-            documentId: ingested.entry.hash,
-            title: ingested.title,
-            kind,
-            ...(ingested.entry.sourceUrl ? { sourceUrl: ingested.entry.sourceUrl } : {}),
-          },
-          ft,
-          ask.note ?? "",
-        );
-        const paper = await prep.ingestCaptured(prepared.mint, prepared.fetched);
-        // A source the fetch stage could not make anything of is the prep half
-        // failing, not the ingest: the supplement is in the library either way,
-        // and the line says what there is.
-        if (paper.status !== "failed") slug = paper.slug;
+        let slug: string | undefined;
+        const prep = pipeline(ask.bookId);
+        if (prep && ft && ft.status === "ok") {
+          await ctx.report(t("reader.ingest.filingUnderBook"));
+          const prepared = prepareCapturedDocument(
+            {
+              documentId: ingested.entry.hash,
+              title: ingested.title,
+              kind,
+              ...(ingested.entry.sourceUrl ? { sourceUrl: ingested.entry.sourceUrl } : {}),
+            },
+            ft,
+            ask.note ?? "",
+          );
+          const paper = await prep.ingestCaptured(prepared.mint, prepared.fetched);
+          // A source the fetch stage could not make anything of is the prep half
+          // failing, not the ingest: the supplement is in the library either way,
+          // and the line says what there is.
+          if (paper.status !== "failed") slug = paper.slug;
+        }
+        stopped();
+
+        const outcome: IngestOutcome = {
+          title: ingested.title,
+          kind,
+          pages: ft?.pages.length ?? 0,
+          chars: ft ? ft.pages.reduce((n, page) => n + page.length, 0) : ingested.chars,
+          ...(slug === undefined ? {} : { slug }),
+        };
+        lines.push(ingestOutputLine(outcome));
       }
-      stopped();
-
-      const outcome: IngestOutcome = {
-        title: ingested.title,
-        kind,
-        pages: ft?.pages.length ?? 0,
-        chars: ft ? ft.pages.reduce((n, page) => n + page.length, 0) : ingested.chars,
-        ...(slug === undefined ? {} : { slug }),
-      };
-      const line = ingestOutputLine(outcome);
+      // The receipt (docs/84): what came in, then what did not and why.
+      if (batch) lines.push(...batch.notes);
+      const line = lines.join(" ");
       const output = await writeOutput(ctx.run.id, line);
       return { output, progress: line };
     })();
