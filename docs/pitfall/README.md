@@ -174,6 +174,8 @@
 - [459-reqwest-ignores-the-ios-system-proxy](./network/459-reqwest-ignores-the-ios-system-proxy.md) — iOS 上 plugin-http（reqwest）只读代理环境变量，系统 HTTP 代理只在 macOS/Windows 上读；Safari 能上 Google、同步照样连不上，代理 app 要开 VPN/TUN 模式
 - [460-plugin-http-errors-drop-the-cause](./network/460-plugin-http-errors-drop-the-cause.md) — 插件把错误序列化成 `to_string()`，reqwest 的原因在 `source()` 链里被丢掉，只剩 "error sending request for url (…)"；插件已 vendor 到 `src-tauri/vendor/tauri-plugin-http` 补上，升版本要重拷
 - [186-fake-ip-dns-does-not-say-what-is-proxied](./network/186-fake-ip-dns-does-not-say-what-is-proxied.md) — fake-ip 模式下 DNS 永远返回 `198.18.0.x` 占位 IP，分流在连接建立时才按反查回的域名匹配，「三个域名解析结果一样」推不出「三家路径相同」（`dns-hijack: any:53` 让 `dig` 也拿不到真实 IP）；`geosite.dat` 停在 2025-11-19，2026 年才上线的 `api.xiaomimimo.com` 没命中 `GEOSITE,CN,DIRECT`，落到兜底走代理，TLS 882ms 对另两家 93/82ms，被写成「小米服务端慢」。确诊查 mihomo 的 `/connections` 看每条连接的 `rule` 和 `chains`，解法是最前面加 `DOMAIN-SUFFIX,<域名>,DIRECT` 再热重载；走代理时「请求→首帧」也含代理往返，去掉隧道后服务端那一段同样快了一倍
+- [493-syndication-truncates-long-posts-and-gives-articles-a-preview](./network/493-syndication-truncates-long-posts-and-gives-articles-a-preview.md) — X 嵌入接口（`tweet-result`）对长帖在 `display_text_range` 处截断、`note_tweet` 里只有 id；Article 推文只给标题和约百字预览，引用 Article 时被引用那条的 text 也只是 `t.co`；都回 200 不报错。有 `note_tweet` 或 `article` 字段就只用元数据，正文走隐藏 webview 读永久链接页
+- [494-a-logged-in-x-page-403s-its-own-background-calls](./network/494-a-logged-in-x-page-403s-its-own-background-calls.md) — 登录态读 X 永久链接页，页面自己的 `UsersByRestIds`、`app_context.json` 8 次里 6 次回 403，内容却完整，不登录一个都没有。限流判据别写成「x.com 任何请求 403」，只认取内容的请求 429、落地 URL 不再是 `/status/`、正文里的限流或验证提示
 
 ## 存储与数据目录
 
