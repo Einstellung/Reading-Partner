@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 494）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 496）。
 
 ## EmbedPDF 引擎
 
@@ -412,7 +412,7 @@
 - [292-killing-vite-by-its-wrapper-pid-leaves-the-server-up](./dev-env/292-killing-vite-by-its-wrapper-pid-leaves-the-server-up.md) — `bun run vite` 是外壳，监听端口的是它的子进程；kill 外壳不带走它，新起的那份撞 `strictPort` 当场退出（只写进日志），`curl` 的 200 是旧服务器答的，于是三轮改动截图一模一样。按 `lsof -ti:<port>` 杀，起完 grep 一句刚加的标识符确认服务器是新的
 - [403-vite-in-an-agent-worktree-never-sees-edits](./dev-env/403-vite-in-an-agent-worktree-never-sees-edits.md) — 在 `.claude/worktrees/` 里起的 vite 改了源码也不重新转换：配置里的 `watch.ignored: **/.claude/**` 把 worktree 自己整棵树排除了。每轮改动按 PID 重起，curl 刚改的模块确认是新代码再截图
 - [239-vite-prebundle-freezes-a-dependency](./dev-env/239-vite-prebundle-freezes-a-dependency.md) — `node_modules/.vite/deps` 把 pi-ai 的模型表整份内联冻在几周前，pull 后没 `bun install` 也没重建缓存，app 看到的表比磁盘旧，`enforceKnownModel` 如实把「不在目录里」的模型换掉并写回盘；升级依赖后缺新导出则整页白屏；vite 5.4 只认 `bun.lockb` 不认 `bun.lock`，缓存永不自动失效；`bun install && rm -rf node_modules/.vite` 再重启，判据是拿 `bun -e` 直读 `node_modules` 和 app 里看到的对比
-- [493-pi-agent-core-cannot-follow-pi-ai-past-0-87](./dev-env/493-pi-agent-core-cannot-follow-pi-ai-past-0-87.md) — pi-agent-core 1.0 删了 `AgentHarness` 和 session（挪去的 pi-durable 是另一套 API），只能留在 0.87.1；它的 `^0.87.1` 让 bun 再装一份旧 pi-ai，类型在 `TranscriptContext` 的 brand 上撞、运行期两套估算器。`overrides` 压成一份，然后必须 `rm -rf node_modules` 重装，单跑 `bun install` 回 no changes
+- [495-pi-agent-core-cannot-follow-pi-ai-past-0-87](./dev-env/495-pi-agent-core-cannot-follow-pi-ai-past-0-87.md) — pi-agent-core 1.0 删了 `AgentHarness` 和 session（挪去的 pi-durable 是另一套 API），只能留在 0.87.1；它的 `^0.87.1` 让 bun 再装一份旧 pi-ai，类型在 `TranscriptContext` 的 brand 上撞、运行期两套估算器。`overrides` 压成一份，然后必须 `rm -rf node_modules` 重装，单跑 `bun install` 回 no changes
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./dev-env/118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
 - [352-loadsettings-throws-before-it-returns-a-promise](./dev-env/352-loadsettings-throws-before-it-returns-a-promise.md) — `loadSettings` 不是 `async`，宿主之外 `readGuardedJson` 同步抛在返回 promise 之前，调用点的 `.catch(() => null)` 接不住；测试里要跑它就先 `installAppData()`
 - [303-a-boot-at-module-scope-registers-for-every-test-file](./dev-env/303-a-boot-at-module-scope-registers-for-every-test-file.md) — 测试文件在模块顶层 boot 领域（注册蒸馏源、desk kind），`afterAll` 要等本文件跑完才 undo，中间每个文件问注册表都看得见那几个源；两个文件单跑都绿。boot 放进用例体 try/finally，断言按 kind 数不按总数
