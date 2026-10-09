@@ -8,7 +8,8 @@ import { expect, test } from "bun:test";
 import { listChange, snapshotOf } from "../../../../src/ui/components/chat/list-change";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
-const user = (text: string): ThreadMessage => ({ role: "user", text, ts: 1 }) as ThreadMessage;
+let clock = 100;
+const user = (text: string): ThreadMessage => ({ role: "user", text, ts: clock++ }) as ThreadMessage;
 const ai = (text: string): ThreadMessage => ({ role: "ai", text, ts: 2 }) as ThreadMessage;
 
 test("the first render and a history arriving into an empty list are not news", () => {
@@ -35,6 +36,19 @@ test("a reply streaming into the last row is a change", () => {
 test("a row the model added is a change", () => {
 	const rows = [user("a"), ai("b")];
 	expect(listChange(snapshotOf("k", rows), "k", [...rows, ai("card")])).toEqual({ kind: "changed" });
+});
+
+test("a send that also drops the last turn's failure is still a send", () => {
+	const rows = [user("a"), ai("failed")];
+	const next = [rows[0], { ...user("c"), ts: 5 }, ai("")];
+	expect(listChange(snapshotOf("k", rows), "k", next)).toEqual({ kind: "sent", index: 1 });
+});
+
+test("a queued message patched when its turn starts is not another send", () => {
+	const queued = { ...user("q"), ts: 7, queued: true } as ThreadMessage;
+	const rows = [user("a"), ai("b"), queued];
+	const next = [rows[0], rows[1], { ...queued, queued: false } as ThreadMessage, ai("")];
+	expect(listChange(snapshotOf("k", rows), "k", next)).toEqual({ kind: "changed" });
 });
 
 test("the reader's message is found among the rows a send added", () => {
