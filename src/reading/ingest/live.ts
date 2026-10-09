@@ -18,11 +18,9 @@ import { keepArticle, type KeepDeps } from "./keep";
 import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { fetchWithRetry } from "../../platform/http/throttled-fetch";
 import { runSubagentTurnLive } from "../../legion/subagent/live";
-import { liveXReadDeps } from "../../info/x/live";
 import { xPostOfUrl } from "../../info/x/post";
 import { saveLinkRecord } from "../../info/links/store";
-import { ingestXPost, type IngestBatch } from "./x-post";
-import { takeLinkInFiled } from "./link-intake";
+import { takeLinkInFiled, type IngestBatch } from "./link-intake";
 import {
   ingestArticleUrl,
   type ArticleIngestDeps,
@@ -80,32 +78,35 @@ export async function keepArticleLive(input: SavedArticleInput): Promise<SavedAr
   return (await keepArticle(input, liveKeepDeps())).record;
 }
 
+/** What the run hands an ingest besides the link: the reader's words, and where to say what is being read. */
+export interface IngestRunContext {
+  /** What the reader said when pasting the link (the ask's note). */
+  note?: string;
+  /** The host about to be read, for the run's progress line. */
+  report?(host: string): void;
+}
+
 /**
  * Ingest a URL with the real host behind it: one document, or for an X post
- * (docs/84) what it led to.
+ * what the link agent took in from it (docs/86).
  */
 export async function ingestUrlLive(
   url: string,
   target: IngestTarget,
+  context: IngestRunContext = {},
 ): Promise<IngestedDocument | IngestBatch> {
-  const deps = await liveIngestDeps();
-  if (xPostOfUrl(url)) {
-    return ingestXPost(url, target, { ...deps, x: liveXReadDeps(fetchBytes), saveRecord: (k, e) => saveLinkRecord(k, e) });
-  }
-  return ingestArticleUrl(url, target, deps);
+  if (xPostOfUrl(url)) return takeLinkInLive(url, target, context);
+  return ingestArticleUrl(url, target, await liveIngestDeps());
 }
 
-/**
- * Take a link in through the link agent (docs/86) with the real host and the
- * daily-tier model. Not what the app runs yet: X links go through the rule-based
- * fan-out above until the comparison passes, and then this replaces that branch.
- */
-export async function takeLinkInLive(url: string, target: IngestTarget, note?: string): Promise<IngestBatch> {
+/** Take a link in through the link agent (docs/86) with the real host and the daily-tier model. */
+export async function takeLinkInLive(url: string, target: IngestTarget, context: IngestRunContext = {}): Promise<IngestBatch> {
   const deps = await liveIngestDeps();
   return takeLinkInFiled(url, target, {
     ...deps,
     turn: runSubagentTurnLive,
     saveRecord: (k, e) => saveLinkRecord(k, e),
-    ...(note ? { note } : {}),
+    ...(context.note ? { note: context.note } : {}),
+    ...(context.report ? { report: context.report } : {}),
   });
 }

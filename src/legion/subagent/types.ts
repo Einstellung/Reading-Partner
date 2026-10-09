@@ -40,8 +40,14 @@ export interface SubagentDefinition {
   // caller writes it, because only the caller knows what this run is for; the
   // runner never composes a status line out of a tool call.
   label: string;
-  // The sub-agent's own role and instructions. The brief contract is appended.
+  // The sub-agent's own role and instructions. The brief contract is appended
+  // unless briefContract is false.
   systemPrompt: string;
+  // Whether the brief contract (brief.ts) goes after systemPrompt. Appended when
+  // unset. false is for a run whose product is what its tools did rather than
+  // its last message: told that only its final words survive, a model ends on a
+  // written summary instead of the tool that ends the run.
+  briefContract?: boolean;
   // Every tool this run may reach. A sub-agent with an empty list is a plain
   // one-shot call and cannot be held to the evidence rule below.
   tools: AgentTool[];

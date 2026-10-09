@@ -12,6 +12,7 @@ import {
   clipToTokens,
   composeBrief,
   subagentSystemPrompt,
+  withBriefContract,
   type BriefFacts,
 } from "../../../src/legion/subagent/brief";
 import { createSubagentQuota } from "../../../src/legion/subagent/quota";
@@ -181,6 +182,21 @@ test("the definition's own prompt comes first, the contract after it", () => {
   const prompt = subagentSystemPrompt(definition, 1200);
   expect(prompt.startsWith("You look up papers.")).toBe(true);
   expect(prompt).toContain("You are a sub-agent");
+});
+
+test("a definition that opts out of the brief contract is sent its own prompt alone", () => {
+  const definition = {
+    name: "n",
+    description: "d",
+    label: "l",
+    systemPrompt: "You file what a link points at.",
+    tools: [],
+    briefContract: false,
+  } satisfies SubagentDefinition;
+  expect(subagentSystemPrompt(definition, 1200)).toBe("You file what a link points at.");
+  expect(subagentSystemPrompt({ ...definition, briefContract: true }, 1200)).toBe(
+    withBriefContract("You file what a link points at.", 1200),
+  );
 });
 
 // --- the shared round budget ---

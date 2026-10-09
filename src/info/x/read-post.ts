@@ -2,8 +2,7 @@
 // content it is in its own right (a long post, an Article, the author's own
 // thread) whose whole text was read, and every link out of it, t.co expanded,
 // with where on the post it was found. Nothing here decides what to follow or
-// whether the post is a lead: the link agent (info/links) weighs that, and the
-// rule-based fan-out still in use until the switch does it in rules.ts.
+// whether the post is a lead: the link agent (info/links) weighs that.
 //
 // Two ways to read a post, layered (docs/84 「建议」). The embed endpoint, one
 // request on every platform, is enough for a short post. A long post's and an
@@ -50,8 +49,6 @@ export interface XReadDeps {
   readPage: ((url: string) => Promise<PageAttempt>) | null;
   /** Where a t.co link goes, one redirect, without fetching the target. Null when unknown. */
   resolveRedirect: (url: string) => Promise<string | null>;
-  /** Whether a registered site adapter reads this link (workshop/bindery's registry). */
-  claimedBySite: (url: string) => boolean;
 }
 
 /** What is kept of a post, whatever else comes of it. Stored, so plain data. */

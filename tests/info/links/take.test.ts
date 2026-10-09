@@ -4,6 +4,7 @@
 // Run: bash scripts/t.sh tests/info/links
 
 import { beforeEach, expect, test } from "bun:test";
+import { LINK_SYSTEM_PROMPT } from "../../../src/info/links/agent";
 import { takeLinkIn, type LinkIntakeDeps } from "../../../src/info/links/take";
 import { call, scriptedTurn, type ScriptedRound } from "../../../src/info/links/scripted-turn";
 import { addressKey, MAX_DOCUMENTS, STEPS_SPENT } from "../../../src/info/links/session";
@@ -107,6 +108,8 @@ test("numbers run on across opens, body links first, and one address gets one nu
   expect(log.results[0].text).toContain("#4 [web page · body] guide — docs.test/guide");
   expect(addressKey("https://www.blog.test/post/#top")).toBe(addressKey(POST));
   expect(got.stop).toEqual({ kind: "finished", note: "the post points at the repo" });
+  // Its own prompt alone: the sub-agent brief contract would have it end on a summary instead of finish.
+  expect(log.systemPrompt).toBe(LINK_SYSTEM_PROMPT);
 });
 
 test("a second open and a later file fetch nothing more", async () => {

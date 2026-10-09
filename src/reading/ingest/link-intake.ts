@@ -2,15 +2,24 @@
 // everything: a built EPUB as an article, a whole PDF or EPUB as a book, each
 // listed where the target says. info/links builds and decides; this file only
 // hands it the filing and turns its intake into the batch the ingest-url run
-// already knows how to report.
-//
-// Not what the app runs for X links yet: until the comparison in docs/86
-// 「第一期」 passes, ingestUrlLive keeps the rule-based fan-out (x-post.ts), and
-// this is called by takeLinkInLive and by the comparison script only.
+// reports. X links come this way (ingestUrlLive); other links keep the one-page
+// path until each source is measured (docs/86 「以后」).
 
 import { takeLinkIn, type LinkIntake, type LinkIntakeDeps } from "../../info/links";
 import { fileBound, type ArticleIngestDeps, type IngestedDocument, type IngestTarget } from "./article";
-import type { IngestBatch } from "./x-post";
+
+/** What one pasted link became: any number of documents, and what was left out. */
+export interface IngestBatch {
+  documents: IngestedDocument[];
+  /** One sentence about the source, said before the documents. */
+  lead: string;
+  /** One sentence each about what was not taken and why. */
+  notes: string[];
+}
+
+export function isIngestBatch(value: IngestedDocument | IngestBatch): value is IngestBatch {
+  return "documents" in value;
+}
 
 export interface LinkIntakeFilingDeps
   extends ArticleIngestDeps,
