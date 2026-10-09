@@ -15,7 +15,7 @@ import { t } from "../../../i18n";
 import { topicFiledNote } from "../../../info/briefer/call";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import { createTopic, listTopics } from "../../../platform/app/topics";
-import { extractLinks, linkTurnNote, linksToTake } from "../../../reading/ingest/take-link-tool";
+import { doorTurnNote, extractLinks, linksToTake } from "../../../reading/ingest/take-link-tool";
 import { chooseIntakeTopic, readIntake } from "../../../reading/ingest/topic-intake";
 import {
   appendMessage,
@@ -125,9 +125,15 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       try {
         // A message carrying links goes to the model with an app note that
         // numbers them and the topics, which is what take_link is called with.
+        // One without links, in a conversation that holds an intake card, goes
+        // with the note that the card, not the model, knows where it stands.
         const latest = history[history.length - 1];
         const latestLinks = latest?.role === "user" ? extractLinks(latest.text) : [];
-        const note = latestLinks.length > 0 ? linkTurnNote(latestLinks, await listTopics().catch(() => [])) : "";
+        const holdsIntake = history.some((m) =>
+          m.parts?.some((part) => part.type === "card" && part.card.kind === "link-intake"),
+        );
+        const topics = latestLinks.length > 0 ? await listTopics().catch(() => []) : [];
+        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) : "";
         const sent = note ? [...history.slice(0, -1), { ...latest, text: latest.text + note }] : history;
         outcome = await sendAtTheDoor({
           threadId: id,

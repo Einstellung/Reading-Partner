@@ -65,6 +65,19 @@ function replyIn(language: string): string {
 }
 
 /**
+ * What the model is told about every intake, on every turn that has one in it.
+ * The card is the one place an intake's state is shown, and it changes after
+ * the model has spoken: a fetch that was running when the card went up is filed
+ * a minute later. Nothing the model has seen says where an intake stands now, so
+ * whatever it said about it would be a guess the card contradicts (docs/68).
+ */
+export const INTAKE_STATE_RULE =
+  "You don't know where any link intake stands, this one or one taken earlier: " +
+  "whether it was fetched, filed or failed, which topic it is under, or how long it is. " +
+  "Its card shows that and keeps changing after you reply. Never state or guess any of it. " +
+  "If the reader asks, say the card shows it.";
+
+/**
  * The app note added to the reader's message, as the model is sent it, when the
  * message carries links: the links by number and the topics by number (the
  * topic menu, shelf order). Never shown to the reader and never stored.
@@ -81,7 +94,7 @@ export function linkTurnNote(
     `\n\n[App note, not the reader's words. Links in this message:\n${linkLines}\n` +
     `The reader's topics:\n${topicLines}\n` +
     `To take links in, call take_link with the link's number or "all", and a topic number only when one clearly fits. ` +
-    `${replyIn(language)}]`
+    `${INTAKE_STATE_RULE} ${replyIn(language)}]`
   );
 }
 
@@ -94,15 +107,34 @@ export function linkTurnNote(
 export function takenResult(cards: number, refused: readonly string[], language: string): string {
   const lines = [
     `${cards === 1 ? "The card is" : `${cards} cards are`} up in the conversation. ` +
-      "The fetch runs in the background and nothing has been read or filed yet. " +
       "The card shows the fetch, its outcome and the topic choice, and marks your suggestion only if you passed a topic.",
+    INTAKE_STATE_RULE,
     "Reply with one short sentence acknowledging the link and nothing else: " +
-      "say nothing about what it contains, its length, whether or where it is saved, or which topic fits, " +
-      "and don't ask which topic.",
+      "say nothing about what it contains, and don't ask which topic.",
   ];
   if (refused.length > 0) lines.push(`Not started: ${refused.join(" ")}`);
   lines.push(replyIn(language));
   return lines.join(" ");
+}
+
+/**
+ * The app note for a turn whose message carries no link, in a conversation that
+ * already holds an intake card: the reader may be asking about it, or the model
+ * may bring it up on its own, and either way the card is the answer.
+ */
+export function intakeTurnNote(language: string = replyLanguage()): string {
+  return `\n\n[App note, not the reader's words. ${INTAKE_STATE_RULE} ${replyIn(language)}]`;
+}
+
+/** The note a door turn's message goes to the model with, if any. */
+export function doorTurnNote(
+  links: readonly string[],
+  topics: readonly { name: string }[],
+  holdsIntake: boolean,
+  language: string = replyLanguage(),
+): string {
+  if (links.length > 0) return linkTurnNote(links, topics, language);
+  return holdsIntake ? intakeTurnNote(language) : "";
 }
 
 export interface TakeLinkDeps {
@@ -144,7 +176,8 @@ export function buildTakeLinkTool(deps: TakeLinkDeps): AgentTool {
       "link, or when they ask you to take one in. Name the link by its number from the app note " +
       'on their message, or "all"; never type a URL. A card goes up at once: it shows the fetch, ' +
       "and the reader picks the topic on it. The tool does not wait for the fetch. A topic you think " +
-      "fits goes in `topic`, never in your reply.",
+      "fits goes in `topic`, never in your reply. " +
+      INTAKE_STATE_RULE,
     parameters: Type.Object({
       link: Type.String({ description: 'The link\'s number in the app note (1-based), or "all".' }),
       topic: Type.Optional(

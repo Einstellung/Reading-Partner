@@ -9,6 +9,9 @@ import {
   extractLinks,
   linkTurnNote,
   takenResult,
+  INTAKE_STATE_RULE,
+  intakeTurnNote,
+  doorTurnNote,
   linksToTake,
   type TakeLinkDeps,
 } from "../../../src/reading/ingest/take-link-tool";
@@ -63,6 +66,38 @@ test("the app note asks for the reply in the reader's language, naming the app's
   expect(note).toContain("in 简体中文");
 });
 
+test("the rule covers every intake and every part of its state, and sends the reader to the card", () => {
+  expect(INTAKE_STATE_RULE).toContain("this one or one taken earlier");
+  for (const part of ["fetched", "filed", "failed", "which topic", "how long"]) expect(INTAKE_STATE_RULE).toContain(part);
+  expect(INTAKE_STATE_RULE).toContain("Never state or guess any of it");
+  expect(INTAKE_STATE_RULE).toContain("say the card shows it");
+});
+
+test("the link note carries the rule", () => {
+  expect(linkTurnNote(["https://a.test/x"], [], "English")).toContain(INTAKE_STATE_RULE);
+});
+
+test("the tool's own definition carries the rule, so every door turn has it", () => {
+  expect(harness(["https://a.test/x"]).tool.description).toContain(INTAKE_STATE_RULE);
+});
+
+test("a turn without a link in a conversation holding an intake card gets the rule as an app note", () => {
+  const note = intakeTurnNote("简体中文");
+  expect(note.startsWith("\n\n[App note, not the reader's words.")).toBe(true);
+  expect(note).toContain(INTAKE_STATE_RULE);
+  expect(note).toContain("in 简体中文");
+  expect(note.endsWith("]")).toBe(true);
+});
+
+test("the door's note: the link note when the message has links, the rule when an intake is held, else none", () => {
+  const topics = [{ name: "Brief" }];
+  expect(doorTurnNote(["https://a.test/x"], topics, true, "English")).toBe(
+    linkTurnNote(["https://a.test/x"], topics, "English"),
+  );
+  expect(doorTurnNote([], topics, true, "English")).toBe(intakeTurnNote("English"));
+  expect(doorTurnNote([], topics, false, "English")).toBe("");
+});
+
 const ORIGIN: BoxOrigin = { place: "door", date: "2026-10-09" };
 
 function harness(links: string[], over: Partial<TakeLinkDeps> = {}) {
@@ -100,12 +135,15 @@ test("a number starts that one link at the door and raises its card; the result 
   expect(h.tool.quiet).toBe(true);
 });
 
-test("the result says the fetch has not happened, keeps the reply short and off the topic, and names the language", async () => {
+test("the result leaves the intake's state to the card, keeps the reply short and off the topic, and names the language", async () => {
   const h = harness(["https://a.test/x"]);
   const { text } = (await h.tool.execute({ link: "1", topic: 2 })) as { text: string };
-  expect(text).toContain("The fetch runs in the background and nothing has been read or filed yet.");
+  expect(text).toContain(INTAKE_STATE_RULE);
+  // Nothing in it the model could repeat as a status: the card moves on after the reply.
+  expect(text).not.toContain("background");
+  expect(text).not.toContain("not been read or filed");
   expect(text).toContain("one short sentence");
-  expect(text).toContain("say nothing about what it contains, its length, whether or where it is saved, or which topic fits");
+  expect(text).toContain("say nothing about what it contains, and don't ask which topic");
   expect(text).toContain("in 简体中文");
   expect(takenResult(2, ["link 3 (c.test): no"], "English")).toContain("2 cards are up");
   expect(takenResult(2, ["link 3 (c.test): no"], "English")).toContain("Not started: link 3 (c.test): no");
