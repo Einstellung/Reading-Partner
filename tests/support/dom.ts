@@ -48,6 +48,22 @@
 // one and hands back what it got. Asking for the DOM and getting the tools are
 // the same call; there is no order left to get wrong.
 //
+// ## Why react-dom is loaded with the process's own timers
+//
+// react-dom and scheduler also take their timers off the global scope once, at
+// module evaluation: `scheduleMicrotask = queueMicrotask`, `scheduleTimeout =
+// setTimeout`, scheduler's `localSetTimeout`. With the window up those globals
+// are happy-dom's, and happy-dom's timer methods return without doing anything
+// once their window is closed. The first file's window closes at its afterAll,
+// and every later file in the run would get a React whose microtask is dropped.
+// The one that bites is useSyncExternalStore: a store notify outside act()
+// schedules a SyncLane render through that microtask, the render never comes,
+// and the root stays marked as having a sync render pending, so every later
+// update on it is folded into the one that never runs. The component freezes on
+// its first frame with no error (docs/pitfall/504). So the first import runs with
+// the process's own timers on globalThis, which outlive every window, and puts
+// the window's back after.
+//
 // ## Usage
 //
 //   import { useDom } from "../support/dom";
@@ -92,6 +108,35 @@ function reactDomIsLoaded(): boolean {
 // nothing; before that, finding it loaded means someone got to it first.
 let warmedUnderDom = false;
 
+// The timers react-dom and scheduler capture, as the process had them before
+// any window went up. Read here, at this module's evaluation, which comes before
+// its first useDom() call registers a window.
+const TIMER_KEYS = [
+  "setTimeout",
+  "clearTimeout",
+  "setInterval",
+  "clearInterval",
+  "setImmediate",
+  "clearImmediate",
+  "queueMicrotask",
+] as const;
+const processTimers = new Map(TIMER_KEYS.map((key) => [key, globalThis[key]]));
+
+// Run `load` with the process's timers on globalThis instead of the window's.
+async function withProcessTimers<T>(load: () => Promise<T>): Promise<T> {
+  const windowTimers = TIMER_KEYS.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
+  for (const key of TIMER_KEYS) {
+    Object.defineProperty(globalThis, key, { value: processTimers.get(key), configurable: true, writable: true });
+  }
+  try {
+    return await load();
+  } finally {
+    for (const [key, descriptor] of windowTimers) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    }
+  }
+}
+
 export async function useDom(): Promise<ReactTesting> {
   if (!warmedUnderDom && reactDomIsLoaded()) {
     throw new Error(
@@ -110,7 +155,9 @@ export async function useDom(): Promise<ReactTesting> {
     if (GlobalRegistrator.isRegistered) await GlobalRegistrator.unregister();
   });
 
-  const testing = await import("@testing-library/react");
+  const testing = warmedUnderDom
+    ? await import("@testing-library/react")
+    : await withProcessTimers(() => import("@testing-library/react"));
   warmedUnderDom = true;
   return testing;
 }
