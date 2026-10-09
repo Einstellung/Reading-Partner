@@ -86,7 +86,7 @@ Composer 在流式期间 Send 和 Stop 都在。
 
 随 v0.20.3 发出：`quiet`，记忆的两个簿记写入默默干（`AgentToolStart` 和 `ToolStatus` 都带着这个标走，界面据此判断，不认工具名）；答铃回合改成拿正文，soul 读 brief 和 output 两个文件喂给回合，读不到才说不在这台设备上，盒子项的 body 存产出正文而不是路径。
 
-2026-10-09：info 的对话（简报、三餐）接 steer，`ui/components/chat/useStreamingTurn.ts` 用书那套 `steering.ts` 和 `turn-row-split.ts`；停止保留回执单和 trace（`turn-rows.ts` 的 `keptOnStop`），书和 info 一致；steer 切行时上面那行连 trace 一起落盘。
+2026-10-09：info 的对话（简报、三餐）接 steer，`ui/components/chat/useStreamingTurn.ts` 用书那套 `steering.ts` 和 `turn-row-split.ts`；停止保留回执单和 trace（`turn-rows.ts` 的 `keptOnStop`），书和 info 一致；steer 切行时上面那行连 trace 一起落盘。只有回执的那行也算产出、照样切；什么都没有的那行删掉，回答在插话下面重开（坑 510）。
 
 ## 尾巴
 

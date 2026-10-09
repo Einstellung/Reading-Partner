@@ -8,6 +8,12 @@
 // The rows above it go into the thread file at that moment, so the file reads
 // user / ai / user / ai in the order it all happened.
 //
+// A row counts as produced when it holds words or a settled call (the same
+// test the stop button keeps a row by, ai/turn-view/turn-rows.ts: keptOnStop):
+// a round that only called a tool leaves its receipt above the reader's line.
+// A row holding neither is not kept above the line; the reply moves under it,
+// in a row stamped after it (docs/pitfall/510).
+//
 // Pure bookkeeping: the session hook reads the verdicts and does the writing —
 // the thread file, the live-turns registry, the reducer.
 
@@ -28,7 +34,11 @@ export interface RowToPersist {
 /** Where the next thing written lands. `split` is set when that opens a row. */
 export interface WritingAt {
   ts: number;
-  split?: { was: number; origin: RowOrigin | null };
+  /**
+   * `drop` is set when the row at `was` holds nothing: it goes rather than
+   * stays above the line, and the reply opens under it.
+   */
+  split?: { was: number; origin: RowOrigin | null; drop?: true };
 }
 
 export interface RowSplit {
@@ -38,19 +48,20 @@ export interface RowSplit {
   readonly origin: RowOrigin | null;
   /**
    * The row being written is already in the thread file: it was handed over
-   * with words in it and nothing has been written since. What ends the turn
-   * now (the stop button) has nothing of it left to put down.
+   * with something in it and nothing has been written since. What ends the
+   * turn now (the stop button) has nothing of it left to put down.
    */
   readonly down: boolean;
   /** The turn's first row was made at `ts`. */
   start(ts: number): void;
   /**
    * The model was handed the reader's line(s). `head` is the row's text so
-   * far, trimmed. Returns the row above when it is not in the file yet.
+   * far, trimmed; `traced` is whether it holds a settled call worth storing.
+   * Returns the row above when it is not in the file yet.
    */
-  steered(head: string): RowToPersist | null;
+  steered(head: string, traced?: boolean): RowToPersist | null;
   /** The model was handed a delegated run's answer. As `steered`. */
-  delivered(head: string, runId: string): RowToPersist | null;
+  delivered(head: string, runId: string, traced?: boolean): RowToPersist | null;
   /**
    * Something is about to be put in the row. Opens the new row first when a
    * split is owed. Called by nothing that ends the turn: an ending writes
@@ -83,23 +94,26 @@ export function createRowSplit(): RowSplit {
   // the ordinary case and the one where onDone persists the whole reply.
   const persisted: string[] = [];
   let steered = false;
-  // What of the row being written is already down, so two lines drained at
-  // the same boundary do not write it twice.
-  let rowPersisted: string | null = null;
+  // The row being written is already down, so two lines drained at the same
+  // boundary do not write it twice.
+  let rowDown = false;
   // The model has the line; the next thing written opens the new row.
   // Deferred to that moment rather than done on the spot so a turn that ends
-  // right after the injection leaves no empty row behind.
+  // right after the injection leaves no empty row behind. `dropPending` when
+  // the row it leaves holds nothing.
   let splitPending = false;
+  let dropPending = false;
   // The run whose answer the row being written is a reply to, and the one the
   // next row will be. Set when a delegated run is delivered into this turn.
   let rowOrigin: RowOrigin | null = null;
   let nextOrigin: RowOrigin | null = null;
 
-  const persistHead = (head: string): RowToPersist | null => {
+  const produced = (head: string, traced: boolean) => head !== "" || traced;
+  const persistHead = (head: string, traced: boolean): RowToPersist | null => {
     steered = true;
-    if (!head || head === rowPersisted) return null;
-    persisted.push(head);
-    rowPersisted = head;
+    if (rowDown || !produced(head, traced)) return null;
+    if (head) persisted.push(head);
+    rowDown = true;
     return { text: head, ts: rowTs, ...(rowOrigin ? { origin: rowOrigin } : {}) };
   };
 
@@ -111,24 +125,25 @@ export function createRowSplit(): RowSplit {
       return rowOrigin;
     },
     get down() {
-      return splitPending;
+      return rowDown;
     },
     start(ts) {
       rowTs = ts;
     },
-    steered(head) {
-      const down = persistHead(head);
-      // The reply that follows is a new row — unless there is nothing above
-      // to separate it from. A line the model was handed before it had
-      // written a word needs no split: an empty row would be the whole of
-      // what it left.
-      splitPending = head !== "";
+    steered(head, traced = false) {
+      const down = persistHead(head, traced);
+      // The reply that follows goes under the reader's line either way. A row
+      // with nothing in it is not left above the line: it goes, and the reply
+      // opens below.
+      splitPending = true;
+      dropPending = !rowDown;
       return down;
     },
-    delivered(head, runId) {
-      const down = persistHead(head);
-      // Handed it before a word was written: this row is the answer.
-      if (head === "") rowOrigin = { runId };
+    delivered(head, runId, traced = false) {
+      const down = persistHead(head, traced);
+      // Handed it before anything was produced: this row is the answer. No
+      // row is drawn for a delivery, so nothing sits between it and its row.
+      if (!rowDown) rowOrigin = { runId };
       else {
         splitPending = true;
         nextOrigin = { runId };
@@ -137,13 +152,17 @@ export function createRowSplit(): RowSplit {
     },
     writing(now) {
       if (!splitPending) return { ts: rowTs };
+      const drop = dropPending;
       splitPending = false;
-      rowPersisted = null;
+      dropPending = false;
+      rowDown = false;
       const was = rowTs;
       rowTs = Math.max(now(), was + 1);
-      rowOrigin = nextOrigin;
+      // A row that goes takes nothing with it: the run it answered is what the
+      // row that replaces it answers, unless another one came since.
+      rowOrigin = drop ? (nextOrigin ?? rowOrigin) : nextOrigin;
       nextOrigin = null;
-      return { ts: rowTs, split: { was, origin: rowOrigin } };
+      return { ts: rowTs, split: { was, origin: rowOrigin, ...(drop ? { drop: true as const } : {}) } };
     },
     answerTail(full, liveText) {
       if (!steered) return full;

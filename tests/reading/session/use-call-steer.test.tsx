@@ -301,3 +301,112 @@ test("the row handed over to a steered line is stored with its trace", async () 
     r.restore();
   }
 });
+
+// --- a line handed over after a round that wrote no word (docs/pitfall/510) --
+
+const shape = (m: { role: string; text: string; parts?: { type: string }[] }) => [
+  m.role,
+  m.text,
+  (m.parts ?? []).map((p) => p.type),
+];
+
+// Round one only called a tool. Its receipt is what the row produced: the row
+// stays above the reader's line, on screen and in the file, and the answer
+// opens under the line, keyed after it.
+test("a row with only a receipt is stored above the line and the answer opens under it", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    act(() => {
+      r.options().onToolStart({ name: "profile_update", args: {}, label: "Updating your profile" });
+      r.options().onToolEnd({ name: "profile_update", isError: false, receipt: RECEIPT });
+    });
+    await act(async () => {
+      view.result.current.send("and keep it short");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    act(() => r.inject(0));
+    act(() => {
+      r.options().onDelta("Noted, short it is.");
+      r.options().onDone("Noted, short it is.", undefined, "Noted, short it is.");
+    });
+
+    expect(rows(view).map((m) => [m.role, m.text])).toEqual([
+      ["user", "why this?"],
+      ["ai", ""],
+      ["user", "and keep it short"],
+      ["ai", "Noted, short it is."],
+    ]);
+    expect(rows(view)[1].tools).toEqual([PROFILE]);
+    expect(r.stored.map(shape)).toEqual([
+      ["user", "why this?", []],
+      ["ai", "", ["trace"]],
+      ["user", "and keep it short", []],
+      ["ai", "Noted, short it is.", []],
+    ]);
+    expect(r.stored[1].parts).toEqual([{ type: "trace", tools: [PROFILE] }]);
+    expect(r.stored[3].ts).toBeGreaterThan(r.stored[2].ts);
+  } finally {
+    r.restore();
+  }
+});
+
+test("a line handed over before the row held anything moves the reply under it", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    act(() => r.options().onThinking?.("…"));
+    await act(async () => {
+      view.result.current.send("in French, please");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    act(() => r.inject(0));
+    act(() => {
+      r.options().onDelta("En français.");
+      r.options().onDone("En français.", undefined, "En français.");
+    });
+
+    expect(rows(view).map((m) => [m.role, m.text])).toEqual([
+      ["user", "why this?"],
+      ["user", "in French, please"],
+      ["ai", "En français."],
+    ]);
+    expect(r.stored.map((m) => [m.role, m.text])).toEqual([
+      ["user", "why this?"],
+      ["user", "in French, please"],
+      ["ai", "En français."],
+    ]);
+    expect(r.stored[2].ts).toBeGreaterThan(r.stored[1].ts);
+  } finally {
+    r.restore();
+  }
+});
+
+test("stopping right after a receipt row was handed over stores it once", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    act(() => {
+      r.options().onToolStart({ name: "profile_update", args: {}, label: "Updating your profile" });
+      r.options().onToolEnd({ name: "profile_update", isError: false, receipt: RECEIPT });
+    });
+    await act(async () => {
+      view.result.current.send("and keep it short");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    act(() => r.inject(0));
+    await act(async () => {
+      view.result.current.stop();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(r.stored.map((m) => [m.role, m.text])).toEqual([
+      ["user", "why this?"],
+      ["ai", ""],
+      ["user", "and keep it short"],
+    ]);
+    expect(r.turns()).toBe(1);
+  } finally {
+    r.restore();
+  }
+});

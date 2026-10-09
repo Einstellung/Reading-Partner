@@ -363,3 +363,144 @@ test("leaving the view still stores what the reader said into the turn", async (
   expect(stored()).toEqual([["user", "never mind"]]);
   expect(runs).toHaveLength(1);
 });
+
+// --- a line handed over after a round that wrote no word (docs/pitfall/510) --
+
+const PLAN_CARD = { kind: "lab", id: "plan" } as never;
+const PROFILE_RECEIPT = { label: "Updated your profile", summary: "Diet goal set" };
+const PROFILE_DONE = {
+  name: "update_meals_profile",
+  label: "Updating your profile",
+  state: "done" as const,
+  receipt: PROFILE_RECEIPT,
+};
+
+// Everything the hook put in the thread file, whole, in order.
+const storedRows = () => (append.mock.calls as [string, string, threads.ThreadMessage][]).map((c) => c[2]);
+
+const shape = (m: { role: string; text: string; parts?: { type: string }[] }) => [
+  m.role,
+  m.text,
+  (m.parts ?? []).map((p) => p.type),
+];
+
+// The meals repro: round one only calls a tool, the reader speaks, round two
+// raises a card and answers. On screen and in the file alike the receipt row
+// stays above the line, and the card and the answer go under it.
+test("a round with only a receipt stays above the line; the card and the answer go under it", async () => {
+  const { hook, runs, begin } = mount();
+  await begin();
+  const port = steerable(runs[0]);
+  await port.open();
+  const h = runs[0].handlers();
+  await act(() => {
+    h.onToolStart?.({ name: "update_meals_profile", args: {}, label: "Updating your profile" });
+    h.onToolEnd?.({ name: "update_meals_profile", isError: false, receipt: PROFILE_RECEIPT });
+  });
+  await act(() => void hook.result.current.steer("Also keep breakfasts under 400 kcal."));
+  await tick();
+  await port.inject(0);
+  await act(() => {
+    h.onToolStart?.({ name: "plan_meals", args: {}, label: "Planning meals" });
+    hook.result.current.raiseCard("meals", PLAN_CARD);
+    h.onToolEnd?.({ name: "plan_meals", isError: false });
+    h.onDelta?.("I've set your diet.");
+    h.onDone?.("I've set your diet.", undefined as never, "I've set your diet.");
+  });
+
+  expect(hook.result.current.messages.map(shape)).toEqual([
+    ["ai", "", []],
+    ["user", "Also keep breakfasts under 400 kcal.", []],
+    ["ai", "", ["card"]],
+    ["ai", "I've set your diet.", []],
+  ]);
+  expect(hook.result.current.messages[0].tools).toEqual([PROFILE_DONE]);
+  const file = storedRows();
+  expect(file.map(shape)).toEqual([
+    ["ai", "", ["trace"]],
+    ["user", "Also keep breakfasts under 400 kcal.", []],
+    ["ai", "", ["card"]],
+    ["ai", "I've set your diet.", ["trace"]],
+  ]);
+  expect(file[0].parts).toEqual([{ type: "trace", tools: [PROFILE_DONE] }]);
+  // The answer is keyed after the line it answers.
+  expect(file[0].ts).toBe(runs[0].ts);
+  expect(file[3].ts).toBeGreaterThan(file[1].ts);
+});
+
+// Handed over with nothing produced: no row is left above the line, and none
+// goes in the file for it.
+test("a line handed over before the row held anything moves the reply under it", async () => {
+  const { hook, runs, begin } = mount();
+  await begin();
+  const port = steerable(runs[0]);
+  await port.open();
+  const h = runs[0].handlers();
+  await act(() => h.onThinking?.("…"));
+  await act(() => void hook.result.current.steer("in French, please"));
+  await tick();
+  await port.inject(0);
+  await act(() => {
+    h.onDelta?.("En français.");
+    h.onDone?.("En français.", undefined as never, "En français.");
+  });
+
+  expect(shown(hook)).toEqual([
+    ["user", "in French, please", undefined],
+    ["ai", "En français.", undefined],
+  ]);
+  const file = storedRows();
+  expect(file.map((m) => [m.role, m.text])).toEqual([
+    ["user", "in French, please"],
+    ["ai", "En français."],
+  ]);
+  expect(file[1].ts).toBeGreaterThan(file[0].ts);
+});
+
+test("Stop right after a receipt row was handed over stores it once", async () => {
+  const { hook, runs, begin } = mount();
+  await begin();
+  const port = steerable(runs[0]);
+  await port.open();
+  const h = runs[0].handlers();
+  await act(() => {
+    h.onToolStart?.({ name: "update_meals_profile", args: {}, label: "Updating your profile" });
+    h.onToolEnd?.({ name: "update_meals_profile", isError: false, receipt: PROFILE_RECEIPT });
+  });
+  await act(() => void hook.result.current.steer("and lunch?"));
+  await tick();
+  await port.inject(0);
+  await act(() => hook.result.current.stop());
+
+  expect(stored()).toEqual([
+    ["ai", ""],
+    ["user", "and lunch?"],
+  ]);
+});
+
+// A tool that raises its card in the millisecond the reply row opened. Two AI
+// rows on one stamp are one row to every patch by stamp, and the reply's words
+// would land in the card too.
+test("a card raised in the reply row's millisecond keeps a row of its own", async () => {
+  const clock = spyOn(Date, "now").mockReturnValue(5000);
+  try {
+    const { hook, runs, begin } = mount();
+    await begin();
+    const h = runs[0].handlers();
+    await act(() => {
+      h.onToolStart?.({ name: "plan_meals", args: {}, label: "Planning meals" });
+      hook.result.current.raiseCard("meals", PLAN_CARD);
+      h.onToolEnd?.({ name: "plan_meals", isError: false });
+      h.onDelta?.("Here is the week.");
+      h.onDone?.("Here is the week.", undefined as never, "Here is the week.");
+    });
+    expect(hook.result.current.messages.map(shape)).toEqual([
+      ["ai", "", ["card"]],
+      ["ai", "Here is the week.", []],
+    ]);
+    const ts = hook.result.current.messages.map((m) => m.ts);
+    expect(new Set(ts).size).toBe(2);
+  } finally {
+    clock.mockRestore();
+  }
+});

@@ -177,7 +177,10 @@ export function useStreamingTurn(
   const raiseCard = useCallback(
     (prefix: string, payload: CardPayload) => {
       const cardId = nextCardId(prefix);
-      const cardTs = Date.now();
+      // From the hook's own clock: a card stamped in the millisecond the reply
+      // row was opened in would be an AI row at the reply's ts, and the reply's
+      // words would be written into it too (patchAiRow).
+      const cardTs = stamp();
       const replyTs = liveRef.current?.row.ts ?? -1;
       setMessages((rows) => insertAbove(rows, replyTs, cardRow(cardId, payload, cardTs)));
       appendMessage(key, threadId, {
@@ -187,7 +190,7 @@ export function useStreamingTurn(
         parts: [toPersistedCardPart(cardId, payload)],
       });
     },
-    [key, threadId, setMessages],
+    [key, threadId, setMessages, stamp],
   );
 
   const begin = useCallback(
@@ -201,11 +204,12 @@ export function useStreamingTurn(
         // The model was handed the reader's lines. The row above goes into the
         // thread file now, with what it did, and the lines under it, so the
         // file reads user / ai / user / ai in the order it happened; the reply
-        // that follows gets a row of its own on the next write.
+        // that follows gets a row of its own on the next write. A receipt
+        // alone is something the row produced (keptOnStop).
         const handOver = (lines: PendingSteer[]) => {
-          const down = split.steered(live.row.text.trim());
+          const trace = toPersistedTracePart(live.row.tools ?? []);
+          const down = split.steered(live.row.text.trim(), trace !== null);
           if (down) {
-            const trace = toPersistedTracePart(live.row.tools ?? []);
             appendMessage(key, threadId, {
               role: "ai",
               text: down.text,
@@ -258,9 +262,10 @@ export function useStreamingTurn(
         const writingRow = () => {
           const at = split.writing(stamp);
           if (!at.split) return;
-          const was = at.split.was;
+          const { was, drop } = at.split;
           live.row = answerRow(at.ts);
-          setMessages((rows) => splitRows(rows, was, live.row));
+          // A row that held nothing goes rather than stay above the line.
+          setMessages((rows) => (drop ? [...dropAiRow(rows, was), live.row] : splitRows(rows, was, live.row)));
           phase = null;
         };
 

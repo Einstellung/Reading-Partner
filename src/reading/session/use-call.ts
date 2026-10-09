@@ -543,7 +543,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const writingRow = (): number => {
       const at = rows.writing(rowTs);
       if (at.split) {
-        const { was, origin } = at.split;
+        const { was, origin, drop } = at.split;
         const row = shapes.current.newRow({
           role: "ai",
           text: "",
@@ -552,7 +552,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           ...(origin ? { origin } : {}),
         });
         liveTurns.openRow(threadId, controller, row);
-        dispatch({ type: "row-split", threadId, ts: was, row });
+        dispatch({ type: "row-split", threadId, ts: was, row, ...(drop ? { drop } : {}) });
         phase = null;
       }
       return at.ts;
@@ -575,11 +575,12 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     // it all happened rather than every question before every answer.
     const steering = createSteering((lines) => {
       const message = liveTurns.get(threadId)?.message as { text: string; tools?: ToolStatus[] } | undefined;
-      const down = rows.steered((message?.text ?? "").trim());
       // With what it did: the receipts of the rounds above the reader's line
       // are part of that row, and a reopened thread would otherwise show its
-      // words without them.
+      // words without them. A receipt alone is something the row produced
+      // (keptOnStop), so it stays above the line.
       const trace = persistedTrace(message?.tools ?? []);
+      const down = rows.steered((message?.text ?? "").trim(), trace !== null);
       if (down) {
         appendOwn(home, threadId, {
           role: "ai",
@@ -600,9 +601,16 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     // nothing goes into the thread file. What is left behind is the reply — a
     // row of its own, marked with the run it answers.
     const delivered = createDelivered((runId) => {
-      const head = (liveTurns.get(threadId)?.message.text ?? "").trim();
-      const down = rows.delivered(head, runId);
-      if (down) appendOwn(home, threadId, { role: "ai", ...down });
+      const message = liveTurns.get(threadId)?.message as { text: string; tools?: ToolStatus[] } | undefined;
+      const trace = persistedTrace(message?.tools ?? []);
+      const down = rows.delivered((message?.text ?? "").trim(), runId, trace !== null);
+      if (down) {
+        appendOwn(home, threadId, {
+          role: "ai",
+          ...down,
+          ...(trace ? { parts: [{ type: "trace" as const, tools: trace }] } : {}),
+        });
+      }
       // Handed it before a word was written: the row already on screen is the
       // answer, so it is marked now rather than only once the file is reopened.
       if (rows.origin?.runId === runId) write({ kind: "origin", origin: rows.origin }, rows.ts);
@@ -696,7 +704,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const ts = rowTs();
     rows.start(ts);
     const streamingRow = shapes.current.newRow({ role: "ai", text: "", ts, streaming: true });
-    liveTurns.start({ threadId, bookId, home, controller, message: streamingRow, steering, delivered });
+    liveTurns.start({ threadId, bookId, home, controller, message: streamingRow, steering, delivered, split: rows });
     dispatch({ type: "turn-started", threadId, row: streamingRow });
 
     void (async () => {
@@ -1183,7 +1191,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // Neither: nothing to keep, and null back.
   const keepPartial = useCallback((live: LiveTurn<M>) => {
     const kept = keptOnStop(live.message as { text: string; tools?: ToolStatus[] });
-    if (kept) {
+    // Handed over with nothing written since: the row is in the file already.
+    if (kept && !live.split?.down) {
       const { ts, origin } = live.message;
       appendOwn(live.home, live.threadId, {
         role: "ai",
