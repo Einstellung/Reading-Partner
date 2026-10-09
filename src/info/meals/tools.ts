@@ -55,11 +55,12 @@ import {
   type Meal,
   type MealKey,
   type MealMode,
+  type MealRef,
   type MealsState,
   type ShoppingItem,
   type WeekPlan,
 } from "./plan/types";
-import { WEEK_DAYS, addDays, assembleWeekPlan, dayOn, isoWeekday, type DayDraft, type MealDraft } from "./plan/week";
+import { WEEK_DAYS, addDays, assembleWeekPlan, dayIndexOf, dayOn, isoWeekday, type DayDraft, type MealDraft } from "./plan/week";
 
 /** What the reader has in front of them when they open the conversation. */
 export type MealsFocus =
@@ -284,8 +285,9 @@ export function mealsGuidance(
     "name, what an image search would find), a one-line `method` in their language and `minutes`.",
     "The program solves the grams and checks the week: foods in the table, roles, minutes,",
     "dislikes, flavours in a row, fish twice, and whether the protein reaches the meal's target.",
-    "What fails comes back to you: fix those meals and send the whole week again (an adjustment",
-    "sends only its own meals).",
+    "What fails comes back to you with the meals it names. For a fresh week the rest of the draft",
+    "is kept: call propose_meals_plan again with only the meals you fix, never the whole week",
+    "again. An adjustment that fails is sent again with all of its meals.",
     "",
     "FLAVOURS",
     FLAVOURS.map((f) => `${f.id} (${f.zh})`).join(", "),
@@ -351,7 +353,37 @@ const mealSchema = (which: MealKey) =>
     note: Type.Optional(Type.String({ description: "One short line of theirs about this meal." })),
   });
 
+/**
+ * What a refused proposal tells the model: every problem, then the meals to
+ * send again. `patch` means the rest of the draft is held for the next call.
+ */
+function refusalText(
+  checked: { plan: WeekPlan; problems: readonly string[]; failing?: readonly MealRef[] },
+  kind: "adjustment" | "patch" | "week",
+): string {
+  const lines = ["Nothing was proposed — the plan does not hold up:", ...checked.problems.map((p) => `- ${p}`)];
+  const named = (checked.failing ?? []).map((r) => `Day ${dayIndexOf(checked.plan, r.date)} ${r.meal}`);
+  if (kind === "week") {
+    lines.push(`Fix those meals and call propose_meals_plan again with the whole week, all ${WEEK_DAYS} days.`);
+  } else if (kind === "adjustment") {
+    lines.push("Fix those meals and call propose_meals_plan again with adjustment set and every meal of this change.");
+  } else {
+    lines.push(
+      "Every other meal of this draft is kept. Call propose_meals_plan again, without adjustment, " +
+        "sending only the meals you change" +
+        (named.length ? `: ${named.join(", ")}.` : ".") +
+        " Do not send the whole week again.",
+    );
+  }
+  return lines.join("\n");
+}
+
 export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
+  // A fresh week the checks refused, as drafted (grams unsolved). The next call
+  // without adjustment patches it: the meals it sends replace theirs and the
+  // rest stand, so a failed meal costs one meal resent, not the week. Tools are
+  // built per turn, so this goes when the turn does.
+  let pending: WeekPlan | null = null;
   return {
     name: "propose_meals_plan",
     label: (args) => (args.adjustment ? t("meals.tool.reworkingMeal") : t("meals.tool.draftingWeek")),
@@ -364,8 +396,10 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
       "lists its foods by id with roles, plus name, searchName, flavour, method and minutes; " +
       "`out`, `delivery` and `bought` give `place`. Set `adjustment` to rework meals of the week " +
       "they already have — then send only those meals. The program solves every gram, checks the " +
-      "week and derives the shopping list; anything that fails comes back to you. It files " +
-      "nothing: the user sees a card and applies it.",
+      "week and derives the shopping list; anything that fails comes back to you naming its " +
+      "meals. For a fresh week the rest of the draft is kept, so the next call sends only the " +
+      "meals it fixes. " +
+      "It files nothing: the user sees a card and applies it.",
     parameters: Type.Object({
       adjustment: Type.Optional(
         Type.Boolean({ description: "True when this reworks meals of the week already planned." }),
@@ -402,12 +436,14 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
       }
       const days = toDayDrafts(args.days);
       if (days.length === 0) throw new Error("propose_meals_plan needs at least one day.");
-      if (!adjustment) {
-        if (days.length < WEEK_DAYS) {
+      const patching = !adjustment && pending !== null;
+      if (!adjustment && !patching) {
+        const distinct = new Set(days.map((d) => Math.round(d.day))).size;
+        if (distinct < WEEK_DAYS) {
           return {
             receipt: null,
             text:
-              `A fresh week needs all ${WEEK_DAYS} days; you sent ${days.length}. Send the whole ` +
+              `A fresh week needs all ${WEEK_DAYS} days; you sent ${distinct}. Send the whole ` +
               "week, or set adjustment if you meant to rework meals of the week they have.",
           };
         }
@@ -424,7 +460,11 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
 
       const assembled = assembleWeekPlan(
         { days },
-        { startDate: deps.today(), createdAt: deps.now(), previous: adjustment ? state.plan : null },
+        {
+          startDate: deps.today(),
+          createdAt: deps.now(),
+          previous: adjustment ? state.plan : patching ? pending : null,
+        },
       );
       const checked = assembled.problems.length
         ? { plan: assembled.plan, problems: assembled.problems }
@@ -438,20 +478,14 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
       // A refusal, not a thrown error: the model can fix every one of these in
       // the same turn, and the user should never see the attempt.
       if (checked.problems.length) {
+        // A day number outside the week changed nothing, so the draft stands.
+        if (!adjustment && !assembled.problems.length) pending = assembled.plan;
         return {
           receipt: null,
-          text:
-            "Nothing was proposed — the plan does not hold up:\n" +
-            checked.problems.map((p) => `- ${p}`).join("\n") +
-            // Nothing of a refused draft is kept, so a fresh week goes back
-            // whole: the model otherwise sends just the fixed day and is
-            // refused again for being short.
-            (adjustment
-              ? "\nFix only those meals and call propose_meals_plan again."
-              : "\nFix those meals and call propose_meals_plan again with the whole week, all " +
-                `${WEEK_DAYS} days — nothing of this draft was kept.`),
+          text: refusalText(checked, adjustment ? "adjustment" : pending ? "patch" : "week"),
         };
       }
+      if (!adjustment) pending = null;
 
       const card: MealsPlanCardData = {
         kind: "meals-plan",

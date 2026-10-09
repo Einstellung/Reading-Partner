@@ -81,6 +81,21 @@ test("a protein food that cannot reach the meal's target is sent back", () => {
   expect(problems[0]).toStartWith("Day 2 dinner: protein reaches only");
 });
 
+test("the meals the problems name come back as slots, once each and in week order", () => {
+  let plan = withMeal(draftWeek(), 3, "lunch", { ...shrimpRice(), minutes: 25 });
+  plan = withMeal(plan, 1, "breakfast", { ...eggToast(), flavour: "teriyaki" });
+  expect(checkPlan({ plan, profile: profile(), targets }).failing).toEqual([
+    { date: "2026-09-21", meal: "dinner" },
+    { date: "2026-09-22", meal: "breakfast" },
+    { date: "2026-09-24", meal: "lunch" },
+  ]);
+
+  const bad: Meal = { ...shrimpRice(), name: undefined, items: [{ foodId: "dragon_meat", role: "protein" }] };
+  const template = checkPlan({ plan: withMeal(draftWeek(), 4, "dinner", bad), profile: profile(), targets });
+  expect(template.problems.length).toBeGreaterThan(1);
+  expect(template.failing).toEqual([{ date: "2026-09-25", meal: "dinner" }]);
+});
+
 test("fish at least twice, unless an adjustment inherited fewer", () => {
   let plan = draftWeek();
   for (let i = 0; i < 7; i++) {
@@ -94,7 +109,9 @@ test("fish at least twice, unless an adjustment inherited fewer", () => {
   plan = withMeal(plan, 0, "lunch", shrimpRice());
   expect(fishMeals(plan)).toBe(1);
   const fresh = checkPlan({ plan, profile: profile(), targets });
-  expect(fresh.problems).toContain("The week has 1 fish or seafood meal; it needs at least two.");
+  expect(fresh.problems).toEqual(["The week has 1 fish or seafood meal; it needs at least two."]);
+  // A week-wide rule names no meal: any one the model changes can mend it.
+  expect(fresh.failing).toEqual([]);
   const adjusted = checkPlan({
     plan,
     profile: profile(),

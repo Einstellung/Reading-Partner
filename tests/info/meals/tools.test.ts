@@ -34,7 +34,7 @@ import {
   type ShoppingState,
   type WeekPlan,
 } from "../../../src/info/meals/plan/types";
-import { MON, charter, draftWeek, profile, shopping, state, week } from "./fixtures/week";
+import { MON, charter, draftWeek, profile, sent, shopping, state, week } from "./fixtures/week";
 
 function deps(current: MealsState): MealsToolDeps & { cards: MealsCard[] } {
   const cards: MealsCard[] = [];
@@ -84,21 +84,6 @@ function ports(current: MealsState): Ports {
 /** A tool answers with a string or a result carrying one. */
 function said(out: string | { text?: unknown }): string {
   return typeof out === "string" ? out : String(out.text);
-}
-
-/** A week as the model would send it: day numbers, food ids and roles, no grams it does not own. */
-function sent(plan: WeekPlan): Record<string, unknown>[] {
-  const keys: MealKey[] = ["breakfast", "lunch", "dinner", "snack"];
-  return plan.days.map((day, i) => {
-    const out: Record<string, unknown> = { day: i + 1 };
-    for (const key of keys) {
-      const { solved: _solved, items, ...rest } = day[key];
-      out[key] = items
-        ? { ...rest, items: items.map((it) => ({ food: it.foodId, role: it.role, ...(it.grams ? { grams: it.grams } : {}) })) }
-        : rest;
-    }
-    return out;
-  });
 }
 
 const LINE = {
@@ -217,32 +202,63 @@ test("a clean week drafts a card with the grams the program solved, and writes n
   expect(card.days).toEqual(week().days);
 });
 
-test("a week that fails the checks goes back to the model, and the fixed one is proposed", async () => {
+test("a week that fails the checks names its meals, keeps the rest, and takes back only those", async () => {
   const d = deps(state({ plan: null }));
   const tool = buildProposeMealsPlanTool(d);
+  const good = sent(week());
 
   const broken = sent(week());
-  const lunch = (broken[0]!.lunch as { items: { food: string }[] });
-  lunch.items[0]!.food = "dragon_steak";
+  (broken[0]!.lunch as { items: { food: string }[] }).items[0]!.food = "dragon_steak";
   // Tuesday breakfast tastes like Monday dinner.
   (broken[1]!.breakfast as { flavour: string }).flavour = "teriyaki";
   const first = said(await tool.execute({ days: broken }));
   expect(first).toContain("Nothing was proposed");
   expect(first).toContain('Day 1 lunch: "dragon_steak" is not in the food table');
-  expect(first).toContain("call propose_meals_plan again with the whole week, all 7 days");
-  expect(first).not.toContain("Fix only those meals");
+  expect(first).toContain("sending only the meals you change: Day 1 lunch.");
+  expect(first).not.toContain("whole week, all 7 days");
   expect(d.cards).toEqual([]);
 
-  // The template holds now; the flavour rule reads the solved week.
-  lunch.items[0]!.food = "frozen_shrimp";
-  const second = said(await tool.execute({ days: broken }));
+  // One meal is a whole call now: the template holds, and the flavour rule
+  // reads the solved week around it.
+  const second = said(await tool.execute({ days: [{ day: 1, lunch: good[0]!.lunch }] }));
   expect(second).toContain("Day 1 dinner and Day 2 breakfast are both teriyaki; change one.");
+  expect(second).toContain("sending only the meals you change: Day 1 dinner, Day 2 breakfast.");
   expect(second).not.toContain("dragon_steak");
   expect(d.cards).toEqual([]);
 
-  (broken[1]!.breakfast as { flavour: string }).flavour = "plain";
-  expect(said(await tool.execute({ days: broken }))).toContain("Proposed the week's meals");
-  expect(d.cards).toHaveLength(1);
+  expect(said(await tool.execute({ days: [{ day: 2, breakfast: good[1]!.breakfast }] }))).toContain(
+    "Proposed the week's meals",
+  );
+  const card = d.cards[0] as MealsPlanCardData;
+  expect(card.adjustment).toBe(false);
+  expect(card.changed).toEqual([]);
+  expect(card.startDate).toBe(MON);
+  // The saved shape is the one a week sent whole becomes.
+  expect(card.days).toEqual(week().days);
+
+  // Proposed, so nothing is held: the next fresh week must be whole again.
+  expect(said(await tool.execute({ days: [{ day: 1, lunch: good[0]!.lunch }] }))).toContain("needs all 7 days");
+});
+
+test("a kept draft takes a whole week too, and dies with the turn's tools", async () => {
+  const d = deps(state({ plan: null }));
+  const broken = sent(week());
+  (broken[3]!.lunch as { minutes: number }).minutes = 40;
+  const tool = buildProposeMealsPlanTool(d);
+  expect(said(await tool.execute({ days: broken }))).toContain("Day 4 lunch takes 40 minutes");
+
+  // A patch that still fails keeps what it fixed and names what is left.
+  const again = said(await tool.execute({ days: [{ day: 4, lunch: { ...(broken[3]!.lunch as object), minutes: 30 } }] }));
+  expect(again).toContain("Day 4 lunch takes 30 minutes; they allow 20.");
+  expect(again).toContain("sending only the meals you change: Day 4 lunch.");
+
+  // The next turn builds the tools afresh, and with them no draft.
+  const next = buildProposeMealsPlanTool(d);
+  expect(said(await next.execute({ days: [{ day: 4, lunch: sent(week())[3]!.lunch }] }))).toContain("needs all 7 days");
+
+  // Sending the whole week over a kept draft replaces every meal of it.
+  expect(said(await tool.execute({ days: sent(week()) }))).toContain("Proposed the week's meals");
+  expect((d.cards[0] as MealsPlanCardData).days).toEqual(week().days);
 });
 
 test("an adjustment re-picks only the meals it sends, and is checked against the reader's limits", async () => {
@@ -255,7 +271,7 @@ test("an adjustment re-picks only the meals it sends, and is checked against the
     }),
   );
   expect(slow).toContain("Day 2 lunch takes 25 minutes; they allow 20.");
-  expect(slow).toContain("Fix only those meals and call propose_meals_plan again.");
+  expect(slow).toContain("call propose_meals_plan again with adjustment set and every meal of this change.");
 
   const out = await tool.execute({
     adjustment: true,

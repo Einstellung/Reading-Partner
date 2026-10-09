@@ -15,7 +15,7 @@ import type {
   ShoppingState,
   WeekPlan,
 } from "../../../../src/info/meals/plan/types";
-import { EMPTY_SHOPPING } from "../../../../src/info/meals/plan/types";
+import { EMPTY_SHOPPING, MEAL_KEYS } from "../../../../src/info/meals/plan/types";
 import { addDays } from "../../../../src/info/meals/plan/week";
 
 // A Monday.
@@ -118,4 +118,18 @@ export function shopping(over: Partial<ShoppingState> = {}): ShoppingState {
 
 export function state(over: Partial<MealsState> = {}): MealsState {
   return { charter: charter(), plan: week(), shopping: shopping(), deviations: [], ...over };
+}
+
+/** A week as the model would send it: day numbers, food ids and roles, no grams it does not own. */
+export function sent(plan: WeekPlan): Record<string, unknown>[] {
+  return plan.days.map((day, i) => {
+    const out: Record<string, unknown> = { day: i + 1 };
+    for (const key of MEAL_KEYS) {
+      const { solved: _solved, items, ...rest } = day[key];
+      out[key] = items
+        ? { ...rest, items: items.map((it) => ({ food: it.foodId, role: it.role, ...(it.grams ? { grams: it.grams } : {}) })) }
+        : rest;
+    }
+    return out;
+  });
 }

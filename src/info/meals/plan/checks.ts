@@ -12,7 +12,7 @@ import type { TemplateItem } from "../nutrition/solve";
 import { minuteCap, type Profile, type Targets } from "../nutrition/targets";
 import { dayTargetsOn, mealNumbers, solvePlan } from "./solve-week";
 import { MAIN_MEAL_KEYS, MEAL_KEYS, type Meal, type MealRef, type WeekPlan } from "./types";
-import { dayIndexOf, sameMeal } from "./week";
+import { dayIndexOf, mealsInOrder, sameMeal } from "./week";
 
 export interface CheckInput {
   plan: WeekPlan;
@@ -29,6 +29,9 @@ export interface CheckResult {
   // The week with its grams solved. Only meaningful when `problems` is empty.
   plan: WeekPlan;
   problems: string[];
+  // The meals the problems name, in week order. A week-wide rule (fish twice)
+  // names none: any meal the model changes can mend it.
+  failing: MealRef[];
 }
 
 function where(plan: WeekPlan, ref: MealRef): string {
@@ -101,13 +104,24 @@ export function checkPlan(input: CheckInput): CheckResult {
   const inScope = (ref: MealRef) => !changed || changed.some((c) => sameMeal(c, ref));
 
   const problems: string[] = [];
+  const named: MealRef[] = [];
+  const fail = (text: string, ...refs: MealRef[]) => {
+    problems.push(text);
+    for (const ref of refs) if (!named.some((n) => sameMeal(n, ref))) named.push(ref);
+  };
+  const failing = (plan: WeekPlan) =>
+    mealsInOrder(plan)
+      .map((m) => m.ref)
+      .filter((ref) => named.some((n) => sameMeal(n, ref)));
+
   for (const day of input.plan.days) {
     for (const key of MEAL_KEYS) {
       const ref = { date: day.date, meal: key };
-      if (day[key].mode === "make" && inScope(ref)) problems.push(...templateProblems(where(input.plan, ref), day[key]));
+      if (day[key].mode !== "make" || !inScope(ref)) continue;
+      for (const text of templateProblems(where(input.plan, ref), day[key])) fail(text, ref);
     }
   }
-  if (problems.length) return { plan: input.plan, problems };
+  if (problems.length) return { plan: input.plan, problems, failing: failing(input.plan) };
 
   const plan = solvePlan(input.plan, targets, profile);
   // A proper meal the reader asked for is exempt; every other made meal is
@@ -121,20 +135,21 @@ export function checkPlan(input: CheckInput): CheckResult {
       if (meal.mode !== "make" || !inScope(ref)) continue;
       const at = where(plan, ref);
       if (!meal.proper && (meal.minutes ?? 0) > cap) {
-        problems.push(`${at} takes ${meal.minutes} minutes; they allow ${cap}.`);
+        fail(`${at} takes ${meal.minutes} minutes; they allow ${cap}.`, ref);
       }
       for (const item of meal.items ?? []) {
         const food = foodById(item.foodId);
-        if (food && !foodAllowed(food, profile.dislikes)) problems.push(`${at} uses ${food.id}, which they do not eat.`);
+        if (food && !foodAllowed(food, profile.dislikes)) fail(`${at} uses ${food.id}, which they do not eat.`, ref);
       }
       const numbers = mealNumbers(meal, key, dayT);
       if (numbers && !numbers.cells.protein) {
         const p = numbers.rows.find((r) => r.role === "protein");
-        problems.push(
+        fail(
           `${at}: protein reaches only ${Math.round(numbers.totals.protein)} g of the ` +
             `${Math.round(numbers.target.protein)} g this meal needs` +
             (p ? ` even with ${p.grams} g of ${p.food.id}` : "") +
             ". Choose a denser protein food, or add a second one as a fixed item.",
+          ref,
         );
       }
     }
@@ -149,7 +164,7 @@ export function checkPlan(input: CheckInput): CheckResult {
     if (!a || !b || a.meal.mode !== "make" || b.meal.mode !== "make") continue;
     if (!a.meal.flavour || a.meal.flavour !== b.meal.flavour) continue;
     if (!inScope(a.ref) && !inScope(b.ref)) continue;
-    problems.push(`${where(plan, a.ref)} and ${where(plan, b.ref)} are both ${a.meal.flavour}; change one.`);
+    fail(`${where(plan, a.ref)} and ${where(plan, b.ref)} are both ${a.meal.flavour}; change one.`, a.ref, b.ref);
   }
 
   const noFish = profile.dislikes.some((d) => d.trim() === "fish" || d.trim() === "seafood");
@@ -159,5 +174,5 @@ export function checkPlan(input: CheckInput): CheckResult {
     problems.push(`The week has ${fish} fish or seafood meal${fish === 1 ? "" : "s"}; it needs at least two.`);
   }
 
-  return { plan, problems };
+  return { plan, problems, failing: failing(plan) };
 }
