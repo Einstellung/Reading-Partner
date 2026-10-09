@@ -8,6 +8,7 @@ import {
   buildTakeLinkTool,
   extractLinks,
   linkTurnNote,
+  takenResult,
   linksToTake,
   type TakeLinkDeps,
 } from "../../../src/reading/ingest/take-link-tool";
@@ -56,6 +57,12 @@ test("the app note numbers the links and the topics, and is empty without links"
   expect(linkTurnNote([], [{ name: "Brief" }])).toBe("");
 });
 
+test("the app note asks for the reply in the reader's language, naming the app's for a bare link", () => {
+  const note = linkTurnNote(["https://a.test/x"], [], "简体中文");
+  expect(note).toContain("Reply in the language the reader writes in");
+  expect(note).toContain("in 简体中文");
+});
+
 const ORIGIN: BoxOrigin = { place: "door", date: "2026-10-09" };
 
 function harness(links: string[], over: Partial<TakeLinkDeps> = {}) {
@@ -71,6 +78,7 @@ function harness(links: string[], over: Partial<TakeLinkDeps> = {}) {
     },
     topics: async () => [{ id: "t-brief" }, { id: "t-pi" }],
     raiseCard: (card) => cards.push(card),
+    language: () => "简体中文",
     ...over,
   });
   return { tool, started, cards };
@@ -88,6 +96,19 @@ test("a number starts that one link at the door and raises its card; the result 
   expect(result.receipt.summary).toBe("b.test");
   expect(h.tool.effect).toBe("write");
   expect(h.tool.gate).toBe("card");
+  // The card stands for the call: no receipt or trace line under the reply.
+  expect(h.tool.quiet).toBe(true);
+});
+
+test("the result says the fetch has not happened, keeps the reply short and off the topic, and names the language", async () => {
+  const h = harness(["https://a.test/x"]);
+  const { text } = (await h.tool.execute({ link: "1", topic: 2 })) as { text: string };
+  expect(text).toContain("The fetch runs in the background and nothing has been read or filed yet.");
+  expect(text).toContain("one short sentence");
+  expect(text).toContain("say nothing about what it contains, its length, whether or where it is saved, or which topic fits");
+  expect(text).toContain("in 简体中文");
+  expect(takenResult(2, ["link 3 (c.test): no"], "English")).toContain("2 cards are up");
+  expect(takenResult(2, ["link 3 (c.test): no"], "English")).toContain("Not started: link 3 (c.test): no");
 });
 
 test("all starts every link, one card each", async () => {

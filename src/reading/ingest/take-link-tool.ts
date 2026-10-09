@@ -10,7 +10,8 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
 import type { BoxOrigin } from "../../box";
-import { t } from "../../i18n";
+import { getLocale, t } from "../../i18n";
+import { aiLanguageName } from "../../platform/app/settings";
 import { hostOf } from "../../platform/std/url";
 import type { IntakeCard } from "./intake-card";
 
@@ -49,19 +50,59 @@ export function linksToTake(history: readonly { role: string; text: string }[]):
 }
 
 /**
+ * The language the reader is answered in: the app's (one setting names it for
+ * the interface and the AI alike). A message that is only a link says nothing
+ * about the language, and the notes around it are English.
+ */
+export function replyLanguage(): string {
+  return aiLanguageName(getLocale()) ?? "English";
+}
+
+// The line both the note and the tool's result end with: the model's reply
+// otherwise follows the English it was handed last.
+function replyIn(language: string): string {
+  return `Reply in the language the reader writes in; when their message is only a link, in ${language}. Never in this note's English unless that is theirs.`;
+}
+
+/**
  * The app note added to the reader's message, as the model is sent it, when the
  * message carries links: the links by number and the topics by number (the
  * topic menu, shelf order). Never shown to the reader and never stored.
  */
-export function linkTurnNote(links: readonly string[], topics: readonly { name: string }[]): string {
+export function linkTurnNote(
+  links: readonly string[],
+  topics: readonly { name: string }[],
+  language: string = replyLanguage(),
+): string {
   if (links.length === 0) return "";
   const linkLines = links.map((url, i) => `${i + 1}. ${url}`).join("\n");
   const topicLines = topics.length > 0 ? topics.map((topic, i) => `${i + 1}. ${topic.name}`).join("\n") : "(none yet)";
   return (
     `\n\n[App note, not the reader's words. Links in this message:\n${linkLines}\n` +
     `The reader's topics:\n${topicLines}\n` +
-    `To take links in, call take_link with the link's number or "all", and a topic number only when one clearly fits.]`
+    `To take links in, call take_link with the link's number or "all", and a topic number only when one clearly fits. ` +
+    `${replyIn(language)}]`
   );
+}
+
+/**
+ * What take_link tells the model once the cards are up. Nothing has been read
+ * yet, so the model has nothing true to say about the content, the filing or
+ * the topic; the card says all three as they happen, and a sentence that guesses
+ * at them contradicts it.
+ */
+export function takenResult(cards: number, refused: readonly string[], language: string): string {
+  const lines = [
+    `${cards === 1 ? "The card is" : `${cards} cards are`} up in the conversation. ` +
+      "The fetch runs in the background and nothing has been read or filed yet. " +
+      "The card shows the fetch, its outcome and the topic choice, and marks your suggestion only if you passed a topic.",
+    "Reply with one short sentence acknowledging the link and nothing else: " +
+      "say nothing about what it contains, its length, whether or where it is saved, or which topic fits, " +
+      "and don't ask which topic.",
+  ];
+  if (refused.length > 0) lines.push(`Not started: ${refused.join(" ")}`);
+  lines.push(replyIn(language));
+  return lines.join(" ");
 }
 
 export interface TakeLinkDeps {
@@ -75,6 +116,8 @@ export interface TakeLinkDeps {
   topics(): Promise<readonly { id: string }[]>;
   /** Put the intake card in the conversation. */
   raiseCard(card: IntakeCard): void;
+  /** The language the reply is asked for in (replyLanguage); injected by the tests. */
+  language?(): string;
 }
 
 function which(arg: unknown, count: number): number[] | string {
@@ -93,11 +136,15 @@ export function buildTakeLinkTool(deps: TakeLinkDeps): AgentTool {
     label: () => t("reader.intake.toolLabel"),
     effect: "write",
     gate: "card",
+    // The intake card stands for the call; a receipt and a trace line under the
+    // reply would say it a second time.
+    quiet: true,
     description:
       "Take a link the reader pasted into their library. Call it when their message carries a " +
       "link, or when they ask you to take one in. Name the link by its number from the app note " +
       'on their message, or "all"; never type a URL. A card goes up at once: it shows the fetch, ' +
-      "and the reader picks the topic on it. The tool does not wait for the fetch.",
+      "and the reader picks the topic on it. The tool does not wait for the fetch. A topic you think " +
+      "fits goes in `topic`, never in your reply.",
     parameters: Type.Object({
       link: Type.String({ description: 'The link\'s number in the app note (1-based), or "all".' }),
       topic: Type.Optional(
@@ -133,13 +180,8 @@ export function buildTakeLinkTool(deps: TakeLinkDeps): AgentTool {
       }
       if (taken.length === 0) throw new Error(`Could not start taking the link in. ${refused.join(" ")}`);
 
-      const cards = taken.length === 1 ? "The card is" : `${taken.length} cards are`;
-      const lines = [
-        `${cards} up in the conversation; the reader picks the topic there. Don't ask which topic, and don't wait for the fetch.`,
-      ];
-      if (refused.length > 0) lines.push(`Not started: ${refused.join(" ")}`);
       return {
-        text: lines.join(" "),
+        text: takenResult(taken.length, refused, deps.language?.() ?? replyLanguage()),
         receipt: { label: t("reader.intake.receiptLabel"), summary: taken.join(", ") },
       };
     },

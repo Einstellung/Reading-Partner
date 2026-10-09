@@ -85,7 +85,8 @@ export interface AgentTool {
   // The reader is not shown this call: no phase, no trace line, no receipt; it
   // stays in the stored trace. For bookkeeping the app does on its own behalf —
   // the memory writes — which is a record of the turn and not something the
-  // reader came here to read. A quiet tool is still a write with a receipt: the
+  // reader came here to read; and for a call whose card already stands for it
+  // in the conversation (the door's take_link). A quiet tool is still a write with a receipt: the
   // record is complete, it is only unshown, and a quiet call that fails keeps
   // its red line like any other.
   quiet?: true;

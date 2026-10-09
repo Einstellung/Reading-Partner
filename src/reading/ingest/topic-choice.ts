@@ -1,9 +1,10 @@
 // Which topic the intake card marks as Lumen's suggestion (topic-intake.ts).
 //
-// The program decides from what it has: a topic whose name appears in the link
-// or in what the reader said about it, and otherwise the topic used most
-// recently. A model that has seen the numbered list (topicMenu) may pick one by
-// its number instead; it answers with the number and never with an id.
+// A suggestion needs a basis, and there are two: the model's pick, made from the
+// numbered list (topicMenu) and named by its number, never by an id; or, when
+// the model named none, a topic whose name appears in the link or in what the
+// reader said about it. With neither, nothing is suggested: a guess the card
+// marks is one the reader has to read as Lumen's opinion.
 //
 // Pure: the topics are handed in.
 
@@ -68,11 +69,11 @@ export function lastUsed(topic: Topic): number {
   return at;
 }
 
-/** The topic a name in the link points at, else the one used most recently. Null for no topics. */
+/** The topic a name in the link points at, the most recently used of a tie. Null when no name is in it. */
 export function suggestTopic(topics: readonly Topic[], url: string, note?: string): Topic | null {
   const text = linkText(url, note);
   let best: Topic | null = null;
-  let bestScore = -1;
+  let bestScore = 0;
   for (const topic of topics) {
     const score = nameScore(topic.name, text);
     if (score > bestScore || (score === bestScore && best && lastUsed(topic) > lastUsed(best))) {
@@ -84,9 +85,9 @@ export function suggestTopic(topics: readonly Topic[], url: string, note?: strin
 }
 
 /**
- * The card's list, in the shelf's order and numbered from 1, with one marked.
- * `pick` is a model's 1-based choice from topicMenu; a number off the list is
- * ignored and the program's suggestion stands.
+ * The card's list, in the shelf's order and numbered from 1, with at most one
+ * marked. `pick` is a model's 1-based choice from topicMenu and is the
+ * suggestion whenever it is on the list; without one, a name match is.
  */
 export function topicChoicesOf(
   topics: readonly Topic[],
