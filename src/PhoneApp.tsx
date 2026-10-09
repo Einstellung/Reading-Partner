@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
-import { BRIEF_TOPIC_ID, listTopics, type Topic } from "./platform/app/topics";
+import { BRIEF_TOPIC_ID, listTopics, onImportMove, type Topic } from "./platform/app/topics";
 import { libraryHas, listLibraryEntries, type LibraryEntry } from "./platform/app/library";
 import {
   libraryFilePath,
@@ -201,6 +201,13 @@ export default function PhoneApp({
   useEffect(() => {
     void refreshSavedArticles();
   }, [refreshSavedArticles]);
+
+  // A book is on one topic, so an import of one another topic lists moved it
+  // (platform/app/topics.ts addFile).
+  useEffect(
+    () => onImportMove((move) => pushToast("info", t("shell.toast.movedFrom", { topic: move.from.name }))),
+    [pushToast, t],
+  );
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.

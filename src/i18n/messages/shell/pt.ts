@@ -9,6 +9,7 @@ export default {
   "toast.asideGone": "Essa conversa paralela não existe mais.",
   "toast.conversationsUnloadable": "Não foi possível carregar as conversas de IA salvas",
   "toast.cantShareFile": "Não foi possível enviar este arquivo para outro app.",
+  "toast.movedFrom": "Movido de “{topic}”",
 
   "call.askAboutThisTitle": "Perguntar sobre isto",
   "call.askAboutThisPlaceholder": "Perguntar sobre isto…",

@@ -125,9 +125,13 @@ function fakeDeps(world: World): KeptDocumentDeps {
       const t = world.topics.find((x) => x.id === topicId);
       if (t && !t.files.some((f) => f.path === path)) t.files.push(file(hash, path));
     },
-    removeFileFromTopic: async (topicId, path) => {
-      const t = world.topics.find((x) => x.id === topicId);
-      if (t) t.files = t.files.filter((f) => f.path !== path);
+    // The store's move: the row as it stands, off every other topic.
+    moveFileToTopic: async (hash, topicId) => {
+      const to = world.topics.find((x) => x.id === topicId);
+      const row = world.topics.flatMap((t) => t.files).find((f) => f.hash === hash);
+      if (!to || !row || to.files.some((f) => f.hash === hash)) return;
+      for (const t of world.topics) t.files = t.files.filter((f) => f.hash !== hash);
+      to.files.push(row);
     },
   };
 }

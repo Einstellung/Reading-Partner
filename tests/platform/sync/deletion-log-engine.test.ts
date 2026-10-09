@@ -23,9 +23,10 @@ import {
   DELETED_BOOKS_FILE,
   effectiveDeletions,
   tombstoneAt,
+  topicFileRevivals,
   type Tombstone,
 } from "../../../src/platform/app/deleted-books";
-import { pruneDeletedTopics, type Topic } from "../../../src/platform/app/topics";
+import { oneTopicPerBook, pruneDeletedTopics, type Topic } from "../../../src/platform/app/topics";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -426,6 +427,75 @@ test("a whole old topic put back by a device that does not merge per book does n
   const onDisk = (JSON.parse(A.text("topics.json")!) as { topics: Topic[] }).topics;
   expect(onDisk[0]!.files.map((f) => f.hash)).toEqual(["h1", "h2"]);
   expect(listed(A)).toEqual(["h1"]);
+});
+
+// --- one book moved to two topics (docs/reading/01 §一, docs/59 §11) -------
+//
+// Each device's store moves a book off the topic it was on. Two devices that
+// moved it to two topics each add a row the other never had, so the merge keeps
+// both; the store's read keeps the topic that claimed it last, on both.
+
+function three(t1: ReturnType<typeof ref>[], t2: ReturnType<typeof ref>[], t3: ReturnType<typeof ref>[]): string {
+  return topicsJson([
+    { id: "t1", name: "one", createdAt: 1, files: t1 },
+    { id: "t2", name: "two", createdAt: 2, files: t2 },
+    { id: "t3", name: "three", createdAt: 3, files: t3 },
+  ]);
+}
+
+function home(dev: ReturnType<typeof makeDevice>): string[] {
+  const onDisk = (JSON.parse(dev.text("topics.json")!) as { topics: Topic[] }).topics;
+  const shelf = oneTopicPerBook(
+    pruneDeletedTopics(onDisk, dev.dead()),
+    topicFileRevivals(dev.text(DELETED_BOOKS_FILE) ?? ""),
+  );
+  return shelf.filter((t) => t.files.some((f) => f.hash === "h1")).map((t) => t.id);
+}
+
+const moved = (at: string) => ({ ...ref("h1"), addedAt: Date.parse(at) });
+
+test("a book moved to two topics on two devices ends on the later one on both", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": three([ref("h1")], [], []) });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A);
+  const b = engineFor(remote, B);
+  await settle(a, b);
+
+  A.log({ kind: "topic-file", id: "t1/h1", op: "delete", at: T2 });
+  A.put("topics.json", three([], [moved(T2)], []));
+  B.log({ kind: "topic-file", id: "t1/h1", op: "delete", at: T1 });
+  B.put("topics.json", three([], [], [moved(T1)]));
+  await settle(a, b);
+
+  expect(A.text("topics.json")).toBe(B.text("topics.json"));
+  const onDisk = (JSON.parse(A.text("topics.json")!) as { topics: Topic[] }).topics;
+  expect(onDisk.filter((t) => t.files.length > 0).map((t) => t.id)).toEqual(["t2", "t3"]);
+  expect(home(A)).toEqual(["t2"]);
+  expect(home(B)).toEqual(["t2"]);
+});
+
+test("a revive is a claim: the topic the book was put back on last keeps it", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": three([ref("h1")], [], []) });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A);
+  const b = engineFor(remote, B);
+  await settle(a, b);
+
+  // A moves it back onto t2, which it had been taken off: the row is old, the
+  // revive is the latest claim. B moved it to t3 in between.
+  A.log({ kind: "topic-file", id: "t2/h1", op: "delete", at: T1 });
+  A.log({ kind: "topic-file", id: "t1/h1", op: "delete", at: T3 });
+  A.log({ kind: "topic-file", id: "t2/h1", op: "revive", at: T3 });
+  A.put("topics.json", three([], [ref("h1")], []));
+  B.log({ kind: "topic-file", id: "t1/h1", op: "delete", at: T2 });
+  B.put("topics.json", three([], [], [moved(T2)]));
+  await settle(a, b);
+
+  expect(A.text(DELETED_BOOKS_FILE)).toBe(B.text(DELETED_BOOKS_FILE));
+  expect(home(A)).toEqual(["t2"]);
+  expect(home(B)).toEqual(["t2"]);
 });
 
 // --- a log that will not read -----------------------------------------------

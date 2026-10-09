@@ -26,10 +26,13 @@ import {
   listTopics,
   markOpened,
   removeFileFromTopic,
+  moveFileToTopic,
+  onImportMove,
   renameTopic,
   setFileHash,
   createTopicStore,
   pruneDeletedFromTopics,
+  type FileMove,
   type Topic,
   type TopicFile,
   type TopicIo,
@@ -358,11 +361,124 @@ test("taking a book off a topic logs the pair, and a row handed back stays off t
   expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
 });
 
-test("the pair is the book on that topic only", async () => {
-  await addFileToTopic("t2", "/books/jit.pdf", "h1");
-  await removeFileFromTopic("t1", "/books/jit.pdf");
+// --- a book is on one topic (docs/reading/01 §一) ---------------------------
+
+test("importing a book another topic lists moves it, and says so", async () => {
+  const heard: FileMove[] = [];
+  const stop = onImportMove((m) => heard.push(m));
+  setSystemTime(new Date(Date.UTC(2026, 9, 9, 10)));
+  const move = await addFileToTopic("t2", "/downloads/jit.pdf", "h1");
+  setSystemTime();
+  stop();
+
+  const expected: FileMove = {
+    hash: "h1",
+    from: { id: "t1", name: "what makes JITs fast" },
+    to: { id: "t2", name: "attention" },
+  };
+  expect(move).toEqual(expected);
+  expect(heard).toEqual([expected]);
+  expect(disk.files.get(LOG)).toMatch(/^\{"kind":"topic-file","id":"t1\/h1","op":"delete","at":"[^"]+"\}\n$/);
+  expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
+  // The new row, with the open time "Continue reading" goes by.
+  expect(topicOnDisk("t2").files).toEqual([
+    { path: "/downloads/jit.pdf", name: "jit.pdf", addedAt: Date.UTC(2026, 9, 9, 10), hash: "h1", lastOpenedAt: 99 },
+  ]);
+});
+
+test("a book on no topic is added, and nothing is said", async () => {
+  const heard: FileMove[] = [];
+  const stop = onImportMove((m) => heard.push(m));
+  expect(await addFileToTopic("t2", "/books/new.pdf", "h9")).toBeNull();
+  stop();
+  expect(heard).toEqual([]);
+  expect(disk.files.has(LOG)).toBe(false);
+  expect(topicOnDisk("t2").files.map((f) => f.hash)).toEqual(["h9"]);
+});
+
+test("moving a book takes its row as it stands to the other topic", async () => {
+  const heard: FileMove[] = [];
+  const stop = onImportMove((m) => heard.push(m));
+  setSystemTime(new Date(Date.UTC(2026, 9, 9, 10)));
+  const move = await moveFileToTopic("h1", "t2");
+  setSystemTime();
+  stop();
+
+  expect(move?.from.id).toBe("t1");
+  expect(move?.to.id).toBe("t2");
+  // A move is not an import: the reader asked for it and sees it.
+  expect(heard).toEqual([]);
+  expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
+  expect(topicOnDisk("t2").files).toEqual([
+    { path: "/books/jit.pdf", name: "jit.pdf", addedAt: Date.UTC(2026, 9, 9, 10), lastOpenedAt: 99, hash: "h1" },
+  ]);
+  const ops = disk.files.get(LOG)!.trim().split("\n").map((l) => JSON.parse(l) as { id: string; op: string });
+  expect(ops.map((o) => `${o.id} ${o.op}`)).toEqual(["t1/h1 delete"]);
+
+  // Already there, a book no topic lists, a topic that is not there: nothing.
+  expect(await moveFileToTopic("h1", "t2")).toBeNull();
+  expect(await moveFileToTopic("h9", "t1")).toBeNull();
+  expect(await moveFileToTopic("h1", "nope")).toBeNull();
+});
+
+test("moving a book back onto a topic it was taken off revives the pair", async () => {
+  setSystemTime(new Date(Date.UTC(2026, 9, 9, 10)));
+  await moveFileToTopic("h1", "t2");
+  setSystemTime(new Date(Date.UTC(2026, 9, 9, 11)));
+  await moveFileToTopic("h1", "t1");
+  setSystemTime();
+  const ops = disk.files.get(LOG)!.trim().split("\n").map((l) => JSON.parse(l) as { id: string; op: string });
+  expect(ops.map((o) => `${o.id} ${o.op}`)).toEqual(["t1/h1 delete", "t2/h1 delete", "t1/h1 revive"]);
   const topics = await listTopics();
-  expect(topics.find((t) => t.id === "t2")!.files.map((f) => f.hash)).toEqual(["h1"]);
+  expect(topics.find((t) => t.id === "t1")!.files.map((f) => f.hash ?? f.path)).toEqual(["/books/tracing.pdf", "h1"]);
+  expect(topics.find((t) => t.id === "t2")!.files).toEqual([]);
+});
+
+// A merge put one book on two topics: two devices moved it to two topics, or an
+// older client listed it twice.
+function onTwo(t1AddedAt: number, t2AddedAt: number): void {
+  const twice = structuredClone(SHELF);
+  twice.topics[0]!.files[0]!.addedAt = t1AddedAt;
+  twice.topics[1]!.files.push({ path: "/other/jit.pdf", name: "jit.pdf", addedAt: t2AddedAt, hash: "h1" });
+  disk.files.set(TOPICS_FILE, JSON.stringify(twice, null, 2));
+}
+
+function holders(topics: Topic[]): string[] {
+  return topics.filter((t) => t.files.some((f) => f.hash === "h1")).map((t) => t.id).sort();
+}
+
+test("a book a merge left on two topics stays on the one that took it last", async () => {
+  onTwo(10, 50);
+  expect(holders(await listTopics())).toEqual(["t2"]);
+  expect(await pruneDeletedFromTopics()).toBe(true);
+  expect(holders(onDisk().topics)).toEqual(["t2"]);
+  expect(await pruneDeletedFromTopics()).toBe(false);
+});
+
+test("a later revive outranks a later row, and a tie goes to the smaller topic id", async () => {
+  onTwo(10, 50);
+  disk.files.set(
+    LOG,
+    '{"kind":"topic-file","id":"t1/h1","op":"delete","at":"1970-01-01T00:00:00.020Z"}\n' +
+      '{"kind":"topic-file","id":"t1/h1","op":"revive","at":"1970-01-01T00:00:00.090Z"}\n',
+  );
+  expect(holders(await listTopics())).toEqual(["t1"]);
+
+  disk.files.delete(LOG);
+  onTwo(50, 50);
+  expect(holders(await listTopics())).toEqual(["t1"]);
+});
+
+test("rows with no book id are on every topic that lists them", async () => {
+  const twice = structuredClone(SHELF);
+  twice.topics[1]!.files.push({ path: "/books/tracing.pdf", name: "tracing.pdf", addedAt: 30 });
+  const json = JSON.stringify(twice, null, 2);
+  disk.files.set(TOPICS_FILE, json);
+  const topics = await listTopics();
+  expect(topics.find((t) => t.id === "t2")!.files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
+  expect(topics.find((t) => t.id === "t1")!.files.map((f) => f.path)).toEqual(["/books/jit.pdf", "/books/tracing.pdf"]);
+  expect(await pruneDeletedFromTopics()).toBe(false);
+  expect(disk.files.get(TOPICS_FILE)).toBe(json);
 });
 
 test("putting the book back on the topic revives the pair", async () => {

@@ -323,7 +323,7 @@ export const PALACE = [
     shape: { kind: "array", container: "topics", idField: "id" },
     deleteWith: "never",
     retention: NEVER,
-    note: "a book on a topic is its own merge unit, keyed by its hash, so an open time on one device and a book taken off on the other both stand; taking a book off is logged as a topic-file event so a merge with no base or a 0.22 client settling the topic whole cannot hand it back (docs/59 §11)",
+    note: "a book on a topic is its own merge unit, keyed by its hash, so an open time on one device and a book taken off on the other both stand; taking a book off is logged as a topic-file event so a merge with no base or a 0.22 client settling the topic whole cannot hand it back. A book is on one topic: filing it under another moves it, and a merge that lands it on two keeps the topic that claimed it last (oneTopicPerBook, docs/59 §11)",
   },
   {
     kind: "deleted-books",

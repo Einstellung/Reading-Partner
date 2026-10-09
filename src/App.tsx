@@ -24,6 +24,7 @@ import {
   listTopics,
   markOpened,
   mostRecentlyOpened,
+  onImportMove,
   type FileRef,
   type Topic,
 } from "./platform/app/topics";
@@ -938,6 +939,14 @@ export default function App() {
           });
       }),
     [openFile, pushToast, t],
+  );
+
+  // A book is on one topic, so an import of one another topic lists moved it
+  // (platform/app/topics.ts addFile). Whichever door it came in by, it is said
+  // here.
+  useEffect(
+    () => onImportMove((move) => pushToast("info", t("shell.toast.movedFrom", { topic: move.from.name }))),
+    [pushToast, t],
   );
 
   // The desk's door. The book is imported as it is picked, the same as on the

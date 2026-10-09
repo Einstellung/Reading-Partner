@@ -8,6 +8,7 @@ export default {
   "toast.asideGone": "Этого бокового разговора больше нет.",
   "toast.conversationsUnloadable": "Не удалось загрузить сохранённые разговоры с ИИ",
   "toast.cantShareFile": "Не удалось передать этот файл другому приложению.",
+  "toast.movedFrom": "Перемещено из «{topic}»",
 
   "call.askAboutThisTitle": "Спросить об этом",
   "call.askAboutThisPlaceholder": "Спросить об этом…",

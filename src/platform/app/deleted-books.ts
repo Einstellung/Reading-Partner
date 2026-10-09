@@ -135,6 +135,19 @@ export function effectiveDeletions(text: string): Deletions {
   return out;
 }
 
+/**
+ * When each "topic-file" pair whose latest event is a revive was put back, by
+ * id: the moment a topic last claimed a book (platform/app/topics.ts,
+ * oneTopicPerBook).
+ */
+export function topicFileRevivals(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const t of latest(text).values()) {
+    if (t.kind === "topic-file" && t.op === "revive") out.set(t.id, t.at);
+  }
+  return out;
+}
+
 export function isDeleted(deletions: Deletions, kind: TombstoneKind, id: string): boolean {
   return deletions[kind].has(id);
 }
@@ -191,6 +204,11 @@ async function readText(): Promise<string> {
 /** Everything this device knows to be deleted. Throws when the log is there and will not read. */
 export async function readDeletions(): Promise<Deletions> {
   return effectiveDeletions(await readText());
+}
+
+/** When each book was last put back onto a topic (topicFileRevivals). */
+export async function readTopicFileRevivals(): Promise<Map<string, string>> {
+  return topicFileRevivals(await readText());
 }
 
 /** Every book id this device knows to be deleted. */

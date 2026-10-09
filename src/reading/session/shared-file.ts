@@ -15,10 +15,11 @@
 // this door rather than at the first open because the Inbox copy belongs to the
 // system and may be swept, leaving a row pointing at nothing.
 //
-// The destination is the Brief topic, always: the share sheet is outside the
-// app, so whichever topic happened to be open says nothing about the document.
-// docs/21 — what cannot be classified goes to the default topic, and the AI
-// proposes moving it into a real one from there.
+// The destination is the Brief topic: the share sheet is outside the app, so
+// whichever topic happened to be open says nothing about the document. docs/21
+// — what cannot be classified goes to the default topic, and the AI proposes
+// moving it into a real one from there. A book already on a topic was
+// classified, and a book is on one topic, so it stays there and opens there.
 
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { isTauri } from "../../platform/app/host";
@@ -127,11 +128,11 @@ export interface SharedBookIo extends FileBookIo {
 export const sharedBookIo: SharedBookIo = { ...fileBookIo, ensureBriefTopic, listTopics };
 
 /**
- * Import a shared book into the default topic and answer with the row to open.
- * Null when the URL named no book, when the bytes turn out to be neither format
- * the reader opens, or when the topic store refused the path — the store owns
- * what a row looks like, so the row is read back from it rather than assembled
- * here.
+ * Import a shared book into the default topic, or leave it on the topic it is
+ * already on, and answer with the row to open. Null when the URL named no book,
+ * when the bytes turn out to be neither format the reader opens, or when the
+ * topic store refused the path — the store owns what a row looks like, so the
+ * row is read back from it rather than assembled here.
  */
 export async function fileSharedBook(
   url: string,
@@ -140,9 +141,19 @@ export async function fileSharedBook(
   const path = sharedBookPath(url);
   if (path === null) return null;
   const topic = await io.ensureBriefTopic();
-  const imported = await fileBook(topic.id, path, BOOKS, io);
+  const imported = await fileBook(topic.id, path, BOOKS, {
+    ...io,
+    addFileToTopic: async (topicId, p, hash, name) => {
+      if ((await io.listTopics()).some((t) => t.files.some((f) => f.hash === hash))) return null;
+      return io.addFileToTopic(topicId, p, hash, name);
+    },
+  });
   if (imported.kind !== "imported") return null;
-  const filed = (await io.listTopics()).find((t) => t.id === topic.id);
-  const file = filed?.files.find((f) => f.path === imported.path);
+  const topics = await io.listTopics();
+  for (const t of topics) {
+    const file = t.files.find((f) => f.hash === imported.bookId);
+    if (file) return { topicId: t.id, file };
+  }
+  const file = topics.find((t) => t.id === topic.id)?.files.find((f) => f.path === imported.path);
   return file ? { topicId: topic.id, file } : null;
 }

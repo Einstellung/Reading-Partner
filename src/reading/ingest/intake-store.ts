@@ -96,7 +96,7 @@ export interface IntakeIo {
   read(path: string): Promise<string | null>;
   write(path: string, text: string): Promise<void>;
   /** List a library document in a topic. Idempotent by hash. */
-  attachToTopic(topicId: string, path: string, hash: string): Promise<void>;
+  attachToTopic(topicId: string, path: string, hash: string): Promise<unknown>;
   newId(): string;
   now(): number;
 }

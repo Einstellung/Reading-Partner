@@ -14,7 +14,7 @@ import {
   BRIEF_TOPIC_ID,
   ensureBriefTopic,
   listTopics,
-  removeFileFromTopic,
+  moveFileToTopic,
   type FileRef,
   type Topic,
 } from "../../platform/app/topics";
@@ -125,8 +125,8 @@ export interface KeptDocumentDeps {
   listTopics(): Promise<Topic[]>;
   ensureBriefTopic(): Promise<unknown>;
   getLibraryEntry(hash: string): Promise<LibraryEntry | null>;
-  addFileToTopic(topicId: string, path: string, hash: string): Promise<void>;
-  removeFileFromTopic(topicId: string, path: string): Promise<void>;
+  addFileToTopic(topicId: string, path: string, hash: string): Promise<unknown>;
+  moveFileToTopic(hash: string, topicId: string): Promise<unknown>;
 }
 
 export const liveKeptDocumentDeps: KeptDocumentDeps = {
@@ -137,7 +137,7 @@ export const liveKeptDocumentDeps: KeptDocumentDeps = {
   ensureBriefTopic,
   getLibraryEntry,
   addFileToTopic: (topicId, path, hash) => addFileToTopic(topicId, path, hash),
-  removeFileFromTopic,
+  moveFileToTopic,
 };
 
 /**
@@ -147,9 +147,9 @@ export const liveKeptDocumentDeps: KeptDocumentDeps = {
  * such record or it could not be rewritten, and then the document is left where
  * it is too.
  *
- * The document is listed in the new topic under the reference it already has,
- * so it is the same row, and taken out of the topic the record was in. A record
- * with no document is only the record moving, as it always was.
+ * The document moves under the reference it already has, so it is the same
+ * row; a book is on one topic, so it leaves the one it was on. A record with no
+ * document is only the record moving, as it always was.
  */
 export async function moveKeptArticle(
   id: string,
@@ -165,22 +165,14 @@ export async function moveKeptArticle(
   // Brief is the one topic a move can name before it exists: a deleted topic's
   // articles go there, and Brief may have been deleted itself.
   if (topicId === BRIEF_TOPIC_ID) await deps.ensureBriefTopic();
-  const topics = await deps.listTopics();
-  const listed = keptDocumentFile(article, topics);
-  let path = listed?.file.path;
-  if (path === undefined) {
-    const entry = await deps.getLibraryEntry(hash);
-    // Not in the library either: there is no document left to file.
-    if (!entry) return true;
-    path = documentPath(hash, entry.originalFilename);
+  if (keptDocumentFile(article, await deps.listTopics())) {
+    await deps.moveFileToTopic(hash, topicId);
+    return true;
   }
-  await deps.addFileToTopic(topicId, path, hash);
-  if (article.topicId !== topicId) {
-    const from = topics.find((t) => t.id === article.topicId);
-    for (const file of from?.files ?? []) {
-      if (file.hash === hash) await deps.removeFileFromTopic(article.topicId, file.path);
-    }
-  }
+  const entry = await deps.getLibraryEntry(hash);
+  // Not in the library either: there is no document left to file.
+  if (!entry) return true;
+  await deps.addFileToTopic(topicId, documentPath(hash, entry.originalFilename), hash);
   return true;
 }
 
