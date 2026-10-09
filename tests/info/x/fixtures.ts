@@ -97,7 +97,6 @@ export function fakeX(
   posts: Record<string, unknown>[],
   pages: Record<string, PageAttempt> | null,
   redirects: Record<string, string> = {},
-  claimed: (url: string) => boolean = () => false,
 ): FakeX {
   const pagesRead: string[] = [];
   const fetched: string[] = [];
@@ -118,7 +117,6 @@ export function fakeX(
           }
         : null,
       resolveRedirect: async (url) => redirects[url] ?? null,
-      claimedBySite: claimed,
     },
   };
 }

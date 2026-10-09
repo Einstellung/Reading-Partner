@@ -9,7 +9,7 @@ import { isTauri } from "../../platform/app/host";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import { fetchWithRetry } from "../../platform/http/throttled-fetch";
-import { siteAdapterFor, type FetchBytes } from "../../workshop/bindery";
+import type { FetchBytes } from "../../workshop/bindery";
 import { fetchPageViaWebview } from "../../workshop/extract/webview-page";
 import { registerLinkReader } from "../links/readers";
 import { tcoTarget } from "./outbound";
@@ -45,9 +45,9 @@ async function resolveRedirect(url: string): Promise<string | null> {
 }
 
 /** Reading an X post with the real host: the embed, and the hidden webview where there is one. */
-export function liveXReadDeps(fetchBytes: FetchBytes = embedFetch): XReadDeps {
+function liveXReadDeps(): XReadDeps {
   return {
-    fetch: fetchBytes,
+    fetch: embedFetch,
     readPage: hasWebviewFetch()
       ? async (url) => {
           const page = await fetchPageViaWebview(url, {
@@ -59,7 +59,6 @@ export function liveXReadDeps(fetchBytes: FetchBytes = embedFetch): XReadDeps {
         }
       : null,
     resolveRedirect,
-    claimedBySite: (link) => siteAdapterFor({ kind: "url", url: link }) !== null,
   };
 }
 

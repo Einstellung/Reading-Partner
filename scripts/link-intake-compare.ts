@@ -1,11 +1,10 @@
 #!/usr/bin/env bun
 // The docs/86 「第一期」 comparison: the eight X links of docs/84 「实测」, taken
-// in by the rule path (reading/ingest/x-post.ts) once and by the link agent
-// (takeLinkInFiled) N times per model, each run judged against the documents
-// docs/86 says each link should bring in.
+// in by the link agent (takeLinkInFiled) N times per model, each run judged
+// against the documents docs/86 says each link should bring in.
 //
-//   bun scripts/link-intake-compare.ts --model claude-haiku-5-5 [--model …] [--runs 3]
-//       [--only handle,handle] [--no-rule] [--reasoning medium] [--cache DIR] [--out DIR]
+//   bun scripts/link-intake-compare.ts --model claude-sonnet-5-5 [--model …] [--runs 3]
+//       [--only handle,handle] [--reasoning medium] [--cache DIR] [--out DIR]
 //   bun scripts/link-intake-compare.ts --dry-run
 //
 // Live runs use the real network and the user's own Anthropic sign-in, read the
@@ -50,8 +49,7 @@ import type { ImportMeta, LibraryEntry } from "../src/platform/app/library";
 import { createSessionFileSystem } from "../src/platform/app/session-fs";
 import type { ArticleIngestDeps, IngestTarget } from "../src/reading/ingest/article";
 import { takeLinkInFiled } from "../src/reading/ingest/link-intake";
-import { ingestXPost } from "../src/reading/ingest/x-post";
-import { siteAdapterFor, type FetchedBytes } from "../src/workshop/bindery";
+import type { FetchedBytes } from "../src/workshop/bindery";
 import { loadExtractReadable } from "../src/workshop/extract/readable-lazy";
 import { memoryAppData } from "../tests/support/memory-appdata";
 import { DRY_RUN_PAGES, dryRunX, registerDryRunAdapters } from "./link-intake-compare/fixtures";
@@ -133,7 +131,6 @@ interface Options {
   models: string[];
   runs: number;
   only: string[] | null;
-  rule: boolean;
   dryRun: boolean;
   reasoning: ThinkingLevel | undefined;
   cache: string | null;
@@ -141,7 +138,7 @@ interface Options {
 }
 
 function parseArgs(argv: string[]): Options {
-  const o: Options = { models: [], runs: 3, only: null, rule: true, dryRun: false, reasoning: "medium", cache: null, out: null };
+  const o: Options = { models: [], runs: 3, only: null, dryRun: false, reasoning: "medium", cache: null, out: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -152,7 +149,6 @@ function parseArgs(argv: string[]): Options {
     if (a === "--model") o.models.push(...next().split(",").map((m) => m.replace(/^anthropic\//, "")));
     else if (a === "--runs") o.runs = Number(next());
     else if (a === "--only") o.only = next().split(",").map((h) => h.toLowerCase());
-    else if (a === "--no-rule") o.rule = false;
     else if (a === "--dry-run") o.dryRun = true;
     else if (a === "--reasoning") {
       const v = next();
@@ -162,7 +158,7 @@ function parseArgs(argv: string[]): Options {
     else throw new Error(`unknown argument ${a}`);
   }
   if (o.dryRun && o.models.length === 0) o.models = ["scripted"];
-  if (!o.dryRun && o.models.length === 0 && o.rule === false) throw new Error("nothing to run: give --model or drop --no-rule");
+  if (!o.dryRun && o.models.length === 0) throw new Error("nothing to run: give --model");
   if (!Number.isInteger(o.runs) || o.runs < 1) throw new Error("--runs takes a positive integer");
   return o;
 }
@@ -261,7 +257,6 @@ function liveX(kept: Kept, fetchBytes: (url: string) => Promise<FetchedBytes>, s
       if (to) await kept.put("redirect", url, { to });
       return to;
     },
-    claimedBySite: (link) => siteAdapterFor({ kind: "url", url: link }) !== null,
   };
 }
 
@@ -453,7 +448,6 @@ interface Doc {
 }
 
 interface RunRecord {
-  path: "rule" | "ai";
   model: string;
   run: number;
   handle: string;
@@ -494,31 +488,6 @@ interface Env {
 
 const TARGET: IngestTarget = { kind: "book", bookId: "link-intake-compare" };
 
-async function runRule(link: LinkCase, env: Env): Promise<RunRecord> {
-  const shelved: Shelved[] = [];
-  const t0 = performance.now();
-  const base = { path: "rule" as const, model: "rule", run: 1, handle: link.handle, rejected: [], toolCalls: 0, rounds: 0, finishCalls: 0, usage: noUsage(), trail: [] };
-  try {
-    const batch = await ingestXPost(link.url, TARGET, {
-      fetch: env.fetch,
-      extractReadable: env.extractReadable,
-      ...tempShelf(join(env.out, "files", link.handle, "rule"), shelved),
-      x: env.x,
-      saveRecord: async () => {},
-    });
-    const documents = batch.documents.map((d) => ({
-      url: d.entry.sourceUrl ?? "",
-      title: d.title,
-      format: d.entry.format === "pdf" ? "pdf" : d.kind === "article" ? "article" : String(d.entry.format ?? d.kind),
-      chars: d.chars,
-    }));
-    return { ...base, ms: performance.now() - t0, documents, stop: "rules", lead: batch.lead, notes: batch.notes, error: null, verdict: judge(link, documents) };
-  } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
-    return { ...base, ms: performance.now() - t0, documents: [], stop: "error", lead: "", notes: [], error, verdict: { pass: false, missing: link.want.map((w) => w.label), extra: [] } };
-  }
-}
-
 /** The turn with its finish tool counted. */
 function countingFinish(turn: SubagentTurnFn, counts: { finish: number }): SubagentTurnFn {
   return (request) =>
@@ -543,7 +512,7 @@ async function runAi(link: LinkCase, env: Env, model: string, run: number, model
   const t0 = performance.now();
   const counts = { finish: 0 };
   const turn = countingFinish(modelTurn, counts);
-  const base = { path: "ai" as const, model, run, handle: link.handle };
+  const base = { model, run, handle: link.handle };
   try {
     const got = await takeLinkInFiled(link.url, TARGET, {
       fetch: env.fetch,
@@ -604,10 +573,10 @@ function pad(s: string, n: number): string {
   return s.length >= n ? s : s + " ".repeat(n - s.length);
 }
 
-function report(records: RunRecord[], links: LinkCase[], models: string[], runs: number, rule: boolean): string {
+function report(records: RunRecord[], links: LinkCase[], models: string[], runs: number): string {
   const lines: string[] = [];
-  const cols = [...(rule ? [{ key: "rule", label: "rule" }] : []), ...models.flatMap((m) => Array.from({ length: runs }, (_, i) => ({ key: `${m}#${i + 1}`, label: `${m.replace(/^claude-/, "")} ${i + 1}` })))];
-  const at = (r: RunRecord) => (r.path === "rule" ? "rule" : `${r.model}#${r.run}`);
+  const cols = models.flatMap((m) => Array.from({ length: runs }, (_, i) => ({ key: `${m}#${i + 1}`, label: `${m.replace(/^claude-/, "")} ${i + 1}` })));
+  const at = (r: RunRecord) => `${r.model}#${r.run}`;
   lines.push([pad("link", 14), ...cols.map((c) => pad(c.label, Math.max(6, c.label.length)))].join("  "));
   for (const link of links) {
     const row = cols.map((c) => {
@@ -627,7 +596,7 @@ function report(records: RunRecord[], links: LinkCase[], models: string[], runs:
   }
   lines.push("");
   for (const m of models) {
-    const rs = records.filter((r) => r.path === "ai" && r.model === m);
+    const rs = records.filter((r) => r.model === m);
     if (rs.length === 0) continue;
     const n = rs.length;
     const sum = (f: (r: RunRecord) => number) => rs.reduce((s, r) => s + f(r), 0);
@@ -638,8 +607,6 @@ function report(records: RunRecord[], links: LinkCase[], models: string[], runs:
         `finish called in ${rs.filter((r) => r.finishCalls > 0).length}/${n}`,
     );
   }
-  const ruleRs = records.filter((r) => r.path === "rule");
-  if (ruleRs.length) lines.push(`rule: ${ruleRs.filter((r) => r.verdict.pass).length}/${ruleRs.length} pass; per link ${(ruleRs.reduce((s, r) => s + r.ms, 0) / ruleRs.length / 1000).toFixed(1)} s`);
   return lines.join("\n");
 }
 
@@ -683,12 +650,11 @@ async function main(): Promise<void> {
     records.push(r);
     await writeFile(log, `${JSON.stringify(r)}\n`, { flag: "a" });
     const docs = r.documents.map((d) => short(d.url)).join(", ") || "nothing";
-    const cost = r.path === "ai" && !opts.dryRun ? ` $${r.usage.cost.toFixed(4)}` : "";
-    console.log(`${r.verdict.pass ? "pass" : "FAIL"} ${r.path === "rule" ? "rule" : `${r.model}#${r.run}`} ${r.handle} ${(r.ms / 1000).toFixed(1)}s${cost} ${r.toolCalls} calls ${r.rounds} rounds${r.path === "ai" ? (r.finishCalls > 0 ? " finish" : " NO-FINISH") : ""}: ${docs}${r.error ? ` — ${r.error}` : ""}`);
+    const cost = opts.dryRun ? "" : ` $${r.usage.cost.toFixed(4)}`;
+    console.log(`${r.verdict.pass ? "pass" : "FAIL"} ${r.model}#${r.run} ${r.handle} ${(r.ms / 1000).toFixed(1)}s${cost} ${r.toolCalls} calls ${r.rounds} rounds${r.finishCalls > 0 ? " finish" : " NO-FINISH"}: ${docs}${r.error ? ` — ${r.error}` : ""}`);
   };
 
   for (const link of links) {
-    if (opts.rule) await keep(await runRule(link, env));
     for (const model of opts.models) {
       for (let run = 1; run <= opts.runs; run++) {
         const usage = noUsage();
@@ -698,7 +664,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const table = report(records, links, opts.models, opts.runs, opts.rule);
+  const table = report(records, links, opts.models, opts.runs);
   await writeFile(join(out, "report.txt"), `${table}\n`);
   console.log(`\n${table}`);
 }

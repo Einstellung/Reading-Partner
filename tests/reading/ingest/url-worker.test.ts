@@ -159,3 +159,27 @@ test("the kind runs here but never appears in the delegate catalogue", () => {
   expect(registeredWorkerKinds()).toContain(INGEST_URL_KIND);
   expect(delegableWorkerKinds()).not.toContain(INGEST_URL_KIND);
 });
+
+// An X link goes to the link agent (docs/86): it is handed what the reader said,
+// each host it reads becomes the run's progress line, and the receipt's lead and
+// notes go either side of the documents' lines.
+test("a link taken in as a batch gets the reader's note, reports its hosts and says the receipt", async () => {
+  const handed: { note?: string }[] = [];
+  const d = deps({
+    readAsk: async () => JSON.stringify({ url: "https://x.com/a/status/1", bookId: "book-1", note: "the repo it shares" }),
+    ingest: async (_url, _bookId, context) => {
+      handed.push({ ...(context.note ? { note: context.note } : {}) });
+      context.report?.("repo.test");
+      return { documents: [document()], lead: "From @a's post.", notes: ["Path: #1 → #2."] };
+    },
+  });
+  const { ctx, reported } = context();
+  await ingestUrlWorker(d)(ASK, ctx).done;
+  expect(handed).toEqual([{ note: "the repo it shares" }]);
+  expect(reported[0]).toContain("x.com");
+  expect(reported[1]).toContain("repo.test");
+  const line = d.outputs.get("legion/outputs/r-ingest.md")!;
+  expect(line.startsWith("From @a's post. ")).toBe(true);
+  expect(line).toContain("A Paper");
+  expect(line.endsWith("Path: #1 → #2.")).toBe(true);
+});

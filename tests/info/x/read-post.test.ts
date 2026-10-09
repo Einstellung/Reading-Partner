@@ -3,7 +3,7 @@ import { tcoTarget } from "../../../src/info/x/outbound";
 import { classifyOutbound as classifyHint } from "../../../src/info/links/hints";
 import { postBodyLines } from "../../../src/info/x/permalink";
 import { largePhoto, parseSyndication, syndicationToken, xPostOfUrl } from "../../../src/info/x/post";
-import { readXPost, type XReading } from "../../../src/info/x/rules";
+import { readPost, type XPostRead } from "../../../src/info/x/read-post";
 import { htmlToText } from "../../../src/workshop/extract/sanitize";
 import {
   ARTICLE_BODY,
@@ -21,7 +21,7 @@ const ID = "2106807332688580789";
 const URL_ = `https://x.com/0xMovez/status/${ID}`;
 const PERMALINK = `https://x.com/0xMovez/status/${ID}`;
 
-function read(result: Awaited<ReturnType<typeof readXPost>>): XReading {
+function read(result: Awaited<ReturnType<typeof readPost>>): XPostRead {
   if (!result.ok) throw new Error(`rejected: ${result.message}`);
   return result;
 }
@@ -60,16 +60,16 @@ test("the embed's long-post text is never taken as whole, its links and photos a
 
 test("a short post with no link is kept as a record and nothing else, without a page load", async () => {
   const x = fakeX([syn({ id_str: ID, text: "Good morning.", display_text_range: [0, 13] })], {});
-  const got = read(await readXPost(URL_, x.deps));
-  expect(got.documents).toEqual([]);
-  expect(got.follow).toEqual([]);
+  const got = read(await readPost(URL_, x.deps));
+  expect(got.own).toEqual([]);
+  expect(got.links).toEqual([]);
   expect(got.skipped).toEqual([]);
   expect(got.record.text).toBe("Good morning.");
   expect(got.record.textComplete).toBe(true);
   expect(x.pagesRead).toEqual([]);
 });
 
-test("a short post's links are followed: entities and the card's t.co, homepages and X links not", async () => {
+test("a short post's links are all listed, the card's t.co expanded", async () => {
   const x = fakeX(
     [
       syn({
@@ -88,12 +88,13 @@ test("a short post's links are followed: entities and the card's t.co, homepages
     {},
     { "https://t.co/card": "https://github.com/amontlabs/lcu" },
   );
-  const got = read(await readXPost(URL_, x.deps));
-  expect(got.follow.map((f) => [f.kind, f.url])).toEqual([
-    ["drive", "https://drive.google.com/file/d/1PT/view"],
-    ["github", "https://github.com/amontlabs/lcu"],
+  const got = read(await readPost(URL_, x.deps));
+  expect(got.links.map((l) => [l.origin, l.url])).toEqual([
+    ["body", "https://drive.google.com/file/d/1PT/view"],
+    ["body", "https://fly.io/"],
+    ["card", "https://github.com/amontlabs/lcu"],
   ]);
-  expect(got.skipped).toEqual([{ subject: "https://fly.io/", reason: "a site's homepage" }]);
+  expect(got.skipped).toEqual([]);
   expect(got.record.links).toContain("https://github.com/amontlabs/lcu");
   expect(x.pagesRead).toEqual([]);
 });
@@ -123,10 +124,10 @@ test("a long post's text comes from the page, with the links the embed cut off a
     },
     { "https://t.co/pdf": "https://drive.google.com/file/d/LOCAL/view?usp=drive_link" },
   );
-  const got = read(await readXPost(URL_, x.deps));
+  const got = read(await readPost(URL_, x.deps));
   expect(x.pagesRead).toEqual([PERMALINK]);
-  // It leads somewhere, so it is a lead: its words are the record, not a document.
-  expect(got.documents).toEqual([]);
+  // Read whole, so it is offered as content; whether it is only a lead is the link agent's call.
+  expect(got.own.map((d) => d.postId)).toEqual([ID]);
   expect(got.record.text).toContain("which of my 1000 calls ever needed the smart one");
   expect(got.record.text).not.toContain("Show translation");
   expect(got.record.text).not.toContain("Views");
@@ -134,9 +135,9 @@ test("a long post's text comes from the page, with the links the embed cut off a
   expect(got.record.selfReplies).toHaveLength(1);
   expect(got.record.selfReplies?.[0]).toContain("Local LLM Thesis:");
   expect(got.record.images).toContain("https://pbs.twimg.com/media/P1?format=jpg&name=large");
-  expect(got.follow.map((f) => f.url)).toEqual([
-    "https://github.com/MervinPraison/PraisonAI",
-    "https://drive.google.com/file/d/LOCAL/view?usp=drive_link",
+  expect(got.links.map((l) => [l.origin, l.url])).toEqual([
+    ["body", "https://github.com/MervinPraison/PraisonAI"],
+    ["self-reply", "https://drive.google.com/file/d/LOCAL/view?usp=drive_link"],
   ]);
 });
 
@@ -149,10 +150,10 @@ test("a long post that links nowhere becomes its own document, from the page", a
       images: ["https://pbs.twimg.com/media/P1?format=webp&name=small"],
     }),
   });
-  const got = read(await readXPost(URL_, x.deps));
-  expect(got.follow).toEqual([]);
-  expect(got.documents).toHaveLength(1);
-  const doc = got.documents[0];
+  const got = read(await readPost(URL_, x.deps));
+  expect(got.links).toEqual([]);
+  expect(got.own).toHaveLength(1);
+  const doc = got.own[0];
   const text = htmlToText(doc.html);
   expect(text).toContain("which of my 1000 calls ever needed the smart one");
   expect(text).not.toContain("Show translation");
@@ -162,7 +163,7 @@ test("a long post that links nowhere becomes its own document, from the page", a
   expect(doc.author).toBe("Movez (@0xMovez)");
 });
 
-test("an Article's body comes from the page, under its title, and its own links are not followed", async () => {
+test("an Article's body comes from the page, under its title, and its own links are marked as the Article's", async () => {
   const body = ARTICLE_BODY.join("\n\n");
   const x = fakeX([articlePost(ID)], {
     [PERMALINK]: page({
@@ -176,21 +177,21 @@ test("an Article's body comes from the page, under its title, and its own links 
       links: [{ href: "https://github.com/a/skill", text: "https://github.com/a/skill" }],
     }),
   });
-  const got = read(await readXPost(URL_, x.deps));
-  expect(got.documents).toHaveLength(1);
-  const doc = got.documents[0];
+  const got = read(await readPost(URL_, x.deps));
+  expect(got.own).toHaveLength(1);
+  const doc = got.own[0];
   expect(doc.shape).toBe("article");
   expect(doc.title).toBe(ARTICLE_TITLE);
   const text = htmlToText(doc.html);
   expect(text.startsWith(ARTICLE_BODY[0])).toBe(true);
   expect(text).not.toContain("3.3K");
   expect(doc.html).toContain("IN1?format=jpg");
-  expect(got.follow).toEqual([]);
+  expect(got.links.map((l) => [l.origin, l.url])).toEqual([["article", "https://github.com/a/skill"]]);
   expect(got.record.articleTitle).toBe(ARTICLE_TITLE);
   expect(got.record.textComplete).toBe(false);
 });
 
-test("a quoted Article goes through the same decision and becomes its own document", async () => {
+test("a quoted Article read whole is content of its own", async () => {
   const QID = "2106761689123139973";
   const quoting = syn({
     id_str: ID,
@@ -205,8 +206,8 @@ test("a quoted Article goes through the same decision and becomes its own docume
       text: focalText("0xMovez", `${ARTICLE_TITLE}\n\n${ARTICLE_BODY.join("\n\n")}`),
     }),
   });
-  const got = read(await readXPost(URL_, x.deps));
-  expect(got.documents.map((d) => [d.postId, d.title])).toEqual([[QID, ARTICLE_TITLE]]);
+  const got = read(await readPost(URL_, x.deps));
+  expect(got.own.map((d) => [d.postId, d.title])).toEqual([[QID, ARTICLE_TITLE]]);
   expect(got.record.quoted?.id).toBe(QID);
   expect(got.record.quoted?.shape).toBe("article");
 });
@@ -224,59 +225,53 @@ test("a quoted short post is put under the long post that quotes it", async () =
       }),
     },
   );
-  const got = read(await readXPost(URL_, x.deps));
-  expect(got.documents).toHaveLength(1);
-  const text = htmlToText(got.documents[0].html);
+  const got = read(await readPost(URL_, x.deps));
+  expect(got.own).toHaveLength(1);
+  const text = htmlToText(got.own[0].html);
   // Once, as the blockquote, not again as the page's copy of the quote card.
   expect(text.split("the original claim")).toHaveLength(2);
-  expect(got.documents[0].html).toContain("<blockquote>");
+  expect(got.own[0].html).toContain("<blockquote>");
 });
 
-test("with no hidden webview a long post is not filed from the embed's opening; its links still are", async () => {
+test("with no hidden webview a long post is not offered from the embed's opening; its links still are", async () => {
   const x = fakeX(
     [longPost(ID, { entities: { urls: [{ url: "https://t.co/g", expanded_url: "https://github.com/robotbird/pi-durable-book" }] } })],
     null,
   );
-  const got = read(await readXPost(URL_, x.deps));
-  expect(got.documents).toEqual([]);
+  const got = read(await readPost(URL_, x.deps));
+  expect(got.own).toEqual([]);
   expect(got.record.textComplete).toBe(false);
   expect(got.skipped).toHaveLength(1);
   expect(got.skipped[0].needsDesktop).toBe(true);
   expect(got.skipped[0].reason).toContain("this device cannot read");
-  expect(got.follow.map((f) => f.url)).toEqual(["https://github.com/robotbird/pi-durable-book"]);
+  expect(got.links.map((l) => l.url)).toEqual(["https://github.com/robotbird/pi-durable-book"]);
 });
 
 test("a page that shows no post, or less than the embed, files nothing and says why", async () => {
   const empty = fakeX([longPost(ID)], {});
-  const none = read(await readXPost(URL_, empty.deps));
-  expect(none.documents).toEqual([]);
+  const none = read(await readPost(URL_, empty.deps));
+  expect(none.own).toEqual([]);
   expect(empty.pagesRead).toEqual([PERMALINK, PERMALINK]);
   expect(none.skipped[0].reason).toContain("could not be read");
 
   const short = fakeX([longPost(ID)], {
     [PERMALINK]: page({ handle: "0xMovez", id: ID, text: focalText("0xMovez", "Andrej Karpathy") }),
   });
-  const cut = read(await readXPost(URL_, short.deps));
-  expect(cut.documents).toEqual([]);
+  const cut = read(await readPost(URL_, short.deps));
+  expect(cut.own).toEqual([]);
   expect(cut.skipped[0].reason).toContain("less text");
 });
 
 test("a post that is gone is a rejection, not a record", async () => {
   const x = fakeX([], {});
-  const got = await readXPost(URL_, x.deps);
+  const got = await readPost(URL_, x.deps);
   expect(got.ok).toBe(false);
 });
 
-test("only the kinds of thing a post recommends are followed", () => {
-  const followed = new Set(["site", "drive", "pdf", "github", "page"]);
-  const classifyOutbound = (url: string, claimed: (u: string) => boolean) => {
-    const h = classifyHint(url, (u) => (claimed(u) ? "site" : null));
-    return followed.has(h.kind) ? { follow: true, kind: h.kind } : { follow: false, reason: h.reason };
-  };
-  const none = () => false;
+test("a link's hint is worked out from its URL, with a reason for the shapes rarely worth taking", () => {
   const verdict = (url: string) => {
-    const v = classifyOutbound(url, none);
-    return v.follow ? v.kind : v.reason;
+    const h = classifyHint(url, () => null);
+    return h.reason ?? h.kind;
   };
   expect(verdict("https://drive.google.com/file/d/1PT/view")).toBe("drive");
   expect(verdict("https://example.com/paper.pdf")).toBe("pdf");
@@ -288,7 +283,7 @@ test("only the kinds of thing a post recommends are followed", () => {
   expect(verdict("https://example.com/pricing")).toBe("a product page");
   expect(verdict("https://www.youtube.com/watch?v=x")).toBe("a video, kept as a link only");
   expect(verdict("https://x.com/a/status/1")).toBe("a link to another page on X");
-  expect(classifyOutbound("https://arxiv.org/", (u) => u.includes("arxiv"))).toEqual({ follow: true, kind: "site" });
+  expect(classifyHint("https://arxiv.org/", (u) => (u.includes("arxiv") ? "arxiv" : null)).kind).toBe("site");
   expect(tcoTarget(301, "https://a.example/x", "")).toBe("https://a.example/x");
   expect(tcoTarget(200, null, '<META http-equiv="refresh" content="0;URL=https://b.example/y">')).toBe(
     "https://b.example/y",
