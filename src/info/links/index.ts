@@ -25,7 +25,7 @@ export {
   type LinkReading,
   type SourceRecord,
 } from "./readers";
-export { composeReceipt, type LinkStop } from "./receipt";
+export { composeReceipt, notTakenOf, type LinkStop, type NotTaken } from "./receipt";
 export {
   LINK_RECORDS_FILE,
   loadLinkRecords,

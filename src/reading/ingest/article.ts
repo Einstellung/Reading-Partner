@@ -87,6 +87,8 @@ export interface IngestedDocument {
   chars: number;
   imagesEmbedded: number;
   imagePlaceholders: number;
+  /** Sections of a document the bindery built; absent for a document fetched whole. */
+  sections?: number;
   /** Where it was filed, or null when the caller named a topic and had none. */
   attachedTo: IngestTarget | null;
 }
@@ -218,6 +220,7 @@ export async function fileBuilt(
       chars: meta.chars,
       imagesEmbedded: meta.imagesEmbedded,
       imagePlaceholders: meta.imagesMissing,
+      sections: meta.sections,
     },
   );
 }
@@ -233,7 +236,7 @@ async function file(
   bytes: Uint8Array,
   fileName: string,
   meta: ImportMeta,
-  counts: { kind: LibraryKind; chars: number; imagesEmbedded: number; imagePlaceholders: number },
+  counts: { kind: LibraryKind; chars: number; imagesEmbedded: number; imagePlaceholders: number; sections?: number },
 ): Promise<IngestedDocument> {
   const path = documentPath(await contentHash(bytes), fileName);
   const entry = await deps.importBook(bytes, path, meta);
@@ -255,6 +258,7 @@ async function file(
     chars: counts.chars,
     imagesEmbedded: counts.imagesEmbedded,
     imagePlaceholders: counts.imagePlaceholders,
+    ...(counts.sections === undefined ? {} : { sections: counts.sections }),
     attachedTo: target.kind === "topic" && target.topicId === null ? null : target,
   };
 }

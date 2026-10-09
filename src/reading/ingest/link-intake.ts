@@ -5,7 +5,7 @@
 // reports. X links come this way (ingestUrlLive); other links keep the one-page
 // path until each source is measured (docs/86 「以后」).
 
-import { takeLinkIn, type LinkIntake, type LinkIntakeDeps } from "../../info/links";
+import { notTakenOf, takeLinkIn, type LinkIntake, type LinkIntakeDeps, type NotTaken } from "../../info/links";
 import { fileBound, type ArticleIngestDeps, type IngestedDocument, type IngestTarget } from "./article";
 
 /** What one pasted link became: any number of documents, and what was left out. */
@@ -15,6 +15,10 @@ export interface IngestBatch {
   lead: string;
   /** One sentence each about what was not taken and why. */
   notes: string[];
+  /** What was looked at and left out, with the reason, for a caller that lays it out itself. */
+  skipped?: NotTaken[];
+  /** The model's closing note, when it left one (the AI's words). */
+  aiNote?: string;
 }
 
 export function isIngestBatch(value: IngestedDocument | IngestBatch): value is IngestBatch {
@@ -43,5 +47,13 @@ export async function takeLinkInFiled(
       return { hash: document.entry.hash, title: document.title, document };
     },
   });
-  return { documents: intake.documents, lead: intake.lead, notes: intake.notes, intake };
+  const aiNote = intake.stop.kind === "finished" ? intake.stop.note : null;
+  return {
+    documents: intake.documents,
+    lead: intake.lead,
+    notes: intake.notes,
+    skipped: notTakenOf(intake.candidates, intake.trail),
+    ...(aiNote ? { aiNote } : {}),
+    intake,
+  };
 }

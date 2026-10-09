@@ -3,7 +3,7 @@
 // documents' own lines are the caller's (reading's ingestOutputLine, which needs
 // the cut pages), so this composes the sentence before them and the lines after.
 
-import { shortAddress, type Candidate, type LinkSession } from "./session";
+import { shortAddress, type Candidate, type LinkSession, type TrailStep } from "./session";
 
 /** How the run ended. `at` is the candidate it stopped on, when it stopped early. */
 export type LinkStop =
@@ -55,6 +55,21 @@ function stopLine(session: LinkSession<unknown>, stop: LinkStop): string {
   }
 }
 
+/** A candidate the run looked at and did not file, and why. */
+export interface NotTaken {
+  url: string;
+  reason: string;
+}
+
+/**
+ * What the run opened or tried to file and left out, with the reason, in the
+ * order it met them. The receipt's "Not taken" lines are these, worded.
+ */
+export function notTakenOf(candidates: readonly Candidate[], trail: readonly TrailStep[]): NotTaken[] {
+  const touched = new Set(trail.map((s) => s.n));
+  return candidates.filter((c) => touched.has(c.n) && !c.filed).map((c) => ({ url: c.url, reason: reasonFor(c) }));
+}
+
 /** The sentence before the documents and the lines after them. */
 export function composeReceipt(
   session: LinkSession<unknown>,
@@ -65,11 +80,11 @@ export function composeReceipt(
   const lead = `Read ${source}.${filedCount === 0 ? " Nothing became a document." : ""}`;
   const notes: string[] = [];
 
-  const touched = new Set(session.trail.map((s) => s.n));
-  for (const c of session.candidates) {
-    if (!touched.has(c.n) || c.filed) continue;
-    notes.push(`Not taken: ${shortAddress(c.url)}: ${reasonFor(c)}.`);
+  for (const item of notTakenOf(session.candidates, session.trail)) {
+    notes.push(`Not taken: ${shortAddress(item.url)}: ${item.reason}.`);
   }
+
+  const touched = new Set(session.trail.map((s) => s.n));
 
   const unopened = session.candidates.filter((c) => c.from === 1 && !c.opened && !c.filed && !touched.has(c.n));
   if (unopened.length > 0) {
