@@ -9,11 +9,16 @@
 //
 // With the bars away, two things stay: the page line at the foot of the
 // screen, faint, and a dot at the top right when Learn has a reply waiting.
+//
+// While the bottom bar is up it fills the shell's composer slot, the way a
+// conversation's composer does, so Lumen's corner stands above it instead of on
+// Learn (lumen/corner-placement.ts).
 
 import { useT } from "../../../../i18n";
 import type { ViewStats } from "../../../../platform/app/reader-contract";
 import type { LessonDot } from "../../../../reading/session/lesson-dot";
 import { IconBookSparkle, IconOutline, IconTextSize } from "../../base/icons";
+import { useComposerSlot } from "../../chat/call/composer-slot";
 import { cn } from "../../lib/utils";
 import { readerPageText } from "../../reader/reader-page-text";
 import { Button } from "../../ui/button";
@@ -44,6 +49,7 @@ export default function PhoneReaderBar(props: {
   };
   const position = props.status ?? pageText.blocks;
   const hidden = !props.shown;
+  const cornerSlot = useComposerSlot();
 
   return (
     <>
@@ -97,6 +103,7 @@ export default function PhoneReaderBar(props: {
       </header>
 
       <nav
+        ref={hidden ? undefined : cornerSlot}
         data-reader-chrome="bottom"
         aria-label={t("phone.readerBar.tools")}
         aria-hidden={hidden || undefined}

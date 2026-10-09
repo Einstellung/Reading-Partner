@@ -95,6 +95,10 @@ export function useCornerLift(shown: boolean, chatMain: boolean): {
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    // A bar that slides in (the phone reader's) is measured where its transform
+    // starts, off the bottom edge; its size never changes, so only the end of
+    // the slide says where it came to rest.
+    element.addEventListener("transitionend", measure);
     window.addEventListener("resize", measure);
     const vv = window.visualViewport;
     // iOS pairs the keyboard's resize with a scroll, and a pinch-zoomed viewport
@@ -104,6 +108,7 @@ export function useCornerLift(shown: boolean, chatMain: boolean): {
     return () => {
       cancelAnimationFrame(pending);
       observer.disconnect();
+      element.removeEventListener("transitionend", measure);
       window.removeEventListener("resize", measure);
       vv?.removeEventListener("resize", measure);
       vv?.removeEventListener("scroll", measure);
