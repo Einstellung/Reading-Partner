@@ -114,7 +114,7 @@ export function IntakeCard({ payload, dispatch }: CardComponentProps<IntakeCardP
 						<div key={doc.hash} className="mt-0.5">
 							<div className="text-[15px] leading-normal">{doc.title}</div>
 							{documentMeta(doc) && (
-								<div className="break-all text-[12.5px] text-faint-foreground">{documentMeta(doc)}</div>
+								<div className="text-[12.5px] text-faint-foreground [overflow-wrap:anywhere]">{documentMeta(doc)}</div>
 							)}
 						</div>
 					))}
@@ -217,7 +217,7 @@ export function IntakeCard({ payload, dispatch }: CardComponentProps<IntakeCardP
 							: "animate-spin border-secondary-border border-t-accent-line",
 					)}
 				/>
-				<span className="break-all">{progressLine(view)}</span>
+				<span className="[overflow-wrap:anywhere]">{progressLine(view)}</span>
 			</div>
 		</Frame>
 	);
