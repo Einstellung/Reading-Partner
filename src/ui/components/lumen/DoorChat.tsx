@@ -5,19 +5,24 @@
 //
 // Two forms, by shell. On the phone it is the whole screen, and Lumen stands
 // down while it is up: the sheet registers as one (BottomSheetLayer), which is
-// what the corner already gets out of the way for. On the iPad and the desktop
+// what the corner already gets out of the way for. The sheet is `absolute` in
+// the phone shell, not `fixed`: the shell moves to what the keyboard leaves
+// visible (KeyboardShell, docs/pitfall/443) and the sheet has to move with it,
+// as every other phone conversation does by being drawn inside it. On the iPad and the desktop
 // it is a panel standing on top of Lumen in the corner's own column, so it
 // follows the corner to whichever edge it was dragged to and Lumen stays where
 // it was, under it.
 
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { useT } from "../../../i18n";
 import { IconClose } from "../base/icons";
 import CallView from "../chat/call/CallView";
+import { holdInView } from "../common/stick-to-bottom";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { BottomSheetLayer, OVERLAY_Z, OverlaySurface } from "../ui/overlay";
+import { doorFocusSelector, type DoorFocus } from "./box-jump";
 import lumenIcon from "./lumen-icon.webp";
 import type { IntakeOpenDocument } from "./intake-view";
 import { useDoorChat } from "./use-door-chat";
@@ -30,7 +35,7 @@ export function DoorChat({
 	form,
 	liftPx = 0,
 	date,
-	focusIntakeId,
+	focus,
 	onOpenDocument,
 	onClose,
 }: {
@@ -39,29 +44,36 @@ export function DoorChat({
 	liftPx?: number;
 	/** The day's conversation to open; today when absent. Read once, at mount. */
 	date?: string;
-	/** An intake card to bring into view once the conversation is drawn (a box card's jump). */
-	focusIntakeId?: string;
+	/** The row to bring into view once the conversation is drawn (a box card's jump). Read once, at mount. */
+	focus?: DoorFocus;
 	onOpenDocument?: (doc: IntakeOpenDocument) => void;
 	onClose: () => void;
 }) {
 	const t = useT();
 	const chat = useDoorChat({ ...(date ? { date } : {}), ...(onOpenDocument ? { onOpenDocument } : {}) });
 
-	// Back to the card the box item stands for: once, after the rows are drawn
-	// and the transcript has put its own scroll back.
+	// Back to the row the box item stands for: once, after the rows are drawn
+	// and the transcript has put its own scroll back. Held there while the cards
+	// settle, or the transcript's pin takes it back to the bottom on their first
+	// growth (common/stick-to-bottom.ts).
+	const [selector] = useState(() => (focus ? doorFocusSelector(focus) : null));
 	const focused = useRef(false);
 	useEffect(() => {
-		if (!focusIntakeId || focused.current || !chat.ready || chat.messages.length === 0) return;
-		const frame = requestAnimationFrame(() =>
-			requestAnimationFrame(() => {
-				const card = document.querySelector(`[data-intake-id="${CSS.escape(focusIntakeId)}"]`);
-				if (!card) return;
+		if (!selector || focused.current || !chat.ready || chat.messages.length === 0) return;
+		let inner = 0;
+		const outer = requestAnimationFrame(() => {
+			inner = requestAnimationFrame(() => {
+				const row = document.querySelector(selector);
+				if (!row) return;
 				focused.current = true;
-				card.scrollIntoView({ block: "center" });
-			}),
-		);
-		return () => cancelAnimationFrame(frame);
-	}, [focusIntakeId, chat.ready, chat.messages.length]);
+				holdInView(row);
+			});
+		});
+		return () => {
+			cancelAnimationFrame(outer);
+			cancelAnimationFrame(inner);
+		};
+	}, [selector, chat.ready, chat.messages.length]);
 
 	const header = (
 		<div className="flex flex-none items-center gap-2 border-b border-border-subtle bg-background py-1.5 pl-3.5 pr-1.5">
@@ -105,7 +117,7 @@ export function DoorChat({
 				<div
 					role="dialog"
 					aria-label={t("shell.door.title")}
-					className={cn("fixed inset-0 flex flex-col bg-chat-surface p-safe", OVERLAY_Z.floating)}
+					className={cn("absolute inset-0 flex flex-col bg-chat-surface p-safe", OVERLAY_Z.floating)}
 				>
 					<BottomSheetLayer />
 					{view}

@@ -63,7 +63,7 @@ test("following it opens the door conversation of its day at the card, and leave
   const s = await started(box);
   const [item] = await box.open(UNSEEN);
   expect(planItemJump(item, { shell: "phone", inReader: false, openBookId: null })).toEqual({
-    steps: [{ step: "open-door-chat", date: "2026-10-08", intakeId: s.intakeId }],
+    steps: [{ step: "open-door-chat", date: "2026-10-08", focus: { intakeId: s.intakeId } }],
     unreachable: null,
   });
   expect(staysUntilDecided(item)).toBe(true);

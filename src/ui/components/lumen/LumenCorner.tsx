@@ -102,7 +102,7 @@ import {
 import { useCaseMotion } from "./use-case-motion";
 import { columnAlign } from "./corner-drag";
 import { useCornerDrag } from "./use-corner-drag";
-import { planItemJump, stateAfterFollow, staysUntilDecided, type Place, type Shell } from "./box-jump";
+import { doorFocusKey, planItemJump, stateAfterFollow, staysUntilDecided, type DoorFocus, type Place, type Shell } from "./box-jump";
 import type { IntakeOpenDocument } from "./intake-view";
 import { readIntake } from "../../../reading/ingest/topic-intake";
 
@@ -116,7 +116,6 @@ export interface LumenJumpTargets {
 	goToPage?: (page: number) => void;
 	openThread?: (bookId: string, threadId: string) => void;
 	openAnnotation?: (annotationId: string) => void;
-	goToDoor: (date: string) => void;
 	goToBriefing: (date: string) => void;
 	goToMeals: () => void;
 	/** A document an intake card filed (its 「打开阅读」), opened in this shell's reader. */
@@ -126,7 +125,7 @@ export interface LumenJumpTargets {
 /** The door conversation, when it is up: today's, or the day and card a box card went back to. */
 interface DoorOpen {
 	date?: string;
-	intakeId?: string;
+	focus?: DoorFocus;
 }
 
 // Whether this device has the intake a box card stands for (box-cards.ts cardsHere).
@@ -381,9 +380,6 @@ export function LumenCorner({
 					case "open-annotation":
 						targets.openAnnotation?.(step.annotationId);
 						break;
-					case "go-to-door":
-						targets.goToDoor(step.date);
-						break;
 					case "go-to-briefing":
 						targets.goToBriefing(step.date);
 						break;
@@ -391,7 +387,7 @@ export function LumenCorner({
 						targets.goToMeals();
 						break;
 					case "open-door-chat":
-						setDoor({ date: step.date, intakeId: step.intakeId });
+						setDoor({ date: step.date, ...(step.focus ? { focus: step.focus } : {}) });
 						break;
 				}
 			}
@@ -425,11 +421,11 @@ export function LumenCorner({
 	const doorChat = (form: "sheet" | "panel") =>
 		door && (
 			<DoorChat
-				key={`${door.date ?? "today"}:${door.intakeId ?? ""}`}
+				key={`${door.date ?? "today"}:${doorFocusKey(door.focus)}`}
 				form={form}
 				{...(form === "panel" ? { liftPx: drag.bottomPx } : {})}
 				{...(door.date ? { date: door.date } : {})}
-				{...(door.intakeId ? { focusIntakeId: door.intakeId } : {})}
+				{...(door.focus ? { focus: door.focus } : {})}
 				onOpenDocument={openDocument}
 				onClose={() => setDoor(null)}
 			/>

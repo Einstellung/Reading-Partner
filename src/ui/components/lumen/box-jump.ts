@@ -25,12 +25,35 @@ export type JumpStep =
   | { step: "go-to-page"; page: number }
   | { step: "open-annotation"; annotationId: string }
   | { step: "open-thread"; bookId: string; threadId: string }
-  | { step: "go-to-door"; date: string }
   | { step: "go-to-briefing"; date: string }
   | { step: "go-to-meals" }
-  // The door conversation of that day, opened over whatever is on screen, at an
-  // intake card (lumen/DoorChat.tsx).
-  | { step: "open-door-chat"; date: string; intakeId: string };
+  // The door conversation of that day, opened over whatever is on screen
+  // (lumen/DoorChat.tsx), at the row the card is about when there is one.
+  | { step: "open-door-chat"; date: string; focus?: DoorFocus };
+
+/**
+ * The row of a door conversation a card goes back to: an intake card, or the
+ * reply that answered a run sent off from there (MessageList's data-origin-run).
+ */
+export type DoorFocus = { intakeId: string } | { runId: string };
+
+// An attribute value as a double-quoted selector string spells it.
+function quoted(value: string): string {
+  return `"${value.replace(/["\\]/g, (c) => `\\${c}`)}"`;
+}
+
+/** The selector DoorChat finds the focused row by, once the conversation is drawn. */
+export function doorFocusSelector(focus: DoorFocus): string {
+  return "intakeId" in focus
+    ? `[data-intake-id=${quoted(focus.intakeId)}]`
+    : `[data-origin-run=${quoted(focus.runId)}]`;
+}
+
+/** A focus's identity, for keying the view that opens it. */
+export function doorFocusKey(focus: DoorFocus | undefined): string {
+  if (!focus) return "";
+  return "intakeId" in focus ? `intake:${focus.intakeId}` : `run:${focus.runId}`;
+}
 
 export interface Jump {
   steps: JumpStep[];
@@ -65,8 +88,10 @@ export function planJump(origin: BoxOrigin, place: Place): Jump {
       );
       return { steps, unreachable: null };
     }
+    // The day's conversation at the door is the door chat (soul/door.ts); no
+    // page draws it.
     case "door":
-      return { steps: [{ step: "go-to-door", date: origin.date }], unreachable: null };
+      return { steps: [{ step: "open-door-chat", date: origin.date }], unreachable: null };
     case "briefing":
       return { steps: [{ step: "go-to-briefing", date: origin.date }], unreachable: null };
     case "meals":
@@ -74,17 +99,22 @@ export function planJump(origin: BoxOrigin, place: Place): Jump {
   }
 }
 
-type ItemFacts = Pick<BoxItem, "origin" | "kind" | "body">;
+type ItemFacts = Pick<BoxItem, "origin" | "kind" | "body" | "runId">;
 
 /**
- * Where a card goes. A link intake's card opens the door conversation it was
- * raised in, at the intake card, on every shell: picking the topic there is the
- * one thing the card is for (docs/68 「收链接」). Anything else goes by origin.
+ * Where a card goes. One from the door opens that day's door conversation, on
+ * every shell, at the row it is about: a link intake's at the intake card, since
+ * picking the topic there is the one thing the card is for (docs/68 「收链接」);
+ * a run's at the reply that answered it. Anything else goes by origin.
  */
 export function planItemJump(item: ItemFacts, place: Place): Jump {
-  const intakeId = intakeIdOfItem(item);
-  if (intakeId && item.origin.place === "door") {
-    return { steps: [{ step: "open-door-chat", date: item.origin.date, intakeId }], unreachable: null };
+  if (item.origin.place === "door") {
+    const intakeId = intakeIdOfItem(item);
+    const focus: DoorFocus | null = intakeId ? { intakeId } : item.runId ? { runId: item.runId } : null;
+    return {
+      steps: [{ step: "open-door-chat", date: item.origin.date, ...(focus ? { focus } : {}) }],
+      unreachable: null,
+    };
   }
   return planJump(item.origin, place);
 }

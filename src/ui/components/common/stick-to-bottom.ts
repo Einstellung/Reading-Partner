@@ -110,6 +110,38 @@ function observeContentDefault(list: Element, onChange: () => void): () => void 
 	};
 }
 
+// The pins by the list they were bound to, so a view that wants the list held
+// somewhere else (holdInView) can reach the one its element sits in.
+const pins = new WeakMap<Element, { hold(place: (host: ScrollHost) => void): void }>();
+
+// Puts `el` in the middle of the host, by assigning scrollTop (instant, as in
+// toBottom). The page's own scroller reports its box from the document's top.
+function centre(host: ScrollHost, el: Element): void {
+	if (!(host instanceof Element)) return;
+	const box = el.getBoundingClientRect();
+	const top = host === host.ownerDocument?.scrollingElement ? 0 : host.getBoundingClientRect().top;
+	host.scrollTop += box.top - top - (host.clientHeight - box.height) / 2;
+}
+
+/**
+ * Holds the pinned list `el` is in on `el` rather than on its newest content:
+ * `el` is put in the middle now and again on every growth until the reader
+ * scrolls, which hands the list back to them. Cards and markdown settling after
+ * the scroll would otherwise take a list still counted as pinned back to the
+ * bottom. A view opening a conversation at one of its rows uses this. Outside a
+ * pinned list `el` is only scrolled into view. `place` is injected by the tests.
+ */
+export function holdInView(el: Element, place?: (host: ScrollHost) => void): void {
+	for (let node: Element | null = el; node; node = node.parentElement) {
+		const pin = pins.get(node);
+		if (pin) {
+			pin.hold(place ?? ((host) => centre(host, el)));
+			return;
+		}
+	}
+	el.scrollIntoView({ block: "center" });
+}
+
 function observeHostDefault(host: ScrollHost, onChange: () => void): () => void {
 	if (typeof ResizeObserver === "undefined" || !(host instanceof Element)) return () => {};
 	const ro = new ResizeObserver(() => onChange());
@@ -141,6 +173,10 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	// layout, not from the reader.
 	let seenHeight = 0;
 	let seenClient = 0;
+	// What the list is held on instead of its bottom (holdInView), and where the
+	// hold last put it: the echo of that write is not the reader scrolling.
+	let held: ((host: ScrollHost) => void) | null = null;
+	let heldAt = 0;
 	let unobserveHost = () => {};
 
 	const onScroll = () => {
@@ -150,6 +186,16 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		const grew = height !== seenHeight || client !== seenClient;
 		seenHeight = height;
 		seenClient = client;
+		if (held) {
+			if (grew) {
+				toHeld();
+				return;
+			}
+			if (Math.abs(host.scrollTop - heldAt) <= 1) return;
+			// The reader scrolled: the list is theirs again, pinned or not by
+			// where they left it.
+			held = null;
+		}
 		// A pinned list whose height moved under it: the browser may report that as
 		// a scroll (anchoring), and reading the distance then would unpin it.
 		if (grew && stuck) {
@@ -176,7 +222,15 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	};
 
 	function onHostResize() {
-		if (stuck) toBottom();
+		if (held) toHeld();
+		else if (stuck) toBottom();
+	}
+	function toHeld() {
+		if (!host || !held) return;
+		held(host);
+		heldAt = host.scrollTop;
+		seenHeight = host.scrollHeight;
+		seenClient = host.clientHeight;
 	}
 
 	function toBottom() {
@@ -199,6 +253,10 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 
 	const onContentChange = () => {
 		settleHost();
+		if (held) {
+			toHeld();
+			return;
+		}
 		// The place is written on the pass that pins a list with nothing remembered,
 		// and let go of there. The pin is off from here, so the settling that
 		// follows leaves the reader on the place.
@@ -218,7 +276,18 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	onContentChange();
 	const unobserve = observeContent(list, onContentChange);
 
+	pins.set(list, {
+		hold(at) {
+			held = at;
+			stuck = false;
+			// A remembered place not yet written is overruled by the row asked for.
+			place = null;
+			settleHost();
+			toHeld();
+		},
+	});
 	return () => {
+		pins.delete(list);
 		unobserve();
 		bind(null);
 	};

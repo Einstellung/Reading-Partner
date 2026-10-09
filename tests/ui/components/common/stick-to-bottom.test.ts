@@ -29,6 +29,7 @@
 
 import { expect, test } from "bun:test";
 import {
+	holdInView,
 	scrollableAncestor,
 	stickToBottom,
 	type ScrollHost,
@@ -462,4 +463,39 @@ test("the place is not spent on the page the walk falls back to", () => {
 	expect(back.scrollTop).toBe(200);
 	stop();
 	outer.remove();
+});
+
+// A conversation opened at one of its rows (a Red Box card's jump back to the
+// door chat): the cards loading after the scroll grow the list, and a pin that
+// still counted itself stuck took it back to the bottom on the first growth.
+test("a row held in view stays there while the content settles, until the reader scrolls", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged, hostResized } = bind(host);
+	const row = { parentElement: LIST } as unknown as Element;
+	let rowTop = 200;
+	holdInView(row, (h) => {
+		h.scrollTop = rowTop - 100;
+	});
+	expect(host.scrollTop).toBe(100);
+	// The browser echoes the hold's own write: not the reader.
+	host.flush();
+	// A card above the row loads and pushes it down.
+	rowTop = 450;
+	host.grow(250);
+	contentChanged();
+	expect(host.scrollTop).toBe(350);
+	host.flush();
+	hostResized();
+	expect(host.scrollTop).toBe(350);
+	// The reader scrolls: the list is theirs, and growth leaves it alone.
+	host.scrollTo(600);
+	host.grow(100);
+	contentChanged();
+	expect(host.scrollTop).toBe(600);
+	// Back at the bottom, it follows the newest content again.
+	host.scrollTo(bottomOf(host));
+	host.grow(80);
+	contentChanged();
+	expect(host.scrollTop).toBe(bottomOf(host));
+	stop();
 });

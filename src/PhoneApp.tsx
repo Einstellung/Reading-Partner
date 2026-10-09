@@ -529,7 +529,6 @@ export default function PhoneApp({
         // would stand, so Lumen stands down for that screen (docs/74).
         stoodDown={base.kind === "lesson"}
         targets={{
-          goToDoor: () => onNavigate("vestibule"),
           goToBriefing: () => onNavigate("briefing"),
           goToMeals: () => onNavigate("meals"),
           // An intake card's 「打开阅读」 (lumen/IntakeCard.tsx).

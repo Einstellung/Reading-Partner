@@ -4,7 +4,14 @@
 
 import { expect, test } from "bun:test";
 
-import { noReaderHereLine, planJump, type Place } from "../../../../src/ui/components/lumen/box-jump";
+import {
+  doorFocusKey,
+  doorFocusSelector,
+  noReaderHereLine,
+  planItemJump,
+  planJump,
+  type Place,
+} from "../../../../src/ui/components/lumen/box-jump";
 
 const DESK: Place = { shell: "desktop", inReader: false, openBookId: null };
 const PHONE: Place = { shell: "phone", inReader: false, openBookId: null };
@@ -55,10 +62,10 @@ test("the phone has no reader to jump into, and says so", () => {
   expect(jump.unreachable).toBe(noReaderHereLine());
 });
 
-test("the door and the briefing go to their own place in either shell", () => {
+test("the door opens its conversation and the briefing goes to its page, in either shell", () => {
   for (const place of [DESK, PHONE]) {
     expect(planJump({ place: "door", date: "2026-09-15" }, place)).toEqual({
-      steps: [{ step: "go-to-door", date: "2026-09-15" }],
+      steps: [{ step: "open-door-chat", date: "2026-09-15" }],
       unreachable: null,
     });
     expect(planJump({ place: "briefing", date: "2026-09-15" }, place)).toEqual({
@@ -70,4 +77,26 @@ test("the door and the briefing go to their own place in either shell", () => {
       unreachable: null,
     });
   }
+});
+
+test("a run's card from the door opens the door chat of its day at the reply that answered it", () => {
+  const item = { origin: { place: "door" as const, date: "2026-10-09" }, kind: "ingest-url", body: "failed", runId: "run-7" };
+  for (const place of [DESK, PHONE]) {
+    expect(planItemJump(item, place)).toEqual({
+      steps: [{ step: "open-door-chat", date: "2026-10-09", focus: { runId: "run-7" } }],
+      unreachable: null,
+    });
+  }
+  // A door card with no run (the reader's own turn) opens the conversation only.
+  expect(planItemJump({ origin: item.origin, kind: "turn" }, PHONE).steps).toEqual([
+    { step: "open-door-chat", date: "2026-10-09" },
+  ]);
+});
+
+test("the focused row is found by the attribute its view draws, the value quoted", () => {
+  expect(doorFocusSelector({ intakeId: "in-1" })).toBe('[data-intake-id="in-1"]');
+  expect(doorFocusSelector({ runId: "run-7" })).toBe('[data-origin-run="run-7"]');
+  expect(doorFocusSelector({ runId: 'a"b' })).toBe('[data-origin-run="a\\"b"]');
+  expect(doorFocusKey({ intakeId: "in-1" })).not.toBe(doorFocusKey({ runId: "in-1" }));
+  expect(doorFocusKey(undefined)).toBe("");
 });

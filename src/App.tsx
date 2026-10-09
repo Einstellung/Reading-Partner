@@ -1186,10 +1186,6 @@ export default function App() {
       // first when one is open: the reader covers the home screen, so setting it
       // underneath would be a card that does nothing visible and still counts
       // itself told.
-      goToDoor: () => {
-        if (inReader) closeReader();
-        setHomeScreen("vestibule");
-      },
       goToBriefing: () => {
         if (inReader) closeReader();
         setHomeScreen("briefing");
