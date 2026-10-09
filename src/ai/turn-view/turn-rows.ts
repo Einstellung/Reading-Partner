@@ -17,9 +17,10 @@
 // from a domain: this is what an agent turn's ending is, not how a row is drawn.
 // The rows are taken structurally, so each surface keeps its own row type.
 
-import type { MessageOrigin } from "../../platform/app/threads";
+import type { MessageOrigin, PersistedToolStatus } from "../../platform/app/threads";
 import {
   appendRunningTool,
+  persistedTrace,
   relabelRunningTool,
   resolveToolStatus,
   type Receipt,
@@ -60,6 +61,28 @@ export const QUEUED_NOTE = "after this step";
 // what the turn did, and the ones that failed are what explain the stop.
 function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
   return [...(previous.tools ?? [])];
+}
+
+// The calls a stopped row keeps on screen: every one that settled, the same set
+// that goes to disk (persistedTrace). A call still running when the reader
+// pressed stop never reports back, since the abort silences the turn, and its
+// line would read as running for good.
+function settledTools(tools: ToolStatus[] | undefined): ToolStatus[] | undefined {
+  const settled = (tools ?? []).filter((t) => t.state !== "running");
+  return settled.length ? settled : undefined;
+}
+
+// What the stop button keeps of the row being written: its words and every call
+// that settled. A receipt ("Updated your profile") is part of what the turn did
+// whether or not a word followed it. Null when the turn had produced neither,
+// and the row goes.
+export function keptOnStop(row: {
+  text: string;
+  tools?: ToolStatus[];
+}): { text: string; trace: PersistedToolStatus[] | null } | null {
+  const text = row.text.trim();
+  const trace = persistedTrace(row.tools ?? []);
+  return text || trace ? { text, trace } : null;
 }
 
 // `text` is deliberately left as it stands. On the two chat surfaces it can hold
@@ -200,7 +223,8 @@ export type RowChange =
   // The loop declined. The sentence is the app's, so it goes in `notice` and
   // never in `text`.
   | { kind: "refusal"; text: string }
-  // The stop button: the half sentence stays, as a finished row.
+  // The stop button: the half sentence stays, as a finished row, and so do the
+  // calls that settled (keptOnStop).
   | { kind: "stopped"; text: string }
   // A delegated run was handed to the model before the row had a word in it,
   // so this row is the answer to it (docs/72). The row goes on being written.
@@ -261,7 +285,7 @@ export function applyRowChange<M extends TurnRow>(row: M, change: RowChange): M 
         failed: undefined,
         phase: undefined,
         notice: undefined,
-        tools: undefined,
+        tools: settledTools(row.tools),
       };
     case "origin":
       return { ...row, origin: change.origin };

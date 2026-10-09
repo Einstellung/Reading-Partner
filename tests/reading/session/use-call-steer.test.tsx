@@ -227,3 +227,77 @@ test("an answer that landed before the queue drained is followed by a turn for i
     r.restore();
   }
 });
+
+// --- what the stop button keeps ---------------------------------------------
+
+const RECEIPT = { label: "Updated your profile", summary: "Prefers short answers" };
+const PROFILE = { name: "profile_update", label: "Updating your profile", state: "done" as const, receipt: RECEIPT };
+
+test("stopping a turn that wrote no word yet keeps its receipt, on screen and in the file", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    act(() => {
+      r.options().onToolStart({ name: "profile_update", args: {}, label: "Updating your profile" });
+      r.options().onToolEnd({ name: "profile_update", isError: false, receipt: RECEIPT });
+      r.options().onToolStart({ name: "read_chapter", args: {}, label: "Reading chapter 2" });
+    });
+    await act(async () => {
+      view.result.current.stop();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const last = rows(view)[rows(view).length - 1];
+    expect([last.role, last.text, last.streaming, last.tools]).toEqual(["ai", "", undefined, [PROFILE]]);
+    expect(r.stored.map((m) => [m.role, m.text, m.parts])).toEqual([
+      ["user", "why this?", undefined],
+      ["ai", "", [{ type: "trace", tools: [PROFILE] }]],
+    ]);
+  } finally {
+    r.restore();
+  }
+});
+
+test("stopping a turn that produced nothing still leaves no row", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    act(() => r.options().onToolStart({ name: "read_chapter", args: {}, label: "Reading chapter 2" }));
+    await act(async () => {
+      view.result.current.stop();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(rows(view).map((m) => m.role)).toEqual(["user"]);
+    expect(r.stored.map((m) => m.role)).toEqual(["user"]);
+  } finally {
+    r.restore();
+  }
+});
+
+// The row above the reader's line goes into the file at the handover; what it
+// did goes with it, or a reopened thread shows its words without the receipt.
+test("the row handed over to a steered line is stored with its trace", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    act(() => {
+      r.options().onToolStart({ name: "profile_update", args: {}, label: "Updating your profile" });
+      r.options().onToolEnd({ name: "profile_update", isError: false, receipt: RECEIPT });
+      r.options().onDelta("Noted.");
+    });
+    await act(async () => {
+      view.result.current.send("and the other one?");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    act(() => r.inject(0));
+
+    expect(r.stored.map((m) => [m.role, m.text, m.parts])).toEqual([
+      ["user", "why this?", undefined],
+      ["ai", "Noted.", [{ type: "trace", tools: [PROFILE] }]],
+      ["user", "and the other one?", undefined],
+    ]);
+  } finally {
+    r.restore();
+  }
+});
