@@ -147,6 +147,13 @@ const PREVIEW_LIMIT = 200;
  */
 export const DELIVERY_ENTRY = "reading-partner.delivery";
 
+/**
+ * How many messages the prompt after the stamp is, written with it. A prompt is
+ * the conversation so far (docs/71), so the branch holds earlier answers ahead
+ * of this turn's words, and this is where the turn's own messages begin.
+ */
+export const PROMPT_ENTRY = "reading-partner.prompt";
+
 // Where a turn runs when the caller does not say: one directory of
 // one-file-per-turn sessions beside whatever the soul will keep, and one lane
 // in each. A worker names its own (legion/subagent).
@@ -792,6 +799,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       // has nobody coming back for it.
       if (borrowed && params.deliverTo !== undefined) {
         await lane.appendCustomEntry(DELIVERY_ENTRY, params.deliverTo as JsonValue, ctx);
+        await lane.appendCustomEntry(PROMPT_ENTRY, { messages: params.messages.length }, ctx);
       }
       const admitted = await lane.accept({ kind: "prompt", prompt: params.messages as AgentMessage[] }, ctx);
       if (!admitted.ok) {

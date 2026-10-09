@@ -43,7 +43,7 @@
 import { BACKGROUND_CONTEXT, type Context, type Entry } from "@earendil-works/pi-agent-core";
 import { joinRoundTexts } from "../ai/turn-view/turn-rows";
 import type { HeldHarness, HeldRecovery } from "../legion/execute/held";
-import { DELIVERY_ENTRY } from "../legion/execute/turn";
+import { DELIVERY_ENTRY, PROMPT_ENTRY } from "../legion/execute/turn";
 import type { BoxOrigin, BoxStore } from "../box";
 import { loadSettings, type Settings } from "../platform/app/settings";
 import { coverOf } from "./bell";
@@ -286,9 +286,14 @@ function isAttempt(entry: Entry): boolean {
  *
  * The scan starts at this turn's stamp — every turn on the lane is a branch off
  * the session root and stamps its own before its prompt is accepted, so
- * everything after the newest stamp belongs to this turn and nothing before it
- * does. Assistant text only: a tool result is fed back to the model and was
- * never part of the reply.
+ * nothing before the newest stamp belongs to this turn. What follows it starts
+ * with the prompt, which is the conversation so far and holds the answers
+ * earlier turns already delivered; the stamp's PROMPT_ENTRY says how many
+ * messages that is, and the turn's own begin after them. A branch written
+ * before that entry existed is read from its last user message on, which can
+ * miss what a steered turn said before the steer but never lands an old answer
+ * a second time. Assistant text only: a tool result is fed back to the model
+ * and was never part of the reply.
  */
 export function saidBefore(transcript: readonly Entry[]): string[] {
   let from = 0;
@@ -299,8 +304,24 @@ export function saidBefore(transcript: readonly Entry[]): string[] {
       break;
     }
   }
+  const turn = transcript.slice(from);
+  const sized = turn.find((e) => e.type === "custom" && e.customType === PROMPT_ENTRY);
+  const size = sized?.type === "custom" ? (sized.data as { messages?: unknown } | undefined)?.messages : undefined;
+  let own: readonly Entry[];
+  if (typeof size === "number") {
+    let prompt = 0;
+    own = turn.filter((e) => e.type === "message" && ++prompt > size);
+  } else {
+    let lastUser = turn.length - 1;
+    while (lastUser >= 0) {
+      const e = turn[lastUser]!;
+      if (e.type === "message" && (e.message as { role?: string }).role === "user") break;
+      lastUser -= 1;
+    }
+    own = turn.slice(lastUser + 1);
+  }
   const said: string[] = [];
-  for (const entry of transcript.slice(from)) {
+  for (const entry of own) {
     if (entry.type !== "message") continue;
     const message = entry.message as { role?: string; content?: unknown };
     if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
