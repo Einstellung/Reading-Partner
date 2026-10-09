@@ -169,12 +169,14 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
         ...(batch?.aiNote ? { aiNote: batch.aiNote } : {}),
         ...(batch ? { emptyReason: batch.lead } : {}),
       });
-      if (intake.state === "failed") await failedOut(id);
       const chosen = intake.attachedTo !== null;
       const lines: string[] = batch ? [batch.lead] : [];
       for (const f of filed) lines.push(intakeOutputLine(f.outcome, chosen));
       if (batch) lines.push(...batch.notes);
       const line = lines.join(" ");
+      // Nothing filed is the run failing for good: its bell is what tells the
+      // reader, and a run that ended `done` would say nothing (soul/bell.ts).
+      if (intake.state === "failed") throw new GiveUpError(line || (intake.reason ?? "Nothing became a document."));
       const output = await writeOutput(ctx.run.id, line);
       return { output, progress: line };
     } catch (e) {

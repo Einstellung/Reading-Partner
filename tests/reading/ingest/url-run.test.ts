@@ -75,6 +75,20 @@ test("the run is delivered back to the place the turn was held, and the soul own
   });
 });
 
+// The intake card is the answer: the run is a program's, so its success says
+// nothing and only its failure is told at the door (soul/bell.ts).
+test("an intake's run is a program's that tells its failure, delivered to the door", async () => {
+  let input: DelegateInput | null = null;
+  const { deps } = started((i) => (input = i));
+  await startUrlIngest(
+    { url: "https://github.com/karpathy/nanoGPT", intakeId: "in-1" },
+    { ...deps, origin: { place: "door", date: "2026-10-09" } },
+  );
+  const sent = input as unknown as DelegateInput;
+  expect(sent.delegator).toEqual({ kind: "program", name: "link-intake", tellFailure: true });
+  expect(JSON.parse(sent.deliverTo!)).toEqual({ place: "door", date: "2026-10-09" });
+});
+
 test("a refused run is the runner's own sentence", async () => {
   const { deps } = started();
   await expect(

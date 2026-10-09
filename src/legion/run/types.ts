@@ -46,7 +46,16 @@ export type RunTier = "local" | "synced";
 export type Delegator =
   | { kind: "soul" }
   | { kind: "run"; id: string }
-  | { kind: "program"; name: string };
+  | {
+      kind: "program";
+      name: string;
+      /**
+       * The reader is waiting in the conversation the run delivers to (a link
+       * taken in at the door): a success says nothing, as for any program, and
+       * a failure is told there in one sentence as well as carded (soul/bell.ts).
+       */
+      tellFailure?: true;
+    };
 
 /** The device executing the run, and when it picked the run up. */
 export interface RunClaimant {

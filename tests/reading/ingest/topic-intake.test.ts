@@ -14,6 +14,7 @@ import type { IngestBatch } from "../../../src/reading/ingest/link-intake";
 import type { WorkerContext } from "../../../src/legion/execute/worker";
 import type { Fulltext } from "../../../src/fulltext/types";
 import type { Run } from "../../../src/legion/run";
+import { GiveUpError } from "../../../src/legion/stop";
 import { memoryIntakes } from "./intake-fixtures";
 
 const ASK = "legion/briefs/ingest-1.json";
@@ -144,7 +145,7 @@ test("the receipt the card reads: each document's hash, title, format, sections 
   expect(line.endsWith('"Took the manual."')).toBe(true);
 });
 
-test("nothing filed: the intake says why and the run still leaves its line", async () => {
+test("nothing filed: the intake says why and the run fails for good with its line", async () => {
   const s = setup({
     ingest: async () => ({
       documents: [],
@@ -155,12 +156,16 @@ test("nothing filed: the intake says why and the run still leaves its line", asy
   });
   const { id } = await s.store.create({ url: "https://x.com/a/status/1" });
   await s.store.choose(id, "t-a");
-  await ingestUrlWorker(s.deps)(ASK, context().ctx).done;
+  const failure = await ingestUrlWorker(s.deps)(ASK, context().ctx).done.catch((e: unknown) => e);
+  expect(failure).toBeInstanceOf(GiveUpError);
+  expect((failure as Error).message).toBe(
+    "Read @a's post. Nothing became a document. Stopped: the step limit was reached.",
+  );
   const intake = (await readIntake(id, s.store))!;
   expect(intake).toMatchObject({ state: "failed", reason: "Read @a's post. Nothing became a document.", attachedTo: null });
   expect(intake.skipped).toHaveLength(1);
   expect(s.attached).toEqual([]);
-  expect(s.outputs.get("r-intake")).toBe("Read @a's post. Nothing became a document. Stopped: the step limit was reached.");
+  expect(s.outputs.has("r-intake")).toBe(false);
 });
 
 test("a throw is a failure on the card only on the run's last try", async () => {

@@ -15,7 +15,8 @@
 //
 // Not every bell is a turn. A run a program delegated is answered by the ledger
 // alone: acked, stamped, and nothing said (docs/55 step 12). Only its failure
-// reaches the reader, as one card to decide about.
+// reaches the reader, as one card to decide about; one whose reader is waiting
+// in the conversation it names also gets a turn of one short sentence there.
 //
 // One at a time. The soul's harness serialises turns anyway (legion/execute/
 // held.ts), but a pass that fired every bell at once would queue a stack of
@@ -185,9 +186,31 @@ export async function runSubstance(
  * A run-done bell is rendered from the substance runSubstance read off the
  * run's paths; without it there is only the brief the bell carries, which for a
  * soul-delegated run is a path and not a sentence.
+ *
+ * `tellFailure` is a failed program run told to a reader whose card already
+ * shows why (Delegator.tellFailure): the turn may say one short sentence on what
+ * they can do next, and nothing that repeats the card.
  */
-export function renderBell(bell: Bell, substance?: RunSubstance | null): string {
+export function renderBell(
+  bell: Bell,
+  substance?: RunSubstance | null,
+  options: { tellFailure?: boolean } = {},
+): string {
   const lines = ["[bell from legion — this was not said by the reader]"];
+  if (bell.type === "run-failed" && options.tellFailure) {
+    const { kind, reason } = bell.payload;
+    lines.push(
+      `Something the reader asked for in this conversation failed (kind: ${kind}).`,
+      "",
+      `Why: ${reason}`,
+      "",
+      "The card in the conversation already shows that it failed and why. Say at most one short sentence, " +
+        "telling the reader what they can do about it (for example, send the correct link to take it in again). " +
+        "Don't restate why it failed and don't apologise at length. " +
+        "Reply in the language this conversation is held in.",
+    );
+    return lines.join("\n");
+  }
   if (bell.type === "run-done") {
     const { kind } = bell.payload;
     const found = substance ?? {
@@ -300,15 +323,25 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     // its own record, which is where another device's copy would be. The
     // delegator rides along for the same reason.
     let origin: BoxOrigin | null = null;
+    let tellFailure = false;
     if (bell.type !== "wake") {
       const run = await runs.get(bell.payload.runId).catch(() => null);
       const delegator = bell.payload.delegator ?? run?.delegator;
+      origin = parseOrigin(bell.payload.deliverTo) ?? parseOrigin(run?.deliverTo);
+      // A program run whose reader is waiting in the conversation it names (a
+      // link taken in at the door) has its failure told there, in one sentence,
+      // by the turn below; its card shows the rest.
+      tellFailure =
+        delegator?.kind === "program" &&
+        delegator.tellFailure === true &&
+        bell.type === "run-failed" &&
+        origin !== null;
       // A run a program delegated was nobody's question: the domain that asked
       // for it has already put what came back where it belongs (the day's
       // collect round leaves its own card in the box), and there is no
       // conversation waiting on an answer. So no turn, no line in a thread, and
       // nothing in the box — the bell is only acknowledged.
-      if (delegator?.kind === "program") {
+      if (delegator?.kind === "program" && !tellFailure) {
         // Except when it failed. Then the work left nothing behind and nobody
         // would ever know, so it goes in the box as something to decide about,
         // with the error itself as the cover (docs/68).
@@ -333,13 +366,12 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
         answered += 1;
         continue;
       }
-      origin = parseOrigin(bell.payload.deliverTo) ?? parseOrigin(run?.deliverTo);
     }
     // What the run pointed at, read once: the turn is answered out of it and
     // the card in the box carries it.
     const substance =
       bell.type === "run-done" ? await runSubstance(bell.payload, readFile) : null;
-    const rendered = renderBell(bell, substance);
+    const rendered = renderBell(bell, substance, { tellFailure });
     // A turn already running where the question was asked takes the bell as it
     // stands (docs/72): it goes into that turn's context as an internal steer
     // and nowhere else — no line in the thread file, no row of its own — and

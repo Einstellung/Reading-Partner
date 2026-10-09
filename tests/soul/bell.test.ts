@@ -696,6 +696,85 @@ test("a run the soul delegated is still answered in a turn", async () => {
   expect([...cards.values()].length).toBe(1);
 });
 
+// --- a link taken in at the door (docs/68 「收链接」) --------------------------
+
+// The intake card shows the fetch and its outcome, so the run is a program's
+// that tells only its failure, at the door it was taken in at.
+const intakeDelegator = { kind: "program", name: "link-intake", tellFailure: true } as const;
+const doorOrigin = () => JSON.stringify({ place: "door", date: doorDate(new Date(NOW)) });
+
+test("a door intake that filed says nothing: no turn, no line, no card", async () => {
+  const { bells } = bellStore();
+  const { box, files: cards } = boxStore();
+  await bells.ring(
+    "run-done",
+    {
+      runId: "r-intake",
+      kind: "ingest-url",
+      brief: "legion/briefs/ingest-1.json",
+      output: "legion/outputs/r-intake.md",
+      deliverTo: doorOrigin(),
+      delegator: intakeDelegator,
+    },
+    { at: NOW - 1000 },
+  );
+  const { send, rounds } = sender([]);
+
+  expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+  expect(rounds).toEqual([]);
+  expect(doorFile()).toBeNull();
+  expect([...cards.values()]).toEqual([]);
+  expect((await bells.get("run-done-r-intake"))?.state).toBe("acked");
+});
+
+test("a door intake that failed is one short sentence at the door, and its card", async () => {
+  const { bells } = bellStore();
+  const { box, files: cards } = boxStore();
+  await bells.ring(
+    "run-failed",
+    {
+      runId: "r-intake",
+      kind: "ingest-url",
+      reason: "Could not fetch the page (404).",
+      deliverTo: doorOrigin(),
+      delegator: intakeDelegator,
+    },
+    { at: NOW - 1000 },
+  );
+  const reply = "The link may be mistyped; send me the right one and I'll take it in again.";
+  const { send, rounds } = sender([{ text: reply }]);
+
+  expect(
+    await answerBell({ settings, bells, box, send, now: () => NOW, newThreadId: () => "door-thread-1" }),
+  ).toBe(1);
+
+  expect(rounds.length).toBe(1);
+  const asked = JSON.stringify(rounds[0]![rounds[0]!.length - 1]);
+  expect(asked).toContain("at most one short sentence");
+  expect(asked).toContain("Don't restate why it failed");
+  expect(doorFile()).toEqual({ messages: [expect.objectContaining({ role: "ai", text: reply })] });
+  // The Red Box item that jumps back to the chat is still there.
+  const items = [...cards.values()].map((text) => JSON.parse(text) as Record<string, unknown>);
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({ runId: "r-intake", kind: "ingest-url", needsDecision: true });
+  expect(items[0]!.origin).toEqual({ place: "door", date: doorDate(new Date(NOW)) });
+  expect((await bells.get("run-failed-r-intake"))?.state).toBe("acked");
+});
+
+test("a failure told in one sentence is not asked to be decided about at length", () => {
+  const failed = {
+    id: "run-failed-r1",
+    type: "run-failed",
+    at: NOW,
+    state: "queued",
+    payload: { runId: "r1", kind: "ingest-url", reason: "Could not fetch the page (404)." },
+  } as Bell;
+  const told = renderBell(failed, null, { tellFailure: true });
+  expect(told.split("\n")[0]).toContain("not said by the reader");
+  expect(told).toContain("at most one short sentence");
+  expect(told).not.toContain("Decide what to do about it");
+  expect(renderBell(failed)).toContain("Decide what to do about it");
+});
 
 // --- a bell for a conversation that already has a turn running (docs/72) ---
 

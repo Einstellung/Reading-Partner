@@ -25,6 +25,9 @@ import type { BoxOrigin } from "../../box";
 /** The kind reading registers for taking a URL in. */
 export const INGEST_URL_KIND = "ingest-url";
 
+/** The program named as the delegator of an intake's run (topic-intake.ts). */
+export const INTAKE_DELEGATOR = "link-intake";
+
 /** Where the ask is kept. The subtree is registered in palace as `run-brief`. */
 export const INGEST_ASKS_DIR = "legion/briefs";
 
@@ -105,11 +108,13 @@ export interface StartIngestDeps {
 /**
  * Write the ask, hand legion the run, and answer without waiting for it.
  *
- * The delegator is the soul: the model asked for this in a turn of its own, and
- * the answer is owed back to the conversation it was asked in — a run a program
- * delegated is acknowledged and never spoken about (soul/bell.ts). Where it is
- * owed back to is filled in here from the place the turn is being held, exactly
- * as delegate does it, so the model cannot address the answer anywhere else.
+ * For a book the delegator is the soul: the model asked for this in a turn of
+ * its own, and the answer is owed back to the conversation it was asked in. An
+ * intake's card already shows the fetch and what came of it, so a program
+ * delegates that run: its success is acknowledged and never spoken about, and
+ * its failure is told in one sentence (soul/bell.ts). Where it is owed back to
+ * is filled in here from the place the turn is being held, exactly as delegate
+ * does it, so the model cannot address the answer anywhere else.
  */
 export async function startUrlIngest(
   ask: IngestAsk,
@@ -120,7 +125,9 @@ export async function startUrlIngest(
   const brief = await write(ask);
   const result = await send({
     kind: INGEST_URL_KIND,
-    delegator: { kind: "soul" },
+    delegator: isBookIngestAsk(ask)
+      ? { kind: "soul" }
+      : { kind: "program", name: INTAKE_DELEGATOR, tellFailure: true },
     brief,
     ...(deps.origin === undefined ? {} : { deliverTo: JSON.stringify(deps.origin) }),
   });
