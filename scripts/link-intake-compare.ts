@@ -462,6 +462,8 @@ interface RunRecord {
   rejected: { n: number; url: string; why: string }[];
   toolCalls: number;
   rounds: number;
+  /** Times the model called finish; 0 means it stopped on words of its own. */
+  finishCalls: number;
   usage: RunUsage;
   stop: string;
   lead: string;
@@ -495,7 +497,7 @@ const TARGET: IngestTarget = { kind: "book", bookId: "link-intake-compare" };
 async function runRule(link: LinkCase, env: Env): Promise<RunRecord> {
   const shelved: Shelved[] = [];
   const t0 = performance.now();
-  const base = { path: "rule" as const, model: "rule", run: 1, handle: link.handle, rejected: [], toolCalls: 0, rounds: 0, usage: noUsage(), trail: [] };
+  const base = { path: "rule" as const, model: "rule", run: 1, handle: link.handle, rejected: [], toolCalls: 0, rounds: 0, finishCalls: 0, usage: noUsage(), trail: [] };
   try {
     const batch = await ingestXPost(link.url, TARGET, {
       fetch: env.fetch,
@@ -517,9 +519,30 @@ async function runRule(link: LinkCase, env: Env): Promise<RunRecord> {
   }
 }
 
-async function runAi(link: LinkCase, env: Env, model: string, run: number, turn: SubagentTurnFn, usage: RunUsage): Promise<RunRecord> {
+/** The turn with its finish tool counted. */
+function countingFinish(turn: SubagentTurnFn, counts: { finish: number }): SubagentTurnFn {
+  return (request) =>
+    turn({
+      ...request,
+      tools: request.tools.map((tool) =>
+        tool.name === "finish"
+          ? {
+              ...tool,
+              execute: async (args: Record<string, unknown>) => {
+                counts.finish++;
+                return tool.execute(args);
+              },
+            }
+          : tool,
+      ),
+    });
+}
+
+async function runAi(link: LinkCase, env: Env, model: string, run: number, modelTurn: SubagentTurnFn, usage: RunUsage): Promise<RunRecord> {
   const shelved: Shelved[] = [];
   const t0 = performance.now();
+  const counts = { finish: 0 };
+  const turn = countingFinish(modelTurn, counts);
   const base = { path: "ai" as const, model, run, handle: link.handle };
   try {
     const got = await takeLinkInFiled(link.url, TARGET, {
@@ -544,6 +567,7 @@ async function runAi(link: LinkCase, env: Env, model: string, run: number, turn:
       rejected: intake.candidates.filter((c) => c.rejected).map((c) => ({ n: c.n, url: c.url, why: c.rejected! })),
       toolCalls: intake.toolCalls,
       rounds: intake.rounds,
+      finishCalls: counts.finish,
       usage,
       stop,
       lead: got.lead,
@@ -561,6 +585,7 @@ async function runAi(link: LinkCase, env: Env, model: string, run: number, turn:
       rejected: [],
       toolCalls: 0,
       rounds: 0,
+      finishCalls: counts.finish,
       usage,
       stop: "error",
       lead: "",
@@ -609,7 +634,8 @@ function report(records: RunRecord[], links: LinkCase[], models: string[], runs:
     lines.push(
       `${m}: ${rs.filter((r) => r.verdict.pass).length}/${n} pass; per link ${(sum((r) => r.ms) / n / 1000).toFixed(1)} s, ` +
         `$${(sum((r) => r.usage.cost) / n).toFixed(4)}, ${(sum((r) => r.usage.input + r.usage.cacheRead + r.usage.cacheWrite) / n).toFixed(0)} in / ` +
-        `${(sum((r) => r.usage.output) / n).toFixed(0)} out tokens, ${(sum((r) => r.toolCalls) / n).toFixed(1)} tool calls, ${(sum((r) => r.rounds) / n).toFixed(1)} rounds`,
+        `${(sum((r) => r.usage.output) / n).toFixed(0)} out tokens, ${(sum((r) => r.toolCalls) / n).toFixed(1)} tool calls, ${(sum((r) => r.rounds) / n).toFixed(1)} rounds; ` +
+        `finish called in ${rs.filter((r) => r.finishCalls > 0).length}/${n}`,
     );
   }
   const ruleRs = records.filter((r) => r.path === "rule");
@@ -658,7 +684,7 @@ async function main(): Promise<void> {
     await writeFile(log, `${JSON.stringify(r)}\n`, { flag: "a" });
     const docs = r.documents.map((d) => short(d.url)).join(", ") || "nothing";
     const cost = r.path === "ai" && !opts.dryRun ? ` $${r.usage.cost.toFixed(4)}` : "";
-    console.log(`${r.verdict.pass ? "pass" : "FAIL"} ${r.path === "rule" ? "rule" : `${r.model}#${r.run}`} ${r.handle} ${(r.ms / 1000).toFixed(1)}s${cost} ${r.toolCalls} calls ${r.rounds} rounds: ${docs}${r.error ? ` — ${r.error}` : ""}`);
+    console.log(`${r.verdict.pass ? "pass" : "FAIL"} ${r.path === "rule" ? "rule" : `${r.model}#${r.run}`} ${r.handle} ${(r.ms / 1000).toFixed(1)}s${cost} ${r.toolCalls} calls ${r.rounds} rounds${r.path === "ai" ? (r.finishCalls > 0 ? " finish" : " NO-FINISH") : ""}: ${docs}${r.error ? ` — ${r.error}` : ""}`);
   };
 
   for (const link of links) {
