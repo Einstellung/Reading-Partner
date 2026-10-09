@@ -12,9 +12,9 @@ Google 登录 2026-08-06 也接上了,走 Android 类型 client + 自定义 URI 
 
 ### 14ef68b login 布局闸
 
-改的是 AI 供应商(Anthropic / OpenAI)登录卡的按钮布局,不是 Google 同步。当时把 `isIOS()` 换成 `isMobileOS()`,让 Android 也把"用代码登录"提为主按钮。
+改的是 AI 供应商(Anthropic / OpenAI)登录卡的按钮布局,不是 Google 同步。spike 里把 `isIOS()` 换成 `isMobileOS()`,让 Android 也把"用代码登录"提为主按钮;这个 commit 没进主线,主线的 `platform.ts` 没有 `isMobileOS()`,`OAuthCard.tsx` 仍用 `isIOS()`。
 
-还能用,但要重写。当时的 `platform.ts` 靠 UA 嗅探,现在已经改成先问 `@tauri-apps/plugin-os` 的 `platform()`,UA 只做非 Tauri 环境的兜底。移植就是按现在的写法加 `isAndroid()`(`platform() === "android"`,兜底 `/Android/`)和 `isMobileOS()`,再把 `src/ui/components/settings/OAuthCard.tsx:52` 的 `isIOS()` 换掉。两个文件,十几行。
+还能用,但要重写。当时的 `platform.ts` 靠 UA 嗅探,现在已经改成先问 `@tauri-apps/plugin-os` 的 `platform()`,UA 只做非 Tauri 环境的兜底。移植就是按现在的写法加 `isAndroid()`(`platform() === "android"`,兜底 `/Android/`)和 `isMobileOS()`,再把 `src/ui/components/settings/OAuthCard.tsx:56` 的 `isIOS()` 换掉。两个文件,十几行。
 
 前提没验过:commit message 说"Android 和 iOS 一样没有可用的 loopback listener",这是假设。`start_oauth_callback_listener` 在 `lib.rs` 的 mobile invoke_handler 里是注册着的,Android 上 Rust 绑 127.0.0.1 能不能被系统浏览器回调到,没人试过。
 
