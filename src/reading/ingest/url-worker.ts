@@ -43,6 +43,8 @@ import { ingestUrlLive, type IngestRunContext } from "./live";
 import type { IngestedDocument, IngestTarget } from "./article";
 import { isIngestBatch, type IngestBatch } from "./link-intake";
 import { intakeStore, type IntakeDocument, type IntakeStore } from "./intake-store";
+import { appBox, type BoxStore } from "../../box";
+import { exitIntakeItem } from "./intake-box";
 import { prepareCapturedDocument, type PreparedSource } from "../prep/papers/captured-source";
 import { peekPrepPipeline } from "../prep/papers/live";
 import type { PrepPaper } from "../prep/papers/types";
@@ -76,6 +78,8 @@ export interface IngestUrlWorkerDeps {
   writeOutput?: (runId: string, text: string) => Promise<string>;
   /** The intake records an ask with no book reports to (intake-store.ts). */
   intakes?: Pick<IntakeStore, "progress" | "filed" | "failed">;
+  /** The box an intake's item leaves when the intake failed (intake-box.ts). The app's unless injected. */
+  box?: BoxStore | null;
 }
 
 /** The part of the prep pipeline this worker uses: one captured document in. */
@@ -108,6 +112,13 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
   const pipeline = deps.pipeline ?? ((bookId: string) => peekPrepPipeline(bookId));
   const writeOutput = deps.writeOutput ?? writeRunOutput;
   const intakes = deps.intakes ?? intakeStore;
+  const box = deps.box === undefined ? appBox() : deps.box;
+  // A failed intake has nothing left to pick a topic for: its item leaves the
+  // box, and the run's own bell is what tells the reader why.
+  const failedOut = (id: string) =>
+    box
+      ? exitIntakeItem(box, id, "dismissed").catch((e) => console.warn("a failed intake's box item would not leave", e))
+      : Promise.resolve();
 
   // A link with no book: filed into the library attached nowhere, and recorded
   // on the intake the card reads. The intake hears each host, then either what
@@ -158,6 +169,7 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
         ...(batch?.aiNote ? { aiNote: batch.aiNote } : {}),
         ...(batch ? { emptyReason: batch.lead } : {}),
       });
+      if (intake.state === "failed") await failedOut(id);
       const chosen = intake.attachedTo !== null;
       const lines: string[] = batch ? [batch.lead] : [];
       for (const f of filed) lines.push(intakeOutputLine(f.outcome, chosen));
@@ -173,6 +185,7 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
         await intakes
           .failed(id, e instanceof Error ? e.message : String(e))
           .catch((err) => console.warn("could not record the failed intake", err));
+        await failedOut(id);
       }
       throw e;
     }

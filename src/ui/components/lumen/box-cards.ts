@@ -6,6 +6,7 @@
 
 import { t } from "../../../i18n";
 import type { BoxItem, BoxOrigin } from "../../../box/types";
+import { intakeIdOfItem } from "../../../reading/ingest/intake-box";
 
 // Five, and the sixth scrolls. Past five the column is a page, and a page in a
 // corner is a screen that opened itself.
@@ -106,4 +107,28 @@ export const SWIPE_DISMISS_PX = 64;
  */
 export function isDismissSwipe(dx: number, dy: number): boolean {
   return Math.abs(dx) >= SWIPE_DISMISS_PX && Math.abs(dx) > Math.abs(dy);
+}
+
+/**
+ * The open items this device shows. Box items sync and intake records do not
+ * (link-intakes/ is machine-local), so a link intake's card is shown only on
+ * the device that has its record, the one the topic can be picked on; another
+ * device neither lists nor counts it. Where one is shown, anything else of the
+ * same delivery (the run's bell, about the same link) is left out under it.
+ */
+export async function cardsHere(
+  items: readonly BoxItem[],
+  hasIntake: (intakeId: string) => Promise<boolean>,
+): Promise<BoxItem[]> {
+  const kept: BoxItem[] = [];
+  const intakeBoxes = new Set<string>();
+  for (const item of items) {
+    const intakeId = intakeIdOfItem(item);
+    if (intakeId === null) kept.push(item);
+    else if (await hasIntake(intakeId).catch(() => false)) {
+      kept.push(item);
+      intakeBoxes.add(item.boxId);
+    }
+  }
+  return kept.filter((item) => intakeIdOfItem(item) !== null || !intakeBoxes.has(item.boxId));
 }

@@ -14,6 +14,7 @@
 import type { FC } from "react";
 import type { InfoCard } from "../../../info/boxes/cards";
 import type { AsideCard } from "../../../reading/aside";
+import type { IntakeCard } from "../../../reading/ingest/intake-card";
 import type { ReadingCard } from "../../../reading/retell/cards";
 import type {
   PersistedCardPayload,
@@ -31,7 +32,7 @@ import { persistedTrace, type Receipt, type ToolStatus } from "../../../ai/turn-
 // reading/retell so neither has to import the other to be in the union. The
 // registry (ui/components/cardRegistry.ts, one level above chat/) is where the
 // components are gathered.
-export type CardPayload = InfoCard | ReadingCard | AsideCard;
+export type CardPayload = InfoCard | ReadingCard | AsideCard | IntakeCard;
 export type CardKind = CardPayload["kind"];
 
 // The component table the render layer looks a card up in, by kind. The mapped
@@ -83,7 +84,9 @@ export type ChatPart =
 //              dispatcher branch is defined so the vocabulary is complete.
 export type CardAction =
   | { kind: "local"; patch: Record<string, unknown> }
-  | { kind: "mutate"; op: string }
+  // `arg` is the one value an op needs beyond the card it came from (the topic
+  // picked on an intake card).
+  | { kind: "mutate"; op: string; arg?: string }
   | { kind: "reply"; role?: "user" | "ai"; text: string }
   | { kind: "navigate"; to: string; arg?: string }
   | { kind: "resolve"; value: unknown };

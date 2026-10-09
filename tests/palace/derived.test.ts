@@ -227,6 +227,9 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   // it confirms (delete-book.ts, delete-thread.ts). Nothing here is a record.
   "ui/components/phone/hold-menu.ts",
   "ui/components/phone/lesson/lesson-view.ts",
+  // An intake card's 「打开阅读」 hands the shell the topic the document was just
+  // attached to, so it opens there. The record is the intake's (intake-store.ts).
+  "ui/components/lumen/intake-view.ts",
 ];
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../src");

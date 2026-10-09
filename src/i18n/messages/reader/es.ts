@@ -161,4 +161,8 @@ export default {
   "gate.bookThreadOpen": "La conversación de este libro ya está abierta.",
   "gate.bookThreadBehind": "La conversación del libro está detrás de esta conversación paralela.",
   "aside.receiptSummary": { one: "{count} pregunta durante la lectura", other: "{count} preguntas durante la lectura" },
+
+  "intake.boxCover": "Elige un tema para el enlace de {host}",
+  "intake.toolLabel": "Recibiendo el enlace",
+  "intake.receiptLabel": "Enlace recibido",
 } satisfies Translation<typeof en>;

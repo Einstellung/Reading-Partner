@@ -75,7 +75,7 @@ function setup(over: IngestUrlWorkerDeps = {}, ask: IngestAsk = { url: "https://
 test("picked before filing: the run files attached nowhere, then attaches to the pick", async () => {
   const s = setup();
   const { id } = await s.store.create({ url: "https://x.com/a/status/1" });
-  await chooseIntakeTopic(id, "t-a", s.store);
+  await chooseIntakeTopic(id, "t-a", { store: s.store, box: null });
   const out = await ingestUrlWorker(s.deps)(ASK, context().ctx).done;
 
   expect(s.targets).toEqual([{ kind: "topic", topicId: null }]);
@@ -97,7 +97,7 @@ test("filed before the pick: the documents wait, the line says so, and the pick 
   expect((await readIntake(id, s.store))!).toMatchObject({ state: "filed", topicId: null, attachedTo: null });
   expect(s.outputs.get("r-intake")!).toContain("whichever topic the reader picks");
 
-  const picked = await chooseIntakeTopic(id, "t-b", s.store);
+  const picked = await chooseIntakeTopic(id, "t-b", { store: s.store, box: null });
   expect(picked.attachedTo).toBe("t-b");
   expect(s.attached).toEqual([{ topicId: "t-b", path: "library/h1.epub", hash: "h1" }]);
 });
@@ -191,6 +191,7 @@ test("starting an intake writes the record, an ask naming it and no book, and th
   const asks: IngestAsk[] = [];
   const started = await startTopicIntake("https://x.com/a/status/1", "the repo it shares", {
     store: s.store,
+    box: null,
     origin: { kind: "door" } as never,
     start: async (ask, deps) => {
       asks.push(ask);

@@ -14,10 +14,12 @@
 import { ASIDE_CARD_REGISTRY } from "./reader/AsideCard";
 import type { CardRegistry } from "./chat/chatParts";
 import { INFO_CARD_REGISTRY } from "./info/InfoCards";
+import { LUMEN_CARD_REGISTRY } from "./lumen/IntakeCard";
 import { READING_CARD_REGISTRY } from "./reader/RetellCard";
 
 export const CARD_REGISTRY: CardRegistry = {
   ...INFO_CARD_REGISTRY,
   ...READING_CARD_REGISTRY,
   ...ASIDE_CARD_REGISTRY,
+  ...LUMEN_CARD_REGISTRY,
 };

@@ -183,4 +183,8 @@ export default {
   "gate.bookThreadOpen": "This book's conversation is already open.",
   "gate.bookThreadBehind": "The book's conversation is behind this side one.",
   "aside.receiptSummary": { one: "{count} question while you were reading", other: "{count} questions while you were reading" },
+
+  "intake.boxCover": "Pick a topic for the link from {host}",
+  "intake.toolLabel": "Taking the link in",
+  "intake.receiptLabel": "Link taken in",
 } as const;

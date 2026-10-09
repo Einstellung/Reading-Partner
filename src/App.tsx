@@ -1198,6 +1198,13 @@ export default function App() {
         if (inReader) closeReader();
         setHomeScreen("meals");
       },
+      // An intake card's 「打开阅读」: the document was attached a moment ago,
+      // so the shelf is read fresh rather than out of the state above.
+      openDocument: async (doc: { hash: string; topicId: string }) => {
+        const topic = (await listTopics()).find((one) => one.id === doc.topicId);
+        const file = topic?.files.find((one) => one.hash === doc.hash);
+        if (file) await openFile(file, doc.topicId);
+      },
     }),
     [topics, openFile, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
   );

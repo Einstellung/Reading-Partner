@@ -15,7 +15,8 @@
 
 import { listTopics } from "../../platform/app/topics";
 import { watchSource } from "../../platform/std/watch";
-import type { BoxOrigin } from "../../box";
+import { appBox, type BoxOrigin, type BoxStore } from "../../box";
+import { exitIntakeItem, intakeBoxItem } from "./intake-box";
 import { intakeStore, type IntakeStore, type TopicIntake } from "./intake-store";
 import { topicChoicesOf, type TopicChoices } from "./topic-choice";
 import { startUrlIngest, type StartedIngest, type StartIngestDeps } from "./url-run";
@@ -38,6 +39,12 @@ export interface TopicIntakeDeps {
   start?: typeof startUrlIngest;
   /** Passed through to startUrlIngest. */
   ingest?: Omit<StartIngestDeps, "origin">;
+  /**
+   * Where the intake's item goes while no topic is picked (intake-box.ts). The
+   * app's box unless injected; null puts none. Only put with an origin, which
+   * is where tapping it goes back to.
+   */
+  box?: BoxStore | null;
 }
 
 /**
@@ -64,7 +71,19 @@ export async function startTopicIntake(
     throw e;
   }
   await store.setRun(intake.id, started.runId);
+  const box = deps.box === undefined ? appBox() : deps.box;
+  if (box && deps.origin) {
+    await box
+      .put(intakeBoxItem(intake, started.runId, deps.origin, intake.createdAt))
+      .catch((e) => console.warn(`link intake ${intake.id} would not go in the box`, e));
+  }
   return { intakeId: intake.id, runId: started.runId, ...(started.done ? { done: started.done } : {}) };
+}
+
+export interface ChooseIntakeDeps {
+  store?: IntakeStore;
+  /** The box the intake's item is taken out of. The app's unless injected; null leaves it. */
+  box?: BoxStore | null;
 }
 
 /**
@@ -73,9 +92,23 @@ export async function startTopicIntake(
  * before then replaces the pick; after the documents are attached the intake
  * is settled and a further pick changes nothing. A new topic is made by the
  * caller (createTopic) before it is picked.
+ *
+ * The intake's box item leaves the box on the pick, filed or not: from here on
+ * the documents end up in the topic without the reader doing anything more.
  */
-export function chooseIntakeTopic(intakeId: string, topicId: string, store: IntakeStore = intakeStore): Promise<TopicIntake> {
-  return store.choose(intakeId, topicId);
+export async function chooseIntakeTopic(
+  intakeId: string,
+  topicId: string,
+  deps: ChooseIntakeDeps = {},
+): Promise<TopicIntake> {
+  const picked = await (deps.store ?? intakeStore).choose(intakeId, topicId);
+  const box = deps.box === undefined ? appBox() : deps.box;
+  if (box && picked.topicId !== null) {
+    await exitIntakeItem(box, intakeId, "saved").catch((e) =>
+      console.warn(`link intake ${intakeId} was picked but its box item would not leave`, e),
+    );
+  }
+  return picked;
 }
 
 /** The intake as it stands, or null when there is no such record on this device. */

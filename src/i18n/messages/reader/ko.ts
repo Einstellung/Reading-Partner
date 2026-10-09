@@ -161,4 +161,8 @@ export default {
   "gate.bookThreadOpen": "이 책의 대화가 이미 열려 있습니다.",
   "gate.bookThreadBehind": "이 책의 대화는 이 곁가지 대화 뒤에 있습니다.",
   "aside.receiptSummary": { other: "읽는 동안 한 질문 {count}개" },
+
+  "intake.boxCover": "{host} 링크의 주제를 골라 주세요",
+  "intake.toolLabel": "링크 받는 중",
+  "intake.receiptLabel": "링크 받음",
 } satisfies Translation<typeof en>;

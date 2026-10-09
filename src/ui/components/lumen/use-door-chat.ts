@@ -14,7 +14,9 @@ import { doorDate, doorKey, openDoorThread, sendAtTheDoor } from "../../../soul"
 import { t } from "../../../i18n";
 import { topicFiledNote } from "../../../info/briefer/call";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
-import { createTopic } from "../../../platform/app/topics";
+import { createTopic, listTopics } from "../../../platform/app/topics";
+import { extractLinks, linkTurnNote, linksToTake } from "../../../reading/ingest/take-link-tool";
+import { chooseIntakeTopic, readIntake } from "../../../reading/ingest/topic-intake";
 import {
   appendMessage,
   onThreadMessage,
@@ -32,6 +34,13 @@ import { useStreamingTurn, type StreamingTurnRun } from "../chat/useStreamingTur
 import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools } from "./door-tools";
+import {
+  INTAKE_CHOOSE_OP,
+  INTAKE_NEW_TOPIC_OP,
+  INTAKE_OPEN_TARGET,
+  documentToOpen,
+  type IntakeOpenDocument,
+} from "./intake-view";
 
 export interface DoorChat {
   messages: UiMessage[];
@@ -45,10 +54,22 @@ export interface DoorChat {
   onCardAction(cardId: string, action: CardAction): void;
 }
 
-export function useDoorChat(): DoorChat {
+export interface DoorChatOptions {
+  /**
+   * The day whose conversation to open: a card in Lumen's box goes back to the
+   * conversation it came from, which may be an earlier day's. Today otherwise.
+   */
+  date?: string;
+  /** Open a document an intake card filed (its 「打开阅读」), in this shell's reader. */
+  onOpenDocument?: (doc: IntakeOpenDocument) => void;
+}
+
+export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   // The day the chat was opened on. A conversation left open over midnight
   // stays in the day it began, the way a call does.
-  const [date] = useState(doorDate);
+  const [date] = useState(() => options.date ?? doorDate());
+  const openDocumentRef = useRef(options.onOpenDocument);
+  openDocumentRef.current = options.onOpenDocument;
   const key = doorKey(date);
   const stickKey = `door:${date}`;
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -102,14 +123,20 @@ export function useDoorChat(): DoorChat {
     async (history: UiMessage[], turn: StreamingTurnRun, id: string) => {
       let outcome;
       try {
+        // A message carrying links goes to the model with an app note that
+        // numbers them and the topics, which is what take_link is called with.
+        const latest = history[history.length - 1];
+        const latestLinks = latest?.role === "user" ? extractLinks(latest.text) : [];
+        const note = latestLinks.length > 0 ? linkTurnNote(latestLinks, await listTopics().catch(() => [])) : "";
+        const sent = note ? [...history.slice(0, -1), { ...latest, text: latest.text + note }] : history;
         outcome = await sendAtTheDoor({
           threadId: id,
           date,
-          history: replayableHistory(history),
+          history: replayableHistory(sent),
           signal: turn.signal,
           handlers: turn.handlers(),
           // The door's own tools, beside the soul's (door-tools.ts).
-          tools: doorTools({ threadId: id, date, raiseCard }),
+          tools: doorTools({ threadId: id, date, raiseCard, links: linksToTake(history) }),
           topic: { onCard: (payload) => raiseCard("topic", payload) },
         });
       } catch (e) {
@@ -164,12 +191,42 @@ export function useDoorChat(): DoorChat {
     [key, threadId, note, setMessages],
   );
 
+  // The intake card's pick: a topic on the shelf, or one made on the card first.
+  // The card redraws off the intake record, so nothing is patched here.
+  const intakeOf = useCallback((cardId: string): string | null => {
+    const found = findCardPart(messagesRef.current, cardId);
+    return found && found.payload.kind === "link-intake" ? found.payload.intakeId : null;
+  }, []);
+  const pickIntakeTopic = useCallback(
+    async (cardId: string, topic: { id?: string; name?: string }) => {
+      const intakeId = intakeOf(cardId);
+      if (!intakeId) return;
+      try {
+        const topicId = topic.id ?? (topic.name ? (await createTopic(topic.name)).id : null);
+        if (topicId) await chooseIntakeTopic(intakeId, topicId);
+      } catch (e) {
+        console.warn("the intake's topic could not be picked", e);
+      }
+    },
+    [intakeOf],
+  );
+  const openIntakeDocument = useCallback(
+    async (cardId: string, hash: string) => {
+      const intakeId = intakeOf(cardId);
+      const doc = intakeId ? documentToOpen(await readIntake(intakeId), hash) : null;
+      if (doc) openDocumentRef.current?.(doc);
+    },
+    [intakeOf],
+  );
+
   // A card's gestures. A door tool's card adds its own `mutate` op here.
   const onCardAction = useCallback(
     (cardId: string, action: CardAction) => {
       switch (action.kind) {
         case "mutate":
           if (action.op === "apply-topic") void applyTopic(cardId);
+          else if (action.op === INTAKE_CHOOSE_OP && action.arg) void pickIntakeTopic(cardId, { id: action.arg });
+          else if (action.op === INTAKE_NEW_TOPIC_OP && action.arg) void pickIntakeTopic(cardId, { name: action.arg });
           break;
         case "local":
           setMessages((prev) => patchCardPayload(prev, cardId, action.patch));
@@ -178,11 +235,13 @@ export function useDoorChat(): DoorChat {
           note(action.text, action.role);
           break;
         case "navigate":
+          if (action.to === INTAKE_OPEN_TARGET && action.arg) void openIntakeDocument(cardId, action.arg);
+          break;
         case "resolve":
           break;
       }
     },
-    [applyTopic, note, setMessages],
+    [applyTopic, pickIntakeTopic, openIntakeDocument, note, setMessages],
   );
 
   return { messages, stickKey, ready: threadId !== null, streaming, send, stop, onCardAction };

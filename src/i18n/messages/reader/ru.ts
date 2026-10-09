@@ -171,4 +171,8 @@ export default {
   "gate.bookThreadOpen": "Разговор об этой книге уже открыт.",
   "gate.bookThreadBehind": "Разговор о книге находится за этим боковым разговором.",
   "aside.receiptSummary": { one: "{count} вопрос во время чтения", few: "{count} вопроса во время чтения", many: "{count} вопросов во время чтения", other: "{count} вопроса во время чтения" },
+
+  "intake.boxCover": "Выберите тему для ссылки с {host}",
+  "intake.toolLabel": "Принимаю ссылку",
+  "intake.receiptLabel": "Ссылка принята",
 } satisfies Translation<typeof en>;

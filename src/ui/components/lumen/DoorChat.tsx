@@ -10,7 +10,7 @@
 // follows the corner to whichever edge it was dragged to and Lumen stays where
 // it was, under it.
 
-import type { CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 
 import { useT } from "../../../i18n";
 import { IconClose } from "../base/icons";
@@ -19,6 +19,7 @@ import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { BottomSheetLayer, OVERLAY_Z, OverlaySurface } from "../ui/overlay";
 import lumenIcon from "./lumen-icon.webp";
+import type { IntakeOpenDocument } from "./intake-view";
 import { useDoorChat } from "./use-door-chat";
 
 // What the panel leaves below itself: the body (72px), the column's gap and the
@@ -28,15 +29,39 @@ const PANEL_RESERVE_PX = 72 + 8 + 24 + 16;
 export function DoorChat({
 	form,
 	liftPx = 0,
+	date,
+	focusIntakeId,
+	onOpenDocument,
 	onClose,
 }: {
 	form: "sheet" | "panel";
 	/** How far the corner stands above its usual place (use-corner-drag.ts). */
 	liftPx?: number;
+	/** The day's conversation to open; today when absent. Read once, at mount. */
+	date?: string;
+	/** An intake card to bring into view once the conversation is drawn (a box card's jump). */
+	focusIntakeId?: string;
+	onOpenDocument?: (doc: IntakeOpenDocument) => void;
 	onClose: () => void;
 }) {
 	const t = useT();
-	const chat = useDoorChat();
+	const chat = useDoorChat({ ...(date ? { date } : {}), ...(onOpenDocument ? { onOpenDocument } : {}) });
+
+	// Back to the card the box item stands for: once, after the rows are drawn
+	// and the transcript has put its own scroll back.
+	const focused = useRef(false);
+	useEffect(() => {
+		if (!focusIntakeId || focused.current || !chat.ready || chat.messages.length === 0) return;
+		const frame = requestAnimationFrame(() =>
+			requestAnimationFrame(() => {
+				const card = document.querySelector(`[data-intake-id="${CSS.escape(focusIntakeId)}"]`);
+				if (!card) return;
+				focused.current = true;
+				card.scrollIntoView({ block: "center" });
+			}),
+		);
+		return () => cancelAnimationFrame(frame);
+	}, [focusIntakeId, chat.ready, chat.messages.length]);
 
 	const header = (
 		<div className="flex flex-none items-center gap-2 border-b border-border-subtle bg-background py-1.5 pl-3.5 pr-1.5">

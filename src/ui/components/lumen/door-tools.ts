@@ -7,6 +7,9 @@
 // other chat card; its gestures are answered in use-door-chat.ts onCardAction.
 
 import type { AgentTool } from "../../../legion/execute/turn";
+import { listTopics } from "../../../platform/app/topics";
+import { buildTakeLinkTool } from "../../../reading/ingest/take-link-tool";
+import { startTopicIntake } from "../../../reading/ingest/topic-intake";
 import type { CardPayload } from "../chat/chatParts";
 
 export interface DoorToolPorts {
@@ -15,8 +18,19 @@ export interface DoorToolPorts {
   date: string;
   /** Put a card in the conversation, on screen and on disk (useStreamingTurn). */
   raiseCard(prefix: string, payload: CardPayload): void;
+  /** The links of this turn, numbered in order (take-link-tool.ts linksToTake). */
+  links: readonly string[];
 }
 
-export function doorTools(_ports: DoorToolPorts): AgentTool[] {
-  return [];
+export function doorTools(ports: DoorToolPorts): AgentTool[] {
+  return [
+    // A pasted link: the intake card, and the fetch as a run (docs/68 「收链接」).
+    buildTakeLinkTool({
+      links: () => ports.links,
+      origin: { place: "door", date: ports.date },
+      start: (url, origin) => startTopicIntake(url, undefined, { origin }),
+      topics: () => listTopics(),
+      raiseCard: (card) => ports.raiseCard("intake", card),
+    }),
+  ];
 }

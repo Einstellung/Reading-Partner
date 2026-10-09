@@ -97,11 +97,14 @@ import {
 	originLabel,
 	showsCase,
 	sortBoxCards,
+	cardsHere,
 } from "./box-cards";
 import { useCaseMotion } from "./use-case-motion";
 import { columnAlign } from "./corner-drag";
 import { useCornerDrag } from "./use-corner-drag";
-import { planJump, type Place, type Shell } from "./box-jump";
+import { planItemJump, stateAfterFollow, staysUntilDecided, type Place, type Shell } from "./box-jump";
+import type { IntakeOpenDocument } from "./intake-view";
+import { readIntake } from "../../../reading/ingest/topic-intake";
 
 // What the body is announced as during a call: the hold that ends it.
 const HOLD_TO_END = "Hold to end the conversation";
@@ -116,7 +119,18 @@ export interface LumenJumpTargets {
 	goToDoor: (date: string) => void;
 	goToBriefing: (date: string) => void;
 	goToMeals: () => void;
+	/** A document an intake card filed (its 「打开阅读」), opened in this shell's reader. */
+	openDocument?: (doc: IntakeOpenDocument) => void | Promise<void>;
 }
+
+/** The door conversation, when it is up: today's, or the day and card a box card went back to. */
+interface DoorOpen {
+	date?: string;
+	intakeId?: string;
+}
+
+// Whether this device has the intake a box card stands for (box-cards.ts cardsHere).
+const hasIntakeHere = (intakeId: string) => readIntake(intakeId).then((intake) => intake !== null);
 
 export function LumenCorner({
 	shell,
@@ -185,7 +199,7 @@ export function LumenCorner({
 	const canTalk = hasNativeSpeech() && (live || context !== null);
 	const handle = voiceCallHandle(call);
 	const t = useT();
-	const [door, setDoor] = useState(false);
+	const [door, setDoor] = useState<DoorOpen | null>(null);
 	// Only where the body is a control: everywhere else there is no call of
 	// theirs to have broken, and a sentence in the corner of a book would be
 	// about nothing they did.
@@ -210,7 +224,7 @@ export function LumenCorner({
 			return;
 		}
 		setOpen(false);
-		setDoor(true);
+		setDoor({});
 	});
 	const feedMenu = menu.feed;
 	const menuContext = useCallback(
@@ -290,8 +304,9 @@ export function LumenCorner({
 		let alive = true;
 		const read = () => {
 			void appBox()
-				.openCount(UNSEEN)
-				.then((n) => {
+				.open(UNSEEN)
+				.then((open) => cardsHere(open, hasIntakeHere))
+				.then(({ length: n }) => {
 					if (!alive) return;
 					setCount(n);
 					// The last card followed or pressed away takes the column with
@@ -316,6 +331,7 @@ export function LumenCorner({
 	const load = useCallback(() => {
 		void appBox()
 			.open(UNSEEN)
+			.then((all) => cardsHere(all, hasIntakeHere))
 			.then(async (open) => {
 				setItems(sortBoxCards(open));
 				const names: Record<string, string> = {};
@@ -346,7 +362,7 @@ export function LumenCorner({
 	// inside the book being opened.
 	const follow = useCallback(
 		async (item: BoxItem) => {
-			const jump = planJump(item.origin, place);
+			const jump = planItemJump(item, place);
 			if (jump.unreachable) {
 				setNote(jump.unreachable);
 				return;
@@ -374,9 +390,13 @@ export function LumenCorner({
 					case "go-to-meals":
 						targets.goToMeals();
 						break;
+					case "open-door-chat":
+						setDoor({ date: step.date, intakeId: step.intakeId });
+						break;
 				}
 			}
-			void appBox().setState(item.id, "told");
+			const next = stateAfterFollow(item);
+			if (next) void appBox().setState(item.id, next);
 			setOpen(false);
 		},
 		[place, targets],
@@ -390,16 +410,37 @@ export function LumenCorner({
 	);
 
 	const dismiss = useCallback((item: BoxItem) => {
+		if (staysUntilDecided(item)) return;
 		setItems((current) => current?.filter((one) => one.id !== item.id) ?? current);
 		void appBox().setState(item.id, "dismissed");
 	}, []);
+
+	const openDocument = useCallback(
+		(doc: IntakeOpenDocument) => {
+			setDoor(null);
+			void targets.openDocument?.(doc);
+		},
+		[targets],
+	);
+	const doorChat = (form: "sheet" | "panel") =>
+		door && (
+			<DoorChat
+				key={`${door.date ?? "today"}:${door.intakeId ?? ""}`}
+				form={form}
+				{...(form === "panel" ? { liftPx: drag.bottomPx } : {})}
+				{...(door.date ? { date: door.date } : {})}
+				{...(door.intakeId ? { focusIntakeId: door.intakeId } : {})}
+				onOpenDocument={openDocument}
+				onClose={() => setDoor(null)}
+			/>
+		);
 
 	if (!shown) return null;
 
 	const asSheet = shell === "phone";
 	return (
 		<>
-		{door && asSheet && <DoorChat form="sheet" onClose={() => setDoor(false)} />}
+		{asSheet && doorChat("sheet")}
 		<div
 			ref={drag.frameRef}
 			className={cn(
@@ -419,8 +460,8 @@ export function LumenCorner({
 			// onto it — which is why the drag never touches this style.
 			style={drag.bottomPx ? { marginBottom: `${drag.bottomPx}px` } : undefined}
 		>
-			{door && !asSheet && (
-				<DoorChat form="panel" liftPx={drag.bottomPx} onClose={() => setDoor(false)} />
+			{!asSheet && door && (
+				doorChat("panel")
 			)}
 			{errorLine && <ErrorLine line={errorLine} />}
 			{menu.state.open && (
@@ -677,6 +718,7 @@ function Column({
 						key={item.id}
 						item={item}
 						title={item.origin.place === "book" ? (titles[item.origin.bookId] ?? null) : null}
+						pinned={staysUntilDecided(item)}
 						onFollow={() => onFollow(item)}
 						onDismiss={() => onDismiss(item)}
 					/>
@@ -693,11 +735,14 @@ function Column({
 function Card({
 	item,
 	title,
+	pinned,
 	onFollow,
 	onDismiss,
 }: {
 	item: BoxItem;
 	title: string | null;
+	/** Stays until the reader decides (box-jump.ts staysUntilDecided): no swipe, no ×. */
+	pinned: boolean;
 	onFollow: () => void;
 	onDismiss: () => void;
 }) {
@@ -719,7 +764,7 @@ function Card({
 			onPointerUp={(event) => {
 				const start = from.current;
 				from.current = null;
-				if (!start || !start.touch) return;
+				if (!start || !start.touch || pinned) return;
 				if (isDismissSwipe(event.clientX - start.x, event.clientY - start.y)) {
 					setSwiped(true);
 					onDismiss();
@@ -752,6 +797,7 @@ function Card({
 			{/* The finger swipes; the cursor gets a target, because there is no
 			    swipe on a mouse and a card with no way out on the desktop would be
 			    a card that only accumulates. */}
+			{!pinned && (
 			<button
 				type="button"
 				aria-label={t("shell.action.dismiss")}
@@ -760,6 +806,7 @@ function Card({
 			>
 				×
 			</button>
+			)}
 		</div>
 	);
 }

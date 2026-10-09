@@ -532,6 +532,9 @@ export default function PhoneApp({
           goToDoor: () => onNavigate("vestibule"),
           goToBriefing: () => onNavigate("briefing"),
           goToMeals: () => onNavigate("meals"),
+          // An intake card's 「打开阅读」 (lumen/IntakeCard.tsx).
+          openDocument: (doc) =>
+            openReader({ bookId: doc.hash, name: doc.title, topicId: doc.topicId, path: doc.path }),
         }}
       />
       </CardRegistryProvider>

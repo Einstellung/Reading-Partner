@@ -6,7 +6,8 @@
 // steps in the order they have to happen; a shell walks it.
 
 import { t } from "../../../i18n";
-import type { BoxOrigin } from "../../../box/types";
+import type { BoxItem, BoxItemState, BoxOrigin } from "../../../box/types";
+import { intakeIdOfItem } from "../../../reading/ingest/intake-box";
 
 export type Shell = "desktop" | "phone";
 
@@ -26,7 +27,10 @@ export type JumpStep =
   | { step: "open-thread"; bookId: string; threadId: string }
   | { step: "go-to-door"; date: string }
   | { step: "go-to-briefing"; date: string }
-  | { step: "go-to-meals" };
+  | { step: "go-to-meals" }
+  // The door conversation of that day, opened over whatever is on screen, at an
+  // intake card (lumen/DoorChat.tsx).
+  | { step: "open-door-chat"; date: string; intakeId: string };
 
 export interface Jump {
   steps: JumpStep[];
@@ -68,4 +72,33 @@ export function planJump(origin: BoxOrigin, place: Place): Jump {
     case "meals":
       return { steps: [{ step: "go-to-meals" }], unreachable: null };
   }
+}
+
+type ItemFacts = Pick<BoxItem, "origin" | "kind" | "body">;
+
+/**
+ * Where a card goes. A link intake's card opens the door conversation it was
+ * raised in, at the intake card, on every shell: picking the topic there is the
+ * one thing the card is for (docs/68 「收链接」). Anything else goes by origin.
+ */
+export function planItemJump(item: ItemFacts, place: Place): Jump {
+  const intakeId = intakeIdOfItem(item);
+  if (intakeId && item.origin.place === "door") {
+    return { steps: [{ step: "open-door-chat", date: item.origin.date, intakeId }], unreachable: null };
+  }
+  return planJump(item.origin, place);
+}
+
+/**
+ * Whether a card stays in the box until the reader decides what it asks: a
+ * link intake's, until its topic is picked. Following it does not move it and
+ * it cannot be pressed away; the pick takes it out (reading/ingest/intake-box.ts).
+ */
+export function staysUntilDecided(item: Pick<BoxItem, "kind" | "body">): boolean {
+  return intakeIdOfItem(item) !== null;
+}
+
+/** The state a followed card moves to, or null for one that stays until decided. */
+export function stateAfterFollow(item: Pick<BoxItem, "kind" | "body">): BoxItemState | null {
+  return staysUntilDecided(item) ? null : "told";
 }

@@ -159,4 +159,8 @@ export default {
   "gate.bookThreadOpen": "这本书的对话已经打开了。",
   "gate.bookThreadBehind": "这本书的对话就在这段旁支对话后面。",
   "aside.receiptSummary": { other: "阅读时提了 {count} 个问题" },
+
+  "intake.boxCover": "选个主题收下 {host} 的链接",
+  "intake.toolLabel": "收下链接",
+  "intake.receiptLabel": "收链接",
 } satisfies Translation<typeof en>;
