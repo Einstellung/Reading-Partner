@@ -22,6 +22,7 @@ import { mergeObject, type ResolveConflict } from "./fields";
 import { latticeFor } from "./lattice";
 import { mergeThread } from "./messages";
 import { mergeProse } from "./prose";
+import { mergeTopic } from "./topics";
 import {
   lineCollection,
   mergeCollection,
@@ -97,15 +98,17 @@ export function mergeFile(input: MergeInput): MergeOutput {
       ? mergeRecordFile(input)
       : strategy === "messages"
         ? mergeRecordFile(input, mergeThread)
-        : strategy === "fields"
-          ? mergeFieldFile(input)
-          : strategy === "cursors"
-            ? mergeFieldFile(input, lowerCursorWins)
-            : strategy === "prose"
-              ? mergeProseFile(input)
-              : strategy === "lattice"
-                ? mergeLatticeFile(input)
-                : null;
+        : strategy === "topics"
+          ? mergeRecordFile(input, mergeTopic)
+          : strategy === "fields"
+            ? mergeFieldFile(input)
+            : strategy === "cursors"
+              ? mergeFieldFile(input, lowerCursorWins)
+              : strategy === "prose"
+                ? mergeProseFile(input)
+                : strategy === "lattice"
+                  ? mergeLatticeFile(input)
+                  : null;
   // A strategy returns null when the file is not the shape it merges —
   // unparseable JSON, a record with no identity, bytes that are not UTF-8. The
   // file then keeps its content whole instead of being half-understood.
@@ -147,8 +150,8 @@ function texts(input: MergeInput): Texts | null {
   return { base: input.base === null ? null : decode(input.base), local, remote };
 }
 
-// Records, and the messages strategy, which is records with a way into a
-// thread both sides edited.
+// Records, and the messages and topics strategies, which are records with a
+// way into a thread, or a topic, both sides edited.
 function mergeRecordFile(input: MergeInput, settle?: SettleRecord): MergeOutput | null {
   const shape = recordShape(input.path);
   const t = texts(input);

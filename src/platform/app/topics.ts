@@ -3,7 +3,14 @@
 // references; files are never copied. Persisted to AppData/topics.json.
 
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
-import { emptyDeletions, readDeletions, type Deletions } from "./deleted-books";
+import {
+  emptyDeletions,
+  readDeletions,
+  recordDeletion,
+  recordRevival,
+  topicFileId,
+  type Deletions,
+} from "./deleted-books";
 import { basename, decodeLegacyName, normalizeFilePath } from "./path";
 import { createSerialQueue } from "./serial-queue";
 
@@ -79,14 +86,17 @@ export function healTopicFiles(files: FileRef[]): FileRef[] {
 }
 
 // Pure: drop what the deletion log says is gone — a topic by its id, a file by
-// the book id it carries. The record may still be in the file: a topic's row
-// comes back when another device edited it (a lastOpenedAt) after this one
-// deleted it, since an edit outranks a delete in the merge (merge/records.ts),
-// and a book's FileRef the same way. The log is what the reader asked for, so
-// the store answers from it and the file catches up on the next write. Returns
-// the same array when nothing is dropped, so a caller can skip the write.
+// the book id it carries, and a file taken off this one topic by the pair. The
+// record may still be in the file: a topic's row comes back when another device
+// edited it (a lastOpenedAt) after this one deleted it, since an edit outranks a
+// delete in the merge (merge/records.ts), and a FileRef comes back from a merge
+// with no base or from a client that still settles a topic whole (docs/59 §11).
+// The log is what the reader asked for, so the store answers from it and the
+// file catches up on the next write. Returns the same array when nothing is
+// dropped, so a caller can skip the write.
 export function pruneDeletedTopics(topics: Topic[], deletions: Deletions): Topic[] {
-  if (deletions.topic.size === 0 && deletions.book.size === 0) return topics;
+  const offTopic = deletions["topic-file"];
+  if (deletions.topic.size === 0 && deletions.book.size === 0 && offTopic.size === 0) return topics;
   let changed = false;
   const out: Topic[] = [];
   for (const topic of topics) {
@@ -94,7 +104,9 @@ export function pruneDeletedTopics(topics: Topic[], deletions: Deletions): Topic
       changed = true;
       continue;
     }
-    const files = topic.files.filter((f) => !f.hash || !deletions.book.has(f.hash));
+    const files = topic.files.filter(
+      (f) => !f.hash || (!deletions.book.has(f.hash) && !offTopic.has(topicFileId(topic.id, f.hash))),
+    );
     if (files.length !== topic.files.length) {
       changed = true;
       out.push({ ...topic, files });
@@ -127,6 +139,10 @@ export interface TopicIo {
   now: () => number;
   // What the deletion log says is gone (deleted-books.ts). Left out, nothing is.
   deletions?: () => Promise<Deletions>;
+  // Log a book going off a topic, or coming back onto one it was taken off. A
+  // revive of a pair that is not deleted writes nothing. Left out, nothing is
+  // logged.
+  logFile?: (op: "delete" | "revive", topicId: string, hash: string) => Promise<void>;
 }
 
 export interface TopicStore {
@@ -279,18 +295,28 @@ export function createTopicStore(io: TopicIo): TopicStore {
       return serialize(async () => {
         const store = await load();
         const topic = store.topics.find((t) => t.id === id);
-        if (!topic || topic.files.some((f) => f.path === path)) return;
+        // A topic lists a book once: the merge keys a row by its book id.
+        if (!topic || topic.files.some((f) => f.path === path || f.hash === hash)) return;
+        // Back onto a topic it was taken off: the revive goes first, or the
+        // next read filters the new row out again.
+        await io.logFile?.("revive", id, hash);
         topic.files.push({ path, name: name ?? basename(path), addedAt: io.now(), hash });
         await save(store);
       });
     },
 
+    // Taking a book off a topic is logged before the row goes, so a device that
+    // still holds the row cannot hand it back (docs/59 §11). Every row of that
+    // book on the topic goes with it. A row with no book id is only the row.
     removeFile: (id, path) =>
       serialize(async () => {
         const store = await load();
         const topic = store.topics.find((t) => t.id === id);
-        if (!topic) return;
-        topic.files = topic.files.filter((f) => f.path !== path);
+        const row = topic?.files.find((f) => f.path === path);
+        if (!topic || !row) return;
+        const hash = row.hash;
+        if (hash) await io.logFile?.("delete", id, hash);
+        topic.files = topic.files.filter((f) => f.path !== path && (!hash || f.hash !== hash));
         await save(store);
       }),
 
@@ -347,6 +373,8 @@ const store = createTopicStore({
   newId: () => crypto.randomUUID(),
   now: () => Date.now(),
   deletions: readDeletions,
+  logFile: (op, topicId, hash) =>
+    (op === "delete" ? recordDeletion : recordRevival)("topic-file", topicFileId(topicId, hash), Date.now()),
 });
 
 export function repairTopicPaths(): Promise<boolean> {

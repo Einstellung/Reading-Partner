@@ -15,7 +15,7 @@
 // AppData is in memory (tests/support/appdata-fake.ts), so the assertions are
 // about what is left in it. Run: bun test.
 
-import { beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, setSystemTime, test } from "bun:test";
 import {
   BRIEF_TOPIC_ID,
   TOPICS_FILE,
@@ -338,4 +338,62 @@ test("pruning writes the file without what the log says is gone, once", async ()
 
 test("a log that is not there hides nothing", async () => {
   expect((await listTopics()).map((t) => t.id).sort()).toEqual(["t1", "t2"]);
+});
+
+// --- a book taken off one topic (docs/59 §11) -------------------------------
+//
+// The row going is logged first, as a "topic-file" event, so a merge with no
+// base or a 0.22 client that settles the topic whole cannot hand it back.
+
+test("taking a book off a topic logs the pair, and a row handed back stays off the shelf", async () => {
+  await removeFileFromTopic("t1", "/books/jit.pdf");
+  expect(disk.files.get(LOG)).toMatch(/^\{"kind":"topic-file","id":"t1\/h1","op":"delete","at":"[^"]+"\}\n$/);
+  expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
+
+  // An older device's whole-topic merge put the row back in the file.
+  disk.files.set(TOPICS_FILE, SHELF_JSON);
+  const t1 = (await listTopics()).find((t) => t.id === "t1")!;
+  expect(t1.files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
+  expect(await pruneDeletedFromTopics()).toBe(true);
+  expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
+});
+
+test("the pair is the book on that topic only", async () => {
+  await addFileToTopic("t2", "/books/jit.pdf", "h1");
+  await removeFileFromTopic("t1", "/books/jit.pdf");
+  const topics = await listTopics();
+  expect(topics.find((t) => t.id === "t2")!.files.map((f) => f.hash)).toEqual(["h1"]);
+});
+
+test("putting the book back on the topic revives the pair", async () => {
+  // A tie goes to the delete, so the two events need two moments.
+  setSystemTime(new Date(Date.UTC(2026, 9, 9, 10)));
+  await removeFileFromTopic("t1", "/books/jit.pdf");
+  setSystemTime(new Date(Date.UTC(2026, 9, 9, 11)));
+  await addFileToTopic("t1", "/books/jit.pdf", "h1");
+  setSystemTime();
+  const ops = disk.files.get(LOG)!.trim().split("\n").map((l) => (JSON.parse(l) as { op: string }).op);
+  expect(ops).toEqual(["delete", "revive"]);
+  const t1 = (await listTopics()).find((t) => t.id === "t1")!;
+  expect(t1.files.map((f) => f.hash ?? f.path)).toEqual(["/books/tracing.pdf", "h1"]);
+});
+
+test("a row with no book id goes without a line in the log", async () => {
+  await removeFileFromTopic("t1", "/books/tracing.pdf");
+  expect(disk.files.has(LOG)).toBe(false);
+  expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/jit.pdf"]);
+});
+
+test("a book the topic already lists under another path is not listed twice", async () => {
+  await addFileToTopic("t1", "content://doc/2905a", "h1", "jit.pdf");
+  expect(disk.files.get(TOPICS_FILE)).toBe(SHELF_JSON);
+  expect(disk.files.has(LOG)).toBe(false);
+});
+
+test("taking off one of two rows of the same book takes both", async () => {
+  const twice = structuredClone(SHELF);
+  twice.topics[0]!.files.push({ path: "content://doc/2905a", name: "jit.pdf", addedAt: 30, hash: "h1" });
+  disk.files.set(TOPICS_FILE, JSON.stringify(twice, null, 2));
+  await removeFileFromTopic("t1", "content://doc/2905a");
+  expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
 });

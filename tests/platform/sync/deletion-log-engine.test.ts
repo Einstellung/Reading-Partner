@@ -362,6 +362,72 @@ test("a topic deleted on one device stays deleted when the other opened one of i
   }
 });
 
+// --- a book taken off one topic (merge/topics.ts, docs/59 §11) --------------
+
+const ref = (hash: string, lastOpenedAt?: number) => ({
+  path: `/${hash}.pdf`,
+  name: `${hash}.pdf`,
+  addedAt: 1,
+  hash,
+  ...(lastOpenedAt === undefined ? {} : { lastOpenedAt }),
+});
+
+function shelf(files: ReturnType<typeof ref>[]): string {
+  return topicsJson([{ id: "t1", name: "one", createdAt: 1, files }]);
+}
+
+function listed(dev: ReturnType<typeof makeDevice>): string[] {
+  const onDisk = (JSON.parse(dev.text("topics.json")!) as { topics: Topic[] }).topics;
+  return pruneDeletedTopics(onDisk, dev.dead())[0]!.files.map((f) => f.hash!);
+}
+
+test("a book taken off on one device and another added on the other, same topic, both stand", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": shelf([ref("h1"), ref("h2")]) });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A);
+  const b = engineFor(remote, B);
+  await settle(a, b);
+
+  A.log({ kind: "topic-file", id: "t1/h2", op: "delete", at: T1 });
+  A.put("topics.json", shelf([ref("h1")]));
+  // B, not yet synced, opens h2 and files h3: both edit the same topic.
+  B.put("topics.json", shelf([ref("h1"), ref("h2", 5), ref("h3")]));
+  await settle(a, b);
+
+  expect(A.text("topics.json")).toBe(B.text("topics.json"));
+  // The merge alone keeps the removal: the open time does not outrank it.
+  const onDisk = (JSON.parse(A.text("topics.json")!) as { topics: Topic[] }).topics;
+  expect(onDisk[0]!.files.map((f) => f.hash)).toEqual(["h1", "h3"]);
+  expect(listed(B)).toEqual(["h1", "h3"]);
+});
+
+test("a whole old topic put back by a device that does not merge per book does not bring the book back", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": shelf([ref("h1"), ref("h2")]) });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A);
+  const b = engineFor(remote, B);
+  await settle(a, b);
+
+  A.log({ kind: "topic-file", id: "t1/h2", op: "delete", at: T1 });
+  A.put("topics.json", shelf([ref("h1")]));
+  await settle(a, b);
+
+  // What a 0.22 client's whole-record merge uploads when its own side wins:
+  // the topic as it held it, h2 included. Its log keeps the line it cannot
+  // read, because the lines merge carries every line.
+  B.put("topics.json", shelf([ref("h1", 9), ref("h2")]));
+  await settle(a, b);
+
+  expect(A.text("topics.json")).toBe(B.text("topics.json"));
+  expect(A.text(DELETED_BOOKS_FILE)).toBe(B.text(DELETED_BOOKS_FILE));
+  // The row is in the file again; the shelf answers from the log.
+  const onDisk = (JSON.parse(A.text("topics.json")!) as { topics: Topic[] }).topics;
+  expect(onDisk[0]!.files.map((f) => f.hash)).toEqual(["h1", "h2"]);
+  expect(listed(A)).toEqual(["h1"]);
+});
+
 // --- a log that will not read -----------------------------------------------
 
 test("a log this device cannot read deletes nothing and is not rewritten", async () => {

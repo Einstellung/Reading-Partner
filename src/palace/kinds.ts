@@ -148,8 +148,8 @@ export interface PalaceRow {
   sync: SyncChannel;
   // How sync merges two edits of it. Present exactly when sync is "data".
   merge?: MergeStrategy;
-  // When merge is "records" or "messages": where the records sit and what
-  // identifies one, read off the writer rather than guessed.
+  // When merge is "records", "messages" or "topics": where the records sit
+  // and what identifies one, read off the writer rather than guessed.
   shape?: RecordShape;
   fieldGroups?: FieldGroups;
   // A tree comparison may never conclude this path was deleted (docs/59 §8.8):
@@ -319,10 +319,11 @@ export const PALACE = [
     id: "fixed",
     refs: [{ kind: "library", via: "files[].hash" }],
     sync: "data",
-    merge: "records",
+    merge: "topics",
     shape: { kind: "array", container: "topics", idField: "id" },
     deleteWith: "never",
     retention: NEVER,
+    note: "a book on a topic is its own merge unit, keyed by its hash, so an open time on one device and a book taken off on the other both stand; taking a book off is logged as a topic-file event so a merge with no base or a 0.22 client settling the topic whole cannot hand it back (docs/59 §11)",
   },
   {
     kind: "deleted-books",
