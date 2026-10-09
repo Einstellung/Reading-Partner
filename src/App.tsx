@@ -1237,8 +1237,10 @@ export default function App() {
   // it — an empty bubble is now the ordinary opening state (it offers the intent
   // chips), so emptiness on its own says nothing about the provider.
   const showGuidance = call?.view === "bubble" && call.messages.length === 0 && !configured;
-  const lastCallMsg = call?.messages[call.messages.length - 1];
-  const streaming = !!(lastCallMsg?.role === "ai" && lastCallMsg.streaming);
+  // The last AI row, not the last row: a steered line sits below the row still
+  // being written, and Stop must stay while that row streams.
+  const aiMsgs = call?.messages.filter((m) => m.role === "ai") ?? [];
+  const streaming = !!aiMsgs[aiMsgs.length - 1]?.streaming;
 
   // Ctrl/Cmd + = / - / 0 on the page. No control goes with it: the More menu
   // already carries the three visible zoom items.
