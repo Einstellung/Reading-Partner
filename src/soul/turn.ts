@@ -49,6 +49,10 @@ export interface AssembleInput {
   // The Red Box the soul's covers are read from. The device's own unless a test
   // hands one in.
   box?: BoxStore;
+  // Tools the surface mounts beside the soul's, for a desk that has nothing on
+  // it to bring them: the door's own (soul/door.ts). Priced and checked for a
+  // second owner with everything else.
+  tools?: readonly AgentTool[];
 }
 
 export interface AssembledTurn {
@@ -111,7 +115,8 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // from a table of its own (platform/app/context.ts) — but it is the order a
   // reader of this list would expect: what is always there, then what this desk
   // happens to hold.
-  const tools = [...soul.tools, ...items.flatMap((i) => i.tools)];
+  const surfaceTools = input.tools ?? [];
+  const tools = [...soul.tools, ...surfaceTools, ...items.flatMap((i) => i.tools)];
   const toolNames = tools.map((t) => t.name);
   // Two tools answering to one name is the mistake openDesk refuses between two
   // items, and the assembly can make it in more ways than that: the soul's own
@@ -127,6 +132,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
       tool,
       by: roleLabel !== "" && roleTools.has(tool) ? roleLabel : "the soul's own set",
     })),
+    ...surfaceTools.map((tool) => ({ tool, by: "the surface" })),
     ...items.flatMap((item) =>
       item.tools.map((tool) => ({ tool, by: `the "${item.kind}" desk item` })),
     ),

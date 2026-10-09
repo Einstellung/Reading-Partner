@@ -10,15 +10,24 @@
 //
 // The turn is the same assembly as every other one, over an empty desk: the soul
 // brings its statements and its tools, no item brings a prompt, and the
-// conversation is replayed from the messages the caller passes in. No interaction
-// is wired to this yet.
+// conversation is replayed from the messages the caller passes in. Two things
+// hold it: a bell that lands here (bell.ts), and the reader typing to Lumen from
+// its menu (door-chat.ts, ui/components/lumen/DoorChat.tsx).
 
 import { openDesk, type DeskEnv, type DeskMessage } from "../desk";
 import { type SourceUnit } from "../memory";
 import { resolvePalace } from "../palace";
 import { appData } from "../platform/app/appdata";
 import { localDate } from "../platform/std/day";
-import { loadThreads, peekThreads } from "../platform/app/threads";
+import {
+  createBookThread,
+  getBookThread,
+  loadThreads,
+  peekThreads,
+  type Thread,
+} from "../platform/app/threads";
+import type { AgentTool } from "../legion/execute/turn";
+import type { TopicProposalSurface } from "../memory";
 import type { Settings } from "../platform/app/settings";
 import type { BudgetPurpose } from "../budget";
 import { assembleTurn, type AssembledTurn } from "./turn";
@@ -55,6 +64,24 @@ export interface DoorTurnInput {
   messages?: readonly DeskMessage[];
   purpose?: BudgetPurpose;
   signal?: AbortSignal;
+  /** What the surface mounts beside the soul's own set (turn.ts). */
+  tools?: readonly AgentTool[];
+  /** Where a topic proposal is drawn; nothing is proposed without one. */
+  topic?: TopicProposalSurface;
+}
+
+/**
+ * The day's one conversation at the door: the book thread of the day's file,
+ * opened if nobody has said anything yet. The same rule the bell lands by
+ * (bell.ts), so the reader and a bell write into one conversation.
+ */
+export async function openDoorThread(
+  date: string,
+  newThreadId: () => string = () => crypto.randomUUID(),
+): Promise<Thread> {
+  const key = doorKey(date);
+  await loadThreads(key).catch(() => ({}));
+  return getBookThread(key) ?? createBookThread(key, newThreadId());
 }
 
 /**
@@ -80,6 +107,8 @@ export async function openDoorTurn(input: DoorTurnInput): Promise<AssembledTurn 
     // standing at the door is answered at the door (docs/68).
     origin: { place: "door", date },
     ...(input.purpose ? { purpose: input.purpose } : {}),
+    ...(input.tools ? { tools: input.tools } : {}),
+    ...(input.topic ? { topic: input.topic } : {}),
   });
 }
 
