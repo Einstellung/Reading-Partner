@@ -80,6 +80,9 @@ const buttonVariants = cva(
         // of them cannot drift apart or lose the touch target.
         composer: "h-9 w-9 rounded-full coarse:h-11 coarse:w-11",
         "composer-sm": "h-6 w-6 rounded-full coarse:h-11 coarse:w-11",
+        // A round control floating over a transcript: the jump to its newest
+        // message.
+        float: "h-9 w-9 rounded-full coarse:h-11 coarse:w-11",
         link: `relative p-0 coarse:px-2 coarse:py-1.5 ${HIT_44}`,
       },
     },

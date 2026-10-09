@@ -25,6 +25,7 @@ export default {
   "list.copied": "Copied",
   "list.attachment": "attachment",
   "list.toolFailed": "failed",
+  "list.jumpToLatest": "Jump to latest",
 
   "toolLabel.readingPage": "Reading page {page}",
   "toolLabel.readingPages": "Reading pages {from}–{to}",

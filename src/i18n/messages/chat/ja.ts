@@ -23,6 +23,7 @@ export default {
   "list.copied": "コピーしました",
   "list.attachment": "添付",
   "list.toolFailed": "失敗",
+  "list.jumpToLatest": "最新へ移動",
 
   "toolLabel.readingPage": "{page} ページを読んでいます",
   "toolLabel.readingPages": "{from}–{to} ページを読んでいます",

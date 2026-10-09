@@ -39,10 +39,10 @@ const app = read("App.tsx");
 const infoCall = read("ui/components/info/InfoCall.tsx");
 
 test("the list binds the pin to the memory for the key it was given", () => {
-  expect(chat).toContain("stickToBottom(list, scrollMemory(stickKey))");
+  expect(chat).toMatch(/stickToBottom\(list, \{\s*\.\.\.scrollMemory\(stickKey\),/);
   // The dep is what re-binds on a thread switch inside a mounted list, which is
   // the aside round trip.
-  expect(chat).toContain("}, [stickKey]);");
+  expect(chat).toContain("}, [stickKey, roomy]);");
 });
 
 test("the call window forwards the key to its list", () => {
