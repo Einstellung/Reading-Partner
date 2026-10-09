@@ -9,11 +9,15 @@
 // the phone shell, not `fixed`: the shell moves to what the keyboard leaves
 // visible (KeyboardShell, docs/pitfall/443) and the sheet has to move with it,
 // as every other phone conversation does by being drawn inside it. On the iPad and the desktop
-// it is a panel standing on top of Lumen in the corner's own column, so it
-// follows the corner to whichever edge it was dragged to and Lumen stays where
-// it was, under it.
+// it is a panel standing on top of Lumen at the corner's edge, so it follows the
+// corner to whichever edge it was dragged to and Lumen stays where it was, under
+// it. The panel is drawn in the shell too, in a layer of its own and not in the
+// corner's `fixed` column, for the same reason as the sheet (docs/pitfall/506):
+// the iPad's first keyboard scrolls the document and a `fixed` column goes with
+// it. With a keyboard up the panel stands on the keyboard instead of on Lumen,
+// which stands down for it (LumenCorner).
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useT } from "../../../i18n";
 import { IconClose } from "../base/icons";
@@ -21,19 +25,19 @@ import CallView from "../chat/call/CallView";
 import { holdInView } from "../common/stick-to-bottom";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
+import { ShellKeyboardContext, useShellKeyboard, type ShellKeyboard } from "../common/useKeyboardInset";
 import { BottomSheetLayer, OVERLAY_Z, OverlaySurface } from "../ui/overlay";
+import { panelPadding } from "./door-panel";
 import { doorFocusSelector, type DoorFocus } from "./box-jump";
 import lumenIcon from "./lumen-icon.webp";
 import type { IntakeOpenDocument } from "./intake-view";
 import { useDoorChat } from "./use-door-chat";
 
-// What the panel leaves below itself: the body (72px), the column's gap and the
-// corner's own margin from the bottom edge (LumenCorner, pb-safe-6).
-const PANEL_RESERVE_PX = 72 + 8 + 24 + 16;
 
 export function DoorChat({
 	form,
 	liftPx = 0,
+	mirrored = false,
 	date,
 	focus,
 	onOpenDocument,
@@ -42,6 +46,8 @@ export function DoorChat({
 	form: "sheet" | "panel";
 	/** How far the corner stands above its usual place (use-corner-drag.ts). */
 	liftPx?: number;
+	/** The corner is docked at the left edge, and the panel stands there with it. */
+	mirrored?: boolean;
 	/** The day's conversation to open; today when absent. Read once, at mount. */
 	date?: string;
 	/** The row to bring into view once the conversation is drawn (a box card's jump). Read once, at mount. */
@@ -50,6 +56,7 @@ export function DoorChat({
 	onClose: () => void;
 }) {
 	const t = useT();
+	const shellKeyboard = useShellKeyboard();
 	const chat = useDoorChat({ ...(date ? { date } : {}), ...(onOpenDocument ? { onOpenDocument } : {}) });
 
 	// Back to the row the box item stands for: once, after the rows are drawn
@@ -126,21 +133,29 @@ export function DoorChat({
 		);
 	}
 
-	const height: CSSProperties = {
-		height: `min(36rem, calc(100dvh - ${PANEL_RESERVE_PX + liftPx}px - env(safe-area-inset-top)))`,
-	};
+	// The panel itself stands clear of the keyboard, so the conversation in it
+	// pads for none; only the shell's `cramped` still applies.
+	const inPanel: ShellKeyboard = { covered: 0, cramped: shellKeyboard?.cramped ?? false };
 	return (
 		<OverlaySurface layer="floating">
 			<div
-				role="dialog"
-				aria-label={t("shell.door.title")}
-				className="pointer-events-auto flex w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-chat-surface shadow-lg"
-				style={height}
-				onKeyDown={(event) => {
-					if (event.key === "Escape") onClose();
-				}}
+				className={cn(
+					"pointer-events-none absolute inset-0 flex flex-col justify-end",
+					mirrored ? "items-start pl-safe-4" : "items-end pr-safe-4",
+					OVERLAY_Z.floating,
+				)}
+				style={panelPadding(shellKeyboard, liftPx)}
 			>
-				{view}
+				<div
+					role="dialog"
+					aria-label={t("shell.door.title")}
+					className="pointer-events-auto flex h-[36rem] max-h-full min-h-0 w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-chat-surface shadow-lg"
+					onKeyDown={(event) => {
+						if (event.key === "Escape") onClose();
+					}}
+				>
+					<ShellKeyboardContext.Provider value={inPanel}>{view}</ShellKeyboardContext.Provider>
+				</div>
 			</div>
 		</OverlaySurface>
 	);

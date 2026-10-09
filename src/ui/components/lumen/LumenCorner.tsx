@@ -77,6 +77,8 @@ import { displayFileTitle } from "../shelf/file-title";
 import { cn } from "../lib/utils";
 import { orbErrorLine } from "../orb/orb";
 import { OVERLAY_Z, useBottomSheetOpen } from "../ui/overlay";
+import { useShellKeyboard } from "../common/useKeyboardInset";
+import { panelOnKeyboard } from "./door-panel";
 import { Button } from "../ui/button";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { ErrorLine } from "./ErrorLine";
@@ -167,6 +169,7 @@ export function LumenCorner({
 	// A sheet comes up across that same edge, and this corner paints over it
 	// (base/bottom-sheet.ts). It stands down while one is up.
 	const sheet = useBottomSheetOpen();
+	const shellKeyboard = useShellKeyboard();
 	const mirrored = drag.side === "left";
 
 	const [open, setOpen] = useState(false);
@@ -423,7 +426,7 @@ export function LumenCorner({
 			<DoorChat
 				key={`${door.date ?? "today"}:${doorFocusKey(door.focus)}`}
 				form={form}
-				{...(form === "panel" ? { liftPx: drag.bottomPx } : {})}
+				{...(form === "panel" ? { liftPx: drag.bottomPx, mirrored } : {})}
 				{...(door.date ? { date: door.date } : {})}
 				{...(door.focus ? { focus: door.focus } : {})}
 				onOpenDocument={openDocument}
@@ -434,9 +437,12 @@ export function LumenCorner({
 	if (!shown) return null;
 
 	const asSheet = shell === "phone";
+	// The panel stands on the keyboard while one is up, over where Lumen would be
+	// (door-panel.ts); Lumen stands down under it until the keyboard goes.
+	const underPanel = !asSheet && door !== null && panelOnKeyboard(shellKeyboard);
 	return (
 		<>
-		{asSheet && doorChat("sheet")}
+		{doorChat(asSheet ? "sheet" : "panel")}
 		<div
 			ref={drag.frameRef}
 			className={cn(
@@ -445,7 +451,7 @@ export function LumenCorner({
 				// `invisible` and not unmounted: the case's animation is state in the
 				// tree, and a sheet opened and closed would replay the whole pull-out.
 				// Nothing hidden this way takes a press either.
-				(sheet || stoodDown) && "invisible",
+				(sheet || stoodDown || underPanel) && "invisible",
 				OVERLAY_Z.floating,
 			)}
 			// Margin and not padding: the padding above is the corner's own margin
@@ -456,9 +462,6 @@ export function LumenCorner({
 			// onto it — which is why the drag never touches this style.
 			style={drag.bottomPx ? { marginBottom: `${drag.bottomPx}px` } : undefined}
 		>
-			{!asSheet && door && (
-				doorChat("panel")
-			)}
 			{errorLine && <ErrorLine line={errorLine} />}
 			{menu.state.open && (
 				<LumenMenu
