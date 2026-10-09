@@ -27,6 +27,7 @@ import { registerMealsDesk } from "../../../../src/info/meals/desk";
 import { EMPTY_MEALS } from "../../../../src/info/meals/plan/types";
 import type { BriefingView } from "../../../../src/info/briefer/reader";
 import type { Thread } from "../../../../src/platform/app/threads";
+import type { SteerPort } from "../../../../src/legion/execute/contract";
 
 const IDLE_SNAPSHOT = {
   briefing: null,
@@ -102,7 +103,16 @@ function stubHost(partial: string) {
   spyOn(readableLazy, "loadExtractReadable").mockResolvedValue((() => null) as never);
   let aborted!: () => void;
   const settled = new Promise<void>((resolve) => (aborted = resolve));
+  // The steer port the harness hands a turn that has a run to queue into
+  // (docs/72). It records what it was asked to queue and hands nothing to the
+  // model: whether a line was taken is the test's to say.
+  const queued: string[] = [];
+  const port: SteerPort = async (message) => {
+    queued.push(typeof message === "string" ? message : message.text);
+    return { ok: true, id: `e${queued.length}` };
+  };
   const turn = spyOn(agent, "runAgentTurn").mockImplementation(async (o) => {
+    o.onSteerable?.(port);
     if (partial) o.onDelta?.(partial);
     await new Promise<void>((resolve) => o.signal?.addEventListener("abort", () => resolve(), { once: true }));
     // The abort is a request: the stream can still land a word before the run
@@ -110,7 +120,7 @@ function stubHost(partial: string) {
     if (partial) o.onDelta?.(" and a late word");
     aborted();
   });
-  return { turn, append, settled };
+  return { turn, append, settled, queued };
 }
 
 async function startTurn(result: { current: ReturnType<typeof useInfoCall> }) {
@@ -181,4 +191,58 @@ test("a meals turn is stamped with the meals thread, not the day's briefing", as
     result.current.stop();
     await settled;
   });
+});
+
+// --- the reader talking while the companion answers (docs/72) --------------
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const said = (append: ReturnType<typeof stubHost>["append"]) =>
+  append.mock.calls.filter((c) => c[2].role === "user").map((c) => c[2].text);
+
+test("a line sent while the companion answers is steered into the turn, not dropped", async () => {
+  const { turn, append, queued, settled } = stubHost("Half an answer");
+  const { result } = renderHook(() => useInfoCall(options()));
+  await startTurn(result);
+  await act(async () => {
+    await result.current.send("and yesterday?");
+    await tick();
+  });
+
+  expect(turn).toHaveBeenCalledTimes(1);
+  expect(queued).toEqual(["and yesterday?"]);
+  expect(result.current.messages.map((m) => [m.role, m.text, m.queued])).toEqual([
+    ["user", "what happened today?", undefined],
+    ["ai", "Half an answer", undefined],
+    ["user", "and yesterday?", true],
+  ]);
+  // Not in the thread file until the model is handed it.
+  expect(said(append)).toEqual(["what happened today?"]);
+
+  await act(async () => {
+    result.current.stop();
+    await settled;
+  });
+});
+
+test("stopped before the model took the line: it is stored and asked in the next turn", async () => {
+  const { turn, append, settled } = stubHost("Half an answer");
+  const { result } = renderHook(() => useInfoCall(options()));
+  await startTurn(result);
+  await act(async () => {
+    await result.current.send("and yesterday?");
+    await tick();
+  });
+  await act(async () => {
+    result.current.stop();
+    await settled;
+    await tick();
+  });
+
+  expect(said(append)).toEqual(["what happened today?", "and yesterday?"]);
+  expect(turn).toHaveBeenCalledTimes(2);
+  expect(JSON.stringify(turn.mock.calls[0]![0].messages)).toContain("what happened today?");
+  const next = JSON.stringify(turn.mock.calls[1]![0].messages);
+  expect(next).toContain("Half an answer");
+  expect(next).toContain("and yesterday?");
+  expect(result.current.streaming).toBe(true);
 });

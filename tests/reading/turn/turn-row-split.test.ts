@@ -134,6 +134,21 @@ test("a turn that ends after a steer with nothing written after it leaves no new
   expect(rows.answerTail("Above.", "Above.")).toBeNull();
 });
 
+// What the stop button reads: a row handed over with words in it is in the file
+// already, until something is written and the reply's own row opens.
+test("the row being written is down from the handover until the next write", () => {
+  const rows = createRowSplit();
+  rows.start(1000);
+  expect(rows.down).toBe(false);
+  rows.steered("Above.");
+  expect(rows.down).toBe(true);
+  rows.writing(at(2000));
+  expect(rows.down).toBe(false);
+  // Handed over before a word was written: nothing of it is in the file.
+  rows.steered("");
+  expect(rows.down).toBe(false);
+});
+
 test("a turn stopped after a split ends on the new row", () => {
   const rows = createRowSplit();
   rows.start(1000);

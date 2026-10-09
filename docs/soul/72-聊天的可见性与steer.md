@@ -48,7 +48,7 @@ soul 在跑时那一行有一个阶段：Thinking… / 工具的 `label` / 出�
 
 注入点是每一轮（一次模型输出加它那轮的工具）结束后，最多等一轮。读者那句立刻作为自己的一行落在正在写的 AI 行下面，带淡标记；这一轮完了模型看见它，接下去的回复是新的一行。连发几句同一点注入。
 
-停止键仍是真掐断，保留半句；队列里没注入的话作为下一回合的开头发出。
+停止键仍是真掐断，保留这一回合已经产出的：半句、跑完的工具和回执单，trace 照回答落地那样落盘；跑到一半的工具不留，什么都没产出的行才删。队列里没注入的话作为下一回合的开头发出。
 
 Composer 在流式期间 Send 和 Stop 都在。
 
@@ -86,9 +86,11 @@ Composer 在流式期间 Send 和 Stop 都在。
 
 随 v0.20.3 发出：`quiet`，记忆的两个簿记写入默默干（`AgentToolStart` 和 `ToolStatus` 都带着这个标走，界面据此判断，不认工具名）；答铃回合改成拿正文，soul 读 brief 和 output 两个文件喂给回合，读不到才说不在这台设备上，盒子项的 body 存产出正文而不是路径。
 
+2026-10-09：info 的对话（简报、三餐）接 steer，`ui/components/chat/useStreamingTurn.ts` 用书那套 `steering.ts` 和 `turn-row-split.ts`；停止保留回执单和 trace（`turn-rows.ts` 的 `keptOnStop`），书和 info 一致；steer 切行时上面那行连 trace 一起落盘。
+
 ## 尾巴
 
-steer 只在书的对话里；retell、rehearsal、简报对话仍是另起回合。图片不能随 steer，留到下一次普通发送。答铃自起的回合不流式，回复一次到达；silent 回合结束时未交出的话写进文件但不自动续跑。
+steer 接了书和 info 的对话；retell、rehearsal 仍是另起回合。图片不能随 steer，留到下一次普通发送。答铃自起的回合不流式，回复一次到达；silent 回合结束时未交出的话写进文件但不自动续跑。
 
 Outline 刷新靠 `local` 档 run 的 `done`，`synced` 档没有。
 

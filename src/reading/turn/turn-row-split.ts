@@ -36,6 +36,12 @@ export interface RowSplit {
   readonly ts: number;
   /** The run the row being written answers; null on an ordinary row. */
   readonly origin: RowOrigin | null;
+  /**
+   * The row being written is already in the thread file: it was handed over
+   * with words in it and nothing has been written since. What ends the turn
+   * now (the stop button) has nothing of it left to put down.
+   */
+  readonly down: boolean;
   /** The turn's first row was made at `ts`. */
   start(ts: number): void;
   /**
@@ -103,6 +109,9 @@ export function createRowSplit(): RowSplit {
     },
     get origin() {
       return rowOrigin;
+    },
+    get down() {
+      return splitPending;
     },
     start(ts) {
       rowTs = ts;

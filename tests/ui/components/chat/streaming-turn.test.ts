@@ -5,9 +5,14 @@
 
 import { expect, test } from "bun:test";
 import {
+  answerRow,
+  deliverRows,
   dropAiRow,
+  insertAbove,
   openAnswerRow,
   patchAiRow,
+  queuedRow,
+  splitRows,
 } from "../../../../src/ui/components/chat/streaming-turn";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
@@ -47,4 +52,38 @@ test("openAnswerRow keeps an answer that is there", () => {
 test("dropAiRow removes the ai row at that timestamp and nothing else", () => {
   const rows: ThreadMessage[] = [{ role: "user", text: "q", ts: 5 }, ai(5, "half")];
   expect(dropAiRow(rows, 5)).toEqual([{ role: "user", text: "q", ts: 5 }]);
+});
+
+// --- the reader talking into the turn (docs/72) ----------------------------
+
+const user = (ts: number, text: string, extra: Partial<ThreadMessage> = {}): ThreadMessage => ({
+  role: "user",
+  text,
+  ts,
+  ...extra,
+});
+
+test("deliverRows takes the queued mark off the lines named, and only theirs", () => {
+  const rows = [ai(1, "a", { streaming: true }), queuedRow(2, "b"), queuedRow(3, "c")];
+  expect(deliverRows(rows, [2]).map((m) => m.queued)).toEqual([undefined, undefined, true]);
+});
+
+test("splitRows finishes the row handed over and opens the reply under the lines it answers", () => {
+  const rows = [user(1, "q"), ai(2, "a", { streaming: true, phase: "writing" }), user(3, "b")];
+  const next = splitRows(rows, 2, answerRow(4));
+  expect(next.map((m) => [m.role, m.text, m.streaming, m.phase])).toEqual([
+    ["user", "q", undefined, undefined],
+    ["ai", "a", undefined, undefined],
+    ["user", "b", undefined, undefined],
+    ["ai", "", true, undefined],
+  ]);
+});
+
+test("insertAbove puts a card above the reply being written, not above a line under it", () => {
+  const card = ai(9, "", { card: { kind: "probe" } as never });
+  const rows = [user(1, "q"), ai(2, "", { streaming: true }), queuedRow(3, "b")];
+  expect(insertAbove(rows, 2, card).map((m) => m.ts)).toEqual([1, 9, 2, 3]);
+  // No reply on screen: above the last row, as insertBeforeLast.
+  expect(insertAbove(rows, -1, card).map((m) => m.ts)).toEqual([1, 2, 9, 3]);
+  expect(insertAbove([], -1, card).map((m) => m.ts)).toEqual([9]);
 });
