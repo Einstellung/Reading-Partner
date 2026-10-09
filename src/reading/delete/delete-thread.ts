@@ -20,7 +20,6 @@ import { deleteThreadImages } from "../../platform/app/thread-images";
 import {
   deleteThreadTree,
   flushThreads,
-  getBookThread,
   getThread,
   loadThreads,
   patchThreadMessage,
@@ -34,7 +33,6 @@ import { hostMarkIds } from "../chat-marks";
 export interface DeleteThreadDeps {
   loadThreads(bookId: string): Promise<unknown>;
   getThread(bookId: string, threadId: string): Thread | undefined;
-  getBookThread(bookId: string): Thread | undefined;
   deleteThreadTree(bookId: string, threadId: string): string[];
   patchMessage(bookId: string, threadId: string, ts: number, patch: Partial<ThreadMessage>): void;
   removeMessage(bookId: string, threadId: string, ts: number): void;
@@ -48,7 +46,6 @@ export interface DeleteThreadDeps {
 export const liveDeleteThreadDeps: DeleteThreadDeps = {
   loadThreads,
   getThread,
-  getBookThread,
   deleteThreadTree,
   patchMessage: patchThreadMessage,
   removeMessage: removeThreadMessage,
@@ -96,8 +93,7 @@ async function settle(
 }
 
 /**
- * Delete one conversation and the asides off it: the general case the two below
- * are named for. The phone reader's mark delete does the same from the marks it
+ * Delete one conversation and the asides off it. The phone reader's mark delete does the same from the marks it
  * holds (ui/components/phone/reader/delete-mark.ts).
  */
 export async function deleteConversation(
@@ -108,31 +104,6 @@ export async function deleteConversation(
   await deps.loadThreads(target.bookId);
   return settle(target, deps.deleteThreadTree(target.bookId, threadId), deps);
 }
-
-/**
- * Delete a book's book-level conversation with its asides: an EPUB's
- * conversation, or a PDF's lesson (docs/74) — a lesson is that same thread, so
- * the next one starts from the beginning. The book, its marks and its reading
- * position stay. Every book-level thread goes: a file two devices each started
- * one in holds two, and leaving the second would be the conversation coming
- * back.
- */
-export async function deleteBookConversation(
-  target: ConversationTarget,
-  deps: DeleteThreadDeps = liveDeleteThreadDeps,
-): Promise<DeletedConversation> {
-  await deps.loadThreads(target.bookId);
-  const threads: string[] = [];
-  for (let t = deps.getBookThread(target.bookId); t; t = deps.getBookThread(target.bookId)) {
-    const gone = deps.deleteThreadTree(target.bookId, t.id);
-    if (gone.length === 0) break;
-    threads.push(...gone);
-  }
-  return settle(target, threads, deps);
-}
-
-/** A PDF's lesson is its book-level conversation (docs/74). */
-export const deleteLesson = deleteBookConversation;
 
 /**
  * Delete one aside of a lesson or a book conversation, and its row in the

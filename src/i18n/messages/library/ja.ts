@@ -34,6 +34,11 @@ const ja: Translation<typeof en> = {
   "card.rename": "名前を変更",
   "card.delete": "削除",
   "card.retell": "この本をリテリング…",
+  "move.action": "移動…",
+  "move.title": "移動先",
+  "move.here": "ここ",
+  "move.done": "「{topic}」に移動しました",
+  "move.failed": "移動できませんでした。",
 
   "topics.eyebrow": "あなたのトピック",
   "topics.title": "トピック",
@@ -57,17 +62,14 @@ const ja: Translation<typeof en> = {
   "materials.removeArticleDescription": "記事は保存した記事から削除されます。ブリーフィングから再度保存すれば戻ります。",
   "materials.removeArticleAction": "削除",
   "materials.deleteBookTitle": "「{title}」を削除しますか？",
-  "materials.removeBookTitle": "「{title}」をこのトピックから外しますか？",
   "materials.deleteBookDescription": "この本と、それに関するすべてを削除しますか？あなた自身についてのメモは残ります。",
-  "materials.removeBookDescription":
-    "このトピックから本が外れます。ファイルはディスクに残り、読書位置とマークもそのまま保たれます——再度追加すればそれらも戻ります。",
+  "materials.deleteArticleDescription":
+    "この記事とそれに関するすべてを、すべてのデバイスから削除しますか？自分についてのメモは残ります。",
   "materials.deleteBookAction": "削除",
-  "materials.removeBookAction": "外す",
 
   "screen.backToTopics": "‹ すべてのトピック",
   "screen.addBook": "+ 本を追加",
   "screen.backToTopicLabel": "トピックに戻る",
-  "screen.removeFileFailed": "このトピックから本を外せませんでした",
   "screen.deleteBookFailed": "本を削除できませんでした",
   "screen.removeArticleFailed": "記事を削除できませんでした",
 

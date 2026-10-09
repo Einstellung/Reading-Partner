@@ -3,9 +3,6 @@ import type en from "./en";
 
 export default {
   "holdMenu.deleteTopic": "删除主题",
-  "holdMenu.deleteLesson": "删除课程",
-  "holdMenu.deleteConversation": "删除对话",
-  "holdMenu.removeFromTopic": "从主题中移除",
   "holdMenu.deleteArticle": "删除文章",
   "holdMenu.deleteBook": "删除图书",
   "holdMenu.removeFromSaved": "从收藏中移除",
@@ -16,27 +13,17 @@ export default {
   "holdMenu.confirmDeleteArticleDescription": "删除这篇文章及其所有相关内容，在每台设备上都删除？你关于自己的笔记会保留。",
   "holdMenu.delete": "删除",
   "holdMenu.confirmRemoveTitle": "移除“{title}”？",
-  "holdMenu.removeOthers": "它仍保留在{names}中",
-  "holdMenu.removeNoOthers": "还有别处收录着它，所以它会保留",
-  "holdMenu.removeBookDescription": "这个主题会失去这本书。{where}，阅读进度和标注也一并保留。",
-  "holdMenu.removeArticleDescription": "这个主题会失去这篇文章。{where}，阅读进度和标注也一并保留。",
   "holdMenu.remove": "移除",
   "holdMenu.confirmConversationTitle": "删除这个对话？",
-  "holdMenu.confirmLessonDescription": "课程连同它的旁问会在每台设备上删除。论文本身保留，下次课程从头开始。",
-  "holdMenu.confirmConversationDescription": "关于这本书说过的一切都会在每台设备上删除。书本身、标注和阅读进度保留。",
   "holdMenu.confirmRemoveSavedDescription": "它会在每台设备上从收藏中移除。它来自的那份简报不受影响。",
   "holdMenu.confirmDeleteAsideDescription": "旁问及它在课程中的那一行都会删除。课程本身保留。",
 
   "holdMenu.doneDeleted": "已删除“{title}”",
-  "holdMenu.doneRemovedFromTopic": "已从{topicName}移除",
-  "holdMenu.doneLessonDeleted": "课程已删除",
-  "holdMenu.doneConversationDeleted": "对话已删除",
   "holdMenu.doneRemovedFromSaved": "已从收藏中移除",
   "holdMenu.doneAsideDeleted": "旁问已删除",
 
   "holdMenu.failedTopic": "主题未能删除。",
   "holdMenu.failedFile": "未能删除。",
-  "holdMenu.failedRemoveFromTopic": "未能从这个主题中移除。",
   "holdMenu.failedConversation": "对话未能删除。",
   "holdMenu.failedRemoveSaved": "未能从收藏中移除。",
 

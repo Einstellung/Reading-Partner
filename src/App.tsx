@@ -24,6 +24,7 @@ import {
   listTopics,
   markOpened,
   mostRecentlyOpened,
+  onFiledElsewhere,
   type FileRef,
   type Topic,
 } from "./platform/app/topics";
@@ -130,6 +131,7 @@ import {
 } from "./ui/components/chat/chatParts";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import { useT } from "./i18n";
+import { alreadyInLine } from "./ui/components/shelf/move-to";
 import { refreshInfoCollector } from "./info/program/live";
 
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
@@ -940,6 +942,14 @@ export default function App() {
     [openFile, pushToast, t],
   );
 
+  // A book is on one topic, so an add of one another topic lists left it
+  // there (platform/app/topics.ts addFile). Whichever door it came in by, it is
+  // said here.
+  useEffect(
+    () => onFiledElsewhere((found) => pushToast("info", alreadyInLine(found.topic.name))),
+    [pushToast, t],
+  );
+
   // The desk's door. The book is imported as it is picked, the same as on the
   // phone and the same as one shared in (reading/session/import-book.ts). No
   // upload here: the desk mirrors its books through sync, only the phone pushes
@@ -1549,6 +1559,7 @@ export default function App() {
               onOpenFile={openFile}
               onTopicsChanged={refreshTopics}
               onSay={(line) => pushToast("error", line)}
+              onTell={(line) => pushToast("info", line)}
             />
           )}
         </div>

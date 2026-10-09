@@ -9,9 +9,6 @@ export default {
   // said after (docs/50). Shared by every phone list that can be held: topics,
   // files, saved articles, asides.
   "holdMenu.deleteTopic": "Delete topic",
-  "holdMenu.deleteLesson": "Delete lesson",
-  "holdMenu.deleteConversation": "Delete conversation",
-  "holdMenu.removeFromTopic": "Remove from topic",
   "holdMenu.deleteArticle": "Delete article",
   "holdMenu.deleteBook": "Delete book",
   "holdMenu.removeFromSaved": "Remove from Saved",
@@ -24,31 +21,18 @@ export default {
     "Delete this article and everything about it, on every device? Your notes about yourself stay.",
   "holdMenu.delete": "Delete",
   "holdMenu.confirmRemoveTitle": "Remove “{title}”?",
-  "holdMenu.removeOthers": "It stays in {names}",
-  "holdMenu.removeNoOthers": "Something else still lists it, so it stays",
-  "holdMenu.removeBookDescription": "This topic loses the book. {where}, with its reading position and marks.",
-  "holdMenu.removeArticleDescription":
-    "This topic loses the article. {where}, with its reading position and marks.",
   "holdMenu.remove": "Remove",
   "holdMenu.confirmConversationTitle": "Delete this conversation?",
-  "holdMenu.confirmLessonDescription":
-    "The lesson goes, with its asides, on every device. The paper stays, and the next lesson starts from the beginning.",
-  "holdMenu.confirmConversationDescription":
-    "Everything said about this book goes, on every device. The book, its marks and its reading position stay.",
   "holdMenu.confirmRemoveSavedDescription": "It leaves Saved on every device. The briefing it came from is not changed.",
   "holdMenu.confirmDeleteAsideDescription": "The aside goes, and its row in the lesson with it. The lesson itself stays.",
 
   "holdMenu.doneDeleted": "Deleted “{title}”",
-  "holdMenu.doneRemovedFromTopic": "Removed from {topicName}",
-  "holdMenu.doneLessonDeleted": "Lesson deleted",
-  "holdMenu.doneConversationDeleted": "Conversation deleted",
   "holdMenu.doneRemovedFromSaved": "Removed from Saved",
   "holdMenu.doneAsideDeleted": "Aside deleted",
 
   // hold-delete.ts: the line said when a confirmed choice failed to go through.
   "holdMenu.failedTopic": "The topic could not be deleted.",
   "holdMenu.failedFile": "It could not be deleted.",
-  "holdMenu.failedRemoveFromTopic": "It could not be removed from this topic.",
   "holdMenu.failedConversation": "The conversation could not be deleted.",
   "holdMenu.failedRemoveSaved": "It could not be removed from Saved.",
 

@@ -1,6 +1,6 @@
 // The small menu a hold opens next to the held thing (hold-menu.ts). The mark
-// popup's look (PhoneReader.tsx MarkPopup): one rounded box, red items with the
-// trash icon. Anchored on the held element's box, below it when there is room
+// popup's look (PhoneReader.tsx MarkPopup): one rounded box, a plain Move to…
+// with the folder icon first, red deletes with the trash icon. Anchored on the held element's box, below it when there is room
 // and above it when there is not.
 //
 // A faint scrim takes the next press: it closes the menu. The click iOS still
@@ -8,7 +8,8 @@
 // swallowed by the hold's guard (use-hold.ts); so the scrim must sit inside
 // the hold's host.
 
-import { IconTrash } from "../base/icons";
+import { IconMoveTo, IconTrash } from "../base/icons";
+import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "../ui/popover";
 import type { HoldChoice, HoldMenuItem } from "./hold-menu";
@@ -66,10 +67,13 @@ export default function HoldMenu(props: {
               role="menuitem"
               variant="ghost"
               size="lg"
-              className="w-full justify-start gap-2.5 px-3 text-[15px] text-destructive"
+              className={cn(
+                "w-full justify-start gap-2.5 px-3 text-[15px]",
+                item.kind === "move" ? "text-foreground" : "text-destructive",
+              )}
               onClick={() => props.onPick(item.choice)}
             >
-              <IconTrash size={16} />
+              {item.kind === "move" ? <IconMoveTo size={16} /> : <IconTrash size={16} />}
               {item.label}
             </Button>
           ))}

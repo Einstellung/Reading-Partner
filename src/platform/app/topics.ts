@@ -1,9 +1,21 @@
 // Topic library. A topic is the top-level container for syntopical reading —
 // several PDFs read against one question (docs/01 §1). Topics store only path
 // references; files are never copied. Persisted to AppData/topics.json.
+//
+// A book, by its content hash, is on one topic. Only moveFile takes it to
+// another; adding one another topic lists leaves it where it is (addFile), and
+// a merge that lands it on two keeps one (oneTopicPerBook).
 
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
-import { emptyDeletions, readDeletions, type Deletions } from "./deleted-books";
+import {
+  emptyDeletions,
+  readDeletions,
+  readTopicFileRevivals,
+  recordDeletion,
+  recordRevival,
+  topicFileId,
+  type Deletions,
+} from "./deleted-books";
 import { basename, decodeLegacyName, normalizeFilePath } from "./path";
 import { createSerialQueue } from "./serial-queue";
 
@@ -79,14 +91,17 @@ export function healTopicFiles(files: FileRef[]): FileRef[] {
 }
 
 // Pure: drop what the deletion log says is gone — a topic by its id, a file by
-// the book id it carries. The record may still be in the file: a topic's row
-// comes back when another device edited it (a lastOpenedAt) after this one
-// deleted it, since an edit outranks a delete in the merge (merge/records.ts),
-// and a book's FileRef the same way. The log is what the reader asked for, so
-// the store answers from it and the file catches up on the next write. Returns
-// the same array when nothing is dropped, so a caller can skip the write.
+// the book id it carries, and a file taken off this one topic by the pair. The
+// record may still be in the file: a topic's row comes back when another device
+// edited it (a lastOpenedAt) after this one deleted it, since an edit outranks a
+// delete in the merge (merge/records.ts), and a FileRef comes back from a merge
+// with no base or from a client that still settles a topic whole (docs/59 §11).
+// The log is what the reader asked for, so the store answers from it and the
+// file catches up on the next write. Returns the same array when nothing is
+// dropped, so a caller can skip the write.
 export function pruneDeletedTopics(topics: Topic[], deletions: Deletions): Topic[] {
-  if (deletions.topic.size === 0 && deletions.book.size === 0) return topics;
+  const offTopic = deletions["topic-file"];
+  if (deletions.topic.size === 0 && deletions.book.size === 0 && offTopic.size === 0) return topics;
   let changed = false;
   const out: Topic[] = [];
   for (const topic of topics) {
@@ -94,7 +109,9 @@ export function pruneDeletedTopics(topics: Topic[], deletions: Deletions): Topic
       changed = true;
       continue;
     }
-    const files = topic.files.filter((f) => !f.hash || !deletions.book.has(f.hash));
+    const files = topic.files.filter(
+      (f) => !f.hash || (!deletions.book.has(f.hash) && !offTopic.has(topicFileId(topic.id, f.hash))),
+    );
     if (files.length !== topic.files.length) {
       changed = true;
       out.push({ ...topic, files });
@@ -103,6 +120,87 @@ export function pruneDeletedTopics(topics: Topic[], deletions: Deletions): Topic
     }
   }
   return changed ? out : topics;
+}
+
+/** A book going from one topic to another. */
+export interface FileMove {
+  hash: string;
+  from: { id: string; name: string };
+  to: { id: string; name: string };
+}
+
+/** A book an add found on another topic, where it stays. */
+export interface FiledElsewhere {
+  hash: string;
+  topic: { id: string; name: string };
+}
+
+/** Whether some book id is listed under more than one topic. */
+export function bookOnTwoTopics(topics: readonly Topic[]): boolean {
+  const home = new Map<string, string>();
+  for (const topic of topics) {
+    for (const f of topic.files) {
+      if (!f.hash) continue;
+      const seen = home.get(f.hash);
+      if (seen !== undefined && seen !== topic.id) return true;
+      home.set(f.hash, topic.id);
+    }
+  }
+  return false;
+}
+
+// Pure: every book on one topic (docs/reading/01 §一). The store never puts a
+// book on a second topic, but a merge can: two devices that moved it to two
+// topics, or a client that still lists one book twice, each add a row the other
+// side never had (docs/59 §11). The topic that claimed it last keeps it. A
+// topic's claim is the later of the pair's latest revive in the deletion log
+// and the row's addedAt, which a move and an import both set to now; a tie goes
+// to the smaller topic id. Everything compared is in the file and the log, so
+// every device drops the same rows. Rows with no book id are left alone. Returns
+// the same array when no book is on two topics.
+export function oneTopicPerBook(
+  topics: Topic[],
+  revivedAt: ReadonlyMap<string, string> = new Map(),
+): Topic[] {
+  if (!bookOnTwoTopics(topics)) return topics;
+  const claim = (topic: Topic, hash: string): number => {
+    const at = revivedAt.get(topicFileId(topic.id, hash));
+    let out = at === undefined ? 0 : Date.parse(at) || 0;
+    for (const f of topic.files) if (f.hash === hash && f.addedAt > out) out = f.addedAt;
+    return out;
+  };
+  const holders = new Map<string, Topic[]>();
+  for (const topic of topics) {
+    for (const f of topic.files) {
+      if (!f.hash) continue;
+      const list = holders.get(f.hash) ?? [];
+      if (!list.includes(topic)) list.push(topic);
+      holders.set(f.hash, list);
+    }
+  }
+  const losing = new Map<Topic, Set<string>>();
+  for (const [hash, list] of holders) {
+    if (list.length < 2) continue;
+    let keep = list[0]!;
+    let keepAt = claim(keep, hash);
+    for (const topic of list.slice(1)) {
+      const at = claim(topic, hash);
+      if (at > keepAt || (at === keepAt && topic.id < keep.id)) {
+        keep = topic;
+        keepAt = at;
+      }
+    }
+    for (const topic of list) {
+      if (topic === keep) continue;
+      const lost = losing.get(topic) ?? new Set<string>();
+      lost.add(hash);
+      losing.set(topic, lost);
+    }
+  }
+  return topics.map((topic) => {
+    const lost = losing.get(topic);
+    return lost ? { ...topic, files: topic.files.filter((f) => !f.hash || !lost.has(f.hash)) } : topic;
+  });
 }
 
 export function healTopics(topics: Topic[]): Topic[] {
@@ -127,6 +225,15 @@ export interface TopicIo {
   now: () => number;
   // What the deletion log says is gone (deleted-books.ts). Left out, nothing is.
   deletions?: () => Promise<Deletions>;
+  // Log a book going off a topic, or coming back onto one it was taken off. A
+  // revive of a pair that is not deleted writes nothing. Left out, nothing is
+  // logged.
+  logFile?: (op: "delete" | "revive", topicId: string, hash: string) => Promise<void>;
+  // When each "topic-file" pair was last put back (deleted-books.ts), read only
+  // when some book is on two topics. Left out, no pair ever was.
+  revivals?: () => Promise<ReadonlyMap<string, string>>;
+  // Told of an add that found the book on another topic and wrote nothing.
+  elsewhere?: (found: FiledElsewhere) => void;
 }
 
 export interface TopicStore {
@@ -136,7 +243,12 @@ export interface TopicStore {
   ensureBrief: () => Promise<Topic>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  addFile: (id: string, rawPath: string, hash: string, name?: string) => Promise<void>;
+  // Answers the topic the book is already on when that is another one; the
+  // add then writes nothing.
+  addFile: (id: string, rawPath: string, hash: string, name?: string) => Promise<FiledElsewhere | null>;
+  // Null when there was nothing to move: no such book or topic, or the book is
+  // already there.
+  moveFile: (hash: string, toId: string) => Promise<FileMove | null>;
   removeFile: (id: string, path: string) => Promise<void>;
   setFileHash: (id: string, path: string, hash: string) => Promise<void>;
   markOpened: (id: string, path: string) => Promise<void>;
@@ -185,16 +297,52 @@ export function createTopicStore(io: TopicIo): TopicStore {
     return { topics: [] };
   }
 
+  // What the log says is gone dropped, and every book on one topic. The same
+  // array when there is nothing to drop.
+  async function settle(topics: Topic[]): Promise<Topic[]> {
+    const deletions = io.deletions ? await io.deletions() : emptyDeletions();
+    const pruned = pruneDeletedTopics(topics, deletions);
+    if (!bookOnTwoTopics(pruned)) return pruned;
+    return oneTopicPerBook(pruned, io.revivals ? await io.revivals() : new Map());
+  }
+
   // Every read hands out repaired references, whether or not the file on disk has
   // been rewritten yet.
   async function load(): Promise<TopicFile> {
-    const healed = healTopics((await readStore()).topics);
-    const deletions = io.deletions ? await io.deletions() : emptyDeletions();
-    return { topics: pruneDeletedTopics(healed, deletions) };
+    return { topics: await settle(healTopics((await readStore()).topics)) };
   }
 
   function save(store: TopicFile): Promise<void> {
     return io.write(JSON.stringify(store, null, 2));
+  }
+
+  // Take a book off one topic, every row of it, logged before the rows go so a
+  // device that still holds them cannot hand them back (docs/59 §11).
+  async function unlist(topic: Topic, hash: string): Promise<void> {
+    await io.logFile?.("delete", topic.id, hash);
+    topic.files = topic.files.filter((f) => f.hash !== hash);
+  }
+
+  // Take a book off every topic but `keep`. Answers the topic it came off and
+  // its row there; after load there is at most one.
+  async function unlistElsewhere(
+    store: TopicFile,
+    hash: string,
+    keep: string,
+  ): Promise<{ topic: Topic; row: FileRef } | null> {
+    let first: { topic: Topic; row: FileRef } | null = null;
+    for (const topic of store.topics) {
+      if (topic.id === keep) continue;
+      const row = topic.files.find((f) => f.hash === hash);
+      if (!row) continue;
+      await unlist(topic, hash);
+      first ??= { topic, row };
+    }
+    return first;
+  }
+
+  function moveOf(hash: string, from: Topic, to: Topic): FileMove {
+    return { hash, from: { id: from.id, name: from.name }, to: { id: to.id, name: to.name } };
   }
 
   return {
@@ -274,22 +422,58 @@ export function createTopicStore(io: TopicIo): TopicStore {
     // The book id comes with the path because by the time a row is written the
     // bytes are already in the library (reading/session/import-book.ts). One
     // write, one sync revision.
+    //
+    // A book is on one topic (docs/reading/01 §一) and only moveFile changes
+    // which: an add of one another topic lists writes nothing and answers where
+    // it is. This is the one place that holds the rule for every door a book
+    // comes in by.
     addFile: (id, rawPath, hash, name) => {
       const path = normalizeFilePath(rawPath);
       return serialize(async () => {
         const store = await load();
         const topic = store.topics.find((t) => t.id === id);
-        if (!topic || topic.files.some((f) => f.path === path)) return;
+        // A topic lists a book once: the merge keys a row by its book id.
+        if (!topic || topic.files.some((f) => f.path === path || f.hash === hash)) return null;
+        const home = store.topics.find((t) => t.files.some((f) => f.hash === hash));
+        if (home) {
+          const found: FiledElsewhere = { hash, topic: { id: home.id, name: home.name } };
+          io.elsewhere?.(found);
+          return found;
+        }
+        // Back onto a topic it was taken off: the revive goes first, or the
+        // next read filters the new row out again.
+        await io.logFile?.("revive", id, hash);
         topic.files.push({ path, name: name ?? basename(path), addedAt: io.now(), hash });
         await save(store);
+        return null;
       });
     },
 
+    // The row as it stands, onto another topic. addedAt is the move: it is
+    // when the book was filed here, and what a merge that lands it on two
+    // topics compares (oneTopicPerBook).
+    moveFile: (hash, toId) =>
+      serialize(async () => {
+        const store = await load();
+        const to = store.topics.find((t) => t.id === toId);
+        if (!to || to.files.some((f) => f.hash === hash)) return null;
+        const from = await unlistElsewhere(store, hash, toId);
+        if (!from) return null;
+        await io.logFile?.("revive", toId, hash);
+        to.files.push({ ...from.row, addedAt: io.now() });
+        await save(store);
+        return moveOf(hash, from.topic, to);
+      }),
+
+    // Every row of that book on the topic goes with it. A row with no book id
+    // is only the row, and is not logged.
     removeFile: (id, path) =>
       serialize(async () => {
         const store = await load();
         const topic = store.topics.find((t) => t.id === id);
-        if (!topic) return;
+        const row = topic?.files.find((f) => f.path === path);
+        if (!topic || !row) return;
+        if (row.hash) await unlist(topic, row.hash);
         topic.files = topic.files.filter((f) => f.path !== path);
         await save(store);
       }),
@@ -328,12 +512,23 @@ export function createTopicStore(io: TopicIo): TopicStore {
       serialize(async () => {
         const raw = await readStore();
         const healed = healTopics(raw.topics);
-        const deletions = io.deletions ? await io.deletions() : emptyDeletions();
-        const pruned = pruneDeletedTopics(healed, deletions);
-        if (pruned === healed) return false;
-        await save({ topics: pruned });
+        const settled = await settle(healed);
+        if (settled === healed) return false;
+        await save({ topics: settled });
         return true;
       }),
+  };
+}
+
+// Who hears of an add that found its book on another topic (App.tsx,
+// PhoneApp.tsx say it in a toast).
+const elsewhereListeners = new Set<(found: FiledElsewhere) => void>();
+
+/** Hear of every add that left its book on the topic it was already on. Answers the unsubscribe. */
+export function onFiledElsewhere(listener: (found: FiledElsewhere) => void): () => void {
+  elsewhereListeners.add(listener);
+  return () => {
+    elsewhereListeners.delete(listener);
   };
 }
 
@@ -347,6 +542,12 @@ const store = createTopicStore({
   newId: () => crypto.randomUUID(),
   now: () => Date.now(),
   deletions: readDeletions,
+  logFile: (op, topicId, hash) =>
+    (op === "delete" ? recordDeletion : recordRevival)("topic-file", topicFileId(topicId, hash), Date.now()),
+  revivals: readTopicFileRevivals,
+  elsewhere: (found) => {
+    for (const listener of elsewhereListeners) listener(found);
+  },
 });
 
 export function repairTopicPaths(): Promise<boolean> {
@@ -372,7 +573,10 @@ export function renameTopic(id: string, name: string): Promise<void> {
 // The row and nothing else. What else named the topic is settled by the domain
 // (reading/delete/delete-topic.ts), which is where the cascade can reach the
 // stores platform/app may not import; this is the last step of it.
-/** Finish a deletion the merge undid: rewrite the file without what the log says is gone. */
+/**
+ * Finish what a merge undid: rewrite the file without what the log says is
+ * gone, and with every book on one topic (oneTopicPerBook).
+ */
 export function pruneDeletedFromTopics(): Promise<boolean> {
   return store.pruneDeleted();
 }
@@ -382,9 +586,21 @@ export function removeTopicRecord(id: string): Promise<void> {
 }
 
 // `name` is for a path whose last segment is not a file name (an Android content
-// URI); without it the name is the path's basename.
-export function addFileToTopic(id: string, rawPath: string, hash: string, name?: string): Promise<void> {
+// URI); without it the name is the path's basename. A book another topic lists
+// stays there: nothing is written, and where it is is answered and told to
+// onFiledElsewhere.
+export function addFileToTopic(
+  id: string,
+  rawPath: string,
+  hash: string,
+  name?: string,
+): Promise<FiledElsewhere | null> {
   return store.addFile(id, rawPath, hash, name);
+}
+
+/** Move a book to another topic, its row as it stands: the one way a book changes topic. */
+export function moveFileToTopic(hash: string, toTopicId: string): Promise<FileMove | null> {
+  return store.moveFile(hash, toTopicId);
 }
 
 export function removeFileFromTopic(id: string, path: string): Promise<void> {

@@ -3,9 +3,6 @@ import type en from "./en";
 
 export default {
   "holdMenu.deleteTopic": "Удалить тему",
-  "holdMenu.deleteLesson": "Удалить урок",
-  "holdMenu.deleteConversation": "Удалить беседу",
-  "holdMenu.removeFromTopic": "Убрать из темы",
   "holdMenu.deleteArticle": "Удалить статью",
   "holdMenu.deleteBook": "Удалить книгу",
   "holdMenu.removeFromSaved": "Убрать из сохранённого",
@@ -18,31 +15,19 @@ export default {
     "Удалить эту статью и всё, что с ней связано, на всех устройствах? Ваши собственные заметки сохранятся.",
   "holdMenu.delete": "Удалить",
   "holdMenu.confirmRemoveTitle": "Убрать «{title}»?",
-  "holdMenu.removeOthers": "Останется в {names}",
-  "holdMenu.removeNoOthers": "Она ещё числится где-то ещё, поэтому останется",
-  "holdMenu.removeBookDescription": "Эта тема лишится книги. {where}, вместе с позицией чтения и пометками.",
-  "holdMenu.removeArticleDescription": "Эта тема лишится статьи. {where}, вместе с позицией чтения и пометками.",
   "holdMenu.remove": "Убрать",
   "holdMenu.confirmConversationTitle": "Удалить эту беседу?",
-  "holdMenu.confirmLessonDescription":
-    "Урок будет удалён вместе с побочными вопросами на всех устройствах. Статья останется, а следующий урок начнётся сначала.",
-  "holdMenu.confirmConversationDescription":
-    "Всё, что было сказано об этой книге, будет удалено на всех устройствах. Сама книга, её пометки и позиция чтения останутся.",
   "holdMenu.confirmRemoveSavedDescription":
     "Она исчезнет из сохранённого на всех устройствах. Сводка, из которой она пришла, не изменится.",
   "holdMenu.confirmDeleteAsideDescription":
     "Побочный вопрос будет удалён вместе со своей строкой в уроке. Сам урок останется.",
 
   "holdMenu.doneDeleted": "«{title}» удалено",
-  "holdMenu.doneRemovedFromTopic": "Убрано из «{topicName}»",
-  "holdMenu.doneLessonDeleted": "Урок удалён",
-  "holdMenu.doneConversationDeleted": "Беседа удалена",
   "holdMenu.doneRemovedFromSaved": "Убрано из сохранённого",
   "holdMenu.doneAsideDeleted": "Побочный вопрос удалён",
 
   "holdMenu.failedTopic": "Не удалось удалить тему.",
   "holdMenu.failedFile": "Не удалось удалить.",
-  "holdMenu.failedRemoveFromTopic": "Не удалось убрать из этой темы.",
   "holdMenu.failedConversation": "Не удалось удалить беседу.",
   "holdMenu.failedRemoveSaved": "Не удалось убрать из сохранённого.",
 

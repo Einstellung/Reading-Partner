@@ -34,6 +34,11 @@ const es: Translation<typeof en> = {
   "card.rename": "Renombrar",
   "card.delete": "Eliminar",
   "card.retell": "Recontar este libro…",
+  "move.action": "Mover a…",
+  "move.title": "Mover a",
+  "move.here": "Aquí",
+  "move.done": "Movido a «{topic}»",
+  "move.failed": "No se pudo mover.",
 
   "topics.eyebrow": "Tus temas",
   "topics.title": "Temas",
@@ -59,17 +64,14 @@ const es: Translation<typeof en> = {
     "El artículo se quita de tus artículos guardados. Volver a guardarlo desde un resumen lo trae de vuelta.",
   "materials.removeArticleAction": "Quitar",
   "materials.deleteBookTitle": "¿Eliminar “{title}”?",
-  "materials.removeBookTitle": "¿Quitar “{title}”?",
   "materials.deleteBookDescription": "¿Eliminar este libro y todo lo relacionado con él? Tus notas sobre ti mismo se conservan.",
-  "materials.removeBookDescription":
-    "El tema pierde el libro. El archivo se queda en el disco, y también su posición de lectura y sus marcas: si lo vuelves a añadir, las recupera.",
+  "materials.deleteArticleDescription":
+    "¿Eliminar este artículo y todo lo relacionado con él, en todos los dispositivos? Tus notas sobre ti mismo se conservan.",
   "materials.deleteBookAction": "Eliminar",
-  "materials.removeBookAction": "Quitar",
 
   "screen.backToTopics": "‹ Todos los temas",
   "screen.addBook": "+ Añadir libro",
   "screen.backToTopicLabel": "Volver al tema",
-  "screen.removeFileFailed": "No se pudo quitar el libro de este tema",
   "screen.deleteBookFailed": "No se pudo eliminar el libro",
   "screen.removeArticleFailed": "No se pudo quitar el artículo",
 

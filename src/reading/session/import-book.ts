@@ -39,7 +39,8 @@ export interface FileBookIo {
     originalPath: string,
     meta?: { filename?: string },
   ): Promise<{ hash: string }>;
-  addFileToTopic(topicId: string, path: string, hash: string, name?: string): Promise<void>;
+  /** The store's door (topics.ts addFile): a book another topic lists is moved. */
+  addFileToTopic(topicId: string, path: string, hash: string, name?: string): Promise<unknown>;
 }
 
 export interface ImportBookIo extends FileBookIo {

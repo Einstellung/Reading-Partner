@@ -46,6 +46,7 @@ import {
 } from "../shelf/topic-shelf";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
+import MoveToTopicDialog from "../shelf/MoveToTopicDialog";
 import HoldMenu, { HOLDABLE, HOLDABLE_ROW } from "./HoldMenu";
 import { visibleItems, type HoldSubject } from "./hold-menu";
 import NewTopicSheet from "./NewTopicSheet";
@@ -155,7 +156,7 @@ function Header(props: {
 }
 
 // What both lists hand the hold: the menu next to the held one, and the
-// confirmation for what was picked in it.
+// confirmation or the topic sheet for what was picked in it.
 function HoldLayer(props: { hold: HoldDeleteControl; topics?: Topic[] }) {
   const { hold } = props;
   return (
@@ -169,6 +170,19 @@ function HoldLayer(props: { hold: HoldDeleteControl; topics?: Topic[] }) {
           open
           onOpenChange={(open) => !open && hold.endAsk()}
           onConfirm={hold.confirm}
+        />
+      )}
+      {hold.moveAsk && (
+        <MoveToTopicDialog
+          open
+          sheet
+          fileName={hold.moveAsk.fileName}
+          targets={hold.moveAsk.targets}
+          onOpenChange={(open) => !open && hold.endAsk()}
+          onPick={(to) => {
+            hold.confirmMove(to);
+            hold.endAsk();
+          }}
         />
       )}
       {hold.topicAsk && props.topics && (
@@ -350,13 +364,6 @@ function TopicShelf(props: {
   const listed = shelfMaterials(files, entries, onDevice ?? new Set());
 
   const surface = useRef<HTMLDivElement | null>(null);
-  // Bumped when a lesson was deleted here: its card's note reads again.
-  const [notesRevision, setNotesRevision] = useState(0);
-  const { onChanged } = props;
-  const rereadShelf = useCallback(async () => {
-    setNotesRevision((n) => n + 1);
-    await onChanged();
-  }, [onChanged]);
   const hold = useHoldDelete({
     host: surface,
     subjectOf: (key) => {
@@ -367,7 +374,7 @@ function TopicShelf(props: {
     topics: props.topics,
     entries,
     onNotice: props.onNotice,
-    onChanged: rereadShelf,
+    onChanged: props.onChanged,
   });
   const materials = visibleItems(listed, hold.hidden, (m) => m.file.path);
   const books = materials.filter((m) => !m.article);
@@ -400,7 +407,7 @@ function TopicShelf(props: {
     return () => {
       live = false;
     };
-  }, [pdfIds, notesRevision]);
+  }, [pdfIds]);
 
   const tap = useCallback(
     async (m: ShelfMaterial): Promise<void> => {
@@ -542,8 +549,6 @@ function materialSubject(topic: Topic, m: ShelfMaterial): HoldSubject {
     topicName: topic.name,
     file: m.file,
     title: m.title,
-    format: m.format === "pdf" ? "pdf" : m.format === "epub" ? "epub" : "other",
     article: m.article,
-    bookId: m.bookId,
   };
 }

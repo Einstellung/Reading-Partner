@@ -67,7 +67,7 @@ export interface ArticleIngestDeps {
    * List the document in a topic under this reference and record its book id.
    * Both halves are idempotent: an article ingested twice is one row.
    */
-  attachToTopic(topicId: string, path: string, hash: string): Promise<void>;
+  attachToTopic(topicId: string, path: string, hash: string): Promise<unknown>;
   /**
    * List the document among a book's supplements. Idempotent by hash: the same
    * URL ingested twice is the same bytes, so it is the same one entry.

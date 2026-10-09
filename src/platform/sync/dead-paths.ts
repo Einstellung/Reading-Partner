@@ -34,13 +34,15 @@ import { TOMBSTONE_KINDS, type Deletions, type TombstoneKind } from "../app/dele
 
 // The id field whose value a deletion of this kind names. A topic's deletion
 // names no file: everything of a topic's is a record, or is logged under its
-// own id by the cascade (reading/delete/delete-topic.ts).
+// own id by the cascade (reading/delete/delete-topic.ts). Nor does a book taken
+// off one topic: the book and its files stay.
 const ID_FIELD: Record<TombstoneKind, PalaceRow["id"] | null> = {
   book: "bookId",
   retell: "retellId",
   outline: "outlineId",
   rehearsal: "rehearsalId",
   topic: null,
+  "topic-file": null,
 };
 
 function ownedBy(row: PalaceRow, kind: TombstoneKind): boolean {

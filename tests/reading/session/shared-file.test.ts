@@ -146,3 +146,20 @@ test("a shared file whose bytes are no book files nothing", async () => {
   expect(await fileSharedBook(`${INBOX}/a.pdf`, io)).toBeNull();
   expect(added).toEqual([]);
 });
+
+// A book is on one topic. One already filed was classified, so the share sheet,
+// which names no topic, leaves it there and opens it there.
+test("a shared book already on a topic stays on it and opens there", async () => {
+  const shelved: Topic = {
+    id: "t1",
+    name: "attention",
+    createdAt: 2,
+    files: [{ path: "/books/a.pdf", name: "a.pdf", addedAt: 1, hash: "content-hash" }],
+  };
+  const { io, added } = fakeIo();
+  const brief = await io.ensureBriefTopic();
+  io.listTopics = async () => [brief, shelved];
+  const filed = await fileSharedBook(`${INBOX}/a.pdf`, io);
+  expect(added).toEqual([]);
+  expect(filed).toEqual({ topicId: "t1", file: shelved.files[0]! });
+});

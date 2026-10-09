@@ -21,7 +21,9 @@
 // Two line shapes. A book's delete is `{"bookId","at"}`, the shape the first
 // build wrote and the only one an older client reads, so the deletion of a book
 // still reaches a device that has not upgraded. Everything else is
-// `{"kind","id","op","at"}`. `at` is the moment of the event: a full ISO time
+// `{"kind","id","op","at"}`, and a client that does not know a kind skips the
+// line and keeps it: 0.21 reads `bookId` alone, 0.22 drops an unknown kind in
+// parseLine, and the lines merge carries every line whoever wrote it. `at` is the moment of the event: a full ISO time
 // on lines written now, a bare day on the old ones, and the two compare as
 // strings — a day sorts before any moment inside it.
 //
@@ -34,7 +36,9 @@ import { writeTextAtomic } from "./atomic-fs";
 
 export const DELETED_BOOKS_FILE = "deleted-books.jsonl";
 
-export const TOMBSTONE_KINDS = ["book", "retell", "outline", "rehearsal", "topic"] as const;
+// "topic-file" is one book taken off one topic, named by topicFileId: the
+// relation, not the book (docs/59 §11).
+export const TOMBSTONE_KINDS = ["book", "retell", "outline", "rehearsal", "topic", "topic-file"] as const;
 export type TombstoneKind = (typeof TOMBSTONE_KINDS)[number];
 export type TombstoneOp = "delete" | "revive";
 
@@ -49,7 +53,19 @@ export interface Tombstone {
 export type Deletions = Readonly<Record<TombstoneKind, ReadonlySet<string>>>;
 
 export function emptyDeletions(): Record<TombstoneKind, Set<string>> {
-  return { book: new Set(), retell: new Set(), outline: new Set(), rehearsal: new Set(), topic: new Set() };
+  return {
+    book: new Set(),
+    retell: new Set(),
+    outline: new Set(),
+    rehearsal: new Set(),
+    topic: new Set(),
+    "topic-file": new Set(),
+  };
+}
+
+/** The id a "topic-file" event names: book `hash` listed under topic `topicId`. */
+export function topicFileId(topicId: string, hash: string): string {
+  return `${topicId}/${hash}`;
 }
 
 function isKind(value: unknown): value is TombstoneKind {
@@ -119,6 +135,19 @@ export function effectiveDeletions(text: string): Deletions {
   return out;
 }
 
+/**
+ * When each "topic-file" pair whose latest event is a revive was put back, by
+ * id: the moment a topic last claimed a book (platform/app/topics.ts,
+ * oneTopicPerBook).
+ */
+export function topicFileRevivals(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const t of latest(text).values()) {
+    if (t.kind === "topic-file" && t.op === "revive") out.set(t.id, t.at);
+  }
+  return out;
+}
+
 export function isDeleted(deletions: Deletions, kind: TombstoneKind, id: string): boolean {
   return deletions[kind].has(id);
 }
@@ -175,6 +204,11 @@ async function readText(): Promise<string> {
 /** Everything this device knows to be deleted. Throws when the log is there and will not read. */
 export async function readDeletions(): Promise<Deletions> {
   return effectiveDeletions(await readText());
+}
+
+/** When each book was last put back onto a topic (topicFileRevivals). */
+export async function readTopicFileRevivals(): Promise<Map<string, string>> {
+  return topicFileRevivals(await readText());
 }
 
 /** Every book id this device knows to be deleted. */

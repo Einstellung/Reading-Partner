@@ -50,7 +50,7 @@ export interface RetireBookDeps {
   saveViewState: (bookId: string, state: ViewState) => Promise<void>;
   removeViewState: (bookId: string) => Promise<void>;
   listTopics: () => Promise<Topic[]>;
-  attachFile: (topicId: string, path: string, hash: string) => Promise<void>;
+  attachFile: (topicId: string, path: string, hash: string) => Promise<unknown>;
   unlinkFile: (topicId: string, path: string) => Promise<void>;
   listSupplements: (bookId: string) => Promise<SupplementRef[]>;
   listSupplementLists: () => Promise<SupplementList[]>;

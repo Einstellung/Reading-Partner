@@ -13,6 +13,7 @@ import {
 } from "../../../platform/app/library";
 import type { FileRef } from "../../../platform/app/topics";
 import { formatPublishedAt, type SavedArticle } from "../../../reading/saved/saved-articles";
+import { t } from "../../../i18n";
 import { displayFileTitle } from "./file-title";
 
 const ISO_DATE = /^(\d{4}-\d{2}-\d{2})/;
@@ -92,4 +93,19 @@ export function splitMaterials(
     }
   }
   return { books, articles };
+}
+
+// What the Delete confirmation says for a file on the shelf. An article is
+// named as one, in the same words the phone's hold menu uses, and says the
+// delete reaches every device.
+export function deleteMaterialDescription(isArticle: boolean): string {
+  return isArticle
+    ? t("library.materials.deleteArticleDescription")
+    : t("library.materials.deleteBookDescription");
+}
+
+// Whether a file is an article, by its entry in the library registry.
+export function isArticleFile(file: Pick<FileRef, "hash">, entries: Record<string, LibraryEntry>): boolean {
+  const entry = file.hash ? entries[file.hash] : undefined;
+  return !!entry && isArticleEntry(entry);
 }

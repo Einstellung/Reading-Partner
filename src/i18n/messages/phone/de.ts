@@ -3,9 +3,6 @@ import type en from "./en";
 
 export default {
   "holdMenu.deleteTopic": "Thema löschen",
-  "holdMenu.deleteLesson": "Lektion löschen",
-  "holdMenu.deleteConversation": "Unterhaltung löschen",
-  "holdMenu.removeFromTopic": "Aus Thema entfernen",
   "holdMenu.deleteArticle": "Artikel löschen",
   "holdMenu.deleteBook": "Buch löschen",
   "holdMenu.removeFromSaved": "Aus Gespeichert entfernen",
@@ -18,31 +15,19 @@ export default {
     "Diesen Artikel und alles dazu auf allen Geräten löschen? Deine eigenen Notizen bleiben erhalten.",
   "holdMenu.delete": "Löschen",
   "holdMenu.confirmRemoveTitle": "„{title}“ entfernen?",
-  "holdMenu.removeOthers": "Bleibt erhalten in {names}",
-  "holdMenu.removeNoOthers": "Etwas anderes listet es noch, deshalb bleibt es erhalten",
-  "holdMenu.removeBookDescription": "Dieses Thema verliert das Buch. {where}, mit Leseposition und Markierungen.",
-  "holdMenu.removeArticleDescription": "Dieses Thema verliert den Artikel. {where}, mit Leseposition und Markierungen.",
   "holdMenu.remove": "Entfernen",
   "holdMenu.confirmConversationTitle": "Diese Unterhaltung löschen?",
-  "holdMenu.confirmLessonDescription":
-    "Die Lektion wird mitsamt ihren Nebenfragen auf allen Geräten gelöscht. Das Paper bleibt erhalten, und die nächste Lektion beginnt von vorn.",
-  "holdMenu.confirmConversationDescription":
-    "Alles, was zu diesem Buch gesagt wurde, wird auf allen Geräten gelöscht. Das Buch selbst, seine Markierungen und die Leseposition bleiben erhalten.",
   "holdMenu.confirmRemoveSavedDescription":
     "Er verschwindet auf allen Geräten aus Gespeichert. Das Briefing, aus dem er stammt, bleibt unverändert.",
   "holdMenu.confirmDeleteAsideDescription":
     "Die Nebenfrage und ihre Zeile in der Lektion werden gelöscht. Die Lektion selbst bleibt erhalten.",
 
   "holdMenu.doneDeleted": "„{title}“ gelöscht",
-  "holdMenu.doneRemovedFromTopic": "Aus {topicName} entfernt",
-  "holdMenu.doneLessonDeleted": "Lektion gelöscht",
-  "holdMenu.doneConversationDeleted": "Unterhaltung gelöscht",
   "holdMenu.doneRemovedFromSaved": "Aus Gespeichert entfernt",
   "holdMenu.doneAsideDeleted": "Nebenfrage gelöscht",
 
   "holdMenu.failedTopic": "Das Thema konnte nicht gelöscht werden.",
   "holdMenu.failedFile": "Konnte nicht gelöscht werden.",
-  "holdMenu.failedRemoveFromTopic": "Konnte nicht aus diesem Thema entfernt werden.",
   "holdMenu.failedConversation": "Die Unterhaltung konnte nicht gelöscht werden.",
   "holdMenu.failedRemoveSaved": "Konnte nicht aus Gespeichert entfernt werden.",
 

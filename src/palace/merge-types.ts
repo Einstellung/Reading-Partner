@@ -14,6 +14,10 @@ export type MergeStrategy =
   // thread both sides edited is not atomic. Its own keys merge as fields and its
   // messages three-way per message (platform/sync/merge/messages.ts, docs/59 §5).
   | "messages"
+  // topics.json: records whose record is a topic, except that a topic both
+  // sides edited is not atomic. Its own keys merge as fields and its book list
+  // three-way per book (platform/sync/merge/topics.ts, docs/59 §11).
+  | "topics"
   // JSON objects of scalar settings: three-way per field.
   | "fields"
   // Fields, where the scalars are watermarks and the lower of two is the safe

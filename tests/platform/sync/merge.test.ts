@@ -47,7 +47,7 @@ test("the files the app writes are classified by what they hold", () => {
   expect(strategyFor("annotations-abc123.json")).toBe("records");
   expect(strategyFor("threads-abc123.json")).toBe("messages");
   expect(strategyFor("library.json")).toBe("records");
-  expect(strategyFor("topics.json")).toBe("records");
+  expect(strategyFor("topics.json")).toBe("topics");
   expect(strategyFor("reading-state.json")).toBe("records");
   expect(strategyFor("info-sources.json")).toBe("records");
   expect(strategyFor("info-feedback.jsonl")).toBe("records");
@@ -1149,6 +1149,77 @@ const CASES: Case[] = [
       topics: [
         { id: "t1", name: "One", createdAt: 1, files: [] },
         { id: "t2", name: "Two", createdAt: 3, files: [] },
+      ],
+    }),
+    identified: false,
+  },
+  {
+    name: "a topic one side added a book to, the other opened one and took one off",
+    path: "topics.json",
+    base: json({
+      topics: [
+        {
+          id: "t1",
+          name: "One",
+          createdAt: 1,
+          files: [
+            { path: "/a.pdf", name: "a.pdf", addedAt: 1, hash: "h1" },
+            { path: "/b.pdf", name: "b.pdf", addedAt: 1, hash: "h2" },
+          ],
+        },
+      ],
+    }),
+    local: json({
+      topics: [
+        {
+          id: "t1",
+          name: "One",
+          createdAt: 1,
+          files: [
+            { path: "/a.pdf", name: "a.pdf", addedAt: 1, hash: "h1", lastOpenedAt: 4 },
+            { path: "/b.pdf", name: "b.pdf", addedAt: 1, hash: "h2", lastOpenedAt: 5 },
+            { path: "/c.pdf", name: "c.pdf", addedAt: 3, hash: "h3" },
+          ],
+        },
+      ],
+    }),
+    remote: json({
+      topics: [
+        {
+          id: "t1",
+          name: "Uno",
+          createdAt: 1,
+          files: [{ path: "/a.pdf", name: "a.pdf", addedAt: 1, hash: "h1", lastOpenedAt: 6 }],
+        },
+      ],
+    }),
+    identified: false,
+  },
+  {
+    name: "a topic both sides listed books on with no base between them",
+    path: "topics.json",
+    base: null,
+    local: json({
+      topics: [
+        {
+          id: "brief",
+          name: "Brief",
+          createdAt: 1,
+          files: [
+            { path: "/a.pdf", name: "a.pdf", addedAt: 1, hash: "h1" },
+            { path: "content://d/1", name: "document:1", addedAt: 2, hash: "h1" },
+          ],
+        },
+      ],
+    }),
+    remote: json({
+      topics: [
+        {
+          id: "brief",
+          name: "Brief",
+          createdAt: 2,
+          files: [{ path: "/b.pdf", name: "b.pdf", addedAt: 1, hash: "h2" }],
+        },
       ],
     }),
     identified: false,

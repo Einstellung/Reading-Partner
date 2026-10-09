@@ -3,9 +3,6 @@ import type en from "./en";
 
 export default {
   "holdMenu.deleteTopic": "Supprimer le sujet",
-  "holdMenu.deleteLesson": "Supprimer la leçon",
-  "holdMenu.deleteConversation": "Supprimer la conversation",
-  "holdMenu.removeFromTopic": "Retirer du sujet",
   "holdMenu.deleteArticle": "Supprimer l'article",
   "holdMenu.deleteBook": "Supprimer le livre",
   "holdMenu.removeFromSaved": "Retirer des éléments enregistrés",
@@ -18,32 +15,19 @@ export default {
     "Supprimer cet article et tout ce qui s'y rapporte, sur tous les appareils ? Vos notes personnelles sont conservées.",
   "holdMenu.delete": "Supprimer",
   "holdMenu.confirmRemoveTitle": "Retirer « {title} » ?",
-  "holdMenu.removeOthers": "Reste dans {names}",
-  "holdMenu.removeNoOthers": "Autre chose le liste encore, donc il reste",
-  "holdMenu.removeBookDescription": "Ce sujet perd le livre. {where}, avec sa position de lecture et ses annotations.",
-  "holdMenu.removeArticleDescription":
-    "Ce sujet perd l'article. {where}, avec sa position de lecture et ses annotations.",
   "holdMenu.remove": "Retirer",
   "holdMenu.confirmConversationTitle": "Supprimer cette conversation ?",
-  "holdMenu.confirmLessonDescription":
-    "La leçon disparaît, avec ses apartés, sur tous les appareils. L'article reste, et la prochaine leçon repart du début.",
-  "holdMenu.confirmConversationDescription":
-    "Tout ce qui a été dit à propos de ce livre disparaît, sur tous les appareils. Le livre, ses annotations et sa position de lecture restent.",
   "holdMenu.confirmRemoveSavedDescription":
     "Il disparaît des éléments enregistrés sur tous les appareils. Le résumé dont il vient n'est pas modifié.",
   "holdMenu.confirmDeleteAsideDescription":
     "L'aparté disparaît, avec sa ligne dans la leçon. La leçon elle-même reste.",
 
   "holdMenu.doneDeleted": "« {title} » supprimé",
-  "holdMenu.doneRemovedFromTopic": "Retiré de {topicName}",
-  "holdMenu.doneLessonDeleted": "Leçon supprimée",
-  "holdMenu.doneConversationDeleted": "Conversation supprimée",
   "holdMenu.doneRemovedFromSaved": "Retiré des éléments enregistrés",
   "holdMenu.doneAsideDeleted": "Aparté supprimé",
 
   "holdMenu.failedTopic": "Le sujet n'a pas pu être supprimé.",
   "holdMenu.failedFile": "Impossible de le supprimer.",
-  "holdMenu.failedRemoveFromTopic": "Impossible de le retirer de ce sujet.",
   "holdMenu.failedConversation": "La conversation n'a pas pu être supprimée.",
   "holdMenu.failedRemoveSaved": "Impossible de le retirer des éléments enregistrés.",
 

@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
-import { BRIEF_TOPIC_ID, listTopics, type Topic } from "./platform/app/topics";
+import { BRIEF_TOPIC_ID, listTopics, onFiledElsewhere, type Topic } from "./platform/app/topics";
 import { libraryHas, listLibraryEntries, type LibraryEntry } from "./platform/app/library";
 import {
   libraryFilePath,
@@ -65,6 +65,7 @@ import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import { useT } from "./i18n";
+import { alreadyInLine } from "./ui/components/shelf/move-to";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import { KeyboardShell } from "./ui/components/common/KeyboardShell";
@@ -201,6 +202,13 @@ export default function PhoneApp({
   useEffect(() => {
     void refreshSavedArticles();
   }, [refreshSavedArticles]);
+
+  // A book is on one topic, so an add of one another topic lists left it there
+  // (platform/app/topics.ts addFile).
+  useEffect(
+    () => onFiledElsewhere((found) => pushToast("info", alreadyInLine(found.topic.name))),
+    [pushToast, t],
+  );
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.

@@ -3,9 +3,6 @@ import type en from "./en";
 
 export default {
   "holdMenu.deleteTopic": "Excluir tópico",
-  "holdMenu.deleteLesson": "Excluir aula",
-  "holdMenu.deleteConversation": "Excluir conversa",
-  "holdMenu.removeFromTopic": "Remover do tópico",
   "holdMenu.deleteArticle": "Excluir artigo",
   "holdMenu.deleteBook": "Excluir livro",
   "holdMenu.removeFromSaved": "Remover dos salvos",
@@ -18,30 +15,18 @@ export default {
     "Excluir este artigo e tudo relacionado a ele, em todos os dispositivos? Suas notas pessoais continuam salvas.",
   "holdMenu.delete": "Excluir",
   "holdMenu.confirmRemoveTitle": "Remover “{title}”?",
-  "holdMenu.removeOthers": "Continua em {names}",
-  "holdMenu.removeNoOthers": "Outro lugar ainda o lista, então ele continua",
-  "holdMenu.removeBookDescription": "Este tópico perde o livro. {where}, com a posição de leitura e as marcações.",
-  "holdMenu.removeArticleDescription": "Este tópico perde o artigo. {where}, com a posição de leitura e as marcações.",
   "holdMenu.remove": "Remover",
   "holdMenu.confirmConversationTitle": "Excluir esta conversa?",
-  "holdMenu.confirmLessonDescription":
-    "A aula é excluída, com seus apartes, em todos os dispositivos. O artigo continua, e a próxima aula começa do início.",
-  "holdMenu.confirmConversationDescription":
-    "Tudo o que foi dito sobre este livro é excluído, em todos os dispositivos. O livro, suas marcações e a posição de leitura continuam.",
   "holdMenu.confirmRemoveSavedDescription":
     "Ele sai dos salvos em todos os dispositivos. O resumo de onde veio não é alterado.",
   "holdMenu.confirmDeleteAsideDescription": "O aparte é excluído, com sua linha na aula. A aula em si continua.",
 
   "holdMenu.doneDeleted": "“{title}” excluído",
-  "holdMenu.doneRemovedFromTopic": "Removido de {topicName}",
-  "holdMenu.doneLessonDeleted": "Aula excluída",
-  "holdMenu.doneConversationDeleted": "Conversa excluída",
   "holdMenu.doneRemovedFromSaved": "Removido dos salvos",
   "holdMenu.doneAsideDeleted": "Aparte excluído",
 
   "holdMenu.failedTopic": "Não foi possível excluir o tópico.",
   "holdMenu.failedFile": "Não foi possível excluir.",
-  "holdMenu.failedRemoveFromTopic": "Não foi possível remover deste tópico.",
   "holdMenu.failedConversation": "Não foi possível excluir a conversa.",
   "holdMenu.failedRemoveSaved": "Não foi possível remover dos salvos.",
 

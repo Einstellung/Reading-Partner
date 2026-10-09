@@ -58,7 +58,7 @@ export interface ReplaceDeps {
   hash(bytes: Uint8Array): Promise<string>;
   importBook(bytes: Uint8Array, path: string, meta: ImportMeta): Promise<LibraryEntry>;
   /** List the new document in the topic the original was filed under. */
-  attach(topicId: string, path: string, hash: string): Promise<void>;
+  attach(topicId: string, path: string, hash: string): Promise<unknown>;
   /**
    * Put the new document in the original's place among a book's supplements:
    * the row is one row before and after, under the new document's id.

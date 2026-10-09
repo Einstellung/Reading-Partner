@@ -34,6 +34,11 @@ const fr: Translation<typeof en> = {
   "card.rename": "Renommer",
   "card.delete": "Supprimer",
   "card.retell": "Reformuler ce livre…",
+  "move.action": "Déplacer vers…",
+  "move.title": "Déplacer vers",
+  "move.here": "Ici",
+  "move.done": "Déplacé vers « {topic} »",
+  "move.failed": "Impossible de le déplacer.",
 
   "topics.eyebrow": "Vos sujets",
   "topics.title": "Sujets",
@@ -60,17 +65,14 @@ const fr: Translation<typeof en> = {
     "L’article quitte vos articles enregistrés. L’enregistrer à nouveau depuis un résumé le fait revenir.",
   "materials.removeArticleAction": "Retirer",
   "materials.deleteBookTitle": "Supprimer « {title} » ?",
-  "materials.removeBookTitle": "Retirer « {title} » ?",
   "materials.deleteBookDescription": "Supprimer ce livre et tout ce qui s’y rapporte ? Vos notes sur vous-même sont conservées.",
-  "materials.removeBookDescription":
-    "Le sujet perd le livre. Le fichier reste sur le disque, tout comme sa position de lecture et ses repères — le rajouter les récupère.",
+  "materials.deleteArticleDescription":
+    "Supprimer cet article et tout ce qui s'y rapporte, sur tous les appareils ? Vos notes personnelles sont conservées.",
   "materials.deleteBookAction": "Supprimer",
-  "materials.removeBookAction": "Retirer",
 
   "screen.backToTopics": "‹ Tous les sujets",
   "screen.addBook": "+ Ajouter un livre",
   "screen.backToTopicLabel": "Retour au sujet",
-  "screen.removeFileFailed": "Impossible de retirer le livre de ce sujet",
   "screen.deleteBookFailed": "Impossible de supprimer le livre",
   "screen.removeArticleFailed": "Impossible de retirer l’article",
 

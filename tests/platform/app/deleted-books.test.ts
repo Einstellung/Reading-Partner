@@ -80,6 +80,7 @@ import {
   effectiveDeletions,
   parseTombstones,
   tombstoneAt,
+  topicFileId,
 } from "../../../src/platform/app/deleted-books";
 
 const T1 = "2026-09-20T10:00:00.000Z";
@@ -129,6 +130,20 @@ test("a book's delete keeps the shape an older client reads; the other kinds hav
   expect([...d.retell]).toEqual(["r1"]);
   expect([...d.topic]).toEqual(["t1"]);
   expect(d.outline.size + d.rehearsal.size).toBe(0);
+});
+
+// A 0.22 client reads it as a line of an unknown kind (the test below) and a
+// 0.21 one as a line with no bookId: neither takes the book away.
+test("a book taken off one topic is the pair, not the book", () => {
+  const text = appendTombstoneLine("", {
+    kind: "topic-file",
+    id: topicFileId("t1", "h1"),
+    op: "delete",
+    at: T1,
+  });
+  expect(text).toBe(`{"kind":"topic-file","id":"t1/h1","op":"delete","at":"${T1}"}\n`);
+  expect([...effectiveDeletions(text)["topic-file"]]).toEqual(["t1/h1"]);
+  expect(parseDeletedBooks(text).size).toBe(0);
 });
 
 test("a line with an unknown kind or op is not an event", () => {

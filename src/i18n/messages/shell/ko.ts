@@ -8,6 +8,7 @@ export default {
   "toast.asideGone": "이 곁가지 대화는 더 이상 없습니다.",
   "toast.conversationsUnloadable": "저장된 AI 대화를 불러올 수 없습니다",
   "toast.cantShareFile": "이 파일을 다른 앱으로 보낼 수 없습니다.",
+  "toast.alreadyIn": "이미 “{topic}”에 있습니다",
 
   "call.askAboutThisTitle": "이것에 대해 묻기",
   "call.askAboutThisPlaceholder": "이것에 대해 묻기…",

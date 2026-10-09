@@ -34,6 +34,11 @@ const ko: Translation<typeof en> = {
   "card.rename": "이름 바꾸기",
   "card.delete": "삭제",
   "card.retell": "이 책 리텔링…",
+  "move.action": "이동…",
+  "move.title": "이동할 주제",
+  "move.here": "현재",
+  "move.done": "“{topic}”(으)로 이동했습니다",
+  "move.failed": "이동하지 못했습니다.",
 
   "topics.eyebrow": "내 주제",
   "topics.title": "주제",
@@ -57,17 +62,14 @@ const ko: Translation<typeof en> = {
   "materials.removeArticleDescription": "기사가 저장한 기사 목록에서 사라집니다. 브리핑에서 다시 저장하면 돌아옵니다.",
   "materials.removeArticleAction": "삭제",
   "materials.deleteBookTitle": "“{title}”을(를) 삭제할까요?",
-  "materials.removeBookTitle": "“{title}”을(를) 이 주제에서 뺄까요?",
   "materials.deleteBookDescription": "이 책과 이 책에 관한 모든 것을 삭제할까요? 당신에 대한 메모는 남습니다.",
-  "materials.removeBookDescription":
-    "주제에서 이 책이 빠집니다. 파일은 디스크에 그대로 남고 읽기 위치와 표시도 유지됩니다—다시 추가하면 함께 돌아옵니다.",
+  "materials.deleteArticleDescription":
+    "이 기사와 관련된 모든 것을 모든 기기에서 삭제할까요? 자신에 대한 메모는 남습니다.",
   "materials.deleteBookAction": "삭제",
-  "materials.removeBookAction": "빼기",
 
   "screen.backToTopics": "‹ 모든 주제",
   "screen.addBook": "+ 책 추가",
   "screen.backToTopicLabel": "주제로 돌아가기",
-  "screen.removeFileFailed": "이 주제에서 책을 뺄 수 없습니다",
   "screen.deleteBookFailed": "책을 삭제할 수 없습니다",
   "screen.removeArticleFailed": "기사를 삭제할 수 없습니다",
 

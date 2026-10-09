@@ -8,13 +8,16 @@
 
 export default {
   // Toasts App.tsx and PhoneApp.tsx push when a file, a saved conversation or
-  // a side conversation cannot be reached.
+  // a side conversation cannot be reached, and when an import moved a book.
   "toast.cantOpenDownloading": "Can't open this — it may not have finished downloading.",
   "toast.cantOpenFile": "Can't open this file — it may have been moved or deleted.",
   "toast.cantReadFile": "Can't read this file — it may have been moved or deleted.",
   "toast.asideGone": "That side conversation is gone.",
   "toast.conversationsUnloadable": "Saved AI conversations could not be loaded",
   "toast.cantShareFile": "This file could not be handed to another app.",
+  // An add found the book on another topic and left it there: a book is on
+  // one topic, and only Move to… changes which.
+  "toast.alreadyIn": "Already in “{topic}”",
 
   // The book-level call: its empty-state title and placeholder, and the
   // unconfigured-provider card.

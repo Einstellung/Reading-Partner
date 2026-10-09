@@ -16,6 +16,7 @@ import {
   moveKeptArticle,
   recordsWithoutListedDocument,
   type KeptDocumentDeps,
+  moveDocumentToTopic,
 } from "../../../src/reading/saved/kept-document";
 import type { SavedArticle } from "../../../src/reading/saved/saved-articles";
 
@@ -125,9 +126,15 @@ function fakeDeps(world: World): KeptDocumentDeps {
       const t = world.topics.find((x) => x.id === topicId);
       if (t && !t.files.some((f) => f.path === path)) t.files.push(file(hash, path));
     },
-    removeFileFromTopic: async (topicId, path) => {
-      const t = world.topics.find((x) => x.id === topicId);
-      if (t) t.files = t.files.filter((f) => f.path !== path);
+    // The store's move: the row as it stands, off every other topic.
+    moveFileToTopic: async (hash, topicId) => {
+      const to = world.topics.find((x) => x.id === topicId);
+      const row = world.topics.flatMap((t) => t.files).find((f) => f.hash === hash);
+      const from = world.topics.find((t) => t.files.some((f) => f.hash === hash));
+      if (!to || !row || !from || to.files.some((f) => f.hash === hash)) return null;
+      for (const t of world.topics) t.files = t.files.filter((f) => f.hash !== hash);
+      to.files.push(row);
+      return { hash, from: { id: from.id, name: from.name }, to: { id: to.id, name: to.name } };
     },
   };
 }
@@ -147,6 +154,21 @@ test("moving a kept article moves its document under the same reference", async 
   expect(world.records[0].topicId).toBe("t1");
   expect(world.topics.find((t) => t.id === "t1")?.files.map((f) => f.path)).toEqual([PATH]);
   expect(world.topics.find((t) => t.id === "brief")?.files).toEqual([]);
+});
+
+test("moving a document off the shelf takes its kept record along", async () => {
+  const world: World = {
+    records: [record({ topicId: "brief" })],
+    topics: [topic("brief", [file(DOC, PATH)]), topic("t1")],
+    library: {},
+    ensured: 0,
+  };
+  const move = await moveDocumentToTopic(DOC, "t1", fakeDeps(world));
+  expect(move?.from.id).toBe("brief");
+  expect(world.records[0].topicId).toBe("t1");
+  expect(world.topics.find((t) => t.id === "t1")?.files.map((f) => f.path)).toEqual([PATH]);
+  // Already there: nothing moves.
+  expect(await moveDocumentToTopic(DOC, "t1", fakeDeps(world))).toBeNull();
 });
 
 test("a document no topic lists is filed from its library entry", async () => {
