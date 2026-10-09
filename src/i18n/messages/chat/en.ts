@@ -11,6 +11,7 @@ export default {
   "composer.switchToVoice": "Switch to voice",
   "composer.stop": "Stop",
   "composer.send": "Send",
+  "call.reply": "Reply…",
 
   "dispatch.noRecord": "No record of it on this device.",
   "dispatch.backWithAnswer": "Back with an answer.",

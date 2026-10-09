@@ -9,6 +9,7 @@ export default {
   "composer.switchToVoice": "음성으로 전환",
   "composer.stop": "중지",
   "composer.send": "보내기",
+  "call.reply": "답장…",
 
   "dispatch.noRecord": "이 기기에는 기록이 없습니다.",
   "dispatch.backWithAnswer": "답을 가지고 돌아왔습니다.",

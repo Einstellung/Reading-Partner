@@ -10,6 +10,7 @@ import {
   intakeTopicRows,
   intakeView,
   progressLine,
+  failureReason,
   reasonText,
   skippedLine,
 } from "../../../../src/ui/components/lumen/intake-view";
@@ -101,9 +102,36 @@ test("known reasons are said in the UI language, anything else as written", () =
   );
   expect(reasonText("the t.co link did not resolve")).toBe("the short link didn't open");
   expect(reasonText("socket hang up")).toBe("socket hang up");
+  expect(reasonText("could not fetch the link (HTTP 404)")).toBe("the link didn't open (HTTP 404)");
+  expect(reasonText("无法抓取该链接（HTTP 503）")).toBe("the link didn't open (HTTP 503)");
   expect(skippedLine({ url: "https://x.com/a/status/1", reason: "the AI did not choose it" })).toBe(
     "Not taken: not related enough, so it was skipped (x.com/a/status/1)",
   );
+});
+
+test("a failure's line is a known kind in the UI language with nothing under it, else a plain line over the program's words", () => {
+  // The walkthrough's sentence: the ingest's Chinese around a GitHub adapter's English.
+  const zh = "无法从 https://github.com/karpathy/this-repo-does-not-exist-xyz 取得可读正文：GitHub has no README for karpathy/this-repo-does-not-exist-xyz, or the repository is private";
+  expect(failureReason(zh)).toEqual({ text: "GitHub has no such repository, or it's private", detail: null });
+  expect(failureReason("could not get readable text from https://arxiv.org/abs/1: arXiv answered HTTP 404 for the PDF of 1v1")).toEqual({
+    text: "the site didn't hand over the document",
+    detail: null,
+  });
+  expect(failureReason("Read x.com. Nothing became a document.")).toEqual({
+    text: "it was read, but nothing in it could be filed",
+    detail: null,
+  });
+  // Unknown: the wrapper is taken off and what the program said is the small print.
+  expect(failureReason("could not get readable text from https://a.test/x: the page has no article")).toEqual({
+    text: "this link couldn't be read",
+    detail: "the page has no article",
+  });
+  expect(failureReason("无法从 https://a.test/x 取得可读正文：the page has no article")).toEqual({
+    text: "this link couldn't be read",
+    detail: "the page has no article",
+  });
+  expect(failureReason("socket hang up")).toEqual({ text: "this link couldn't be read", detail: "socket hang up" });
+  expect(failureReason("")).toEqual({ text: "this link couldn't be read", detail: null });
 });
 
 test("a document's line is its sections or pages and where it came from", () => {
@@ -112,7 +140,7 @@ test("a document's line is its sections or pages and where it came from", () => 
   expect(documentMeta({ ...DOC, sections: undefined, pages: 0, sourceUrl: undefined })).toBe("");
 });
 
-test("the list is the shelf in order, Lumen's suggestion marked while it exists, else the program's", () => {
+test("the list is the shelf in order, Lumen's suggestion marked while it exists, else a name in the link, else none", () => {
   const topics = [topic("t-brief", "Brief", 5), topic("t-pi", "pi", 1), topic("t-edge", "Edge models", 2)];
   const rows = intakeTopicRows(topics, { url: "https://example.test/post" }, "t-edge", "t-pi");
   expect(rows.map((r) => [r.id, r.suggested, r.picked])).toEqual([
@@ -123,6 +151,11 @@ test("the list is the shelf in order, Lumen's suggestion marked while it exists,
   // A topic named in the link wins once Lumen's pick is gone from the shelf.
   const fallback = intakeTopicRows(topics, { url: "https://github.com/robotbird/pi" }, null, "t-deleted");
   expect(fallback.find((r) => r.suggested)?.id).toBe("t-pi");
+  // No pick and no name: nothing is marked, however recently a topic was used.
+  expect(intakeTopicRows(topics, { url: "https://github.com/karpathy/nanoGPT" }, null).some((r) => r.suggested)).toBe(false);
+  // A pick is exactly what the card marks, even with a name in the link.
+  const picked = intakeTopicRows(topics, { url: "https://github.com/robotbird/pi" }, null, "t-edge");
+  expect(picked.filter((r) => r.suggested).map((r) => r.id)).toEqual(["t-edge"]);
 });
 
 test("打开阅读 opens a document of the receipt, in the topic it was attached to", () => {

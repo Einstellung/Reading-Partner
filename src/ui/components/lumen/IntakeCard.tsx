@@ -22,7 +22,7 @@ import {
 	intakeTopicRows,
 	intakeView,
 	progressLine,
-	reasonText,
+	failureReason,
 	skippedLine,
 } from "./intake-view";
 
@@ -92,11 +92,15 @@ export function IntakeCard({ payload, dispatch }: CardComponentProps<IntakeCardP
 	}
 
 	if (view.phase === "failed") {
+		const failure = failureReason(view.reason);
 		return (
 			<Frame intakeId={payload.intakeId}>
 				<div className="mx-0.5 flex flex-col gap-0.5 border-l-2 border-border pl-2.5">
 					<div className="text-[12.5px] font-semibold text-muted-foreground">{t("shell.intake.failedLabel")}</div>
-					<div className="text-[13.5px] leading-snug text-foreground">{reasonText(view.reason)}</div>
+					<div className="text-[13.5px] leading-snug text-foreground">{failure.text}</div>
+					{failure.detail && (
+						<div className="text-[11.5px] leading-snug break-words text-muted-foreground">{failure.detail}</div>
+					)}
 				</div>
 			</Frame>
 		);

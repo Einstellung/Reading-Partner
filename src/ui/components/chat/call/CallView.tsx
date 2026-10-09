@@ -20,6 +20,7 @@ import type { ChatMarkHost } from '../ChatMarkLayer';
 import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
 import { useKeyboardRoom } from '../../common/useKeyboardInset';
+import { useT } from '../../../../i18n';
 import type { PendingImage, ThreadMessage } from '../types';
 import type { CardActionHandler } from '../chatParts';
 import { Button } from '../../ui/button';
@@ -154,6 +155,7 @@ export default function CallView({
 	// the call drops everything above its list, the host's bar, the corner
 	// controls and the chapter line, for the composer and a line or two of the
 	// conversation. They come back with the keyboard's going.
+	const t = useT();
 	const keyboard = useKeyboardRoom();
 	const cramped = keyboard.cramped;
 
@@ -245,7 +247,7 @@ export default function CallView({
 					<div key={composerKey} className={`px-4 ${keyboard.up ? 'pb-2' : 'pb-6'}`} ref={composerSlot}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							{footer}
-							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />
+							<Composer onSend={onSend} placeholder={t('chat.call.reply')} pill {...composerProps} />
 						</div>
 					</div>
 				</Scope>

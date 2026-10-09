@@ -59,9 +59,10 @@ export interface IntakeTopicRow {
 }
 
 /**
- * The list: the shelf's topics in order, Lumen's suggestion marked (the one it
- * named when it raised the card, while that topic still exists, else the
- * program's), and the reader's pick.
+ * The list: the shelf's topics in order, the reader's pick, and Lumen's
+ * suggestion marked: the topic it named when it raised the card, while that
+ * topic still exists, and only when it named none a topic the link names
+ * (topic-choice.ts). Nothing is marked without either.
  */
 export function intakeTopicRows(
   topics: readonly Topic[],
@@ -102,15 +103,20 @@ export function documentMeta(doc: IntakeDocument): string {
 }
 
 // The backend's reasons are the program's English sentences (info/links
-// receipt.ts, info/x/read-post.ts, intake-store.ts). The ones whose kind is
-// known are said in the reader's language; anything else is shown as written.
+// receipt.ts, info/x/read-post.ts, intake-store.ts, the site adapters under
+// info/sources/plugins), some of them inside a sentence of the ingest's own in
+// the language the app had when it failed (reader.ingest.unreadable). The ones
+// whose kind is known are said in the reader's language, matched on the English
+// wherever it sits.
 type ReasonKey =
   | "shell.intake.reason.noContent"
   | "shell.intake.reason.notChosen"
   | "shell.intake.reason.onlyOnPage"
   | "shell.intake.reason.shortLink"
   | "shell.intake.reason.unreadable"
-  | "shell.intake.reason.nothingFiled";
+  | "shell.intake.reason.nothingFiled"
+  | "shell.intake.reason.repoMissing"
+  | "shell.intake.reason.siteRefused";
 const REASONS: readonly [RegExp, ReasonKey][] = [
   [/has no content of its own/i, "shell.intake.reason.noContent"],
   [/the AI did not choose it/i, "shell.intake.reason.notChosen"],
@@ -118,12 +124,44 @@ const REASONS: readonly [RegExp, ReasonKey][] = [
   [/t\.co link did not resolve/i, "shell.intake.reason.shortLink"],
   [/could not be read/i, "shell.intake.reason.unreadable"],
   [/Nothing became a document/i, "shell.intake.reason.nothingFiled"],
+  [/GitHub has no README for .*the repository is private/i, "shell.intake.reason.repoMissing"],
+  [/(GitHub|arXiv) (did not serve|could not be reached|answered HTTP|served no PDF)/i, "shell.intake.reason.siteRefused"],
 ];
+// The ingest's own "could not fetch the link (HTTP 404)", in any of its languages.
+const HTTP_STATUS = /[(（]HTTP (\d{3})[)）]/;
+
+function knownReason(reason: string): string | null {
+  const known = REASONS.find(([pattern]) => pattern.test(reason));
+  if (known) return t(known[1]);
+  const status = HTTP_STATUS.exec(reason);
+  return status ? t("shell.intake.reason.httpStatus", { status: status[1] }) : null;
+}
 
 /** A backend reason in the reader's language where its kind is known, else as written. */
 export function reasonText(reason: string): string {
-  const known = REASONS.find(([pattern]) => pattern.test(reason));
-  return known ? t(known[1]) : reason;
+  return knownReason(reason) ?? reason;
+}
+
+// What is left of a reason once the ingest's sentence around it is taken off:
+// whatever follows the link it names and the colon after it.
+function detailOf(reason: string): string {
+  const link = /https?:\/\/[^\s：]+/.exec(reason);
+  if (!link) return reason.trim();
+  const after = reason.slice(link.index + link[0].replace(/[:：]+$/, "").length);
+  const colon = after.search(/[:：]/);
+  return (colon >= 0 ? after.slice(colon + 1) : reason).trim();
+}
+
+/**
+ * A failed intake's reason as the card shows it: a short line in the reader's
+ * language, and the program's own words under it, as small print, only when
+ * the kind is not known.
+ */
+export function failureReason(reason: string): { text: string; detail: string | null } {
+  const known = knownReason(reason);
+  if (known) return { text: known, detail: null };
+  const detail = detailOf(reason);
+  return { text: t("shell.intake.reason.failed"), detail: detail || null };
 }
 
 /** One 「没收：…」 line. */

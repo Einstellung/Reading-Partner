@@ -127,4 +127,8 @@ export default {
   "intake.reason.unreadable": "страницу не удалось прочитать",
   "intake.reason.nothingFiled": "прочитано, но сохранить было нечего",
   "intake.reason.unknown": "причина не указана",
+  "intake.reason.repoMissing": "На GitHub нет такого репозитория, или он закрыт",
+  "intake.reason.siteRefused": "сайт не отдал документ",
+  "intake.reason.httpStatus": "ссылка не открылась (HTTP {status})",
+  "intake.reason.failed": "эту ссылку не удалось прочитать",
 } satisfies Translation<typeof en>;

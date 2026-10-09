@@ -123,4 +123,8 @@ export default {
   "intake.reason.unreadable": "no se pudo leer la página",
   "intake.reason.nothingFiled": "se leyó, pero nada se pudo guardar",
   "intake.reason.unknown": "sin motivo indicado",
+  "intake.reason.repoMissing": "GitHub no tiene ese repositorio, o es privado",
+  "intake.reason.siteRefused": "el sitio no entregó el documento",
+  "intake.reason.httpStatus": "el enlace no se abrió (HTTP {status})",
+  "intake.reason.failed": "no se pudo leer este enlace",
 } satisfies Translation<typeof en>;

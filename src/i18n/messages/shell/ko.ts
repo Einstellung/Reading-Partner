@@ -120,4 +120,8 @@ export default {
   "intake.reason.unreadable": "페이지를 읽을 수 없었어요",
   "intake.reason.nothingFiled": "읽었지만 문서로 넣을 내용이 없었어요",
   "intake.reason.unknown": "이유 없음",
+  "intake.reason.repoMissing": "GitHub에 이 저장소가 없거나 비공개입니다",
+  "intake.reason.siteRefused": "사이트가 문서를 내주지 않았습니다",
+  "intake.reason.httpStatus": "링크가 열리지 않았습니다 (HTTP {status})",
+  "intake.reason.failed": "이 링크를 읽지 못했습니다",
 } satisfies Translation<typeof en>;

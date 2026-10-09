@@ -9,6 +9,7 @@ export default {
   "composer.switchToVoice": "Mudar para voz",
   "composer.stop": "Parar",
   "composer.send": "Enviar",
+  "call.reply": "Responder…",
 
   "dispatch.noRecord": "Não há registro disso neste dispositivo.",
   "dispatch.backWithAnswer": "Voltou com uma resposta.",

@@ -144,4 +144,8 @@ export default {
   "intake.reason.unreadable": "the page couldn't be read",
   "intake.reason.nothingFiled": "it was read, but nothing in it could be filed",
   "intake.reason.unknown": "no reason given",
+  "intake.reason.repoMissing": "GitHub has no such repository, or it's private",
+  "intake.reason.siteRefused": "the site didn't hand over the document",
+  "intake.reason.httpStatus": "the link didn't open (HTTP {status})",
+  "intake.reason.failed": "this link couldn't be read",
 } as const;

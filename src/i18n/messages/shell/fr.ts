@@ -123,4 +123,8 @@ export default {
   "intake.reason.unreadable": "la page n'a pas pu être lue",
   "intake.reason.nothingFiled": "lu, mais rien n'a pu être rangé",
   "intake.reason.unknown": "aucune raison donnée",
+  "intake.reason.repoMissing": "GitHub n'a pas ce dépôt, ou il est privé",
+  "intake.reason.siteRefused": "le site n'a pas fourni le document",
+  "intake.reason.httpStatus": "le lien ne s'est pas ouvert (HTTP {status})",
+  "intake.reason.failed": "ce lien n'a pas pu être lu",
 } satisfies Translation<typeof en>;

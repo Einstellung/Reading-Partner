@@ -120,4 +120,8 @@ export default {
   "intake.reason.unreadable": "ページを読み取れませんでした",
   "intake.reason.nothingFiled": "読みましたが、文書にできる内容がありませんでした",
   "intake.reason.unknown": "理由不明",
+  "intake.reason.repoMissing": "GitHub にこのリポジトリがないか、非公開です",
+  "intake.reason.siteRefused": "サイトが文書を返しませんでした",
+  "intake.reason.httpStatus": "リンクを開けませんでした（HTTP {status}）",
+  "intake.reason.failed": "このリンクを読み取れませんでした",
 } satisfies Translation<typeof en>;

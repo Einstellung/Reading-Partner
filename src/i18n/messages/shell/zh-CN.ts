@@ -119,4 +119,8 @@ export default {
   "intake.reason.unreadable": "页面读不出来",
   "intake.reason.nothingFiled": "读过了，但没有能收成文档的内容",
   "intake.reason.unknown": "原因不明",
+  "intake.reason.repoMissing": "GitHub 上找不到这个仓库，可能不存在或是私有的",
+  "intake.reason.siteRefused": "网站没有给出这份文档",
+  "intake.reason.httpStatus": "链接打不开（HTTP {status}）",
+  "intake.reason.failed": "没能读到这个链接的内容",
 } satisfies Translation<typeof en>;
