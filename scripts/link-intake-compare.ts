@@ -331,7 +331,9 @@ function credentialsOnlyAppData(): void {
     writeAtomic: async (p, contents) => {
       const file = real(p);
       const tmp = `${file}.compare-${process.pid}.tmp`;
-      await writeFile(tmp, contents, { mode: 0o600 });
+      // The file keeps the permissions the app gave it.
+      const mode = existsSync(file) ? (await stat(file)).mode & 0o777 : 0o600;
+      await writeFile(tmp, contents, { mode });
       await rename(tmp, file);
     },
     writeBytes: refuse,
@@ -354,9 +356,13 @@ interface RunUsage {
   cacheWrite: number;
   cost: number;
   calls: number;
+  /** What the model was handed and did: the task, each tool call with its answer, its last words. */
+  task: string;
+  transcript: { name: string; args: unknown; text: string }[];
+  answer: string;
 }
 
-const noUsage = (): RunUsage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, calls: 0 });
+const noUsage = (): RunUsage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, calls: 0, task: "", transcript: [], answer: "" });
 
 /** A sub-agent turn on the app's harness loop, Anthropic direct, usage counted per round. */
 function liveTurn(model: Model<Api>, reasoning: ThinkingLevel | undefined, usage: RunUsage): SubagentTurnFn {
@@ -378,7 +384,14 @@ function liveTurn(model: Model<Api>, reasoning: ThinkingLevel | undefined, usage
         apiKey,
         systemPrompt: request.systemPrompt,
         messages: [{ role: "user", content: request.task, timestamp: Date.now() }],
-        tools: request.tools,
+        tools: request.tools.map((tool) => ({
+          ...tool,
+          execute: async (args: Record<string, unknown>) => {
+            const out = await tool.execute(args);
+            usage.transcript.push({ name: tool.name, args, text: typeof out === "string" ? out : out.text });
+            return out;
+          },
+        })),
         signal: request.signal,
         reasoning: reasoning && model.reasoning ? reasoning : undefined,
         ...providerCallSetup("anthropic", `compare-${Date.now()}`),
@@ -389,7 +402,10 @@ function liveTurn(model: Model<Api>, reasoning: ThinkingLevel | undefined, usage
         stall: null,
         ...settler.callbacks,
       });
-      return await settler.outcome;
+      usage.task = request.task;
+      const outcome = await settler.outcome;
+      if (outcome.kind === "answer") usage.answer = outcome.text;
+      return outcome;
     } finally {
       settler.dispose();
     }
