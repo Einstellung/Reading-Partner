@@ -45,6 +45,7 @@ export function withBriefContract(systemPrompt: string, tokenCap: number): strin
 
 // The prompt one sub-agent run is sent with.
 export function subagentSystemPrompt(definition: SubagentDefinition, tokenCap: number): string {
+  if (definition.briefContract === false) return definition.systemPrompt;
   return withBriefContract(definition.systemPrompt, tokenCap);
 }
 
