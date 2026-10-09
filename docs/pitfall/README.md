@@ -178,6 +178,7 @@
 - [494-a-logged-in-x-page-403s-its-own-background-calls](./network/494-a-logged-in-x-page-403s-its-own-background-calls.md) — 登录态读 X 永久链接页，页面自己的 `UsersByRestIds`、`app_context.json` 8 次里 6 次回 403，内容却完整，不登录一个都没有。限流判据别写成「x.com 任何请求 403」，只认取内容的请求 429、落地 URL 不再是 `/status/`、正文里的限流或验证提示
 - [496-webkitgtk-reports-an-x-permalink-loaded-only-after-48-seconds](./network/496-webkitgtk-reports-an-x-permalink-loaded-only-after-48-seconds.md) — WebKitGTK 冷启动读 X 永久链接页，推文 15 秒就渲染好，FINISHED 却在 48 秒才来，Linux 的 `webview_fetch` 只等这个事件，45 秒超时；超时后照样读文档跑脚本，内容拿得到。读 X 不看 `status`，只看脚本读没读到推文
 - [498-drive-download-is-octet-stream-named-only-in-content-disposition](./network/498-drive-download-is-octet-stream-named-only-in-content-disposition.md) — Drive 的 `uc?export=download` 303 到 usercontent，PDF 也回 `application/octet-stream`，文件名只在 `Content-Disposition`。判 PDF 只看 `%PDF` 魔数，HTML 页面拒收；`FetchedBytes.contentDisposition` 要由宿主 fetch 传上来
+- [503-code-repos-pass-the-book-tests-by-numbered-files-deep-in-the-tree](./network/503-code-repos-pass-the-book-tests-by-numbered-files-deep-in-the-tree.md) — GitHub 适配器的编号文件规则取递归整棵树，`PraisonAI` 四层目录下五个 `0N-*.md` 设计笔记、`lcu` 的 `docs/releases/0.8.1.md` 发布说明都算章节，代码仓库被整个打成十几万字的书。没有 `SUMMARY.md` 时，README 列表和编号文件只在 md 占 README 所在目录文件一半以上（图片不计）时才算
 
 ## 存储与数据目录
 

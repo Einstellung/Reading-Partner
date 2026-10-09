@@ -1,7 +1,9 @@
 // A pasted GitHub link read as its document (src/info/sources/plugins/github-site.ts,
 // docs/85): which links it claims, an ordinary repo's README, a book repo read
-// whole by SUMMARY.md, by the README's list or by numbered files, a book with a
-// chapter missing turned back, and a single Markdown file. The fetch is scripted.
+// whole by SUMMARY.md, by the README's list or by numbered files when the repo is
+// mostly prose, a code project whose README links its docs read as its README, a
+// book with a chapter missing turned back, and a single Markdown file. The fetch
+// is scripted.
 // Run: bash scripts/t.sh tests/info/sources/plugins/github-site.test.ts
 
 import { afterEach, expect, test } from "bun:test";
@@ -10,6 +12,7 @@ import {
   chapterLinks,
   githubSiteAdapter,
   githubTargetOfUrl,
+  mostlyProse,
   rawUrl,
 } from "../../../../src/info/sources/plugins/github-site";
 import { githubPlugin } from "../../../../src/info/sources/plugins/github";
@@ -181,6 +184,12 @@ test("a repo with no README is turned back", async () => {
 
 // --- book repos ------------------------------------------------------------------
 
+const treeJson = (paths: readonly string[]) =>
+  text(JSON.stringify({ tree: paths.map((path) => ({ path, type: "blob" })) }));
+
+// `n` files named by `make`, to give a fixture the proportions of a real tree.
+const files = (n: number, make: (k: number) => string) => Array.from({ length: n }, (_, k) => make(k));
+
 const BOOK_README = "# The Book\n\nA book in chapters. Start with the [preface](book/00-preface.md).\n";
 const SUMMARY = [
   "# Summary",
@@ -259,6 +268,7 @@ test("without SUMMARY.md, a README that lists chapters is the table of contents"
   ].join("\n");
   const responses: Record<string, FetchedBytes> = {
     [readmeApi("o", "notes")]: readmeJson("o", "notes", "trunk", "README.md", readme),
+    [treeApi("o", "notes", "trunk")]: treeJson(["README.md", "LICENSE", "ch/basics.md", "ch/middle.md", "ch/end.md"]),
     [rawUrl("o", "notes", "trunk", "ch/basics.md")]: text("Basics body."),
     [rawUrl("o", "notes", "trunk", "ch/middle.md")]: text("Middle body."),
     [rawUrl("o", "notes", "trunk", "ch/end.md")]: text("End body."),
@@ -282,7 +292,7 @@ test("with neither list, numbered Markdown files in the tree are the chapters, i
   const tree = ["README.md", "src/x.ts", "chapters/10-ten.md", "chapters/2-two.md", "chapters/1-one.md", "notes.md"];
   const responses: Record<string, FetchedBytes> = {
     [readmeApi("o", "num")]: readmeJson("o", "num", "main", "README.md", "# Numbered\n\nChapters below.\n"),
-    [treeApi("o", "num", "main")]: text(JSON.stringify({ tree: tree.map((path) => ({ path, type: "blob" })) })),
+    [treeApi("o", "num", "main")]: treeJson(tree),
   };
   for (const p of tree.filter((p) => p.startsWith("chapters/"))) {
     responses[rawUrl("o", "num", "main", p)] = text(`# Title of ${p}\n\nBody of ${p}.`);
@@ -294,6 +304,83 @@ test("with neither list, numbered Markdown files in the tree are the chapters, i
     "Title of chapters/2-two.md",
     "Title of chapters/10-ten.md",
   ]);
+});
+
+// --- code projects -------------------------------------------------------------------
+
+// Shapes from the live tree listings (2026-10-09): Markdown, pictures and other
+// files in the proportions each repo has, plus the paths the rule looks at.
+const PI_DURABLE_BOOK = ["README.md", "SUMMARY.md", "LICENSE", ...files(42, (k) => `chapters/${k + 1}-ch.md`)];
+const PRAISONAI = [
+  "README.md", "AGENTS.md", "ARCHITECTURE.md", "CONTRIBUTING.md", "api.md", "LICENSE",
+  ...["00-ground-truth", "04-test-gating", "05-live-ci-job", "06-adapter-revival", "07-local-package-spec"].map(
+    (n) => `src/praisonai-agents/docs/local-model-layer/${n}.md`,
+  ),
+  ...files(166, (k) => `src/praisonai-agents/docs/d${k}.md`),
+  ...files(135, (k) => `docs/images/i${k}.png`),
+  ...files(6546, (k) => `src/praisonai-agents/praisonaiagents/m${k}.py`),
+];
+const LCU_DOCS = ["docs/install.md", "docs/usage.md", "docs/config.md", "docs/api.md", "docs/faq.md", "docs/design.md"];
+const LCU = [
+  "README.md", "AGENTS.md", "LICENSE",
+  ...LCU_DOCS,
+  ...files(22, (k) => `docs/releases/0.${5 + Math.floor(k / 10)}.${k % 10}.md`),
+  ...files(87, (k) => `skills/s${k}/SKILL.md`),
+  ...files(9, (k) => `assets/a${k}.png`),
+  ...files(280, (k) => `runtime/r${k}.mjs`),
+];
+const NANOGPT = [
+  "README.md", "LICENSE", ".gitignore", ".gitattributes", "assets/gpt2_124M_loss.png", "assets/nanogpt.jpg",
+  "data/shakespeare/readme.md", "data/shakespeare_char/readme.md", "data/openwebtext/readme.md",
+  ...files(15, (k) => `p${k}.py`), "scaling_laws.ipynb", "transformer_sizing.ipynb",
+];
+
+test("a repo is mostly prose when Markdown is at least half of its files, pictures not counted", () => {
+  expect(mostlyProse(PI_DURABLE_BOOK, "")).toBe(true);
+  expect(mostlyProse(PRAISONAI, "")).toBe(false);
+  expect(mostlyProse(LCU, "")).toBe(false);
+  expect(mostlyProse(NANOGPT, "")).toBe(false);
+  // Figures do not make a book less of a book.
+  expect(mostlyProse(["README.md", "a.md", "b.md", ...files(20, (k) => `img/${k}.png`), "book.toml"], "")).toBe(true);
+  // Only the README's directory is weighed.
+  expect(mostlyProse(LCU, "docs")).toBe(true);
+  // No listing, no book.
+  expect(mostlyProse([], "")).toBe(false);
+});
+
+test("a code project whose README links its docs is its README", async () => {
+  const readme = ["# lcu", "", ...LCU_DOCS.map((p) => `- [${p}](${p})`), ""].join("\n");
+  const { got, fetched } = await read("https://github.com/o/lcu", {
+    [readmeApi("o", "lcu")]: readmeJson("o", "lcu", "main", "README.md", readme),
+    [treeApi("o", "lcu", "main")]: treeJson(LCU),
+  });
+  expect(manuscriptOf(got).sections).toHaveLength(1);
+  expect(fetched.filter((u) => u.startsWith("https://raw.githubusercontent.com/o/lcu/main/docs/"))).toEqual([]);
+});
+
+test("numbered files deep in a code project are not chapters", async () => {
+  for (const [repo, tree] of [["praisonai", PRAISONAI], ["nanogpt", NANOGPT]] as const) {
+    const { got, fetched } = await read(`https://github.com/o/${repo}`, {
+      [readmeApi("o", repo)]: readmeJson("o", repo, "main", "README.md", `# ${repo}\n\nCode.\n`),
+      [treeApi("o", repo, "main")]: treeJson(tree),
+    });
+    expect(manuscriptOf(got).sections).toHaveLength(1);
+    expect(fetched.filter((u) => u.endsWith(".md") && !u.endsWith("SUMMARY.md"))).toEqual([]);
+    undo?.();
+    undo = null;
+  }
+});
+
+test("a prose repo without SUMMARY.md is still a book by its README's list", async () => {
+  const readme = ["# Book", "", ...files(42, (k) => `- [Ch ${k + 1}](chapters/${k + 1}-ch.md)`)].join("\n");
+  const tree = PI_DURABLE_BOOK.filter((p) => p !== "SUMMARY.md");
+  const responses: Record<string, FetchedBytes> = {
+    [readmeApi("o", "pdb")]: readmeJson("o", "pdb", "main", "README.md", readme),
+    [treeApi("o", "pdb", "main")]: treeJson(tree),
+  };
+  for (const p of tree.filter((p) => p.startsWith("chapters/"))) responses[rawUrl("o", "pdb", "main", p)] = text("Body.");
+  const { got } = await read("https://github.com/o/pdb", responses);
+  expect(manuscriptOf(got).sections).toHaveLength(43);
 });
 
 // --- one file -------------------------------------------------------------------------

@@ -40,7 +40,7 @@
    GitHub、Drive、PDF 链接已做（2026-10-08）。
 
    - GitHub：适配器在 `info/sources/plugins/github-site.ts`，挂在 GitHub 插件的 `site` 上。仓库链接和 `/tree/<ref>/<目录>` 取 README（API 的 `/readme`，它知道文件名和默认分支；API 不答时退到 raw 上 HEAD 的 `README.md`）。`/blob/<ref>/<文件>.md` 只取那一个文件。相对路径的图指到 raw，相对链接指到 github.com 的 blob 页。README 允许内嵌 HTML，构建时照常清洗。
-   - 书稿类仓库的判定，依次：README 所在目录有 `SUMMARY.md` 且列了 md 文件；README 自己链接了至少 3 个仓库内的 md 文件（许可证、贡献指南、更新记录这类不算）；目录树里至少 3 个文件名以数字开头的 md 文件，按数字顺序。都不满足就是普通仓库，只取 README。是书就取全书：README 作开篇一节，每章一节，节标题用目录里的链接文字（没有就用章节自己的一级标题，再没有用文件名），章节开头的一级标题去掉不重复。章节正文全走 `raw.githubusercontent.com`；API 只用一到两次（README，没有目录时再看一次树）。任何一章取不到就不出书，拒收理由列出缺的章节。
+   - 书稿类仓库的判定：README 所在目录有 `SUMMARY.md` 且列了 md 文件，就是书。没有的话，要那个目录下 md 至少占文件的一半（图片不计），才再看 README 自己是否链接了至少 3 个仓库内的 md 文件（许可证、贡献指南、更新记录这类不算），没有再看目录树里是否有至少 3 个文件名以数字开头的 md 文件，按数字顺序。都不满足就是普通仓库，只取 README：README 链着自家文档的代码仓库（`MervinPraison/PraisonAI`、`amontlabs/lcu`）不是书（坑 503）。是书就取全书：README 作开篇一节，每章一节，节标题用目录里的链接文字（没有就用章节自己的一级标题，再没有用文件名），章节开头的一级标题去掉不重复。章节正文全走 `raw.githubusercontent.com`；API 只用一到两次（README，没有 `SUMMARY.md` 时再看一次树）。任何一章取不到就不出书，拒收理由列出缺的章节。
    - Drive：站点适配器，info 登记（`info/sources/drive-site.ts`，和插件的站点适配器一起在 `registerSourceSiteAdapters` 里登记），不是文献库所以不挂插件。`/file/d/<id>`、`open?id=`、`uc?id=` 改写成 `uc?export=download&id=<id>`，文件名取 `Content-Disposition`（坑 498）。只收 PDF，按 `%PDF` 判；回来的是页面（要登录、病毒扫描确认、文件不存在）就拒收并说明是哪种。文件夹链接拒收。
    - PDF 链接：bindery 的通用适配器（`workshop/bindery/pdf.ts`），不认识任何站，所以不归 info。站点适配器都不认领的裸链接取一次，内容是 PDF（`%PDF` 魔数，不看路径和 Content-Type）就原样交回，名字取 `Content-Disposition` 或路径末段；路径是 `.pdf` 或声明 `application/pdf` 却回了页面的，拒收；别的照旧是没有适配器。站点适配器先问，所以 arXiv 的 PDF 链接仍归 arXiv。
    - 实测 `robotbird/pi-durable-book`：`SUMMARY.md` 列的 42 章加 README 共 43 节，一次 API 调用，约 310 KB 的 EPUB，目录里每章一条。

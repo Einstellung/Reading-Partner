@@ -5,18 +5,21 @@
 // - A book repo, whose README is only a table of contents and whose chapters
 //   are Markdown files: the whole book, README first, one section per chapter.
 //   The order is SUMMARY.md's (GitBook's and mdBook's table of contents) when
-//   the directory has one, else the README's own list of chapter links when it
+//   the directory has one. Without it, a repo is a book only when it is mostly
+//   prose (Markdown is at least half of the files under the README's directory,
+//   pictures not counted): then the README's own list of chapter links when it
 //   links at least BOOK_MIN_README_LINKS Markdown files in the repo, else the
 //   Markdown files in the tree whose names start with a number, when there are
-//   at least that many. A book with a chapter that cannot be fetched is not
-//   made: the rejection names what is missing.
+//   at least that many. A code project whose README links its docs is its
+//   README. A book with a chapter that cannot be fetched is not made: the
+//   rejection names what is missing.
 // - A Markdown file (/blob/<ref>/<file>.md): that file alone.
 //
 // The README comes from the REST API, which finds it whatever its name and says
 // which branch it is on; everything else comes from raw.githubusercontent.com,
 // since the API allows 60 unauthenticated requests an hour and a book has forty
-// chapters. The tree is asked for (one more API call) only when neither
-// SUMMARY.md nor the README lists chapters.
+// chapters. The tree is asked for (one more API call) only when there is no
+// SUMMARY.md.
 
 import {
   markdownToHtml,
@@ -54,6 +57,8 @@ const NOT_CHAPTERS =
   /^(?:license|licence|contributing|changelog|changes|history|code_of_conduct|security|authors|support|governance|maintainers|readme)(?:\.|$)/i;
 
 const MARKDOWN_FILE = /\.(?:md|markdown)$/i;
+// Figures of a book, left out when weighing how much of it is prose.
+const PICTURE_FILE = /\.(?:png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 
 /** What a GitHub link names. `dir` and `file` are repo paths without a leading slash. */
 export type GithubTarget =
@@ -267,6 +272,17 @@ export function numberedChapters(paths: readonly string[], dir: string, readmePa
     .map((path) => ({ path, title: "" }));
 }
 
+/**
+ * Whether the files under `dir` are mostly prose: Markdown is at least half of
+ * them, pictures not counted. An empty listing (the API did not answer) is not.
+ */
+export function mostlyProse(paths: readonly string[], dir: string): boolean {
+  const prefix = dir === "" ? "" : `${dir}/`;
+  const files = paths.filter((p) => p.startsWith(prefix) && !PICTURE_FILE.test(p));
+  const markdown = files.filter((p) => MARKDOWN_FILE.test(p)).length;
+  return markdown > 0 && markdown * 2 >= files.length;
+}
+
 async function treePaths(fetch: FetchBytes, owner: string, repo: string, ref: string): Promise<string[]> {
   const got = await getText(fetch, `${API}/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
   if (!got.ok) return [];
@@ -382,12 +398,13 @@ async function readRepo(
     openingHeading = linkTitle(summary.text, readmeDir, readme.path);
   }
   if (chapters.length === 0) {
-    const listed = chapterLinks(readme.markdown, readmeDir, readme.path);
-    if (listed.length >= BOOK_MIN_README_LINKS) chapters = listed;
-  }
-  if (chapters.length === 0) {
-    const numbered = numberedChapters(await treePaths(fetch, owner, repo, ref), readmeDir, readme.path);
-    if (numbered.length >= BOOK_MIN_README_LINKS) chapters = numbered;
+    const paths = await treePaths(fetch, owner, repo, ref);
+    if (mostlyProse(paths, readmeDir)) {
+      const listed = chapterLinks(readme.markdown, readmeDir, readme.path);
+      const numbered = numberedChapters(paths, readmeDir, readme.path);
+      if (listed.length >= BOOK_MIN_README_LINKS) chapters = listed;
+      else if (numbered.length >= BOOK_MIN_README_LINKS) chapters = numbered;
+    }
   }
 
   const base = { title, author: owner, sourceUrl, images: [] };
