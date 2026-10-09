@@ -5,7 +5,9 @@
 import { expect, test } from "bun:test";
 import {
   articleRowLine,
+  deleteMaterialDescription,
   formatArticleDate,
+  isArticleFile,
   savedArticleLine,
   splitMaterials,
 } from "../../../../src/ui/components/shelf/article-row";
@@ -108,4 +110,18 @@ test("a saved article's line is its source and date, whichever it has", () => {
   expect(savedArticleLine({ sourceName: "Hacker News", publishedAt: "" })).toBe("Hacker News");
   expect(savedArticleLine({ sourceName: "", publishedAt: "  " })).toBe("");
   expect(savedArticleLine({ sourceName: "Blog", publishedAt: "last week" })).toBe("Blog · last week");
+});
+
+test("the delete confirmation for an article says it goes from every device", () => {
+  expect(deleteMaterialDescription(true)).toContain("this article");
+  expect(deleteMaterialDescription(true)).toContain("on every device");
+  expect(deleteMaterialDescription(false)).toContain("this book");
+});
+
+test("a file is an article by its registry entry", () => {
+  const entries = { a1: article({ hash: "a1" }), b1: article({ hash: "b1", kind: undefined }) };
+  expect(isArticleFile({ hash: "a1" }, entries)).toBe(true);
+  expect(isArticleFile({ hash: "b1" }, entries)).toBe(false);
+  expect(isArticleFile({ hash: "zz" }, entries)).toBe(false);
+  expect(isArticleFile({}, entries)).toBe(false);
 });

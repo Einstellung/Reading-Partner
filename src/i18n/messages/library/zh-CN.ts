@@ -63,6 +63,8 @@ const zhCN: Translation<typeof en> = {
   "materials.removeArticleAction": "移除",
   "materials.deleteBookTitle": "删除“{title}”？",
   "materials.deleteBookDescription": "删除这本书以及关于它的一切？你自己的笔记会保留。",
+  "materials.deleteArticleDescription":
+    "删除这篇文章及其所有相关内容，在每台设备上都删除？你关于自己的笔记会保留。",
   "materials.deleteBookAction": "删除",
 
   "screen.backToTopics": "‹ 所有主题",

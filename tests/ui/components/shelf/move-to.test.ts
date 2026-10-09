@@ -3,7 +3,7 @@
 
 import { expect, test } from "bun:test";
 import type { FileRef, Topic } from "../../../../src/platform/app/topics";
-import { canMoveFile, movedLine, moveTargets } from "../../../../src/ui/components/shelf/move-to";
+import { alreadyInLine, canMoveFile, movedLine, moveTargets, toastTopicName } from "../../../../src/ui/components/shelf/move-to";
 
 const file = (path: string, hash?: string): FileRef => ({ path, name: path, addedAt: 0, ...(hash ? { hash } : {}) });
 const topic = (id: string, name: string, createdAt: number, files: FileRef[] = []): Topic => ({
@@ -36,4 +36,22 @@ test("every topic is offered in shelf order, the current one marked here", () =>
 
 test("the line after a move names where it went", () => {
   expect(movedLine("Cities")).toBe("Moved to “Cities”");
+});
+
+test("a long topic name is cut inside a toast, a short one is left alone", () => {
+  const long = "A very long topic name that would wrap to many lines in a narrow phone toast";
+  const cut = toastTopicName(long);
+  expect(Array.from(cut).length).toBeLessThanOrEqual(40);
+  expect(cut.endsWith("…")).toBe(true);
+  expect(long.startsWith(cut.slice(0, -1))).toBe(true);
+  expect(toastTopicName("Cities")).toBe("Cities");
+  expect(toastTopicName("x".repeat(40))).toBe("x".repeat(40));
+  expect(Array.from(toastTopicName("🙂".repeat(60))).length).toBe(40);
+});
+
+test("both topic toasts use the cut name", () => {
+  const long = "B".repeat(80);
+  expect(movedLine(long)).toBe(`Moved to “${"B".repeat(39)}…”`);
+  expect(alreadyInLine(long)).toBe(`Already in “${"B".repeat(39)}…”`);
+  expect(alreadyInLine("Cities")).toBe("Already in “Cities”");
 });

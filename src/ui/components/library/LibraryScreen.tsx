@@ -59,7 +59,7 @@ import {
   PAGE_TITLE,
 } from "../shelf/cardStyles";
 import { displayFileTitle, type BookMeta } from "../shelf/file-title";
-import { savedArticleLine, splitMaterials } from "../shelf/article-row";
+import { deleteMaterialDescription, isArticleFile, savedArticleLine, splitMaterials } from "../shelf/article-row";
 import ArticleRows from "../shelf/ArticleRows";
 import { settleDelete } from "../common/settle-delete";
 import SavedArticleView from "./SavedArticleView";
@@ -637,7 +637,7 @@ function TopicMaterials(props: {
       {removing && (
         <ConfirmDestructiveDialog
           title={t("library.materials.deleteBookTitle", { title: displayFileTitle(removing.name) })}
-          description={t("library.materials.deleteBookDescription")}
+          description={deleteMaterialDescription(isArticleFile(removing, props.entries))}
           actionLabel={t("library.materials.deleteBookAction")}
           open
           onOpenChange={(open) => !open && setRemoving(null)}

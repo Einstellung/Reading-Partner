@@ -63,6 +63,8 @@ const ja: Translation<typeof en> = {
   "materials.removeArticleAction": "削除",
   "materials.deleteBookTitle": "「{title}」を削除しますか？",
   "materials.deleteBookDescription": "この本と、それに関するすべてを削除しますか？あなた自身についてのメモは残ります。",
+  "materials.deleteArticleDescription":
+    "この記事とそれに関するすべてを、すべてのデバイスから削除しますか？自分についてのメモは残ります。",
   "materials.deleteBookAction": "削除",
 
   "screen.backToTopics": "‹ すべてのトピック",

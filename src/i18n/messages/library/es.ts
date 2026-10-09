@@ -65,6 +65,8 @@ const es: Translation<typeof en> = {
   "materials.removeArticleAction": "Quitar",
   "materials.deleteBookTitle": "¿Eliminar “{title}”?",
   "materials.deleteBookDescription": "¿Eliminar este libro y todo lo relacionado con él? Tus notas sobre ti mismo se conservan.",
+  "materials.deleteArticleDescription":
+    "¿Eliminar este artículo y todo lo relacionado con él, en todos los dispositivos? Tus notas sobre ti mismo se conservan.",
   "materials.deleteBookAction": "Eliminar",
 
   "screen.backToTopics": "‹ Todos los temas",

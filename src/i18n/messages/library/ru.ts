@@ -83,6 +83,8 @@ const ru: Translation<typeof en> = {
   "materials.removeArticleAction": "Убрать",
   "materials.deleteBookTitle": "Удалить «{title}»?",
   "materials.deleteBookDescription": "Удалить эту книгу и всё, что с ней связано? Ваши заметки о себе сохранятся.",
+  "materials.deleteArticleDescription":
+    "Удалить эту статью и всё, что с ней связано, на всех устройствах? Ваши собственные заметки сохранятся.",
   "materials.deleteBookAction": "Удалить",
 
   "screen.backToTopics": "‹ Все темы",

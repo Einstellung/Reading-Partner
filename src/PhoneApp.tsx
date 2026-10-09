@@ -65,6 +65,7 @@ import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import { useT } from "./i18n";
+import { alreadyInLine } from "./ui/components/shelf/move-to";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import { KeyboardShell } from "./ui/components/common/KeyboardShell";
@@ -205,7 +206,7 @@ export default function PhoneApp({
   // A book is on one topic, so an add of one another topic lists left it there
   // (platform/app/topics.ts addFile).
   useEffect(
-    () => onFiledElsewhere((found) => pushToast("info", t("shell.toast.alreadyIn", { topic: found.topic.name }))),
+    () => onFiledElsewhere((found) => pushToast("info", alreadyInLine(found.topic.name))),
     [pushToast, t],
   );
 

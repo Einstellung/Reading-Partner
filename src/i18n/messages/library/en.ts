@@ -78,6 +78,8 @@ export default {
   "materials.deleteBookTitle": "Delete “{title}”?",
   "materials.deleteBookDescription":
     "Delete this book and everything about it? Your notes about yourself stay.",
+  "materials.deleteArticleDescription":
+    "Delete this article and everything about it, on every device? Your notes about yourself stay.",
   "materials.deleteBookAction": "Delete",
 
   // The topic screen's own chrome (LibraryScreen).

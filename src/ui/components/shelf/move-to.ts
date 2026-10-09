@@ -34,8 +34,23 @@ export function moveTargets(topics: readonly Topic[], currentTopicId: string): M
   }));
 }
 
+// A toast is narrow on a phone and a topic name has no length limit, so the name
+// said inside one is cut. Counted in code points, so a surrogate pair is not split.
+export const TOAST_TOPIC_MAX = 40;
+
+export function toastTopicName(name: string, max = TOAST_TOPIC_MAX): string {
+  const chars = Array.from(name.trim());
+  if (chars.length <= max) return chars.join("");
+  return `${chars.slice(0, max - 1).join("").trimEnd()}…`;
+}
+
 export function movedLine(topicName: string): string {
-  return t("library.move.done", { topic: topicName });
+  return t("library.move.done", { topic: toastTopicName(topicName) });
+}
+
+/** The toast for an import whose book is already on another topic. */
+export function alreadyInLine(topicName: string): string {
+  return t("shell.toast.alreadyIn", { topic: toastTopicName(topicName) });
 }
 
 export function moveFailedLine(): string {

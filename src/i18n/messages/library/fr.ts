@@ -66,6 +66,8 @@ const fr: Translation<typeof en> = {
   "materials.removeArticleAction": "Retirer",
   "materials.deleteBookTitle": "Supprimer « {title} » ?",
   "materials.deleteBookDescription": "Supprimer ce livre et tout ce qui s’y rapporte ? Vos notes sur vous-même sont conservées.",
+  "materials.deleteArticleDescription":
+    "Supprimer cet article et tout ce qui s'y rapporte, sur tous les appareils ? Vos notes personnelles sont conservées.",
   "materials.deleteBookAction": "Supprimer",
 
   "screen.backToTopics": "‹ Tous les sujets",

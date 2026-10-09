@@ -131,6 +131,7 @@ import {
 } from "./ui/components/chat/chatParts";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import { useT } from "./i18n";
+import { alreadyInLine } from "./ui/components/shelf/move-to";
 import { refreshInfoCollector } from "./info/program/live";
 
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
@@ -945,7 +946,7 @@ export default function App() {
   // there (platform/app/topics.ts addFile). Whichever door it came in by, it is
   // said here.
   useEffect(
-    () => onFiledElsewhere((found) => pushToast("info", t("shell.toast.alreadyIn", { topic: found.topic.name }))),
+    () => onFiledElsewhere((found) => pushToast("info", alreadyInLine(found.topic.name))),
     [pushToast, t],
   );
 

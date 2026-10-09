@@ -63,6 +63,8 @@ const ko: Translation<typeof en> = {
   "materials.removeArticleAction": "삭제",
   "materials.deleteBookTitle": "“{title}”을(를) 삭제할까요?",
   "materials.deleteBookDescription": "이 책과 이 책에 관한 모든 것을 삭제할까요? 당신에 대한 메모는 남습니다.",
+  "materials.deleteArticleDescription":
+    "이 기사와 관련된 모든 것을 모든 기기에서 삭제할까요? 자신에 대한 메모는 남습니다.",
   "materials.deleteBookAction": "삭제",
 
   "screen.backToTopics": "‹ 모든 주제",
