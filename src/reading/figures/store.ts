@@ -24,7 +24,7 @@ import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { reportStoreError } from "../../platform/app/store-errors";
 import { extractFiguresFromDocument, FIGURES_VERSION } from "./extract";
-import { loadPdfjs } from "../../fulltext/extract";
+import { loadPdfjs } from "../../pdfjs/load";
 import type { FiguresIndex } from "./types";
 
 // A failed extraction is written down so the next open does not repeat it, and

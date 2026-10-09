@@ -29,6 +29,6 @@ bun 的 ESM 命名空间对象可写，绑定是同一个槽，导入方读的�
 
 ## 把导出抄进一张表就读不到那个槽了
 
-`createXStore(io)` 这种在模块底部建单例的写法，io 表在 import 时求值一次。表里写 `loadPdfjs,` 是把槽里的值抄进一个字段，之后 `spyOn(extract, "loadPdfjs")` 改的是槽，那个字段还是原函数。实测：`src/reading/figures/store.ts` 的 io 改成 `loadPdfjs,`，`tests/reading/figures/store-disk.test.ts` 6 个用例红 4 个，真的去开 pdf.js。写成 `loadPdfjs: () => loadPdfjs()` 就把读槽推迟到调用时，spy 生效。
+`createXStore(io)` 这种在模块底部建单例的写法，io 表在 import 时求值一次。表里写 `loadPdfjs,` 是把槽里的值抄进一个字段，之后 `spyOn(pdfjsLoad, "loadPdfjs")`（`src/pdfjs/load.ts` 的命名空间）改的是槽，那个字段还是原函数。实测：`src/reading/figures/store.ts` 的 io 改成 `loadPdfjs,`，`tests/reading/figures/store-disk.test.ts` 6 个用例红 4 个，真的去开 pdf.js。写成 `loadPdfjs: () => loadPdfjs()` 就把读槽推迟到调用时，spy 生效。
 
 `settings.ts` 一直是箭头（`write: (contents) => writeTextAtomic(...)`），`annotations.ts` 和 `threads.ts` 的 `write: writeTextAtomic` 是抄值那种，今天没人 spy `writeTextAtomic` 所以没炸。新写接线一律箭头。

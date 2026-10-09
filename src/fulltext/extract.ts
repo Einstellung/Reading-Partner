@@ -5,6 +5,7 @@
 // flattening, extractFromDocument) take a structural pdf.js document so they
 // run headless in tests; extractFulltext wires them to the lazily loaded engine.
 
+import { loadPdfjs } from "../pdfjs/load";
 import { FULLTEXT_VERSION, type Fulltext, type FulltextStatus, type OutlineItem } from "./types";
 
 // Structural subset of pdf.js we depend on — keeps the pure path free of the
@@ -127,42 +128,6 @@ export async function extractFromDocument(doc: PdfDocument): Promise<Omit<Fullte
 }
 
 // --- Engine-backed path (browser only) ---
-
-let pdfjsPromise: Promise<typeof import("pdfjs-dist/legacy/build/pdf.mjs")> | null = null;
-
-// WebKitGTK (the Tauri webview) trails newer JS built-ins; the reader's own
-// pdf.js needed a Math.sumPrecise polyfill for the same reason.
-// pdf.js 4.x uses Promise.withResolvers, so guard it before loading the engine.
-function ensurePromiseWithResolvers(): void {
-  const P = Promise as unknown as { withResolvers?: unknown };
-  if (typeof P.withResolvers === "function") return;
-  P.withResolvers = function <T>() {
-    let resolve!: (value: T | PromiseLike<T>) => void;
-    let reject!: (reason?: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
-  };
-}
-
-// Loaded lazily and cached so pdf.js and its worker stay out of the initial
-// bundle (a separate chunk fetched on the first book open). Exported so the
-// figure-index extractor (src/figures) reuses the exact same pinned pdf.js and
-// worker rather than loading a second copy.
-export async function loadPdfjs() {
-  ensurePromiseWithResolvers();
-  if (!pdfjsPromise) {
-    pdfjsPromise = (async () => {
-      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-      const workerUrl = (await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url")).default;
-      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-      return pdfjs;
-    })();
-  }
-  return pdfjsPromise;
-}
 
 export async function extractFulltext(buffer: ArrayBuffer): Promise<Omit<Fulltext, "version">> {
   const pdfjs = await loadPdfjs();

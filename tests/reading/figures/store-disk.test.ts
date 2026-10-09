@@ -15,7 +15,7 @@
 // Run: bun test.
 
 import { beforeEach, expect, spyOn, test } from "bun:test";
-import * as extract from "../../../src/fulltext/extract";
+import * as pdfjsLoad from "../../../src/pdfjs/load";
 import {
   FIGURES_RETRY_AFTER_MS,
   createFiguresStore,
@@ -68,11 +68,11 @@ beforeEach(() => {
   disk = installAppData();
   opens = true;
   openCalls = 0;
-  // loadPdfjs is the one export in that module that needs a browser; a spy on
-  // it leaves the rest of the extractor real, and the preload puts it back
+  // loadPdfjs is the one piece of the path that needs a browser; a spy on it
+  // leaves the extractor real, and the preload puts it back
   // between cases (docs/pitfall/122).
-  spyOn(extract, "loadPdfjs").mockImplementation(
-    (async () => stubPdfjs) as unknown as typeof extract.loadPdfjs,
+  spyOn(pdfjsLoad, "loadPdfjs").mockImplementation(
+    (async () => stubPdfjs) as unknown as typeof pdfjsLoad.loadPdfjs,
   );
 });
 

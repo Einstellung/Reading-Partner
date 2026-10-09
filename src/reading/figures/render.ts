@@ -7,7 +7,7 @@
 // figure card and the view_figure tool never re-raster the same crop.
 
 import { decodeBlob } from "../../ai/image-utils";
-import { loadPdfjs } from "../../fulltext/extract";
+import { loadPdfjs } from "../../pdfjs/load";
 import { bytesToBase64 } from "../../platform/std/base64";
 import { heldEpub } from "../epub/book-cache";
 import { openZip, type EpubZip } from "../../workshop/bindery/zip";

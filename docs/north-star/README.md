@@ -23,6 +23,6 @@
 - [mobile-platform](./mobile-platform.md) — 移动端平台缺口：Android 识别、语音权限、安全区、真机验证链没接；iOS itms-services OTA 分发未做；latest.json 三平台并发写有竞态
 - [soul-conversation-gaps](./soul-conversation-gaps.md) — soul 对话的尾巴：steer 还没接 retell 和 info 回合、图片和答铃不流式、Outline 刷新漏 synced 档、openThread 竞态、threadId 待改名 conversation
 - [voice-i18n](./voice-i18n.md) — 语音跟随语言选项：听写语言、STT/TTS、通话与按住说话文案、麦克风权限说明；2026-09-28 从多语言第一轮（[81](../ui/81-多语言.md)）拿掉
-- [architecture-audit](./architecture-audit.md) — [37](../platform/37-结构与架构优化.md) 架构审计 C 组长期债：App.tsx 与 ui/components 越线目录、流式驱动三份收拢到两份、loadPdfjs 待抽 capability（第三个消费者已出现）、docs/38 安全审阅未入库
+- [architecture-audit](./architecture-audit.md) — [37](../platform/37-结构与架构优化.md) 架构审计 C 组长期债：App.tsx 与 ui/components 越线目录、流式驱动三份收拢到两份、docs/38 安全审阅未入库
 
 webview 渲染管子（隐藏 WebviewWindow 当渲染引擎）已经落地并随彭博社源发货，不再是北极星方向；现状和剩下的缺口（SPA 站发现层）记在 [17](../info/17-信息源系统.md)。

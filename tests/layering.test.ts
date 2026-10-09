@@ -8,7 +8,7 @@
 //              platform/http, platform/sync). platform/app is the floor and
 //              imports nothing.
 //   capability headless services a domain calls into (ai/, ai/voice, budget/,
-//              fulltext/, memory/). They may use platform and each other; they
+//              fulltext/, memory/, pdfjs/). They may use platform and each other; they
 //              must never reach up into a domain, because that is how ai/ ended
 //              up in a cycle with four of them (reading-turn assembly used to
 //              live there).
@@ -149,6 +149,9 @@ const LAYER: Record<string, Layer> = {
   // the live binding of the usage log has to import the log itself: at the root
   // of memory/ that import is a cycle.
   "memory/usage": "capability",
+  // The one pinned pdf.js (and its worker) that full-text extraction and the
+  // figure index and rasterizer share. Imports nothing in src.
+  pdfjs: "capability",
   // The person at the desk (docs/61): what rides every turn whatever the desk
   // holds, plus the assembly. A capability because it reaches for desk, memory,
   // conversations, palace and ai, and for no domain.
