@@ -58,7 +58,11 @@ export const RECOVERY_ATTEMPT = "reading-partner.recovery-attempt";
 export const MAX_ATTEMPTS = 2;
 
 export interface RecoverDeps {
-  /** The lane the soul's turns run on. */
+  /**
+   * The lane the soul's turns run on. Each conversation's turns run on a lane
+   * under it, `<lane>/<conversation>` (legion/execute/held.ts), and an open run
+   * on any of them is the soul's.
+   */
   lane: string;
   /** This device's settings. Read once per pass; the app's unless injected. */
   settings?: () => Promise<Settings>;
@@ -116,13 +120,13 @@ export async function recoverSoulSession(
 ): Promise<void> {
   try {
     for (const operation of previous.open) {
-      // Only a run is anybody's answer, and only on the soul's own lane — a
+      // Only a run is anybody's answer, and only on the soul's own lanes — a
       // worker's session is not this one.
-      if (operation.kind !== "run" || operation.lane !== deps.lane) {
+      if (operation.kind !== "run" || !isSoulLane(operation.lane, deps.lane)) {
         await previous.abort(operation.lane, context);
         continue;
       }
-      await finishRun(previous, operation.operationId, deps, context);
+      await finishRun(previous, operation.lane, operation.operationId, deps, context);
     }
   } finally {
     await previous.close(context).catch((e) => {
@@ -131,13 +135,18 @@ export async function recoverSoulSession(
   }
 }
 
+// The soul's lane, or one conversation's lane under it.
+function isSoulLane(name: string, soul: string): boolean {
+  return name === soul || name.startsWith(`${soul}/`);
+}
+
 async function finishRun(
   previous: HeldRecovery,
+  lane: string,
   operationId: string,
   deps: RecoverDeps,
   context: Context,
 ): Promise<void> {
-  const { lane } = deps;
   const snapshot = await previous.inspect(lane, context);
   const origin = stampedOrigin(snapshot.transcript);
   if (!origin) {

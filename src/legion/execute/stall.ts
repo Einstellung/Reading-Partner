@@ -33,8 +33,14 @@
 // The clock is paused while a tool runs. A sub-agent or a page fetch can take
 // minutes and says nothing in between; what is being measured is the provider's
 // silence, not the turn's.
+//
+// Which is why a watch also carries the turn's whole allowance (`limit`): a
+// tool that never comes back holds the silence clock paused for ever, and with
+// it the turn's lane. The allowance runs on the same wall clock and the same
+// tick, and nothing pauses it.
 
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
+import type { AiSurface } from "../../platform/app/cache-telemetry";
 
 /** How long a streaming turn may say nothing before it is taken as dead. */
 export const TURN_STALL_MS = 90_000;
@@ -63,6 +69,45 @@ export function isStall(thrown: unknown): boolean {
   return thrown instanceof StallError;
 }
 
+/**
+ * How long a turn on a held lane may take from its run starting to its end,
+ * tools included. Sized off the longest turn the code allows: eight rounds
+ * (turn.ts, DEFAULT_MAX_ROUNDS), each a generation of up to a minute or so and
+ * a tool that can take the 45 seconds a hidden-webview fetch is given
+ * (docs/pitfall/496) — about fourteen minutes.
+ */
+export const TURN_LIMIT_MS = 15 * 60_000;
+/**
+ * The info companion's turns. A meals round writes the whole week, 7 days of 4
+ * meals, in one tool call, and a week the check rejects is written again in
+ * the next round (info/meals/tools.ts): eight rounds of that on a slow model is
+ * past twenty minutes.
+ */
+export const INFO_TURN_LIMIT_MS = 30 * 60_000;
+
+/** The allowance a turn of `surface` gets. */
+export function turnLimitFor(surface: AiSurface | undefined): number {
+  return surface === "info" ? INFO_TURN_LIMIT_MS : TURN_LIMIT_MS;
+}
+
+/** What the reader's surface is told when the allowance runs out. */
+export const TURN_LIMIT_MESSAGE = "the answer took too long and was stopped";
+
+/**
+ * The failure the allowance raises. Not a stall: a turn that ran for a quarter
+ * of an hour is not one to ask again on its own.
+ */
+export class TurnLimitError extends Error {
+  constructor(message: string = TURN_LIMIT_MESSAGE) {
+    super(message);
+    this.name = "TurnLimitError";
+  }
+}
+
+export function isTurnLimit(thrown: unknown): boolean {
+  return thrown instanceof TurnLimitError;
+}
+
 /** Injected clock and ticker; the real ones unless a test hands its own in. */
 export interface StallTimers {
   now(): number;
@@ -89,6 +134,8 @@ interface StallOptions {
   timers?: StallTimers;
   /** Called once, when the stream is judged dead. */
   onStall: () => void;
+  /** Called once, when the allowance `limit` armed has run out. */
+  onLimit?: () => void;
 }
 
 export interface StallWatch {
@@ -98,6 +145,11 @@ export interface StallWatch {
   hold(): void;
   /** A tool ended. */
   unhold(): void;
+  /**
+   * Arm the turn's whole allowance: `ms` from now, read off the wall clock and
+   * paused by nothing. Arming again moves it.
+   */
+  limit(ms: number): void;
   /** The turn is over, one way or another. Idempotent. */
   stop(): void;
   /**
@@ -147,6 +199,8 @@ export function createStallWatches(defaults: { timers?: StallTimers } = {}): Sta
         awayMs,
         fire: () => {},
       };
+      // When the allowance runs out; null until `limit` arms it.
+      let limitAt: number | null = null;
 
       const end = (): void => {
         if (done) return;
@@ -161,7 +215,14 @@ export function createStallWatches(defaults: { timers?: StallTimers } = {}): Sta
       };
 
       const cancel = timers.every(tickMs, () => {
-        if (done || entry.held > 0) return;
+        if (done) return;
+        // Before the hold: a tool that never returns is what the allowance is for.
+        if (limitAt !== null && timers.now() >= limitAt) {
+          end();
+          options.onLimit?.();
+          return;
+        }
+        if (entry.held > 0) return;
         if (timers.now() - entry.lastBeat >= stallMs) entry.fire();
       });
       live.add(entry);
@@ -183,6 +244,9 @@ export function createStallWatches(defaults: { timers?: StallTimers } = {}): Sta
         unhold() {
           entry.held = Math.max(0, entry.held - 1);
           entry.lastBeat = timers.now();
+        },
+        limit(ms) {
+          limitAt = timers.now() + ms;
         },
         stop: end,
         longestSilence: () => Math.max(entry.longest, entry.held > 0 ? 0 : timers.now() - entry.lastBeat),

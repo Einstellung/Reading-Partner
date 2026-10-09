@@ -141,8 +141,19 @@ export type SteerPort = (message: string | SteerMessage) => Promise<SteerOutcome
 // A turn that has already settled, or had not started when the port was used.
 export const STEER_ENDED = "the turn had already ended";
 
+// What a turn with nothing to show yet is waiting on. Each moment is reported as
+// it begins; whatever comes next (a delta, a thinking delta, a tool) ends it.
+//
+//   queued      another turn of the same conversation holds the lane
+//               (held.ts), and this one waits for it to end
+//   first-byte  round `round`'s request has gone out and nothing of its
+//               answer has come back
+export type TurnWait = { kind: "queued" } | { kind: "first-byte"; round: number };
+
 export interface AgentCallbacks {
   onDelta(text: string): void;
+  // The turn is waiting, and on what. Optional; no surface draws it yet.
+  onWait?(wait: TurnWait): void;
   // The turn can be steered from here on: it has a run of its own to queue
   // into. Fires at most once, before any round's output. A caller with no use
   // for steering leaves it out and nothing is queued.

@@ -378,6 +378,18 @@ export const PALACE = [
     retention: { rule: "tail", lines: 2000 },
     note: "one line per thing the nightly housekeeper did or refused (src/housekeeper, docs/80); it trims itself",
   },
+  {
+    kind: "turn-log",
+    domain: "platform",
+    match: fixed("turn-log.jsonl"),
+    samples: ["turn-log.jsonl"],
+    id: "fixed",
+    refs: [],
+    sync: "local",
+    deleteWith: "never",
+    retention: { rule: "tail", lines: 5000 },
+    note: "one line per moment of each AI turn on this device: start, lane, each round's first byte and end, how it ended (src/legion/execute/turn-log.ts). Diagnostics for a person to export; nothing in the app reads it back",
+  },
 
   // -- marks and conversations ---------------------------------------------
   {

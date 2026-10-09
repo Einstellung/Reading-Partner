@@ -1,14 +1,29 @@
-// A harness held across turns: one session, one lane, every turn of one agent
-// run on it in order. The soul holds one (src/soul/harness.ts); a turn that
-// runs on it (turn.ts, `held`) borrows the lane for the turn and gives it back.
+// A harness held across turns: one session, a lane per conversation, every
+// turn of one agent run on it. The soul holds one (src/soul/harness.ts); a turn
+// that runs on it (turn.ts, `held`) borrows its conversation's lane for the
+// turn and gives it back.
 //
 // What a turn brings is decided per turn — its model and stream, its tools,
-// its system prompt, its budget fit — and the harness fixes all of those at
-// creation (docs/pitfall/307). So the harness is created once with delegates
-// that read the turn currently holding it, and acquiring the lane swaps the
-// turn in: the tool registry and the lane's active tools, the lane's model,
-// and the provider catalogue the harness resolves that model from. Turns are
-// serialised on the lane; a second acquire waits for the first release.
+// its system prompt, its budget fit — and a pi harness fixes all of those at
+// creation, for every lane on it at once (docs/pitfall/307). So a pi harness
+// is created with delegates that read the turn currently holding it, and
+// acquiring a lane swaps the turn in: the tool registry and the lane's active
+// tools, the lane's model, and the provider catalogue the harness resolves
+// that model from. One pi harness can therefore serve one turn at a time, and
+// turns that may run together need one each.
+//
+// Which turns may run together is the conversation's to say (HeldTurn
+// `conversation`). Two turns of one conversation take its lane in order: the
+// second is assembled from the conversation file the first writes its reply
+// to (docs/71), and the reader's line mid-answer steers the running turn
+// rather than opening another (docs/72). Turns of different conversations
+// share nothing a turn holds, so each conversation is a strand of its own: its
+// lane (`<lane>/<conversation>`) and a pi harness over the one session, whose
+// writes pi queues one at a time whichever harness makes them
+// (docs/pitfall/499). A strand nobody holds or waits for is let go; its next
+// turn attaches a fresh harness, which reads the lane back off the session.
+// A turn that names no conversation runs on the lane the harness is named for,
+// on the harness the session was opened with.
 //
 // Every turn starts on the session root. The lane is navigated back to root
 // before its prompt is accepted, so the history the harness hands
@@ -51,6 +66,7 @@ import {
 import type { StreamFn, TurnLane } from "./contract";
 import { providerConfigFor } from "./provider-config";
 import {
+  attachHarness,
   createHarness,
   settlePrevious,
   type HarnessHandle,
@@ -70,6 +86,12 @@ export interface HeldTurn {
     messages: AgentMessage[],
     context: Context,
   ) => Message[] | Promise<Message[]>;
+  /**
+   * The conversation this turn continues. Turns of one conversation run one
+   * after another; turns of different ones run side by side. Unset is the
+   * harness's own lane.
+   */
+  conversation?: string;
 }
 
 /** The lane for the length of one turn. `release` hands it to the next. */
@@ -82,11 +104,18 @@ export interface HeldLane {
 export interface HeldHarness {
   readonly lane: TurnLane;
   /**
-   * Borrow the lane, configured for `turn` and standing on the session root.
-   * An abort while waiting for the turn ahead gives up the place in line and
-   * rejects; the lane is never handed to a turn nobody is waiting on.
+   * Borrow the turn's lane, configured for `turn` and standing on the session
+   * root. `onQueued` is called, before anything is awaited, when another turn
+   * of the same conversation holds it. An abort while waiting for the turn
+   * ahead gives up the place in line and rejects; the lane is never handed to
+   * a turn nobody is waiting on.
    */
-  acquire(turn: HeldTurn, context: Context, signal?: AbortSignal): Promise<HeldLane>;
+  acquire(
+    turn: HeldTurn,
+    context: Context,
+    signal?: AbortSignal,
+    onQueued?: () => void,
+  ): Promise<HeldLane>;
   /**
    * Open the session without taking the lane, so `recover` runs before anybody
    * asks for a turn. `turn` is only the seed the harness is created with — its
@@ -142,15 +171,17 @@ export interface HoldOptions {
 // One turn's worth of configuration, and the pi plumbing that reads it back.
 // The harness fixes its model registry, its stream, its system prompt and its
 // reduction at creation (docs/pitfall/307), so all four are delegates over a
-// slot the caller swaps a turn into. Two harnesses means two slots: the live
-// one and the previous session's.
-function turnSlot(): {
+// slot the caller swaps a turn into. One slot per pi harness: one per strand,
+// and the previous session's.
+interface TurnSlot {
   take: (turn: HeldTurn) => void;
   models: Models;
   streamFn: StreamFn;
   systemPrompt: () => string;
   toProviderMessages: (messages: AgentMessage[], context: Context) => Message[] | Promise<Message[]>;
-} {
+}
+
+function turnSlot(): TurnSlot {
   // Every model a turn has brought, by provider then id. pi's Models is a
   // registry of providers, each with its catalogue, and the harness resolves
   // the lane's configured model from it by name; a provider is re-set with its
@@ -208,7 +239,7 @@ async function configure(
 
 // The previous session as the recovery holds it. Turns are serialised on it the
 // same way, so two open operations are finished one after the other.
-function heldRecovery(previous: PreviousSession, slot: ReturnType<typeof turnSlot>): HeldRecovery {
+function heldRecovery(previous: PreviousSession, slot: TurnSlot): HeldRecovery {
   let tail: Promise<void> = Promise.resolve();
   return {
     open: previous.open,
@@ -265,13 +296,43 @@ function waitUnlessAborted(ahead: Promise<void>, signal: AbortSignal | undefined
   });
 }
 
+// What every pi harness the held one makes is told at creation, whichever slot
+// it reads its turn from: no retries of its own, no compaction, one tool at a
+// time (turn.ts says why for each).
+function harnessShape(slot: TurnSlot, model: Model<Api>) {
+  return {
+    models: slot.models,
+    model,
+    streamFn: slot.streamFn,
+    tools: [],
+    systemPrompt: slot.systemPrompt,
+    toProviderMessages: slot.toProviderMessages,
+    retry: { enabled: false, maxRetries: 0, baseDelayMs: 0 },
+    compaction: { enabled: false, reserveTokens: 0, keepRecentTokens: 0 },
+    toolExecution: "sequential" as const,
+  };
+}
+
+// One conversation's place on the held harness: its lane, the pi harness that
+// drives it, and the turns in line for it.
+interface Strand {
+  lane: string;
+  slot: TurnSlot;
+  // Attached on the strand's first turn. Unset on the primary strand, whose
+  // harness is the one the session was opened with.
+  harness?: Promise<Harness<undefined>>;
+  // The turn holding the lane, as a promise the next acquire waits on.
+  tail: Promise<void>;
+  // Turns holding the lane or waiting for it.
+  users: number;
+}
+
 export function holdHarness(options: HoldOptions): HeldHarness {
   const { lane: laneId } = options;
   const slot = turnSlot();
-  const { models, streamFn } = slot;
   let handle: Promise<HarnessHandle> | undefined;
-  // The turn holding the lane, as a promise the next acquire waits on.
-  let tail: Promise<void> = Promise.resolve();
+  const primary: Strand = { lane: laneId.name, slot, tail: Promise.resolve(), users: 0 };
+  const strands = new Map<string, Strand>();
 
   const open = (turn: HeldTurn, context: Context): Promise<HarnessHandle> => {
     handle ??= (async () => {
@@ -289,15 +350,7 @@ export function holdHarness(options: HoldOptions): HeldHarness {
           ...(options.sessionsRoot ? { sessionsRoot: options.sessionsRoot } : {}),
           ...(options.now ? { now: options.now } : {}),
           cwd: laneId.sessions,
-          models,
-          model: turn.model,
-          streamFn,
-          tools: [],
-          systemPrompt: slot.systemPrompt,
-          toProviderMessages: slot.toProviderMessages,
-          retry: { enabled: false, maxRetries: 0, baseDelayMs: 0 },
-          compaction: { enabled: false, reserveTokens: 0, keepRecentTokens: 0 },
-          toolExecution: "sequential",
+          ...harnessShape(slot, turn.model),
           ...(recover && recoverySlot
             ? {
                 recovery: {
@@ -335,6 +388,41 @@ export function holdHarness(options: HoldOptions): HeldHarness {
     return handle;
   };
 
+  const strandFor = (conversation: string | undefined): Strand => {
+    if (conversation === undefined) return primary;
+    let strand = strands.get(conversation);
+    if (!strand) {
+      strand = {
+        lane: `${laneId.name}/${conversation}`,
+        slot: turnSlot(),
+        tail: Promise.resolve(),
+        users: 0,
+      };
+      strands.set(conversation, strand);
+    }
+    return strand;
+  };
+
+  // The pi harness a strand's lane is driven by, attached over the open
+  // session on the strand's first turn.
+  const harnessOf = async (
+    strand: Strand,
+    turn: HeldTurn,
+    context: Context,
+  ): Promise<Harness<undefined>> => {
+    const opened = await open(turn, context);
+    if (strand === primary) return opened.harness;
+    if (!strand.harness) {
+      const attaching = attachHarness(harnessShape(strand.slot, turn.model), opened.session, context);
+      strand.harness = attaching;
+      // One that would not attach is tried again by the strand's next turn.
+      attaching.catch(() => {
+        if (strand.harness === attaching) strand.harness = undefined;
+      });
+    }
+    return strand.harness;
+  };
+
   return {
     lane: laneId,
 
@@ -342,22 +430,37 @@ export function holdHarness(options: HoldOptions): HeldHarness {
       await open(turn, context);
     },
 
-    async acquire(turn, context, signal) {
-      const previous = tail;
-      let release!: () => void;
-      tail = new Promise<void>((resolve) => {
-        release = resolve;
+    async acquire(turn, context, signal, onQueued) {
+      const { conversation } = turn;
+      const strand = strandFor(conversation);
+      if (strand.users > 0) onQueued?.();
+      strand.users += 1;
+      const previous = strand.tail;
+      let handOn!: () => void;
+      strand.tail = new Promise<void>((resolve) => {
+        handOn = resolve;
       });
+      let released = false;
+      const release = (): void => {
+        if (released) return;
+        released = true;
+        handOn();
+        strand.users -= 1;
+        // Nobody holds it and nobody is waiting: its harness is let go, and
+        // the conversation's next turn attaches a fresh one.
+        if (strand.users === 0 && conversation !== undefined && strands.get(conversation) === strand) {
+          strands.delete(conversation);
+        }
+      };
       if (!(await waitUnlessAborted(previous, signal))) {
         // The turns queued behind this one still wait for the one ahead.
         void previous.then(release);
         throw new Error("the turn was stopped while waiting for the lane");
       }
       try {
-        const opened = await open(turn, context);
-        slot.take(turn);
-        const { harness } = opened;
-        const lane = await configure(harness, laneId.name, turn, context);
+        const harness = await harnessOf(strand, turn, context);
+        strand.slot.take(turn);
+        const lane = await configure(harness, strand.lane, turn, context);
         if ((await lane.getTipId(context)) !== null) {
           const moved = await lane.navigateTree(null, { summarize: false }, context);
           if (!moved.ok) throw new Error(moved.error.message);
@@ -371,8 +474,17 @@ export function holdHarness(options: HoldOptions): HeldHarness {
 
     async close(context) {
       const opened = handle;
+      const attached = [...strands.values()].flatMap((strand) =>
+        strand.harness ? [strand.harness] : [],
+      );
       handle = undefined;
+      strands.clear();
       if (!opened) return;
+      // Each of these closes the shared session too; pi hands a second close
+      // of a session the first one's promise.
+      for (const harness of attached) {
+        await (await harness.catch(() => undefined))?.close(context);
+      }
       await (await opened).close(context);
     },
   };

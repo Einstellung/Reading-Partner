@@ -28,6 +28,15 @@
 //                    refusal recorded here, and nothing else was sent.
 //   abort            the caller's signal asks the lane to abort. A stream that
 //                    reports an abort nobody asked for is treated the same way.
+//                    A read still running is let go of rather than waited
+//                    for: pi waits on a tool's promise, and a read that never
+//                    settles would hold the run, and the lane, open for ever.
+//   time limit       a turn on a held lane gets an allowance (stall.ts,
+//                    TURN_LIMIT_MS), from its run starting to its end, tools
+//                    included; running out of it aborts the run like a stall.
+//   diagnostics      one line per moment of the turn in a local log
+//                    (turn-log.ts): start, lane, each round's first byte and
+//                    end, and how it ended.
 //   telemetry        message_end, once per assistant message that came back
 //                    from the provider, failed rounds included.
 //   tool args        prepareArguments: validated by pi-ai's validateToolCall
@@ -86,15 +95,20 @@ import {
   type SteerPort,
   type StreamFn,
   type TurnLane,
+  type TurnWait,
 } from "./contract";
 import {
   recordLongestSilence,
   StallError,
   STALL_MESSAGE,
   stallWatches,
+  TURN_LIMIT_MESSAGE,
+  TurnLimitError,
+  turnLimitFor,
   type StallWatch,
   type StallWatches,
 } from "./stall";
+import { appTurnLog, type TurnEnd, type TurnLogEvent, type TurnLogSink } from "./turn-log";
 import { normalizeToolResult, toolLabel } from "./tool-result";
 import { createHarness, createSessionRepo, sweepSessionGroup } from "./harness";
 import type { AgentLane, HeldHarness, HeldLane } from "./held";
@@ -120,6 +134,7 @@ export {
   type ToolResult,
   type ToolResultImage,
   type TurnLane,
+  type TurnWait,
 } from "./contract";
 
 const DEFAULT_MAX_ROUNDS = 8;
@@ -157,6 +172,36 @@ function contentText(content: readonly (TextContent | ImageContent)[]): string {
     .filter((c): c is TextContent => c.type === "text")
     .map((c) => c.text)
     .join("");
+}
+
+// What a tool call that was let go of says, as its result.
+const TOOL_LET_GO = "the turn ended while this tool was still running";
+
+// `work`, unless `signal` aborts first. What `work` goes on to do is nobody's:
+// it cannot be stopped from here, only no longer waited for.
+function unlessAborted<T>(work: Promise<T>, signal: AbortSignal | undefined, onLetGo: () => void): Promise<T> {
+  if (!signal) return work;
+  return new Promise<T>((resolve, reject) => {
+    const letGo = (): void => {
+      onLetGo();
+      reject(new Error(TOOL_LET_GO));
+    };
+    if (signal.aborted) {
+      letGo();
+      return;
+    }
+    signal.addEventListener("abort", letGo, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", letGo);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", letGo);
+        reject(error);
+      },
+    );
+  });
 }
 
 export interface HarnessTurnParams extends AgentCallbacks {
@@ -217,6 +262,16 @@ export interface HarnessTurnParams extends AgentCallbacks {
   stall?: StallWatches | null;
   // The silence this turn is allowed. The watch's own default unless said.
   stallMs?: number;
+  // How long this turn may run, from its run starting to its end, tools
+  // included (stall.ts). No limit when unset; rides the stall watch's clock,
+  // so `stall: null` turns it off too.
+  limitMs?: number;
+  // The conversation this turn continues, which is the lane it queues on when
+  // `held` is set (held.ts). Ignored on a session of the turn's own.
+  conversation?: string;
+  // Where the turn's diagnostic lines go (turn-log.ts). Nothing is written
+  // when unset.
+  log?: TurnLogSink;
   // Finish the operation of this id on the borrowed lane instead of accepting a
   // prompt: `messages` is not sent, because that prompt is already in the
   // session the lane belongs to. Everything else about the turn is unchanged —
@@ -237,11 +292,36 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, headers } = params;
   const { sessionId, maxRounds } = params;
   const { onDelta, onThinking, onResponse, onRound, onToolStart, onToolEnd, onDone, onError } = params;
-  const { onSteerable, onSteered, onDelivered } = params;
+  const { onSteerable, onSteered, onDelivered, onWait } = params;
   const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
   const refuse = params.onRefusal ?? ((message: string) => onError(message));
   const purpose = params.purpose ?? "chat";
   if (signal?.aborted) return;
+
+  // The diagnostic record (turn-log.ts). Times are wall-clock, from the turn's
+  // start or from the round's request.
+  const turnId = newRunId();
+  const begunAt = Date.now();
+  const note = (event: TurnLogEvent): void => {
+    params.log?.({ at: Date.now(), turn: turnId, ...event });
+  };
+  let endReason: TurnEnd | undefined;
+  let endError: string | undefined;
+  const ending = (reason: TurnEnd, error?: string): void => {
+    endReason ??= reason;
+    if (error !== undefined) endError ??= error;
+  };
+  const wait = (w: TurnWait): void => {
+    onWait?.(w);
+  };
+  note({
+    event: "start",
+    ...(params.telemetry ? { surface: params.telemetry.surface } : {}),
+    ...(params.conversation !== undefined ? { conversation: params.conversation } : {}),
+    provider: model.provider,
+    model: model.id,
+    held: params.held !== undefined,
+  });
 
   const piTools: Tool[] = tools.map(({ name, description, parameters }) => ({
     name,
@@ -299,7 +379,15 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   // that and not the reader's Stop. Read once the run has settled, where the
   // two are otherwise the same thing.
   let stalled = false;
+  // The same, for the turn's whole allowance running out.
+  let timedOut = false;
   let watch: StallWatch | undefined;
+  // When the round in flight sent its request, and whether anything of its
+  // answer has come back yet.
+  let requestAt = 0;
+  let heard = true;
+  // Tool calls let go of because the run was ending (unlessAborted), by id.
+  const letGo = new Set<string>();
 
   const steer: SteerPort = async (message) => {
     const m: SteerMessage = typeof message === "string" ? { text: message } : message;
@@ -408,8 +496,18 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       ),
     // A throw is left to propagate — the harness turns it into an error tool
     // result whose text is the error's message, exactly as the loop did.
-    async execute(_id, args) {
-      const raw = await tool.execute(args as Record<string, any>);
+    //
+    // pi aborts the context it hands a tool when the run is asked to stop, and
+    // then waits for the tool (docs/pitfall/500). A tool here takes no signal,
+    // so for a read the abort is raced instead: the run settles and the lane is
+    // handed back whether or not the read ever does. A write is waited for: one
+    // that landed after its turn had ended would land with nobody shown its
+    // receipt.
+    async execute(id, args, _onUpdate, _toolContext, _invocation, context) {
+      const running = tool.execute(args as Record<string, any>);
+      const raw = await (tool.effect === "read"
+        ? unlessAborted(running, context.abortSignal, () => letGo.add(id))
+        : running);
       const { text, images, receipt } = normalizeToolResult(tool, raw);
       const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
       for (const im of images) content.push({ type: "image", data: im.data, mimeType: im.mimeType });
@@ -464,6 +562,10 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
         stalled = true;
         void abortRun();
       },
+      onLimit: () => {
+        timedOut = true;
+        void abortRun();
+      },
     });
     // What is measured is the provider's silence. Until the first request goes
     // out this turn may be queued behind another on a held lane for as long as
@@ -483,12 +585,24 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     let harness: AgentHarness<undefined>;
     if (params.held) {
       borrowed = await params.held.acquire(
-        { model, streamFn, tools: harnessTools, systemPrompt, toProviderMessages },
+        {
+          model,
+          streamFn,
+          tools: harnessTools,
+          systemPrompt,
+          toProviderMessages,
+          ...(params.conversation !== undefined ? { conversation: params.conversation } : {}),
+        },
         ctx,
         signal,
+        () => {
+          note({ event: "queued" });
+          wait({ kind: "queued" });
+        },
       );
       harness = borrowed.harness;
       lane = borrowed.lane;
+      note({ event: "lane", waitMs: Date.now() - begunAt });
     } else {
       const fileSystem = params.fileSystem ?? createSessionFileSystem();
       const laneId = params.lane ?? READER_TURN;
@@ -539,6 +653,9 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       }
       watch?.beat();
       round += 1;
+      requestAt = Date.now();
+      heard = false;
+      if (round <= maxRounds) wait({ kind: "first-byte", round });
       // Same exit as the budget refusal, for the same reason: every round of
       // this turn reached the model and came back. What it did with them —
       // fetching and fetching without concluding — is not a broken call, and a
@@ -575,6 +692,10 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       // Any update at all is the provider still talking, thinking included: a
       // long think is not a stall (watchdog.ts holds the same line).
       watch?.beat();
+      if (!heard) {
+        heard = true;
+        note({ event: "first-byte", round, ms: Date.now() - requestAt });
+      }
       if (event.type === "text_delta") onDelta(event.delta);
       else if (event.type === "thinking_delta") onThinking?.(event.delta);
     });
@@ -594,6 +715,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       if (recovery || message.role !== "assistant") return;
       if (runId === undefined || runId !== operationId) return;
       recordRound(message, message.stopReason !== "error" && message.stopReason !== "aborted");
+      note({ event: "round", round, stop: message.stopReason, ms: Date.now() - requestAt });
     });
     listen("tool_start", ({ toolName, args }) => {
       // Nothing is waiting on the provider while a tool runs, and a sub-agent
@@ -608,8 +730,11 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
         ...(tool?.quiet ? { quiet: true as const } : {}),
       });
     });
-    listen("tool_end", ({ toolName, result, isError }) => {
+    listen("tool_end", ({ toolCallId, toolName, result, isError }) => {
       watch?.unhold();
+      // Let go of because the reader stopped the turn: as silent as the rest
+      // of a Stop. Let go of for a stall or the time limit, the line says so.
+      if (letGo.has(toolCallId) && signal?.aborted) return;
       // A failure's text is the message the tool threw, which is what the reader
       // is shown in place of the line that was running; a success carries the
       // receipt the adapter parked in `details` and no text (the text is the
@@ -644,15 +769,18 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       // of it is driven — so the listeners above can tell its messages from the
       // replayed history from the first one.
       operationId = params.resume;
+      if (params.limitMs !== undefined) watch?.limit(params.limitMs);
       if (signal?.aborted) await abortRun();
       onSteerable?.(steer);
       const resumed = await lane.resume(ctx);
       ended = true;
       if (!resumed.ok) {
+        ending("error", resumed.error.message);
         onError(resumed.error.message);
         return;
       }
       if (resumed.value.status === "suspended") {
+        ending("error", "suspended");
         onError("the model turn stopped to wait on deferred");
         return;
       }
@@ -668,10 +796,13 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       const admitted = await lane.accept({ kind: "prompt", prompt: params.messages as AgentMessage[] }, ctx);
       if (!admitted.ok) {
         ended = true;
+        ending("error", admitted.error.message);
         onError(admitted.error.message);
         return;
       }
       operationId = admitted.value.operationId;
+      // Armed once there is a run to abort, so running out can always stop it.
+      if (params.limitMs !== undefined) watch?.limit(params.limitMs);
       // The signal may have fired between the check above and the run existing.
       if (signal?.aborted) await abortRun();
       // There is a run to queue into from here until it settles below.
@@ -680,10 +811,12 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       const driven = await lane.drive({ operationId, waitForRetry: true }, ctx);
       ended = true;
       if (!driven.ok) {
+        ending("error", driven.error.message);
         onError(driven.error.message);
         return;
       }
       if (driven.value.kind !== "settled") {
+        ending("error", driven.value.reason);
         onError(`the model turn stopped to wait on ${driven.value.reason}`);
         return;
       }
@@ -691,33 +824,61 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       record = driven.value.outcome;
     }
     if (record.status === "aborted") {
-      if (refusal) refuse(refusal.message);
+      if (refusal) {
+        ending("refused", refusal.message);
+        refuse(refusal.message);
+      }
       // Nobody asked for this one. The caller is told, and told what kind of
       // failure it was, so a surface that can ask again knows it is worth it.
-      else if (stalled) onError(STALL_MESSAGE, undefined, new StallError());
+      else if (stalled) {
+        ending("stalled");
+        onError(STALL_MESSAGE, undefined, new StallError());
+      } else if (timedOut) {
+        ending("timed-out");
+        onError(TURN_LIMIT_MESSAGE, undefined, new TurnLimitError());
+      } else ending("aborted");
       return;
     }
-    if (signal?.aborted) return;
+    if (signal?.aborted) {
+      ending("aborted");
+      return;
+    }
     if (record.status === "failed") {
       if (thrown !== undefined) {
-        onError(thrown instanceof Error ? thrown.message : String(thrown), undefined, thrown);
+        const message = thrown instanceof Error ? thrown.message : String(thrown);
+        ending("error", message);
+        onError(message, undefined, thrown);
       } else {
-        onError(last?.errorMessage || record.error?.message || "stream error", last);
+        const message = last?.errorMessage || record.error?.message || "stream error";
+        ending("error", message);
+        onError(message, last);
       }
       return;
     }
     if (!last) {
+      ending("error", "no final message");
       onError("model stream ended without a final message");
       return;
     }
     const text = assistantText(last);
+    ending("done");
     onDone(text, last, joinRoundTexts([...written, text]));
   } catch (e) {
     ended = true;
-    if (signal?.aborted) return;
+    if (signal?.aborted) {
+      ending("aborted");
+      return;
+    }
+    ending("error", errMsg(e));
     onError(errMsg(e), undefined, e);
   } finally {
     ended = true;
+    note({
+      event: "end",
+      reason: endReason ?? "aborted",
+      ms: Date.now() - begunAt,
+      ...(endError !== undefined ? { error: endError } : {}),
+    });
     // What the stall window has to clear, measured on a real turn. Development
     // only: nothing in a release build reads it, and the point of it is to be
     // read back off a device that has just been made to think for a while.
@@ -761,6 +922,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
     resume,
     stallMs,
     onDelta,
+    onWait,
     onThinking,
     onResponse,
     onRound,
@@ -808,11 +970,19 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       about,
       telemetry,
       ...(lane ? { lane } : {}),
-      ...(harness ? { held: harness } : {}),
+      // A held lane is shared by the conversation's turns, so one that never
+      // ends would hold up every turn after it: there it gets an allowance. The
+      // conversation is the thread, the same id the cache accounting and the
+      // provider's session already go by.
+      ...(harness
+        ? { held: harness, conversation: telemetry.thread, limitMs: turnLimitFor(telemetry.surface) }
+        : {}),
       ...(deliverTo ? { deliverTo } : {}),
       ...(stallMs === undefined ? {} : { stallMs }),
       ...(resume === undefined ? {} : { resume }),
+      log: appTurnLog,
       onDelta,
+      onWait,
       onThinking,
       onResponse,
       onRound,
