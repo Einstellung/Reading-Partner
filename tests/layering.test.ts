@@ -219,9 +219,13 @@ const LAYER: Record<string, Layer> = {
   // bodies, a room's picture — and the briefer only names its kind, so the edge
   // runs briefer -> tasking and never back.
   "info/tasking": "domain",
-  // An X link read as a lead (docs/84): the embed endpoint, the permalink page
-  // in the hidden webview, which links to follow, and the record of the post.
-  // A leaf under info; reading's ingest calls it and files what it found.
+  // AI-driven link intake (docs/86): the link agent's prompt, tools, candidate
+  // table and caps, the reader registry, the receipt and the source records.
+  // Knows no site and no reader: info/x registers into it, reading files for it.
+  "info/links": "domain",
+  // An X link read (docs/84): the embed endpoint, the permalink page in the
+  // hidden webview, and the post's record; registered as a reader of
+  // info/links, and still the rule-based fan-out until the switch (docs/86).
   "info/x": "domain",
   reading: "domain",
   "reading/chapters": "domain",

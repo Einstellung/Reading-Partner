@@ -1,9 +1,9 @@
-// An X link read as a lead (docs/84): the post itself as a source record, the
+// An X link read (docs/84, docs/86): the post itself as a source record, the
 // content it is in its own right (a long post, an Article, the author's own
-// thread) as documents to build, and the links out of it that are worth
-// following. Nothing here builds or files anything — the reading side hands the
-// documents to the bindery and each followed link to the bindery's registry,
-// and keeps the record beside what came of them.
+// thread) whose whole text was read, and every link out of it, t.co expanded,
+// with where on the post it was found. Nothing here decides what to follow or
+// whether the post is a lead: the link agent (info/links) weighs that, and the
+// rule-based fan-out still in use until the switch does it in rules.ts.
 //
 // Two ways to read a post, layered (docs/84 「建议」). The embed endpoint, one
 // request on every platform, is enough for a short post. A long post's and an
@@ -14,18 +14,17 @@
 
 import { oneLine } from "../../platform/std/text";
 import { rejection, type FetchBytes, type Rejection } from "../../workshop/bindery";
-import { classifyOutbound } from "./outbound";
 import {
   bodyHtml,
   bodyText,
   focalPost,
-  outboundAnchors,
   parsePermalinkResult,
   postBodyLines,
   type PagePost,
   type PermalinkRead,
 } from "./permalink";
 import {
+  isXHost,
   largePhoto,
   parseSyndication,
   syndicationUrl,
@@ -88,14 +87,6 @@ export interface XOwnDocument {
   chars: number;
 }
 
-/** A link out of a post to hand the bindery's registry. */
-export interface XTarget {
-  url: string;
-  kind: string;
-  /** The post it came out of. */
-  postId: string;
-}
-
 /** Something about the post that was not taken, and why, for the receipt. */
 export interface XSkip {
   /** The link, or the post when it is the post's own text that was not taken. */
@@ -105,16 +96,33 @@ export interface XSkip {
   needsDesktop?: boolean;
 }
 
-export interface XReading {
+/** Where on the post a link was found. */
+export type XLinkOrigin = "body" | "card" | "self-reply" | "quoted" | "article";
+
+/** A link out of a post, t.co expanded once read through. */
+export interface XLink {
+  url: string;
+  /** The anchor's words on the page; empty for the embed's links. */
+  anchor: string;
+  origin: XLinkOrigin;
+  /** The post it came out of. */
+  postId: string;
+}
+
+export interface XPostRead {
   ok: true;
   record: XPostRecord;
-  documents: XOwnDocument[];
-  follow: XTarget[];
+  /**
+   * The content that is a post in its own right and was read whole: the pasted
+   * post's first when it is, then the quoted one's. A cut-short text is never
+   * here (pitfall 493); a quoted short post is put under the post quoting it.
+   */
+  own: XOwnDocument[];
+  /** Every link out, in the order found, expanded and deduplicated. */
+  links: XLink[];
   skipped: XSkip[];
 }
 
-/** Links followed out of one pasted post, the quoted one's included. */
-export const MAX_FOLLOW = 6;
 // Fewer characters than this from the page, against the embed's cut-short
 // opening, means the page did not hold the post.
 const PAGE_SHORTFALL = 0.9;
@@ -175,8 +183,8 @@ interface PostOutcome {
   record: XPostRecord;
   /** The post's own document, when it is content and its whole text was read. */
   document: XOwnDocument | null;
-  /** Links worth looking at, t.co ones unexpanded, in order. */
-  candidates: string[];
+  /** Links out of it, t.co ones unexpanded, in order. */
+  links: XLink[];
   skipped: XSkip[];
 }
 
@@ -198,14 +206,39 @@ function baseRecord(post: XSyndicatedPost): XPostRecord {
   };
 }
 
-// One post through the decision of docs/84 「建议」, its quoted post aside.
-async function readOne(post: XSyndicatedPost, deps: XReadDeps): Promise<PostOutcome> {
+// The links on a page post that leave X, with their words, each once.
+function pageLinks(post: PagePost, origin: XLinkOrigin, postId: string): XLink[] {
+  const out: XLink[] = [];
+  for (const a of post.anchors) {
+    let host: string;
+    try {
+      host = new URL(a.href).hostname;
+    } catch {
+      continue;
+    }
+    if (isXHost(host) || out.some((l) => l.url === a.href)) continue;
+    out.push({ url: a.href, anchor: a.text, origin, postId });
+  }
+  return out;
+}
+
+// One post read the way docs/84 「建议」 reads it, its quoted post aside.
+async function readOne(post: XSyndicatedPost, deps: XReadDeps, quoted: boolean): Promise<PostOutcome> {
   const record = baseRecord(post);
   const skipped: XSkip[] = [];
   const author = post.author.name ? `${post.author.name} (@${post.author.handle})` : `@${post.author.handle}`;
-  // An Article's links are its references, not what it is about (docs/84 外链实测 6).
-  const candidates = post.shape === "article" ? [] : [...record.links];
-  if (post.shape === "short") return { record, document: null, candidates, skipped };
+  // An Article's embed link is the Article itself; its references are on the page.
+  const embedOrigin = quoted ? ("quoted" as const) : ("body" as const);
+  const links: XLink[] =
+    post.shape === "article"
+      ? []
+      : [
+          ...post.links.map((url) => ({ url, anchor: "", origin: embedOrigin, postId: post.id })),
+          ...(post.cardUrl
+            ? [{ url: post.cardUrl, anchor: "", origin: quoted ? ("quoted" as const) : ("card" as const), postId: post.id }]
+            : []),
+        ];
+  if (post.shape === "short") return { record, document: null, links, skipped };
 
   const what = post.shape === "article" ? "the Article's body" : "the post's full text";
   if (!deps.readPage) {
@@ -214,7 +247,7 @@ async function readOne(post: XSyndicatedPost, deps: XReadDeps): Promise<PostOutc
       reason: `${what} is only on the post's page, which this device cannot read; the embed gives only its opening`,
       needsDesktop: true,
     });
-    return { record, document: null, candidates, skipped };
+    return { record, document: null, links, skipped };
   }
   const page = await permalink(record.url, deps.readPage);
   const found = typeof page === "string" ? null : focalPost(page, post.id, post.author.handle);
@@ -223,7 +256,7 @@ async function readOne(post: XSyndicatedPost, deps: XReadDeps): Promise<PostOutc
       subject: record.url,
       reason: `${what} could not be read: ${typeof page === "string" ? page : "the page did not show this post"}`,
     });
-    return { record, document: null, candidates, skipped };
+    return { record, document: null, links, skipped };
   }
 
   const isArticle = post.shape === "article";
@@ -238,7 +271,7 @@ async function readOne(post: XSyndicatedPost, deps: XReadDeps): Promise<PostOutc
       subject: record.url,
       reason: `${what} could not be read: the page held less text (${text.length} characters) than the embed's opening`,
     });
-    return { record, document: null, candidates, skipped };
+    return { record, document: null, links, skipped };
   }
 
   const replies = isArticle ? [] : found.selfReplies;
@@ -251,8 +284,10 @@ async function readOne(post: XSyndicatedPost, deps: XReadDeps): Promise<PostOutc
   if (pageImages.length > 0) {
     record.images = [...new Set([...record.images, ...pageImages.map(largePhoto)])];
   }
-  if (!isArticle) {
-    for (const p of [found.focal, ...replies]) candidates.push(...outboundAnchors(p));
+  if (isArticle) links.push(...pageLinks(found.focal, "article", post.id));
+  else {
+    links.push(...pageLinks(found.focal, embedOrigin, post.id));
+    for (const r of replies) links.push(...pageLinks(r, quoted ? "quoted" : "self-reply", post.id));
   }
 
   const parts = [bodyHtml(lines, pageImages)];
@@ -272,7 +307,7 @@ async function readOne(post: XSyndicatedPost, deps: XReadDeps): Promise<PostOutc
       html: parts.join("\n<hr>\n"),
       chars,
     },
-    candidates,
+    links,
     skipped,
   };
 }
@@ -290,40 +325,49 @@ function quotedHtml(record: XPostRecord): string {
   return `<blockquote><p>${para(who)}</p><p>${para(record.text).replace(/\n/g, "<br>")}</p></blockquote>`;
 }
 
+/** The key two links are the same link by: no protocol, `www.`, fragment or trailing slash. */
+function linkKey(url: string): string {
+  return url
+    .replace(/^https?:\/\/(?:www\.)?/i, "")
+    .replace(/#.*$/, "")
+    .replace(/\/+$/, "");
+}
+
 /**
- * Read the post a link is about: what to keep, build and follow. A rejection is
- * a post that could not be read at all (gone, private, X unreachable); anything
- * less is in `skipped` beside whatever could be read.
+ * Read the post a link is about: its record, its own content where it was read
+ * whole, and every link out of it. A rejection is a post that could not be read
+ * at all (gone, private, X unreachable); anything less is in `skipped` beside
+ * whatever could be read.
  */
-export async function readXPost(url: string, deps: XReadDeps): Promise<XReading | Rejection> {
+export async function readPost(url: string, deps: XReadDeps): Promise<XPostRead | Rejection> {
   const ref = xPostOfUrl(url);
   if (!ref) return rejection("no-adapter", "the link is not an X post");
   const post = await syndicated(ref.id, deps);
   if ("ok" in post) return post;
 
-  const main = await readOne(post, deps);
-  const documents: XOwnDocument[] = [];
+  const main = await readOne(post, deps, false);
+  const own: XOwnDocument[] = [];
   const skipped = [...main.skipped];
-  const candidates: { url: string; postId: string }[] = main.candidates.map((u) => ({ url: u, postId: post.id }));
-  if (main.document && isContent(main)) documents.push(main.document);
+  const found: XLink[] = [...main.links];
+  if (main.document && isContent(main)) own.push(main.document);
 
   if (post.quoted) {
-    // The quoted post goes through the same decision. When it is not content
-    // of its own, its words go where X shows them: under the quoting post.
-    const quoted = await readOne(post.quoted, deps);
+    // The quoted post is read the same way. When it is not content of its own,
+    // its words go where X shows them: under the quoting post.
+    const quoted = await readOne(post.quoted, deps, true);
     main.record.quoted = quoted.record;
     skipped.push(...quoted.skipped);
-    candidates.push(...quoted.candidates.map((u) => ({ url: u, postId: post.quoted!.id })));
-    if (quoted.document && isContent(quoted)) documents.push(quoted.document);
-    else if (documents[0]?.postId === post.id) {
-      documents[0] = { ...documents[0], html: `${documents[0].html}\n${quotedHtml(quoted.record)}` };
+    found.push(...quoted.links);
+    if (quoted.document && isContent(quoted)) own.push(quoted.document);
+    else if (own[0]?.postId === post.id) {
+      own[0] = { ...own[0], html: `${own[0].html}\n${quotedHtml(quoted.record)}` };
     }
   }
 
-  const follow: XTarget[] = [];
+  const links: XLink[] = [];
   const seen = new Set<string>();
-  for (const candidate of candidates) {
-    let target = candidate.url;
+  for (const link of found) {
+    let target = link.url;
     if (/^https?:\/\/t\.co\//i.test(target)) {
       const expanded = await deps.resolveRedirect(target).catch(() => null);
       if (!expanded) {
@@ -331,33 +375,16 @@ export async function readXPost(url: string, deps: XReadDeps): Promise<XReading 
         continue;
       }
       target = expanded;
-      const record = candidate.postId === post.id ? main.record : main.record.quoted;
-      if (record) record.links = record.links.map((l) => (l === candidate.url ? expanded : l));
+      const record = link.postId === post.id ? main.record : main.record.quoted;
+      if (record) record.links = record.links.map((l) => (l === link.url ? expanded : l));
     }
-    const key = target
-      .replace(/^https?:\/\/(?:www\.)?/i, "")
-      .replace(/#.*$/, "")
-      .replace(/\/+$/, "");
+    const key = linkKey(target);
     if (seen.has(key)) continue;
     seen.add(key);
-    const verdict = classifyOutbound(target, deps.claimedBySite);
-    if (!verdict.follow) {
-      skipped.push({ subject: target, reason: verdict.reason });
-      continue;
-    }
-    if (follow.length >= MAX_FOLLOW) {
-      skipped.push({ subject: target, reason: `past the first ${MAX_FOLLOW} links` });
-      continue;
-    }
-    follow.push({ url: target, kind: verdict.kind, postId: candidate.postId });
+    links.push({ ...link, url: target });
   }
   for (const record of [main.record, main.record.quoted]) {
     if (record) record.links = [...new Set(record.links)];
   }
-  // A post that leads somewhere is a lead however long it is (docs/84 要什么):
-  // what it points at is the document, its own words stay in the record. An
-  // Article is content in its own right and its links are not followed.
-  const leads = new Set(follow.map((t) => t.postId));
-  const own = documents.filter((d) => d.shape === "article" || !leads.has(d.postId));
-  return { ok: true, record: main.record, documents: own, follow, skipped };
+  return { ok: true, record: main.record, own, links, skipped };
 }

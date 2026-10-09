@@ -42,6 +42,7 @@ import { registerBookDelivery } from "../../../reading/turn/deliver";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
 import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerSourceSiteAdapters } from "../../../info/sources/plugins/all";
+import { registerXLinkReader } from "../../../info/x/live";
 import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-worker";
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photos/photo-sweep";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
@@ -209,6 +210,7 @@ export function bootDomains(): void {
   // plugins as the documents they name, for the bindery to ask before it
   // fetches a pasted link as a web page (docs/85).
   registerSourceSiteAdapters();
+  registerXLinkReader();
   // The week's photographs, searched in the hidden webview on whichever device
   // has one (docs/73 图片). Registered on every device, and refused at once on
   // one that has no webview: the run is `local`, so the only device that may

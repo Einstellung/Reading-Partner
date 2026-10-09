@@ -2,6 +2,7 @@
 
 export {
   bind,
+  buildRead,
   readMaterial,
   type BindResult,
   type Bound,

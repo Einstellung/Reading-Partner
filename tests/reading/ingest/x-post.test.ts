@@ -7,7 +7,10 @@ import { importBook } from "../../../src/platform/app/library";
 import { registerSiteAdapter, type FetchedBytes } from "../../../src/workshop/bindery";
 import { ingestXPost, type XIngestDeps } from "../../../src/reading/ingest/x-post";
 import { ingestUrlWorker } from "../../../src/reading/ingest/url-worker";
-import type { XPostEntry } from "../../../src/info/x/store";
+import type { LinkRecordEntry } from "../../../src/info/links/store";
+import type { XPostRecord } from "../../../src/info/x/read-post";
+
+type XPostEntry = LinkRecordEntry & { record: XPostRecord };
 import type { WorkerContext } from "../../../src/legion/execute/worker";
 import type { Run } from "../../../src/legion/run";
 import { installAppData } from "../../support/appdata-fake";
@@ -38,8 +41,8 @@ function deps(x: ReturnType<typeof fakeX>): { deps: XIngestDeps; saved: XPostEnt
         supplements.push(ref.title);
       },
       x: x.deps,
-      saveRecord: async (entry) => {
-        saved.push(entry);
+      saveRecord: async (_key, entry) => {
+        saved.push(entry as XPostEntry);
       },
       now: () => 1_000,
     },

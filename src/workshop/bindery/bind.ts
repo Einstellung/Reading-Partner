@@ -161,14 +161,13 @@ function withLanguage(m: Manuscript): Manuscript {
 }
 
 /**
- * Make material into an EPUB, or say why it cannot be one. A rejection is a
- * normal answer (a sign-in wall, an empty page) and carries a sentence the
- * caller can pass on; a thrown error is a wiring or build fault.
+ * The third step alone: the pictures and the EPUB for a manuscript readMaterial
+ * passed. For a caller that read the material first and decided afterwards to
+ * keep it (info/links reads a page, shows it to a model, and files it only when
+ * the model asks), so the page is not read twice. bind is readMaterial then
+ * this, so either way the bytes are the same.
  */
-export async function bind(material: Material, deps: BinderyDeps = {}): Promise<BindResult> {
-  const read = await readMaterial(material, deps);
-  if (!read.ok || "passedThrough" in read) return read;
-
+export async function buildRead(read: ReadManuscript, deps: BinderyDeps = {}): Promise<Bound> {
   const { manuscript, srcs } = await withImages(read.manuscript, deps);
   const epub = await buildSectionedEpub(manuscriptEpubInput(manuscript));
   const have = new Set(manuscript.images.map((i) => i.src));
@@ -188,4 +187,15 @@ export async function bind(material: Material, deps: BinderyDeps = {}): Promise<
       imagesMissing: srcs.filter((src) => !have.has(src)).length,
     },
   };
+}
+
+/**
+ * Make material into an EPUB, or say why it cannot be one. A rejection is a
+ * normal answer (a sign-in wall, an empty page) and carries a sentence the
+ * caller can pass on; a thrown error is a wiring or build fault.
+ */
+export async function bind(material: Material, deps: BinderyDeps = {}): Promise<BindResult> {
+  const read = await readMaterial(material, deps);
+  if (!read.ok || "passedThrough" in read) return read;
+  return buildRead(read, deps);
 }

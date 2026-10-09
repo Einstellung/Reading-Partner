@@ -10,8 +10,9 @@
 // record is kept whatever came of the rest, with the hashes of what did.
 
 import { bind } from "../../workshop/bindery";
-import { readXPost, type XPostRecord, type XReadDeps, type XSkip } from "../../info/x/read-post";
-import type { XPostEntry } from "../../info/x/store";
+import type { XPostRecord, XReadDeps, XSkip } from "../../info/x/read-post";
+import { readXPost } from "../../info/x/rules";
+import type { LinkRecordEntry } from "../../info/links/store";
 import {
   fileBuilt,
   ingestArticleUrl,
@@ -22,8 +23,8 @@ import {
 
 export interface XIngestDeps extends ArticleIngestDeps {
   x: XReadDeps;
-  /** Keep the post's record (info/x/store). */
-  saveRecord(entry: XPostEntry): Promise<void>;
+  /** Keep the post's record (info/links/store), under its key. */
+  saveRecord(key: string, entry: LinkRecordEntry): Promise<void>;
   now?: () => number;
 }
 
@@ -99,9 +100,12 @@ export async function ingestXPost(
     }
   }
 
-  await deps.saveRecord({
+  await deps.saveRecord(`x:${record.id}`, {
+    source: "x",
+    url,
     record,
     documents: documents.map((d) => d.entry.hash),
+    trail: [],
     takenAt: (deps.now ?? Date.now)(),
   });
 
