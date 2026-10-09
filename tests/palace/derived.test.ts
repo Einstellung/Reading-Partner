@@ -174,6 +174,7 @@ const STORES_A_TOPIC_ID: Record<string, readonly PalaceKind[]> = {
   "info/labs/types.ts": ["info-labs"],
   "memory/usage/model-calls.ts": ["model-calls"],
   "platform/app/threads.ts": ["info-thread", "conversation", "info-meals-thread"],
+  "reading/ingest/intake-store.ts": ["link-intake"],
   "reading/rehearsal/types.ts": ["rehearsal"],
   "reading/retell/types.ts": ["retell"],
   "reading/saved/saved-articles.ts": ["saved-articles"],

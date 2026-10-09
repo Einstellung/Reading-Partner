@@ -6,6 +6,8 @@ import { expect, test } from "bun:test";
 import {
   INGEST_URL_KIND,
   ingestOutputLine,
+  intakeOutputLine,
+  isBookIngestAsk,
   parseIngestAsk,
   startUrlIngest,
   type IngestAsk,
@@ -112,4 +114,29 @@ test("the output line says what came in, how big it is, and where it now is", ()
   expect(pdf).toContain("12 pages");
   // No prep list behind this book: nothing claims the text is readable.
   expect(pdf).not.toContain("prep list");
+});
+
+// A link pasted with no book open (topic-intake.ts) names an intake instead.
+test("an intake ask reads back with no book, and a book still wins where both are named", () => {
+  const ask = { url: "https://x.com/a/status/1", intakeId: "in-1", note: "the repo" };
+  const read = parseIngestAsk(JSON.stringify(ask));
+  expect(read).toEqual(ask);
+  expect(isBookIngestAsk(read)).toBe(false);
+  const both = parseIngestAsk('{"url":"https://a.test/x","bookId":"b","intakeId":"in-1"}');
+  expect(both).toEqual({ url: "https://a.test/x", bookId: "b" });
+  expect(isBookIngestAsk(both)).toBe(true);
+  expect(() => parseIngestAsk('{"url":"https://a.test/x","intakeId":"  "}')).toThrow(/no book/);
+});
+
+test("the intake line says it is in the library and where its topic comes from, never a book", () => {
+  const outcome = { title: "A Manual", kind: "article" as const, pages: 40, chars: 90000 };
+  const waiting = intakeOutputLine(outcome, false);
+  expect(waiting).toContain('"A Manual" (article, 90000 characters)');
+  expect(waiting).toContain("whichever topic the reader picks");
+  const chosen = intakeOutputLine(outcome, true);
+  expect(chosen).toContain("filed under the topic they picked");
+  for (const line of [waiting, chosen]) {
+    expect(line).not.toContain("book");
+    expect(line).not.toContain("Outline");
+  }
 });

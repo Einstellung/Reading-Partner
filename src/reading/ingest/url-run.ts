@@ -9,7 +9,7 @@
 //
 // The ask is a file. A run record carries references and never content
 // (docs/55), and this ask is three fields rather than one string — the URL, why
-// the reader shared it, and the book it becomes a supplement of — so it is
+// the reader shared it, and the book or the intake it is for — so it is
 // written as JSON beside the soul's own briefs and the collect task book, under
 // the subtree palace registers as `run-brief`.
 //
@@ -28,13 +28,30 @@ export const INGEST_URL_KIND = "ingest-url";
 /** Where the ask is kept. The subtree is registered in palace as `run-brief`. */
 export const INGEST_ASKS_DIR = "legion/briefs";
 
-/** What one ingest run is asked for. Frozen when the run is created. */
-export interface IngestAsk {
+interface IngestAskBase {
   url: string;
   /** Why the reader shared it, in their companion's words. Carried to the prep note. */
   note?: string;
-  /** The book this becomes a supplement of (docs/67). */
+}
+
+/** A link pasted while reading a book: it becomes that book's supplement (docs/67). */
+export interface BookIngestAsk extends IngestAskBase {
   bookId: string;
+}
+
+/**
+ * A link pasted with no book open: it goes into the library attached nowhere,
+ * and into the topic the reader picks on the intake card (topic-intake.ts).
+ */
+export interface IntakeIngestAsk extends IngestAskBase {
+  intakeId: string;
+}
+
+/** What one ingest run is asked for. Frozen when the run is created. */
+export type IngestAsk = BookIngestAsk | IntakeIngestAsk;
+
+export function isBookIngestAsk(ask: IngestAsk): ask is BookIngestAsk {
+  return "bookId" in ask;
 }
 
 /** Write the ask for a run about to be delegated, answering its path. */
@@ -45,7 +62,11 @@ export async function writeIngestAsk(ask: IngestAsk): Promise<string> {
   return path;
 }
 
-/** Read an ask back. A file with no URL or no book is not one. */
+/**
+ * Read an ask back. A file with no URL is not one, nor is one naming neither a
+ * book nor an intake. A book wins where both are named, so an ask written
+ * before intakes existed reads exactly as it always did.
+ */
 export function parseIngestAsk(text: string): IngestAsk {
   let parsed: unknown;
   try {
@@ -53,13 +74,16 @@ export function parseIngestAsk(text: string): IngestAsk {
   } catch {
     throw new Error("the ingest ask is not readable JSON");
   }
-  const value = parsed as Partial<IngestAsk> | null;
+  const value = parsed as { url?: unknown; note?: unknown; bookId?: unknown; intakeId?: unknown } | null;
   const url = typeof value?.url === "string" ? value.url.trim() : "";
   const bookId = typeof value?.bookId === "string" ? value.bookId.trim() : "";
+  const intakeId = typeof value?.intakeId === "string" ? value.intakeId.trim() : "";
   if (!url) throw new Error("the ingest ask names no URL");
-  if (!bookId) throw new Error("the ingest ask names no book");
   const note = typeof value?.note === "string" && value.note.trim() ? value.note.trim() : undefined;
-  return { url, bookId, ...(note === undefined ? {} : { note }) };
+  const noted = note === undefined ? {} : { note };
+  if (bookId) return { url, bookId, ...noted };
+  if (intakeId) return { url, intakeId, ...noted };
+  throw new Error("the ingest ask names no book and no intake");
 }
 
 /** What starting one ingest run answers: enough to say a run is going. */
@@ -131,4 +155,17 @@ export function ingestOutputLine(outcome: IngestOutcome): string {
     `Took in "${outcome.title}" (${outcome.kind}, ${size}). It is a supplement of this book ` +
     `now: the reader can open it under the book's contents in the Outline sidebar.${readable}`
   );
+}
+
+/**
+ * The same line for a link taken in with no book (topic-intake.ts): it is in the
+ * library, and it is either in the topic the reader already picked on the card
+ * or waiting there for them to pick one.
+ */
+export function intakeOutputLine(outcome: IngestOutcome, topicChosen: boolean): string {
+  const size = outcome.kind === "article" ? `${outcome.chars} characters` : `${outcome.pages} pages`;
+  const where = topicChosen
+    ? "It is in the reader's library now, filed under the topic they picked on the card."
+    : "It is in the reader's library now; it goes into whichever topic the reader picks on the card.";
+  return `Took in "${outcome.title}" (${outcome.kind}, ${size}). ${where}`;
 }

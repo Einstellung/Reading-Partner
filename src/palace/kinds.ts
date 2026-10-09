@@ -1118,6 +1118,21 @@ export const PALACE = [
     note: "the source record of each X post pasted as a link (docs/84), keyed by post id; `documents` lists library hashes and is not a ref the housekeeper follows, so a document deleted later leaves a stale hash behind, which the record reads past",
   },
   {
+    kind: "link-intake",
+    domain: "reading",
+    match: subtree("link-intakes/"),
+    samples: ["link-intakes/0f5c2f1a-9c1e-4f6f-9a02-3c7d5b1e8a44.json"],
+    id: "fixed",
+    refs: [
+      { kind: "topics", via: "topicId", onDelete: "keep" },
+      { kind: "library", via: "documents[].hash" },
+    ],
+    sync: "local",
+    deleteWith: "never",
+    retention: NEVER,
+    note: "one link pasted in the door conversation with no book open, the card's state while the run reads it and the reader picks a topic (reading/ingest/intake-store.ts). Machine-local like the run behind it. A deleted topic's id is kept: the documents were attached to the topic row, which is what the delete removes, and a pick still waiting names a topic whose attach is then a no-op (addFileToTopic skips an unknown id), leaving the documents attached nowhere. One the reader never picks a topic for stays, its documents in the library attached nowhere; nothing reclaims either yet",
+  },
+  {
     kind: "info-meals-photos",
     domain: "info",
     match: fixed("info-meals-photos.json"),

@@ -18,10 +18,21 @@
 // second one made here would race the reader's. No pipeline means the supplement
 // is the whole of the ingest, which is the answer the tool has always given for
 // a book with no prep run behind it.
+//
+// An ask that names an intake instead of a book is a link pasted with no book
+// open (topic-intake.ts): the documents go into the library attached nowhere,
+// the intake record hears each host being read and what was filed, and the
+// topic the reader picks on the card is attached by whichever comes second.
 
-import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/execute/worker";
+import {
+  registerWorker,
+  type WorkerContext,
+  type WorkerHandle,
+  type WorkerOutcome,
+} from "../../legion/execute/worker";
 import { writeRunOutput } from "../../legion/execute/outputs";
-import { StoppedError } from "../../legion/stop";
+import { GiveUpError, StoppedError } from "../../legion/stop";
+import { MAX_ATTEMPTS } from "../../legion/run/types";
 import { appData } from "../../platform/app/appdata";
 import { t } from "../../i18n";
 import { formatOfBytes, readLibraryBook } from "../../platform/app/library";
@@ -29,12 +40,21 @@ import { hostOf } from "../../platform/std/url";
 import type { Fulltext } from "../../fulltext/types";
 import { ensureDocumentFulltext } from "./fulltext";
 import { ingestUrlLive, type IngestRunContext } from "./live";
-import type { IngestedDocument } from "./article";
+import type { IngestedDocument, IngestTarget } from "./article";
 import { isIngestBatch, type IngestBatch } from "./link-intake";
+import { intakeStore, type IntakeDocument, type IntakeStore } from "./intake-store";
 import { prepareCapturedDocument, type PreparedSource } from "../prep/papers/captured-source";
 import { peekPrepPipeline } from "../prep/papers/live";
 import type { PrepPaper } from "../prep/papers/types";
-import { INGEST_URL_KIND, ingestOutputLine, parseIngestAsk, type IngestOutcome } from "./url-run";
+import {
+  INGEST_URL_KIND,
+  ingestOutputLine,
+  intakeOutputLine,
+  isBookIngestAsk,
+  parseIngestAsk,
+  type IngestOutcome,
+  type IntakeIngestAsk,
+} from "./url-run";
 
 export { INGEST_URL_KIND };
 
@@ -43,16 +63,19 @@ export interface IngestUrlWorkerDeps {
   /** The ask, read back off its path. */
   readAsk?: (path: string) => Promise<string>;
   /**
-   * Fetch the URL and file it as a supplement of the book: one document, or for
-   * a link the link agent takes in (an X post, docs/86) a batch of them.
+   * Fetch the URL and file it where the target says — a book's supplements, or
+   * the library attached nowhere for an intake: one document, or for a link the
+   * link agent takes in (an X post, docs/86) a batch of them.
    */
-  ingest?: (url: string, bookId: string, context: IngestRunContext) => Promise<IngestedDocument | IngestBatch>;
+  ingest?: (url: string, target: IngestTarget, context: IngestRunContext) => Promise<IngestedDocument | IngestBatch>;
   /** The document's text, cut into the pages the reader will see. Null when there is none. */
   fulltext?: (hash: string) => Promise<Fulltext | null>;
   /** This book's live prep pipeline, or null where the book has none. */
   pipeline?: (bookId: string) => CapturedSink | null;
   /** Where the run's one line is put, answering the path. */
   writeOutput?: (runId: string, text: string) => Promise<string>;
+  /** The intake records an ask with no book reports to (intake-store.ts). */
+  intakes?: Pick<IntakeStore, "progress" | "filed" | "failed">;
 }
 
 /** The part of the prep pipeline this worker uses: one captured document in. */
@@ -80,10 +103,80 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
   const readAsk = deps.readAsk ?? ((path: string) => appData.readText(path));
   const ingest =
     deps.ingest ??
-    ((url: string, bookId: string, context: IngestRunContext) => ingestUrlLive(url, { kind: "book", bookId }, context));
+    ((url: string, target: IngestTarget, context: IngestRunContext) => ingestUrlLive(url, target, context));
   const fulltext = deps.fulltext ?? libraryFulltext;
   const pipeline = deps.pipeline ?? ((bookId: string) => peekPrepPipeline(bookId));
   const writeOutput = deps.writeOutput ?? writeRunOutput;
+  const intakes = deps.intakes ?? intakeStore;
+
+  // A link with no book: filed into the library attached nowhere, and recorded
+  // on the intake the card reads. The intake hears each host, then either what
+  // was filed or, once the run will not be tried again, why nothing was.
+  async function intakeRun(ask: IntakeIngestAsk, ctx: WorkerContext, stopped: () => void): Promise<WorkerOutcome> {
+    const id = ask.intakeId;
+    const reading = (host: string) => {
+      void ctx.report(t("reader.ingest.fetching", { host }));
+      void intakes.progress(id, host).catch((e) => console.warn("could not record the host being read", e));
+    };
+    try {
+      reading(hostOf(ask.url));
+      const taken = await ingest(
+        ask.url,
+        { kind: "topic", topicId: null },
+        { ...(ask.note ? { note: ask.note } : {}), report: reading },
+      );
+      stopped();
+      const batch = isIngestBatch(taken) ? taken : null;
+      const documents = batch ? batch.documents : [taken as IngestedDocument];
+
+      const filed: { document: IntakeDocument; outcome: IngestOutcome }[] = [];
+      for (const ingested of documents) {
+        await ctx.report(t("reader.ingest.extractingText"));
+        const kind = ingested.kind === "article" ? ("article" as const) : ("pdf" as const);
+        const ft = await fulltext(ingested.entry.hash);
+        stopped();
+        const pages = ft?.pages.length ?? 0;
+        const chars = ft ? ft.pages.reduce((n, page) => n + page.length, 0) : ingested.chars;
+        filed.push({
+          outcome: { title: ingested.title, kind, pages, chars },
+          document: {
+            hash: ingested.entry.hash,
+            title: ingested.title,
+            format: ingested.kind === "article" ? "article" : (ingested.entry.format ?? "pdf"),
+            ...(ingested.sections === undefined ? {} : { sections: ingested.sections }),
+            pages,
+            chars,
+            path: ingested.path,
+            ...(ingested.entry.sourceUrl ? { sourceUrl: ingested.entry.sourceUrl } : {}),
+          },
+        });
+      }
+
+      const intake = await intakes.filed(id, {
+        documents: filed.map((f) => f.document),
+        skipped: batch?.skipped ?? [],
+        ...(batch?.aiNote ? { aiNote: batch.aiNote } : {}),
+        ...(batch ? { emptyReason: batch.lead } : {}),
+      });
+      const chosen = intake.attachedTo !== null;
+      const lines: string[] = batch ? [batch.lead] : [];
+      for (const f of filed) lines.push(intakeOutputLine(f.outcome, chosen));
+      if (batch) lines.push(...batch.notes);
+      const line = lines.join(" ");
+      const output = await writeOutput(ctx.run.id, line);
+      return { output, progress: line };
+    } catch (e) {
+      // A try below the limit is tried again in place, and the card keeps
+      // showing it as being read; only the last one says it failed.
+      const last = e instanceof StoppedError || e instanceof GiveUpError || ctx.run.attempts >= MAX_ATTEMPTS;
+      if (last) {
+        await intakes
+          .failed(id, e instanceof Error ? e.message : String(e))
+          .catch((err) => console.warn("could not record the failed intake", err));
+      }
+      throw e;
+    }
+  }
 
   return (brief: string, ctx: WorkerContext): WorkerHandle => {
     let cancelled = false;
@@ -96,8 +189,9 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
     const done = (async () => {
       const ask = parseIngestAsk(await readAsk(brief));
       stopped();
+      if (!isBookIngestAsk(ask)) return intakeRun(ask, ctx, stopped);
       await ctx.report(t("reader.ingest.fetching", { host: hostOf(ask.url) }));
-      const taken = await ingest(ask.url, ask.bookId, {
+      const taken = await ingest(ask.url, { kind: "book", bookId: ask.bookId }, {
         ...(ask.note ? { note: ask.note } : {}),
         // Each host the link agent reads, in the program's words (docs/86 「回路」).
         report: (host) => void ctx.report(t("reader.ingest.fetching", { host })),
@@ -165,7 +259,7 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
  *
  * An agent kind: an X link is taken in by the link agent (docs/86), so there is
  * a model inside, and it may not delegate. Not `delegable`: the ask is a URL
- * and a book, which is not something the model could write as a brief. The
+ * and a book or an intake, which is not something the model could write as a brief. The
  * tool writes this run itself and the soul's delegate catalogue never names
  * the kind.
  */
