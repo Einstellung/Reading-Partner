@@ -34,6 +34,16 @@ export default {
   "lumen.show": "Lumen を表示",
   "lumen.hide": "Lumen を隠す",
   "lumen.needsDecision": "判断が必要です",
+  "lumen.holdForMenu": "長押しで Lumen のメニュー",
+  "lumen.menuVoice": "音声",
+  "lumen.menuType": "入力",
+
+  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  "door.title": "Lumen",
+  "door.close": "閉じる",
+  "door.empty": "何か話したいことは？",
+  "door.placeholder": "Lumen にメッセージ…",
+  "door.failed": "返信を始められませんでした。",
 
   "box.bookFallback": "ある本",
   "box.originBookPage": "{book} · {page}ページ",

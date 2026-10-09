@@ -34,6 +34,16 @@ export default {
   "lumen.show": "Lumen 표시",
   "lumen.hide": "Lumen 숨기기",
   "lumen.needsDecision": "결정이 필요합니다",
+  "lumen.holdForMenu": "길게 눌러 Lumen 메뉴 열기",
+  "lumen.menuVoice": "음성",
+  "lumen.menuType": "입력",
+
+  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  "door.title": "Lumen",
+  "door.close": "닫기",
+  "door.empty": "무슨 생각을 하고 있나요?",
+  "door.placeholder": "Lumen에게 메시지…",
+  "door.failed": "답장을 시작하지 못했어요.",
 
   "box.bookFallback": "어떤 책",
   "box.originBookPage": "{book} · {page}쪽",

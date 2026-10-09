@@ -47,6 +47,16 @@ export default {
   "lumen.show": "Show Lumen",
   "lumen.hide": "Hide Lumen",
   "lumen.needsDecision": "Needs a decision",
+  "lumen.holdForMenu": "Hold for Lumen's menu",
+  "lumen.menuVoice": "Voice",
+  "lumen.menuType": "Type",
+
+  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  "door.title": "Lumen",
+  "door.close": "Close",
+  "door.empty": "What's on your mind?",
+  "door.placeholder": "Message Lumen…",
+  "door.failed": "Couldn't start this reply.",
 
   // The box's cards: where each item came from, and the case's own label.
   "box.bookFallback": "A book",
