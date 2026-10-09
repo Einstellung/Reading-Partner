@@ -36,7 +36,7 @@ export default {
   "lumen.needsDecision": "Entscheidung nötig",
   "lumen.holdForMenu": "Gedrückt halten für Lumens Menü",
   "lumen.menuVoice": "Sprechen",
-  "lumen.menuType": "Tippen",
+  "lumen.menuType": "Text",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",

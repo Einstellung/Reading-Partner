@@ -36,7 +36,7 @@ export default {
   "lumen.needsDecision": "결정이 필요합니다",
   "lumen.holdForMenu": "길게 눌러 Lumen 메뉴 열기",
   "lumen.menuVoice": "음성",
-  "lumen.menuType": "입력",
+  "lumen.menuType": "텍스트",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",

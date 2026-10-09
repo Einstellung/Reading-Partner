@@ -36,7 +36,7 @@ export default {
   "lumen.needsDecision": "需要你定",
   "lumen.holdForMenu": "长按打开 Lumen 的菜单",
   "lumen.menuVoice": "语音",
-  "lumen.menuType": "打字",
+  "lumen.menuType": "文字",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
