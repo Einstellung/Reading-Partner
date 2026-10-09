@@ -153,10 +153,12 @@ export async function ingestArticleUrl(
   return await fileBound(deps, target, url, source.slugBase, bound);
 }
 
-// File what the bindery built, or say why there is nothing to file. A rejection
-// names the link as the model passed it, so the sentence it reads back is about
-// the link it knows.
-async function fileBound(
+/**
+ * File what the bindery built, or say why there is nothing to file. A rejection
+ * names the link as the model passed it, so the sentence it reads back is about
+ * the link it knows.
+ */
+export async function fileBound(
   deps: FilingDeps,
   target: IngestTarget,
   url: string,

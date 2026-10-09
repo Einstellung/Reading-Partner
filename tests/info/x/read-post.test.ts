@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { classifyOutbound, tcoTarget } from "../../../src/info/x/outbound";
+import { tcoTarget } from "../../../src/info/x/outbound";
+import { classifyOutbound as classifyHint } from "../../../src/info/links/hints";
 import { postBodyLines } from "../../../src/info/x/permalink";
 import { largePhoto, parseSyndication, syndicationToken, xPostOfUrl } from "../../../src/info/x/post";
-import { readXPost, type XReading } from "../../../src/info/x/read-post";
+import { readXPost, type XReading } from "../../../src/info/x/rules";
 import { htmlToText } from "../../../src/workshop/extract/sanitize";
 import {
   ARTICLE_BODY,
@@ -267,6 +268,11 @@ test("a post that is gone is a rejection, not a record", async () => {
 });
 
 test("only the kinds of thing a post recommends are followed", () => {
+  const followed = new Set(["site", "drive", "pdf", "github", "page"]);
+  const classifyOutbound = (url: string, claimed: (u: string) => boolean) => {
+    const h = classifyHint(url, (u) => (claimed(u) ? "site" : null));
+    return followed.has(h.kind) ? { follow: true, kind: h.kind } : { follow: false, reason: h.reason };
+  };
   const none = () => false;
   const verdict = (url: string) => {
     const v = classifyOutbound(url, none);
