@@ -8,11 +8,12 @@
 
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../ui/button';
-import { IconCheck, IconCopy } from '../base/icons';
+import { IconArrowDown, IconCheck, IconCopy } from '../base/icons';
 import { Markdown } from '../markdown/Markdown';
 import { useFlickerProbe } from '../common/useFlickerProbe';
 import { scrollMemory } from '../common/scroll-memory';
-import { stickToBottom } from '../common/stick-to-bottom';
+import { jumpToLatest, releaseOpening, revealSent, stickToBottom } from '../common/stick-to-bottom';
+import { listChange, snapshotOf, type ListSnapshot } from './list-change';
 import { copyText } from '../common/clipboard';
 import type { ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
@@ -195,11 +196,15 @@ function CardPartView({
 // re-parses its Markdown.
 const MessageBubble = memo(function MessageBubble({
 	message,
+	index,
 	size,
 	surface,
 	onCardAction,
 }: {
 	message: ThreadMessage;
+	// The row's position, written on the reader's own messages so the list can
+	// find the one just sent and scroll it into view.
+	index: number;
 	size: 'sm' | 'lg';
 	surface: CardSurface;
 	onCardAction?: CardActionHandler;
@@ -216,7 +221,7 @@ const MessageBubble = memo(function MessageBubble({
 		// row also renders in the corner bubble and in RetellView, both on white.
 		const hasImages = !!images && images.length > 0;
 		return (
-			<div className="flex flex-col items-end gap-1.5">
+			<div data-sent-row={index} className="flex flex-col items-end gap-1.5">
 				{hasImages && <MessageImages images={images!} />}
 				{message.text && (
 					<div
@@ -360,6 +365,12 @@ const MessageBubble = memo(function MessageBubble({
 	);
 });
 
+// A negative top margin the size of the list's gap, for a child that should add
+// no space of its own.
+function gapPull(size: 'sm' | 'lg') {
+	return size === 'lg' ? '-mt-[calc(1.5rem*var(--chat-scale,1))]' : '-mt-3';
+}
+
 export function MessageList({
 	messages,
 	size = 'sm',
@@ -388,11 +399,44 @@ export function MessageList({
 	// continued and nothing is drawn on it.
 	marks?: ChatMarkHost | null;
 }) {
+	const t = useT();
 	const listRef = useRef<HTMLDivElement>(null);
+	const roomRef = useRef<HTMLDivElement>(null);
+	// Whether there is new content below what the reader can see: the arrow.
+	const [below, setBelow] = useState(false);
+	// The room a sent message rises into needs a scroller whose height is not its
+	// content's; the corner bubble's list is capped and sized by what it holds.
+	const roomy = size === 'lg';
 	useLayoutEffect(() => {
 		const list = listRef.current;
-		return list ? stickToBottom(list, scrollMemory(stickKey)) : undefined;
-	}, [stickKey]);
+		if (!list) return undefined;
+		setBelow(false);
+		return stickToBottom(list, {
+			...scrollMemory(stickKey),
+			onBelow: setBelow,
+			...(roomy
+				? {
+						setRoom: (px: number) => {
+							if (roomRef.current) roomRef.current.style.height = `${px}px`;
+						},
+					}
+				: {}),
+		});
+	}, [stickKey, roomy]);
+
+	// Once open, the list moves for the conversation only when the reader sends:
+	// their message is scrolled near the top. Anything else that arrives ends the
+	// opening and leaves the list where it is (common/stick-to-bottom.ts).
+	const seen = useRef<ListSnapshot | null>(null);
+	useLayoutEffect(() => {
+		const list = listRef.current;
+		const change = listChange(seen.current, stickKey, messages);
+		seen.current = snapshotOf(stickKey, messages);
+		if (!list || change.kind === 'none') return;
+		const row = change.kind === 'sent' ? list.querySelector(`[data-sent-row="${change.index}"]`) : null;
+		if (row) revealSent(row);
+		else releaseOpening(list);
+	}, [messages, stickKey]);
 
 	const host = marks ?? null;
 	usePenStrokes(listRef, host);
@@ -421,8 +465,11 @@ export function MessageList({
 				ref={listRef}
 				className={
 					'flex flex-col ' +
+					// Only the capped corner bubble's list scrolls itself. A big list is
+					// scrolled by its host, and an overflow of its own would make it the
+					// box the arrow below sticks to, which never scrolls.
 					(size === 'lg' ? 'gap-[calc(1.5rem*var(--chat-scale,1))] ' : 'gap-3 ') +
-					'overflow-y-auto ' +
+					(size === 'lg' ? '' : 'overflow-y-auto ') +
 					className
 				}
 			>
@@ -440,11 +487,36 @@ export function MessageList({
 					<MessageBubble
 						key={i}
 						message={m}
+						index={i}
 						size={size}
 						surface={surface}
 						onCardAction={onCardAction}
 					/>
 				))}
+				{/* The two trailing children each pull back over the list's gap, so
+				    neither adds space of its own. The room under the last row a sent
+				    message rises into; stick-to-bottom sizes it. */}
+				{roomy && <div ref={roomRef} aria-hidden className={'h-0 shrink-0 ' + gapPull(size)} />}
+				{/* The arrow, stuck to the bottom of whatever scrolls the list — the
+				    transcript's own scroller, above the composer and moving with the
+				    keyboard shell — and centred on the column. */}
+				<div className={'pointer-events-none sticky bottom-0 z-10 h-0 shrink-0 ' + gapPull(size)}>
+					{below && (
+						<Button
+							type="button"
+							variant="outline"
+							size="float"
+							aria-label={t('chat.list.jumpToLatest')}
+							title={t('chat.list.jumpToLatest')}
+							onClick={() => {
+								if (listRef.current) jumpToLatest(listRef.current);
+							}}
+							className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 text-neutral-600 shadow-md"
+						>
+							<IconArrowDown size={18} />
+						</Button>
+					)}
+				</div>
 			</div>
 		</ChatMarksContext.Provider>
 		</DeliveredRunsContext.Provider>

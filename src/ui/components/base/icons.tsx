@@ -165,6 +165,15 @@ export function IconSend({ size = 16 }: IconProps) {
 	);
 }
 
+// Down arrow for a transcript's jump to its newest message: the send arrow turned.
+export function IconArrowDown({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path d="M8 3V13M8 13L4 9M8 13L12 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
+	);
+}
+
 // Microphone glyph for push-to-talk voice input.
 export function IconMic({ size = 16 }: IconProps) {
 	return (

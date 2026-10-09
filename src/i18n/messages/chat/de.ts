@@ -23,6 +23,7 @@ export default {
   "list.copied": "Kopiert",
   "list.attachment": "Anhang",
   "list.toolFailed": "fehlgeschlagen",
+  "list.jumpToLatest": "Zum Neuesten springen",
 
   "toolLabel.readingPage": "Liest Seite {page}",
   "toolLabel.readingPages": "Liest Seiten {from}–{to}",

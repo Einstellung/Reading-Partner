@@ -1,6 +1,9 @@
-// The chat list's pin-to-bottom (src/ui/components/common/stick-to-bottom.ts).
+// The chat list's scroll position (src/ui/components/common/stick-to-bottom.ts).
+// Most of this file is the opening, when the list is pinned to its bottom while
+// it settles; the tests at the end are what happens once the conversation moves
+// on, when nothing that arrives moves the list and the arrow says it arrived.
 //
-// What these assertions are here for, in order of what breaks the real thing:
+// What the opening assertions are here for, in order of what breaks the real thing:
 //
 // - The list must still be at the bottom after the content has grown, not only
 //   at the moment it mounted. Markdown, cards and images settle after the first
@@ -30,6 +33,9 @@
 import { expect, test } from "bun:test";
 import {
 	holdInView,
+	jumpToLatest,
+	releaseOpening,
+	revealSent,
 	scrollableAncestor,
 	stickToBottom,
 	type ScrollHost,
@@ -492,10 +498,205 @@ test("a row held in view stays there while the content settles, until the reader
 	host.grow(100);
 	contentChanged();
 	expect(host.scrollTop).toBe(600);
-	// Back at the bottom, it follows the newest content again.
+	// Back at the bottom while the list is still opening, it follows the settling.
 	host.scrollTo(bottomOf(host));
 	host.grow(80);
 	contentChanged();
 	expect(host.scrollTop).toBe(bottomOf(host));
+	stop();
+});
+
+// After the opening, nothing that arrives moves the list: new content below the
+// visible area turns "new content below" on (the transcript's down-arrow), and
+// only the reader moves the list — by hand, by tapping the arrow, or by sending
+// a message, which scrolls once to put it near the top with room for the reply.
+
+function bindArrow(host: ReturnType<typeof makeHost>, offsets: Map<Element, number> = new Map()) {
+	let notify = () => {};
+	let notifyHost = () => {};
+	let room = 0;
+	const below: boolean[] = [];
+	const stop = stickToBottom(LIST, {
+		resolveHost: () => host as unknown as ScrollHost,
+		observeContent: (_list, onChange) => {
+			notify = onChange;
+			return () => {};
+		},
+		observeHost: (_host, onChange) => {
+			notifyHost = onChange;
+			return () => {};
+		},
+		onBelow: (next) => below.push(next),
+		// The spacer under the last row: its height is part of the content's.
+		setRoom: (px) => {
+			host.scrollHeight += px - room;
+			room = px;
+		},
+		offsetOf: (_host, el) => offsets.get(el) ?? 0,
+		topInset: () => 16,
+	});
+	return {
+		stop,
+		contentChanged: () => notify(),
+		hostResized: () => notifyHost(),
+		below: () => below[below.length - 1] ?? false,
+		notices: () => below,
+		room: () => room,
+	};
+}
+
+test("growth while the list is still opening follows it and shows no arrow", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged, below } = bindArrow(host);
+	host.grow(400);
+	contentChanged();
+	expect(host.scrollTop).toBe(bottomOf(host));
+	expect(below()).toBe(false);
+	stop();
+});
+
+test("a reply growing below a reader at the bottom leaves the list where it is and shows the arrow", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged, below } = bindArrow(host);
+	host.flush();
+	releaseOpening(LIST);
+	for (const by of [120, 300]) {
+		host.grow(by);
+		contentChanged();
+	}
+	expect(host.scrollTop).toBe(700);
+	expect(below()).toBe(true);
+	stop();
+});
+
+test("growth while the reader is scrolled up shows the arrow and keeps their place", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged, below } = bindArrow(host);
+	host.scrollTo(200);
+	releaseOpening(LIST);
+	host.grow(150);
+	contentChanged();
+	expect(host.scrollTop).toBe(200);
+	expect(below()).toBe(true);
+	stop();
+});
+
+test("growth that stays within reach of the bottom shows no arrow", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged, notices } = bindArrow(host);
+	releaseOpening(LIST);
+	host.grow(20);
+	contentChanged();
+	expect(notices()).toEqual([]);
+	stop();
+});
+
+test("reaching the bottom by hand clears the arrow, and later growth brings it back", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged, below, notices } = bindArrow(host);
+	releaseOpening(LIST);
+	host.grow(500);
+	contentChanged();
+	expect(below()).toBe(true);
+	host.scrollTo(bottomOf(host));
+	expect(below()).toBe(false);
+	host.grow(200);
+	contentChanged();
+	expect(host.scrollTop).toBe(1200);
+	expect(below()).toBe(true);
+	// Told only when it changes.
+	expect(notices()).toEqual([true, false, true]);
+	stop();
+});
+
+test("tapping the arrow goes to the bottom and clears it, without pinning the list", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged, below } = bindArrow(host);
+	host.scrollTo(100);
+	releaseOpening(LIST);
+	host.grow(500);
+	contentChanged();
+	expect(below()).toBe(true);
+	jumpToLatest(LIST, false);
+	expect(host.scrollTop).toBe(bottomOf(host));
+	expect(below()).toBe(false);
+	host.flush();
+	// The next reply grows past the edge: the arrow again, not a follow.
+	host.grow(300);
+	contentChanged();
+	expect(host.scrollTop).toBe(1200);
+	expect(below()).toBe(true);
+	stop();
+});
+
+test("a conversation opened at a row shows the arrow when something arrives below it", () => {
+	const host = makeHost(1000, 300);
+	const { stop, contentChanged, below } = bindArrow(host);
+	const row = { parentElement: LIST } as unknown as Element;
+	holdInView(row, (h) => {
+		h.scrollTop = 300;
+	});
+	host.flush();
+	// Cards settling under the hold are not news.
+	host.grow(100);
+	contentChanged();
+	expect(below()).toBe(false);
+	// The reply arrives.
+	releaseOpening(LIST);
+	host.grow(400);
+	contentChanged();
+	expect(host.scrollTop).toBe(300);
+	expect(below()).toBe(true);
+	stop();
+});
+
+test("a sent message rises near the top, and the reply writes into the room under it", () => {
+	const host = makeHost(2000, 500);
+	const row = { parentElement: LIST } as unknown as Element;
+	const { stop, contentChanged, below, room } = bindArrow(host, new Map([[row, 2000]]));
+	host.flush();
+	// The reader's message lands at the end of the content.
+	host.grow(100);
+	revealSent(row);
+	expect(host.scrollTop).toBe(2000 - 16);
+	expect(room()).toBe(384);
+	host.flush();
+	contentChanged();
+	expect(below()).toBe(false);
+	// The reply streams into the room: the content's height and the list hold still.
+	host.grow(300);
+	contentChanged();
+	expect(room()).toBe(84);
+	expect(host.scrollTop).toBe(1984);
+	expect(below()).toBe(false);
+	// Longer than the room: it grows past the edge, and the arrow says so.
+	host.grow(200);
+	contentChanged();
+	expect(room()).toBe(0);
+	expect(host.scrollTop).toBe(1984);
+	expect(below()).toBe(true);
+	stop();
+});
+
+test("once released, a container shrinking for the keyboard keeps the bottom in view", () => {
+	const host = makeHost(3000, 700);
+	const { stop, hostResized, below } = bindArrow(host);
+	host.flush();
+	releaseOpening(LIST);
+	host.clientHeight = 337;
+	hostResized();
+	expect(host.scrollTop).toBe(bottomOf(host));
+	expect(below()).toBe(false);
+	stop();
+});
+
+test("once released, a container that shrinks under a reader scrolled up keeps their offset", () => {
+	const host = makeHost(3000, 700);
+	const { stop, hostResized } = bindArrow(host);
+	host.scrollTo(900);
+	releaseOpening(LIST);
+	host.clientHeight = 337;
+	hostResized();
+	expect(host.scrollTop).toBe(900);
 	stop();
 });

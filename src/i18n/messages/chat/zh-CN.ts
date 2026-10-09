@@ -23,6 +23,7 @@ export default {
   "list.copied": "已复制",
   "list.attachment": "附件",
   "list.toolFailed": "失败",
+  "list.jumpToLatest": "跳到最新",
 
   "toolLabel.readingPage": "正在读第 {page} 页",
   "toolLabel.readingPages": "正在读第 {from}–{to} 页",

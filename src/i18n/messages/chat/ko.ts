@@ -23,6 +23,7 @@ export default {
   "list.copied": "복사됨",
   "list.attachment": "첨부",
   "list.toolFailed": "실패",
+  "list.jumpToLatest": "최신으로 이동",
 
   "toolLabel.readingPage": "{page}쪽을 읽는 중",
   "toolLabel.readingPages": "{from}–{to}쪽을 읽는 중",

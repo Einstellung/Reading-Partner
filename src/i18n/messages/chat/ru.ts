@@ -23,6 +23,7 @@ export default {
   "list.copied": "Скопировано",
   "list.attachment": "вложение",
   "list.toolFailed": "ошибка",
+  "list.jumpToLatest": "К последнему",
 
   "toolLabel.readingPage": "Читает страницу {page}",
   "toolLabel.readingPages": "Читает страницы {from}–{to}",
