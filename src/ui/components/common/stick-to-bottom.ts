@@ -95,9 +95,9 @@ const DEFAULT_THRESHOLD = 40;
 const SCROLLABLE = new Set(["auto", "scroll", "overlay"]);
 
 // Whether this element is the one that scrolls: it must both be allowed to and
-// have something to scroll. The allowance alone is not a test — the list itself
-// always carries overflow-y:auto, and in the call window it is the ancestor that
-// is height-constrained and therefore the one that actually scrolls.
+// have something to scroll. The allowance alone is not a test — an element can
+// carry overflow-y:auto with nothing to scroll, while it is an ancestor that is
+// height-constrained and therefore the one that actually scrolls.
 function scrolls(el: Element): boolean {
 	const view = el.ownerDocument?.defaultView;
 	if (!view) return false;

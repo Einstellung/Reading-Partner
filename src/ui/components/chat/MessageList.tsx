@@ -465,8 +465,11 @@ export function MessageList({
 				ref={listRef}
 				className={
 					'flex flex-col ' +
+					// Only the capped corner bubble's list scrolls itself. A big list is
+					// scrolled by its host, and an overflow of its own would make it the
+					// box the arrow below sticks to, which never scrolls.
 					(size === 'lg' ? 'gap-[calc(1.5rem*var(--chat-scale,1))] ' : 'gap-3 ') +
-					'overflow-y-auto ' +
+					(size === 'lg' ? '' : 'overflow-y-auto ') +
 					className
 				}
 			>
