@@ -34,6 +34,16 @@ export default {
   "lumen.show": "Mostrar Lumen",
   "lumen.hide": "Ocultar Lumen",
   "lumen.needsDecision": "Necesita una decisión",
+  "lumen.holdForMenu": "Mantén pulsado para el menú de Lumen",
+  "lumen.menuVoice": "Voz",
+  "lumen.menuType": "Escribir",
+
+  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  "door.title": "Lumen",
+  "door.close": "Cerrar",
+  "door.empty": "¿Qué tienes en mente?",
+  "door.placeholder": "Escribe a Lumen…",
+  "door.failed": "No se pudo iniciar esta respuesta.",
 
   "box.bookFallback": "Un libro",
   "box.originBookPage": "{book} · p. {page}",

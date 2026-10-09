@@ -8,6 +8,7 @@ import {
   doorKey,
   doorLabel,
   listDoorUnits,
+  openDoorThread,
   openDoorTurn,
 } from "../../src/soul";
 import { resolvePalace } from "../../src/palace";
@@ -71,14 +72,44 @@ test("a conversation at the door is filed under its own topic, or under none", a
 });
 
 // Nothing on the desk, and no topic yet. The offer to file the conversation
-// waits for the screen that would show its card: nothing draws the door yet, so
-// the door passes no surface and the soul mounts no propose_topic (soul/self.ts).
+// waits for a screen that would show its card: a caller that passes no surface
+// (the bell) gets no propose_topic (soul/self.ts).
 test("a turn at the door assembles over an empty desk", async () => {
   const turn = await openDoorTurn({ settings, threadId: "d1", date: "2026-09-10" });
   expect(turn!.systemPrompt).toBe("");
   expect(turn!.tools.map((t) => t.name)).not.toContain("propose_topic");
   expect(turn!.messages).toEqual([]);
   expect(turn!.refusal).toBe("");
+});
+
+// The chat typed to Lumen draws cards, so it offers to file the conversation,
+// and what the door mounts of its own rides beside the soul's set.
+test("the chat at the door mounts its own tools and a topic offer", async () => {
+  const tool = { name: "door_tool", description: "", parameters: {}, execute: async () => "" } as never;
+  const turn = await openDoorTurn({
+    settings,
+    threadId: "d1",
+    date: "2026-09-10",
+    tools: [tool],
+    topic: { onCard: () => {}, list: async () => [] },
+  });
+  const names = turn!.tools.map((t) => t.name);
+  expect(names).toContain("door_tool");
+  expect(names).toContain("propose_topic");
+  expect(names).toContain("delegate");
+});
+
+test("the day's conversation at the door is one thread, opened once", async () => {
+  let n = 0;
+  const first = await openDoorThread("2026-09-10", () => `t${++n}`);
+  const again = await openDoorThread("2026-09-10", () => `t${++n}`);
+  expect(again.id).toBe(first.id);
+  // A day that already has one is opened, not added to.
+  seed(doorKey("2026-09-11"), { held: { book: true, messages: [{ role: "user", text: "hi", ts: 1 }] } });
+  rebuildThreadStoreForTests();
+  const held = await openDoorThread("2026-09-11", () => "fresh");
+  expect(held.id).toBe("held");
+  expect(held.messages.map((m) => m.text)).toEqual(["hi"]);
 });
 
 test("the conversation the reader is holding is replayed, and nothing said elsewhere", async () => {

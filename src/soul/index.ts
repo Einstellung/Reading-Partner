@@ -56,9 +56,16 @@ export {
   doorKey,
   doorLabel,
   listDoorUnits,
+  openDoorThread,
   openDoorTurn,
   type DoorTurnInput,
 } from "./door";
+export {
+  sendAtTheDoor,
+  type DoorSendDeps,
+  type DoorSendInput,
+  type DoorSendOutcome,
+} from "./door-chat";
 export { GO_TO_TOOL, buildPlaceTools, placesDescription } from "./places";
 export {
   LIST_CAP,

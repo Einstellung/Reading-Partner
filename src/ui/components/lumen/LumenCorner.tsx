@@ -17,9 +17,15 @@
 // (case-motion.ts). The eyes and the lean go with it, in the reader too.
 //
 // Two controls, and the body is one of them now. The case is the trigger the
-// column rises from; a long press on Lumen opens the info voice session and a
-// second one ends it (docs/68, hold-toggle.ts). A tap on the body is still
+// column rises from; a long press on Lumen opens a small menu beside it — voice
+// and typing — and during a call the same press ends it (docs/68,
+// hold-toggle.ts, lumen-menu.ts). The finger can stay down and slide onto an
+// item. The desktop's right-click is the same menu. A tap on the body is still
 // wired to nothing — Lumen is not a button, the props it brings are.
+//
+// Typing opens the day's conversation at the door (DoorChat.tsx): the whole
+// screen on the phone, with Lumen standing down, and a panel standing on Lumen
+// everywhere else.
 //
 // The body is also the handle it is dragged by (corner-drag.ts). One press
 // feeds both machines and the first one to claim it wins: past the slop it is a
@@ -32,8 +38,8 @@
 // The session is the info screen's. What it would be about is published by
 // whichever screen holds it (voice-context.ts) and the call is built here, so
 // it outlives the screen it was opened from and can be hung up from anywhere.
-// Where nothing is registered and no call is up the body does not even charge,
-// which is what makes the gesture legible: it only lights up where it can talk.
+// Where nothing is registered the menu has no voice row; typing is offered
+// everywhere, so the body charges everywhere.
 //
 // A call that never got going says so. The hold charges and buzzes before
 // anything is known about the microphone, and iOS can refuse it outright, so a
@@ -45,12 +51,25 @@
 // store's own subscribe covers a write made in this process, and the sync tick
 // covers an item that arrived from the other device.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type MouseEvent,
+	type PointerEvent,
+	type ReactElement,
+} from "react";
 
 import { UNSEEN, appBox } from "../../../box";
 import type { BoxItem } from "../../../box/types";
 import { useT } from "../../../i18n";
-import { voiceStartFeedback, voiceStopFeedback } from "../../../platform/app/haptics";
+import {
+	longPressFeedback,
+	voiceStartFeedback,
+	voiceStopFeedback,
+} from "../../../platform/app/haptics";
 import { getLibraryEntry } from "../../../platform/app/library";
 import { hasNativeSpeech } from "../../../platform/app/platform";
 import { TICK_MS } from "../../../platform/sync";
@@ -58,10 +77,14 @@ import { displayFileTitle } from "../shelf/file-title";
 import { cn } from "../lib/utils";
 import { orbErrorLine } from "../orb/orb";
 import { OVERLAY_Z, useBottomSheetOpen } from "../ui/overlay";
+import { Button } from "../ui/button";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { ErrorLine } from "./ErrorLine";
 import { Lumen, LumenCase } from "./Lumen";
+import { DoorChat } from "./DoorChat";
+import { startsHold, type LumenMenuItem } from "./lumen-menu";
 import { useHoldToggle } from "./use-hold-toggle";
+import { useLumenMenu } from "./use-lumen-menu";
 import { useVoiceCall, voiceCallHandle } from "./use-voice-call";
 import { getVoiceContext, subscribeVoiceContext, type VoiceContext } from "./voice-context";
 import {
@@ -80,10 +103,7 @@ import { columnAlign } from "./corner-drag";
 import { useCornerDrag } from "./use-corner-drag";
 import { planJump, type Place, type Shell } from "./box-jump";
 
-// What the body is announced as while it can talk: the two names are the two
-// directions of the one gesture. On a screen with nothing to talk about it is
-// not a control at all and has no name.
-const HOLD_TO_TALK = "Hold to talk";
+// What the body is announced as during a call: the hold that ends it.
 const HOLD_TO_END = "Hold to end the conversation";
 
 /** What the shell can do about a card, in the shell's own terms. */
@@ -164,49 +184,105 @@ export function LumenCorner({
 	// about, unless the call the hold would end is already up.
 	const canTalk = hasNativeSpeech() && (live || context !== null);
 	const handle = voiceCallHandle(call);
+	const t = useT();
+	const [door, setDoor] = useState(false);
 	// Only where the body is a control: everywhere else there is no call of
 	// theirs to have broken, and a sentence in the corner of a book would be
 	// about nothing they did.
 	const errorLine = canTalk ? orbErrorLine(handle.error) : null;
 	const { start, stop } = call;
 
-	const toggle = useCallback(() => {
-		if (live) {
+	const liveRef = useRef(live);
+	liveRef.current = live;
+
+	// What the menu decided. Each is read at the moment it lands, not at the
+	// render the press began in.
+	const menu = useLumenMenu((effect) => {
+		if (effect === "hang-up") {
 			stop();
 			void voiceStopFeedback();
 			return;
 		}
-		// Read at the moment of the press, not at the render the press began in.
-		if (!getVoiceContext()) return;
-		start();
-		void voiceStartFeedback();
-	}, [live, start, stop]);
+		if (effect === "voice") {
+			if (!getVoiceContext()) return;
+			start();
+			void voiceStartFeedback();
+			return;
+		}
+		setOpen(false);
+		setDoor(true);
+	});
+	const feedMenu = menu.feed;
+	const menuContext = useCallback(
+		() => ({ live: liveRef.current, canVoice: hasNativeSpeech() && getVoiceContext() !== null }),
+		[],
+	);
 
-	const hold = useHoldToggle(canTalk, toggle);
+	// Full charge: the menu opens, or the call ends. The buzz for the menu is
+	// the long-press one; the call's own ending buzzes on its way out.
+	const fire = useCallback(() => {
+		if (!liveRef.current) {
+			setOpen(false);
+			void longPressFeedback();
+		}
+		feedMenu({ kind: "fired", ...menuContext() });
+	}, [feedMenu, menuContext]);
+
+	const hold = useHoldToggle(true, fire);
 
 	// One press and two machines to feed. The drag answers first: the move that
 	// carries the press past the slop is the move the hold is told to let go on,
 	// so a press ends as a drag or as a hold and never as both, and a press that
 	// never travels is the hold it always was.
+	//
+	// Once the hold has fired the press belongs to the menu: its moves are a
+	// finger sliding onto a row, not a drag and not a hold drifting away, and
+	// the charge stays up until it lets go.
 	const handlers = {
 		onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
+			if (!startsHold(event.pointerType, event.button)) return;
+			menu.feed({ kind: "down" });
 			drag.onPointerDown(event);
 			hold.handlers.onPointerDown(event);
 		},
 		onPointerMove: (event: PointerEvent<HTMLButtonElement>) => {
-			if (drag.onPointerMove(event)) hold.handlers.onPointerCancel(event);
-			else hold.handlers.onPointerMove(event);
+			if (menu.sliding()) {
+				menu.feed({ kind: "slide", item: menu.itemAt(event.clientX, event.clientY) });
+				return;
+			}
+			if (drag.onPointerMove(event)) {
+				hold.handlers.onPointerCancel(event);
+				menu.feed({ kind: "cancel" });
+				menu.feed({ kind: "dismiss" });
+			} else hold.handlers.onPointerMove(event);
 		},
 		onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
 			drag.onPointerUp(event);
+			// A release past full charge that no frame saw fires here, before the
+			// menu hears the release.
 			hold.handlers.onPointerUp(event);
+			menu.feed({ kind: "up", item: menu.itemAt(event.clientX, event.clientY) });
 		},
 		onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
 			drag.onPointerCancel(event);
 			hold.handlers.onPointerCancel(event);
+			menu.feed({ kind: "cancel" });
 		},
-		onContextMenu: hold.handlers.onContextMenu,
+		onContextMenu: (event: MouseEvent<HTMLButtonElement>) => {
+			hold.handlers.onContextMenu(event);
+			if (!liveRef.current) setOpen(false);
+			menu.feed({ kind: "context", ...menuContext() });
+		},
 	};
+	const holdRef = hold.ref;
+	const menuBodyRef = menu.bodyRef;
+	const bodyRef = useCallback(
+		(el: HTMLButtonElement | null) => {
+			holdRef(el);
+			menuBodyRef(el);
+		},
+		[holdRef, menuBodyRef],
+	);
 
 	// The number on the badge. Both readings land here: the store's announcement
 	// of a write this process made, and the tick that catches the other device's.
@@ -320,7 +396,10 @@ export function LumenCorner({
 
 	if (!shown) return null;
 
+	const asSheet = shell === "phone";
 	return (
+		<>
+		{door && asSheet && <DoorChat form="sheet" onClose={() => setDoor(false)} />}
 		<div
 			ref={drag.frameRef}
 			className={cn(
@@ -340,7 +419,24 @@ export function LumenCorner({
 			// onto it — which is why the drag never touches this style.
 			style={drag.bottomPx ? { marginBottom: `${drag.bottomPx}px` } : undefined}
 		>
+			{door && !asSheet && (
+				<DoorChat form="panel" liftPx={drag.bottomPx} onClose={() => setDoor(false)} />
+			)}
 			{errorLine && <ErrorLine line={errorLine} />}
+			{menu.state.open && (
+				<LumenMenu
+					items={menu.state.items}
+					hot={menu.state.hot}
+					// Opened by a right-click or the keyboard, the first row takes
+					// the focus; under a finger nothing does.
+					focusFirst={menu.state.press === null}
+					mirrored={mirrored}
+					menuRef={menu.menuRef}
+					rowRef={menu.rowRef}
+					label={(item) => t(item === "voice" ? "shell.lumen.menuVoice" : "shell.lumen.menuType")}
+					onPick={(item) => menu.feed({ kind: "pick", item })}
+				/>
+			)}
 			<Popover open={open} onOpenChange={setOpen}>
 				{/* The body's own box, with the case hanging off its left edge.
 				    Nothing here clips: the corner's footprint is wider than the
@@ -366,7 +462,7 @@ export function LumenCorner({
 						style={mirrored ? { transform: "scaleX(-1)" } : undefined}
 					>
 						<Lumen
-							ref={hold.ref}
+							ref={bodyRef}
 							handle={handle}
 							attention={call.attention}
 							// Beside an open book nothing moves but the case and the
@@ -374,15 +470,11 @@ export function LumenCorner({
 							still={inReader}
 							reach={box.reach}
 							reaching={box.moving}
-							// A named control only where a hold means something.
-							// Everywhere else it is off the tab order and out of the
-							// accessibility tree: a picture that happens to be drawn on
-							// a button, which a finger can now push around the screen
-							// and a keyboard still has no business in.
-							label={canTalk ? (live ? HOLD_TO_END : HOLD_TO_TALK) : "Lumen"}
-							aria-hidden={canTalk ? undefined : true}
-							tabIndex={canTalk ? undefined : -1}
-							role={canTalk ? undefined : "presentation"}
+							// A named control everywhere: a hold opens the menu, and
+							// on the desktop so do a right-click and the menu key.
+							label={live ? HOLD_TO_END : t("shell.lumen.holdForMenu")}
+							aria-haspopup={live ? undefined : "menu"}
+							aria-expanded={live ? undefined : menu.state.open}
 							// A tap is still wired to nothing: Lumen is not a button,
 							// the props it brings are (docs/68).
 							onActivate={NOTHING}
@@ -447,6 +539,83 @@ export function LumenCorner({
 					/>
 				</PopoverContent>
 			</Popover>
+		</div>
+		</>
+	);
+}
+
+const MENU_ICON_CLASS = "h-[19px] w-[19px] flex-none text-muted-foreground";
+
+const MENU_ICON: Record<LumenMenuItem, ReactElement> = {
+	voice: (
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={MENU_ICON_CLASS}>
+			<rect x="9" y="3" width="6" height="11" rx="3" />
+			<path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+		</svg>
+	),
+	type: (
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={MENU_ICON_CLASS}>
+			<rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+			<path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M7.5 14h9" />
+		</svg>
+	),
+};
+
+// The menu a hold opens, standing on Lumen in the corner's column. Not a Radix
+// popover: the finger that opened it is still down on the body, captured there,
+// and the rows are hit-tested against its moves (lumen-menu.ts) rather than
+// waiting for presses of their own.
+function LumenMenu({
+	items,
+	hot,
+	focusFirst,
+	mirrored,
+	menuRef,
+	rowRef,
+	label,
+	onPick,
+}: {
+	items: readonly LumenMenuItem[];
+	hot: LumenMenuItem | null;
+	focusFirst: boolean;
+	mirrored: boolean;
+	menuRef: (el: HTMLElement | null) => void;
+	rowRef: (item: LumenMenuItem) => (el: HTMLElement | null) => void;
+	label: (item: LumenMenuItem) => string;
+	onPick: (item: LumenMenuItem) => void;
+}) {
+	const first = useRef<HTMLButtonElement | null>(null);
+	useEffect(() => {
+		if (focusFirst) first.current?.focus({ preventScroll: true });
+	}, [focusFirst]);
+	return (
+		<div
+			ref={menuRef}
+			role="menu"
+			className={cn(
+				"pointer-events-auto min-w-[8.5rem] select-none rounded-[14px] border border-border bg-popover p-[5px] shadow-lg [-webkit-touch-callout:none] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95",
+				mirrored ? "origin-bottom-left" : "origin-bottom-right",
+			)}
+		>
+			{items.map((item, i) => (
+				<Button
+					key={item}
+					ref={(el: HTMLButtonElement | null) => {
+						rowRef(item)(el);
+						if (i === 0) first.current = el;
+					}}
+					type="button"
+					role="menuitem"
+					variant="ghost"
+					size="lg"
+					data-hot={hot === item ? "" : undefined}
+					onClick={() => onPick(item)}
+					className="flex h-11 w-full items-center justify-start gap-2.5 rounded-[10px] pl-3 pr-3.5 text-left text-[15px] text-foreground data-[hot]:bg-secondary can-hover:hover:bg-secondary"
+				>
+					{MENU_ICON[item]}
+					{label(item)}
+				</Button>
+			))}
 		</div>
 	);
 }

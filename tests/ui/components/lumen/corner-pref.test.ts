@@ -8,13 +8,13 @@ import type { PrefStore } from "../../../../src/ui/components/base/pref-store";
 import {
   LUMEN_CORNER_KEY,
   LUMEN_CORNER_SPOT_KEY,
-  lumenToggleTitle,
   readLumenCornerShown,
   readLumenCornerSpot,
   writeLumenCornerShown,
   writeLumenCornerSpot,
 } from "../../../../src/ui/components/lumen/corner-pref";
 import { CORNER_SPOT_DEFAULT } from "../../../../src/ui/components/lumen/corner-drag";
+import { lumenToggleTitle } from "../../../../src/ui/components/base/lumen-toggle";
 
 function store(initial: Record<string, string> = {}): PrefStore & { slots: Record<string, string> } {
   const slots = { ...initial };

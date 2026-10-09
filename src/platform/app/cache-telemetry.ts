@@ -42,7 +42,9 @@ export type AiSurface =
   // A turn no reader opened: the soul answering a bell (src/soul/bell.ts).
   | "bell"
   // A turn a dead process started, finished by the next one (src/soul/recover.ts).
-  | "recovery";
+  | "recovery"
+  // A conversation typed to Lumen at the door (soul/door.ts).
+  | "door";
 
 // Which conversation a turn belongs to. `thread` is the id whose previous turn
 // the gap is measured against; a run with no conversation of its own (a chapter

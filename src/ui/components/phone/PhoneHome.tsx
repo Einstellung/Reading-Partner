@@ -7,7 +7,7 @@ import { useT } from "../../../i18n";
 import PeerUpdateNotice from "../common/PeerUpdateNotice";
 import SettingsButton from "../common/SettingsButton";
 import type { ContinueBook } from "./shelf-list";
-import { lumenToggleTitle } from "../lumen/corner-pref";
+import { lumenToggleTitle } from "../base/lumen-toggle";
 import { BriefingCardBody, Card, CardBodyPlaceholder, CardLabel } from "../info/HomeCard";
 import type { LaunchProps } from "../info/InfoHome";
 

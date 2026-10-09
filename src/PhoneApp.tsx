@@ -517,7 +517,10 @@ export default function PhoneApp({
       {/* Lumen, bottom right, on every screen this shell draws (docs/68). A card
           born over a book still shows here and can still be pressed away; what
           it cannot do is jump, because this shell has no reader to jump into
-          (lumen/box-jump.ts). */}
+          (lumen/box-jump.ts). Typing to Lumen opens a chat of its own here,
+          which draws cards like every other chat, so it gets the card table
+          too. */}
+      <CardRegistryProvider>
       <LumenCorner
         shell="phone"
         shown={lumen.shown}
@@ -531,6 +534,7 @@ export default function PhoneApp({
           goToMeals: () => onNavigate("meals"),
         }}
       />
+      </CardRegistryProvider>
     </KeyboardShell>
   );
 }
