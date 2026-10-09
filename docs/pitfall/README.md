@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 499）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 501）。
 
 ## EmbedPDF 引擎
 
@@ -386,6 +386,7 @@
 - [64-replayed-assistant-timestamp-without-usage](./ai/64-replayed-assistant-timestamp-without-usage.md) — 重放的 assistant 消息缺 `timestamp` 和 `usage` 正好绕开 pi 的估算路径；单补 `timestamp` 会让 `clampMaxTokensToContext` 在每一次 AI 调用里抛 TypeError，全 app 的 AI 当场全死
 - [390-a-frozen-ios-app-leaves-the-stream-silent-and-the-lane-held](./ai/390-a-frozen-ios-app-leaves-the-stream-silent-and-the-lane-held.md) — iOS 冻住进程后那条流式连接不报错也不结束，pi 停在 `drive` 里，run 不结算、soul 的 lane 不交还、线程一直算 busy，用户之后说的每句话都被当成 steering 塞进死 run 的队列，谁也看不见。挂钟量沉默（90 秒，工具跑着时暂停），回前台且整个离开期间没有字节就立刻掐；只能用 `lane.requestAbort` 掐，abort 底下的请求会让 pi 抛 `SessionInvariantError`
 - [491-a-stall-watch-that-runs-out-in-the-lane-queue-watches-nothing](./ai/491-a-stall-watch-that-runs-out-in-the-lane-queue-watches-nothing.md) — 停摆计时器在排队等 soul lane 时就开始计时，排满 90 秒触发时还没有 operation 可掐，计时器结束了；之后那条流静默死掉就永远占着 lane，全 app 的 soul 回合停在 Thinking。计时器在第一次请求前 `hold`，`acquire` 认 abort 信号
+- [500-a-filing-agent-judges-the-content-unless-told-not-to](./ai/500-a-filing-agent-judges-the-content-unless-told-not-to.md) — 链接入库 agent 的提示没说内容好坏不归它管，Haiku 5.5 三次里一次拒收一篇能过质量关的 X Article，理由是内容教人绕过 Anthropic 的地区检查；不是 provider 拒答，是模型自己 finish。提示写明它只判断链接指的是哪份文档，不审内容
 - [65-pi-clamps-max-tokens-to-one-and-calls-it-done](./ai/65-pi-clamps-max-tokens-to-one-and-calls-it-done.md) — 上下文接近窗口时 pi 把允许输出夹到 1，模型吐一个 token 就停，`done` 正常发出、没有 error；聊天里是一个字的回复，解析 JSON 的地方变成"格式错误"。pi 的估算器还是 `chars/4`，中文低估 2.5–4 倍，最该收紧时放行。发请求前自己算，见 `src/budget/`
 - [66-usage-shortcut-freezes-pi-context-estimate](./ai/66-usage-shortcut-freezes-pi-context-estimate.md) — 消息数组里一旦有带 usage 的真 assistant 消息，pi 的估算就等于那个 usage，系统提示词不再计入，压缩 usage 之前的任何东西都不改变它；重放历史里那条没 timestamp 的 assistant 消息又会把捷径整个关掉（NaN 比较），同一个调用点两套计价。判断压缩够不够只能重新量，不能拿字符估的 saving 去减
 - [131-pi-cache-retention-env-never-reaches-the-webview](./ai/131-pi-cache-retention-env-never-reaches-the-webview.md) — `PI_CACHE_RETENTION=long` 在 dev 和打包版都读不到：webview 里没有 `process`，Vite build 又把 `process.env` 换成 `{}`，pi 每次都落回 5 分钟保留期。要换只能在发送路径上传 `cacheRetention`，并把同一个值传给埋点
@@ -418,6 +419,7 @@
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./dev-env/118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
 - [352-loadsettings-throws-before-it-returns-a-promise](./dev-env/352-loadsettings-throws-before-it-returns-a-promise.md) — `loadSettings` 不是 `async`，宿主之外 `readGuardedJson` 同步抛在返回 promise 之前，调用点的 `.catch(() => null)` 接不住；测试里要跑它就先 `installAppData()`
 - [303-a-boot-at-module-scope-registers-for-every-test-file](./dev-env/303-a-boot-at-module-scope-registers-for-every-test-file.md) — 测试文件在模块顶层 boot 领域（注册蒸馏源、desk kind），`afterAll` 要等本文件跑完才 undo，中间每个文件问注册表都看得见那几个源；两个文件单跑都绿。boot 放进用例体 try/finally，断言按 kind 数不按总数
+- [499-registered-site-adapters-outlive-the-test-file](./dev-env/499-registered-site-adapters-outlive-the-test-file.md) — 站点适配器登记表是模块级 Map，`drive-site` 和 `arxiv-site` 的测试调 `registerSourceSiteAdapters()` 不撤销，全量里后面文件的 GitHub、Drive 链接被真适配器认领、去连网；依赖路由的测试在 `beforeEach` 里用同名桩把登记表清掉
 - [344-the-fake-appdatas-readdir-ignores-the-directory](./dev-env/344-the-fake-appdatas-readdir-ignores-the-directory.md) — `tests/support/appdata-fake.ts` 的 `readDir` mock 忽略传进来的路径，答的是整块盘的整条路径、`isFile` 恒为 true；扫子目录的 store（box、legion/runs、legion/bell、legion/ledger）在它上面列表恒为空，测试会因为错误的理由变绿。那四家一律拿 Map 当盘，假 AppData 上只钉路径、内容和读不到时不抛
 - [369-bun-typeof-fetch-carries-preconnect](./dev-env/369-bun-typeof-fetch-carries-preconnect.md) — 注入口写 `fetchFn: typeof fetch`，测试里的假实现 `bun test` 照跑，`tsc -p tsconfig.test.json` 报少一个 `preconnect`：`@types/bun` 的全局 `fetch` 是带静态属性的函数。注入口自己声明 `type FetchLike = (url: string, init?: RequestInit) => Promise<Response>`
 - [320-tests-tsconfig-no-array-at](./dev-env/320-tests-tsconfig-no-array-at.md) — 测试里写 `Array.prototype.at`，`bun test` 照跑，`tsc -p tsconfig.test.json` 报 lib 里没有；测试那份 tsconfig 的 lib 停在 ES2022 以前。取最后一个写 `all[all.length - 1]`
