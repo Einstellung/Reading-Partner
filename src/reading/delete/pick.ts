@@ -92,30 +92,6 @@ export function hasOtherReference(
 }
 
 /**
- * Whether taking this file out of this topic takes the last reference to the
- * book with it — the question that decides whether the reader is unlinking or
- * deleting (LibraryScreen.tsx).
- *
- * The same PDF added to two topics is two FileRefs with one hash, and removing
- * one of them must not delete the book out from under the other; nor may it
- * when a book lists the same document among its supplements. A file with no
- * hash yet (added but never opened) is not a book this can speak for, so it
- * answers no and the caller unlinks.
- */
-export function isLastReferenceToBook(
-  topics: readonly Topic[],
-  topicId: string,
-  file: FileRef,
-  lists: readonly SupplementList[] = [],
-): boolean {
-  if (!file.hash) return false;
-  const rest = topics.map((t) =>
-    t.id === topicId ? { ...t, files: t.files.filter((f) => f.path !== file.path) } : t,
-  );
-  return !hasOtherReference(file.hash, rest, lists);
-}
-
-/**
  * The documents among `hashes` that nothing outside them would still list: the
  * set that can go together. A document another one of them lists as a
  * supplement goes with it, and one listed by a book that is not going stays —

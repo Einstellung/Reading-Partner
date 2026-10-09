@@ -1,19 +1,17 @@
 // What a deleted book takes with it (src/reading/delete/pick.ts). Run: bun test.
 //
-// Three questions with an answer that is not "everything with this book's id on
-// it": an observation a statement rests on, a retell that also covers two other
-// books, and a PDF the reader put in two topics.
+// Two questions with an answer that is not "everything with this book's id on
+// it": an observation a statement rests on, and a retell that also covers two
+// other books.
 
 import { expect, test } from "bun:test";
 import {
   deadLocalPathsFor,
-  isLastReferenceToBook,
   observationIdsToDelete,
   retellIdsToDelete,
 } from "../../../src/reading/delete/pick";
 import type { Observation } from "../../../src/memory/observations/types";
 import type { Statement } from "../../../src/memory/statements/types";
-import type { FileRef, Topic } from "../../../src/platform/app/topics";
 import type { Retell } from "../../../src/reading/retell/types";
 
 const BOOK = "aaaa1111";
@@ -68,32 +66,6 @@ test("a retell of this book alone goes; one that spans another stays", () => {
     { id: "r-empty", materials: [] },
   ] as Retell[];
   expect(retellIdsToDelete(retells, BOOK)).toEqual(["r-only"]);
-});
-
-// --- the last reference ------------------------------------------------------
-
-const ref = (path: string, hash?: string): FileRef => ({ path, addedAt: 1, hash }) as FileRef;
-
-function topic(id: string, files: FileRef[]): Topic {
-  return { id, name: id, files, createdAt: 1 } as Topic;
-}
-
-test("the only topic holding the book is the last reference", () => {
-  const file = ref("/books/a.pdf", BOOK);
-  const topics = [topic("t1", [file]), topic("t2", [ref("/books/b.pdf", OTHER)])];
-  expect(isLastReferenceToBook(topics, "t1", file)).toBe(true);
-});
-
-test("the same book in a second topic is not the last reference", () => {
-  const file = ref("/books/a.pdf", BOOK);
-  // A different path, because a FileRef is the file where the reader added it.
-  const topics = [topic("t1", [file]), topic("t2", [ref("/elsewhere/a.pdf", BOOK)])];
-  expect(isLastReferenceToBook(topics, "t1", file)).toBe(false);
-});
-
-test("a file with no book id yet is never the last reference", () => {
-  const file = ref("/books/a.pdf");
-  expect(isLastReferenceToBook([topic("t1", [file])], "t1", file)).toBe(false);
 });
 
 // --- the files ---------------------------------------------------------------

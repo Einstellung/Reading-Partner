@@ -446,6 +446,27 @@ export function IconTrash({ size = 16 }: IconProps) {
 	);
 }
 
+// A folder with an arrow going in: moving a file to another topic.
+export function IconMoveTo({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path
+				d="M2 4.5C2 3.95 2.45 3.5 3 3.5H6L7.5 5H13C13.55 5 14 5.45 14 6V12C14 12.55 13.55 13 13 13H3C2.45 13 2 12.55 2 12V4.5Z"
+				stroke="currentColor"
+				strokeWidth="1.2"
+				strokeLinejoin="round"
+			/>
+			<path
+				d="M5.5 9H10.5M8.75 7.25L10.5 9L8.75 10.75"
+				stroke="currentColor"
+				strokeWidth="1.2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
+
 // Two books standing on a shelf: the Materials section of a topic, which is the
 // shelf itself.
 export function IconBooks({ size = 20 }: IconProps) {

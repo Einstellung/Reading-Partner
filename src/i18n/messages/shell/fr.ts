@@ -8,7 +8,7 @@ export default {
   "toast.asideGone": "Cette conversation annexe n'existe plus.",
   "toast.conversationsUnloadable": "Les conversations IA enregistrées n'ont pas pu être chargées",
   "toast.cantShareFile": "Ce fichier n'a pas pu être transmis à une autre app.",
-  "toast.movedFrom": "Déplacé depuis « {topic} »",
+  "toast.alreadyIn": "Déjà dans « {topic} »",
 
   "call.askAboutThisTitle": "Poser une question à ce sujet",
   "call.askAboutThisPlaceholder": "Poser une question à ce sujet…",

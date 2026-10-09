@@ -6,7 +6,6 @@ import { expect, test } from "bun:test";
 import {
   deleteBook,
   deleteIfUnreferenced,
-  isLastReference,
   listFilesOnlyInTopic,
   removeFromTopic,
   type DeleteBookDeps,
@@ -15,7 +14,6 @@ import { deleteTopic, type DeleteTopicDeps } from "../../../src/reading/delete/d
 import {
   filesOnlyInTopic,
   hasOtherReference,
-  isLastReferenceToBook,
   orphanedTogether,
 } from "../../../src/reading/delete/pick";
 import type { Topic } from "../../../src/platform/app/topics";
@@ -103,13 +101,7 @@ test("an article on a shelf and a supplement of a book survives either going", a
   expect(w.tombstoned).toEqual([Y, X]);
 });
 
-test("the confirmation counts supplement lists too", async () => {
-  const topics = [topic("t", [["x", X]])];
-  const file = topics[0].files[0];
-  expect(isLastReferenceToBook(topics, "t", file)).toBe(true);
-  expect(isLastReferenceToBook(topics, "t", file, [{ bookId: Y, items: [{ hash: X }] }])).toBe(false);
-  const w = world(topics, { [Y]: [X] });
-  expect(await isLastReference(topics, "t", file, w.deps)).toBe(false);
+test("a book listing itself, and the books a sweep is deleting, keep nothing", () => {
   // A book listing itself, and the books the sweep is deleting, keep nothing.
   expect(hasOtherReference(X, [], [{ bookId: X, items: [{ hash: X }] }])).toBe(false);
   expect(hasOtherReference(X, [], [{ bookId: Y, items: [{ hash: X }] }], new Set([Y]))).toBe(false);

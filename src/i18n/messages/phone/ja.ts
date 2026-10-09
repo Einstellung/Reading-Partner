@@ -3,9 +3,6 @@ import type en from "./en";
 
 export default {
   "holdMenu.deleteTopic": "トピックを削除",
-  "holdMenu.deleteLesson": "レッスンを削除",
-  "holdMenu.deleteConversation": "会話を削除",
-  "holdMenu.removeFromTopic": "トピックから削除",
   "holdMenu.deleteArticle": "記事を削除",
   "holdMenu.deleteBook": "本を削除",
   "holdMenu.removeFromSaved": "保存済みから削除",
@@ -16,27 +13,17 @@ export default {
   "holdMenu.confirmDeleteArticleDescription": "この記事とそれに関するすべてを、すべてのデバイスから削除しますか？自分についてのメモは残ります。",
   "holdMenu.delete": "削除",
   "holdMenu.confirmRemoveTitle": "「{title}」を削除しますか？",
-  "holdMenu.removeOthers": "{names}には残ります",
-  "holdMenu.removeNoOthers": "他の場所にまだ登録されているので残ります",
-  "holdMenu.removeBookDescription": "このトピックからは本がなくなります。{where}。読書位置とマークも一緒に残ります。",
-  "holdMenu.removeArticleDescription": "このトピックからは記事がなくなります。{where}。読書位置とマークも一緒に残ります。",
   "holdMenu.remove": "削除",
   "holdMenu.confirmConversationTitle": "この会話を削除しますか？",
-  "holdMenu.confirmLessonDescription": "レッスンはアサイドごと、すべてのデバイスから削除されます。論文自体は残り、次のレッスンは最初から始まります。",
-  "holdMenu.confirmConversationDescription": "この本について話したことはすべて、すべてのデバイスから削除されます。本自体、マーク、読書位置は残ります。",
   "holdMenu.confirmRemoveSavedDescription": "すべてのデバイスの保存済みから消えます。元になったブリーフィングは変わりません。",
   "holdMenu.confirmDeleteAsideDescription": "アサイドと、レッスン内のその行が削除されます。レッスン自体は残ります。",
 
   "holdMenu.doneDeleted": "「{title}」を削除しました",
-  "holdMenu.doneRemovedFromTopic": "{topicName}から削除しました",
-  "holdMenu.doneLessonDeleted": "レッスンを削除しました",
-  "holdMenu.doneConversationDeleted": "会話を削除しました",
   "holdMenu.doneRemovedFromSaved": "保存済みから削除しました",
   "holdMenu.doneAsideDeleted": "アサイドを削除しました",
 
   "holdMenu.failedTopic": "トピックを削除できませんでした。",
   "holdMenu.failedFile": "削除できませんでした。",
-  "holdMenu.failedRemoveFromTopic": "このトピックから削除できませんでした。",
   "holdMenu.failedConversation": "会話を削除できませんでした。",
   "holdMenu.failedRemoveSaved": "保存済みから削除できませんでした。",
 

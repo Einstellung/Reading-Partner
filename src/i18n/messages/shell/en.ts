@@ -15,8 +15,9 @@ export default {
   "toast.asideGone": "That side conversation is gone.",
   "toast.conversationsUnloadable": "Saved AI conversations could not be loaded",
   "toast.cantShareFile": "This file could not be handed to another app.",
-  // An import took a book off the topic it was on: a book is on one topic.
-  "toast.movedFrom": "Moved from “{topic}”",
+  // An add found the book on another topic and left it there: a book is on
+  // one topic, and only Move to… changes which.
+  "toast.alreadyIn": "Already in “{topic}”",
 
   // The book-level call: its empty-state title and placeholder, and the
   // unconfigured-provider card.

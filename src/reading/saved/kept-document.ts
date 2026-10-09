@@ -15,6 +15,7 @@ import {
   ensureBriefTopic,
   listTopics,
   moveFileToTopic,
+  type FileMove,
   type FileRef,
   type Topic,
 } from "../../platform/app/topics";
@@ -126,7 +127,7 @@ export interface KeptDocumentDeps {
   ensureBriefTopic(): Promise<unknown>;
   getLibraryEntry(hash: string): Promise<LibraryEntry | null>;
   addFileToTopic(topicId: string, path: string, hash: string): Promise<unknown>;
-  moveFileToTopic(hash: string, topicId: string): Promise<unknown>;
+  moveFileToTopic(hash: string, topicId: string): Promise<FileMove | null>;
 }
 
 export const liveKeptDocumentDeps: KeptDocumentDeps = {
@@ -174,6 +175,30 @@ export async function moveKeptArticle(
   if (!entry) return true;
   await deps.addFileToTopic(topicId, documentPath(hash, entry.originalFilename), hash);
   return true;
+}
+
+/**
+ * Move a file on a topic to another one: "Move to…" (docs/reading/01 §一). A
+ * kept article whose document this is goes with it, or its record would stay
+ * behind as a row of its own. Answers the move; null when there was nothing to
+ * move (no topic lists the book, or it is already on that one). The record's
+ * half is best-effort: the file has moved.
+ */
+export async function moveDocumentToTopic(
+  hash: string,
+  toTopicId: string,
+  deps: Pick<KeptDocumentDeps, "moveFileToTopic" | "loadSavedArticles" | "setSavedArticleTopic"> = liveKeptDocumentDeps,
+): Promise<FileMove | null> {
+  const move = await deps.moveFileToTopic(hash, toTopicId);
+  if (!move) return null;
+  try {
+    for (const article of keptRecordsOfDocument(await deps.loadSavedArticles(), move.from.id, hash)) {
+      await deps.setSavedArticleTopic(article.id, toTopicId);
+    }
+  } catch (e) {
+    console.warn("failed to move the kept article of a moved document", hash, e);
+  }
+  return move;
 }
 
 /**

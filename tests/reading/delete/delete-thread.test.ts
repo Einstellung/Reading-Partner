@@ -14,9 +14,7 @@ import {
 } from "../../../src/platform/app/threads";
 import {
   deleteAside,
-  deleteBookConversation,
   deleteConversation,
-  deleteLesson,
   type DeleteThreadDeps,
 } from "../../../src/reading/delete/delete-thread";
 
@@ -57,7 +55,6 @@ function setup(threads: Thread[], marks: Annotation[] = [], opts: { unreadable?:
   const deps: DeleteThreadDeps = {
     loadThreads: (bookId) => store.load(bookId),
     getThread: (bookId, id) => store.get(bookId, id),
-    getBookThread: (bookId) => store.getBook(bookId),
     deleteThreadTree: (bookId, id) => store.removeTree(bookId, id),
     patchMessage: (bookId, id, ts, patch) => store.patch(bookId, id, ts, patch),
     removeMessage: (bookId, id, ts) => store.removeMessage(bookId, id, ts),
@@ -76,48 +73,9 @@ function mark(id: string, aiThreadId?: string): Annotation {
   return { id, type: "highlight", aiThreadId } as unknown as Annotation;
 }
 
-test("deleting a lesson takes the book thread and its asides, and leaves marked passages' conversations", async () => {
-  const { deps, calls, onDisk } = setup(
-    [
-      thread("lesson", { book: true }),
-      thread("a1", { parentThreadId: "lesson" }),
-      thread("a2", { parentThreadId: "lesson", annotationId: "m2" }),
-      thread("passage", { annotationId: "m9" }),
-    ],
-    [mark("m2", "a2"), mark("m9", "passage")],
-  );
-  expect(deleteLesson).toBe(deleteBookConversation);
-  const out = await deleteLesson(TARGET, deps);
-  expect(out.threads.sort()).toEqual(["a1", "a2", "lesson"]);
-  expect(out.marks).toEqual(["m2"]);
-  expect(Object.keys(onDisk())).toEqual(["passage"]);
-  for (const id of ["lesson", "a1", "a2"]) {
-    expect(calls).toContain(`images:${id}`);
-    expect(calls).toContain(`log:topic:${id}`);
-  }
-  expect(calls).toContain("marks:book:m2");
-});
-
-test("every book-level thread goes, so a second one from another device does not come back", async () => {
-  const { deps, onDisk } = setup([
-    thread("b1", { book: true, createdAt: 1 }),
-    thread("b2", { book: true, createdAt: 2 }),
-  ]);
-  const out = await deleteBookConversation(TARGET, deps);
-  expect(out.threads.sort()).toEqual(["b1", "b2"]);
-  expect(onDisk()).toEqual({});
-});
-
-test("a book with no conversation deletes nothing and touches no marks", async () => {
-  const { deps, calls } = setup([thread("passage", { annotationId: "m9" })]);
-  const out = await deleteBookConversation(TARGET, deps);
-  expect(out).toEqual({ threads: [], marks: [] });
-  expect(calls).toEqual([]);
-});
-
 test("a threads file that cannot be read throws and deletes nothing", async () => {
   const { deps, calls } = setup([thread("lesson", { book: true })], [], { unreadable: true });
-  await expect(deleteBookConversation(TARGET, deps)).rejects.toThrow();
+  await expect(deleteConversation(TARGET, "lesson", deps)).rejects.toThrow();
   expect(calls).toEqual([]);
 });
 

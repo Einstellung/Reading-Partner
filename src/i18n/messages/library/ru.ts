@@ -54,6 +54,11 @@ const ru: Translation<typeof en> = {
   "card.rename": "Переименовать",
   "card.delete": "Удалить",
   "card.retell": "Пересказать эту книгу…",
+  "move.action": "Переместить в…",
+  "move.title": "Переместить в",
+  "move.here": "Здесь",
+  "move.done": "Перемещено в «{topic}»",
+  "move.failed": "Не удалось переместить.",
 
   "topics.eyebrow": "Ваши темы",
   "topics.title": "Темы",
@@ -77,17 +82,12 @@ const ru: Translation<typeof en> = {
   "materials.removeArticleDescription": "Статья исчезнет из сохранённых. Сохранив её снова из подборки, вы вернёте её обратно.",
   "materials.removeArticleAction": "Убрать",
   "materials.deleteBookTitle": "Удалить «{title}»?",
-  "materials.removeBookTitle": "Убрать «{title}»?",
   "materials.deleteBookDescription": "Удалить эту книгу и всё, что с ней связано? Ваши заметки о себе сохранятся.",
-  "materials.removeBookDescription":
-    "Книга уйдёт из темы. Файл останется на диске, как и позиция чтения и отметки — если добавить книгу снова, они вернутся вместе с ней.",
   "materials.deleteBookAction": "Удалить",
-  "materials.removeBookAction": "Убрать",
 
   "screen.backToTopics": "‹ Все темы",
   "screen.addBook": "+ Добавить книгу",
   "screen.backToTopicLabel": "Назад к теме",
-  "screen.removeFileFailed": "Не удалось убрать книгу из этой темы",
   "screen.deleteBookFailed": "Не удалось удалить книгу",
   "screen.removeArticleFailed": "Не удалось убрать статью",
 

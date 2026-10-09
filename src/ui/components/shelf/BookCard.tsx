@@ -31,6 +31,10 @@ export default function BookCard(props: {
   // Start a retell of this book (docs/31). Absent for a file that has never
   // been opened: it has no book id yet, so there is nothing on disk to retell.
   onRetell?: () => void;
+  // File it under another topic. Absent when there is nowhere to move it to
+  // (shelf/move-to.ts canMoveFile).
+  onMove?: () => void;
+  // Delete it, with everything about it.
   onRemove: () => void;
 }) {
   const t = useT();
@@ -69,7 +73,8 @@ export default function BookCard(props: {
             ...(props.onRetell
               ? [{ label: t("library.card.retell"), onSelect: props.onRetell }]
               : []),
-            { label: t("library.card.remove"), onSelect: props.onRemove, destructive: true },
+            ...(props.onMove ? [{ label: t("library.move.action"), onSelect: props.onMove }] : []),
+            { label: t("library.card.delete"), onSelect: props.onRemove, destructive: true },
           ]}
         />
       </div>

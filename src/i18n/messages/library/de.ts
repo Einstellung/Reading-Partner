@@ -34,6 +34,11 @@ const de: Translation<typeof en> = {
   "card.rename": "Umbenennen",
   "card.delete": "Löschen",
   "card.retell": "Dieses Buch nacherzählen…",
+  "move.action": "Verschieben nach…",
+  "move.title": "Verschieben nach",
+  "move.here": "Hier",
+  "move.done": "Nach „{topic}“ verschoben",
+  "move.failed": "Es konnte nicht verschoben werden.",
 
   "topics.eyebrow": "Deine Themen",
   "topics.title": "Themen",
@@ -58,17 +63,12 @@ const de: Translation<typeof en> = {
   "materials.removeArticleDescription": "Der Artikel verschwindet aus deinen gespeicherten Artikeln. Erneutes Speichern aus einem Briefing bringt ihn zurück.",
   "materials.removeArticleAction": "Entfernen",
   "materials.deleteBookTitle": "„{title}“ löschen?",
-  "materials.removeBookTitle": "„{title}“ entfernen?",
   "materials.deleteBookDescription": "Dieses Buch und alles dazu löschen? Deine Notizen über dich selbst bleiben erhalten.",
-  "materials.removeBookDescription":
-    "Das Thema verliert das Buch. Die Datei bleibt auf der Festplatte, ebenso Leseposition und Markierungen — fügst du es wieder hinzu, kommen sie mit zurück.",
   "materials.deleteBookAction": "Löschen",
-  "materials.removeBookAction": "Entfernen",
 
   "screen.backToTopics": "‹ Alle Themen",
   "screen.addBook": "+ Buch hinzufügen",
   "screen.backToTopicLabel": "Zurück zum Thema",
-  "screen.removeFileFailed": "Das Buch konnte nicht aus diesem Thema entfernt werden",
   "screen.deleteBookFailed": "Das Buch konnte nicht gelöscht werden",
   "screen.removeArticleFailed": "Der Artikel konnte nicht entfernt werden",
 

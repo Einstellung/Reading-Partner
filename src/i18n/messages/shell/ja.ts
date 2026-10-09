@@ -8,7 +8,7 @@ export default {
   "toast.asideGone": "この脇道の会話はもうありません。",
   "toast.conversationsUnloadable": "保存された AI 会話を読み込めませんでした",
   "toast.cantShareFile": "このファイルを他のアプリに渡せませんでした。",
-  "toast.movedFrom": "「{topic}」から移動しました",
+  "toast.alreadyIn": "すでに「{topic}」にあります",
 
   "call.askAboutThisTitle": "これについて聞く",
   "call.askAboutThisPlaceholder": "これについて聞く…",

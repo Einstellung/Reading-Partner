@@ -17,6 +17,11 @@ export default function ArticleRows<R extends { title: string; line: string }>(p
   // needs room over it.
   underCards?: boolean;
   onOpen: (row: R) => void;
+  // A topic's own articles move to another topic; a kept article does not.
+  canMove?: (row: R) => boolean;
+  onMove?: (row: R) => void;
+  // What the destructive button says: Remove unless given.
+  removeLabel?: string;
   onRemove: (row: R) => void;
 }) {
   const t = useT();
@@ -32,8 +37,13 @@ export default function ArticleRows<R extends { title: string; line: string }>(p
             </span>
           </button>
           <div className="flex gap-1">
+            {props.onMove && (props.canMove?.(row) ?? true) && (
+              <Button variant="outline" size="sm" onClick={() => props.onMove?.(row)}>
+                {t("library.move.action")}
+              </Button>
+            )}
             <Button variant="destructive-outline" size="sm" onClick={() => props.onRemove(row)}>
-              {t("library.card.remove")}
+              {props.removeLabel ?? t("library.card.remove")}
             </Button>
           </div>
         </li>

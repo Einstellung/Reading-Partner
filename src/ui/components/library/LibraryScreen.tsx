@@ -18,7 +18,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useT } from "../../../i18n";
 import {
   createTopic,
-  removeFileFromTopic,
   renameTopic,
   sortedFiles,
   type FileRef,
@@ -26,7 +25,7 @@ import {
 } from "../../../platform/app/topics";
 import { logEvent } from "../../../platform/app/events";
 import { listLibraryEntries, type LibraryEntry } from "../../../platform/app/library";
-import { isLastReference, removeFromTopic } from "../../../reading/delete/delete-book";
+import { removeFromTopic } from "../../../reading/delete/delete-book";
 import { deleteTopic } from "../../../reading/delete/delete-topic";
 import {
   loadSavedArticles,
@@ -34,7 +33,7 @@ import {
   type SavedArticle,
 } from "../../../reading/saved/saved-articles";
 import {
-  forgetKeptArticlesOfDocument,
+  moveDocumentToTopic,
   recordsWithoutListedDocument,
 } from "../../../reading/saved/kept-document";
 import { unkeepArticle } from "../../../reading/delete/unkeep";
@@ -46,6 +45,8 @@ import RehearsalScreen from "../rehearsal/RehearsalScreen";
 import type { Rehearsal } from "../../../reading/rehearsal";
 import { Button } from "../ui/button";
 import BookCard from "../shelf/BookCard";
+import MoveToTopicDialog from "../shelf/MoveToTopicDialog";
+import { canMoveFile, moveFailedLine, movedLine, moveTargets } from "../shelf/move-to";
 import { readBookMeta } from "../shelf/book-meta";
 import {
   HEADER_ACTION,
@@ -89,6 +90,8 @@ export default function LibraryScreen(props: {
   onTopicsChanged: () => Promise<void> | void;
   // A failure the reader has to hear about, such as a delete that did not happen.
   onSay: (line: string) => void;
+  // A line that is not a failure, such as where a moved file went.
+  onTell: (line: string) => void;
 }) {
   const t = useT();
   // Articles kept out of a briefing (docs/21), and which one is being read.
@@ -328,32 +331,35 @@ export default function LibraryScreen(props: {
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
                   onRetell={(f) => void startRetellOn(f)}
-                  onRemoveFile={(p) =>
+                  // The file and everything about it. removeFromTopic counts the
+                  // references at the moment of the delete: a document a book
+                  // still lists as a supplement keeps its data.
+                  onDeleteBook={(file) =>
                     void settleDelete({
-                      // An unlink deletes nothing, but a kept article whose
-                      // document this was leaves the topic with its row.
-                      act: async () => {
-                        const hash = activeTopic.files.find((f) => f.path === p)?.hash;
-                        await removeFileFromTopic(activeTopic.id, p);
-                        if (hash) await forgetKeptArticlesOfDocument(activeTopic.id, hash);
-                      },
+                      act: () => removeFromTopic(activeTopic.id, file),
                       refresh: async () => {
                         await refreshSavedArticles();
                         await props.onTopicsChanged();
                       },
-                      failed: t("library.screen.removeFileFailed"),
-                      onFail: props.onSay,
-                    })
-                  }
-                  // removeFromTopic counts the references again at the moment
-                  // of the delete: the book goes only if nothing else lists it.
-                  onDeleteBook={(file) =>
-                    void settleDelete({
-                      act: () => removeFromTopic(activeTopic.id, file),
-                      refresh: props.onTopicsChanged,
                       failed: t("library.screen.deleteBookFailed"),
                       onFail: props.onSay,
                     })
+                  }
+                  onMoveFile={(file, to) =>
+                    void (async () => {
+                      try {
+                        if (!file.hash || !(await moveDocumentToTopic(file.hash, to.id))) {
+                          throw new Error("nothing moved");
+                        }
+                        props.onTell(movedLine(to.name));
+                      } catch (e) {
+                        console.error("failed to move a file", e);
+                        props.onSay(moveFailedLine());
+                      } finally {
+                        await refreshSavedArticles();
+                        await props.onTopicsChanged();
+                      }
+                    })()
                   }
                   onOpenSavedArticle={setOpenSavedArticle}
                   onRemoveSavedArticle={(id) =>
@@ -527,8 +533,7 @@ function TopicLibrary(props: {
 // topic's name are the sidebar shell's now, because every section wears them.
 function TopicMaterials(props: {
   topic: Topic;
-  // Every topic, for the one question this section asks of them: whether the
-  // book being taken out of this one is anywhere else (pick.ts).
+  // Every topic: where Move to… can send a file.
   topics: Topic[];
   // Reading position, length and marks per file, keyed by path; read by the
   // host, which needs the same numbers for the topic's header line.
@@ -542,9 +547,10 @@ function TopicMaterials(props: {
   onOpenFile: (file: FileRef) => void;
   // Start a retell of this one book and go straight into it.
   onRetell: (file: FileRef) => void;
-  onRemoveFile: (path: string) => void;
-  // Take the book itself away, with everything about it.
+  // Take the file away, with everything about it.
   onDeleteBook: (file: FileRef) => void;
+  // File it under another topic (shelf/move-to.ts).
+  onMoveFile: (file: FileRef, to: { id: string; name: string }) => void;
   onOpenSavedArticle: (article: SavedArticle) => void;
   onRemoveSavedArticle: (id: string) => void;
 }) {
@@ -556,21 +562,8 @@ function TopicMaterials(props: {
   const meta = props.meta;
   const [removing, setRemoving] = useState<FileRef | null>(null);
   const [removingArticle, setRemovingArticle] = useState<SavedArticle | null>(null);
-  // Whether the confirmation is offering to unlink or to delete. Null until the
-  // supplement lists have been read, and the dialog waits for it.
-  const [lastReference, setLastReference] = useState<boolean | null>(null);
-  useEffect(() => {
-    setLastReference(null);
-    if (!removing) return;
-    let live = true;
-    isLastReference(props.topics, props.topic.id, removing)
-      .then((last) => live && setLastReference(last))
-      // A list that cannot be read offers the unlink, which deletes nothing.
-      .catch(() => live && setLastReference(false));
-    return () => {
-      live = false;
-    };
-  }, [removing, props.topics, props.topic.id]);
+  const [moving, setMoving] = useState<FileRef | null>(null);
+  const movable = (f: FileRef) => canMoveFile(f, props.topics);
 
   return (
     <>
@@ -592,6 +585,7 @@ function TopicMaterials(props: {
                   meta={meta[f.path]}
                   onOpen={() => props.onOpenFile(f)}
                   onRetell={f.hash ? () => props.onRetell(f) : undefined}
+                  onMove={movable(f) ? () => setMoving(f) : undefined}
                   onRemove={() => setRemoving(f)}
                 />
               ))}
@@ -605,6 +599,9 @@ function TopicMaterials(props: {
             rowKey={(row) => row.file.path}
             underCards={books.length > 0}
             onOpen={(row) => props.onOpenFile(row.file)}
+            canMove={(row) => movable(row.file)}
+            onMove={(row) => setMoving(row.file)}
+            removeLabel={t("library.card.delete")}
             onRemove={(row) => setRemoving(row.file)}
           />
         </>
@@ -637,28 +634,27 @@ function TopicMaterials(props: {
         />
       )}
 
-      {removing && lastReference !== null && (
+      {removing && (
         <ConfirmDestructiveDialog
-          title={
-            lastReference
-              ? t("library.materials.deleteBookTitle", { title: displayFileTitle(removing.name) })
-              : t("library.materials.removeBookTitle", { title: displayFileTitle(removing.name) })
-          }
-          description={
-            lastReference
-              ? t("library.materials.deleteBookDescription")
-              : t("library.materials.removeBookDescription")
-          }
-          actionLabel={
-            lastReference ? t("library.materials.deleteBookAction") : t("library.materials.removeBookAction")
-          }
+          title={t("library.materials.deleteBookTitle", { title: displayFileTitle(removing.name) })}
+          description={t("library.materials.deleteBookDescription")}
+          actionLabel={t("library.materials.deleteBookAction")}
           open
           onOpenChange={(open) => !open && setRemoving(null)}
-          onConfirm={() =>
-            lastReference && removing.hash
-              ? props.onDeleteBook(removing)
-              : props.onRemoveFile(removing.path)
-          }
+          onConfirm={() => props.onDeleteBook(removing)}
+        />
+      )}
+
+      {moving && (
+        <MoveToTopicDialog
+          open
+          fileName={displayFileTitle(moving.name)}
+          targets={moveTargets(props.topics, props.topic.id)}
+          onOpenChange={(open) => !open && setMoving(null)}
+          onPick={(to) => {
+            setMoving(null);
+            if (!to.here) props.onMoveFile(moving, to);
+          }}
         />
       )}
     </>

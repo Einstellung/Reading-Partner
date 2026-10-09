@@ -1,12 +1,11 @@
-// The phone's hold-to-delete (hold-menu.ts): which items a hold offers on each
-// kind of thing, what the confirmations and the lines after say, the click a
-// hold ends in, and the bookkeeping that lets a deleted item leave in place.
+// The phone's hold menu (hold-menu.ts): which items a hold offers on each kind
+// of thing, what the confirmations and the lines after say, the click a hold
+// ends in, and the bookkeeping that lets a deleted item leave in place.
 // Run: scripts/t.sh tests/ui/components/phone/hold-menu.test.ts
 
 import { expect, test } from "bun:test";
 import type { FileRef, Topic } from "../../../../src/platform/app/topics";
 import {
-  choiceRemovesItem,
   hideKey,
   holdConfirm,
   holdDoneLine,
@@ -14,7 +13,6 @@ import {
   holdMenuItems,
   DISMISS_CLICK_MS,
   NO_CLICK_GUARD,
-  otherTopicNames,
   restoreKey,
   settleHidden,
   stepClickGuard,
@@ -31,13 +29,13 @@ const book = (over: Partial<Extract<HoldSubject, { kind: "file" }>> = {}): HoldS
   topicName: "How minds decide",
   file: file("a.epub", "h1"),
   title: "Thinking, Fast and Slow",
-  format: "epub",
   article: false,
-  bookId: "h1",
   ...over,
 });
 
-const labels = (s: HoldSubject, f = {}) => holdMenuItems(s, f).map((i) => i.label);
+const TWO = [topic("t1", "How minds decide", [file("a.epub", "h1")]), topic("t2", "Why cities work")];
+
+const labels = (s: HoldSubject, topics: Topic[] = TWO) => holdMenuItems(s, topics).map((i) => i.label);
 
 test("a topic, a kept article and an aside each offer the one delete", () => {
   expect(labels({ kind: "topic", topic: topic("t1", "Cities") })).toEqual(["Delete topic"]);
@@ -47,38 +45,18 @@ test("a topic, a kept article and an aside each offer the one delete", () => {
   ).toEqual(["Delete aside"]);
 });
 
-test("a book in its last topic is deleted; one filed elsewhere is only removed", () => {
-  expect(labels(book(), { last: true })).toEqual(["Delete book"]);
-  expect(labels(book(), { last: false })).toEqual(["Remove from topic"]);
-});
-
-test("an article row says article", () => {
-  expect(labels(book({ article: true }), { last: true })).toEqual(["Delete article"]);
-});
-
-test("a reference count that could not be read offers the stronger delete", () => {
-  expect(labels(book(), {})).toEqual(["Delete book"]);
-});
-
-test("a PDF with a lesson offers the lesson first", () => {
-  expect(labels(book({ format: "pdf" }), { last: true, hasConversation: true })).toEqual([
-    "Delete lesson",
-    "Delete book",
+test("a file moves first, plain, then deletes, red", () => {
+  const items = holdMenuItems(book(), TWO);
+  expect(items.map((i) => [i.choice, i.label, i.kind])).toEqual([
+    ["move-file", "Move to…", "move"],
+    ["delete-file", "Delete book", "delete"],
   ]);
-  expect(labels(book({ format: "pdf" }), { last: true, hasConversation: false })).toEqual(["Delete book"]);
+  expect(labels(book({ article: true }))).toEqual(["Move to…", "Delete article"]);
 });
 
-test("an EPUB with a book-level thread offers the conversation", () => {
-  expect(labels(book(), { last: false, hasConversation: true })).toEqual([
-    "Delete conversation",
-    "Remove from topic",
-  ]);
-});
-
-test("no conversation item without a book id, on an article, or on an unknown format", () => {
-  expect(labels(book({ bookId: null }), { last: true, hasConversation: true })).toEqual(["Delete book"]);
-  expect(labels(book({ article: true }), { last: true, hasConversation: true })).toEqual(["Delete article"]);
-  expect(labels(book({ format: "other" }), { last: true, hasConversation: true })).toEqual(["Delete book"]);
+test("no Move to… with one topic, or on a file with no book id to move by", () => {
+  expect(labels(book(), [TWO[0]!])).toEqual(["Delete book"]);
+  expect(labels(book({ file: file("old.pdf") }))).toEqual(["Delete book"]);
 });
 
 test("the menu is headed by what was held", () => {
@@ -87,25 +65,11 @@ test("the menu is headed by what was held", () => {
   expect(holdMenuHead({ kind: "aside", bookId: "b", topicId: "t", asideId: "a", question: "Why?" })).toBe("Why?");
 });
 
-test("removing names the topics the file stays in", () => {
-  const w = holdConfirm("remove-from-topic", book(), { otherTopics: ["Economics of attention"] });
-  expect(w.title).toBe("Remove “Thinking, Fast and Slow”?");
-  expect(w.description).toBe(
-    "This topic loses the book. It stays in “Economics of attention”, with its reading position and marks.",
-  );
-  expect(w.action).toBe("Remove");
-});
-
-test("removing a file kept only by something else still says it stays", () => {
-  expect(holdConfirm("remove-from-topic", book(), {}).description).toContain("it stays, with its reading position");
-});
-
 test("deleting says what goes and what stays", () => {
   const w = holdConfirm("delete-file", book({ article: true, title: "Depth" }));
   expect(w.title).toBe("Delete “Depth”?");
   expect(w.description).toContain("Delete this article and everything about it");
-  expect(holdConfirm("delete-lesson", book()).description).toContain("next lesson starts from the beginning");
-  expect(holdConfirm("delete-conversation", book()).description).toContain("its reading position stay");
+  expect(holdConfirm("delete-file", book()).description).toContain("Delete this book and everything about it");
   expect(holdConfirm("remove-saved", { kind: "saved", id: "s", title: "Commutes" }).title).toBe("Remove “Commutes”?");
   expect(
     holdConfirm("delete-aside", { kind: "aside", bookId: "b", topicId: "t", asideId: "a", question: "q" }).description,
@@ -114,30 +78,10 @@ test("deleting says what goes and what stays", () => {
 
 test("the line after each choice", () => {
   expect(holdDoneLine("delete-file", book())).toBe("Deleted “Thinking, Fast and Slow”");
-  expect(holdDoneLine("remove-from-topic", book())).toBe("Removed from How minds decide");
-  expect(holdDoneLine("delete-lesson", book())).toBe("Lesson deleted");
-  expect(holdDoneLine("delete-conversation", book())).toBe("Conversation deleted");
   expect(holdDoneLine("remove-saved", { kind: "saved", id: "s", title: "x" })).toBe("Removed from Saved");
-});
-
-test("a conversation delete changes the card; the rest take it away", () => {
-  expect(choiceRemovesItem("delete-lesson")).toBe(false);
-  expect(choiceRemovesItem("delete-conversation")).toBe(false);
-  expect(choiceRemovesItem("delete-file")).toBe(true);
-  expect(choiceRemovesItem("remove-saved")).toBe(true);
-  expect(choiceRemovesItem("delete-aside")).toBe(true);
-  expect(choiceRemovesItem("delete-topic")).toBe(true);
-});
-
-test("the other topics are matched by hash, and by path when there is none", () => {
-  const topics = [
-    topic("t1", "Here", [file("a.epub", "h1")]),
-    topic("t2", "There", [file("elsewhere/a.epub", "h1")]),
-    topic("t3", "Nowhere", [file("b.epub", "h2")]),
-  ];
-  expect(otherTopicNames(topics, "t1", file("a.epub", "h1"))).toEqual(["There"]);
-  const byPath = [topic("t1", "Here", [file("x.pdf")]), topic("t2", "There", [file("x.pdf")])];
-  expect(otherTopicNames(byPath, "t1", file("x.pdf"))).toEqual(["There"]);
+  expect(holdDoneLine("delete-aside", { kind: "aside", bookId: "b", topicId: "t", asideId: "a", question: "q" })).toBe(
+    "Aside deleted",
+  );
 });
 
 // ---- the click a hold ends in --------------------------------------------------

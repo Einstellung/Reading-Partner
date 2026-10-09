@@ -8,7 +8,7 @@ export default {
   "toast.asideGone": "Dieses Seitengespräch gibt es nicht mehr.",
   "toast.conversationsUnloadable": "Gespeicherte KI-Unterhaltungen konnten nicht geladen werden",
   "toast.cantShareFile": "Diese Datei konnte nicht an eine andere App übergeben werden.",
-  "toast.movedFrom": "Aus „{topic}“ verschoben",
+  "toast.alreadyIn": "Schon in „{topic}“",
 
   "call.askAboutThisTitle": "Dazu fragen",
   "call.askAboutThisPlaceholder": "Dazu fragen…",

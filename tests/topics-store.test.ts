@@ -27,12 +27,12 @@ import {
   markOpened,
   removeFileFromTopic,
   moveFileToTopic,
-  onImportMove,
+  onFiledElsewhere,
   renameTopic,
   setFileHash,
   createTopicStore,
   pruneDeletedFromTopics,
-  type FileMove,
+  type FiledElsewhere,
   type Topic,
   type TopicFile,
   type TopicIo,
@@ -363,32 +363,24 @@ test("taking a book off a topic logs the pair, and a row handed back stays off t
 
 // --- a book is on one topic (docs/reading/01 §一) ---------------------------
 
-test("importing a book another topic lists moves it, and says so", async () => {
-  const heard: FileMove[] = [];
-  const stop = onImportMove((m) => heard.push(m));
-  setSystemTime(new Date(Date.UTC(2026, 9, 9, 10)));
-  const move = await addFileToTopic("t2", "/downloads/jit.pdf", "h1");
-  setSystemTime();
+test("adding a book another topic lists leaves it there and says where it is", async () => {
+  const heard: FiledElsewhere[] = [];
+  const stop = onFiledElsewhere((f) => heard.push(f));
+  const found = await addFileToTopic("t2", "/downloads/jit.pdf", "h1");
   stop();
 
-  const expected: FileMove = {
-    hash: "h1",
-    from: { id: "t1", name: "what makes JITs fast" },
-    to: { id: "t2", name: "attention" },
-  };
-  expect(move).toEqual(expected);
+  const expected: FiledElsewhere = { hash: "h1", topic: { id: "t1", name: "what makes JITs fast" } };
+  expect(found).toEqual(expected);
   expect(heard).toEqual([expected]);
-  expect(disk.files.get(LOG)).toMatch(/^\{"kind":"topic-file","id":"t1\/h1","op":"delete","at":"[^"]+"\}\n$/);
-  expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
-  // The new row, with the open time "Continue reading" goes by.
-  expect(topicOnDisk("t2").files).toEqual([
-    { path: "/downloads/jit.pdf", name: "jit.pdf", addedAt: Date.UTC(2026, 9, 9, 10), hash: "h1", lastOpenedAt: 99 },
-  ]);
+  // Nothing written: the row and its open time stay where they were.
+  expect(disk.files.has(LOG)).toBe(false);
+  expect(topicOnDisk("t1").files.map((f) => f.hash ?? f.path)).toContain("h1");
+  expect(topicOnDisk("t2").files).toEqual([]);
 });
 
 test("a book on no topic is added, and nothing is said", async () => {
-  const heard: FileMove[] = [];
-  const stop = onImportMove((m) => heard.push(m));
+  const heard: FiledElsewhere[] = [];
+  const stop = onFiledElsewhere((f) => heard.push(f));
   expect(await addFileToTopic("t2", "/books/new.pdf", "h9")).toBeNull();
   stop();
   expect(heard).toEqual([]);
@@ -397,8 +389,8 @@ test("a book on no topic is added, and nothing is said", async () => {
 });
 
 test("moving a book takes its row as it stands to the other topic", async () => {
-  const heard: FileMove[] = [];
-  const stop = onImportMove((m) => heard.push(m));
+  const heard: FiledElsewhere[] = [];
+  const stop = onFiledElsewhere((f) => heard.push(f));
   setSystemTime(new Date(Date.UTC(2026, 9, 9, 10)));
   const move = await moveFileToTopic("h1", "t2");
   setSystemTime();
@@ -406,7 +398,7 @@ test("moving a book takes its row as it stands to the other topic", async () => 
 
   expect(move?.from.id).toBe("t1");
   expect(move?.to.id).toBe("t2");
-  // A move is not an import: the reader asked for it and sees it.
+  // A move is not an add: the reader asked for it and sees it.
   expect(heard).toEqual([]);
   expect(topicOnDisk("t1").files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
   expect(topicOnDisk("t2").files).toEqual([

@@ -1,53 +1,36 @@
-// What runs behind the phone's hold menu (hold-menu.ts): the reads that decide
-// which items it shows, and the delete a confirmed item does. Every delete is
-// one of the reading domain's own (reading/delete/); this file only picks which
-// and says what happened.
+// What runs behind the phone's hold menu (hold-menu.ts): the delete a confirmed
+// item does, and the move a picked topic does. Every delete is one of the
+// reading domain's own (reading/delete/), and the move is the kept-document one
+// (reading/saved/kept-document.ts); this file only picks which and says what
+// happened.
 
 import { t } from "../../../i18n";
-import { getBookThread, loadThreads } from "../../../platform/app/threads";
 import type { LibraryEntry } from "../../../platform/app/library";
-import type { FileRef, Topic } from "../../../platform/app/topics";
-import { isLastReference, removeFromTopic } from "../../../reading/delete/delete-book";
-import {
-  deleteAside,
-  deleteBookConversation,
-  deleteLesson,
-} from "../../../reading/delete/delete-thread";
+import type { FileMove, FileRef, Topic } from "../../../platform/app/topics";
+import { removeFromTopic } from "../../../reading/delete/delete-book";
+import { deleteAside } from "../../../reading/delete/delete-thread";
 import { deleteTopic } from "../../../reading/delete/delete-topic";
 import { unkeepArticle } from "../../../reading/delete/unkeep";
+import { moveDocumentToTopic } from "../../../reading/saved/kept-document";
+import { moveFailedLine, movedLine } from "../shelf/move-to";
 import { topicDeleteWords } from "../shelf/topic-delete";
-import {
-  holdDoneLine,
-  otherTopicNames,
-  type HoldChoice,
-  type HoldFacts,
-  type HoldSubject,
-} from "./hold-menu";
+import { holdDoneLine, type ConfirmedChoice, type HoldChoice, type HoldSubject } from "./hold-menu";
 
 export interface HoldDeleteDeps {
-  isLastReference: typeof isLastReference;
-  hasBookConversation: (bookId: string) => Promise<boolean>;
   removeFromTopic: typeof removeFromTopic;
-  deleteLesson: typeof deleteLesson;
-  deleteBookConversation: typeof deleteBookConversation;
   removeSavedArticle: (id: string) => Promise<void>;
   deleteAside: typeof deleteAside;
   deleteTopic: (topicId: string, alsoDeleteFiles: readonly string[]) => Promise<string[]>;
+  moveFile: (hash: string, toTopicId: string) => Promise<FileMove | null>;
 }
 
 export const liveHoldDeleteDeps: HoldDeleteDeps = {
-  isLastReference: (topics, topicId, file) => isLastReference(topics, topicId, file),
-  hasBookConversation: async (bookId) => {
-    await loadThreads(bookId);
-    return !!getBookThread(bookId);
-  },
   removeFromTopic: (topicId, file) => removeFromTopic(topicId, file),
-  deleteLesson: (target) => deleteLesson(target),
-  deleteBookConversation: (target) => deleteBookConversation(target),
   // The record, and the document a keep built from it (reading/delete/unkeep.ts).
   removeSavedArticle: (id) => unkeepArticle(id),
   deleteAside: (target, asideId) => deleteAside(target, asideId),
   deleteTopic: (topicId, alsoDeleteFiles) => deleteTopic(topicId, undefined, { alsoDeleteFiles }),
+  moveFile: (hash, toTopicId) => moveDocumentToTopic(hash, toTopicId),
 };
 
 /**
@@ -71,51 +54,16 @@ export async function runTopicDelete(
   return topicDeleteWords({ topic, topics, only: went, entries }).done(went.length > 0);
 }
 
-/**
- * The facts the menu for this subject needs. A read that fails leaves its fact
- * unknown: the menu then offers the stronger delete and no conversation item.
- */
-export async function lookupHoldFacts(
-  subject: HoldSubject,
-  topics: readonly Topic[],
-  deps: HoldDeleteDeps = liveHoldDeleteDeps,
-): Promise<HoldFacts> {
-  if (subject.kind !== "file") return {};
-  const [last, hasConversation] = await Promise.all([
-    deps.isLastReference(topics, subject.topicId, subject.file).catch((e: unknown) => {
-      console.warn("failed to count a file's references", e);
-      return undefined;
-    }),
-    subject.bookId && !subject.article
-      ? deps.hasBookConversation(subject.bookId).catch(() => false)
-      : Promise.resolve(false),
-  ]);
-  return {
-    ...(last === undefined ? {} : { last }),
-    hasConversation,
-    otherTopics: otherTopicNames(topics, subject.topicId, subject.file),
-  };
-}
-
 /** Run a confirmed choice. Answers the line to say; throws when it did not go. */
 export async function runHoldChoice(
-  choice: Exclude<HoldChoice, "delete-topic">,
+  choice: ConfirmedChoice,
   subject: HoldSubject,
   deps: HoldDeleteDeps = liveHoldDeleteDeps,
 ): Promise<string> {
   switch (choice) {
-    case "delete-file":
-    case "remove-from-topic": {
+    case "delete-file": {
       const s = subject as Extract<HoldSubject, { kind: "file" }>;
       await deps.removeFromTopic(s.topicId, s.file);
-      break;
-    }
-    case "delete-lesson":
-    case "delete-conversation": {
-      const s = subject as Extract<HoldSubject, { kind: "file" }>;
-      if (!s.bookId) throw new Error("hold-delete: a conversation needs a book id");
-      const target = { bookId: s.bookId, topicId: s.topicId };
-      await (choice === "delete-lesson" ? deps.deleteLesson(target) : deps.deleteBookConversation(target));
       break;
     }
     case "remove-saved":
@@ -130,17 +78,30 @@ export async function runHoldChoice(
   return holdDoneLine(choice, subject);
 }
 
+/**
+ * Move a held file to the picked topic. Answers the line to say; throws when
+ * nothing moved, which is also what a file with no book id is.
+ */
+export async function runHoldMove(
+  subject: Extract<HoldSubject, { kind: "file" }>,
+  to: { id: string; name: string },
+  deps: Pick<HoldDeleteDeps, "moveFile"> = liveHoldDeleteDeps,
+): Promise<string> {
+  const hash = subject.file.hash;
+  if (!hash) throw new Error("hold-delete: a file moves by its book id");
+  if (!(await deps.moveFile(hash, to.id))) throw new Error("hold-delete: nothing moved");
+  return movedLine(to.name);
+}
+
 /** The line said when a choice failed. */
 export function holdFailedLine(choice: HoldChoice): string {
   switch (choice) {
     case "delete-topic":
       return t("phone.holdMenu.failedTopic");
+    case "move-file":
+      return moveFailedLine();
     case "delete-file":
       return t("phone.holdMenu.failedFile");
-    case "remove-from-topic":
-      return t("phone.holdMenu.failedRemoveFromTopic");
-    case "delete-lesson":
-    case "delete-conversation":
     case "delete-aside":
       return t("phone.holdMenu.failedConversation");
     case "remove-saved":

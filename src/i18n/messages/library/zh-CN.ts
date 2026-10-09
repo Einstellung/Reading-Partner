@@ -34,6 +34,11 @@ const zhCN: Translation<typeof en> = {
   "card.rename": "重命名",
   "card.delete": "删除",
   "card.retell": "复述这本书…",
+  "move.action": "移到…",
+  "move.title": "移到",
+  "move.here": "当前",
+  "move.done": "已移到「{topic}」",
+  "move.failed": "没能移动。",
 
   "topics.eyebrow": "你的主题",
   "topics.title": "主题",
@@ -57,16 +62,12 @@ const zhCN: Translation<typeof en> = {
   "materials.removeArticleDescription": "文章会从你保存的文章中移除。从简报里再次保存它可以找回来。",
   "materials.removeArticleAction": "移除",
   "materials.deleteBookTitle": "删除“{title}”？",
-  "materials.removeBookTitle": "移除“{title}”？",
   "materials.deleteBookDescription": "删除这本书以及关于它的一切？你自己的笔记会保留。",
-  "materials.removeBookDescription": "主题会失去这本书，但文件仍留在磁盘上，阅读位置和标记也都保留——重新加入会带回它们。",
   "materials.deleteBookAction": "删除",
-  "materials.removeBookAction": "移除",
 
   "screen.backToTopics": "‹ 所有主题",
   "screen.addBook": "+ 添加书",
   "screen.backToTopicLabel": "返回主题",
-  "screen.removeFileFailed": "无法从这个主题中移除这本书",
   "screen.deleteBookFailed": "无法删除这本书",
   "screen.removeArticleFailed": "无法移除这篇文章",
 

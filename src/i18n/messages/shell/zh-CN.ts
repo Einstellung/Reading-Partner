@@ -8,7 +8,7 @@ export default {
   "toast.asideGone": "这段旁支对话已经不在了。",
   "toast.conversationsUnloadable": "保存的 AI 对话无法加载",
   "toast.cantShareFile": "无法把这个文件交给其他应用。",
-  "toast.movedFrom": "已从「{topic}」移到这里",
+  "toast.alreadyIn": "已在「{topic}」里",
 
   "call.askAboutThisTitle": "问问这个",
   "call.askAboutThisPlaceholder": "问问这个…",

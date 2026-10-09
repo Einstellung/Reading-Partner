@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
-import { BRIEF_TOPIC_ID, listTopics, onImportMove, type Topic } from "./platform/app/topics";
+import { BRIEF_TOPIC_ID, listTopics, onFiledElsewhere, type Topic } from "./platform/app/topics";
 import { libraryHas, listLibraryEntries, type LibraryEntry } from "./platform/app/library";
 import {
   libraryFilePath,
@@ -202,10 +202,10 @@ export default function PhoneApp({
     void refreshSavedArticles();
   }, [refreshSavedArticles]);
 
-  // A book is on one topic, so an import of one another topic lists moved it
+  // A book is on one topic, so an add of one another topic lists left it there
   // (platform/app/topics.ts addFile).
   useEffect(
-    () => onImportMove((move) => pushToast("info", t("shell.toast.movedFrom", { topic: move.from.name }))),
+    () => onFiledElsewhere((found) => pushToast("info", t("shell.toast.alreadyIn", { topic: found.topic.name }))),
     [pushToast, t],
   );
 

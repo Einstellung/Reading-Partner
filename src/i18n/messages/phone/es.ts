@@ -3,9 +3,6 @@ import type en from "./en";
 
 export default {
   "holdMenu.deleteTopic": "Eliminar tema",
-  "holdMenu.deleteLesson": "Eliminar lección",
-  "holdMenu.deleteConversation": "Eliminar conversación",
-  "holdMenu.removeFromTopic": "Quitar del tema",
   "holdMenu.deleteArticle": "Eliminar artículo",
   "holdMenu.deleteBook": "Eliminar libro",
   "holdMenu.removeFromSaved": "Quitar de Guardados",
@@ -18,31 +15,19 @@ export default {
     "¿Eliminar este artículo y todo lo relacionado con él, en todos los dispositivos? Tus notas sobre ti mismo se conservan.",
   "holdMenu.delete": "Eliminar",
   "holdMenu.confirmRemoveTitle": "¿Quitar “{title}”?",
-  "holdMenu.removeOthers": "Seguirá en {names}",
-  "holdMenu.removeNoOthers": "Algo más lo sigue listando, así que se conserva",
-  "holdMenu.removeBookDescription": "Este tema pierde el libro. {where}, con su posición de lectura y sus marcas.",
-  "holdMenu.removeArticleDescription": "Este tema pierde el artículo. {where}, con su posición de lectura y sus marcas.",
   "holdMenu.remove": "Quitar",
   "holdMenu.confirmConversationTitle": "¿Eliminar esta conversación?",
-  "holdMenu.confirmLessonDescription":
-    "La lección se elimina, con sus apartes, en todos los dispositivos. El artículo se conserva, y la próxima lección empieza desde el principio.",
-  "holdMenu.confirmConversationDescription":
-    "Todo lo dicho sobre este libro se elimina, en todos los dispositivos. El libro, sus marcas y su posición de lectura se conservan.",
   "holdMenu.confirmRemoveSavedDescription":
     "Desaparece de Guardados en todos los dispositivos. El resumen del que vino no cambia.",
   "holdMenu.confirmDeleteAsideDescription":
     "El aparte se elimina, junto con su fila en la lección. La lección en sí se conserva.",
 
   "holdMenu.doneDeleted": "Se eliminó “{title}”",
-  "holdMenu.doneRemovedFromTopic": "Se quitó de {topicName}",
-  "holdMenu.doneLessonDeleted": "Lección eliminada",
-  "holdMenu.doneConversationDeleted": "Conversación eliminada",
   "holdMenu.doneRemovedFromSaved": "Se quitó de Guardados",
   "holdMenu.doneAsideDeleted": "Aparte eliminado",
 
   "holdMenu.failedTopic": "No se pudo eliminar el tema.",
   "holdMenu.failedFile": "No se pudo eliminar.",
-  "holdMenu.failedRemoveFromTopic": "No se pudo quitar de este tema.",
   "holdMenu.failedConversation": "No se pudo eliminar la conversación.",
   "holdMenu.failedRemoveSaved": "No se pudo quitar de Guardados.",
 

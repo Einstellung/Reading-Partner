@@ -2,9 +2,9 @@
 // several PDFs read against one question (docs/01 §1). Topics store only path
 // references; files are never copied. Persisted to AppData/topics.json.
 //
-// A book, by its content hash, is on one topic: filing it under another moves
-// it (addFile, moveFile), and a merge that lands it on two keeps one
-// (oneTopicPerBook).
+// A book, by its content hash, is on one topic. Only moveFile takes it to
+// another; adding one another topic lists leaves it where it is (addFile), and
+// a merge that lands it on two keeps one (oneTopicPerBook).
 
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
 import {
@@ -129,6 +129,12 @@ export interface FileMove {
   to: { id: string; name: string };
 }
 
+/** A book an add found on another topic, where it stays. */
+export interface FiledElsewhere {
+  hash: string;
+  topic: { id: string; name: string };
+}
+
 /** Whether some book id is listed under more than one topic. */
 export function bookOnTwoTopics(topics: readonly Topic[]): boolean {
   const home = new Map<string, string>();
@@ -226,8 +232,8 @@ export interface TopicIo {
   // When each "topic-file" pair was last put back (deleted-books.ts), read only
   // when some book is on two topics. Left out, no pair ever was.
   revivals?: () => Promise<ReadonlyMap<string, string>>;
-  // Told of a book an import took off another topic, after the write.
-  moved?: (move: FileMove) => void;
+  // Told of an add that found the book on another topic and wrote nothing.
+  elsewhere?: (found: FiledElsewhere) => void;
 }
 
 export interface TopicStore {
@@ -237,8 +243,9 @@ export interface TopicStore {
   ensureBrief: () => Promise<Topic>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  // Answers the move when the book was on another topic, which it leaves.
-  addFile: (id: string, rawPath: string, hash: string, name?: string) => Promise<FileMove | null>;
+  // Answers the topic the book is already on when that is another one; the
+  // add then writes nothing.
+  addFile: (id: string, rawPath: string, hash: string, name?: string) => Promise<FiledElsewhere | null>;
   // Null when there was nothing to move: no such book or topic, or the book is
   // already there.
   moveFile: (hash: string, toId: string) => Promise<FileMove | null>;
@@ -416,9 +423,10 @@ export function createTopicStore(io: TopicIo): TopicStore {
     // bytes are already in the library (reading/session/import-book.ts). One
     // write, one sync revision.
     //
-    // A book is on one topic (docs/reading/01 §一), so one another topic lists
-    // comes off that one here and is moved, its open time with it. This is the
-    // one place that holds the rule for every door a book comes in by.
+    // A book is on one topic (docs/reading/01 §一) and only moveFile changes
+    // which: an add of one another topic lists writes nothing and answers where
+    // it is. This is the one place that holds the rule for every door a book
+    // comes in by.
     addFile: (id, rawPath, hash, name) => {
       const path = normalizeFilePath(rawPath);
       return serialize(async () => {
@@ -426,18 +434,18 @@ export function createTopicStore(io: TopicIo): TopicStore {
         const topic = store.topics.find((t) => t.id === id);
         // A topic lists a book once: the merge keys a row by its book id.
         if (!topic || topic.files.some((f) => f.path === path || f.hash === hash)) return null;
-        const from = await unlistElsewhere(store, hash, id);
+        const home = store.topics.find((t) => t.files.some((f) => f.hash === hash));
+        if (home) {
+          const found: FiledElsewhere = { hash, topic: { id: home.id, name: home.name } };
+          io.elsewhere?.(found);
+          return found;
+        }
         // Back onto a topic it was taken off: the revive goes first, or the
         // next read filters the new row out again.
         await io.logFile?.("revive", id, hash);
-        const row: FileRef = { path, name: name ?? basename(path), addedAt: io.now(), hash };
-        if (from?.row.lastOpenedAt !== undefined) row.lastOpenedAt = from.row.lastOpenedAt;
-        topic.files.push(row);
+        topic.files.push({ path, name: name ?? basename(path), addedAt: io.now(), hash });
         await save(store);
-        if (!from) return null;
-        const move = moveOf(hash, from.topic, topic);
-        io.moved?.(move);
-        return move;
+        return null;
       });
     },
 
@@ -512,14 +520,15 @@ export function createTopicStore(io: TopicIo): TopicStore {
   };
 }
 
-// Who hears of a book an import moved (App.tsx, PhoneApp.tsx say it in a toast).
-const importMoves = new Set<(move: FileMove) => void>();
+// Who hears of an add that found its book on another topic (App.tsx,
+// PhoneApp.tsx say it in a toast).
+const elsewhereListeners = new Set<(found: FiledElsewhere) => void>();
 
-/** Hear of every book an import took off another topic. Answers the unsubscribe. */
-export function onImportMove(listener: (move: FileMove) => void): () => void {
-  importMoves.add(listener);
+/** Hear of every add that left its book on the topic it was already on. Answers the unsubscribe. */
+export function onFiledElsewhere(listener: (found: FiledElsewhere) => void): () => void {
+  elsewhereListeners.add(listener);
   return () => {
-    importMoves.delete(listener);
+    elsewhereListeners.delete(listener);
   };
 }
 
@@ -536,8 +545,8 @@ const store = createTopicStore({
   logFile: (op, topicId, hash) =>
     (op === "delete" ? recordDeletion : recordRevival)("topic-file", topicFileId(topicId, hash), Date.now()),
   revivals: readTopicFileRevivals,
-  moved: (move) => {
-    for (const listener of importMoves) listener(move);
+  elsewhere: (found) => {
+    for (const listener of elsewhereListeners) listener(found);
   },
 });
 
@@ -578,17 +587,18 @@ export function removeTopicRecord(id: string): Promise<void> {
 
 // `name` is for a path whose last segment is not a file name (an Android content
 // URI); without it the name is the path's basename. A book another topic lists
-// is moved here, and the move is answered and told to onImportMove.
+// stays there: nothing is written, and where it is is answered and told to
+// onFiledElsewhere.
 export function addFileToTopic(
   id: string,
   rawPath: string,
   hash: string,
   name?: string,
-): Promise<FileMove | null> {
+): Promise<FiledElsewhere | null> {
   return store.addFile(id, rawPath, hash, name);
 }
 
-/** Move a book to another topic, its row as it stands. Not an import, so nothing is told. */
+/** Move a book to another topic, its row as it stands: the one way a book changes topic. */
 export function moveFileToTopic(hash: string, toTopicId: string): Promise<FileMove | null> {
   return store.moveFile(hash, toTopicId);
 }

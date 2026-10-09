@@ -42,6 +42,12 @@ export default {
   "card.rename": "Rename",
   "card.delete": "Delete",
   "card.retell": "Retell this book…",
+  // move-to.ts, MoveToTopicDialog.tsx: a file onto another topic, phone and desk.
+  "move.action": "Move to…",
+  "move.title": "Move to",
+  "move.here": "Here",
+  "move.done": "Moved to “{topic}”",
+  "move.failed": "It could not be moved.",
 
   // The topic shelf (LibraryScreen's TopicLibrary).
   "topics.eyebrow": "Your topics",
@@ -70,19 +76,14 @@ export default {
     "The article leaves your saved articles. Saving it again from a briefing brings it back.",
   "materials.removeArticleAction": "Remove",
   "materials.deleteBookTitle": "Delete “{title}”?",
-  "materials.removeBookTitle": "Remove “{title}”?",
   "materials.deleteBookDescription":
     "Delete this book and everything about it? Your notes about yourself stay.",
-  "materials.removeBookDescription":
-    "The topic loses the book. The file stays on disk, and so do its reading position and marks — adding it back brings them with it.",
   "materials.deleteBookAction": "Delete",
-  "materials.removeBookAction": "Remove",
 
   // The topic screen's own chrome (LibraryScreen).
   "screen.backToTopics": "‹ All topics",
   "screen.addBook": "+ Add book",
   "screen.backToTopicLabel": "Back to the topic",
-  "screen.removeFileFailed": "Could not remove the book from this topic",
   "screen.deleteBookFailed": "Could not delete the book",
   "screen.removeArticleFailed": "Could not remove the article",
 

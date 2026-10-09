@@ -1,13 +1,13 @@
-// What runs behind the phone's hold menu (hold-delete.ts): the facts read when a
-// hold lands, which delete a confirmed item calls, and the line said after.
+// What runs behind the phone's hold menu (hold-delete.ts): which delete a
+// confirmed item calls, the move a picked topic does, and the line said after.
 // Run: scripts/t.sh tests/ui/components/phone/hold-delete.test.ts
 
 import { expect, test } from "bun:test";
 import type { FileRef, Topic } from "../../../../src/platform/app/topics";
 import {
   holdFailedLine,
-  lookupHoldFacts,
   runHoldChoice,
+  runHoldMove,
   runTopicDelete,
   type HoldDeleteDeps,
 } from "../../../../src/ui/components/phone/hold-delete";
@@ -19,19 +19,9 @@ const topic = (id: string, name: string, files: FileRef[] = []): Topic => ({ id,
 function fakeDeps(over: Partial<HoldDeleteDeps> = {}): { deps: HoldDeleteDeps; calls: string[] } {
   const calls: string[] = [];
   const deps: HoldDeleteDeps = {
-    isLastReference: async () => true,
-    hasBookConversation: async () => false,
     removeFromTopic: async (topicId, f) => {
       calls.push(`remove ${topicId} ${f.path}`);
       return true;
-    },
-    deleteLesson: async (t) => {
-      calls.push(`lesson ${t.bookId} ${t.topicId}`);
-      return { threads: [], marks: [] };
-    },
-    deleteBookConversation: async (t) => {
-      calls.push(`conversation ${t.bookId} ${t.topicId}`);
-      return { threads: [], marks: [] };
     },
     removeSavedArticle: async (id) => {
       calls.push(`saved ${id}`);
@@ -44,88 +34,34 @@ function fakeDeps(over: Partial<HoldDeleteDeps> = {}): { deps: HoldDeleteDeps; c
       calls.push(`topic ${id} ${files.join(",")}`);
       return [...files];
     },
+    moveFile: async (hash, to) => {
+      calls.push(`move ${hash} ${to}`);
+      return { hash, from: { id: "t1", name: "Transformers" }, to: { id: to, name: "Minds" } };
+    },
     ...over,
   };
   return { deps, calls };
 }
 
-const pdf: HoldSubject = {
+const pdf: Extract<HoldSubject, { kind: "file" }> = {
   kind: "file",
   topicId: "t1",
   topicName: "Transformers",
   file: file("attn.pdf", "p1"),
   title: "Attention Is All You Need",
-  format: "pdf",
   article: false,
-  bookId: "p1",
 };
-
-test("the facts of a file: its reference count, its conversation, its other topics", async () => {
-  const topics = [topic("t1", "Transformers", [file("attn.pdf", "p1")]), topic("t2", "Minds", [file("attn.pdf", "p1")])];
-  const { deps } = fakeDeps({ isLastReference: async () => false, hasBookConversation: async () => true });
-  expect(await lookupHoldFacts(pdf, topics, deps)).toEqual({
-    last: false,
-    hasConversation: true,
-    otherTopics: ["Minds"],
-  });
-});
-
-test("a count that fails is left unknown, and a conversation read that fails is none", async () => {
-  const { deps } = fakeDeps({
-    isLastReference: async () => {
-      throw new Error("no lists");
-    },
-    hasBookConversation: async () => {
-      throw new Error("no threads");
-    },
-  });
-  const warn = console.warn;
-  console.warn = () => {};
-  try {
-    const facts = await lookupHoldFacts(pdf, [], deps);
-    expect("last" in facts).toBe(false);
-    expect(facts.hasConversation).toBe(false);
-  } finally {
-    console.warn = warn;
-  }
-});
-
-test("an article's conversation is never looked up", async () => {
-  let asked = false;
-  const { deps } = fakeDeps({
-    hasBookConversation: async () => {
-      asked = true;
-      return true;
-    },
-  });
-  await lookupHoldFacts({ ...pdf, article: true } as HoldSubject, [], deps);
-  expect(asked).toBe(false);
-});
-
-test("a topic, a kept article and an aside need no reads", async () => {
-  expect(await lookupHoldFacts({ kind: "saved", id: "s", title: "x" }, [], fakeDeps().deps)).toEqual({});
-});
 
 test("each choice calls its own delete and answers its line", async () => {
   const { deps, calls } = fakeDeps();
   expect(await runHoldChoice("delete-file", pdf, deps)).toBe("Deleted “Attention Is All You Need”");
-  expect(await runHoldChoice("remove-from-topic", pdf, deps)).toBe("Removed from Transformers");
-  expect(await runHoldChoice("delete-lesson", pdf, deps)).toBe("Lesson deleted");
-  expect(await runHoldChoice("delete-conversation", pdf, deps)).toBe("Conversation deleted");
   expect(await runHoldChoice("remove-saved", { kind: "saved", id: "s1", title: "x" }, deps)).toBe(
     "Removed from Saved",
   );
   expect(
     await runHoldChoice("delete-aside", { kind: "aside", bookId: "p1", topicId: "t1", asideId: "a1", question: "q" }, deps),
   ).toBe("Aside deleted");
-  expect(calls).toEqual([
-    "remove t1 attn.pdf",
-    "remove t1 attn.pdf",
-    "lesson p1 t1",
-    "conversation p1 t1",
-    "saved s1",
-    "aside p1 a1",
-  ]);
+  expect(calls).toEqual(["remove t1 attn.pdf", "saved s1", "aside p1 a1"]);
 });
 
 test("a failed delete throws, so the item comes back", async () => {
@@ -138,10 +74,18 @@ test("a failed delete throws, so the item comes back", async () => {
   expect(holdFailedLine("remove-saved")).toBe("It could not be removed from Saved.");
 });
 
-test("a conversation delete without a book id throws rather than guessing", async () => {
-  await expect(
-    runHoldChoice("delete-lesson", { ...pdf, bookId: null } as HoldSubject, fakeDeps().deps),
-  ).rejects.toThrow();
+test("a move goes by the book id and says where the file went", async () => {
+  const { deps, calls } = fakeDeps();
+  expect(await runHoldMove(pdf, { id: "t2", name: "Minds" }, deps)).toBe("Moved to “Minds”");
+  expect(calls).toEqual(["move p1 t2"]);
+});
+
+test("a move that moved nothing throws, and so does a file with no book id", async () => {
+  await expect(runHoldMove(pdf, { id: "t2", name: "Minds" }, fakeDeps({ moveFile: async () => null }).deps)).rejects.toThrow();
+  const { deps, calls } = fakeDeps();
+  await expect(runHoldMove({ ...pdf, file: file("attn.pdf") }, { id: "t2", name: "Minds" }, deps)).rejects.toThrow();
+  expect(calls).toEqual([]);
+  expect(holdFailedLine("move-file")).toBe("It could not be moved.");
 });
 
 test("a topic delete names the files that actually went", async () => {

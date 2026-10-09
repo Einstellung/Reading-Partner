@@ -3,9 +3,6 @@ import type en from "./en";
 
 export default {
   "holdMenu.deleteTopic": "주제 삭제",
-  "holdMenu.deleteLesson": "레슨 삭제",
-  "holdMenu.deleteConversation": "대화 삭제",
-  "holdMenu.removeFromTopic": "주제에서 제거",
   "holdMenu.deleteArticle": "기사 삭제",
   "holdMenu.deleteBook": "책 삭제",
   "holdMenu.removeFromSaved": "저장한 항목에서 제거",
@@ -16,27 +13,17 @@ export default {
   "holdMenu.confirmDeleteArticleDescription": "이 기사와 관련된 모든 것을 모든 기기에서 삭제할까요? 자신에 대한 메모는 남습니다.",
   "holdMenu.delete": "삭제",
   "holdMenu.confirmRemoveTitle": "“{title}”을(를) 제거할까요?",
-  "holdMenu.removeOthers": "{names}에는 그대로 남습니다",
-  "holdMenu.removeNoOthers": "다른 곳에도 등록되어 있어 그대로 남습니다",
-  "holdMenu.removeBookDescription": "이 주제에서 책이 사라집니다. {where}. 읽은 위치와 표시는 함께 남습니다.",
-  "holdMenu.removeArticleDescription": "이 주제에서 기사가 사라집니다. {where}. 읽은 위치와 표시는 함께 남습니다.",
   "holdMenu.remove": "제거",
   "holdMenu.confirmConversationTitle": "이 대화를 삭제할까요?",
-  "holdMenu.confirmLessonDescription": "레슨이 곁가지 대화와 함께 모든 기기에서 삭제됩니다. 논문 자체는 남고, 다음 레슨은 처음부터 시작합니다.",
-  "holdMenu.confirmConversationDescription": "이 책에 대해 나눈 모든 대화가 모든 기기에서 삭제됩니다. 책 자체, 표시, 읽은 위치는 남습니다.",
   "holdMenu.confirmRemoveSavedDescription": "모든 기기의 저장한 항목에서 사라집니다. 이 기사가 나온 브리핑은 그대로입니다.",
   "holdMenu.confirmDeleteAsideDescription": "곁가지 대화와 레슨 안의 해당 줄이 삭제됩니다. 레슨 자체는 남습니다.",
 
   "holdMenu.doneDeleted": "“{title}”을(를) 삭제했습니다",
-  "holdMenu.doneRemovedFromTopic": "{topicName}에서 제거했습니다",
-  "holdMenu.doneLessonDeleted": "레슨을 삭제했습니다",
-  "holdMenu.doneConversationDeleted": "대화를 삭제했습니다",
   "holdMenu.doneRemovedFromSaved": "저장한 항목에서 제거했습니다",
   "holdMenu.doneAsideDeleted": "곁가지 대화를 삭제했습니다",
 
   "holdMenu.failedTopic": "주제를 삭제하지 못했습니다.",
   "holdMenu.failedFile": "삭제하지 못했습니다.",
-  "holdMenu.failedRemoveFromTopic": "이 주제에서 제거하지 못했습니다.",
   "holdMenu.failedConversation": "대화를 삭제하지 못했습니다.",
   "holdMenu.failedRemoveSaved": "저장한 항목에서 제거하지 못했습니다.",
 

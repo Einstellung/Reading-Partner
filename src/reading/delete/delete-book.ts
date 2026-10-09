@@ -50,7 +50,6 @@ import {
   deadLocalPathsFor,
   filesOnlyInTopic,
   hasOtherReference,
-  isLastReferenceToBook,
   observationIdsToDelete,
   retellIdsToDelete,
   type SupplementList,
@@ -335,16 +334,6 @@ export async function removeFromTopic(
     }
   }
   return file.hash ? deleteIfUnreferenced(file.hash, deps) : false;
-}
-
-/** Whether removeFromTopic would delete the document: what the confirmation says. */
-export async function isLastReference(
-  topics: readonly Topic[],
-  topicId: string,
-  file: FileRef,
-  deps: Pick<DeleteBookDeps, "listSupplementLists"> = liveDeleteBookDeps,
-): Promise<boolean> {
-  return isLastReferenceToBook(topics, topicId, file, await deps.listSupplementLists());
 }
 
 /**

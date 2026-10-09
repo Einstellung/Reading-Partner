@@ -24,7 +24,7 @@ import {
   listTopics,
   markOpened,
   mostRecentlyOpened,
-  onImportMove,
+  onFiledElsewhere,
   type FileRef,
   type Topic,
 } from "./platform/app/topics";
@@ -941,11 +941,11 @@ export default function App() {
     [openFile, pushToast, t],
   );
 
-  // A book is on one topic, so an import of one another topic lists moved it
-  // (platform/app/topics.ts addFile). Whichever door it came in by, it is said
-  // here.
+  // A book is on one topic, so an add of one another topic lists left it
+  // there (platform/app/topics.ts addFile). Whichever door it came in by, it is
+  // said here.
   useEffect(
-    () => onImportMove((move) => pushToast("info", t("shell.toast.movedFrom", { topic: move.from.name }))),
+    () => onFiledElsewhere((found) => pushToast("info", t("shell.toast.alreadyIn", { topic: found.topic.name }))),
     [pushToast, t],
   );
 
@@ -1562,6 +1562,7 @@ export default function App() {
               onOpenFile={openFile}
               onTopicsChanged={refreshTopics}
               onSay={(line) => pushToast("error", line)}
+              onTell={(line) => pushToast("info", line)}
             />
           )}
         </div>
