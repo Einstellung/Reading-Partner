@@ -118,8 +118,9 @@ export type CallAction<M extends CallRow> =
   | { type: "row-appended"; threadId: string; row: M }
   // The reader spoke into the running turn and the model has been handed it:
   // the AI row at `ts` is finished where it stands and the reply that follows
-  // starts a row of its own (docs/72).
-  | { type: "row-split"; threadId: string; ts: number; row: M }
+  // starts a row of its own (docs/72). With `drop` the row held nothing and
+  // goes instead of staying above the reader's line (docs/pitfall/510).
+  | { type: "row-split"; threadId: string; ts: number; row: M; drop?: boolean }
   // A queued reader row reached the model, so its mark comes off.
   | { type: "row-delivered"; threadId: string; ts: number }
   // Someone outside the view wrote into this conversation while it was open — a
@@ -193,16 +194,18 @@ export function callReducer<M extends CallRow>(
       };
     case "row-appended":
       return { ...state, messages: [...state.messages, action.row] };
-    case "row-split":
+    case "row-split": {
+      const was = (m: M) => m.ts === action.ts && m.role === "ai";
       return {
         ...state,
         messages: [
-          ...state.messages.map((m) =>
-            m.ts === action.ts && m.role === "ai" ? applyRowChange(m, { kind: "handed-over" }) : m,
-          ),
+          ...(action.drop
+            ? state.messages.filter((m) => !was(m))
+            : state.messages.map((m) => (was(m) ? applyRowChange(m, { kind: "handed-over" }) : m))),
           action.row,
         ],
       };
+    }
     case "row-delivered":
       return {
         ...state,

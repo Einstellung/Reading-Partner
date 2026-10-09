@@ -47,6 +47,10 @@ export interface LiveTurn<M extends LiveMessage> {
   // steering is: the bell reaches a turn it did not start, and this registry is
   // the only handle on it.
   delivered?: Delivered;
+  // Whether the row being written is already in the thread file: handed over
+  // to a line the reader said, with nothing written since
+  // (reading/turn/turn-row-split.ts). The stop button then has nothing to add.
+  split?: { readonly down: boolean };
   // A turn this session did not start and draws no row for: the soul answering
   // a bell into this conversation (soul/bell.ts). It is registered all the same
   // so the thread is known to be busy — the reader talking into it steers it

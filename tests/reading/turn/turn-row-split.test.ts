@@ -30,12 +30,51 @@ test("a steer mid-answer puts the row above in the file and opens a new row on t
   expect(rows.answerTail("First part.\n\nThe answer.", "The answer.")).toBe("The answer.");
 });
 
-test("a steer before the model wrote a word leaves the row where it is", () => {
+// The empty row is above the reader's line on screen; the reply belongs under
+// it. Nothing of it goes in the file, and the row that replaces it is stamped
+// after the line (docs/pitfall/510).
+test("a steer before the row held anything drops it and opens the reply under the line", () => {
   const rows = createRowSplit();
   rows.start(1000);
   expect(rows.steered("")).toBeNull();
-  expect(rows.writing(at(2000))).toEqual({ ts: 1000 });
+  expect(rows.down).toBe(false);
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: null, drop: true } });
+  expect(rows.writing(at(2500))).toEqual({ ts: 2000 });
   expect(rows.answerTail("  The answer.", "The answer.")).toBe("The answer.");
+});
+
+// A round that only called a tool: its receipt is what the row produced, so
+// the row stays above the line and goes into the file with no words.
+test("a steer after a round that only called a tool puts the receipt row in the file and splits", () => {
+  const rows = createRowSplit();
+  rows.start(1000);
+  rows.writing(at(1200));
+  expect(rows.steered("", true)).toEqual({ text: "", ts: 1000 });
+  expect(rows.down).toBe(true);
+  // A second line drained at the same boundary writes it once.
+  expect(rows.steered("", true)).toBeNull();
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: null } });
+  expect(rows.down).toBe(false);
+  expect(rows.answerTail("I've set your diet.", "I've set your diet.")).toBe("I've set your diet.");
+});
+
+test("a delivered run after a round that only called a tool splits as a steer does", () => {
+  const rows = createRowSplit();
+  rows.start(1000);
+  expect(rows.delivered("", "run-1", true)).toEqual({ text: "", ts: 1000 });
+  expect(rows.origin).toBeNull();
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: { runId: "run-1" } } });
+});
+
+test("an empty row marked with a run keeps the mark when a steer moves it under the line", () => {
+  const rows = createRowSplit();
+  rows.start(1000);
+  rows.delivered("", "run-1");
+  rows.steered("");
+  expect(rows.writing(at(2000))).toEqual({
+    ts: 2000,
+    split: { was: 1000, origin: { runId: "run-1" }, drop: true },
+  });
 });
 
 test("a split row is keyed after the row it follows even when the clock is behind", () => {
@@ -115,13 +154,13 @@ test("two steers a round apart split twice and leave the last row's text as the 
   expect(rows.answerTail("One.\n\nTwo.\n\nThree.", "Three.")).toBe("Three.");
 });
 
-test("a second steer right after a split, before the new row has text, does not split again", () => {
+test("a second steer right after a split, before the new row has text, moves the empty row under it", () => {
   const rows = createRowSplit();
   rows.start(1000);
   rows.steered("One.");
   rows.writing(at(2000));
   expect(rows.steered("")).toBeNull();
-  expect(rows.writing(at(3000))).toEqual({ ts: 2000 });
+  expect(rows.writing(at(3000))).toEqual({ ts: 3000, split: { was: 2000, origin: null, drop: true } });
 });
 
 test("a turn that ends after a steer with nothing written after it leaves no new row and hands over", () => {
@@ -132,6 +171,25 @@ test("a turn that ends after a steer with nothing written after it leaves no new
   // never opened a row and every ending lands on the row that exists.
   expect(rows.ts).toBe(1000);
   expect(rows.answerTail("Above.", "Above.")).toBeNull();
+});
+
+// What the stop button reads: a row handed over with words in it is in the file
+// already, until something is written and the reply's own row opens.
+test("the row being written is down from the handover until the next write", () => {
+  const rows = createRowSplit();
+  rows.start(1000);
+  expect(rows.down).toBe(false);
+  rows.steered("Above.");
+  expect(rows.down).toBe(true);
+  rows.writing(at(2000));
+  expect(rows.down).toBe(false);
+  // Handed over before anything was produced: nothing of it is in the file.
+  rows.steered("");
+  expect(rows.down).toBe(false);
+  rows.writing(at(3000));
+  // Handed over with only a receipt: that is in the file.
+  rows.steered("", true);
+  expect(rows.down).toBe(true);
 });
 
 test("a turn stopped after a split ends on the new row", () => {

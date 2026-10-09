@@ -129,8 +129,9 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const stickKey = infoStickKey(dateKey, anchor.threadId);
   // The turn in flight and the rows it writes into. Stop settles it the way
   // every chat surface does: runAgentTurn says nothing once the reader has
-  // aborted it, so the hook keeps what was written.
-  const { messages, setMessages, streaming, begin, raiseCard, stop, abort } = useStreamingTurn(
+  // aborted it, so the hook keeps what was written. A line said while it runs
+  // is steered into it (docs/72).
+  const { messages, setMessages, streaming, begin, rows, steer, raiseCard, stop, abort } = useStreamingTurn(
     bookId,
     anchor.threadId,
   );
@@ -205,7 +206,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       // Gated on the on-disk thread being empty, so a reopened conversation never
       // re-greets.
       if (anchor.onboarding && thread.messages.length === 0) {
-        begin((run) => void runAgent([{ role: "user", text: OPENING_KICKOFF }], run));
+        begin((run) => void ask(run));
       }
       // A screen's button opened this conversation with something to say ("Plan
       // this week."). Sent as the reader's own turn, shown and persisted, and
@@ -547,16 +548,31 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     });
   }
 
+  // What a turn is asked with: the conversation as it stands when it is asked,
+  // which is not always when it was first asked (useStreamingTurn: a stall asks
+  // again, and so do lines the reader said into a turn that never took them).
+  // The onboarding opener has nothing above it; the AI speaks first.
+  function ask(run: StreamingTurnRun): Promise<void> {
+    const history: ChatMessage[] = replayableHistory(rows());
+    const opening = anchor.onboarding && history.length === 0;
+    return runAgent(opening ? [{ role: "user", text: OPENING_KICKOFF }] : history, run);
+  }
+
   async function send(text: string) {
-    if (!text.trim() || streaming) return;
+    const said = text.trim();
+    if (!said) return;
+    // A turn is running: this is a line into it, not a second turn (docs/72).
+    // It is drawn under the reply, handed to the model at the end of the round
+    // in flight, and opens the next turn if this one ends without taking it.
+    if (steer(said)) return;
     const now = Date.now();
     const userMsg: UiMessage = { role: "user", text, ts: now };
-    const history: ChatMessage[] = replayableHistory([...messages, userMsg]);
     setMessages((prev) => [...prev, userMsg]);
     appendMessage(bookId, anchor.threadId, { role: "user", text, ts: now });
     let sent: Promise<void> | undefined;
     begin((run) => {
-      sent = runAgent(history, run);
+      const asked = ask(run);
+      sent ??= asked;
     });
     await sent;
   }

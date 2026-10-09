@@ -5,7 +5,7 @@
 // companion. Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { applyRowChange, type RowChange } from "../../../src/ai/turn-view/turn-rows";
+import { applyRowChange, keptOnStop, type RowChange } from "../../../src/ai/turn-view/turn-rows";
 import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 
 const ai = (ts: number, text = "", extra: Partial<ThreadMessage> = {}): ThreadMessage => ({
@@ -110,13 +110,39 @@ test("a refusal goes in the notice, keeps the words and the trace", () => {
   expect(declined.tools?.map((t) => t.name)).toEqual(["read_talk_outline"]);
 });
 
-test("a stop keeps the half sentence as a finished row with no trace", () => {
+// The call still running never reports back once the turn is stopped, so its
+// line goes; what settled stays.
+test("a stop keeps the half sentence as a finished row, without the call still running", () => {
   const row = run(ai(1, "", { streaming: true }), [START, { kind: "delta", chunk: "half a sen" }]);
   expect(applyRowChange(row, { kind: "stopped", text: "half a sen" })).toEqual({
     role: "ai",
     text: "half a sen",
     ts: 1,
   });
+});
+
+test("a stop keeps the calls that settled, receipts included", () => {
+  const receipt = { label: "Updated your profile", summary: "Prefers short answers" };
+  const row = run(ai(1, "", { streaming: true }), [
+    START,
+    { kind: "tool-end", name: "read_talk_outline", isError: false, receipt },
+    { kind: "tool-start", name: "read_chapter", label: "Reading chapter 2" },
+  ]);
+  expect(applyRowChange(row, { kind: "stopped", text: "" }).tools).toEqual([
+    { name: "read_talk_outline", label: "Reading the talk outline", state: "done", receipt },
+  ]);
+});
+
+test("keptOnStop keeps words or a settled call, and nothing else", () => {
+  const done = { name: "s", label: "S", state: "done" as const };
+  const quiet = { name: "q", label: "Q", state: "done" as const, quiet: true as const };
+  const running = { name: "r", label: "R", state: "running" as const };
+  expect(keptOnStop({ text: "  half  ", tools: [running] })).toEqual({ text: "half", trace: null });
+  expect(keptOnStop({ text: "", tools: [done, running] })).toEqual({ text: "", trace: [done] });
+  // Not shown, still stored: the trace keeps every call that ran.
+  expect(keptOnStop({ text: "", tools: [quiet] })).toEqual({ text: "", trace: [quiet] });
+  expect(keptOnStop({ text: " ", tools: [running] })).toBeNull();
+  expect(keptOnStop({ text: "" })).toBeNull();
 });
 
 test("every way a turn ends clears the phase", () => {

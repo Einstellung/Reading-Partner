@@ -680,6 +680,30 @@ test("the model handed the line: the reply so far is a row, the rest is a new on
   expect(wrote.messages[2].text).toBe("the other one is");
 });
 
+// The row held nothing when the line was handed over: it goes, and the reply
+// opens under the line (docs/pitfall/510).
+test("a split that drops the row above takes it off and opens the reply under the line", () => {
+  const state = call({
+    messages: [
+      { role: "user", text: "why?", ts: 1 },
+      { role: "ai", text: "", ts: 2, streaming: true, phase: "thinking" },
+      { role: "user", text: "in French", ts: 3 },
+    ],
+  });
+  const split = reduce(state, {
+    type: "row-split",
+    threadId: "t1",
+    ts: 2,
+    row: { role: "ai", text: "", ts: 4, streaming: true },
+    drop: true,
+  })!;
+  expect(split.messages.map((m) => [m.role, m.ts])).toEqual([
+    ["user", 1],
+    ["user", 3],
+    ["ai", 4],
+  ]);
+});
+
 test("the queued mark comes off the row it was on, and off nothing else", () => {
   const state = call({
     messages: [

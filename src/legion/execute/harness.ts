@@ -272,9 +272,29 @@ export async function createHarness(deps: HarnessDeps, context: Context): Promis
   };
 }
 
-// The harness itself, over a session someone else resolved. Two callers: the
-// one above, and the settling pass below, which needs a harness on the previous
-// session to reach its lanes.
+/**
+ * One more harness over a session another harness already holds, for lanes of
+ * its own (held.ts). pi keeps a harness's tools, system prompt and reduction
+ * for every lane on it (docs/pitfall/307), so two turns that bring their own
+ * cannot share one; they can share the session, whose writes pi queues one at
+ * a time whichever harness makes them (docs/pitfall/507). Each lane is driven
+ * by one harness only: a harness holds its lanes' state in memory and would
+ * not see another's moves.
+ *
+ * Closing it closes the session too (pi's `close` does both), so it is closed
+ * with the session's owner and not before.
+ */
+export async function attachHarness(
+  deps: HarnessDeps,
+  session: Session,
+  context: Context,
+): Promise<Harness<undefined>> {
+  return (await buildHarness(deps, session, context)).harness;
+}
+
+// The harness itself, over a session someone else resolved. Three callers:
+// createHarness, attachHarness, and the settling pass below, which needs a
+// harness on the previous session to reach its lanes.
 async function buildHarness(
   deps: HarnessDeps,
   session: Session,

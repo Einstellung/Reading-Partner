@@ -575,3 +575,30 @@ test("a turn that was killed before it said anything lands nothing at all", asyn
     off();
   }
 });
+
+// Each conversation's turns run on a lane of its own under the soul's
+// (legion/execute/held.ts), so a run left open on one of those is the soul's to
+// finish; a lane that is not under it is not.
+test("a run left open on a conversation's lane is resumed there; a lane outside the soul's is aborted", async () => {
+  const off = bookDelivery();
+  try {
+    const stub = stubRecovery({ transcript: [stamp] as LaneSnapshot["transcript"] }, [
+      { lane: `soul/${THREAD}`, operationId: "op-1", kind: "run", startedAt: NOW },
+      { lane: "soulmate", operationId: "op-2", kind: "run", startedAt: NOW },
+    ]);
+    const sent: string[] = [];
+    await recoverSoulSession(stub.previous, {
+      lane: "soul",
+      settings: async () => settings,
+      send: async (turn) => {
+        sent.push(`${turn.harness.lane.name}:${turn.operationId}`);
+        return "";
+      },
+    });
+    expect(sent).toEqual([`soul/${THREAD}:op-1`]);
+    expect(stub.notes).toEqual([RECOVERY_ATTEMPT]);
+    expect(stub.aborted).toEqual(["soulmate"]);
+  } finally {
+    off();
+  }
+});

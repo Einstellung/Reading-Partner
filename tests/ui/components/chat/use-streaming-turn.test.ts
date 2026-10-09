@@ -15,6 +15,7 @@ const { act, cleanup, renderHook } = await useDom();
 
 import * as threads from "../../../../src/platform/app/threads";
 import { STALL_MESSAGE, StallError } from "../../../../src/legion/execute/stall";
+import type { SteerPort } from "../../../../src/legion/execute/contract";
 import {
   useStreamingTurn,
   type StreamingTurnRun,
@@ -139,8 +140,11 @@ test("a reply that called no tool is stored with no trace", async () => {
   expect(kept()).toEqual([{ role: "ai", text: "Plain.", ts: runs[0].ts }]);
 });
 
-// Stop keeps what was on screen, round break included, and a word the stream
-// lands after the abort does not reopen the row.
+
+const READ = { name: "read_chapter", label: "Reading chapter 2", state: "done" as const };
+
+// Stop keeps what was on screen, round break included, and the calls that
+// settled; a word the stream lands after the abort does not reopen the row.
 test("Stop keeps the row as the reader saw it and ignores what arrives after", async () => {
   const { hook, runs, begin, aiRows, kept } = mount();
   await begin();
@@ -155,8 +159,348 @@ test("Stop keeps the row as the reader saw it and ignores what arrives after", a
   await act(() => h.onDelta?.(" a late word"));
 
   expect(aiRows().map((m) => [m.text, m.streaming, m.phase, m.tools])).toEqual([
-    ["Let me look.\n\nIt says", undefined, undefined, undefined],
+    ["Let me look.\n\nIt says", undefined, undefined, [READ]],
   ]);
-  expect(kept().map((m) => m.text)).toEqual(["Let me look.\n\nIt says"]);
+  expect(kept()).toEqual([
+    { role: "ai", text: "Let me look.\n\nIt says", ts: runs[0].ts, parts: [{ type: "trace", tools: [READ] }] },
+  ]);
   expect(hook.result.current.streaming).toBe(false);
+});
+
+// A write that landed before the stop is part of what the turn did, whether or
+// not a word followed it. The call still running when the reader stopped never
+// reports back, so it goes, on screen and on disk alike.
+test("Stop keeps a row that holds only a receipt, and stores its trace", async () => {
+  const receipt = { label: "Updated your profile", summary: "Prefers short answers" };
+  const { hook, runs, begin, aiRows, kept } = mount();
+  await begin();
+  const h = runs[0].handlers();
+  await act(() => {
+    h.onToolStart?.({ name: "profile_update", args: {}, label: "Updating your profile" });
+    h.onToolEnd?.({ name: "profile_update", isError: false, receipt });
+    h.onToolStart?.({ name: "read_chapter", args: {}, label: "Reading chapter 2" });
+  });
+  await act(() => hook.result.current.stop());
+
+  const settled = { name: "profile_update", label: "Updating your profile", state: "done" as const, receipt };
+  expect(aiRows().map((m) => [m.text, m.streaming, m.tools])).toEqual([["", undefined, [settled]]]);
+  expect(kept()).toEqual([{ role: "ai", text: "", ts: runs[0].ts, parts: [{ type: "trace", tools: [settled] }] }]);
+});
+
+test("Stop on a row that produced nothing still drops it", async () => {
+  const { hook, runs, begin, aiRows, kept } = mount();
+  await begin();
+  await act(() => runs[0].handlers().onToolStart?.({ name: "read_chapter", args: {}, label: "Reading chapter 2" }));
+  await act(() => hook.result.current.stop());
+
+  expect(aiRows()).toEqual([]);
+  expect(kept()).toEqual([]);
+});
+
+// --- the reader talking into the turn (docs/72) ----------------------------
+
+const tick = () => act(async () => void (await new Promise((resolve) => setTimeout(resolve, 0))));
+
+// The port the harness hands a turn once it has a run to queue into. It records
+// what it was asked to queue; the test says when the model was handed it.
+function steerable(run: StreamingTurnRun) {
+  const queued: string[] = [];
+  const port: SteerPort = async (message) => {
+    queued.push(typeof message === "string" ? message : message.text);
+    return { ok: true, id: `e${queued.length}` };
+  };
+  return {
+    queued,
+    open: () => act(() => run.handlers().onSteerable?.(port)),
+    inject: (index: number) => act(() => run.handlers().onSteered?.([`e${index + 1}`])),
+  };
+}
+
+// Everything the hook put in the thread file, in order.
+const stored = () =>
+  (append.mock.calls as [string, string, threads.ThreadMessage][]).map((c) => [c[2].role, c[2].text]);
+
+const shown = (hook: ReturnType<typeof mount>["hook"]) =>
+  hook.result.current.messages.map((m) => [m.role, m.text, m.streaming ?? m.queued]);
+
+async function steered(line: string) {
+  const rig = mount();
+  await rig.begin();
+  const port = steerable(rig.runs[0]);
+  await port.open();
+  await act(() => rig.runs[0].handlers().onDelta?.("Because"));
+  let took = false;
+  await act(() => {
+    took = rig.hook.result.current.steer(line);
+  });
+  await tick();
+  expect(took).toBe(true);
+  return { ...rig, port };
+}
+
+test("a line said mid-turn is queued into it, drawn under the reply, and not stored yet", async () => {
+  const { hook, runs, port } = await steered("and the other one?");
+
+  expect(runs).toHaveLength(1);
+  expect(runs[0].signal.aborted).toBe(false);
+  expect(port.queued).toEqual(["and the other one?"]);
+  expect(shown(hook)).toEqual([
+    ["ai", "Because", true],
+    ["user", "and the other one?", true],
+  ]);
+  expect(stored()).toEqual([]);
+});
+
+test("no turn running: steer declines and the caller sends it as a turn", () => {
+  const { hook } = mount();
+  expect(hook.result.current.steer("hello")).toBe(false);
+  expect(hook.result.current.messages).toEqual([]);
+});
+
+test("handed the line, the file reads ai / user / ai and the reply gets a row of its own", async () => {
+  const { hook, runs, port } = await steered("and the other one?");
+  await port.inject(0);
+
+  expect(stored()).toEqual([
+    ["ai", "Because"],
+    ["user", "and the other one?"],
+  ]);
+  expect(shown(hook)[1]).toEqual(["user", "and the other one?", undefined]);
+
+  await act(() => {
+    const h = runs[0].handlers();
+    h.onDelta?.("The other one is older.");
+    h.onDone?.("x", undefined as never, "Because\n\nThe other one is older.");
+  });
+  expect(shown(hook)).toEqual([
+    ["ai", "Because", undefined],
+    ["user", "and the other one?", undefined],
+    ["ai", "The other one is older.", undefined],
+  ]);
+  expect(stored()).toEqual([
+    ["ai", "Because"],
+    ["user", "and the other one?"],
+    ["ai", "The other one is older."],
+  ]);
+  expect(runs).toHaveLength(1);
+});
+
+test("Stop with a line the model never took keeps the line and opens the next turn on it", async () => {
+  const { hook, runs } = await steered("wait, also this");
+  await act(() => hook.result.current.stop());
+
+  expect(stored()).toEqual([
+    ["ai", "Because"],
+    ["user", "wait, also this"],
+  ]);
+  expect(runs).toHaveLength(2);
+  expect(shown(hook)).toEqual([
+    ["ai", "Because", undefined],
+    ["user", "wait, also this", undefined],
+    ["ai", "", true],
+  ]);
+  // The next turn is asked with the conversation as it now stands.
+  expect(hook.result.current.rows().map((m) => m.text)).toEqual(["Because", "wait, also this", ""]);
+  expect(hook.result.current.streaming).toBe(true);
+});
+
+test("Stop after the line was handed over, before a word followed, stores nothing twice", async () => {
+  const { hook, runs, port } = await steered("and the other one?");
+  await port.inject(0);
+  await act(() => hook.result.current.stop());
+
+  expect(stored()).toEqual([
+    ["ai", "Because"],
+    ["user", "and the other one?"],
+  ]);
+  expect(shown(hook)).toEqual([
+    ["ai", "Because", undefined],
+    ["user", "and the other one?", undefined],
+  ]);
+  expect(runs).toHaveLength(1);
+});
+
+test("a turn that answers before the queue drains opens the next turn on the line", async () => {
+  const { hook, runs } = await steered("one more thing");
+  await act(() => runs[0].handlers().onDone?.("Because.", undefined as never, "Because."));
+
+  expect(stored()).toEqual([
+    ["ai", "Because."],
+    ["user", "one more thing"],
+  ]);
+  expect(runs).toHaveLength(2);
+  expect(hook.result.current.streaming).toBe(true);
+});
+
+test("a turn that fails puts the line back and opens nothing on it", async () => {
+  const { hook, runs, begin } = mount();
+  await begin();
+  // Said before the turn had a run to queue into: it waits, and never goes.
+  await act(() => void hook.result.current.steer("are you there?"));
+  await act(() => runs[0].handlers().onError?.("401 unauthorized", undefined, new Error("401")));
+
+  expect(stored()).toEqual([["user", "are you there?"]]);
+  expect(runs).toHaveLength(1);
+  expect(shown(hook)[1]).toEqual(["user", "are you there?", undefined]);
+});
+
+test("a stalled turn is asked again with the line said into it already in the conversation", async () => {
+  const { hook, runs } = await steered("and the other one?");
+  await stall(runs[0]);
+
+  expect(runs).toHaveLength(2);
+  expect(stored()).toEqual([["user", "and the other one?"]]);
+  expect(shown(hook)).toEqual([
+    ["user", "and the other one?", undefined],
+    ["ai", "", true],
+  ]);
+});
+
+test("leaving the view still stores what the reader said into the turn", async () => {
+  const { hook, runs } = await steered("never mind");
+  await act(() => hook.result.current.abort());
+
+  expect(stored()).toEqual([["user", "never mind"]]);
+  expect(runs).toHaveLength(1);
+});
+
+// --- a line handed over after a round that wrote no word (docs/pitfall/510) --
+
+const PLAN_CARD = { kind: "lab", id: "plan" } as never;
+const PROFILE_RECEIPT = { label: "Updated your profile", summary: "Diet goal set" };
+const PROFILE_DONE = {
+  name: "update_meals_profile",
+  label: "Updating your profile",
+  state: "done" as const,
+  receipt: PROFILE_RECEIPT,
+};
+
+// Everything the hook put in the thread file, whole, in order.
+const storedRows = () => (append.mock.calls as [string, string, threads.ThreadMessage][]).map((c) => c[2]);
+
+const shape = (m: { role: string; text: string; parts?: { type: string }[] }) => [
+  m.role,
+  m.text,
+  (m.parts ?? []).map((p) => p.type),
+];
+
+// The meals repro: round one only calls a tool, the reader speaks, round two
+// raises a card and answers. On screen and in the file alike the receipt row
+// stays above the line, and the card and the answer go under it.
+test("a round with only a receipt stays above the line; the card and the answer go under it", async () => {
+  const { hook, runs, begin } = mount();
+  await begin();
+  const port = steerable(runs[0]);
+  await port.open();
+  const h = runs[0].handlers();
+  await act(() => {
+    h.onToolStart?.({ name: "update_meals_profile", args: {}, label: "Updating your profile" });
+    h.onToolEnd?.({ name: "update_meals_profile", isError: false, receipt: PROFILE_RECEIPT });
+  });
+  await act(() => void hook.result.current.steer("Also keep breakfasts under 400 kcal."));
+  await tick();
+  await port.inject(0);
+  await act(() => {
+    h.onToolStart?.({ name: "plan_meals", args: {}, label: "Planning meals" });
+    hook.result.current.raiseCard("meals", PLAN_CARD);
+    h.onToolEnd?.({ name: "plan_meals", isError: false });
+    h.onDelta?.("I've set your diet.");
+    h.onDone?.("I've set your diet.", undefined as never, "I've set your diet.");
+  });
+
+  expect(hook.result.current.messages.map(shape)).toEqual([
+    ["ai", "", []],
+    ["user", "Also keep breakfasts under 400 kcal.", []],
+    ["ai", "", ["card"]],
+    ["ai", "I've set your diet.", []],
+  ]);
+  expect(hook.result.current.messages[0].tools).toEqual([PROFILE_DONE]);
+  const file = storedRows();
+  expect(file.map(shape)).toEqual([
+    ["ai", "", ["trace"]],
+    ["user", "Also keep breakfasts under 400 kcal.", []],
+    ["ai", "", ["card"]],
+    ["ai", "I've set your diet.", ["trace"]],
+  ]);
+  expect(file[0].parts).toEqual([{ type: "trace", tools: [PROFILE_DONE] }]);
+  // The answer is keyed after the line it answers.
+  expect(file[0].ts).toBe(runs[0].ts);
+  expect(file[3].ts).toBeGreaterThan(file[1].ts);
+});
+
+// Handed over with nothing produced: no row is left above the line, and none
+// goes in the file for it.
+test("a line handed over before the row held anything moves the reply under it", async () => {
+  const { hook, runs, begin } = mount();
+  await begin();
+  const port = steerable(runs[0]);
+  await port.open();
+  const h = runs[0].handlers();
+  await act(() => h.onThinking?.("…"));
+  await act(() => void hook.result.current.steer("in French, please"));
+  await tick();
+  await port.inject(0);
+  await act(() => {
+    h.onDelta?.("En français.");
+    h.onDone?.("En français.", undefined as never, "En français.");
+  });
+
+  expect(shown(hook)).toEqual([
+    ["user", "in French, please", undefined],
+    ["ai", "En français.", undefined],
+  ]);
+  const file = storedRows();
+  expect(file.map((m) => [m.role, m.text])).toEqual([
+    ["user", "in French, please"],
+    ["ai", "En français."],
+  ]);
+  expect(file[1].ts).toBeGreaterThan(file[0].ts);
+});
+
+test("Stop right after a receipt row was handed over stores it once", async () => {
+  const { hook, runs, begin } = mount();
+  await begin();
+  const port = steerable(runs[0]);
+  await port.open();
+  const h = runs[0].handlers();
+  await act(() => {
+    h.onToolStart?.({ name: "update_meals_profile", args: {}, label: "Updating your profile" });
+    h.onToolEnd?.({ name: "update_meals_profile", isError: false, receipt: PROFILE_RECEIPT });
+  });
+  await act(() => void hook.result.current.steer("and lunch?"));
+  await tick();
+  await port.inject(0);
+  await act(() => hook.result.current.stop());
+
+  expect(stored()).toEqual([
+    ["ai", ""],
+    ["user", "and lunch?"],
+  ]);
+});
+
+// A tool that raises its card in the millisecond the reply row opened. Two AI
+// rows on one stamp are one row to every patch by stamp, and the reply's words
+// would land in the card too.
+test("a card raised in the reply row's millisecond keeps a row of its own", async () => {
+  const clock = spyOn(Date, "now").mockReturnValue(5000);
+  try {
+    const { hook, runs, begin } = mount();
+    await begin();
+    const h = runs[0].handlers();
+    await act(() => {
+      h.onToolStart?.({ name: "plan_meals", args: {}, label: "Planning meals" });
+      hook.result.current.raiseCard("meals", PLAN_CARD);
+      h.onToolEnd?.({ name: "plan_meals", isError: false });
+      h.onDelta?.("Here is the week.");
+      h.onDone?.("Here is the week.", undefined as never, "Here is the week.");
+    });
+    expect(hook.result.current.messages.map(shape)).toEqual([
+      ["ai", "", ["card"]],
+      ["ai", "Here is the week.", []],
+    ]);
+    const ts = hook.result.current.messages.map((m) => m.ts);
+    expect(new Set(ts).size).toBe(2);
+  } finally {
+    clock.mockRestore();
+  }
 });
