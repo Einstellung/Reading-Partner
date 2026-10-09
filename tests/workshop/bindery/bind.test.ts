@@ -4,7 +4,7 @@
 // Run: bash scripts/t.sh tests/workshop/bindery/bind.test.ts
 
 import { expect, test } from "bun:test";
-import { bind, manuscriptEpubInput, readMaterial } from "../../../src/workshop/bindery/bind";
+import { bind, buildRead, manuscriptEpubInput, readMaterial } from "../../../src/workshop/bindery/bind";
 import {
   buildArticleEpub,
   buildSectionedEpub,
@@ -94,6 +94,23 @@ test("a fetched page bound twice is the same bytes", async () => {
       imagesMissing: 0,
     });
   }
+});
+
+test("reading first and building after is the same bytes as bind", async () => {
+  for (const name of ["rich", "bare"] as const) {
+    const input = PINNED_ARTICLES[name];
+    const before = await buildArticleEpub(input);
+    const read = await withSite({ minChars: 1, toManuscript: async () => asManuscript(input) }, () => readMaterial(SITE));
+    if (!read.ok || "passedThrough" in read) throw new Error("not read");
+    expect((await buildRead(read)).epub).toEqual(before);
+  }
+  const material = { kind: "html", html: `<p>${PROSE}</p>`, title: "T", sourceUrl: "https://e.com/t" } as const;
+  const read = await readMaterial(material);
+  const bound = await bind(material);
+  if (!read.ok || "passedThrough" in read || !bound.ok || "passedThrough" in bound) throw new Error("not built");
+  const built = await buildRead(read);
+  expect(built.epub).toEqual(bound.epub);
+  expect(built.metadata).toEqual(bound.metadata);
 });
 
 // --- several sections -------------------------------------------------------
