@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 506）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 507）。
 
 ## EmbedPDF 引擎
 
@@ -342,6 +342,7 @@
 - [457-a-state-updater-that-reads-the-viewport-is-replayed](./overlay/457-a-state-updater-that-reads-the-viewport-is-replayed.md) — 转屏时 vv `scroll`（continuous，排 Scheduler）还没渲染，window `resize`（discrete，SyncLane）就到了；同步渲染跳过前者、每次从旧 base state 重放后者，`setSize(prev => { const next = read(); ... })` 这种在 updater 里现读视口的每次都返回新对象，`PenToolbar` 的 layout effect 跟着重跑 setState，52 次后 `Maximum update depth exceeded`，EPUB 课堂整屏白（七次带键盘转横屏白两次）。测量挪到事件里，updater 只比 `prev` 和测好的 `next`
 - [458-a-scroll-events-update-renders-after-the-frames-raf](./overlay/458-a-scroll-events-update-renders-after-the-frames-raf.md) — vv `scroll` 里的 setState 渲染在这一帧的 rAF 回调之后；iPad 文档上卷那次外壳挪到 `top: 340px` 的渲染晚于 Lumen 的两次测量，Lumen 量到没挪的输入框、不抬，压着发送键（774/846 对输入框 800/862）。`useKeyboardFrame` 的事件回调用 `flushSync`，外壳在事件返回前挪好
 - [505-a-fixed-layer-in-the-phone-shell-is-left-behind-by-the-keyboard](./overlay/505-a-fixed-layer-in-the-phone-shell-is-left-behind-by-the-keyboard.md) — `KeyboardShell` 用 `top` 挪而不用 transform，不是里面 `fixed` 元素的包含块；手机上 `fixed inset-0` 的 Lumen 打字对话跟着文档被卷上去（层 top -281），`CallView` 却按挪过的外壳垫了底，顶栏出屏、输入框顶到灵动岛、点发送只收键盘。带输入框的整屏层在外壳里用 `absolute inset-0`
+- [506-the-ipad-door-panel-in-the-fixed-corner-leaves-with-the-keyboard](./overlay/506-the-ipad-door-panel-in-the-fixed-corner-leaves-with-the-keyboard.md) — iPad 横屏 Lumen 的打字面板画在角落 `fixed` 的列里，第一次弹键盘跟着文档卷走（输入框 y=-207），`100dvh` 算的高度也不随键盘缩。面板在外壳里单开 `absolute inset-0` 一层，键盘在时站在键盘上（底边留 `covered + 8`、`max-h-full`），Lumen 隐身，面板里的 `CallView` 不再按 `covered` 垫底
 - [386-a-moved-box-reports-nothing](./overlay/386-a-moved-box-reports-nothing.md) — `CallView` 的 composer 在空态和非空态里是同一个下标上的 `<div>`，React 复用同一个 DOM 节点：callback ref 不再调一次，`ResizeObserver` 只管尺寸不管位置，于是量到的还是它居中时的盒子，Lumen 一直压着发送键。两个分支各给一个 key
 - [68-overflow-x-auto-clips-the-other-axis](./overlay/68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
 - [80-portalled-overlay-trips-the-host-outside-press](./overlay/80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路
