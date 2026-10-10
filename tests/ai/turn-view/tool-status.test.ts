@@ -7,6 +7,7 @@ import {
   persistedTrace,
   relabelRunningTool,
   resolveToolStatus,
+  doneTraceLabels,
   visibleTrace,
   type ToolStatus,
 } from "../../../src/ai/turn-view/tool-status";
@@ -118,4 +119,20 @@ test("the trace the reader sees drops quiet calls and keeps the ones that failed
   // A stored trace from before the flag existed has no quiet call in it, so
   // every line it holds is one the reader was shown.
   expect(visibleTrace([loud])).toEqual([loud]);
+});
+
+test("the grey line under a settled answer leaves out what its receipt already says", () => {
+  const read: ToolStatus = { name: "read_pages", label: "Reading page 7", state: "done" };
+  const wrote: ToolStatus = {
+    name: "propose_meals_plan",
+    label: "Drafting this week's meals",
+    state: "done",
+    receipt: { label: "Drafted the week", summary: "Mon: soup" },
+  };
+  const running: ToolStatus = { name: "search", label: "Searching", state: "running" };
+  const failed: ToolStatus = { name: "x", label: "Writing", state: "error", error: "no" };
+  const quiet: ToolStatus = { name: "q", label: "Filing", state: "done", quiet: true };
+  expect(doneTraceLabels([read, wrote, running, failed, quiet])).toEqual(["Reading page 7"]);
+  // A turn whose every call was a write with a receipt draws no grey line at all.
+  expect(doneTraceLabels([wrote])).toEqual([]);
 });
