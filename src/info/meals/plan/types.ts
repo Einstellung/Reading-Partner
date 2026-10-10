@@ -165,6 +165,16 @@ export interface Pot {
   name: string;
   // One line on how it is cooked, in the reader's language.
   method: string;
+  // The boxes it was packed into after the cook meal, set when a meal of a pot
+  // already cooked went differently. From then on the shares and labels stay
+  // as packed and a box no meal eats is a spare another meal can take.
+  packed?: PotBox[];
+}
+
+/** One box a cooked pot was packed into: the meal written on it, and where it waits. */
+export interface PotBox {
+  for: MealRef;
+  storage: "fridge" | "freezer";
 }
 
 export interface WeekPlan {

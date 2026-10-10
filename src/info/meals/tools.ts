@@ -41,7 +41,7 @@ import {
   removeShoppingItem,
   replaceShoppingItem,
 } from "./plan/shopping";
-import { MAX_POT_MEALS, MIN_POT_MEALS, potPortions } from "./plan/pots";
+import { FRIDGE_DAYS, MAX_POT_MEALS, MIN_POT_MEALS, potBoxing, potPortions } from "./plan/pots";
 import { targetsOf } from "./plan/solve-week";
 import {
   CATEGORY_ORDER,
@@ -258,13 +258,25 @@ export function mealsGuidance(
     const portions = potPortions(plan);
     if (plan.pots?.length) {
       out.push("Pots:");
+      let spare = false;
       for (const pot of plan.pots) {
         const cook = dayIndexOf(plan, pot.cook.date);
         const shares = [...portions.values()].filter((p) => p.pot.id === pot.id);
         const share = shares[0]?.shareG;
+        const spares = potBoxing(plan, pot)?.spares ?? [];
+        const boxes = spares.map((b) => `${b.storage}, from Day ${dayIndexOf(plan, b.for.date)} ${b.for.meal}`);
+        if (spares.length) spare = true;
         out.push(
           `- ${pot.id}: ${pot.name}, ${pot.rawG} g ${pot.foodId}, cooked Day ${cook} ${pot.cook.meal} (${pot.method}); ` +
-            (share ? `${shares.length} meals of ${share} g` : "no longer split: fewer than two meals eat from it"),
+            (share ? `${shares.length} meals of ${share} g` : "no longer split: fewer than two meals eat from it") +
+            (spares.length ? `; ${spares.length} spare box${spares.length === 1 ? "" : "es"}: ${boxes.join("; ")}` : ""),
+        );
+      }
+      if (spare) {
+        out.push(
+          "A spare box is a share already cooked and packed that no meal eats. To use it, set `pot` on a",
+          "later made meal in an adjustment and do not send the pot again. A fridge box keeps until",
+          `${FRIDGE_DAYS} days after the cook day; a freezer box keeps to the end of the week.`,
         );
       }
     }

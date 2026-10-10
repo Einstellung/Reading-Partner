@@ -20,6 +20,7 @@ import { targetsOf } from "../../../../src/info/meals/plan/solve-week";
 import type { DayPlan, Meal, WeekPlan } from "../../../../src/info/meals/plan/types";
 import { addDays, applyDeviation, assembleWeekPlan } from "../../../../src/info/meals/plan/week";
 import { dayViewOn } from "../../../../src/info/meals/screen/view";
+import { mealsGuidance } from "../../../../src/info/meals/tools";
 import { MON, charter, draftPotWeek, potMeal, potWeek, profile, state } from "../fixtures/week";
 
 let before: Locale;
@@ -196,4 +197,81 @@ test("a week planned before the pots has none and solves as it did", () => {
   expect(plan.pots).toBeUndefined();
   expect(potPortions(plan).size).toBe(0);
   expect(thawTonight(plan, MON)).toEqual([]);
+});
+
+const out = (date: string, meal: "lunch" | "dinner") =>
+  ({ date, meal, said: "外面吃的", became: "out", changed: "", at: 1 }) as const;
+
+test("a deviation before a pot is cooked splits it again over the meals left", () => {
+  const moved = applyDeviation(potWeek(), out(D(5), "lunch"), null, MON);
+  const pot = moved.plan.pots!.find((p) => p.id === "B")!;
+  expect(pot.packed).toBeUndefined();
+  expect(potPortions(moved.plan).get(refKey({ date: D(6), meal: "lunch" }))).toMatchObject({ index: 2, count: 2, shareG: 200 });
+
+  const cook = applyDeviation(potWeek(), out(MON, "dinner"), null, MON);
+  expect(cook.plan.pots!.find((p) => p.id === "A")).toMatchObject({ cook: { date: D(1), meal: "lunch" } });
+  expect(cook.plan.pots!.find((p) => p.id === "A")!.packed).toBeUndefined();
+});
+
+// Pot A is cooked on day 1 dinner and eaten on days 2, 3 and 5 at lunch; day 3's
+// lunch is eaten out, told on day 2.
+const packedWeek = () => applyDeviation(potWeek(), out(D(2), "lunch"), null, D(1)).plan;
+
+test("a deviation after a pot is cooked keeps the boxes and sets the meal's box aside", () => {
+  const plan = packedWeek();
+  const pot = plan.pots!.find((p) => p.id === "A")!;
+  expect(pot.cook).toEqual({ date: MON, meal: "dinner" });
+  expect(pot.packed).toEqual([
+    { for: { date: D(1), meal: "lunch" }, storage: "fridge" },
+    { for: { date: D(2), meal: "lunch" }, storage: "fridge" },
+    { for: { date: D(4), meal: "lunch" }, storage: "freezer" },
+  ]);
+  const portions = potPortions(plan);
+  expect(portions.get(refKey({ date: D(1), meal: "lunch" }))).toMatchObject({ index: 2, count: 4, shareG: 150, storage: "fridge" });
+  expect(portions.get(refKey({ date: D(4), meal: "lunch" }))).toMatchObject({ index: 4, count: 4, shareG: 150, storage: "freezer" });
+  expect(portions.has(refKey({ date: D(2), meal: "lunch" }))).toBe(false);
+
+  const lunch = dayViewOn(state({ plan }), D(4), MON, "other")!.meals.find((m) => m.key === "lunch")!;
+  expect(lunch.rows.find((r) => r.role === "protein")).toMatchObject({ potLabel: "卤牛腱一锅的 1/4", grams: 150 });
+  expect(dayViewOn(state({ plan }), D(2), MON, "other")!.meals.flatMap((m) => m.rows).some((r) => r.potLabel)).toBe(false);
+  expect(mealsGuidance(state({ plan }), D(1))).toContain("3 meals of 150 g; 1 spare box: fridge, from Day 3 lunch");
+
+  // A second deviation leaves the packing as it was.
+  const again = applyDeviation(plan, out(D(4), "lunch"), null, D(3)).plan;
+  expect(again.pots!.find((p) => p.id === "A")!.packed).toEqual(pot.packed!);
+  expect(potPortions(again).get(refKey({ date: D(1), meal: "lunch" }))).toMatchObject({ count: 4, shareG: 150 });
+});
+
+test("a later meal can take a spare box at the packed share", () => {
+  const previous = packedWeek();
+  const plan = structuredClone(previous);
+  day(plan, 1).dinner = potMeal("番茄牛腱面", "tomato", "A", "beef_shank_raw", "dried_noodles", "bok_choy");
+  const changed = [{ date: D(1), meal: "dinner" as const }];
+  const result = checkPlan({ plan, profile: profile(), targets: targets(), changed, previous });
+  expect(result.problems).toEqual([]);
+  expect(potPortions(plan).get(refKey(changed[0]!))).toMatchObject({ index: 3, count: 4, shareG: 150, storage: "fridge" });
+  expect(mealsGuidance(state({ plan }), D(1))).not.toContain("spare box:");
+
+  const extra = structuredClone(plan);
+  day(extra, 5).dinner = potMeal("番茄牛腱面", "tomato", "A", "beef_shank_raw", "dried_noodles", "bok_choy");
+  expect(potProblems(extra, extra.pots![0]!).map((p) => p.text)).toContain(
+    "Day 6 dinner eats from pot A, which is already packed and has no spare box left.",
+  );
+});
+
+test("a fridge box is not taken more than two days after cooking; a freezer box is", () => {
+  const plan = packedWeek();
+  day(plan, 5).dinner = potMeal("番茄牛腱面", "tomato", "A", "beef_shank_raw", "dried_noodles", "bok_choy");
+  const late = checkPlan({ plan, profile: profile(), targets: targets(), changed: [{ date: D(5), meal: "dinner" }] });
+  expect(late.problems).toContain(
+    "Day 6 dinner is 5 days after pot A is cooked; its spare box from Day 3 lunch is in the fridge, which keeps 2 days. Give it its own protein.",
+  );
+  expect(late.failing).toEqual([{ date: D(5), meal: "dinner" }]);
+
+  const frozen = applyDeviation(potWeek(), out(D(4), "lunch"), null, D(1)).plan;
+  day(frozen, 5).dinner = potMeal("咖喱牛腱面", "curry", "A", "beef_shank_raw", "dried_noodles", "bok_choy");
+  const ok = checkPlan({ plan: frozen, profile: profile(), targets: targets(), changed: [{ date: D(5), meal: "dinner" }] });
+  expect(ok.problems).toEqual([]);
+  expect(potPortions(frozen).get(refKey({ date: D(5), meal: "dinner" }))).toMatchObject({ index: 4, storage: "freezer" });
+  expect(thawTonight(frozen, D(4)).map((t) => [t.pot.id, t.ref.date, t.ref.meal])).toEqual([["A", D(5), "dinner"]]);
 });

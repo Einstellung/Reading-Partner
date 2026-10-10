@@ -12,10 +12,12 @@ import { FOODS, foodAllowed, foodById, type Food } from "../nutrition/foods";
 import type { TemplateItem } from "../nutrition/solve";
 import { minuteCap, type Profile, type Targets } from "../nutrition/targets";
 import {
+  FRIDGE_DAYS,
   MAX_POT_DAYS,
   MAX_POT_MEALS,
   MIN_POT_MEALS,
   compareRefs,
+  potBoxing,
   potById,
   potMeals,
   potShareG,
@@ -108,6 +110,8 @@ export function templateProblems(at: string, meal: Meal, key: MealKey): string[]
  * What is wrong with one pot, before anything is solved: a food that is cooked
  * as a pot, two to four meals, cooked at a meal that eats from it, no meal
  * before it or more than MAX_POT_DAYS after, and a share one meal can take.
+ * A packed pot keeps the split it was packed with: instead of the count and
+ * the share, every meal needs a box, and a fridge box keeps FRIDGE_DAYS.
  * Each problem comes with the meals it names: the pot's meals and its cook meal.
  */
 export function potProblems(plan: WeekPlan, pot: Pot): { text: string; refs: MealRef[] }[] {
@@ -128,7 +132,8 @@ export function potProblems(plan: WeekPlan, pot: Pot): { text: string; refs: Mea
     add(`Pot ${pot.id}: ${food.id} is not cooked as a pot; only ${potFoods.join(", ")} are. Give each of its meals its own protein.`);
     return out;
   }
-  if (meals.length < MIN_POT_MEALS || meals.length > MAX_POT_MEALS) {
+  const boxing = potBoxing(plan, pot);
+  if (!boxing && (meals.length < MIN_POT_MEALS || meals.length > MAX_POT_MEALS)) {
     add(`Pot ${pot.id} feeds ${meals.length} meal${meals.length === 1 ? "" : "s"}; a pot feeds ${MIN_POT_MEALS} to ${MAX_POT_MEALS}.`);
   }
   if (!meals.some((r) => sameMeal(r, pot.cook))) {
@@ -142,7 +147,19 @@ export function potProblems(plan: WeekPlan, pot: Pot): { text: string; refs: Mea
     const days = daysBetween(pot.cook.date, ref.date) ?? 0;
     if (days > MAX_POT_DAYS) add(`${at(ref)} is ${days} days after pot ${pot.id} is cooked; at most ${MAX_POT_DAYS}.`, [ref]);
   }
-  if (meals.length >= MIN_POT_MEALS) {
+  for (const ref of boxing?.unboxed ?? []) {
+    add(`${at(ref)} eats from pot ${pot.id}, which is already packed and has no spare box left.`, [ref]);
+  }
+  for (const { ref, box } of boxing?.taken ?? []) {
+    const days = daysBetween(pot.cook.date, ref.date) ?? 0;
+    if (box.storage !== "fridge" || days <= FRIDGE_DAYS) continue;
+    add(
+      `${at(ref)} is ${days} days after pot ${pot.id} is cooked; its spare box from ${at(box.for)} is in the ` +
+        `fridge, which keeps ${FRIDGE_DAYS} days. Give it its own protein.`,
+      [ref],
+    );
+  }
+  if (!boxing && meals.length >= MIN_POT_MEALS) {
     const share = potShareG(pot.rawG, meals.length);
     if (share < food.minG || share > food.maxG) {
       add(

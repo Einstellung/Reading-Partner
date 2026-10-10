@@ -113,13 +113,15 @@ function settle(meal: Meal, became: MealMode, place: string | undefined): Meal {
  * re-pick the foods of: the meal itself when it became a made meal with no
  * foods yet, or the next made main meal today or tomorrow when a made meal was
  * not eaten, since its foods are now in the fridge. Nothing else moves and
- * nothing is re-planned. A deviation about a date the plan does not cover
- * changes nothing.
+ * nothing is re-planned. `today` decides whether a pot is already cooked and
+ * packed (plan/pots.ts settlePots). A deviation about a date the plan does not
+ * cover changes nothing.
  */
 export function applyDeviation(
   plan: WeekPlan,
   deviation: Deviation,
   profile: DayOrderProfile | null = null,
+  today: string | null = null,
 ): { plan: WeekPlan; attention: MealRef[] } {
   const target = dayOn(plan, deviation.date);
   const before = target?.[deviation.meal];
@@ -128,7 +130,7 @@ export function applyDeviation(
   const ref: MealRef = { date: deviation.date, meal: deviation.meal };
   const settled = settle(before, deviation.became, deviation.place);
   const days = plan.days.map((d) => (d.date === ref.date ? { ...d, [ref.meal]: settled } : d));
-  const next: WeekPlan = settlePots({ ...plan, days, revision: plan.revision + 1 });
+  const next: WeekPlan = settlePots({ ...plan, days, revision: plan.revision + 1 }, { ref, before: plan, today });
 
   const attention: MealRef[] = [];
   if (settled.mode === "make" && !settled.items?.length) attention.push(ref);
