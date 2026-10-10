@@ -4,9 +4,8 @@
 // defines. The source every other locale is typed against.
 //
 // Out of scope (docs/ui/81): info/meals/screen/onboarding.ts (the scripted
-// questions and their answer options) and info/meals/screen/list-order.ts (the
-// shopping list's own status words) are not areas this catalog covers — see the
-// migration report. method-screen.ts's worked formulas and citations stay
+// questions and their answer options) is not an area this catalog covers — see
+// the migration report. method-screen.ts's worked formulas and citations stay
 // English; only its section titles and the three standing notes are here.
 
 export default {
@@ -220,4 +219,46 @@ export default {
   "abbr.fat": "F",
   "abbr.carbs": "C",
   "guideLine": "Fat {fat} g · Carbs {carbs} g (guide {fatTarget} / {carbsTarget} g)",
+
+  // list-order.ts: the shopping card's status and preview lines
+  "shopping.left": "{count} left",
+  "shopping.bought": "Bought · {weekday}",
+  "shopping.toGet": "{count} to get",
+  "shopping.missed": "{count} you didn't get",
+  "shopping.allGot": "Everything on the list.",
+  "shopping.more": "and {count} more",
+
+  // tools.ts: what a meals write left behind (the receipt under the answer)
+  "receipt.draftedWeek": "Drafted the week",
+  "receipt.reworkedMeal": "Reworked a meal",
+  "receipt.updatedProfile": "Updated your profile",
+  "receipt.recordedDeviation": "Recorded a change of plan",
+  "receipt.addedToList": "Added to the shopping list",
+  "receipt.removedFromList": "Took a line off the list",
+  "receipt.swappedLine": "Swapped a line on the list",
+  "receipt.rewroteMethod": "Rewrote how it's made",
+
+  // The profile fields a receipt names when the reader changed them
+  "field.weightKg": "Weight",
+  "field.heightCm": "Height",
+  "field.bodyFatPct": "Body fat",
+  "field.waistCm": "Waist",
+  "field.goal": "Goal",
+  "field.trainingDays": "Training days",
+  "field.trainTime": "Training time",
+  "field.work": "Work",
+  "field.effort": "Effort",
+  "field.people": "People eating",
+  "field.dislikes": "Dislikes",
+  "field.shops": "Shops",
+  "field.kitchen": "Kitchen",
+  "field.notes": "Notes",
+
+  // Between the meals a receipt or the applied line names
+  "listJoin": ", ",
+
+  // The line drawn after the plan card's Apply (cards.ts MealsAppliedCardData)
+  "applied.week": "Saved the week · {count} to buy",
+  "applied.change": "Changed {meals} · {count} to buy",
+  "applied.freeze": "{count} to freeze on arrival",
 } as const;

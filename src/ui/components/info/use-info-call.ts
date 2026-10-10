@@ -62,11 +62,13 @@ import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import { t } from "../../../i18n";
 import {
   findCardPart,
+  nextCardId,
   patchCardPayload,
   rehydrateMessage,
   toPersistedCardPart,
   upsertCardRow,
   type CardAction,
+  type CardPayload,
 } from "../chat/chatParts";
 import { useStreamingTurn, type StreamingTurnRun } from "../chat/useStreamingTurn";
 import type { ChatMessage, ProviderId } from "../../../ai/providers";
@@ -183,6 +185,18 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       const ts = Date.now();
       setMessages((prev) => [...prev, { role, text, ts }]);
       if (opts?.persist !== false) appendMessage(bookId, anchor.threadId, { role, text, ts });
+    },
+    [bookId, anchor.threadId],
+  );
+
+  // A note for the model drawn as a card: the row's text goes to the model on
+  // the next turn and the card is what the reader sees, the way an aside's
+  // receipt is written (reading/aside.ts). Always persisted.
+  const noteCardTurn = useCallback(
+    (text: string, cardId: string, card: CardPayload) => {
+      const ts = Date.now();
+      setMessages((prev) => [...prev, { role: "ai", text, ts, parts: [{ type: "card", id: cardId, card }] }]);
+      appendMessage(bookId, anchor.threadId, { role: "ai", text, ts, parts: [toPersistedCardPart(cardId, card)] });
     },
     [bookId, anchor.threadId],
   );
@@ -394,7 +408,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       const found = findCardPart(messagesRef.current, cardId);
       if (!found || found.payload.kind !== "meals-plan") return;
       const card = found.payload;
-      const { ok, note } = await applyPlan(
+      const { ok, note, shown } = await applyPlan(
         card,
         liveMealsPorts({ today: () => todayLocal(), changed: () => onMealsChanged?.() }),
       );
@@ -404,9 +418,12 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       patchThreadMessage(bookId, anchor.threadId, found.ts, {
         parts: [toPersistedCardPart(cardId, applied)],
       });
-      noteTurn(note);
+      // The model is told in its own row, with the assistant's role; the reader
+      // sees the applied card's line, not the note (info/meals/cards.ts).
+      if (shown) noteCardTurn(note, nextCardId("meals"), shown);
+      else noteTurn(note);
     },
-    [bookId, anchor.threadId, noteTurn, onMealsChanged],
+    [bookId, anchor.threadId, noteTurn, noteCardTurn, onMealsChanged],
   );
 
   // The card action dispatcher wired into the message list. Stable across

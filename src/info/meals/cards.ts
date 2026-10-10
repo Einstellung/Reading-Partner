@@ -3,8 +3,9 @@
 // that drafts it and the component that draws it import one definition.
 //
 // The plan card is a draft. The tool that produces it writes nothing; Apply is
-// the only write, and a synthetic user turn afterwards tells the model what
-// landed (apply.ts). `phase` is what a second click reads to do nothing. The
+// the only write, and a row afterwards tells the model what landed (apply.ts):
+// its text is a note for the model, and the reader sees only the applied card's
+// short line. `phase` is what a second click reads to do nothing. The
 // profile has no card: onboarding and a stated change write it directly.
 
 import type { DayPlan, MealRef, Pot } from "./plan/types";
@@ -30,7 +31,21 @@ export interface MealsPlanCardData {
   phase: "proposed" | "applied";
 }
 
-export type MealsCard = MealsPlanCardData;
+// What the row written after Apply shows the reader: one short line under the
+// card, drawn in the reader's language when it renders. The row's text is the
+// model's note (apply.ts planNote) and is never drawn, like an aside receipt's
+// (reading/aside.ts). Counts, not words, so a change of language redraws it.
+export interface MealsAppliedCardData {
+  kind: "meals-applied";
+  adjustment: boolean;
+  // The meals an adjustment changed. Empty on a fresh week.
+  changed: MealRef[];
+  // Lines still to buy, and how many of them go in the freezer on arrival.
+  toBuy: number;
+  freeze: number;
+}
+
+export type MealsCard = MealsPlanCardData | MealsAppliedCardData;
 
 /** The kinds this domain contributes, for the registry the UI assembles. */
-export const MEALS_CARD_KINDS = ["meals-plan"] as const;
+export const MEALS_CARD_KINDS = ["meals-plan", "meals-applied"] as const;

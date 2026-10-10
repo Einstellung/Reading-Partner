@@ -467,3 +467,50 @@ export function shoppingNote(item: ShoppingItem): string {
     ? t("meals.shoppingNoteFreeze", { keeps: keepsLabel(item.keeps) })
     : keepsLabel(item.keeps);
 }
+
+/** A run of meals by weekday and label, joined the way the language lists them. */
+export function mealsList(refs: readonly { date: string; meal: MealKey }[]): string {
+  return refs.map(boxName).join(t("meals.listJoin"));
+}
+
+/**
+ * The one line drawn after the plan card's Apply (cards.ts MealsAppliedCardData,
+ * by shape: screen does not import the cards): what was saved and what the
+ * shopping list now holds. The model's note on the same row is never drawn.
+ */
+export function appliedLine(card: {
+  adjustment: boolean;
+  changed: readonly { date: string; meal: MealKey }[];
+  toBuy: number;
+  freeze: number;
+}): string {
+  const head = card.adjustment
+    ? t("meals.applied.change", { meals: mealsList(card.changed), count: card.toBuy })
+    : t("meals.applied.week", { count: card.toBuy });
+  return card.freeze ? `${head} · ${t("meals.applied.freeze", { count: card.freeze })}` : head;
+}
+
+const PROFILE_FIELDS = [
+  "weightKg",
+  "heightCm",
+  "bodyFatPct",
+  "waistCm",
+  "goal",
+  "trainingDays",
+  "trainTime",
+  "work",
+  "effort",
+  "people",
+  "dislikes",
+  "shops",
+  "kitchen",
+  "notes",
+] as const;
+
+/** The profile fields a change named, as the reader calls them. Unknown names are dropped. */
+export function profileFieldsLine(fields: readonly string[]): string {
+  return fields
+    .filter((f): f is (typeof PROFILE_FIELDS)[number] => (PROFILE_FIELDS as readonly string[]).includes(f))
+    .map((f) => t(`meals.field.${f}`))
+    .join(t("meals.listJoin"));
+}

@@ -7,7 +7,7 @@
 // deviation write straight through: they are the reader's own answers and
 // sentences, with nothing to approve.
 
-import type { MealsPlanCardData } from "./cards";
+import type { MealsAppliedCardData, MealsPlanCardData } from "./cards";
 import type { PhotoCache } from "./photos/dish-photos";
 import type { Profile, Region, Targets } from "./nutrition/targets";
 import { photoQueriesForPlan, type PhotoQuery } from "./photos/photo-run";
@@ -56,9 +56,10 @@ export interface MealsPorts {
 export interface Applied {
   // False when nothing was written.
   ok: boolean;
-  // The synthetic user turn telling the AI what the reader just did. Empty when
-  // nothing happened.
+  // What the AI is told the reader just did. Empty when nothing happened.
   note: string;
+  // What the reader is shown in place of the note, after the plan card's Apply.
+  shown?: MealsAppliedCardData;
   // Work still running after the note was handed back: starting the photograph
   // run. A test awaits it.
   pending?: Promise<void>;
@@ -147,7 +148,7 @@ export async function applyPlan(card: MealsPlanCardData, ports: MealsPorts): Pro
     () => {},
     () => {},
   );
-  return { ok: true, note: planNote(card, shopping), pending };
+  return { ok: true, note: planNote(card, shopping), shown: appliedCard(card, shopping), pending };
 }
 
 /**
@@ -242,17 +243,32 @@ export function mealWords(ref: MealRef): string {
   return `${ref.date} ${ref.meal}`;
 }
 
-export function planNote(card: MealsPlanCardData, shopping: ShoppingState): string {
+function stillToBuy(shopping: ShoppingState): { toBuy: number; freeze: number } {
   const list = currentList(shopping).filter((i) => !isChecked(shopping, i));
-  const freeze = list.filter((i) => i.freezeOnArrival).length;
+  return { toBuy: list.length, freeze: list.filter((i) => i.freezeOnArrival).length };
+}
+
+/**
+ * The note left in the thread after Apply, for the model. Bracketed and about
+ * the reader, on a row with the assistant's role, the way an aside's receipt is
+ * (reading/aside.ts): the reader did not say it, and the row draws the applied
+ * card in place of these words.
+ */
+export function planNote(card: MealsPlanCardData, shopping: ShoppingState): string {
+  const { toBuy, freeze } = stillToBuy(shopping);
+  const head = card.adjustment
+    ? `The reader applied the change to ${card.changed.map(mealWords).join(", ")}.`
+    : "The reader saved this week's meals.";
   const tail =
-    ` The shopping list is on my screen — ${list.length} things` +
-    (freeze ? `, ${freeze} to freeze when I get home.` : ".") +
-    " Don't read it back to me.";
-  if (card.adjustment) {
-    return `Applied the change to ${card.changed.map(mealWords).join(", ")}.${tail}`;
-  }
-  return `Saved this week's meals.${tail}`;
+    ` The shopping list is on their screen — ${toBuy} things` +
+    (freeze ? `, ${freeze} to freeze on arrival.` : ".") +
+    " Do not read it back to them.";
+  return `[${head}${tail}]`;
+}
+
+/** What the reader sees after Apply (cards.ts MealsAppliedCardData). */
+export function appliedCard(card: MealsPlanCardData, shopping: ShoppingState): MealsAppliedCardData {
+  return { kind: "meals-applied", adjustment: card.adjustment, changed: card.changed, ...stillToBuy(shopping) };
 }
 
 export function deviationNote(deviation: Deviation, attention: readonly MealRef[]): string {

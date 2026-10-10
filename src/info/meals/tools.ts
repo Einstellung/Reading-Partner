@@ -19,6 +19,7 @@ import { asStrings } from "../../platform/std/json";
 import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
 import type { MealsCard, MealsPlanCardData } from "./cards";
 import { checkPlan } from "./plan/checks";
+import { boxName, mealsList, modeWord, profileFieldsLine, weekdayName } from "./screen/view";
 import { FOOD_TAGS, FOODS, foodAllowed } from "./nutrition/foods";
 import type { TemplateItem, TemplateRole } from "./nutrition/solve";
 import {
@@ -597,10 +598,12 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
           " A card now shows the user the days with the grams the program solved. Nothing is " +
           "saved until they apply it. Do not recite amounts or the shopping list — they are on the card.",
         receipt: {
-          label: adjustment ? "Reworked a meal" : "Drafted the week",
+          label: adjustment ? t("meals.receipt.reworkedMeal") : t("meals.receipt.draftedWeek"),
           summary: adjustment
-            ? assembled.changed.map(mealWords).join("; ")
-            : checked.plan.days.map((d) => `${d.date}: ${d.dinner.name ?? d.dinner.mode}`).join("; "),
+            ? mealsList(assembled.changed)
+            : checked.plan.days
+                .map((d) => `${weekdayName(d.date)}: ${d.dinner.name ?? modeWord(d.dinner.mode)}`)
+                .join("; "),
         },
       };
     },
@@ -727,7 +730,7 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
         text:
           `Saved.${numbers}${state.plan ? " The week's grams are re-solved and the list follows." : ""}` +
           " Say it in one line; the numbers are on their screen.",
-        receipt: { label: "Updated your profile", summary: Object.keys(args).join(", ") },
+        receipt: { label: t("meals.receipt.updatedProfile"), summary: profileFieldsLine(Object.keys(args)) },
       };
     },
   };
@@ -794,7 +797,7 @@ export function buildRecordDeviationTool(deps: MealsToolDeps & { ports: MealsPor
           ? `Recorded. ${attention.map(mealWords).join(" and ")} needs its foods picked again — call ` +
             "propose_meals_plan with adjustment set for those meals only."
           : "Recorded. Nothing else in the week moved, so there is nothing to re-plan.",
-        receipt: { label: "Recorded a change of plan", summary: `${date} ${meal}: ${said}` },
+        receipt: { label: t("meals.receipt.recordedDeviation"), summary: `${boxName({ date, meal })}: ${said}` },
       };
     },
   };
@@ -892,7 +895,7 @@ export function buildAddShoppingItemsTool(
           "Everything else still waits for next week."
         : `Added ${added.join(", ")} to the list, apart from the planned ingredients. Say so in ` +
           "one line; the list itself is on their screen.";
-      return { text: note, receipt: { label: "Added to the shopping list", summary: added.join(", ") } };
+      return { text: note, receipt: { label: t("meals.receipt.addedToList"), summary: added.join(t("meals.listJoin")) } };
     },
   };
 }
@@ -928,7 +931,7 @@ export function buildRemoveShoppingItemTool(
       deps.ports.changed();
       return {
         text: `${hit.removed.name} is off the list. One line back, nothing else.`,
-        receipt: { label: "Took a line off the list", summary: hit.removed.name },
+        receipt: { label: t("meals.receipt.removedFromList"), summary: hit.removed.name },
       };
     },
   };
@@ -980,7 +983,7 @@ export function buildReplaceShoppingItemTool(
       deps.ports.changed();
       return {
         text: `${from} is now ${hit.line.name}, in the same group and keeping the same time.`,
-        receipt: { label: "Swapped a line on the list", summary: `${from} → ${hit.line.name}` },
+        receipt: { label: t("meals.receipt.swappedLine"), summary: `${from} → ${hit.line.name}` },
       };
     },
   };
@@ -1035,7 +1038,7 @@ export function buildWriteMethodTool(deps: MealsToolDeps & { ports: MealsPorts }
       deps.ports.changed();
       return {
         text: `The method for ${meal.name ?? key} is rewritten and on their screen. Do not read it back.`,
-        receipt: { label: "Rewrote how it's made", summary: `${date} ${key}` },
+        receipt: { label: t("meals.receipt.rewroteMethod"), summary: boxName({ date, meal: key }) },
       };
     },
   };
