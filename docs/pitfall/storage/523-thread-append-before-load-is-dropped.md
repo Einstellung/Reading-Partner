@@ -12,4 +12,6 @@ Linux 桌面（xvfb，真 Haiku）书回合正文中间 SIGKILL，重开 app、�
 
 `BookThreads` 加 `load(home)`，app 的实现调 `loadThreads(home)`；lander、撤回 steer 落盘、读文件历史之前先 `await load`。`tests/reading/turn/support/durable-threads.ts` 的 `fakeThreads(…, { unloaded: true })` 模拟没加载的 store。
 
-这一条修了之后实测半句仍没进线程文件（Linux 验收第二次），还有别的原因没查明，见 `docs/research/pi-durable-迁移交接.md`「Linux 桌面验收」。
+测试没抓到，是因为书回合的测试全用 `fakeThreads`，它的 append 从不丢。`tests/reading/turn/durable-kill.test.ts` 用 app 的 `createThreadStore` 落到目录、真 SIGKILL 子进程、重启时 store 没加载，去掉 lander 里的 `load` 就红。
+
+Linux 验收第二次「修了仍不落」是 vite 发的旧代码（坑 403），不是别的原因。

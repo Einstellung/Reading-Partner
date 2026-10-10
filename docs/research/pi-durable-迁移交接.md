@@ -305,3 +305,16 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 库增长：第一回合（三轮）WAL 从 119 KB 到 2.39 MB，被杀的一回合约 +845 KB；WAL 没 checkpoint，偏大，不能直接当每回合字节数。
 
 没走成（预算用完）：工具里杀、重启后在途回合的停止和插话、插话两种、停止、铃、带思考的首包。`stream.timeoutMs` 只能按不带思考的首包给下限：取 60 s 以上，带思考的要补测。
+
+## 半句不落修复（分支 `fix/pi-durable-partial`，从 `verify/pi-durable-linux` aefa5c47 起）
+
+「修了 523 仍不落」是验收环境的问题：worktree 里的 vite 不监听自己的文件（坑 403），58ec415a 写进去时 vite 开着，重启 app 跑的还是旧 lander。证据是线程文件 mtime 停在读者那句写盘时，重启后的落盘没写过文件。key 没有对不上：`rp.thread` 的 origin 是 `home = bookId = 文件名里的 hash`。
+
+重起 vite 后在真 app（xvfb :98，同一个测试数据目录，驱动在 scratchpad `fix-partial/tools/`）里杀两次：经 sim bridge 把 `providers.anthropic.stream/streamSimple` 换成慢速 faux（`fix-partial/tools/faux.js`，只改那一页的内存），流到三百字时 SIGKILL，重启后线程文件里半句一次、屏幕上读者那句下面是半句、没有新的模型请求。全程没调真模型。
+
+顺带：
+
+- 被杀的回合重启后补 end：`onSettled` 带上 `rp.turn` 的 `startedAt`，本进程没开过的线程由 `BookTurnLog.endUnbegun` 写一行 end，带 `conversation` 和杀前那行 start 配对（turn id 是新的）。
+- 重启后那次 surface `subagent` 的 Haiku 请求是记忆蒸馏（observations），把这条线程新增的三条消息蒸进 `observations/meta.json`，和回合恢复无关，不是新旧运行时重复处理。
+- `durable-book.ts` 加 `storeBookThreads(store)`，app 的 `appThreads` 和测试共用这一个适配。
+
