@@ -318,3 +318,16 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 重启后那次 surface `subagent` 的 Haiku 请求是记忆蒸馏（observations），把这条线程新增的三条消息蒸进 `observations/meta.json`，和回合恢复无关，不是新旧运行时重复处理。
 - `durable-book.ts` 加 `storeBookThreads(store)`，app 的 `appThreads` 和测试共用这一个适配。
 
+
+## iOS 模拟器验收
+
+2026-10-10，分支 `verify/pi-durable-ios`（= `dev/pi-durable` 6cffd52f，没改代码）。iPhone 17 Pro 模拟器跑 `tauri ios dev`，包名 `.dev`，手机 EPUB 课堂，模型 claude-haiku-5-5，Haiku 请求 9 次。
+
+- 正常回合过：首字节 1.2 到 1.6 s，600 词约 10 s。
+- 正文中间杀进程不过：`rp.partial` 有半句，`rp.turn` 报 `landed: true`、submission 为 unanswered，线程文件里只有读者那句，Lumen 上多一张卡片。同 Linux 第 2 项。在 Thinking 中被杀则什么都不落，符合「一个字没写」。
+- 插话进同一回合（turn-log 第 2 轮），行位置没截到；停止只测到 Thinking 中按停（无半句、无回执行），正文中停止待测。
+- 切后台 30 s：原回合 `stalled`（36 s）后看门狗重问一次跑完；重问的回答先答了上一条被停掉、没有回答的问题。
+- IPC（探针页直接从 vite 载入 .dev webview）：每次提交 p50 10 ms、p95 12 到 13 ms、max 17 到 18 ms，裸 IPC p50 0 ms、p95 1 ms；SIGKILL 恢复正确。crash 流 armed 后一秒内跑完，驱动要 0.1 s 轮询再杀。
+- 库增长：基线 4 KB + WAL 117 KB；8 个书回合后主库 356 KB（约 45 KB/回合），WAL 4.0 MB 未 checkpoint。
+- 没走：工具里杀进程、重启后打开在途回合、带工具轮的插话、手机 PDF 课堂（PDF 已铺进容器）。
+- 环境：Mac `~/rp-flow` detached 在 6cffd52f，驱动脚本 `~/pdv.sh`，vite PID 在 `/tmp/pdv/devpid`。凭据只放 access token，refresh 是假值，过期后要从 Linux 再拷一次 access。
