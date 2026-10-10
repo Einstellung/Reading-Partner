@@ -121,8 +121,8 @@ export interface ReadingContext {
 const TOOL_LINE: Record<string, string> = {
   read_pages: "read_pages(from, to) — a page range of the book the reader is in.",
   read_chapter:
-    "read_chapter(...) — one whole chapter of the book the reader is in, in a single" +
-    " call. Its schema says whether it takes a chapter number or a page range.",
+    "read_chapter(chapter | from, to) — one whole chapter of the book the reader is in, in a" +
+    " single call: by chapter number when the book has a chapter table, by page range when not.",
   search_topic: "search_topic(query) — keyword search across every material in this topic.",
   read_annotations:
     "read_annotations(material) — the reader's highlights and notes on one named material.",

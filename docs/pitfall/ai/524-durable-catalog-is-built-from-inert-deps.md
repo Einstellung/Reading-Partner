@@ -15,4 +15,4 @@ pi-durable 的工具登记一个进程一份，名字、描述、schema 来自 `
 
 前两个已修：目录给 statement 一条带时间戳的假读者消息、补上 `buildReadSupplementTools`；`tests/soul/tool-contract.test.ts` 断言目录登记了 roster 里的每个名字。
 
-`read_chapter` 两种 schema 共用一个名字没修，要定是拆成两个名字还是合成一个 schema。在那之前有章节的书上 `read_chapter` 每次都失败（真模型也一样，第一轮 Haiku 验收那次 `read_chapter` 的结果多半也是这个）。目录里同名工具只登记第一个，靠 roster 测试抓不到这种「名字在、schema 不一致」。
+`read_chapter` 合成一个 schema：`chapter` 和 `from`/`to` 都是可选参数，执行时按这本书有没有章节表走对应分支，用了不适用的那组参数返回一句话告诉模型该用哪组（`reading/lecture/tools.ts`）。`tests/soul/tool-contract.test.ts` 另加两条：roster 和 companion 里每个工具的参数形状必须和目录登记的同名工具一致；`read_chapter` 在无章节表、空表、有表三种书上造出来的 schema 和描述都必须等于登记那份。以后工厂按依赖给同名工具换 schema，这里会红。

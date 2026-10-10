@@ -1203,7 +1203,8 @@ test("a usable chapter table reaches the prompt and read_chapter takes a number"
   expect(turn!.systemPrompt).toContain("This book's chapters, with the pages each one spans:");
   expect(turn!.systemPrompt).toContain("[ch.3] 第 3 章 编码注意力机制 — p.61-90");
   const tool = turn!.tools.find((t) => t.name === "read_chapter")!;
-  expect(Object.keys((tool.parameters as { properties: object }).properties)).toEqual(["chapter"]);
+  expect(await tool.execute({ chapter: 3 })).toContain("p.61-90");
+  expect(await tool.execute({ from: 61, to: 90 })).toContain("takes `chapter`");
 });
 
 // The 67-page bilingual survey: no usable outline, and past the first tier.
@@ -1214,10 +1215,8 @@ test("no usable chapter table leaves read_chapter taking a page range", async ()
   );
   expect(turn!.systemPrompt).not.toContain("This book's chapters");
   const tool = turn!.tools.find((t) => t.name === "read_chapter")!;
-  expect(Object.keys((tool.parameters as { properties: object }).properties)).toEqual([
-    "from",
-    "to",
-  ]);
+  expect(await tool.execute({ from: 1, to: 2 })).toContain("=== Page 1 ===");
+  expect(await tool.execute({ chapter: 3 })).toContain("takes a page range");
 });
 
 test("a chapter in focus is the chapter that gets inlined, every turn", async () => {

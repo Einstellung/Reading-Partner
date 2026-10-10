@@ -40,7 +40,7 @@ How to answer:
 Tools:
 You can call tools to look past what you were handed. Mounted this turn:
 - read_pages(from, to) — a page range of the book the reader is in.
-- read_chapter(...) — one whole chapter of the book the reader is in, in a single call. Its schema says whether it takes a chapter number or a page range.
+- read_chapter(chapter | from, to) — one whole chapter of the book the reader is in, in a single call: by chapter number when the book has a chapter table, by page range when not.
 - search_topic(query) — keyword search across every material in this topic.
 - read_paper(slug, from, to) — pages of a pre-read reference paper's full text.
 - read_note(slug) — a pre-read paper's whole prep note.
@@ -205,7 +205,7 @@ How to answer:
 Tools:
 You can call tools to look past what you were handed. Mounted this turn:
 - read_pages(from, to) — a page range of the book the reader is in.
-- read_chapter(...) — one whole chapter of the book the reader is in, in a single call. Its schema says whether it takes a chapter number or a page range.
+- read_chapter(chapter | from, to) — one whole chapter of the book the reader is in, in a single call: by chapter number when the book has a chapter table, by page range when not.
 - search_topic(query) — keyword search across every material in this topic.
 - read_paper(slug, from, to) — pages of a pre-read reference paper's full text.
 - read_note(slug) — a pre-read paper's whole prep note.

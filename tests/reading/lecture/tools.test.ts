@@ -119,3 +119,17 @@ test("the row a call draws names the chapter the focus line shows", async () => 
   await tool.execute({ chapter: 2 });
   expect(lessonFocusLine(table, { chapter: focused[1].number!, page: null, resumed: false })).toBe("Now: CHAPTER II.");
 });
+
+// The registered schema carries both sets of parameters (pitfall 524); a call
+// with the set that does not fit this book is told which one does.
+test("a call with the parameters that do not fit this book is told which ones do", async () => {
+  const withTable = buildReadChapterTool({ bookName: "book.pdf", fulltext: BOOK, chapters: TABLE });
+  const a = (await withTable.execute({ from: 10, to: 20 })) as string;
+  expect(a).toContain("takes `chapter`");
+  expect(a).not.toContain("=== Page");
+
+  const noTable = buildReadChapterTool({ bookName: "book.pdf", fulltext: BOOK, chapters: null });
+  const b = (await noTable.execute({ chapter: 3 })) as string;
+  expect(b).toContain("takes a page range");
+  expect(b).not.toContain("NaN");
+});

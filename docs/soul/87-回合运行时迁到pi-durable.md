@@ -38,7 +38,7 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 
 进入一个对话的输入只有两条路：读者在看的这条线程里插话走 steer（`submit({ whenBusy: "steer" })`）；其余全部经 `startTurn` 开新回合，包括铃和将来 agent 之间的跨对话请求。目标对话忙时不排 pi-durable 的 follow-up：铃留在它自己的文件里不投递，跨对话请求留在发起方，都等目标对话的 `rp.turn` 落盘完成后再起回合；铃投递之后才 `delivered`、ack，照旧。
 
-工具注册是进程级的，一个名字一份。工具执行时经 `api` 读本对话的 `rp.thread`，按 place 找到登记的桌面解析器（今天 `soul/delivery.ts` 的 opener 就是），拿到这本书或这个地方的上下文，再交给今天的 `build*Tools` 造出的那个工具执行；解析结果按对话在进程内缓存。`legion/durable` 不 import soul 和领域，解析器在打开 Harness 时注入。
+工具注册是进程级的，一个名字一份。工具执行时经 `api` 读本对话的 `rp.thread`，按 place 找到登记的桌面解析器（今天 `soul/delivery.ts` 的 opener 就是），拿到这本书或这个地方的上下文，再交给今天的 `build*Tools` 造出的那个工具执行；解析结果按对话在进程内缓存。所以同名工具在任何桌面上都必须是同一个 schema 和描述；按桌面变的只能是执行（`read_chapter` 的做法，见坑 524）。`legion/durable` 不 import soul 和领域，解析器在打开 Harness 时注入。
 
 ## 上下文与 budget
 

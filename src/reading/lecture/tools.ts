@@ -8,11 +8,14 @@
 // read_pages uses, and — on the book-level thread — writes the chapter down as
 // the thread's focus so the next turn inlines it instead of re-fetching it.
 //
-// Two shapes, one name. With a usable chapter table the model names a chapter
+// One schema, two ways in. With a usable chapter table the model names a chapter
 // number and the table decides the pages. With no usable table (docs/09: two of
 // the five measured books have none) the model gives a page range instead, at a
 // higher cap than read_pages, because otherwise a book with no bookmarks leaves
-// a lecture reading ten pages at a time.
+// a lecture reading ten pages at a time. Both sets of parameters live in the one
+// schema because the durable runtime registers a tool once per process, by name,
+// and every desk's read_chapter is called through that registration (pitfall
+// 524); a call with the set that does not fit this book is told which one does.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
@@ -75,21 +78,46 @@ export function chapterOfReadChapterLabel(label: string): number | null {
 }
 
 export function buildReadChapterTool(deps: ReadChapterDeps): AgentTool {
-  const { fulltext: ft, chapters } = deps;
+  const { fulltext: ft } = deps;
+  const chapters = deps.chapters && deps.chapters.length > 0 ? deps.chapters : null;
 
-  if (chapters && chapters.length > 0) {
-    return {
-      name: "read_chapter",
-      replay: "safe",
-      label: (args) => readChapterLabel(args.chapter),
-      effect: "read",
-      description:
-        "Read one whole chapter of the book the reader is in, by the chapter number " +
-        `printed in the book. Returns every page of it with its page anchors. ${ONLY_WHEN_NAMED}`,
-      parameters: Type.Object({
-        chapter: Type.Number({ description: "The chapter number as printed in the book." }),
-      }),
-      execute: async (args) => {
+  return {
+    name: "read_chapter",
+    replay: "safe",
+    label: (args) =>
+      args.chapter === undefined && args.from !== undefined
+        ? pageRangeLabel(args)
+        : readChapterLabel(args.chapter),
+    effect: "read",
+    description:
+      "Read one whole chapter of the book the reader is in, returned with its page anchors. " +
+      "When the book has a chapter table, give `chapter`: the chapter number printed in the book. " +
+      "When it has no usable chapter table, give `from` and `to` instead: a 1-based, inclusive " +
+      `page range of up to ${READ_CHAPTER_MAX_PAGES} pages — find where the chapter starts and ` +
+      `ends first (read_pages, search_topic). ${ONLY_WHEN_NAMED}`,
+    parameters: Type.Object({
+      chapter: Type.Optional(
+        Type.Number({
+          description: "The chapter number as printed in the book. Only for a book with a chapter table.",
+        }),
+      ),
+      from: Type.Optional(
+        Type.Number({ description: "First page (1-based). Only for a book with no chapter table." }),
+      ),
+      to: Type.Optional(
+        Type.Number({
+          description: "Last page (1-based, inclusive). Only for a book with no chapter table.",
+        }),
+      ),
+    }),
+    execute: async (args) => {
+      if (chapters) {
+        if (args.chapter === undefined) {
+          return (
+            "This book has a chapter table, so read_chapter takes `chapter` (the number printed " +
+            `in the book), not a page range. Its chapters are: ${chapterList(chapters)}.`
+          );
+        }
         const n = Math.round(Number(args.chapter));
         const found = chapters.find((c) => c.number === n);
         if (!found) {
@@ -107,31 +135,20 @@ export function buildReadChapterTool(deps: ReadChapterDeps): AgentTool {
           MAX_CHAPTER_PAGES,
         );
         return `${head}\n\n${body}`;
-      },
-    };
-  }
-
-  return {
-    name: "read_chapter",
-    replay: "safe",
-    label: (args) => pageRangeLabel(args),
-    effect: "read",
-    description:
-      "Read a chapter-sized stretch of the book the reader is in: a 1-based, inclusive " +
-      `page range of up to ${READ_CHAPTER_MAX_PAGES} pages, returned with its page anchors. ` +
-      "This book has no usable chapter table, so give the range yourself — find where the " +
-      `chapter starts and ends first (read_pages, search_topic). ${ONLY_WHEN_NAMED}`,
-    parameters: Type.Object({
-      from: Type.Number({ description: "First page (1-based)." }),
-      to: Type.Number({ description: "Last page (1-based, inclusive)." }),
-    }),
-    execute: async (args) =>
-      formatPages(
+      }
+      if (args.from === undefined || args.to === undefined) {
+        return (
+          "This book has no usable chapter table, so read_chapter takes a page range, `from` and " +
+          "`to`, not `chapter`. Find where the chapter starts and ends first (read_pages, search_topic)."
+        );
+      }
+      return formatPages(
         ft,
         Math.round(Number(args.from)),
         Math.round(Number(args.to)),
         BOOK_PAGE_LABEL,
         READ_CHAPTER_MAX_PAGES,
-      ),
+      );
+    },
   };
 }

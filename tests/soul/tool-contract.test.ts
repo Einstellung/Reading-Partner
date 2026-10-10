@@ -232,6 +232,44 @@ test("the durable catalog registers every tool in the roster", () => {
   expect(missing).toEqual([]);
 });
 
+// The durable runtime registers one schema per name, from the catalog, and the
+// model calls every desk's tool of that name through it (pitfall 524). So any
+// tool a factory builds - here, the roster's and the companion's, built with
+// deps of their own - has to take the arguments the catalog's tool of that name
+// declares. Compared with the descriptions inside the schema left out: those may
+// print a process-wide registry (delegate's kinds, go_to's places), read at both
+// ends from the same registry, and the roster fakes one.
+function shape(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(shape);
+  if (schema === null || typeof schema !== "object") return schema;
+  return Object.fromEntries(
+    Object.entries(schema).filter(([k]) => k !== "description").map(([k, v]) => [k, shape(v)]),
+  );
+}
+
+test("every tool of one name takes the arguments the durable catalog registered for it", () => {
+  const registered = new Map(catalog.map((t) => [t.name, t]));
+  for (const tool of [...ROSTER.flatMap((r) => r.tools), ...companion]) {
+    const entry = registered.get(tool.name);
+    if (!entry) continue;
+    expect(`${tool.name}: ${JSON.stringify(shape(tool.parameters))}`).toBe(
+      `${tool.name}: ${JSON.stringify(shape(entry.parameters))}`,
+    );
+  }
+});
+
+// read_chapter is built per book, with or without a chapter table; every book's
+// has to be the registered one, description and all.
+test("read_chapter is one tool whether or not the book has a chapter table", () => {
+  const entry = catalog.find((t) => t.name === "read_chapter")!;
+  const table = [{ number: 1, title: "One", startPage: 1, endPage: 2 }];
+  for (const chapters of [null, [], table]) {
+    const tool = buildReadChapterTool(any({ bookName: "b", fulltext: { status: "ok", pages: [""] }, chapters }));
+    expect(JSON.stringify(tool.parameters)).toBe(JSON.stringify(entry.parameters));
+    expect(tool.description).toBe(entry.description);
+  }
+});
+
 // The companion's replay column: the online reads are safe, the rest unsafe.
 const COMPANION_SAFE = ["probe_source", "read_page"];
 
