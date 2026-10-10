@@ -678,6 +678,35 @@ test("a sent message rises near the top, and the reply writes into the room unde
 	stop();
 });
 
+test("a sent message stays at the top while the step above it is still being written", () => {
+	const host = makeHost(2000, 500);
+	const row = { parentElement: LIST } as unknown as Element;
+	const offsets = new Map([[row, 2000]]);
+	const { stop, contentChanged, below } = bindArrow(host, offsets);
+	host.flush();
+	// A line said into a turn still writing: it goes in under the step.
+	host.grow(100);
+	revealSent(row);
+	host.flush();
+	expect(host.scrollTop).toBe(1984);
+	// The step above it goes on writing and pushes it down; it is kept in place.
+	offsets.set(row, 2150);
+	host.grow(150);
+	contentChanged();
+	host.flush();
+	expect(host.scrollTop).toBe(2134);
+	expect(below()).toBe(false);
+	// The reader scrolls: the list is theirs, and the step growing above no
+	// longer moves it.
+	host.scrollTo(1500);
+	offsets.set(row, 2300);
+	host.grow(150);
+	contentChanged();
+	expect(host.scrollTop).toBe(1500);
+	expect(below()).toBe(true);
+	stop();
+});
+
 test("once released, a container shrinking for the keyboard keeps the bottom in view", () => {
 	const host = makeHost(3000, 700);
 	const { stop, hostResized, below } = bindArrow(host);

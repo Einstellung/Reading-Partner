@@ -425,14 +425,15 @@ export function MessageList({
 	}, [stickKey, roomy]);
 
 	// Once open, the list moves for the conversation only when the reader sends:
-	// their message is scrolled near the top. Anything else that arrives ends the
+	// their message is scrolled near the top. The answer to the line it opened on
+	// arriving late is still the opening. Anything else that arrives ends the
 	// opening and leaves the list where it is (common/stick-to-bottom.ts).
 	const seen = useRef<ListSnapshot | null>(null);
 	useLayoutEffect(() => {
 		const list = listRef.current;
 		const change = listChange(seen.current, stickKey, messages);
 		seen.current = snapshotOf(stickKey, messages);
-		if (!list || change.kind === 'none') return;
+		if (!list || change.kind === 'none' || change.kind === 'answered') return;
 		const row = change.kind === 'sent' ? list.querySelector(`[data-sent-row="${change.index}"]`) : null;
 		if (row) revealSent(row);
 		else releaseOpening(list);

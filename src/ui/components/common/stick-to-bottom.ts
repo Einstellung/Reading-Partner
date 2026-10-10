@@ -20,6 +20,10 @@
 // held open under it (`setRoom`) for the reply to write into. The room shrinks
 // as the reply fills it, so the reply grows in view without the list moving; a
 // reply longer than the room grows past the bottom edge and turns the arrow on.
+// The message is held at its place like a row held in view (holdInView), until
+// the reader scrolls: a line said into a turn still writing sits under the step
+// being written, and that step growing above it would otherwise push it down
+// and out of view.
 //
 // The two shapes this runs in differ: in the call window the list is unbounded
 // and an ancestor scrolls, in the reading bubble the list is capped and scrolls
@@ -442,15 +446,16 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		release,
 		reveal(row) {
 			release();
-			held = null;
 			place = null;
 			settleHost();
 			if (!host) return;
 			anchor = row;
 			fitRoom();
-			host.scrollTop = offsetOf(host, row) - topInset(host);
-			measured();
-			look();
+			held = (at) => {
+				if (row.isConnected === false) return;
+				at.scrollTop = offsetOf(at, row) - topInset(at);
+			};
+			toHeld();
 		},
 		jump(smooth) {
 			held = null;

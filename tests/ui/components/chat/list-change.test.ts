@@ -56,3 +56,23 @@ test("the reader's message is found among the rows a send added", () => {
 	expect(listChange(snapshotOf("k", rows), "k", [...rows, user("c")])).toEqual({ kind: "sent", index: 2 });
 	expect(listChange(snapshotOf("k", rows), "k", [...rows, user("c"), ai("")])).toEqual({ kind: "sent", index: 2 });
 });
+
+test("the answer to the line the list opened on, arriving late, is part of the opening", () => {
+	const rows = [user("a"), ai("b"), user("c")];
+	const shown = [rows[0], rows[1], { ...rows[2] }, ai("thinking")];
+	expect(listChange(snapshotOf("k", rows), "k", shown)).toEqual({ kind: "answered" });
+});
+
+test("rows added after an answered line, or after a queued one, are a change", () => {
+	const answered = [user("a"), ai("b")];
+	expect(listChange(snapshotOf("k", answered), "k", [...answered, ai("c")])).toEqual({ kind: "changed" });
+	const queued = [user("a"), ai("b"), { ...user("c"), queued: true } as ThreadMessage];
+	expect(listChange(snapshotOf("k", queued), "k", [...queued, ai("d")])).toEqual({ kind: "changed" });
+});
+
+test("an answer that also rewrites a row above it is a change", () => {
+	const rows = [user("a"), ai("b"), user("c")];
+	expect(listChange(snapshotOf("k", rows), "k", [rows[0], { ...rows[1], ts: 9 }, rows[2], ai("d")])).toEqual({
+		kind: "changed",
+	});
+});
