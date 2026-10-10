@@ -288,9 +288,12 @@ export default function InfoHome(props: {
             ...(kickoff ? { kickoff } : {}),
           });
         const day = props.mealsDay ?? localMealsDay;
+        // The phone pushes the day onto its stack; the desktop and tablet shell
+        // has no stack, so this screen remembers the day and switches to it.
         const openDay = (date: string) => {
           setLocalMealsDay(date);
-          props.onOpenMealsDay?.(date);
+          if (props.onOpenMealsDay) props.onOpenMealsDay(date);
+          else onNavigate("meals-day");
         };
         const back = () => onNavigate("meals");
         const recipeMeal = props.mealsRecipe ?? localMealsRecipe;
