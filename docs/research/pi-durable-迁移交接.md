@@ -67,8 +67,8 @@
 - `use-call.ts`、`use-lesson-call.ts` 换成 `runBookTurn`：删 `runAgentTurn` 的 `harness: soulHarness()` 和 `deliverTo`；读者那句先写文件，再 `splitAssembled(turn.messages)` 拿历史和那句（带页窗图片时 `content` 要支持图片，`TurnRequest.content` 现在只是 string）；`onView` 的行映射到 `shapes.newRow` 和 reducer（需要一个整段替换回合行的 action）；steer 走 `turn.steer(text, ts)`；停止走 `turn.stop()`，交回的 steer 写文件开下一回合；`settled.stalled` 时照今天重问一次；`setBookWatching` 接 `watching(callRef.current, …)`；拒绝在 `onTurnSettled` 之外没有出口，界面要从 `rp.turn` 结果或 lander 那里拿到 refusal 去显示和 toast。
 - `steering.ts`、`turn-row-split.ts`、`live-turns.ts` 的旧逻辑等 use-call 切过去再删；`liveTurns` 按线程登记两套运行时。
 - 回前台判死：`runBookTurn` 用的是 `stallWatches()` 单例，`watchAppAwayForStalls` 已由外壳绑定，应当照旧生效，没有单测。
-- 停摆路径没有单测（stall watch 的 tick 用真时钟，测试要注入 `createStallWatches({ timers })`）。
-- 未查明：`durable-turn.test.ts` 里纯文字回答流式中 steer，steer 被注入（落成 user 行）但 run 没有再生成回答就结算了；工具轮里的 steer（第一棒的测试）正常。测试目前只断言前两行。下一棒先查这是 pi-durable 的行为（最后一轮之后注入的 steer 不再起生成）还是我们的用法，确认后记坑 519。
+- 停摆路径的单测第三棒补了（`durable-stall.test.ts`）。
+- 纯文字回答流式中 steer 不出回答：第三棒查明并修好，见坑 519。
 - 文档第一阶段验收的 app 那几项。
 
 ## 第二棒拍板的
@@ -83,3 +83,40 @@
 ## 发现的文档问题
 
 - 「工具的 replay」表把四个派活工具列为 safe，前提（idempotencyKey 绑 `api.taskId`）还没实现，见上。
+
+## 第三棒做完的（分支 `dev/pi-durable-p1c`，从 `dev/pi-durable` a283b163 起）
+
+- 纯文字回答里 steer 不出回答是 pi-durable 的语义（坑 519）：`final` 边界取到的 steer 结束原 run、原 submission 先结算，steer 开下一个 run。`rp.turn` 的 wait 那步在原 submission 结算后再 `waitForIdle()`；`createLandStep` 把原 submission 之后、requestId 为 `steer:` 且已放下的 submission 都算本回合，状态取最后一个，superseded 和 `rp.partial` 按这一串判。`durable-turn.test.ts` 断言已放开。
+- `TurnResult` 加 `reason`、`detail`、`refusal`；落盘的 memo 改名 `landing`，存整个结果。
+- `TurnRequest.content`、`BookTurnRequest.line.content` 支持图片（`TurnContent`）。
+- `reading/turn/book-turn-rows.ts`：`driveBookTurn()` 把每次 view 映射成 `CallRow` 交给 `onRows`，`ended` 给出 answered / stopped（带撤回的 steer）/ refused / failed / stalled；`turnEnd()` 是判定的纯函数；`afterStall(attempt)` 第一次重问，第二次报 `STALL_MESSAGE`。
+- `call-state.ts` 加 `turn-rows` action：替换读者那句之后的所有行，`mergeTurnRows` 让没变的行保持原对象。
+- `live-turns.ts` 的条目加 `rows` 和 `durable`（steer、stop 句柄），`withLive` 带上全部 rows。
+- `setBookWatching(probe)` 可登记多个，返回撤销函数。
+- 测试：`tests/reading/turn/durable-stall.test.ts`（假时钟：90 秒判死、工具 hold、回前台判死、重问策略、结局判定）、`book-turn-rows.test.ts`。全量 `scripts/t.sh` 7372 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+## 第三棒没做完的
+
+use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是 `tests/reading/session/use-call-*.test.tsx` 约 48 个测试 spy `runAgentTurn`，切调用点要连这些测试一起改，预算不够。下一棒按下面做：
+
+- `use-call.ts` 的 `runTurn`：读者那句的 ts 取线程文件里最后一条 user；先画占位流式行；`buildReadingTurn` → `splitAssembled` → `readingDurable()` → `driveBookTurn`。origin 是 `turn.origin` 加 `home`；`describe` 用 `turn.tools` 的 `toolLabel` 和 `quiet`；`thinkingLevel` 取 `toReasoning(s.chatThinking)`。`onRows` 经 `shapes.newRow` 发 `turn-rows`（rows 为空时不替换占位行），同时写进 liveTurns 条目的 `rows`。
+- 结局：answered、stopped 用最终 rows 再发一次 `turn-rows`（answered 时最后一个 AI 行带 `turn.notice`），然后 `syncFocusChapter`、`onSettled`；stopped 交回的 steer 和条目上没送出去的行写文件、`row-appended`，再开一回合。refused、failed 走 `showFailure`：失败行放在回合最后一行之后，用 `row-changed` 带 retry；不在看时只放 error 卡片，答案卡片由 lander 放。stalled 清掉回合行、写 steer，按 `afterStall` 重问或报失败。
+- `send`：有 `live.durable` 时 `durable.steer(text, at)`；返回 false（run 还没起，或已结束、正在落盘）就记在条目上、画 queued 行，结局时写文件开下一回合。`stop`：`live.durable.stop()`；还在装配时 abort 并删占位行。`releaseThreads` 对 durable 条目调 `durable.stop()`。
+- `setBookWatching` 放进 useEffect，probe 是 `watching(callRef.current, bookIdRef.current, …)`，cleanup 用它返回的函数。
+- reducer 的 `row-arrived` 要按 role+ts 去重：lander 用 `appendMessage` 写文件，不经 `appendOwn`，`onThreadMessage` 会把落盘的行当外来消息再加一遍。
+- 删 use-call 里的 `runAgentTurn`、`soulHarness`、`deliverTo`、`createSteering`、`createDelivered`、`createRowSplit`、`rowTsAfter`、`flushSteering`、`keepPartial`。use-call 测试改成 spy `book-turn-rows` 的 `driveBookTurn` 和 `durable-runtime` 的 `readingDurable`，或用 faux provider 起真运行时；`use-call-delivered.test.tsx` 测的是要删的内部 steer 路，一起删。
+- `use-lesson-call.ts`：现在用 `useStreamingTurn` 的 `begin` 和 `run.handlers`。切过去要自己管回合行和 streaming 状态，用同一个 `driveBookTurn`。课堂不 steer。
+- 删旧逻辑：`steering.ts`、`turn-row-split.ts` 还被 `useStreamingTurn`（soul 回合面）和 `deliver.ts`（答进书里的铃）用。use-call 切完只删只给它用的部分（`rowTsAfter`、`RowSplit.delivered` 等）；`delivered.ts` 等 `deliver.ts` 改 submit 时再删。
+- 新路径没有 `runAgentTurn` 的 `telemetry`（surface、inline、thread）日志，只有 `recordModelCall`。
+
+## 第三棒拍板的
+
+- 一个回合可以跨多个 run：final 边界取到的 steer 开的 run 属于本回合，落盘等对话空闲。
+- 被裁成桩的工具结果按对话记、回合结算时清（第一棒按 run 记）。
+- 失败和拒绝的文案从 `rp.turn` 的结果拿，不另开出口。
+
+## 第三棒发现的文档问题
+
+- docs/soul/87「一个回合」第 3 步写 `rp.turn` 只 `wait()` 这次 submission，「落盘」写「读本 run 的条目」。纯文字回答里的 steer 会开下一个 run（坑 519），回合不等于 run，应改成「等对话空闲，读本回合（从这次 submission 的 `pi.user` 起，含 steer 开的 run）的条目」。没改，等定。
+- 87「上下文与 budget」写「被裁成桩的工具结果按 submission 记」，现在按对话记。
+- `docs/pitfall/README.md` 第 80 行「下一个是 516」过期了。
