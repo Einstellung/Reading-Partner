@@ -30,11 +30,13 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 ## 一个回合
 
 1. 读者那句照今天写进对话文件。
-2. 一次 commit 写本对话的 `rp.desk` 文档：这回合装配好的系统提示各段和工具名单；`configure()` 写模型和思考档（[75](./75-两档模型.md)）。
+2. 对话忙时 `startTurn` 抛 `TurnBusy`（reset 落在 run 中间会结束那个 run）。不忙则一次 commit 写本对话的 `rp.desk` 文档：这回合装配好的系统提示各段、工具名单，加 `purpose`、`maxRounds`、`excludeTs`（读者那句在文件里的 ts，历史读取器据此排除）；`configure()` 写模型和思考档（[75](./75-两档模型.md)）。
 3. 建一个回合任务 `rp.turn`（我们 extension 的 `tasks`，`background: true`，所以对话 `abort()` 不会连带它）。它的步骤：`submit({ type: "input", requestId: <任务 id> })`，memo 记下 submission id；`wait()`；落盘，memo 记已落。
 4. 界面订阅这个对话的 `viewState()`：`pi.live` 的半句喂流式行，`pi.live` 的工具调用喂阶段行，`pi.inbox` 喂 steer 行。
 
-系统提示由 section 渲染，section 读 `rp.desk`。系统提示拆成几段（soul 的稳定部分、桌上的东西等），pi-durable 只把变了的那段写成 `pi.system` 条目，库的增长和 prompt cache 都靠这个。
+系统提示由 section 渲染，section 读 `rp.desk`。系统提示拆成几段（soul 的稳定部分、桌上的东西等）。每回合 `reset()` 之后各段都会重写成 `pi.system` 条目（坑 517），库的增长按每回合一份完整系统提示算；发给 provider 的文本没变，prompt cache 不受影响。
+
+进入一个对话的输入只有两条路：读者在看的这条线程里插话走 steer（`submit({ whenBusy: "steer" })`）；其余全部经 `startTurn` 开新回合，包括铃和将来 agent 之间的跨对话请求。目标对话忙时不排 pi-durable 的 follow-up：铃留在它自己的文件里不投递，跨对话请求留在发起方，都等目标对话的 `rp.turn` 落盘完成后再起回合；铃投递之后才 `delivered`、ack，照旧。
 
 工具注册是进程级的，一个名字一份。工具执行时经 `api` 读本对话的 `rp.thread`，按 place 找到登记的桌面解析器（今天 `soul/delivery.ts` 的 opener 就是），拿到这本书或这个地方的上下文，再交给今天的 `build*Tools` 造出的那个工具执行；解析结果按对话在进程内缓存。`legion/durable` 不 import soul 和领域，解析器在打开 Harness 时注入。
 
@@ -42,7 +44,7 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 
 `GenerationTask` 的 `beforeRequest` hook 换掉每次请求的 messages：对话文件里的历史（今天的 `HISTORY_KEEP` 裁剪不变，不含本回合读者那句）加上本 run 在库里的条目（读者那句、各轮回答和工具结果、steer）。每回合开始前对话 `reset()`，模型只看得见本 run。不往库里灌历史。
 
-同一个 hook 里走 `src/budget` 的 `fitRoundToBudget`，每轮重算不写回。被裁成桩的工具结果按 submission 记在进程内，重启后从头量。轮数上限也在这里，从 `request.messages` 数本 run 的 assistant 消息。量不下或超轮数时 hook 抛出带 refusal 的错误，run 以失败结算，`rp.turn` 按记下的 refusal 落盘，同今天两种拒绝。
+同一个 hook 里走 `src/budget` 的 `fitRoundToBudget`，每轮重算不写回。被裁成桩的工具结果按 submission 记在进程内，重启后从头量。轮数上限也在这里，从 `request.messages` 数本 run 的 assistant 消息。量不下或超轮数时 hook 拦不住请求（坑 516）：`beforeRequest` 记下拒绝，从外面 `abort()` 对话，自己挂在 `awaitWithContext` 上不让请求发出；run 以 aborted 结算，`rp.turn` 把记下的拒绝作为 `refusal` 交给 lander 落盘，同今天两种拒绝。拒绝记在进程内，记下后进程被杀就只落已说的话。
 
 遥测和用量走 `afterResponse`：每条从 provider 回来的消息调一次 `ai/model-usage.ts` 的 `recordModelCall`，重问也记（那是真花的钱）；hook 在崩溃后重跑时用 memo 去重。`pi.usage` 不读：它在库里、随换代清零，用量的记录仍是 `recordModelCall` 那份日志。
 
@@ -52,10 +54,10 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 
 - 读本 run 的条目（从这次 submission 的 `pi.user` 起），只取 `pi.assistant` 的文字，`stopReason: "aborted"` 的那条除外（坑 511：被杀的半句，和重问的回答不拼接）。被杀的回合怎么处理见下一节。
 - 按 steer 的 `pi.user` 条目切成几条消息，steer 那几行读者的话夹在中间，顺序同 transcript。工具的 trace、回执单从 `pi.tool-result` 的 details 派生（[72](./72-聊天的可见性与steer.md) 的 `receipt` 走 details）。
-- 每条消息的 ts 由 submission id 和段号定，steer 行用界面那一行的 ts；对话文件的写入遇到同 ts 的消息跳过。先写文件，再 memo「已落」，中间被杀则重跑时按 ts 跳过。
+- 每条消息的 ts 由 `rp.turn` 输入里记下的开始时刻定，按行序递增（pi-durable 的 id 是整数，推不出时间，坑 518）；steer 行用 requestId `steer:<界面行 ts>` 里的界面 ts，落盘时从 `storage.scanSubmissions`（本对话最近 200 条）找回。对话文件的写入遇到同 ts 的消息跳过。先写文件，再 memo「已落」，中间被杀则重跑时按 ts 跳过。
 - 不在看这条线程时照今天放盒子卡片（`soul/landing.ts` 的顺序：先落文件、flush，再放卡片）。
 
-停止键是 `conversation.abort()`。abort 之前读出 `pi.inbox` 里还没注入的 steer，写进对话文件当下一回合的开头。submission 以 aborted 结算后 `rp.turn` 照常落盘：已说的话（含 aborted 的半句）、跑完的工具和回执单，同 72。什么都没产出就不落。
+停止键是 `conversation.abort()`。abort 之前读出 `pi.inbox` 里还没注入的 steer，写进对话文件当下一回合的开头。在线 abort 时 pi-durable 自己把半句写成 aborted 的 `pi.assistant`，停止不写 `rp.partial`。submission 以 aborted 结算后 `rp.turn` 照常落盘：已说的话（含 aborted 的半句）、跑完的工具和回执单，同 72。什么都没产出就不落。
 
 ## 被杀之后
 
@@ -67,7 +69,7 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 | 工具里 | 生成任务在等工具 | `resume()`：不可重放的工具得到 interrupted 的结果，可重放的重跑，模型接着说 | 整个回合的话，含死前几轮已提交的 |
 | 一个字没写 | 都不是 | `abort()` | 什么都不落，同今天 |
 
-落盘时 aborted 那半句取 transcript 里的 `aborted` 条目，没有就取 `rp.partial`；两者都有只用一份。每次进程起来给这个 submission 记一次尝试（本对话的 `rp.recovery` 文档，被看门狗取代的 submission 也记在这里），到两次就 `abort()`，同今天 `MAX_ATTEMPTS`。
+`rp.partial` 只在恢复时写，凡是有半句且不是「工具里」都写（含到两次放弃后的 abort）。落盘时 aborted 那半句取 transcript 里的 `aborted` 条目，没有就取 `rp.partial`；两者都有只用一份。恢复里要 abort 的对话走 `stopTurn`，被撤回的 steer 随结果交回。每次进程起来给这个 submission 记一次尝试（本对话的 `rp.recovery` 文档，被看门狗取代的 submission 也记在这里），到两次就 `abort()`，同今天 `MAX_ATTEMPTS`；尝试按 run 的第一个 input 计。
 
 被恢复的对话在 pi-durable 里就是忙的：读者打开那条线程会看到在流的行，停止键和 steer 照常生效。今天的 `hold` 不再需要。
 
@@ -81,11 +83,11 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 
 1. 每个回合结算后看库文件大小。超过 100 MB，且 `inspect()` 没有活任务、没有未结算的 submission（background 任务也算活任务，`waitForIdle()` 不看它们），就换代。
 2. `harness.close()`（连带关掉 `SqliteDatabase`），开新代号的库、新 Harness，删旧库（连 `-wal`、`-shm`）。
-3. 对话下次用时重建，上下文照常由 `beforeRequest` 从对话文件组装，换代对模型不可见。
+3. 对话下次用时重建，上下文照常由 `beforeRequest` 从对话文件组装，换代对模型不可见。旧的 Harness 和 Conversation 句柄随之失效，调用方每次从 `runtime.harness` 和 `conversationFor` 重取，不长期持有。
 
-spike 实测纯问答一轮约 5.2 KB（回答 4.3 KB），100 MB 约两万轮。真实回合还带工具结果和变了的系统提示段，按每轮 20 到 50 KB 算是两千到五千轮，按每天一百轮是一到两个月换一次。第一阶段实测真实回合的增长后再定阈值。
+spike 实测纯问答一轮约 5.2 KB（回答 4.3 KB），100 MB 约两万轮。真实回合还带工具结果，每回合 `reset()` 后系统提示整份重写（每轮多一份系统提示的大小），按每轮 20 到 50 KB 算是两千到五千轮，按每天一百轮是一到两个月换一次。阈值等第一阶段实测真实回合的增长后定。
 
-常驻不结束的 agent 会挡住换代（坑 514：close 等在途工具，关完任务留在旧库）。这类 agent 必须能从自己的文件（run 文件、对话文件）重新起来；库超过阈值的 1.5 倍仍不空闲时，`abort()` 它们（`{ background: true }` 连 background 的一起），换代后重新起。工具里的长等待一律经 `awaitWithContext` 或 `context.abortSignal`，否则 abort、关 app、换代都会挂在它上面。
+常驻不结束的 agent 会挡住换代（坑 514：close 等在途工具，关完任务留在旧库）。这类 agent 必须能从自己的文件（run 文件、对话文件）重新起来；库超过阈值的 1.5 倍仍不空闲时，`abort()` 有活任务或未结算 submission 的对话（`{ background: true }` 连 background 的一起），换代后重新起。工具里的长等待一律经 `awaitWithContext` 或 `context.abortSignal`，否则 abort、关 app、换代都会挂在它上面。
 
 ## 概念对照
 
@@ -100,10 +102,10 @@ spike 实测纯问答一轮约 5.2 KB（回答 4.3 KB），100 MB 约两万轮�
 | `RECOVERY_ATTEMPT` | `rp.recovery` 文档 |
 | `steering.ts` 的差集 | `submit({ whenBusy: "steer" })`，注入与否看 `pi.inbox` 和 transcript |
 | 90 秒停摆看门狗 | 留，到点 `conversation.abort()` |
-| bell 投递（`soul/bell.ts`） | `submit({ type: "input", requestId: "bell:" + 铃 id })` 进 `deliverTo` 那个地方的对话，忙时排成 follow-up；落盘之后才 `delivered`、ack；内部 steer 那条路删 |
-| 答铃 steer 进在跑的轮（`reading/delivered.ts`） | 同上，忙就排队，删 |
+| bell 投递（`soul/bell.ts`） | `startTurn` 进 `deliverTo` 那个地方的对话，requestId `bell:` + 铃 id；对话忙时铃留在它自己的文件里，等该对话的 `rp.turn` 落盘完成后再投；落盘之后才 `delivered`、ack；内部 steer 那条路删 |
+| 答铃 steer 进在跑的轮（`reading/delivered.ts`） | 同上，忙就等落盘后起回合，删 |
 | subagent（`legion/subagent`） | 工具任务拥有的子对话；brief、quota、诚实失败照旧（见第三阶段） |
-| 跨对话协作 | 工具里 `api.conversation(B.id, context)` 拿句柄，`submit({ type: "input", content, requestId: "ask:" + api.taskId })` 再 `wait()`；B 的回答按 `settled.answer` 经 Harness 句柄读；工具声明 `replay: "safe"` |
+| 跨对话协作 | 工具里 `api.conversation(B.id, context)` 拿句柄，B 忙时经 `awaitWithContext` 等 B 这一回合落盘，再 `startTurn` 起回合（requestId `ask:` + `api.taskId`）并 `wait()`；B 的回答按 `settled.answer` 经 Harness 句柄读；工具声明 `replay: "safe"` |
 | `toProviderMessages` 里的 budget 梯子 | `beforeRequest` |
 | `before_request` 的轮数上限 | `beforeRequest` |
 | `message_end` 遥测 | `afterResponse` |
@@ -124,7 +126,7 @@ spike 实测纯问答一轮约 5.2 KB（回答 4.3 KB），100 MB 约两万轮�
 | `delegate`、`translate_document`、`ingest_url`、`research_literature` | safe：idempotencyKey 或子对话的 requestId 绑 `api.taskId` |
 | `observation_update`、`statement_write`、`propose_topic`、`go_to`、`trial_source`、`add_source`、`add_saved_article`、`remove_supplement`、`record_chapter_decision`、`set_talk_spine`、`write_talk_segment`、`move_talk_segment`、`remove_talk_segment`、info 秘书自己那组 | unsafe |
 
-`tests/soul/tool-contract.test.ts` 的 ROSTER 加一列 replay，新工具必须声明。适配层把每个工具的 `execute` 包上 `context.abortSignal`，abort 时放手不等（今天 turn.ts 对读工具的做法，坑 508）。
+`tests/soul/tool-contract.test.ts` 的 ROSTER 加一列 replay，新工具必须声明。适配层把每个工具（读和写）的 `execute` 包上 `context.abortSignal`，abort 时放手不等（今天 turn.ts 对读工具的做法，坑 508）；写工具放手后才落下的回执没人看到。参数校验交给 pi-durable，不接今天 `prepareArguments` 里的 `recordToolArgs` 遥测。
 
 ## 分层
 
@@ -149,7 +151,7 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 范围是写进书文件的回合：读者在书里的对话（`reading/session/use-call.ts`）、手机课堂（`ui/components/phone/lesson/use-lesson-call.ts`）、答进书里的铃、这些回合的恢复。今天这些回合跑在 soul 的 held harness 上、和其他 soul 回合共用 lane 与 `recover.ts`，切出来之后书的线程只走新运行时。
 
-动：`legion/durable/` 按「分层」写成正式代码；`platform/app/durable-sqlite.ts` 和 `durable_sqlite.rs` 补文件大小查询；palace 加 `durable` 行；`reading/turn/` 的 live-turns 改订阅 `viewState()`，steering、turn-row-split 按 inbox 语义重做；`reading/turn/deliver.ts` 和 `soul/bell.ts` 里 place 为 `book` 的分支改成 submit；`use-call.ts`、`use-lesson-call.ts` 换调用。
+动：`legion/durable/` 按「分层」写成正式代码；`platform/app/durable-sqlite.ts` 和 `durable_sqlite.rs` 补文件大小查询；palace 加 `durable` 行；`reading/turn/` 的 live-turns 改订阅 `viewState()`，steering、turn-row-split 按 inbox 语义重做；`reading/turn/deliver.ts` 和 `soul/bell.ts` 里 place 为 `book` 的分支改成 `startTurn`（目标忙则等落盘后再投）；`use-call.ts`、`use-lesson-call.ts` 换调用。
 
 删：spike 测量文件；`reading/turn/delivered.ts` 的书那条内部 steer 路；`use-call.ts` 里给 `runAgentTurn` 的 `harness: soulHarness()` 和 `deliverTo`。
 
@@ -172,7 +174,7 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 范围：门口对话、info 简报与语音、三餐、排练教练、复述，以及所有 bell 投递。
 
-动：这些回合面的调用改成第一阶段的 `turn.ts`；`soul/bell.ts` 全部改 submit；`soul/headless.ts` 改成建 `rp.turn` 不等界面；`ui/components/chat/useStreamingTurn.ts`、`use-info-call.ts`、`voice-call-live.ts`、`useRetell.ts`、`useCoach.ts` 换调用；`info/briefer/deliver.ts` 的 opener 改成桌面解析器。
+动：这些回合面的调用改成第一阶段的 `turn.ts`；`soul/bell.ts` 全部改 `startTurn`；`soul/headless.ts` 改成建 `rp.turn` 不等界面；`ui/components/chat/useStreamingTurn.ts`、`use-info-call.ts`、`voice-call-live.ts`、`useRetell.ts`、`useCoach.ts` 换调用；`info/briefer/deliver.ts` 的 opener 改成桌面解析器。
 
 删：`soul/harness.ts` 的回合入口和 `startSoulSession`；`DELIVERY_ENTRY`、`PROMPT_ENTRY` 不再写。`soul/recover.ts` 和 `legion/execute/held.ts` 只留给升级后第一次启动收尾旧 soul session，第四阶段删。
 
@@ -180,7 +182,7 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 并存：pi-agent-core 仍 0.87.1，只剩旧 session 的收尾、子 agent、后台 pass 和 agent worker 用 `legion/execute`。
 
-验收：门口、info、三餐各一个回合在模拟器和 iPad 上被杀恢复、steer、停止；答铃在对话空闲和忙时各一次，重启不重投；语音回合跑通；typecheck、t.sh 全绿。
+验收：门口、info、三餐各一个回合在模拟器和 iPad 上被杀恢复、steer、停止；答铃在对话空闲和忙时各一次（忙时等该回合落盘后才投），重启不重投；语音回合跑通；typecheck、t.sh 全绿。
 
 量：大，三到四棒。
 
