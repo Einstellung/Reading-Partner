@@ -34,6 +34,7 @@
 - [71 soul](./soul/71-soul.md) — 唯一的 orchestrator：soul
 - [72 聊天的可见性与steer](./soul/72-聊天的可见性与steer.md) — 工具流可见性、回执、派工单与 steer
 - [75 两档模型](./soul/75-两档模型.md) — 对话档与日常档，任务归档由程序定
+- [87 回合运行时迁到pi-durable](./soul/87-回合运行时迁到pi-durable.md) — 每设备一个 SQLite 库、一个 Harness，落盘、恢复、换代与四个阶段
 
 ## info
 
