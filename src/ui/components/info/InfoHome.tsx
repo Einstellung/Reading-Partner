@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { savedArticleId } from "../../../reading/saved/saved-articles";
-import type { HomeScreen } from "../base/shell-nav";
+import { showsLaunchCard, type HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
@@ -203,7 +203,7 @@ export default function InfoHome(props: {
 
   return (
     <>
-      {screen === "vestibule" && (
+      {showsLaunchCard(screen, !!info.snap?.briefing) && (
         <div className="absolute inset-0 overflow-y-auto bg-background">
           {props.renderLaunch ? (
             props.renderLaunch({
