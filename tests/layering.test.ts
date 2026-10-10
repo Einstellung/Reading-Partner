@@ -120,6 +120,10 @@ const LAYER: Record<string, Layer> = {
   // round because platform may not import legion.
   "legion/run": "capability",
   "legion/subagent": "capability",
+  // Spike only (docs/research/pi-durable-spike.md): pi-durable's JSONL storage
+  // on AppData and the scenes measured with it. Imports platform/app's types
+  // and npm packages; nothing in the app imports it.
+  "legion/durable": "capability",
   memory: "capability",
   // The nightly pass that turns observations into statements. A capability like
   // the rest of memory: the collector election that decides which machine runs
