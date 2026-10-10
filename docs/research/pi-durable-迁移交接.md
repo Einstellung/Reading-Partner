@@ -2,15 +2,25 @@
 
 ## 第一阶段现状
 
-截至第六棒（`dev/pi-durable-p1g`）。
+截至第七棒（`dev/pi-durable-p1h`）。
 
-已切到新运行时的回合面：读者在书里的对话（`reading/session/use-call.ts`，手机 EPUB 课堂 `use-book-lesson.ts` 走它）、手机 PDF 课堂（`ui/components/phone/lesson/use-lesson-call.ts`）、答进书里的铃（`reading/turn/deliver.ts`）、这些回合被杀后的恢复（`reading/turn/durable-runtime.ts` 启动时 `recoverBeforeResume`）。
+已切到新运行时的回合面：读者在书里的对话（`reading/session/use-call.ts`，手机 EPUB 课堂 `use-book-lesson.ts` 走它）、手机 PDF 课堂（`ui/components/phone/lesson/use-lesson-call.ts`）、答进书里的铃（`reading/turn/deliver.ts`）、这些回合被杀后的恢复（`reading/turn/durable-runtime.ts` 启动时 `recoverBeforeResume`）。重启后恢复的回合，读者打开那条线程时接上：看得到在流，停止和插话够得着，落盘中发的话等它结算后开新回合（第七棒）。
 
 真机验收前已知的缺口：
 
-- 重启后恢复的回合没有界面登记：读者打开那条线程看不到它在流，停止键和插话够不着它；这时读者发话，`startTurn` 抛 `TurnBusy`，界面当失败显示。87「被杀之后」写的「读者打开那条线程会看到在流的行，停止键和 steer 照常生效」没实现。
 - 遥测只有 `recordModelCall` 和 `recordCacheTurn`，没有 turn-log 诊断行和 `recordLongestSilence`。
-- xvfb 桌面、iOS 模拟器、iPad、真模型首包、库增长都没验。
+- 接上的恢复回合没有停摆看门狗（只有本进程起的回合有）。
+
+下一棒真机验收清单（Linux 用 `xvfb-run`，iOS 模拟器，iPad 真机；全部用 .dev 包名）：
+
+- 正文中间杀进程：重启后线程里是已说的话加半句，不重问。
+- 工具里杀进程：重启后可重放的工具重跑、模型接着说；打开线程看到它在流。
+- 重启后打开有在途回合的线程：看到在流的行，停止键在；停止保留半句和回执；插话进同一回合；回合正在落盘时发话，等它落完开新回合，不出失败行。
+- 插话：正文流式中、工具在跑时各一次，行的位置同今天。
+- 停止：保留半句和回执，交回的插话开下一回合。
+- 铃：线程空闲时投、线程忙（读者回合在跑）时等它落完再投；读者在看时流式出现、可停可插话。
+- 真模型只用 Haiku：量首包时间，定 `stream.timeoutMs`（大于带思考的最长首包）。
+- 真实回合的库增长：记若干回合前后 `durable/turns-*.sqlite`（含 `-wal`）的大小，算每回合字节数，回填 87「换代」的阈值。
 
 依据 [docs/soul/87](../soul/87-回合运行时迁到pi-durable.md)。分支 `dev/pi-durable-p1a`（从 `dev/pi-durable` e14f7013 起）。
 
@@ -239,3 +249,27 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 
 - 判忙只查最新一个 `rp.turn`：`startTurn` 忙时拒绝，同一对话不会有两个未结算的。
 - 挂起是投递方报的（`onWait`），pass 不自己判忙。不挂起的铃仍一只一只投。
+
+## 第七棒（分支 `dev/pi-durable-p1h`，从 `dev/pi-durable` 6940a038 起）
+
+做了：
+
+- `legion/durable/turn.ts` 的 `turnInFlight(runtime, key)`：经 `rp.conversations` 找对话（找不到不建），最新一个 `rp.turn` 不是 terminal 就交回对话、`startedAt`（取自任务输入）和结算的 promise。`startTurn` 和它共用结算那段（`forgetStubs`、`maybeRotate`）。
+- `reading/turn/durable-turn.ts`：订阅 `viewState()` 投影成行的那段提成 `followTurn`，`runBookTurn` 和新的 `resumedTurn` 共用；`resumedTurn` 交回 `startedAt` 和 `follow(onView)`，steer、stop 同 `runBookTurn`。工具行的标签用新加的 `ReadingDurable.describe`（catalog）。
+- `reading/turn/book-turn-rows.ts`：`resumedBookTurn(durable, { home, threadId })` 交回 `after`（即 `startedAt`）和 `follow(onRows)`，结局判定和 `driveBookTurn` 同一段。
+- use-call：`openThread` 时线程有消息且 liveTurns 没登记，就查在途回合；有就以 `runTurn(…, resumed)` 接上，不装配，`after` 用回合的 `startedAt`。之后同本会话起的回合：登记 liveTurns、画行、停止走 `durable.stop()`、插话走 `steer`、结局走 `finish`（交回的插话和没送出的话写文件后开下一回合）。`setBookWatching` 用会话原有的那个 probe。
+- 手机 PDF 课堂：打开线程后同样查，接上走 `runTurn(0, resumed)`，按回合登记 `setBookWatching`，离开时照旧停。
+- 查的结果回来之前读者发的话等它（use-call 按线程记，课堂只有一个），回来后重走 `send`：有在途回合就插话；正在落盘时插话不被收下，留在 `unsent`，结算后写文件开新回合。
+- 测试：`tests/reading/turn/durable-resumed.test.ts`（faux，4 个：空闲线程查不到且不建对话、接上后流式和插话且屏幕 ts 等于落盘 ts、停止保留半句、落盘中没有 run 时插话不收）；`tests/reading/session/use-call-resumed.test.tsx`（5 个，`fakeBookTurns()` 加了 `inFlight(after)` 和 `lookups`，打桩 `resumedBookTurn`）；`use-lesson-call.test.tsx` 加 2 个。全量 `scripts/t.sh` 7373 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+拍板的：
+
+- 接上的回合就是读者自己的回合：结局（含失败行和 Retry）、停止、交回的插话都走 `finish`，不按铃的 visiting 处理。
+- 空线程不查：回合总是从文件里的一句话开始。
+- 接上的回合不挂停摆看门狗（没要求）。
+- 坑号 520、521 没用上。
+
+没做：
+
+- 恢复时被 abort 的回合（正文中间）落盘只要几毫秒；读者恰好在那之间打开线程，`turn-rows` 会把文件里刚写的撤回插话行从屏幕上替换掉，结算后的屏幕也没有 `rp.partial` 的半句，重开线程才对。
+- 真机和模拟器都没跑。
