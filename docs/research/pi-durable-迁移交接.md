@@ -362,3 +362,14 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 切后台 30 s：过。Haiku 回合在后台继续流完（33.8 s done），回来无 stalled、无重问；第一轮那次 stalled 后重问没复现。
 - 手机 PDF 课堂：预算用完没走。
 - 环境：`~/rp-flow` detached 在 c2c36ed3，工作区有未提交的 `src/main.tsx` 一行和 `src/dev-faux.ts`；dev server PID 24214（`/tmp/pdv/devpid`）留着在跑。模拟器 app 里的凭据已删，下一轮要从 Linux 再拷 access token。
+
+## 手机 PDF 课堂验收（分支 `verify/pi-durable-pdf-lesson`，从 `dev/pi-durable` e5222e29 起）
+
+2026-10-10，iPhone 17 Pro 模拟器，idb 真触摸，PDF 是 Attention Is All You Need。`~/rp-flow` 的代码和 e5222e29 只差文档，没重起 dev server。全程用第三轮的启动脚手架跑慢速 faux（12 token/s，每段答案 40 句），没调真模型。截图和报告在 scratchpad `verify-ios/report.html` 的「手机 PDF 课堂」一节。五步都过，没改代码。
+
+- 发问：首次点 PDF 出说明卡，Start the lesson 后课堂自动发开场问题，流式中 Stop 在，结束后 Stop 消失。
+- 插话：标「after this step」、钉在上方；当前一步写完后同一回合接着答，正文顺序是上一步末尾、插话句、下一步。
+- 停止：半句留在屏幕和线程文件。
+- 流式中返回主题页再进：离开时半句已进线程文件，回来半句在读者那句下面，无 Stop、无新请求。
+- 流式中 SIGKILL：重启进课堂半句只有一份，faux 调用 0 次（不重问），turn-log 补 end aborted；Lumen 盒子 +1（按设计）。
+- 环境：dev server PID 24214 仍在跑；模拟器 app 里的凭据已删，localStorage `__fauxPlan` 已清（`src/dev-faux.ts` 脚手架仍在 `~/rp-flow` 未提交）。发送助手 `~/pdsend.sh TEXT`（按 DOM 取输入框和 Send 的位置再点）。
