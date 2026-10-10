@@ -30,7 +30,7 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 ## 一个回合
 
 1. 读者那句照今天写进对话文件。
-2. 对话忙时 `startTurn` 抛 `TurnBusy`（reset 落在 run 中间会结束那个 run）。不忙则一次 commit 写本对话的 `rp.desk` 文档：这回合装配好的系统提示各段、工具名单，加 `purpose`、`maxRounds`、`excludeTs`（读者那句在文件里的 ts，历史读取器据此排除）；`configure()` 写模型和思考档（[75](./75-两档模型.md)）。
+2. 对话有 run 在跑、或有未结算的 `rp.turn`（含正在落盘那步）时算忙，`startTurn` 抛 `TurnBusy`（reset 落在 run 中间会结束那个 run，落在落盘中会顶掉那次落盘）。不忙则一次 commit 写本对话的 `rp.desk` 文档：这回合装配好的系统提示各段、工具名单，加 `purpose`、`maxRounds`、`excludeTs`（读者那句在文件里的 ts，历史读取器据此排除）；`configure()` 写模型和思考档（[75](./75-两档模型.md)）。
 3. 建一个回合任务 `rp.turn`（我们 extension 的 `tasks`，`background: true`，所以对话 `abort()` 不会连带它）。它的步骤：`submit({ type: "input", requestId: <任务 id> })`，memo 记下 submission id；`wait()` 这次 submission，再 `conversation.waitForIdle()`；落盘，memo 记已落。一个回合可以跨多个 run：最后一轮回答结束时取到的 steer 会结束原 run、原 submission 先结算，再开下一个 run（坑 519），所以 `rp.turn` 等对话空闲才落盘。
 4. 界面订阅这个对话的 `viewState()`：`pi.live` 的半句喂流式行，`pi.live` 的工具调用喂阶段行，`pi.inbox` 喂 steer 行。
 
@@ -102,7 +102,7 @@ spike 实测纯问答一轮约 5.2 KB（回答 4.3 KB），100 MB 约两万轮�
 | `RECOVERY_ATTEMPT` | `rp.recovery` 文档 |
 | `steering.ts` 的差集 | `submit({ whenBusy: "steer" })`，注入与否看 `pi.inbox` 和 transcript |
 | 90 秒停摆看门狗 | 留，到点 `conversation.abort()` |
-| bell 投递（`soul/bell.ts`） | `startTurn` 进 `deliverTo` 那个地方的对话，requestId `bell:` + 铃 id；对话忙时铃留在它自己的文件里，等该对话的 `rp.turn` 落盘完成后再投；落盘之后才 `delivered`、ack；内部 steer 那条路删 |
+| bell 投递（`soul/bell.ts`） | `startTurn` 进 `deliverTo` 那个地方的对话，requestId 同其他回合是 `turn:<任务 id>`，铃 id 记在 `rp.turn` 的任务输入里，重启后据此找回已起的回合不重投；对话忙时铃留在它自己的文件里，等该对话的 `rp.turn` 落盘完成后再投，只有投往这个对话的铃等，别的铃照常投；落盘之后才 `delivered`、ack；内部 steer 那条路删 |
 | 答铃 steer 进在跑的轮（`reading/delivered.ts`） | 同上，忙就等落盘后起回合，删 |
 | subagent（`legion/subagent`） | 工具任务拥有的子对话；brief、quota、诚实失败照旧（见第三阶段） |
 | 跨对话协作 | 工具里 `api.conversation(B.id, context)` 拿句柄，B 忙时经 `awaitWithContext` 等 B 这一回合落盘，再 `startTurn` 起回合（requestId `ask:` + `api.taskId`）并 `wait()`；B 的回答按 `settled.answer` 经 Harness 句柄读；工具声明 `replay: "safe"` |
@@ -149,7 +149,7 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 ### 第一阶段：阅读回合
 
-范围是写进书文件的回合：读者在书里的对话（`reading/session/use-call.ts`）、手机课堂（`ui/components/phone/lesson/use-lesson-call.ts`）、答进书里的铃、这些回合的恢复。今天这些回合跑在 soul 的 held harness 上、和其他 soul 回合共用 lane 与 `recover.ts`，切出来之后书的线程只走新运行时。
+范围是写进书文件的回合：读者在书里的对话（`reading/session/use-call.ts`，手机 EPUB 课堂 [77](../reading/77-手机EPUB课堂.md) 的 `ui/components/phone/lesson/use-book-lesson.ts` 也走它）、手机 PDF 课堂（[74](../reading/74-手机PDF课堂.md)，`ui/components/phone/lesson/use-lesson-call.ts`）、答进书里的铃、这些回合的恢复。今天这些回合跑在 soul 的 held harness 上、和其他 soul 回合共用 lane 与 `recover.ts`，切出来之后书的线程只走新运行时。
 
 动：`legion/durable/` 按「分层」写成正式代码；`platform/app/durable-sqlite.ts` 和 `durable_sqlite.rs` 补文件大小查询；palace 加 `durable` 行；`reading/turn/` 的 live-turns 改订阅 `viewState()`，steering、turn-row-split 按 inbox 语义重做；`reading/turn/deliver.ts` 和 `soul/bell.ts` 里 place 为 `book` 的分支改成 `startTurn`（目标忙则等落盘后再投）；`use-call.ts`、`use-lesson-call.ts` 换调用。
 

@@ -1,5 +1,17 @@
 # pi-durable 迁移交接
 
+## 第一阶段现状
+
+截至第六棒（`dev/pi-durable-p1g`）。
+
+已切到新运行时的回合面：读者在书里的对话（`reading/session/use-call.ts`，手机 EPUB 课堂 `use-book-lesson.ts` 走它）、手机 PDF 课堂（`ui/components/phone/lesson/use-lesson-call.ts`）、答进书里的铃（`reading/turn/deliver.ts`）、这些回合被杀后的恢复（`reading/turn/durable-runtime.ts` 启动时 `recoverBeforeResume`）。
+
+真机验收前已知的缺口：
+
+- 重启后恢复的回合没有界面登记：读者打开那条线程看不到它在流，停止键和插话够不着它；这时读者发话，`startTurn` 抛 `TurnBusy`，界面当失败显示。87「被杀之后」写的「读者打开那条线程会看到在流的行，停止键和 steer 照常生效」没实现。
+- 遥测只有 `recordModelCall` 和 `recordCacheTurn`，没有 turn-log 诊断行和 `recordLongestSilence`。
+- xvfb 桌面、iOS 模拟器、iPad、真模型首包、库增长都没验。
+
 依据 [docs/soul/87](../soul/87-回合运行时迁到pi-durable.md)。分支 `dev/pi-durable-p1a`（从 `dev/pi-durable` e14f7013 起）。
 
 ## 第一棒做完的
@@ -213,3 +225,17 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 文档的问题：
 
 - 第四棒和派活说明都把 `use-lesson-call.ts` 叫「EPUB 课堂」。它是手机 PDF 课堂（docs/74，`openPhonePdf`）；手机 EPUB 课堂（docs/77）是 `use-book-lesson.ts`，走 `useCall`，第四棒已经跟着切了。
+
+## 第六棒（分支 `dev/pi-durable-p1g`，从 `dev/pi-durable` b1672527 起）
+
+做了：
+
+- 判忙：`legion/durable/turn.ts` 的 `startTurn` 在本对话有 run，或最新一个 `rp.turn` 还不是 terminal（含正在落盘那步）时抛 `TurnBusy`。`steerTurn` 仍只看 `pi.live.run`：落盘中没有 run 收那句话。`deliver-bell.test.ts` 加了复现：没有界面登记的回合卡在落盘的 flush 上，铃不发请求，落盘完才起自己的回合。
+- 铃队列：`TurnDelivery` 加 `onWait`，`deliverBookBell` 开始等忙线程时调（等界面登记撤掉、`TurnBusy` 后等落盘、重启后等本铃先前的回合）。`soul/bell.ts` 的 pass 收到后把这只铃挂到后台等，接着投后面的铃；同一对话后响的铃排在它后面，前一只失败就不投、留给下一轮。挂起的铃跨 pass 存在，后面的 pass 跳过它，它不计入本 pass 的返回数。`bell.test.ts` 加了一个：三只铃，第一只的线程忙，第二只（别的线程）照投并 ack，第三只（同线程）等第一只落完再投。
+- use-call 层的铃回合测试：`tests/reading/session/use-call-bell.test.tsx` 3 个，真的 `answerBell` + `deliverBookBell`，只对 `driveBookTurn` 打桩（`fakeBookTurns()`）。读者在看时铃回合流式出现在线程里、停止键到达它、插话 steer 进它且不开第二回合；停止后说了话 ack，一句没说 onTrouble、铃留着。
+- docs/soul/87：「一个回合」的判忙、「概念对照」铃那一行（requestId 是 `turn:<任务 id>`，铃 id 在任务输入里）、第一阶段范围里两个课堂的文件名和文档号。
+
+拍板的：
+
+- 判忙只查最新一个 `rp.turn`：`startTurn` 忙时拒绝，同一对话不会有两个未结算的。
+- 挂起是投递方报的（`onWait`），pass 不自己判忙。不挂起的铃仍一只一只投。
