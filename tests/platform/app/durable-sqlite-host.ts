@@ -4,7 +4,7 @@
 // Rust side tags them.
 
 import { Database } from "bun:sqlite";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { HostCall, WireValue } from "../../../src/platform/app/durable-sqlite";
 
@@ -67,6 +67,11 @@ export function bunSqliteHost(root: string): HostCall {
     durable_sqlite_remove: ({ path }) => {
       for (const suffix of ["", "-wal", "-shm"]) rmSync(join(root, `${path as string}${suffix}`), { force: true });
     },
+    durable_sqlite_size: ({ path }) =>
+      ["", "-wal"].reduce((total, suffix) => {
+        const file = join(root, `${path as string}${suffix}`);
+        return total + (existsSync(file) ? statSync(file).size : 0);
+      }, 0),
   };
   return async (command, args) => {
     const run = commands[command];

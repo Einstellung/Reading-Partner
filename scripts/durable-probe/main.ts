@@ -8,9 +8,21 @@
 // writes crash-armed.json once 200 characters are committed; the driver
 // SIGKILLs the process there. The second finds the pending submission and
 // writes crash.json.
+//
+// Build and run (Linux shown; on the Mac the same page goes into a .dev build
+// for the simulator or the iPad, and the JSON comes out of the app container):
+//
+//   bunx vite build scripts/durable-probe --outDir <dir>/dist --emptyOutDir
+//   bun run tauri build --debug --no-bundle --config \
+//     '{"identifier":"com.xinyuan.readingpartner.durableprobe","build":{"frontendDist":"<dir>/dist","beforeBuildCommand":""}}'
+//   xvfb-run -a src-tauri/target/debug/reading-partner   # run, note its PID
+//
+// Wait for AppData/durable-probe/crash-armed.json, SIGKILL that PID, start the
+// binary once more and read AppData/durable-probe/{latency,concurrency,
+// collaboration,rotation,crash}.json (AppData of the probe identifier).
 
 import { invoke } from "@tauri-apps/api/core";
-import { openDurableSqlite, removeDurableSqlite, type HostCall } from "../../platform/app/durable-sqlite";
+import { openDurableSqlite, removeDurableSqlite, type HostCall } from "../../src/platform/app/durable-sqlite";
 import {
   collaborationScene,
   concurrencyScene,
@@ -20,7 +32,7 @@ import {
   rotationScene,
   spread,
   type SceneHost,
-} from "./sqlite-scenes";
+} from "../../tests/legion/durable/support/sqlite-scenes";
 
 const DIR = "durable-probe";
 let calls = 0;

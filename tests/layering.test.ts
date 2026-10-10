@@ -120,9 +120,10 @@ const LAYER: Record<string, Layer> = {
   // round because platform may not import legion.
   "legion/run": "capability",
   "legion/subagent": "capability",
-  // Spike only (docs/research/pi-durable-spike.md): pi-durable's JSONL storage
-  // on AppData and the scenes measured with it. Imports platform/app's types
-  // and npm packages; nothing in the app imports it.
+  // The turn runtime on pi-durable (docs/soul/87): the device's Harness, our
+  // extension, the tool adapter, turns and recovery. Imports platform/app, ai,
+  // budget and legion capabilities only; what a place needs (desk resolvers,
+  // landers, the history reader) is handed in when the Harness opens.
   "legion/durable": "capability",
   memory: "capability",
   // The nightly pass that turns observations into statements. A capability like

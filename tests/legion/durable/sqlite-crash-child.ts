@@ -3,7 +3,7 @@
 // parent SIGKILLs it there. Usage: bun sqlite-crash-child.ts <root> <path>
 
 import { openDurableSqlite, removeDurableSqlite } from "../../../src/platform/app/durable-sqlite";
-import { crashStart } from "../../../src/legion/durable/sqlite-scenes";
+import { crashStart } from "./support/sqlite-scenes";
 import { bunSqliteHost } from "../../platform/app/durable-sqlite-host";
 
 const [root, path] = process.argv.slice(2);

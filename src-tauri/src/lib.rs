@@ -89,6 +89,7 @@ pub fn run() {
             durable_sqlite::durable_sqlite_all,
             durable_sqlite::durable_sqlite_close,
             durable_sqlite::durable_sqlite_remove,
+            durable_sqlite::durable_sqlite_size,
             oauth_callback::start_oauth_callback_listener,
             voice::start_voice_recording,
             voice::stop_voice_recording,
@@ -121,6 +122,7 @@ pub fn run() {
             durable_sqlite::durable_sqlite_all,
             durable_sqlite::durable_sqlite_close,
             durable_sqlite::durable_sqlite_remove,
+            durable_sqlite::durable_sqlite_size,
             oauth_callback::start_oauth_callback_listener
         ]);
 

@@ -233,6 +233,25 @@ pub async fn durable_sqlite_remove(app: AppHandle, path: String) -> Result<(), S
     Ok(())
 }
 
+/// Bytes of a database file and its `-wal`, open or closed; missing files count
+/// as zero. The generation swap reads it after every turn.
+#[tauri::command]
+pub async fn durable_sqlite_size(app: AppHandle, path: String) -> Result<u64, String> {
+    let root = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let file = crate::atomic_fs::safe_join(&root, &path)?;
+    let mut total = 0;
+    for suffix in ["", "-wal"] {
+        let mut target = file.clone().into_os_string();
+        target.push(suffix);
+        match std::fs::metadata(&target) {
+            Ok(meta) => total += meta.len(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Ok(total)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

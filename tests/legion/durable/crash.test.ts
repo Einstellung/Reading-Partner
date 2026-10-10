@@ -1,85 +1,108 @@
-// pi-durable spike: SIGKILL a real process mid-run and reopen its JSONL
-// directory in a new one. docs/research/pi-durable-spike.md.
+// A child process starts a turn and is SIGKILLed at a chosen point; this
+// process reopens the same database and conversation file, recovers before
+// resume() and checks what landed (docs/soul/87, "被杀之后", "落盘").
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai/providers/faux";
+import { expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { recoverBeforeResume } from "../../../src/legion/durable/recover";
+import { openTestRuntime, type TestRuntime } from "./support/runtime";
 
 const CHILD = join(import.meta.dir, "crash-child.ts");
-const dirs: string[] = [];
+const CRASH_ANSWER = "潮汐是月球和太阳引力共同作用的结果，".repeat(40);
 
-afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
-
-type Event = { event: string; [key: string]: unknown };
-
-async function events(proc: Bun.Subprocess<"ignore", "pipe", "inherit">, killOn?: string): Promise<Event[]> {
-  const seen: Event[] = [];
+/** Run the child until it prints ARMED, SIGKILL it (only this PID), return what followed ARMED. */
+async function killWhenArmed(mode: string, root: string): Promise<string> {
+  const child = Bun.spawn(["bun", CHILD, mode, root], { stdin: "ignore", stdout: "pipe", stderr: "inherit" });
+  const reader = child.stdout.getReader();
   const decoder = new TextDecoder();
-  let buffered = "";
-  const reader = proc.stdout.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffered += decoder.decode(value, { stream: true });
-    let newline: number;
-    while ((newline = buffered.indexOf("\n")) !== -1) {
-      const event = JSON.parse(buffered.slice(0, newline)) as Event;
-      buffered = buffered.slice(newline + 1);
-      seen.push(event);
-      if (killOn !== undefined && event.event === killOn) proc.kill("SIGKILL");
+  let out = "";
+  try {
+    while (!out.includes("ARMED")) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error(`child exited before arming: ${out}`);
+      out += decoder.decode(value);
     }
+  } finally {
+    child.kill("SIGKILL");
+    await child.exited;
   }
-  await proc.exited;
-  return seen;
+  return out.slice(out.indexOf("ARMED") + 6).split("\n")[0]!.trim();
 }
 
-async function crashAndResume(mode: string): Promise<{ first: Event[]; second: Event[] }> {
-  const dir = mkdtempSync(join(tmpdir(), "pi-durable-"));
-  dirs.push(dir);
-  const spawn = (args: string[]) =>
-    Bun.spawn(["bun", CHILD, ...args], { stdin: "ignore", stdout: "pipe", stderr: "inherit" });
-  const first = await events(spawn([mode, "first", dir]), "kill-me");
-  const id = String(first.find((e) => e.event === "submitted")?.id);
-  const second = await events(spawn([mode, "resume", dir, id]));
-  return { first, second };
+async function settle(t: TestRuntime): Promise<void> {
+  const until = Date.now() + 15_000;
+  while ((await t.runtime.harness.inspect(ctx)).tasks.length > 0) {
+    if (Date.now() > until) throw new Error("tasks still live");
+    await new Promise((r) => setTimeout(r, 10));
+  }
 }
 
-describe("pi-durable across a SIGKILL", () => {
-  test("a streamed answer killed halfway keeps its committed text and the run finishes", async () => {
-    const { first, second } = await crashAndResume("stream");
-    const killedAt = first.find((e) => e.event === "kill-me")?.partialChars as number;
-    const reopened = second.find((e) => e.event === "reopened")!;
-    expect(reopened.partialChars as number).toBeGreaterThanOrEqual(killedAt - 40);
-    const settled = second.find((e) => e.event === "settled")!;
-    expect(settled.status).toBe("done");
-    const request = second.find((e) => e.event === "model-request")!;
-    // The retry is a fresh request: the partial is not sent back, and the
-    // committed partial is replaced by the new attempt (docs/pitfall/ai/511).
-    expect(request.roles).toEqual(["system", "user"]);
-    // The old partial stays visible until the retry commits; a short retry
-    // answer goes straight to the transcript and clears it.
-    expect(second.find((e) => e.event === "partial-changed")?.to).toBeNull();
-    const settledLines = settled.lines as { text: string }[];
-    expect(settledLines[settledLines.length - 1]?.text).toBe("resumed; saw none");
-  }, 30_000);
+const assistants = (t: TestRuntime) =>
+  t.file.rows().filter((r) => r.role === "assistant") as { text: string; tools: { name: string; isError: boolean }[] }[];
 
-  test("an unsafe tool killed mid-call gives the model an interrupted error", async () => {
-    const { second } = await crashAndResume("unsafe");
-    expect(second.some((e) => e.event === "note-started")).toBe(false);
-    const request = second.find((e) => e.event === "model-request")!;
-    expect(request.lastTool).toBe(
-      "error: <harness>\n[error] Tool note was interrupted and may have partially run\n</harness>",
-    );
-    expect(second.find((e) => e.event === "settled")?.status).toBe("done");
-  }, 30_000);
+test("killed mid-text: the half sentence lands once and nothing is asked again", async () => {
+  const root = mkdtempSync(join(tmpdir(), "durable-crash-"));
+  const armedAt = Number(await killWhenArmed("mid-text", root));
+  const t = await openTestRuntime({ root, responses: [fauxAssistantMessage(fauxText("asked again"))] });
+  expect((await recoverBeforeResume(t.runtime, ctx)).map((r) => r.outcome)).toEqual(["mid-text"]);
+  await settle(t);
+  expect(t.requests).toHaveLength(0);
+  const said = assistants(t);
+  expect(said).toHaveLength(1);
+  expect(said[0]!.text.length).toBeGreaterThanOrEqual(armedAt);
+  expect(CRASH_ANSWER.startsWith(said[0]!.text)).toBe(true);
+  await t.runtime.close(ctx);
+}, 30_000);
 
-  test("a replay-safe tool killed mid-call runs again", async () => {
-    const { second } = await crashAndResume("safe");
-    expect(second.some((e) => e.event === "lookup-started")).toBe(true);
-    const request = second.find((e) => e.event === "model-request")!;
-    expect(request.lastTool).toBe("ok: passage about tides");
-  }, 30_000);
-});
+test("killed inside an unsafe tool: the model gets interrupted and the turn finishes", async () => {
+  const root = mkdtempSync(join(tmpdir(), "durable-crash-"));
+  await killWhenArmed("unsafe-tool", root);
+  let notes = 0;
+  const t = await openTestRuntime({
+    root,
+    responses: [fauxAssistantMessage(fauxText("The note may not have been written."))],
+    desk: { note: async () => (notes++, "noted") },
+  });
+  expect((await recoverBeforeResume(t.runtime, ctx)).map((r) => r.outcome)).toEqual(["in-tool"]);
+  await settle(t);
+  expect(notes).toBe(0);
+  expect(t.requests[0]![t.requests[0]!.length - 1]).toContain("interrupted");
+  const said = assistants(t);
+  expect(said).toHaveLength(1);
+  expect(said[0]!.text).toBe("The note may not have been written.");
+  expect(said[0]!.tools.map((x) => [x.name, x.isError])).toEqual([["note", true]]);
+  await t.runtime.close(ctx);
+}, 30_000);
+
+test("killed inside a replay-safe tool: the tool runs again and the turn finishes", async () => {
+  const root = mkdtempSync(join(tmpdir(), "durable-crash-"));
+  await killWhenArmed("safe-tool", root);
+  let lookups = 0;
+  const t = await openTestRuntime({
+    root,
+    responses: [fauxAssistantMessage(fauxText("Found it."))],
+    desk: { lookup: async (q) => (lookups++, `text of ${q}`) },
+  });
+  expect((await recoverBeforeResume(t.runtime, ctx)).map((r) => r.outcome)).toEqual(["in-tool"]);
+  await settle(t);
+  expect(lookups).toBe(1);
+  const said = assistants(t);
+  expect(said.map((r) => r.text)).toEqual(["Found it."]);
+  expect(said[0]!.tools.map((x) => [x.name, x.isError])).toEqual([["lookup", false]]);
+  await t.runtime.close(ctx);
+}, 30_000);
+
+test("killed between writing the file and the landed memo: the rerun writes nothing twice", async () => {
+  const root = mkdtempSync(join(tmpdir(), "durable-crash-"));
+  await killWhenArmed("land", root);
+  const t = await openTestRuntime({ root, responses: [] });
+  expect(t.file.rows().map((r) => r.text)).toEqual(["Explain the tides.", "Short answer."]);
+  expect(await recoverBeforeResume(t.runtime, ctx)).toEqual([]);
+  await settle(t);
+  expect(t.file.rows().map((r) => r.text)).toEqual(["Explain the tides.", "Short answer."]);
+  await t.runtime.close(ctx);
+}, 30_000);

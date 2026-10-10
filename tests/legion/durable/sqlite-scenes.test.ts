@@ -1,6 +1,6 @@
 // The SQLite-backend scenes on the bun:sqlite stand-in for the Rust host, all
 // on the faux provider. The same scenes run in the Tauri app over the real IPC
-// (sqlite-probe-main.ts); docs/research/pi-durable-spike.md has both sets of
+// (scripts/durable-probe/main.ts); docs/research/pi-durable-spike.md has both sets of
 // numbers. DURABLE_REPORT=1 prints each scene's result.
 
 import { expect, test } from "bun:test";
@@ -15,7 +15,7 @@ import {
   latencyScene,
   rotationScene,
   type SceneHost,
-} from "../../../src/legion/durable/sqlite-scenes";
+} from "./support/sqlite-scenes";
 import { bunSqliteHost } from "../../platform/app/durable-sqlite-host";
 
 function host(root = mkdtempSync(join(tmpdir(), "durable-scenes-"))) {

@@ -3,7 +3,7 @@
 // reply streams, twelve conversations in one harness, one conversation's tool
 // asking another, per-reply growth and the generation swap, and the crash
 // halves. They run on whatever opens the database: the Tauri IPC in the app
-// (sqlite-probe-main.ts), a bun:sqlite stand-in under test.
+// (scripts/durable-probe/main.ts), a bun:sqlite stand-in under test.
 
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type, type TranscriptContext } from "@earendil-works/pi-ai";

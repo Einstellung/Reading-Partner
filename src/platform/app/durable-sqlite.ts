@@ -122,3 +122,8 @@ export async function openDurableSqlite(path: string, call: HostCall = invoke): 
 export async function removeDurableSqlite(path: string, call: HostCall = invoke): Promise<void> {
   await call("durable_sqlite_remove", { path });
 }
+
+/** Bytes of a database file and its `-wal`, open or closed; zero when absent. */
+export async function durableSqliteSize(path: string, call: HostCall = invoke): Promise<number> {
+  return Number(await call("durable_sqlite_size", { path }));
+}
