@@ -1003,3 +1003,51 @@ test("a bell's turn that failed releases the conversation all the same", async (
     off();
   }
 });
+
+async function until(done: () => Promise<boolean>): Promise<void> {
+  for (let i = 0; i < 200 && !(await done()); i++) await new Promise((resolve) => setTimeout(resolve, 5));
+}
+
+test("a bell waiting on a busy conversation holds up only that conversation's bells", async () => {
+  const otherThread = JSON.stringify({ ...JSON.parse(bookOrigin), threadId: "thread-2" });
+  const taken: string[] = [];
+  let release!: () => void;
+  const busy = new Promise<void>((resolve) => (release = resolve));
+  const off = registerTurnDelivery("book", async (input) => {
+    taken.push(input.runId);
+    if (input.runId === "r-1") {
+      input.onWait?.();
+      await busy;
+    }
+    return { status: "answered", reply: `Back on ${input.runId}.`, watching: true };
+  });
+  try {
+    const { bells } = bellStore();
+    const { box } = boxStore();
+    const ring = (runId: string, deliverTo: string, at: number) =>
+      bells.ring("run-done", { runId, kind: "research-literature", brief: "in", deliverTo }, { at });
+    await ring("r-1", bookOrigin, NOW - 3000);
+    await ring("r-2", otherThread, NOW - 2000);
+    await ring("r-3", bookOrigin, NOW - 1000);
+    const { send } = sender([]);
+
+    // r-1's conversation is busy: the pass answers r-2 on another thread, and
+    // r-3 waits behind r-1 on the same one.
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+    expect(taken).toEqual(["r-1", "r-2"]);
+    expect((await bells.get("run-done-r-2"))?.state).toBe("acked");
+    expect((await bells.get("run-done-r-1"))?.state).not.toBe("acked");
+    // A pass meanwhile delivers neither of the waiting two a second time.
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(0);
+    expect(taken).toEqual(["r-1", "r-2"]);
+
+    // The busy turn lands: r-1 is answered and acked, then r-3 after it.
+    release();
+    await until(async () => (await bells.read()).length === 0);
+    expect(taken).toEqual(["r-1", "r-2", "r-3"]);
+    expect((await bells.get("run-done-r-1"))?.state).toBe("acked");
+    expect((await bells.get("run-done-r-3"))?.state).toBe("acked");
+  } finally {
+    off();
+  }
+});

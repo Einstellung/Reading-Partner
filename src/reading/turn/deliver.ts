@@ -177,6 +177,7 @@ export async function deliverBookBell(
   const conversation = await runtime.conversationFor(bookThreadKey(book), bookThreadOrigin(book), BACKGROUND_CONTEXT);
   const earlier = await bellTurn(runtime, conversation.id, input.bellId, BACKGROUND_CONTEXT);
   if (earlier) {
+    input.onWait?.();
     const result = await earlier;
     if (result?.status === "done" || (result?.reason === "aborted" && result.landed)) {
       return answered(replyTo(deps.threads, book, input.runId));
@@ -189,6 +190,7 @@ export async function deliverBookBell(
   const modelId = modelIdFor(s, "talk");
   if (!providerId || !modelId) return { status: "failed", reason: "no model is configured" };
   for (;;) {
+    if (deps.turns.has(threadId)) input.onWait?.();
     await whenFree(deps.turns, threadId);
     const stored = deps.threads.messages(home, threadId) ?? [];
     const after = Math.max(deps.now(), ...stored.map((m) => m.ts));
@@ -283,7 +285,8 @@ export async function deliverBookBell(
         off();
         return { status: "failed", reason: e instanceof Error ? e.message : String(e) };
       }
-      // A turn resumed after a restart is running here with no row of anyone's.
+      // A turn resumed after a restart is running or landing here with no row of anyone's.
+      input.onWait?.();
       await landed;
       off();
       continue;

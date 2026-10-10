@@ -25,6 +25,8 @@
 // A place with a turn runtime of its own (a book, docs/soul/87) answers the
 // bell there with a turn of its own. A conversation that is busy is waited for:
 // the bell starts its turn once that one has landed, and is acked only after.
+// Only that bell waits, and any rung after it for the same conversation; the
+// pass goes on with the rest.
 
 import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
@@ -286,6 +288,16 @@ export function coverOf(reply: string): string {
 // way up, and a developer ringing a bell by hand all land here.
 let pass: Promise<number> | null = null;
 
+// Bells waiting for a busy conversation to land its turn (docs/soul/87), and
+// the last delivery waiting on each conversation. A waiting bell outlives the
+// pass that started it; the passes after skip it until it settles.
+const waiting = new Set<string>();
+const waitingOn = new Map<string, Promise<TurnDeliveryOutcome | null>>();
+
+function conversationOf(origin: BoxOrigin): string {
+  return origin.place === "book" ? `book:${origin.bookId}:${origin.threadId}` : JSON.stringify(origin);
+}
+
 /**
  * Answer whatever is in the inbox, oldest first, and say how many were answered.
  * Cheap when there is nothing: one directory listing and out.
@@ -314,6 +326,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
   let answered = 0;
   for (const bell of queued) {
     if (deps.signal?.aborted) break;
+    if (waiting.has(bell.id)) continue;
     const at = now();
     const date = doorDate(new Date(at));
     // Where the question was asked (docs/68). A `local` run never reaches a file,
@@ -372,25 +385,16 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     const rendered = renderBell(bell, substance, { tellFailure });
     // A place that answers on its own runtime (docs/soul/87). Null means there
     // is nothing there to answer in any more, and the bell goes to the door.
-    if (origin && bell.type !== "wake") {
+    const deliver = origin && bell.type !== "wake" ? turnDeliverer(origin.place) : null;
+    if (origin && deliver && bell.type !== "wake") {
       const { runId, kind } = bell.payload;
-      const deliver = turnDeliverer(origin.place);
-      const outcome = deliver
-        ? await deliver({
-            origin,
-            settings: deps.settings,
-            bell: rendered,
-            bellId: bell.id,
-            runId,
-            ...(deps.signal ? { signal: deps.signal } : {}),
-          }).catch((e): TurnDeliveryOutcome => ({ status: "failed", reason: e instanceof Error ? e.message : String(e) }))
-        : null;
-      if (outcome?.status === "failed") {
-        deps.onTrouble?.(bell, outcome.reason);
-        break;
-      }
-      if (outcome) {
-        // The reply is on disk; the card only where nobody was looking.
+      const place = origin;
+      // The reply is on disk; the card only where nobody was looking, then the ledger.
+      const settle = async (outcome: TurnDeliveryOutcome): Promise<boolean> => {
+        if (outcome.status === "failed") {
+          deps.onTrouble?.(bell, outcome.reason);
+          return false;
+        }
         if (!outcome.watching) {
           await box
             .put({
@@ -398,7 +402,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
               source: "run",
               cover: coverOf(outcome.reply),
               ...(substance?.output ? { body: substance.output } : {}),
-              origin,
+              origin: place,
               kind,
               runId,
               needsDecision: bell.type === "run-failed",
@@ -409,6 +413,43 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
         await bells.delivered(bell.id);
         await bells.ack(bell.id);
         await runs.markDelivered(runId, now()).catch(() => null);
+        return true;
+      };
+      let parked!: () => void;
+      const parking = new Promise<"waiting">((resolve) => (parked = () => resolve("waiting")));
+      const start = () =>
+        deliver({
+          origin: place,
+          settings: deps.settings,
+          bell: rendered,
+          bellId: bell.id,
+          runId,
+          onWait: parked,
+          ...(deps.signal ? { signal: deps.signal } : {}),
+        }).catch((e): TurnDeliveryOutcome => ({ status: "failed", reason: e instanceof Error ? e.message : String(e) }));
+      // Behind a bell already waiting on the same conversation, in the order
+      // they rang; not at all after one that failed.
+      const target = conversationOf(place);
+      const ahead = waitingOn.get(target);
+      const delivering = ahead ? ahead.then((before) => (before?.status === "failed" ? null : start())) : start();
+      if (ahead) parked();
+      const first = await Promise.race([delivering, parking]);
+      if (first === "waiting") {
+        // The conversation is busy: this bell waits for it on its own and the
+        // pass goes on to the next one.
+        waiting.add(bell.id);
+        waitingOn.set(target, delivering);
+        void delivering
+          .then((outcome) => (outcome ? settle(outcome) : false))
+          .catch((e) => console.warn(`bell ${bell.id} waited for its turn and would not settle`, e))
+          .finally(() => {
+            waiting.delete(bell.id);
+            if (waitingOn.get(target) === delivering) waitingOn.delete(target);
+          });
+        continue;
+      }
+      if (first) {
+        if (!(await settle(first))) break;
         answered += 1;
         continue;
       }

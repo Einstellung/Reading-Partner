@@ -85,6 +85,8 @@ export interface TurnDelivery {
   /** The run the bell is about; the reply is stamped with it. */
   runId: string;
   signal?: AbortSignal;
+  /** Called when the conversation is busy and the delivery starts waiting for it to land. */
+  onWait?: () => void;
 }
 
 /**
