@@ -2,14 +2,15 @@
 
 ## 第一阶段现状
 
-截至第七棒（`dev/pi-durable-p1h`）。
+截至第八棒（`dev/pi-durable-p1i`）。
 
-已切到新运行时的回合面：读者在书里的对话（`reading/session/use-call.ts`，手机 EPUB 课堂 `use-book-lesson.ts` 走它）、手机 PDF 课堂（`ui/components/phone/lesson/use-lesson-call.ts`）、答进书里的铃（`reading/turn/deliver.ts`）、这些回合被杀后的恢复（`reading/turn/durable-runtime.ts` 启动时 `recoverBeforeResume`）。重启后恢复的回合，读者打开那条线程时接上：看得到在流，停止和插话够得着，落盘中发的话等它结算后开新回合（第七棒）。
+已切到新运行时的回合面：读者在书里的对话（`reading/session/use-call.ts`，手机 EPUB 课堂 `use-book-lesson.ts` 走它）、手机 PDF 课堂（`ui/components/phone/lesson/use-lesson-call.ts`）、答进书里的铃（`reading/turn/deliver.ts`）、这些回合被杀后的恢复（`reading/turn/durable-runtime.ts` 启动时 `recoverBeforeResume`）。重启后恢复的回合，读者打开那条线程时接上：看得到在流，停止和插话够得着，落盘中发的话等它结算后开新回合（第七棒），挂同一个停摆看门狗（第八棒）。书回合写 turn-log 诊断行，开发构建记 `recordLongestSilence`（第八棒）。
 
 真机验收前已知的缺口：
 
-- 遥测只有 `recordModelCall` 和 `recordCacheTurn`，没有 turn-log 诊断行和 `recordLongestSilence`。
-- 接上的恢复回合没有停摆看门狗（只有本进程起的回合有）。
+- 恢复时被 abort 的回合落盘那几毫秒里打开线程，屏幕上少掉写回的插话和半句，重开线程才对（第七棒，已知不处理）。
+- 工具参数校验的 `recordToolArgs` 没接：pi-durable 的 `prepareArguments` 要求纯函数、重试时会重跑，也拿不到模型。
+- 没有人打开的恢复回合不挂看门狗，turn-log 里也没有它的 `first-byte`（首字节取自线程的 view）。
 
 下一棒真机验收清单（Linux 用 `xvfb-run`，iOS 模拟器，iPad 真机；全部用 .dev 包名）：
 
@@ -272,4 +273,22 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 没做：
 
 - 恢复时被 abort 的回合（正文中间）落盘只要几毫秒；读者恰好在那之间打开线程，`turn-rows` 会把文件里刚写的撤回插话行从屏幕上替换掉，结算后的屏幕也没有 `rp.partial` 的半句，重开线程才对。
+- 真机和模拟器都没跑。
+
+## 第八棒（分支 `dev/pi-durable-p1i`，从 `dev/pi-durable` 353bb754 起）
+
+做了：
+
+- `reading/turn/durable-turn.ts`：`runBookTurn` 里的看门狗提成 `watchTurn`（beat、hold、到点 supersede，回前台判死走共享的 `stallWatches()`），`resumedTurn` 的 `follow` 也挂它；`resumedTurn` / `resumedBookTurn` 多一个可选的 `{ watches, stallMs }`。被切的接上回合以 `stalled` 结束，use-call 和课堂按原来的 `afterStall` 重问一次（新装配的回合），第二次报失败。
+- turn-log：`reading/turn/durable-turn-log.ts` 的 `BookTurnLog`，按线程 key 记，写 `start`（surface、`conversation` 为 threadId、provider、model、`held: false`）、`first-byte`、`round`、`end`，字段含义同 `legion/execute/turn-log.ts`。本进程起的回合在 `startTurn` 后写 `start`；没在本进程起的（恢复的）在本进程看到的第一个请求时写。请求时刻来自 extension 新加的 `requested`（`openDurable` 的 `onRequest`，`beforeRequest` 里算出轮次后调），`round` 挂在 `recordResponse`，`first-byte` 是线程 view 上这一轮第一次出现半句（按消息 timestamp 区分轮次），`end` 在 `onSettled` 和跟随方看到结算时各报一次、只写第一次，看门狗切过的记 `stalled`。没有 lane，不写 `queued`、`lane`。`openReadingDurable` 的 `log` 可换 sink，默认 `appTurnLog`。
+- `recordLongestSilence`：看门狗停下时，开发构建记这一回合最长的沉默（surface 同 turn-log）并打 `[stall]` 那行，同旧路径。
+- 测试：`durable-stall.test.ts` 三个停摆场景对「本进程起」和「重启后接上」各跑一遍（假时钟），并核 turn-log 的 `end`；加开发构建记最长沉默 1 个。`durable-turn-log.test.ts` 4 个（一回合的行序和单一 id、结局映射、faux 带工具的书回合、恢复回合从首个请求记起）。`use-call-resumed.test.tsx` 加 1 个（接上的回合被切重问一次、第二次失败）。全量 `scripts/t.sh` 7382 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+拍板的：
+
+- 接上回合的看门狗从读者打开线程（`follow`）时起算。
+- 坑号 520、521 没用上。
+
+没做：
+
 - 真机和模拟器都没跑。
