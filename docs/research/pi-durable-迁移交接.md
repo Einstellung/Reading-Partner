@@ -120,3 +120,34 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - docs/soul/87「一个回合」第 3 步写 `rp.turn` 只 `wait()` 这次 submission，「落盘」写「读本 run 的条目」。纯文字回答里的 steer 会开下一个 run（坑 519），回合不等于 run，应改成「等对话空闲，读本回合（从这次 submission 的 `pi.user` 起，含 steer 开的 run）的条目」。没改，等定。
 - 87「上下文与 budget」写「被裁成桩的工具结果按 submission 记」，现在按对话记。
 - `docs/pitfall/README.md` 第 80 行「下一个是 516」过期了。
+
+## 第四棒做完的（分支 `dev/pi-durable-p1d`，从 `dev/pi-durable` a40e84ad 起）
+
+- reducer 的 `row-arrived`：到达的行带 id、屏幕上同 role+ts 的行没有 id（界面自己画的）时视为同一行，不再加一遍。两个都带 id 的照旧按 id 分。
+- `use-call.ts` 切到新运行时：读者那句先写文件，ts 取文件里最后一条 user；先画占位流式行；`buildReadingTurn` → `splitAssembled` → `readingDurable()` → `driveBookTurn`；每次 view 经 `shapes.newRow` 发 `turn-rows`，同时写进 liveTurns 条目的 `rows`。页窗图片走 `line.content`。origin 优先 `turn.origin`，不是 book 时按 bookId/threadId/annotationId 拼。
+- steer：条目上有 `durable` 就 `steer(text, ts)`；行先记进条目新增的 `unsent` 并画 queued，steer 返回 true 才从 `unsent` 去掉。装配期间说的话等 `durable` 接上后逐条 steer。bell 自己的回合（`silent`）照旧走 `live.steering`。
+- 结局（`finish`）：answered 用最终 rows 发 `turn-rows`，最后一个 AI 行带 `notice`，`syncFocusChapter`、`onSettled`；stopped 去掉空 AI 行；refused / failed 走 `showFailure`，失败行是回合最后一行之后新的一行，`row-changed` 带 retry，不在看时只放 error 卡片；stalled 清掉回合行按 `afterStall` 重问一次。交回的 steer 和 `unsent` 合并按 ts 排序写文件、`row-delivered`；answered 和 stopped 之后开下一回合，失败不开。
+- 停止：有 `durable` 时只调 `stop()`，条目留到 `ended`；还在装配时 abort、删占位行、写 `unsent` 并开下一回合。删线程时 `releaseThreads` 同时调 `durable.stop()`。
+- `setBookWatching` 在 useEffect 里登记，probe 是 `watching(callRef.current, bookIdRef.current, …)`。
+- 删掉：use-call 里的 `runAgentTurn`、`soulHarness`、`deliverTo`、`createSteering`、`createDelivered`、`createRowSplit`、`rowTsAfter`、`flushSteering`、`keepPartial`、`isStall`；`turn-row-split.ts` 的 `rowTsAfter`、`RowSplit.delivered` 和整套 origin。
+- 测试：`tests/support/use-call.ts` 加 `fakeBookTurns()`，spy `readingDurable` 和 `driveBookTurn`，测试自己发 view 和结局。`use-call-steer.test.tsx` 重写成 9 个（line/model/origin、steer 不开第二回合、view 接管 queued 行且没变的行保持原对象、停止后交回的 steer 开下一回合、来不及 steer 的话在回答后开下一回合、停止留回执、停止无产出不留行、拒绝和失败、判死重问一次）。thinking、hangup、open、arrivals、aside、reopen、phone-reader-render 的 `runAgentTurn` spy 换成 `fakeBookTurns`，断言不变（hangup 的 AI 行改成 lander 写的，无 minted id）。全量 `scripts/t.sh` 7358 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+删掉的测试：
+
+- `use-call-delivered.test.tsx` 全部 7 个：测的是 bell 送进正在跑的书回合（`createDelivered`），这条内部 steer 路随 use-call 切换没了。
+- `use-call-steer.test.tsx` 里 7 个：「user / ai / user / ai 写文件」「行交接时带 trace」「只有回执的行留在线上方」「行空时交接把回答挪到线下」「交接后马上停止只存一次」「停止保留半句写文件」「停止留回执写文件」里写文件的部分。写文件和行切分现在是运行时的事，由 `durable-turn.test.ts`（落盘顺序）、`durable-view.test.ts`（291、360、510）、`durable-book.test.ts` 覆盖。界面上能看到的那部分在新测试里保留。
+- `turn-row-split.test.ts` 里 7 个：6 个测 `delivered` 和 origin，1 个测 `rowTsAfter`，被测的代码删了。
+
+## 第四棒拍板的
+
+- use-call 测试打桩在 `driveBookTurn`（不是起真运行时加 faux provider）：hook 的事是把 rows 画上屏、处理结局、接 steer 和停止，打桩能精确控制交接和结局的时机；运行时本身已有 faux provider 的测试。
+- 停止不再立刻收尾：条目留到运行时结算，期间 `isAnswering` 仍为 true，界面的停止键也还在。
+- steer 失败（reject）当作没被收下，留在 `unsent`。
+
+## 第四棒没做完的
+
+- `use-lesson-call.ts` 没切。手机课堂（`use-book-lesson.ts`）走的是 `useCall`，已经跟着切了；`use-lesson-call.ts` 是另一条（EPUB 课堂），照第三棒那条做。
+- telemetry：新路径只有 `recordModelCall`。`runAgentTurn` 给书回合还写 `recordCacheTurn`（surface `reading`、`inline`、thread、round、请求开始时刻、retention）。`recordResponse` 拿不到 inline 和 round，要从 `AssembledTurns` 带 inline、按对话数本回合的轮次。turn-log 的诊断行和 `recordLongestSilence` 也没有。
+- `live-turns.ts` 的 `openRow`、`patch`、`split` 只剩旧书回合用过，没删（`live-turns.test.ts` 有 5 个测试用 `patch`，要一起改）。`delivered` 字段和 `delivered.ts` 等 `deliver.ts` 改 submit 时删。
+- `deliver.ts` 的 `deliverIntoReadingTurn` 现在永远返回 null（书回合条目不再带 `delivered`），bell 会走自己的回合；它的 `holdReadingTurn` 在书回合还在跑时 `turns.start` 会打印「second turn」并 abort 我们的 controller（不会停掉运行时的 run，但条目会被换掉，该回合结局时 `settle` 找不到条目就静默）。改 submit 那棒一起处理。
+- 回前台判死、真机和模拟器验收没做。
