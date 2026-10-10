@@ -203,6 +203,8 @@ const LAYER: Record<string, Layer> = {
   "info/meals/plan": "domain",
   // Everything that fetches or caches a dish or ingredient photo.
   "info/meals/photos": "domain",
+  // One made meal's recipe page: the prompt, the stored recipes, the call.
+  "info/meals/recipe": "domain",
   // The day and week screens' text and layout, plus onboarding.
   "info/meals/screen": "domain",
   "info/picture": "domain",

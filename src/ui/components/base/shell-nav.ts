@@ -21,6 +21,7 @@ export type HomeScreen =
   | "meals"
   | "meals-shopping"
   | "meals-day"
+  | "meals-recipe"
   | "meals-method"
   | "meals-onboarding"
   | "settings";
@@ -84,6 +85,7 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
     case "meals":
     case "meals-shopping":
     case "meals-day":
+    case "meals-recipe":
     case "meals-method":
     case "meals-onboarding":
       return "meals";

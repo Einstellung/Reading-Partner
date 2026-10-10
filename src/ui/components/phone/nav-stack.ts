@@ -11,6 +11,7 @@
 // overlay: it is always pushed last, so `baseScreen` hands the shell the screen
 // that keeps rendering underneath it.
 
+import type { MealKey } from "../../../info/meals/plan/types";
 import type { SavedArticle } from "../../../reading/saved/saved-articles";
 
 export type ScreenKind =
@@ -21,6 +22,7 @@ export type ScreenKind =
   | "meals"
   | "meals-shopping"
   | "meals-day"
+  | "meals-recipe"
   | "meals-method"
   | "meals-onboarding"
   | "saved"
@@ -45,6 +47,8 @@ export type PhoneScreen =
   // Which day is open. One of a week, so the entry carries the date the way an
   // opened saved article carries its record.
   | { kind: "meals-day"; date: string }
+  // One made meal's recipe, pushed over its day.
+  | { kind: "meals-recipe"; date: string; meal: MealKey }
   | { kind: "meals-method" }
   | { kind: "meals-onboarding" }
   | { kind: "saved" }
@@ -62,7 +66,7 @@ export type PhoneScreen =
 
 export type PayloadFreeKind = Exclude<
   ScreenKind,
-  "savedArticle" | "topic" | "reader" | "lesson" | "meals-day"
+  "savedArticle" | "topic" | "reader" | "lesson" | "meals-day" | "meals-recipe"
 >;
 
 export type NavStack = readonly PhoneScreen[];

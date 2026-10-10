@@ -1,5 +1,6 @@
 // One day (docs/73): the four meals in eating order, each with its foods at
-// their solved grams and a one-line method.
+// their solved grams and a one-line method. A made meal's whole card opens its
+// recipe (docs/73 做法页).
 //
 // Rendering and event binding only.
 
@@ -10,7 +11,7 @@ import { useT } from "../../../../i18n";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import { markDishPhotoBroken } from "../../../../info/meals/photos/photo-store";
 import { hostRegion } from "../../../../info/meals/region";
-import type { MealsState } from "../../../../info/meals/plan/types";
+import type { MealKey, MealsState } from "../../../../info/meals/plan/types";
 import {
   dayViewOn,
   dishPhotoCredit,
@@ -43,18 +44,52 @@ export interface MealsDayProps {
   onBack: () => void;
   onAsk: () => void;
   onOpenMethod: () => void;
+  onOpenRecipe: (meal: MealKey) => void;
 }
 
-function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
+function MealCard({ view, photos, onOpen }: { view: MealView; photos: PhotoCache; onOpen: () => void }) {
   const t = useT();
   const [photoFailed, setPhotoFailed] = useState(false);
   const made = view.mode === "make";
+  // Only a made meal with its grams has a recipe to open.
+  const opens = made && view.rows.length > 0;
   const dish = { searchName: view.searchName };
   const picture = made ? dishPicture(dish, photos) : null;
   const credit = made ? dishPhotoCredit(dish, photos) : null;
+  // The photo credit inside the card is a link of its own.
+  const fromInner = (target: EventTarget) => target instanceof Element && target.closest("button, a") !== null;
+  const openRecipe = (
+    <span className="mt-2 flex items-center gap-1 text-[13px] text-accent-line">
+      {t("meals.recipe.open")}
+      <span aria-hidden="true" className="text-[17px] leading-none">
+        ›
+      </span>
+    </span>
+  );
 
   return (
-    <section className="rounded-2xl border border-border-soft bg-card p-5">
+    <section
+      className={
+        opens
+          ? "block w-full cursor-pointer rounded-2xl border border-border-soft bg-card p-5 text-left transition-colors active:bg-muted-faint can-hover:hover:border-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-line"
+          : "rounded-2xl border border-border-soft bg-card p-5"
+      }
+      {...(opens
+        ? {
+            role: "button",
+            tabIndex: 0,
+            "aria-label": t("meals.recipe.openAria", { meal: view.label, name: view.name }),
+            onClick: (e: React.MouseEvent) => {
+              if (!fromInner(e.target)) onOpen();
+            },
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+              e.preventDefault();
+              onOpen();
+            },
+          }
+        : {})}
+    >
       <div className="flex items-baseline gap-2">
         <CardLabel>{mealHeading(view)}</CardLabel>
         <span className="flex-1" />
@@ -144,8 +179,10 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
                 <CardLabel>{t("meals.how")}</CardLabel>
               </span>
               {view.method}
+              {opens && openRecipe}
             </div>
           )}
+          {opens && !view.method && <div className="mt-3">{openRecipe}</div>}
         </>
       ) : (
         <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
@@ -210,7 +247,7 @@ export function MealsDay(props: MealsDayProps) {
         <div className="flex flex-col gap-4">
           {view.targets && <DaySummary view={view} onOpenMethod={props.onOpenMethod} />}
           {view.meals.map((m) => (
-            <MealCard key={m.key} view={m} photos={photos} />
+            <MealCard key={m.key} view={m} photos={photos} onOpen={() => props.onOpenRecipe(m.key)} />
           ))}
         </div>
       )}
