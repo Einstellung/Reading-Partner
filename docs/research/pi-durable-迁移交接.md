@@ -352,3 +352,13 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 停止：过。正文流中停止，半句留在线程和屏幕；带工具轮时工具回执行（trace）也留下。
 - 手机 PDF 课堂、切后台：预算用完没走。退出重进 app 本轮做了五次，界面都回到首页、线程内容完整。
 - 观察：重开线程时视图停在旧位置（看不到在流的那行，要点向下箭头）；工具轮插话后新发的那句没滚到上方。都未查。
+
+## iOS 模拟器验收第三轮（分支 `verify/pi-durable-ios3`，从 `dev/pi-durable` 27a3a8fb 起）
+
+2026-10-10，iPhone 17 Pro 模拟器。要抓时机的用慢速 faux：页面内的 `ios2/faux2.js`，加一个只在 Mac `~/rp-flow` 里、未提交的启动脚手架 `src/dev-faux.ts`（`main.tsx` 第一行 import；localStorage `__fauxPlan` 有值时从启动起把 anthropic 换成 faux，重启后恢复的回合也走它；源在 scratchpad `ios3/dev-faux.ts`）。真 Haiku 2 次。报告页 scratchpad `verify-ios/report.html`，页首有全部项的总表。
+
+- 修了两个滚动问题（c2c36ed3）：插话句排在还在写的那一步下面，那一步继续长把它推出视口，现在发出的那句在读者滚动前一直钉在上方（`stick-to-bottom.ts` reveal 改为 hold）；重启后重开在途回合，运行时找到回合才画行，那次变化结束了开场，视图停在读者那句，现在「开场时最后一句读者话的回答晚到」仍算开场（`list-change.ts` 的 `answered`）。旧路径重开时在途的行和历史同一次渲染、落在在流那行，新路径现与之一致。
+- 重启后在途回合上按停止：过。工具里杀、重启后工具重放、faux 接着写，正文中停止，半句进线程，回合 aborted。
+- 切后台 30 s：过。Haiku 回合在后台继续流完（33.8 s done），回来无 stalled、无重问；第一轮那次 stalled 后重问没复现。
+- 手机 PDF 课堂：预算用完没走。
+- 环境：`~/rp-flow` detached 在 c2c36ed3，工作区有未提交的 `src/main.tsx` 一行和 `src/dev-faux.ts`；dev server PID 24214（`/tmp/pdv/devpid`）留着在跑。模拟器 app 里的凭据已删，下一轮要从 Linux 再拷 access token。
