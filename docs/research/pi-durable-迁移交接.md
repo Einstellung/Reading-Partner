@@ -47,3 +47,37 @@
 - 「pi-durable 只把变了的那段写成 `pi.system`」和每回合 `reset()` 冲突：reset 后每段都重写（坑 517），「换代」一节按每轮 20 到 50 KB 的估算没算这份。
 - 「每条消息的 ts 由 submission id 和段号定」：id 是自增整数（坑 518），改用开始时刻。
 - 没覆盖：铃在对话忙时「排成 follow-up」。follow-up 的 run 前面没有 reset，请求里会带着上一个 run 的条目，而上一回合落盘后历史读取器又会读到一遍。第一阶段做答进书里的铃之前要先定：等空闲再起回合，还是 beforeRequest 能认出 run 的起点。
+
+## 第二棒做完的（分支 `dev/pi-durable-p1b`，从 `dev/pi-durable` 71dc1a40 起）
+
+- `src/ai/durable-models.ts`：`createAppModels()`，`providers.ts` 的每个 provider 包一层：auth 走 `resolveApiKey`，`stream`/`streamSimple` 补 `transport` 和 `DEFAULT_MAX_RETRIES`。
+- `src/reading/turn/durable-book.ts`：书的 origin 是今天的 book BoxOrigin 加 `home`（线程文件所在文档），线程键 `book:<home>:<threadId>`。`AssembledTurns` 按线程存本进程装配的历史和工具；历史读取器先用它，没有（重启后恢复的回合）就读文件按 `HISTORY_KEEP` 组；桌面解析器同理，没有就走 `soul/delivery.ts` 的 book opener。`bookLander` 按 role+ts 跳过已有行、写 trace、flush 后放卡片，读者在看或拒绝时不放；拒绝不写文件。`bookUsageReport` 给 `recordModelCall`。
+- `src/reading/turn/durable-view.ts`：`projectView()` 把 view state 投影成回合的行，已提交部分直接用 `projectRun`，所以屏幕上的 ts 就是落盘的 ts；`pi.live` 半句进正在写的行，工具槽成工具行，`pi.inbox` 的 steer 成排队行。291、360、510 有单测。
+- `src/reading/turn/durable-runtime.ts`：`openReadingDurable()` 组装注入、`recoverBeforeResume`、`landWithdrawnSteers` 把撤回的 steer 写进线程文件；`onTurnSettled` 是「落盘完成」事件（`rp.turn` 落盘那步提交 terminal 之后发，`extension.ts` 的 `settled` / `harness.ts` 的 `onSettled`），给下一棒的铃用。`startReadingDurable()` 单例，`setBookWatching()` 由阅读会话设「读者在不在看」。
+- `src/reading/turn/durable-turn.ts`：`runBookTurn()` 是 use-call 要接的无 React 控制器：存装配、`startTurn`、订阅 `viewState()` 调 `projectView` 回调 `onView`、`steer`/`stop`、停摆看门狗复用 `legion/execute/stall.ts` 的 watch（生成有进展就 beat、工具在跑 hold），到点 `supersede` 并把撤回的 steer 交回调用方重问。
+- `src/ui/components/common/durable-catalog.ts`：`appToolCatalog()`，tool-contract ROSTER 那些工厂用惰性依赖造出全部工具，只取名字、描述、schema、replay。`useBackgroundServices` 在 `startSoulSession` 旁边调 `startReadingDurable(appToolCatalog)`。
+- `legion/durable/turn.ts`：`StartedTurn` 多了 `startedAt`；`supersede(runtime, conversation, submission, context)` 标记后走 `stopTurn`，返回撤回的 steer。
+- palace 加 `durable` 行（sync `local`）。只读工具补 `replay: "safe"`，ROSTER 加 `safe` 列和断言。
+- 测试：`tests/reading/turn/durable-{view,book,runtime,turn}.test.ts`。
+
+## 还没做的
+
+- `use-call.ts`、`use-lesson-call.ts` 换成 `runBookTurn`：删 `runAgentTurn` 的 `harness: soulHarness()` 和 `deliverTo`；读者那句先写文件，再 `splitAssembled(turn.messages)` 拿历史和那句（带页窗图片时 `content` 要支持图片，`TurnRequest.content` 现在只是 string）；`onView` 的行映射到 `shapes.newRow` 和 reducer（需要一个整段替换回合行的 action）；steer 走 `turn.steer(text, ts)`；停止走 `turn.stop()`，交回的 steer 写文件开下一回合；`settled.stalled` 时照今天重问一次；`setBookWatching` 接 `watching(callRef.current, …)`；拒绝在 `onTurnSettled` 之外没有出口，界面要从 `rp.turn` 结果或 lander 那里拿到 refusal 去显示和 toast。
+- `steering.ts`、`turn-row-split.ts`、`live-turns.ts` 的旧逻辑等 use-call 切过去再删；`liveTurns` 按线程登记两套运行时。
+- 回前台判死：`runBookTurn` 用的是 `stallWatches()` 单例，`watchAppAwayForStalls` 已由外壳绑定，应当照旧生效，没有单测。
+- 停摆路径没有单测（stall watch 的 tick 用真时钟，测试要注入 `createStallWatches({ timers })`）。
+- 未查明：`durable-turn.test.ts` 里纯文字回答流式中 steer，steer 被注入（落成 user 行）但 run 没有再生成回答就结算了；工具轮里的 steer（第一棒的测试）正常。测试目前只断言前两行。下一棒先查这是 pi-durable 的行为（最后一轮之后注入的 steer 不再起生成）还是我们的用法，确认后记坑 519。
+- 文档第一阶段验收的 app 那几项。
+
+## 第二棒拍板的
+
+- 系统提示只用一个 section `turn`：每回合 reset 本来就整段重写（坑 517），拆段没有收益。
+- 历史和桌面工具优先用本进程的装配（页窗图片、旁支的父段、桌面工具都和今天一样），重启后才退到读文件和 opener。
+- 落盘跳过按 role+ts，不只按 ts（同毫秒的问和答见坑 291 附近那条）。
+- 拒绝不写进线程文件，同今天（只在行上显示）。
+- catalog 用惰性依赖调各工厂。`go_to` 只在外壳登记过 place 之后才有，所以在 `useBackgroundServices` 里建。
+- `delegate`、`translate_document`、`ingest_url`、`research_literature` 仍是 unsafe：文档说它们 safe 的前提是 idempotencyKey 绑 `api.taskId`，适配层现在没把 task id 交给工具，重跑会派第二个 run。接上之前不能标 safe。
+
+## 发现的文档问题
+
+- 「工具的 replay」表把四个派活工具列为 safe，前提（idempotencyKey 绑 `api.taskId`）还没实现，见上。

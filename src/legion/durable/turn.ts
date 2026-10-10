@@ -211,6 +211,8 @@ export interface StartedTurn {
   taskId: TaskId<TurnResult>;
   /** Resolves once `rp.turn` is terminal; the outcome's result when it completed. */
   settled: Promise<TurnResult | undefined>;
+  /** `rp.turn`'s start time: the landed rows are stamped after it. */
+  startedAt: number;
 }
 
 export class TurnBusy extends Error {
@@ -238,6 +240,7 @@ export async function startTurn(runtime: DurableRuntime, request: TurnRequest, c
     return tool;
   });
   runtime.desks.forget(conversation.id);
+  const startedAt = runtime.now();
   await conversation.reset(undefined, context);
   const taskId = await conversation.commit(async (tx) => {
     const desk = await tx.doc(DeskDoc, conversation.id);
@@ -252,7 +255,7 @@ export async function startTurn(runtime: DurableRuntime, request: TurnRequest, c
     });
     return tx.createTask(
       runtime.turnTask,
-      { content: request.content, startedAt: runtime.now() },
+      { content: request.content, startedAt },
       { ownership: { kind: "conversation" }, background: true },
     );
   }, context);
@@ -262,7 +265,7 @@ export async function startTurn(runtime: DurableRuntime, request: TurnRequest, c
     await runtime.maybeRotate(context);
     return task.state.outcome.status === "completed" ? task.state.outcome.result : undefined;
   });
-  return { conversation, taskId, settled };
+  return { conversation, taskId, settled, startedAt };
 }
 
 /** A reader's line while the run goes; false when nothing is running to take it. */
@@ -306,17 +309,19 @@ export async function stopTurn(
 
 /**
  * The stall watchdog's way out: mark the submission superseded, so its
- * `rp.turn` lands nothing, and abort. The watchdog asks again with a new turn.
+ * `rp.turn` lands nothing, and stop. The watchdog asks again with a new turn,
+ * opened with the steers this hands back.
  */
 export async function supersede(
+  runtime: DurableRuntime,
   conversation: Conversation,
   submission: SubmissionId,
   context: Context,
-): Promise<void> {
+): Promise<WithdrawnSteer[]> {
   await conversation.commit(async (tx) => {
     const recovery = await tx.doc(RecoveryDoc, conversation.id);
     const key = String(submission);
     recovery.submissions[key] = { attempts: recovery.submissions[key]?.attempts ?? 0, superseded: true };
   }, context);
-  await conversation.abort(context);
+  return stopTurn(runtime, conversation, context);
 }
