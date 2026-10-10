@@ -223,5 +223,7 @@ export function batchMakeLine(
     )
     .join(t("meals.recipe.listSep"));
   const line = t("meals.recipe.batchMake", { count: batch.servings, items });
-  return batch.note ? `${line} ${batch.note}` : line;
+  if (!batch.note) return line;
+  // A line that ends in a full-width stop (Chinese, Japanese) takes the note without a space.
+  return /[。！？]$/.test(line) ? `${line}${batch.note}` : `${line} ${batch.note}`;
 }

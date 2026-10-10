@@ -120,7 +120,7 @@ test("the cook-ahead amounts are the solved grams times the servings, eggs count
     { name: "鸡腿肉", grams: 240, units: null },
     { name: "鸡蛋", grams: 450, units: "9 个" },
   ]);
-  expect(batchMakeLine(ROWS, BATCH)).toBe("一次做 3 顿：鸡腿肉 240 克、鸡蛋 9 个（450 克）。 焖的时间加到 8 分钟。");
+  expect(batchMakeLine(ROWS, BATCH)).toBe("一次做 3 顿：鸡腿肉 240 克、鸡蛋 9 个（450 克）。焖的时间加到 8 分钟。");
 });
 
 const entry = (at: number, name = "x"): RecipeEntry => ({ at, name, steps: ["a"], batch: null });
