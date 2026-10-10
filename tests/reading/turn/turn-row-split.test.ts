@@ -3,7 +3,7 @@
 // `head` and `liveText` arguments, and the clock is passed in. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { createRowSplit, rowTsAfter } from "../../../src/reading/turn/turn-row-split";
+import { createRowSplit } from "../../../src/reading/turn/turn-row-split";
 
 const at = (ms: number) => () => ms;
 
@@ -12,7 +12,6 @@ test("a turn nobody spoke into stays on its first row and answers with the whole
   rows.start(1000);
   expect(rows.writing(at(2000))).toEqual({ ts: 1000 });
   expect(rows.writing(at(3000))).toEqual({ ts: 1000 });
-  expect(rows.origin).toBeNull();
   expect(rows.answerTail("The whole answer.", "The whole answer.")).toBe("The whole answer.");
   // Written even when empty: an unsteered turn always settles its row.
   expect(rows.answerTail("", "")).toBe("");
@@ -25,7 +24,7 @@ test("a steer mid-answer puts the row above in the file and opens a new row on t
   expect(rows.steered("First part.")).toEqual({ text: "First part.", ts: 1000 });
   // Not split yet: nothing has been written since the model took the line.
   expect(rows.ts).toBe(1000);
-  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: null } });
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000 } });
   expect(rows.writing(at(2500))).toEqual({ ts: 2000 });
   expect(rows.answerTail("First part.\n\nThe answer.", "The answer.")).toBe("The answer.");
 });
@@ -38,7 +37,7 @@ test("a steer before the row held anything drops it and opens the reply under th
   rows.start(1000);
   expect(rows.steered("")).toBeNull();
   expect(rows.down).toBe(false);
-  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: null, drop: true } });
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, drop: true } });
   expect(rows.writing(at(2500))).toEqual({ ts: 2000 });
   expect(rows.answerTail("  The answer.", "The answer.")).toBe("The answer.");
 });
@@ -53,85 +52,16 @@ test("a steer after a round that only called a tool puts the receipt row in the 
   expect(rows.down).toBe(true);
   // A second line drained at the same boundary writes it once.
   expect(rows.steered("", true)).toBeNull();
-  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: null } });
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000 } });
   expect(rows.down).toBe(false);
   expect(rows.answerTail("I've set your diet.", "I've set your diet.")).toBe("I've set your diet.");
-});
-
-test("a delivered run after a round that only called a tool splits as a steer does", () => {
-  const rows = createRowSplit();
-  rows.start(1000);
-  expect(rows.delivered("", "run-1", true)).toEqual({ text: "", ts: 1000 });
-  expect(rows.origin).toBeNull();
-  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: { runId: "run-1" } } });
-});
-
-test("an empty row marked with a run keeps the mark when a steer moves it under the line", () => {
-  const rows = createRowSplit();
-  rows.start(1000);
-  rows.delivered("", "run-1");
-  rows.steered("");
-  expect(rows.writing(at(2000))).toEqual({
-    ts: 2000,
-    split: { was: 1000, origin: { runId: "run-1" }, drop: true },
-  });
 });
 
 test("a split row is keyed after the row it follows even when the clock is behind", () => {
   const rows = createRowSplit();
   rows.start(1000);
   rows.steered("Above.");
-  expect(rows.writing(at(900))).toEqual({ ts: 1001, split: { was: 1000, origin: null } });
-});
-
-test("a delivered run mid-answer opens a row marked with the run", () => {
-  const rows = createRowSplit();
-  rows.start(1000);
-  expect(rows.delivered("Looking into it.", "run-1")).toEqual({ text: "Looking into it.", ts: 1000 });
-  expect(rows.origin).toBeNull();
-  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: { runId: "run-1" } } });
-  expect(rows.origin).toEqual({ runId: "run-1" });
-  expect(rows.answerTail("Looking into it.\n\nHere is what came back.", "Here is what came back.")).toBe(
-    "Here is what came back.",
-  );
-  // The next split is an ordinary row again.
-  rows.steered("Here is what came back.");
-  expect(rows.writing(at(3000))).toEqual({ ts: 3000, split: { was: 2000, origin: null } });
-  expect(rows.origin).toBeNull();
-});
-
-test("a delivered run before a word was written marks the row in place", () => {
-  const rows = createRowSplit();
-  rows.start(1000);
-  expect(rows.delivered("", "run-1")).toBeNull();
-  expect(rows.origin).toEqual({ runId: "run-1" });
-  expect(rows.writing(at(2000))).toEqual({ ts: 1000 });
-});
-
-test("a row marked with a run keeps its mark when a steer puts it in the file", () => {
-  const rows = createRowSplit();
-  rows.start(1000);
-  rows.delivered("", "run-1");
-  rows.writing(at(1500));
-  expect(rows.steered("The translation is in.")).toEqual({
-    text: "The translation is in.",
-    ts: 1000,
-    origin: { runId: "run-1" },
-  });
-  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: null } });
-});
-
-test("a row marked with a run keeps its mark when a second delivery puts it in the file", () => {
-  const rows = createRowSplit();
-  rows.start(1000);
-  rows.delivered("", "run-1");
-  rows.writing(at(1500));
-  expect(rows.delivered("The translation is in.", "run-2")).toEqual({
-    text: "The translation is in.",
-    ts: 1000,
-    origin: { runId: "run-1" },
-  });
-  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: { runId: "run-2" } } });
+  expect(rows.writing(at(900))).toEqual({ ts: 1001, split: { was: 1000 } });
 });
 
 test("two steers drained at the same boundary write the row above once and split once", () => {
@@ -139,7 +69,7 @@ test("two steers drained at the same boundary write the row above once and split
   rows.start(1000);
   expect(rows.steered("Above.")).toEqual({ text: "Above.", ts: 1000 });
   expect(rows.steered("Above.")).toBeNull();
-  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: null } });
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000 } });
   expect(rows.writing(at(2100))).toEqual({ ts: 2000 });
   expect(rows.answerTail("Above.\n\nAnswer.", "Answer.")).toBe("Answer.");
 });
@@ -150,7 +80,7 @@ test("two steers a round apart split twice and leave the last row's text as the 
   rows.steered("One.");
   rows.writing(at(2000));
   expect(rows.steered("Two.")).toEqual({ text: "Two.", ts: 2000 });
-  expect(rows.writing(at(3000))).toEqual({ ts: 3000, split: { was: 2000, origin: null } });
+  expect(rows.writing(at(3000))).toEqual({ ts: 3000, split: { was: 2000 } });
   expect(rows.answerTail("One.\n\nTwo.\n\nThree.", "Three.")).toBe("Three.");
 });
 
@@ -160,7 +90,7 @@ test("a second steer right after a split, before the new row has text, moves the
   rows.steered("One.");
   rows.writing(at(2000));
   expect(rows.steered("")).toBeNull();
-  expect(rows.writing(at(3000))).toEqual({ ts: 3000, split: { was: 2000, origin: null, drop: true } });
+  expect(rows.writing(at(3000))).toEqual({ ts: 3000, split: { was: 2000, drop: true } });
 });
 
 test("a turn that ends after a steer with nothing written after it leaves no new row and hands over", () => {
@@ -208,15 +138,4 @@ test("a tail the joined rows do not prefix falls back to what arrived in the row
   rows.writing(at(2000));
   expect(rows.answerTail("Something else entirely.", "  What arrived.  ")).toBe("What arrived.");
   expect(rows.answerTail("Something else entirely.", "   ")).toBeNull();
-});
-
-// The reply is started in the millisecond its question was appended. Stamped
-// with the clock alone the two share a ts, and a lookup by ts finds the
-// question (reading/turn/live-turns.ts: withLive).
-test("a row opens after the latest row in the file, even in the same millisecond", () => {
-  expect(rowTsAfter(1000, [{ ts: 400 }, { ts: 1000 }])).toBe(1001);
-  // A steered line keyed ahead of the clock (use-call.ts: steerTsRef).
-  expect(rowTsAfter(1000, [{ ts: 1002 }, { ts: 900 }])).toBe(1003);
-  expect(rowTsAfter(1000, [{ ts: 400 }])).toBe(1000);
-  expect(rowTsAfter(1000, [])).toBe(1000);
 });

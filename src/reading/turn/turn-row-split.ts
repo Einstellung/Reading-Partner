@@ -1,10 +1,10 @@
 // Which row a reading turn is writing, and what of it is already in the
 // thread file (docs/72).
 //
-// The row moves when something is put into the turn mid-answer: the reader's
-// line (reading/steering.ts) or a delegated run coming back (reading/
-// delivered.ts). The model is handed it at the end of the round in flight, and
-// what it writes after that is an answer to it, so it gets a row of its own.
+// The row moves when the reader's line is put into the turn mid-answer
+// (reading/steering.ts). The model is handed it at the end of the round in
+// flight, and what it writes after that is an answer to it, so it gets a row
+// of its own.
 // The rows above it go into the thread file at that moment, so the file reads
 // user / ai / user / ai in the order it all happened.
 //
@@ -19,16 +19,10 @@
 
 import { joinRoundTexts } from "../../ai/turn-view/turn-rows";
 
-export interface RowOrigin {
-  runId: string;
-}
-
 /** The row above, to go into the thread file now, keyed by its row. */
 export interface RowToPersist {
   text: string;
   ts: number;
-  /** Absent on an ordinary row, as on the thread message it becomes. */
-  origin?: RowOrigin;
 }
 
 /** Where the next thing written lands. `split` is set when that opens a row. */
@@ -38,14 +32,12 @@ export interface WritingAt {
    * `drop` is set when the row at `was` holds nothing: it goes rather than
    * stays above the line, and the reply opens under it.
    */
-  split?: { was: number; origin: RowOrigin | null; drop?: true };
+  split?: { was: number; drop?: true };
 }
 
 export interface RowSplit {
   /** The row being written. */
   readonly ts: number;
-  /** The run the row being written answers; null on an ordinary row. */
-  readonly origin: RowOrigin | null;
   /**
    * The row being written is already in the thread file: it was handed over
    * with something in it and nothing has been written since. What ends the
@@ -60,8 +52,6 @@ export interface RowSplit {
    * Returns the row above when it is not in the file yet.
    */
   steered(head: string, traced?: boolean): RowToPersist | null;
-  /** The model was handed a delegated run's answer. As `steered`. */
-  delivered(head: string, runId: string, traced?: boolean): RowToPersist | null;
   /**
    * Something is about to be put in the row. Opens the new row first when a
    * split is owed. Called by nothing that ends the turn: an ending writes
@@ -74,16 +64,6 @@ export interface RowSplit {
    * and nothing followed: the row above is already down.
    */
   answerTail(full: string, liveText: string): string | null;
-}
-
-// The stamp for a row this turn opens: now, or just past the latest row
-// already in the thread file. The send path appends the reader's question and
-// starts the turn in the same millisecond, and a reply stamped like its
-// question is a row that stamp alone cannot find again.
-export function rowTsAfter(now: number, messages: readonly { ts: number }[]): number {
-  let last = -Infinity;
-  for (const m of messages) if (m.ts > last) last = m.ts;
-  return Math.max(now, last + 1);
 }
 
 export function createRowSplit(): RowSplit {
@@ -103,10 +83,6 @@ export function createRowSplit(): RowSplit {
   // the row it leaves holds nothing.
   let splitPending = false;
   let dropPending = false;
-  // The run whose answer the row being written is a reply to, and the one the
-  // next row will be. Set when a delegated run is delivered into this turn.
-  let rowOrigin: RowOrigin | null = null;
-  let nextOrigin: RowOrigin | null = null;
 
   const produced = (head: string, traced: boolean) => head !== "" || traced;
   const persistHead = (head: string, traced: boolean): RowToPersist | null => {
@@ -114,15 +90,12 @@ export function createRowSplit(): RowSplit {
     if (rowDown || !produced(head, traced)) return null;
     if (head) persisted.push(head);
     rowDown = true;
-    return { text: head, ts: rowTs, ...(rowOrigin ? { origin: rowOrigin } : {}) };
+    return { text: head, ts: rowTs };
   };
 
   return {
     get ts() {
       return rowTs;
-    },
-    get origin() {
-      return rowOrigin;
     },
     get down() {
       return rowDown;
@@ -139,17 +112,6 @@ export function createRowSplit(): RowSplit {
       dropPending = !rowDown;
       return down;
     },
-    delivered(head, runId, traced = false) {
-      const down = persistHead(head, traced);
-      // Handed it before anything was produced: this row is the answer. No
-      // row is drawn for a delivery, so nothing sits between it and its row.
-      if (!rowDown) rowOrigin = { runId };
-      else {
-        splitPending = true;
-        nextOrigin = { runId };
-      }
-      return down;
-    },
     writing(now) {
       if (!splitPending) return { ts: rowTs };
       const drop = dropPending;
@@ -158,11 +120,7 @@ export function createRowSplit(): RowSplit {
       rowDown = false;
       const was = rowTs;
       rowTs = Math.max(now(), was + 1);
-      // A row that goes takes nothing with it: the run it answered is what the
-      // row that replaces it answers, unless another one came since.
-      rowOrigin = drop ? (nextOrigin ?? rowOrigin) : nextOrigin;
-      nextOrigin = null;
-      return { ts: rowTs, split: { was, origin: rowOrigin, ...(drop ? { drop: true as const } : {}) } };
+      return { ts: rowTs, split: { was, ...(drop ? { drop: true as const } : {}) } };
     },
     answerTail(full, liveText) {
       if (!steered) return full;
