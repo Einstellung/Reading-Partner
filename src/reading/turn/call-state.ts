@@ -248,8 +248,14 @@ export function callReducer<M extends CallRow>(
       // is two answers, and one answer reported twice is one. A row with no id
       // is one this reducer has never seen, because the only rows that carry one
       // are the ones that came off the file.
-      const { id } = action.row;
+      //
+      // A durable turn's lander writes the rows the view already drew
+      // (reading/turn/durable-book.ts), and not through this session's own
+      // appends: those come back with an id the drawn row never had, at the
+      // drawn row's role and stamp, and are the same row.
+      const { id, role, ts } = action.row;
       if (id !== undefined && state.messages.some((m) => m.id === id)) return state;
+      if (state.messages.some((m) => m.id === undefined && m.role === role && m.ts === ts)) return state;
       return { ...state, messages: [...state.messages, action.row] };
     }
     case "row-dropped":

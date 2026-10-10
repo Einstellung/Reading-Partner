@@ -428,6 +428,16 @@ test("arrivals are told apart by id, not by what they say", () => {
   expect(reduce(next, { type: "row-arrived", threadId: "t1", row: idless })?.messages).toHaveLength(3);
 });
 
+test("a landed row the view already drew is not drawn again", () => {
+  // The durable lander writes the turn's rows with ids the drawn rows never had.
+  const open = call({ messages: [user(1, "why?"), ai(2, "because")] });
+  const landed = ai(2, "because", { id: "landed" });
+  expect(reduce(open, { type: "row-arrived", threadId: "t1", row: landed })).toBe(open);
+  // A row from the file at that stamp is a different row: two ids, two rows.
+  const filed = call({ messages: [ai(2, "done", { id: "t-one" })] });
+  expect(reduce(filed, { type: "row-arrived", threadId: "t1", row: ai(2, "done", { id: "t-two" }) })?.messages).toHaveLength(2);
+});
+
 test("the stop button keeps the half sentence as a finished row", () => {
   const open = call({
     messages: [ai(1, "half a sen", { streaming: true, tools: [{ name: "s", label: "S", state: "running" }] })],
