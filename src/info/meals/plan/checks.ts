@@ -6,14 +6,23 @@
 // needs), because nothing can be solved until it holds; then the grams are
 // solved; then the rules that read the solved week — minutes, dislikes,
 // protein reached, each day's kcal reached, flavour next to flavour, fish
-// twice a week.
+// twice a week. The pots are held to theirs with the templates (docs/73 一锅).
 
-import { foodAllowed, foodById, type Food } from "../nutrition/foods";
+import { FOODS, foodAllowed, foodById, type Food } from "../nutrition/foods";
 import type { TemplateItem } from "../nutrition/solve";
 import { minuteCap, type Profile, type Targets } from "../nutrition/targets";
+import {
+  MAX_POT_DAYS,
+  MAX_POT_MEALS,
+  MIN_POT_MEALS,
+  compareRefs,
+  potById,
+  potMeals,
+  potShareG,
+} from "./pots";
 import { dayTargetsOn, mealNumbers, solvePlan } from "./solve-week";
-import { MAIN_MEAL_KEYS, MEAL_KEYS, type Meal, type MealKey, type MealRef, type WeekPlan } from "./types";
-import { dayIndexOf, mealsInOrder, sameMeal } from "./week";
+import { MAIN_MEAL_KEYS, MEAL_KEYS, type Meal, type MealKey, type MealRef, type Pot, type WeekPlan } from "./types";
+import { daysBetween, dayIndexOf, mealsInOrder, sameMeal } from "./week";
 
 export interface CheckInput {
   plan: WeekPlan;
@@ -24,6 +33,9 @@ export interface CheckInput {
   // The week before an adjustment, so a weekly rule the reader's own deviation
   // already broke is not blamed on the meals being re-picked.
   previous?: WeekPlan | null;
+  // The ids of the pots this draft sent. With `changed`, a pot is held to its
+  // rules when the draft sent it or one of its meals, before or after.
+  pots?: readonly string[] | null;
 }
 
 export interface CheckResult {
@@ -92,6 +104,57 @@ export function templateProblems(at: string, meal: Meal, key: MealKey): string[]
   return out;
 }
 
+/**
+ * What is wrong with one pot, before anything is solved: a food that is cooked
+ * as a pot, two to four meals, cooked at a meal that eats from it, no meal
+ * before it or more than MAX_POT_DAYS after, and a share one meal can take.
+ * Each problem comes with the meals it names: the pot's meals and its cook meal.
+ */
+export function potProblems(plan: WeekPlan, pot: Pot): { text: string; refs: MealRef[] }[] {
+  const out: { text: string; refs: MealRef[] }[] = [];
+  const meals = potMeals(plan, pot.id);
+  const cookIsMeal = plan.days.some((d) => d.date === pot.cook.date);
+  const all = cookIsMeal && !meals.some((r) => sameMeal(r, pot.cook)) ? [pot.cook, ...meals] : meals;
+  const add = (text: string, refs: MealRef[] = all) => out.push({ text, refs });
+  const at = (ref: MealRef) => where(plan, ref);
+  if (!pot.name || !pot.method) add(`Pot ${pot.id} needs its name and its one-line method.`);
+  const food = foodById(pot.foodId);
+  if (!food) {
+    add(`Pot ${pot.id}: "${pot.foodId}" is not in the food table.`);
+    return out;
+  }
+  if (!food.potG) {
+    const potFoods = FOODS.filter((f) => f.potG).map((f) => f.id);
+    add(`Pot ${pot.id}: ${food.id} is not cooked as a pot; only ${potFoods.join(", ")} are. Give each of its meals its own protein.`);
+    return out;
+  }
+  if (meals.length < MIN_POT_MEALS || meals.length > MAX_POT_MEALS) {
+    add(`Pot ${pot.id} feeds ${meals.length} meal${meals.length === 1 ? "" : "s"}; a pot feeds ${MIN_POT_MEALS} to ${MAX_POT_MEALS}.`);
+  }
+  if (!meals.some((r) => sameMeal(r, pot.cook))) {
+    add(`Pot ${pot.id} is cooked at ${at(pot.cook)}, which does not eat from it; the meal it is cooked at eats the first share.`);
+  }
+  for (const ref of meals) {
+    if (compareRefs(ref, pot.cook) < 0) {
+      add(`${at(ref)} eats from pot ${pot.id} before it is cooked at ${at(pot.cook)}.`, [ref, pot.cook]);
+      continue;
+    }
+    const days = daysBetween(pot.cook.date, ref.date) ?? 0;
+    if (days > MAX_POT_DAYS) add(`${at(ref)} is ${days} days after pot ${pot.id} is cooked; at most ${MAX_POT_DAYS}.`, [ref]);
+  }
+  if (meals.length >= MIN_POT_MEALS) {
+    const share = potShareG(pot.rawG, meals.length);
+    if (share < food.minG || share > food.maxG) {
+      add(
+        `Pot ${pot.id}: ${pot.rawG} g over ${meals.length} meals is ${share} g a meal, outside the ` +
+          `${food.minG}–${food.maxG} g one meal takes. ` +
+          (share > food.maxG ? "Feed more meals from it or make it smaller." : "Feed fewer meals from it or make it bigger."),
+      );
+    }
+  }
+  return out;
+}
+
 function isFishy(meal: Meal): boolean {
   return (meal.items ?? []).some((i) => {
     const tags = foodById(i.foodId)?.tags ?? [];
@@ -132,9 +195,26 @@ export function checkPlan(input: CheckInput): CheckResult {
   for (const day of input.plan.days) {
     for (const key of MEAL_KEYS) {
       const ref = { date: day.date, meal: key };
-      if (day[key].mode !== "make" || !inScope(ref)) continue;
-      for (const text of templateProblems(where(input.plan, ref), day[key], key)) fail(text, ref);
+      const meal = day[key];
+      if (meal.mode !== "make" || !inScope(ref)) continue;
+      if (meal.pot && !potById(input.plan, meal.pot)) {
+        fail(`${where(input.plan, ref)} eats from pot ${meal.pot}, which pots does not define.`, ref);
+        continue;
+      }
+      for (const text of templateProblems(where(input.plan, ref), meal, key)) fail(text, ref);
     }
+  }
+  // A pot answers for itself in a fresh week; in an adjustment, when the draft
+  // sent it or touched one of its meals.
+  const sent = input.pots ?? [];
+  const potInScope = (pot: Pot) =>
+    !changed ||
+    sent.includes(pot.id) ||
+    potMeals(input.plan, pot.id).some(inScope) ||
+    (input.previous ? potMeals(input.previous, pot.id).some(inScope) : false);
+  for (const pot of input.plan.pots ?? []) {
+    if (!potInScope(pot)) continue;
+    for (const p of potProblems(input.plan, pot)) fail(p.text, ...p.refs);
   }
   if (problems.length) return { plan: input.plan, problems, failing: failing(input.plan) };
 
@@ -162,8 +242,8 @@ export function checkPlan(input: CheckInput): CheckResult {
         fail(
           `${at}: protein reaches only ${Math.round(numbers.totals.protein)} g of the ` +
             `${Math.round(numbers.target.protein)} g this meal needs` +
-            (p ? ` even with ${p.grams} g of ${p.food.id}` : "") +
-            ". Choose a denser protein food, or add a second one as a fixed item.",
+            (p ? ` with ${p.grams} g of ${p.food.id}` : "") +
+            ". Add a second protein food as a fixed item: an egg, tofu, a cup of soy milk.",
           ref,
         );
       }

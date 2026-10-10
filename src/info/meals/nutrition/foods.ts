@@ -72,6 +72,12 @@ export interface Food {
   unit?: { grams: number; label: string };
   tags: FoodTag[];
   source: FoodSource;
+  /**
+   * Raw grams of the usual supermarket pack, which is what one pot cooks
+   * (docs/73 一锅). Only on raw meat that is cooked once and eaten over
+   * several meals; a food without it is never a pot.
+   */
+  potG?: number;
 }
 
 export const TAIWAN_FDA_CREDIT =
@@ -84,7 +90,23 @@ export const USDA_FDC_CREDIT =
   "U.S. Department of Agriculture, Agricultural Research Service. FoodData Central (SR Legacy 2018-04, Foundation Foods 2026-04-30). Public domain (CC0 1.0).";
 export const USDA_FDC_URL = "https://fdc.nal.usda.gov/";
 
-export const FOODS: readonly Food[] = FOOD_TABLE;
+// The pot column (docs/73 一锅): the raw weight of one usual pack. Kept here
+// rather than in the generated food-table.ts so a rebuild of the table does not
+// lose it. Fish fillets, shrimp, eggs, ready-to-eat chicken, tofu and dairy are
+// portioned per meal and have none.
+export const POT_PACK_G: Readonly<Record<string, number>> = {
+  chicken_breast: 400,
+  chicken_thigh: 450,
+  chicken_tender: 400,
+  pork_tenderloin: 500,
+  pork_loin: 500,
+  lean_pork_leg: 500,
+  ground_pork: 300,
+  lean_beef: 500,
+  beef_shank_raw: 600,
+};
+
+export const FOODS: readonly Food[] = FOOD_TABLE.map((f) => (POT_PACK_G[f.id] ? { ...f, potG: POT_PACK_G[f.id] } : f));
 
 const BY_ID: ReadonlyMap<string, Food> = new Map(FOODS.map((f) => [f.id, f]));
 

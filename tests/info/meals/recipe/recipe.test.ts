@@ -1,20 +1,19 @@
 // The recipe page's pure half (src/info/meals/recipe/recipe.ts) and its file
-// (recipe-store.ts): the key, the prompt, the parse, the cook-ahead amounts,
-// and what a save keeps.
+// (recipe-store.ts): the key, the prompt, the parse, the packing step a pot's
+// cook meal ends with, and what a save keeps.
 // Run: scripts/t.sh tests/info/meals/recipe
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createFakeAppData, type FakeAppData } from "../../../support/guarded-appdata";
 import { getLocale, setLocale, type Locale } from "../../../../src/i18n";
 import {
-  batchAmounts,
-  batchMakeLine,
+  packStep,
   parseRecipe,
   recipeKey,
+  recipePot,
   recipeRequest,
   recipeSystemPrompt,
   recipeUserText,
-  type RecipeBatch,
   type RecipeEntry,
 } from "../../../../src/info/meals/recipe/recipe";
 import {
@@ -29,7 +28,8 @@ import {
 import { newTally } from "../../../../src/platform/app/structured-output";
 import { strategyFor } from "../../../../src/platform/sync/merge/contract";
 import { dayViewOn } from "../../../../src/info/meals/screen/view";
-import { MON, profile, state } from "../fixtures/week";
+import { addDays } from "../../../../src/info/meals/plan/week";
+import { MON, potWeek, profile, state } from "../fixtures/week";
 
 let io: FakeAppData;
 // The locale is one store for the whole process; put back what was there.
@@ -49,14 +49,12 @@ const ROWS = [
   { foodId: "steamed_bun", name: "馒头", grams: 260, units: null },
 ];
 
-const BATCH: RecipeBatch = {
-  servings: 3,
-  cook: [1, 2],
-  note: "焖的时间加到 8 分钟。",
-  pack: "分成 3 盒。",
-  keep: "冷藏 3 天。",
-  reheat: "微波 2 分钟。",
-};
+// One meal of the pot week: Monday's dinner cooks the braised beef, the
+// others eat a box of it.
+function potMealView(dayIndex: number, meal: "lunch" | "dinner") {
+  const day = dayViewOn(state({ plan: potWeek() }), addDays(MON, dayIndex), MON, "other")!;
+  return day.meals.find((m) => m.key === meal)!;
+}
 
 // A made meal off the shared week, with its solved rows.
 function madeMeal() {
@@ -85,51 +83,76 @@ test("a made meal asks with its rows and the reader's kitchen; a meal not made a
   expect(recipeRequest({ ...view, mode: "out" }, p, "zh-CN")).toBeNull();
 });
 
-test("the prompt names the language and forbids grams in the steps and the batch", () => {
+test("the prompt names the language and forbids grams in the steps and the packing of a pot", () => {
   const prompt = recipeSystemPrompt({ effort: "simple", language: "zh-CN" });
   expect(prompt).toContain("简体中文");
   expect(prompt).toContain("Do not repeat the grams");
-  expect(prompt).toContain("Never write an amount in batch");
+  expect(prompt).toContain("never write packing");
+  expect(prompt).not.toContain("batch");
 });
 
-test("steps lose a leading number; a batch that is not whole is dropped", () => {
+test("steps lose a leading number; a batch the model still sends is ignored", () => {
   const tally = newTally();
-  const reply =
-    'Here: {"steps": ["1. 鸡腿切块。", "第2步：下锅煎。", " ", 3], "batch": {"servings": 3, "cook": [1], "pack": "分装。", "keep": ""}}';
-  const parsed = parseRecipe(reply, 3, tally);
+  const reply = 'Here: {"steps": ["1. 鸡腿切块。", "第2步：下锅煎。", " ", 3], "batch": {"servings": 3}}';
+  const parsed = parseRecipe(reply, tally);
   expect(parsed.ok).toBe(true);
   if (!parsed.ok) return;
-  expect(parsed.value.steps).toEqual(["鸡腿切块。", "下锅煎。"]);
-  expect(parsed.value.batch).toBeNull();
-  expect(tally).toMatchObject({ seen: 4, kept: 2, repaired: 1 });
-});
-
-test("a batch keeps only rows that exist, in order, once", () => {
-  const reply = JSON.stringify({ steps: ["a"], batch: { ...BATCH, cook: [3, 1, 1, 9, 0] } });
-  const parsed = parseRecipe(reply, 3);
-  expect(parsed.ok && parsed.value.batch?.cook).toEqual([1, 3]);
+  expect(parsed.value).toEqual({ steps: ["鸡腿切块。", "下锅煎。"] });
+  expect(tally).toMatchObject({ seen: 4, kept: 2 });
 });
 
 test("no steps is a failure", () => {
-  expect(parseRecipe('{"steps": []}', 3).ok).toBe(false);
-  expect(parseRecipe("no json here", 3).ok).toBe(false);
+  expect(parseRecipe('{"steps": []}').ok).toBe(false);
+  expect(parseRecipe("no json here").ok).toBe(false);
 });
 
-test("the cook-ahead amounts are the solved grams times the servings, eggs counted", () => {
-  expect(batchAmounts(ROWS, BATCH)).toEqual([
-    { name: "鸡腿肉", grams: 240, units: null },
-    { name: "鸡蛋", grams: 450, units: "9 个" },
-  ]);
-  expect(batchMakeLine(ROWS, BATCH)).toBe("一次做 3 顿：鸡腿肉 240 克、鸡蛋 9 个（450 克）。焖的时间加到 8 分钟。");
+test("the meal a pot is cooked at is told to cook the whole pot and ends with the program's packing step", () => {
+  const cook = potMealView(0, "dinner");
+  const req = recipeRequest(cook, profile(), "zh-CN")!;
+  expect(req.pot).toMatchObject({ cooks: true, rawG: 600, count: 4, name: "卤牛腱", storage: "fresh" });
+  const text = recipeUserText(req);
+  expect(text).toContain("This meal cooks a pot: 卤牛腱, 600 g of raw 牛腱子（生）");
+  expect(text).toContain("Stop before packing the rest");
+  expect(packStep(cook.pot)).toBe(
+    "剩下的连汤汁分成 3 盒，一盒一顿，盒上写好哪天哪顿：星期二午餐、星期三午餐放冷藏；星期五午餐今天就冷冻。",
+  );
+  setLocale("en");
+  expect(packStep(cook.pot)).toBe(
+    "Pack the rest with its sauce into 3 boxes, one per meal, each marked with its day and meal: " +
+      "Tuesday Lunch, Wednesday Lunch in the fridge; Friday Lunch in the freezer today.",
+  );
 });
 
-const entry = (at: number, name = "x"): RecipeEntry => ({ at, name, steps: ["a"], batch: null });
+test("a meal that eats a box is told to reheat it, not cook it, and has no packing step", () => {
+  const fridge = potMealView(1, "lunch");
+  const frozen = potMealView(4, "lunch");
+  expect(packStep(fridge.pot)).toBeNull();
+  expect(packStep(madeMeal().pot)).toBeNull();
+  const text = recipeUserText(recipeRequest(fridge, profile(), "zh-CN")!);
+  expect(text).toContain("It is in the fridge.");
+  expect(text).toContain("Do not cook it again");
+  expect(recipeUserText(recipeRequest(frozen, profile(), "zh-CN")!)).toContain("moved from the freezer to the fridge last night");
+});
+
+test("the key carries the pot facts the steps depend on, and a meal without a pot keys as before", () => {
+  const view = potMealView(1, "lunch");
+  const pot = recipePot(view.pot)!;
+  const k = (p: typeof pot | null) => recipeKey(view.name, view.rows, ["wok"], "zh-CN", p);
+  expect(k(null)).toBe(recipeKey(view.name, view.rows, ["wok"], "zh-CN"));
+  expect(k(pot)).not.toBe(k(null));
+  expect(k({ ...pot, cooks: true })).not.toBe(k(pot));
+  expect(k({ ...pot, storage: "freezer" })).not.toBe(k(pot));
+  expect(k({ ...pot, count: 3 })).not.toBe(k(pot));
+  expect(k({ ...pot, method: "红烧" })).not.toBe(k(pot));
+});
+
+const entry = (at: number, name = "x"): RecipeEntry => ({ at, name, steps: ["a"] });
 
 test("a save merges into the file and reads back", async () => {
   await saveRecipe("k1", entry(1000, "one"), 1000, io);
-  await saveRecipe("k2", { ...entry(2000, "two"), batch: BATCH }, 2000, io);
+  await saveRecipe("k2", entry(2000, "two"), 2000, io);
   expect((await loadRecipe("k1", io))?.name).toBe("one");
-  expect((await loadRecipe("k2", io))?.batch).toEqual(BATCH);
+  expect((await loadRecipe("k2", io))?.steps).toEqual(["a"]);
   expect(await loadRecipe("k3", io)).toBeNull();
   expect(JSON.parse(io.files.get(MEALS_RECIPES_FILE)!).recipes).toHaveProperty("k1");
 });
@@ -142,6 +165,12 @@ test("a save drops what aged out and keeps the newest", () => {
   const kept = keptRecipes(many, now);
   expect(Object.keys(kept)).toHaveLength(RECIPE_KEEP_COUNT);
   expect(kept).not.toHaveProperty(`k${RECIPE_KEEP_COUNT}`);
+});
+
+test("an entry written with the model's batch still reads, without it", () => {
+  const batch = { servings: 3, cook: [1], note: "", pack: "分成 3 盒。", keep: "冷藏 3 天。", reheat: "微波 2 分钟。" };
+  const parsed = parseRecipeFile({ recipes: { old: { at: 1, name: "旧", steps: ["a"], batch }, bare: { at: 2, steps: ["b"], batch: null } } });
+  expect(parsed!.recipes).toEqual({ old: { at: 1, name: "旧", steps: ["a"] }, bare: { at: 2, name: "", steps: ["b"] } });
 });
 
 test("an entry that does not read is skipped, not the file", () => {

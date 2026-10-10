@@ -54,6 +54,8 @@ export interface MealSolution {
 export interface DayMealInput {
   slot: MealSlot;
   items: TemplateItem[];
+  /** The protein food's grams when the meal eats a share of a pot. */
+  proteinG?: number;
 }
 
 export interface DaySolution {
@@ -138,6 +140,8 @@ export interface SolveOptions {
   fatBumpG?: number;
   /** The kcal to fill when it is not the target's: the snack fills what the day has left. */
   kcal?: number;
+  /** The protein food's grams when they are given rather than a portion: a meal's share of a pot. */
+  proteinG?: number;
 }
 
 /**
@@ -170,7 +174,7 @@ export function solveMeal(
     .filter((r) => r.item.role === "fixed" && countsTowardPortion(r.food))
     .reduce((s, r) => s + (r.food.protein * r.grams) / 100, 0);
 
-  P.grams = portionGrams(P.food, slot, beside);
+  P.grams = opts.proteinG ?? portionGrams(P.food, slot, beside);
   if (O) {
     const start = slot === "snack" ? O.food.minG : (O.food.defaultG ?? O.food.minG) + (opts.fatBumpG ?? 0);
     O.grams = Math.min(O.food.maxG, start);
@@ -212,11 +216,13 @@ export function solveDay(meals: readonly DayMealInput[], day: DayTargets): DaySo
   const sorted = [...meals].sort((a, b) => order(a) - order(b));
   const solveAll = (bump: number): MealSolution[] => {
     const mains = sorted.map((m) =>
-      m.slot === "snack" ? null : solveMeal(m.slot, m.items, day.meals[m.slot], { fatBumpG: bump }),
+      m.slot === "snack" ? null : solveMeal(m.slot, m.items, day.meals[m.slot], { fatBumpG: bump, proteinG: m.proteinG }),
     );
     const left = mains.reduce((s, m) => s + (m ? m.target.kcal - m.totals.kcal : 0), 0);
     return sorted.map(
-      (m, i) => mains[i] ?? solveMeal(m.slot, m.items, day.meals[m.slot], { kcal: day.meals[m.slot].kcal + left }),
+      (m, i) =>
+        mains[i] ??
+        solveMeal(m.slot, m.items, day.meals[m.slot], { kcal: day.meals[m.slot].kcal + left, proteinG: m.proteinG }),
     );
   };
   let bump = 0;

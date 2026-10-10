@@ -23,6 +23,7 @@ import {
   type MealKey,
   type MealsCharter,
   type MealsState,
+  type Pot,
   type ShoppingItem,
   type ShoppingState,
   type WeekPlan,
@@ -110,7 +111,25 @@ function validatePlan(raw: unknown): WeekPlan | null {
   const dayOk = (d: unknown) =>
     isObject(d) && typeof d.date === "string" && MEAL_KEYS.every((k) => isObject(d[k]) && typeof d[k].mode === "string");
   if (!raw.days.every(dayOk)) return null;
-  return raw as unknown as WeekPlan;
+  const plan = raw as unknown as WeekPlan;
+  if (raw.pots === undefined) return plan;
+  const pots = Array.isArray(raw.pots) ? raw.pots.filter(isPot) : [];
+  const { pots: _, ...rest } = plan;
+  return pots.length ? { ...rest, pots } : rest;
+}
+
+function isPot(raw: unknown): raw is Pot {
+  return (
+    isObject(raw) &&
+    typeof raw.id === "string" &&
+    typeof raw.foodId === "string" &&
+    typeof raw.rawG === "number" &&
+    isObject(raw.cook) &&
+    typeof raw.cook.date === "string" &&
+    typeof raw.cook.meal === "string" &&
+    typeof raw.name === "string" &&
+    typeof raw.method === "string"
+  );
 }
 
 // The trip, with every half defaulted.

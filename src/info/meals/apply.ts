@@ -131,6 +131,7 @@ export async function applyPlan(card: MealsPlanCardData, ports: MealsPorts): Pro
     createdAt: previous?.createdAt ?? ports.now(),
     revision: (previous?.revision ?? 0) + 1,
   };
+  if (card.pots?.length) drafted.pots = card.pots;
   const { plan, shopping } = resolvedWeek(drafted, state.shopping, state.charter, ports.region(), ports.today());
   try {
     await ports.savePlan(plan, shopping);

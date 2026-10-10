@@ -1,14 +1,14 @@
 // One made meal's recipe (docs/73 做法页), pushed over its day: the dish, its
-// ingredients at their solved grams, the steps, and for a dish that keeps, how
-// to cook it ahead.
+// ingredients at their solved grams, and the steps, which end with packing the
+// pot on the meal a pot is cooked at.
 //
-// Rendering and event binding only. The request, the parse and the cook-ahead
-// amounts are in info/meals/recipe; the call and the stored copy in use-recipe.
+// Rendering and event binding only. The request, the parse and the packing
+// step are in info/meals/recipe; the call and the stored copy in use-recipe.
 
 import { useLocale, useT } from "../../../../i18n";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import type { MealKey, MealsState } from "../../../../info/meals/plan/types";
-import { batchMakeLine, recipeRequest, type RecipeEntry } from "../../../../info/meals/recipe/recipe";
+import { packStep, recipeRequest, type RecipeEntry } from "../../../../info/meals/recipe/recipe";
 import { hostRegion } from "../../../../info/meals/region";
 import { dayViewOn, ingredientPicture, weekdayName, type MealView } from "../../../../info/meals/screen/view";
 import { IconSparkle } from "../../base/icons";
@@ -61,7 +61,7 @@ function RecipeHead({ view, photos }: { view: MealView; photos: PhotoCache }) {
                       alt={r.name}
                     />
                     <span className="min-w-0">
-                      {r.name}
+                      {r.potLabel ?? r.name}
                       {r.units ? <span className="text-faint-foreground"> {r.units}</span> : null}
                     </span>
                   </span>
@@ -110,50 +110,25 @@ function StepsSkeleton({ writing }: { writing: boolean }) {
 function RecipeSteps({ view, recipe, fresh }: { view: MealView; recipe: RecipeEntry; fresh: boolean }) {
   const t = useT();
   const enter = fresh ? "animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none" : "";
-  const batch = recipe.batch;
-  const batchRows: Array<[string, string]> = batch
-    ? [
-        [t("meals.recipe.batchServings"), batchMakeLine(view.rows, batch)],
-        [t("meals.recipe.batchPack"), batch.pack],
-        [t("meals.recipe.batchKeep"), batch.keep],
-        [t("meals.recipe.batchReheat"), batch.reheat],
-      ]
-    : [];
+  const pack = packStep(view.pot);
+  const steps = pack ? [...recipe.steps, pack] : recipe.steps;
   return (
-    <>
-      <section className={cn(CARD, enter)}>
-        <CardLabel>{t("meals.how")}</CardLabel>
-        <ol className="m-0 mt-2 list-none p-0">
-          {recipe.steps.map((step, i) => (
-            <li
-              key={i}
-              className="flex gap-3 border-t border-border-subtle py-2.5 text-[15px] leading-[1.65] text-foreground first:border-t-0"
-            >
-              <span className="mt-px size-6 flex-none rounded-full border border-accent-line text-center text-[12px] leading-[22px] tabular-nums text-accent-line">
-                {i + 1}
-              </span>
-              <span className="min-w-0">{step}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
-      {batch && (
-        <section className={cn(CARD, enter)}>
-          <CardLabel>{t("meals.recipe.batch")}</CardLabel>
-          <dl className="m-0 mt-2">
-            {batchRows.map(([label, text]) => (
-              <div
-                key={label}
-                className="flex gap-3 border-t border-border-subtle py-2 text-[14px] leading-relaxed text-foreground first:border-t-0"
-              >
-                <dt className="w-[3.5em] flex-none pt-px text-[13px] text-faint-foreground">{label}</dt>
-                <dd className="m-0 min-w-0">{text}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
-    </>
+    <section className={cn(CARD, enter)}>
+      <CardLabel>{t("meals.how")}</CardLabel>
+      <ol className="m-0 mt-2 list-none p-0">
+        {steps.map((step, i) => (
+          <li
+            key={i}
+            className="flex gap-3 border-t border-border-subtle py-2.5 text-[15px] leading-[1.65] text-foreground first:border-t-0"
+          >
+            <span className="mt-px size-6 flex-none rounded-full border border-accent-line text-center text-[12px] leading-[22px] tabular-nums text-accent-line">
+              {i + 1}
+            </span>
+            <span className="min-w-0">{step}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

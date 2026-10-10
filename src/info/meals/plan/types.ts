@@ -124,8 +124,11 @@ export interface Meal {
   // minutes are not held to the effort level's cap (checks.ts). Made meals only.
   proper?: true;
   // The model's template: food ids from the food table and their roles, with
-  // grams for the fixed items.
+  // grams for the fixed items. A meal that eats from a pot has the pot's food
+  // as its protein item, put there by the program.
   items?: TemplateItem[];
+  // The id of the pot this meal eats a share of (WeekPlan.pots). Made meals only.
+  pot?: string;
   // Every row at its solved weight, written by the program. Absent until the
   // meal has been solved.
   solved?: SolvedItem[];
@@ -144,6 +147,26 @@ export interface DayPlan {
   snack: Meal;
 }
 
+/**
+ * One protein food cooked once and eaten over two to four meals (docs/73 一锅).
+ * The model names the food, the meal it is cooked at, what it is called and
+ * how it is cooked; the program splits it, says where each share is kept and
+ * writes the packing step (plan/pots.ts). Absent from weeks planned before.
+ */
+export interface Pot {
+  // The model's own short id, unique in the week; meals point at it.
+  id: string;
+  foodId: string;
+  // Raw grams of the whole pot for one person: the food's pack by default.
+  rawG: number;
+  // The meal it is cooked at, which eats its share fresh.
+  cook: MealRef;
+  // What it is called on screen ("卤牛腱"), in the reader's language.
+  name: string;
+  // One line on how it is cooked, in the reader's language.
+  method: string;
+}
+
 export interface WeekPlan {
   // "week-" + startDate.
   id: string;
@@ -151,6 +174,8 @@ export interface WeekPlan {
   startDate: string;
   // Seven, in date order.
   days: DayPlan[];
+  // What is cooked once and eaten over several meals. Absent on a week with none.
+  pots?: Pot[];
   createdAt: number;
   // Bumped by every applied adjustment, deviation and re-solve.
   revision: number;

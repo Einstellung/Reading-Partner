@@ -13,7 +13,7 @@
 import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../../platform/app/guarded-file";
 import { isObject } from "../../../platform/std/json";
 import { MEALS_VERSION } from "../plan/types";
-import type { RecipeBatch, RecipeEntry } from "./recipe";
+import type { RecipeEntry } from "./recipe";
 
 export const MEALS_RECIPES_FILE = "info-meals-recipes.json";
 
@@ -31,26 +31,8 @@ export const recipeIo: RecipeIo = appGuardedFileIo();
 
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
 
-function isBatch(raw: unknown): raw is RecipeBatch {
-  return (
-    isObject(raw) &&
-    typeof raw.servings === "number" &&
-    Array.isArray(raw.cook) &&
-    raw.cook.every((n) => typeof n === "number") &&
-    typeof raw.pack === "string" &&
-    typeof raw.keep === "string" &&
-    typeof raw.reheat === "string"
-  );
-}
-
 function isEntry(raw: unknown): raw is RecipeEntry {
-  return (
-    isObject(raw) &&
-    typeof raw.at === "number" &&
-    isStrings(raw.steps) &&
-    raw.steps.length > 0 &&
-    (raw.batch === null || isBatch(raw.batch))
-  );
+  return isObject(raw) && typeof raw.at === "number" && isStrings(raw.steps) && raw.steps.length > 0;
 }
 
 /** The recipes out of a parsed file, or null when the bytes are not this shape. An entry that does not read is skipped. */
@@ -60,10 +42,9 @@ export function parseRecipeFile(raw: unknown): MealsRecipes | null {
   if (isObject(raw.recipes)) {
     for (const [key, entry] of Object.entries(raw.recipes)) {
       if (!isEntry(entry)) continue;
-      const batch = entry.batch
-        ? { ...entry.batch, note: typeof entry.batch.note === "string" ? entry.batch.note : "" }
-        : null;
-      recipes[key] = { ...entry, name: typeof entry.name === "string" ? entry.name : "", batch };
+      // Entries written before the pots carry a `batch` of the model's; it is
+      // read past and gone on the next save.
+      recipes[key] = { at: entry.at, name: typeof entry.name === "string" ? entry.name : "", steps: entry.steps };
     }
   }
   return { recipes };

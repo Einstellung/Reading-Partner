@@ -25,6 +25,7 @@ import {
   type Targets,
 } from "../nutrition/targets";
 import { MEAL_KEYS, type DayPlan, type Meal, type MealKey, type MealsCharter, type WeekPlan } from "./types";
+import { potPortions, refKey, type PotPortion } from "./pots";
 import { isoWeekday } from "./week";
 
 /** The reader's targets, or null when there is no profile or they withheld body data. */
@@ -66,8 +67,11 @@ export function asSolvable(items: readonly TemplateItem[]): TemplateItem[] {
   });
 }
 
-/** One day's made meals solved together, so the day's fat floor holds. */
-function solveOneDay(day: DayPlan, target: DayTargets): DayPlan {
+/**
+ * One day's made meals solved together, so the day's fat floor holds. A meal
+ * that eats from a pot has its share as its protein grams.
+ */
+function solveOneDay(day: DayPlan, target: DayTargets, portions: ReadonlyMap<string, PotPortion>): DayPlan {
   const items = (k: MealKey) => asSolvable(day[k].items ?? []);
   const keys = MEAL_KEYS.filter((k) => day[k].mode === "make" && templateSolvable(items(k)));
   const next: DayPlan = { ...day };
@@ -81,7 +85,7 @@ function solveOneDay(day: DayPlan, target: DayTargets): DayPlan {
   }
   if (!keys.length) return next;
   const solution = solveDay(
-    keys.map((k) => ({ slot: k, items: items(k) })),
+    keys.map((k) => ({ slot: k, items: items(k), proteinG: portions.get(refKey({ date: day.date, meal: k }))?.shareG })),
     target,
   );
   for (const m of solution.meals) {
@@ -96,7 +100,8 @@ function solveOneDay(day: DayPlan, target: DayTargets): DayPlan {
 
 /** The week with every made meal's grams solved against the targets. */
 export function solvePlan(plan: WeekPlan, targets: Targets, profile: Profile): WeekPlan {
-  return { ...plan, days: plan.days.map((d) => solveOneDay(d, dayTargetsOn(targets, profile, d.date))) };
+  const portions = potPortions(plan);
+  return { ...plan, days: plan.days.map((d) => solveOneDay(d, dayTargetsOn(targets, profile, d.date), portions)) };
 }
 
 /** What one stored meal adds up to. */

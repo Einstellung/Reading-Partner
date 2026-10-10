@@ -34,7 +34,7 @@ import {
   type ShoppingState,
   type WeekPlan,
 } from "../../../src/info/meals/plan/types";
-import { MON, charter, draftWeek, profile, sent, shopping, state, week } from "./fixtures/week";
+import { MON, charter, draftPotWeek, draftWeek, potWeek, profile, sent, shopping, state, week } from "./fixtures/week";
 
 function deps(current: MealsState): MealsToolDeps & { cards: MealsCard[] } {
   const cards: MealsCard[] = [];
@@ -248,6 +248,60 @@ test("a week that fails the checks names its meals, keeps the rest, and takes ba
 
   // Proposed, so nothing is held: the next fresh week must be whole again.
   expect(said(await tool.execute({ days: [{ day: 1, lunch: good[0]!.lunch }] }))).toContain("needs all 7 days");
+});
+
+// The pot week as the model sends it: pots by day number, and pot meals with no protein item.
+function sentPots(): { days: Record<string, unknown>[]; pots: Record<string, unknown>[] } {
+  const plan = draftPotWeek();
+  const days = sent(plan).map((day) => {
+    const out: Record<string, unknown> = { ...day };
+    for (const key of ["breakfast", "lunch", "dinner", "snack"]) {
+      const meal = out[key] as { pot?: string; items?: { role: string }[] };
+      if (meal.pot) out[key] = { ...meal, items: meal.items!.filter((i) => i.role !== "protein") };
+    }
+    return out;
+  });
+  const pots = plan.pots!.map((p) => ({
+    id: p.id,
+    food: p.foodId,
+    ...(p.rawG !== 600 ? { grams: p.rawG } : {}),
+    day: p.cook.date === MON ? 1 : 4,
+    meal: p.cook.meal,
+    name: p.name,
+    method: p.method,
+  }));
+  return { days, pots };
+}
+
+test("pots go in by day number and come out on the card split and solved; the instruction lists them", async () => {
+  const d = deps(state({ plan: null }));
+  const tool = buildProposeMealsPlanTool(d);
+  const args = validated(tool, sentPots());
+  expect(said(await tool.execute(args))).toContain("Proposed the week's meals");
+  const card = d.cards[0] as MealsPlanCardData;
+  expect(card.pots).toEqual(potWeek().pots);
+  expect(card.days).toEqual(potWeek().days);
+
+  const text = mealsGuidance(state({ plan: potWeek() }), MON);
+  expect(text).toContain("- A: 卤牛腱, 600 g beef_shank_raw, cooked Day 1 dinner (电压力锅卤 40 分钟); 4 meals of 150 g");
+  expect(text).toContain("dinner: 卤牛腱配馒头 [garlic], 10 min: pot A; steamed_bun (staple)");
+  expect(text).toContain("beef_shank_raw 牛腱子（生） protein [beef] pot 600 g");
+  expect(text).toContain("POTS: cook a meat once");
+});
+
+test("a pot that does not hold up comes back naming its meals, and the patch keeps the pots", async () => {
+  const d = deps(state({ plan: null }));
+  const tool = buildProposeMealsPlanTool(d);
+  const args = sentPots();
+  args.pots[1] = { ...args.pots[1], grams: 900 };
+  const first = said(await tool.execute(args));
+  expect(first).toContain("Pot B: 900 g over 3 meals is 300 g a meal");
+  expect(first).toContain("sending only the meals you change: Day 4 lunch, Day 6 lunch, Day 7 lunch.");
+  const fixed = said(await tool.execute({ days: [], pots: [{ ...args.pots[1], grams: 400 }] }).catch((e) => ({ text: String(e) })));
+  expect(fixed).toContain("needs at least one day");
+  const again = said(await tool.execute({ days: [{ day: 4, lunch: args.days[3]!.lunch }], pots: [{ ...args.pots[1], grams: 400 }] }));
+  expect(again).toContain("Proposed the week's meals");
+  expect((d.cards[0] as MealsPlanCardData).pots).toEqual(potWeek().pots);
 });
 
 test("a kept draft takes a whole week too, and dies with the turn's tools", async () => {

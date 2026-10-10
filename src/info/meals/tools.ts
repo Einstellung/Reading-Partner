@@ -41,6 +41,7 @@ import {
   removeShoppingItem,
   replaceShoppingItem,
 } from "./plan/shopping";
+import { MAX_POT_MEALS, MIN_POT_MEALS, potPortions } from "./plan/pots";
 import { targetsOf } from "./plan/solve-week";
 import {
   CATEGORY_ORDER,
@@ -60,7 +61,17 @@ import {
   type ShoppingItem,
   type WeekPlan,
 } from "./plan/types";
-import { WEEK_DAYS, addDays, assembleWeekPlan, dayIndexOf, dayOn, isoWeekday, type DayDraft, type MealDraft } from "./plan/week";
+import {
+  WEEK_DAYS,
+  addDays,
+  assembleWeekPlan,
+  dayIndexOf,
+  dayOn,
+  isoWeekday,
+  type DayDraft,
+  type MealDraft,
+  type PotDraft,
+} from "./plan/week";
 
 /** What the reader has in front of them when they open the conversation. */
 export type MealsFocus =
@@ -98,7 +109,9 @@ function mealLine(meal: Meal): string {
     case "make": {
       const head = `${meal.name ?? "no foods yet"}${meal.flavour ? ` [${meal.flavour}]` : ""}`;
       const mins = (meal.minutes ? `, ${meal.minutes} min` : "") + (meal.proper ? ", proper" : "");
-      return meal.items?.length ? `${head}${mins}: ${templateLine(meal.items)}` : `${head} — needs foods`;
+      const items = meal.pot ? (meal.items ?? []).filter((i) => i.role !== "protein") : meal.items;
+      const pot = meal.pot ? `pot ${meal.pot}; ` : "";
+      return meal.items?.length ? `${head}${mins}: ${pot}${templateLine(items)}` : `${head} — needs foods`;
     }
     case "out":
       return meal.place ? `out at ${meal.place}` : "out";
@@ -174,10 +187,12 @@ const GOAL_ADVICE: Record<Goal, string> = {
     "meal, vegetables at lunch and dinner.",
 };
 
-/** The food table as the model chooses from it: id, name, roles, tags. */
+/** The food table as the model chooses from it: id, name, roles, tags, and the pack a pot cooks. */
 export function foodListing(dislikes: readonly string[]): string[] {
   return FOODS.filter((f) => foodAllowed(f, dislikes)).map(
-    (f) => `${f.id} ${f.zh} ${f.roles.join("/")}${f.tags.length ? ` [${f.tags.join(",")}]` : ""}`,
+    (f) =>
+      `${f.id} ${f.zh} ${f.roles.join("/")}${f.tags.length ? ` [${f.tags.join(",")}]` : ""}` +
+      (f.potG ? ` pot ${f.potG} g` : ""),
   );
 }
 
@@ -240,6 +255,19 @@ export function mealsGuidance(
       out.push(dayHeading(plan, i, profile, today));
       for (const key of MEAL_KEYS) out.push(`    ${key}: ${mealLine(day[key])}`);
     }
+    const portions = potPortions(plan);
+    if (plan.pots?.length) {
+      out.push("Pots:");
+      for (const pot of plan.pots) {
+        const cook = dayIndexOf(plan, pot.cook.date);
+        const shares = [...portions.values()].filter((p) => p.pot.id === pot.id);
+        const share = shares[0]?.shareG;
+        out.push(
+          `- ${pot.id}: ${pot.name}, ${pot.rawG} g ${pot.foodId}, cooked Day ${cook} ${pot.cook.meal} (${pot.method}); ` +
+            (share ? `${shares.length} meals of ${share} g` : "no longer split: fewer than two meals eat from it"),
+        );
+      }
+    }
     out.push(
       "",
       "Refer to a meal by its day number and which meal it is. Never write a date yourself — the",
@@ -282,6 +310,17 @@ export function mealsGuidance(
     "breakfast included — never share one; rotate through the list over the week.",
     "Fish or seafood in at least two meals a week. Nothing they do not eat. Only what their kitchen",
     "can do and their shops sell.",
+    "POTS: cook a meat once and eat it over several meals. Only foods marked `pot` in FOODS can be",
+    "one (raw meat bought by the pack); fish fillets, shrimp, eggs, ready-to-eat chicken and tofu",
+    `are portioned per meal. A pot feeds ${MIN_POT_MEALS} to ${MAX_POT_MEALS} main meals, the first of them the meal it is cooked`,
+    "at, the rest within the next few days; make the dish different across them (the same braised",
+    "beef over noodles, then in a curry) and keep the flavour rule. Send it in `pots`: an id, the",
+    "food, the day and meal it is cooked at, a short `name` in their language ('卤牛腱') and a",
+    "one-line `method` their kitchen can do. Its weight is the food's pack; give `grams` only for",
+    "another size. Each meal that eats from it sets `pot` to that id and has no protein item. The",
+    "program splits the weight evenly, solves the rest of each meal around its share, decides",
+    "which shares go in the fridge or the freezer, writes the packing step and lists the whole pack",
+    "on the shopping list. Leafy greens are never cooked ahead; each meal makes its own.",
     "The snack is a protein food (yogurt, soy milk, milk), a fixed fruit and, if they like nuts, the",
     "nuts as its `fat`: the program sizes them to close the day's calories. On a training day it is",
     "eaten right after training.",
@@ -361,8 +400,27 @@ const mealSchema = (which: MealKey) =>
     place: Type.Optional(
       Type.String({ description: "For out, delivery and bought: where, in their own words." }),
     ),
+    pot: Type.Optional(
+      Type.String({
+        description: "For make: the id of a pot from `pots` this meal eats a share of. The meal then has no protein item.",
+      }),
+    ),
     note: Type.Optional(Type.String({ description: "One short line of theirs about this meal." })),
   });
+
+const potSchema = Type.Object({
+  id: Type.String({ description: "A short id of your own, unique in the week ('A', 'beef')." }),
+  food: Type.String({ description: "A food id from FOODS marked `pot`." }),
+  grams: Type.Optional(
+    Type.Number({ description: "Raw grams of the whole pot, only when it is not the food's usual pack." }),
+  ),
+  day: Type.Number({ description: "1 to 7: the day it is cooked." }),
+  meal: Type.String({ description: "breakfast, lunch or dinner: the meal it is cooked at, which eats the first share." }),
+  name: Type.Optional(Type.String({ description: "What it is called, in their language ('卤牛腱')." })),
+  method: Type.Optional(
+    Type.String({ description: "One line on how it is cooked with their kitchen, in their language." }),
+  ),
+});
 
 /**
  * What a refused proposal tells the model: every problem, then the meals to
@@ -425,6 +483,13 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
         }),
         { description: "The days this call plans." },
       ),
+      pots: Type.Optional(
+        Type.Array(potSchema, {
+          description:
+            "What is cooked once and eaten over several meals. In a patch or an adjustment, send only " +
+            "the pots you add or change; the week's others stay.",
+        }),
+      ),
     }),
     execute: async (args) => {
       const state = await deps.state();
@@ -446,6 +511,7 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
         };
       }
       const days = toDayDrafts(args.days);
+      const pots = toPotDrafts(args.pots);
       if (days.length === 0) throw new Error("propose_meals_plan needs at least one day.");
       const patching = !adjustment && pending !== null;
       if (!adjustment && !patching) {
@@ -470,7 +536,7 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
       }
 
       const assembled = assembleWeekPlan(
-        { days },
+        { days, pots },
         {
           startDate: deps.today(),
           createdAt: deps.now(),
@@ -485,6 +551,7 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
             targets,
             changed: adjustment ? assembled.changed : null,
             previous: adjustment ? state.plan : null,
+            pots: pots.map((p) => p.id),
           });
       // A refusal, not a thrown error: the model can fix every one of these in
       // the same turn, and the user should never see the attempt.
@@ -503,6 +570,7 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
         threadId: deps.threadId,
         startDate: checked.plan.startDate,
         days: checked.plan.days,
+        ...(checked.plan.pots?.length ? { pots: checked.plan.pots } : {}),
         adjustment,
         changed: adjustment ? assembled.changed : [],
         changedDates: adjustment ? assembled.changedDates : [],
@@ -1098,11 +1166,37 @@ function toMealDraft(raw: unknown): MealDraft | null {
     const minutes = Number(e.minutes);
     if (Number.isFinite(minutes) && minutes > 0) draft.minutes = Math.round(minutes);
     if (e.proper === true) draft.proper = true;
+    if (text("pot")) draft.pot = text("pot");
   } else if (text("place")) {
     draft.place = text("place");
   }
   if (text("note")) draft.note = text("note");
   return draft;
+}
+
+// The pots as the model sent them. One with no id is dropped; the rest are
+// kept as written for the checks to name back.
+export function toPotDrafts(raw: unknown): PotDraft[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PotDraft[] = [];
+  for (const entry of raw) {
+    const e = record(entry);
+    const id = String(e.id ?? "").trim();
+    if (!id) continue;
+    const day = Number(e.day);
+    const grams = Number(e.grams);
+    const meal = toMealKey(e.meal);
+    out.push({
+      id,
+      food: String(e.food ?? e.foodId ?? "").trim(),
+      ...(e.grams !== undefined && Number.isFinite(grams) && grams > 0 ? { grams } : {}),
+      day: Number.isFinite(day) ? Math.round(day) : 0,
+      meal: meal === "snack" ? null : meal,
+      name: String(e.name ?? "").trim(),
+      method: String(e.method ?? "").trim(),
+    });
+  }
+  return out;
 }
 
 export function toDayDrafts(raw: unknown): DayDraft[] {

@@ -18,8 +18,11 @@ import {
   type MealKey,
   type MealMode,
   type MealRef,
+  type Pot,
   type WeekPlan,
 } from "./types";
+import { settlePots } from "./pots";
+import { foodById } from "../nutrition/foods";
 
 export const WEEK_DAYS = 7;
 
@@ -125,7 +128,7 @@ export function applyDeviation(
   const ref: MealRef = { date: deviation.date, meal: deviation.meal };
   const settled = settle(before, deviation.became, deviation.place);
   const days = plan.days.map((d) => (d.date === ref.date ? { ...d, [ref.meal]: settled } : d));
-  const next: WeekPlan = { ...plan, days, revision: plan.revision + 1 };
+  const next: WeekPlan = settlePots({ ...plan, days, revision: plan.revision + 1 });
 
   const attention: MealRef[] = [];
   if (settled.mode === "make" && !settled.items?.length) attention.push(ref);
@@ -168,8 +171,23 @@ export interface MealDraft {
   minutes?: number;
   proper?: boolean;
   items?: TemplateItem[];
+  // The id of a pot this call or the week already has.
+  pot?: string;
   place?: string;
   note?: string;
+}
+
+// One pot as the model hands it over: the food, the meal it is cooked at by
+// day number, its name and method. `grams` is the raw weight when it is not
+// the food's usual pack.
+export interface PotDraft {
+  id: string;
+  food: string;
+  grams?: number;
+  day: number;
+  meal: MealKey | null;
+  name: string;
+  method: string;
 }
 
 // One day as the model hands it over. `day` is 1..7, the position in the week
@@ -184,6 +202,7 @@ export interface DayDraft {
 
 export interface WeekDraft {
   days: DayDraft[];
+  pots?: PotDraft[];
 }
 
 export interface AssembleOptions {
@@ -224,8 +243,16 @@ function mealFromDraft(d: MealDraft): Meal {
   if (d.method) meal.method = d.method;
   if (d.minutes !== undefined) meal.minutes = d.minutes;
   if (d.proper) meal.proper = true;
+  if (d.pot) meal.pot = d.pot;
   if (d.note) meal.note = d.note;
   return meal;
+}
+
+// A meal that eats from a pot has the pot's food as its one protein item,
+// whatever protein the draft gave it.
+function withPotProtein(meal: Meal, pot: Pot): Meal {
+  const rest = (meal.items ?? []).filter((i) => i.role !== "protein");
+  return { ...meal, items: [{ foodId: pot.foodId, role: "protein" }, ...rest] };
 }
 
 /**
@@ -245,6 +272,29 @@ export function assembleWeekPlan(draft: WeekDraft, opts: AssembleOptions): Assem
     return kept ? { ...kept } : emptyDay(date);
   });
 
+  const pots = new Map<string, Pot>((previous?.pots ?? []).map((p) => [p.id, p]));
+  for (const p of draft.pots ?? []) {
+    const index = Math.round(p.day) - 1;
+    const date = days[index]?.date;
+    if (!date) {
+      problems.push(`Pot ${p.id} is cooked on day ${p.day}, which is not one of the seven days of the week.`);
+      continue;
+    }
+    if (!p.meal) {
+      problems.push(`Pot ${p.id} needs the meal it is cooked at: breakfast, lunch or dinner.`);
+      continue;
+    }
+    const grams = p.grams ?? foodById(p.food)?.potG ?? 0;
+    pots.set(p.id, {
+      id: p.id,
+      foodId: p.food,
+      rawG: Math.round(grams / 5) * 5,
+      cook: { date, meal: p.meal },
+      name: p.name,
+      method: p.method,
+    });
+  }
+
   const changed: MealRef[] = [];
   for (const entry of draft.days) {
     const index = Math.round(entry.day) - 1;
@@ -262,14 +312,31 @@ export function assembleWeekPlan(draft: WeekDraft, opts: AssembleOptions): Assem
     }
   }
 
+  // Every meal of a pot takes its food, kept meals included, so a pot the
+  // draft re-defined does not leave them on the old one; a pot no meal eats
+  // from is dropped.
+  const used = new Set<string>();
+  for (const day of days) {
+    for (const key of MEAL_KEYS) {
+      const meal = day[key];
+      const pot = meal.mode === "make" && meal.pot ? pots.get(meal.pot) : undefined;
+      if (!pot) continue;
+      day[key] = withPotProtein(meal, pot);
+      used.add(pot.id);
+    }
+  }
+  const kept = [...pots.values()].filter((p) => used.has(p.id));
+
+  const plan: WeekPlan = {
+    id: weekId(startDate),
+    startDate,
+    days,
+    createdAt: previous?.createdAt ?? opts.createdAt,
+    revision: (previous?.revision ?? 0) + 1,
+  };
+  if (kept.length) plan.pots = kept;
   return {
-    plan: {
-      id: weekId(startDate),
-      startDate,
-      days,
-      createdAt: previous?.createdAt ?? opts.createdAt,
-      revision: (previous?.revision ?? 0) + 1,
-    },
+    plan,
     changed,
     changedDates: [...new Set(changed.map((c) => c.date))].sort(),
     problems,

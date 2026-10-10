@@ -25,7 +25,7 @@ async function writeRecipe(request: RecipeRequest): Promise<RecipeEntry> {
     { spend: { caller: "info" } },
   );
   const tally = newTally();
-  const parsed = parseRecipe(text, request.rows.length, tally);
+  const parsed = parseRecipe(text, tally);
   reportParse({ site: "meals-recipe", model, text, tally, error: parsed.ok ? undefined : parsed.error });
   if (!parsed.ok) throw new Error(parsed.error);
   const entry: RecipeEntry = { at: Date.now(), name: request.name, ...parsed.value };

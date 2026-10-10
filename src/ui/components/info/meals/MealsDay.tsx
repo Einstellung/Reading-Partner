@@ -159,7 +159,7 @@ function MealCard({ view, photos, onOpen }: { view: MealView; photos: PhotoCache
                             alt={r.name}
                           />
                           <span className="min-w-0">
-                            {r.name}
+                            {r.potLabel ?? r.name}
                             {r.units ? <span className="text-faint-foreground"> {r.units}</span> : null}
                           </span>
                         </span>

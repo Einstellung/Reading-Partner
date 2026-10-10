@@ -113,6 +113,46 @@ export function week(): WeekPlan {
   return solvePlan(draftWeek(), targets, c.profile);
 }
 
+// --- a week with pots (docs/73 一锅) ------------------------------------------
+
+/** A meal that eats from a pot, with the pot's food as its protein item, as assembly leaves it. */
+export function potMeal(name: string, flavour: Flavour, pot: string, foodId: string, staple: string, veg: string): Meal {
+  return { ...make(name, name, flavour, 10, [P(foodId), C(staple), X(veg, 200)]), pot };
+}
+
+/**
+ * The fixture week with two pots: beef shank, 600 g cooked at Monday's dinner
+ * for four meals (Tuesday and Wednesday from the fridge, Friday from the
+ * freezer), and chicken breast, 400 g cooked at Thursday's lunch for three
+ * (Saturday from the fridge, Sunday from the freezer).
+ */
+export function draftPotWeek(): WeekPlan {
+  const plan = draftWeek();
+  const d = (i: number) => plan.days[i] as DayPlan;
+  const beef = "beef_shank_raw";
+  const chicken = "chicken_breast";
+  d(0).dinner = potMeal("卤牛腱配馒头", "garlic", "A", beef, "steamed_bun", "bok_choy");
+  d(1).lunch = potMeal("牛腱拌面", "sesame", "A", beef, "dried_noodles", "bok_choy");
+  d(2).lunch = potMeal("咖喱牛腱饭", "curry", "A", beef, "microwave_grain_rice", "frozen_mixed_veg");
+  d(4).lunch = potMeal("黑椒牛腱饭", "black-pepper", "A", beef, "microwave_grain_rice", "frozen_mixed_veg");
+  d(3).lunch = potMeal("蒜香鸡胸饭", "garlic", "B", chicken, "microwave_grain_rice", "bok_choy");
+  d(5).lunch = potMeal("番茄鸡丝面", "tomato", "B", chicken, "dried_noodles", "frozen_mixed_veg");
+  d(6).lunch = potMeal("照烧鸡丝饭", "teriyaki", "B", chicken, "microwave_grain_rice", "bok_choy");
+  plan.pots = [
+    { id: "A", foodId: beef, rawG: 600, cook: { date: MON, meal: "dinner" }, name: "卤牛腱", method: "电压力锅卤 40 分钟" },
+    { id: "B", foodId: chicken, rawG: 400, cook: { date: addDays(MON, 3), meal: "lunch" }, name: "蒸鸡胸", method: "蒸 15 分钟，撕成丝" },
+  ];
+  return plan;
+}
+
+/** The pot week with its grams solved against the fixture profile. */
+export function potWeek(): WeekPlan {
+  const c = charter();
+  const targets = targetsOf(c, "other");
+  if (!targets) throw new Error("fixture profile has no targets");
+  return solvePlan(draftPotWeek(), targets, c.profile);
+}
+
 export function shopping(over: Partial<ShoppingState> = {}): ShoppingState {
   return { ...EMPTY_SHOPPING, items: [], reader: [], dropped: {}, replaced: {}, checked: {}, ...over };
 }

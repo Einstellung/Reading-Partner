@@ -7,7 +7,7 @@
 // landed (apply.ts). `phase` is what a second click reads to do nothing. The
 // profile has no card: onboarding and a stated change write it directly.
 
-import type { DayPlan, MealRef } from "./plan/types";
+import type { DayPlan, MealRef, Pot } from "./plan/types";
 
 // A week of meals, or the one or two meals of it a deviation reopened. Either
 // way the card carries the whole week as it would stand once applied, solved
@@ -19,6 +19,8 @@ export interface MealsPlanCardData {
   // Local date of day one.
   startDate: string;
   days: DayPlan[];
+  // The week's pots as they would stand once applied. Absent on a week with none.
+  pots?: Pot[];
   // True when this reopens meals in the week already on disk.
   adjustment: boolean;
   // The meals this card changes, and the dates they fall on. Empty on a fresh

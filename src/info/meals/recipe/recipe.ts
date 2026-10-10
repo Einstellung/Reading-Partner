@@ -1,10 +1,10 @@
 // One made meal's recipe page (docs/73 做法页): what the model is asked, what
-// its answer is held to, and the numbers the page adds to it.
+// its answer is held to, and the step the program adds to it.
 //
-// The model writes the steps and, for a dish that keeps, how to cook it ahead.
-// It never writes a gram: the list above the steps carries the solved weights,
-// and the cook-ahead amounts are those weights times the servings, computed
-// here (docs/73 事实不经模型).
+// The model writes the steps. It never writes a gram — the list above the
+// steps carries the solved weights — and never how a pot is packed and kept:
+// the meal a pot is cooked at ends with a packing step written here from the
+// plan (docs/73 一锅, 事实不经模型).
 
 import { t } from "../../../i18n";
 import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings";
@@ -13,26 +13,12 @@ import type { ParseTally } from "../../../platform/app/structured-output";
 import { hashText } from "../../../platform/sync/merge/text";
 import { foodById } from "../nutrition/foods";
 import type { Effort, Profile } from "../nutrition/targets";
-import type { IngredientRow, MealView } from "../screen/view";
-
-/** How to cook the dish ahead for several meals. Absent for a dish that does not keep. */
-export interface RecipeBatch {
-  // How many meals one cooking makes, this one included.
-  servings: number;
-  // Which ingredient rows are cooked ahead, 1-based in the order of the list.
-  // The rest (a steamed bun, fruit) are made fresh each time.
-  cook: number[];
-  // What changes at that size, or what is not made ahead. May be empty.
-  note: string;
-  pack: string;
-  keep: string;
-  reheat: string;
-}
+import type { PotPortion, PotStorage } from "../plan/pots";
+import { boxName, type IngredientRow, type MealView } from "../screen/view";
 
 /** What the model wrote for one meal. */
 export interface RecipeText {
   steps: string[];
-  batch: RecipeBatch | null;
 }
 
 /** One stored recipe: the text, when it was written and what it was for. */
@@ -40,6 +26,20 @@ export interface RecipeEntry extends RecipeText {
   at: number;
   // The dish's name, for whoever reads the file.
   name: string;
+}
+
+/** What the model is told about the pot a meal is cooked at or eats from. */
+export interface RecipePot {
+  name: string;
+  method: string;
+  // The pot's food, by its table name.
+  food: string;
+  rawG: number;
+  // How many meals it feeds.
+  count: number;
+  // This meal cooks it, rather than eating a box of it.
+  cooks: boolean;
+  storage: PotStorage;
 }
 
 /** Everything one call is written from. */
@@ -53,30 +53,52 @@ export interface RecipeRequest {
   kitchen: readonly string[];
   effort: Effort;
   language: AiLanguage;
+  pot: RecipePot | null;
 }
 
 /**
  * The stored recipe's key: the dish, every food at its solved grams, the
- * kitchen and the language. A meal whose dish or grams changed, a kitchen the
- * reader re-described, or a switch of language each ask for a new recipe, and
- * the old one is left for retention to drop.
+ * kitchen and the language, and for a pot meal what the steps depend on —
+ * whether it cooks the pot or eats a box, the pot's name, method, weight and
+ * meals, and where the box waits. Any of them changing asks for a new recipe,
+ * and the old one is left for retention to drop. A meal without a pot keys as
+ * it always has.
  */
 export function recipeKey(
   name: string,
   rows: ReadonlyArray<Pick<IngredientRow, "foodId" | "grams">>,
   kitchen: readonly string[],
   language: string,
+  pot: RecipePot | null = null,
 ): string {
   const foods = rows.map((r) => `${r.foodId}:${r.grams}`).sort();
-  return hashText(JSON.stringify([name, foods, [...kitchen], language]));
+  const base: unknown[] = [name, foods, [...kitchen], language];
+  if (pot) base.push([pot.cooks ? "cook" : "eat", pot.name, pot.method, pot.rawG, pot.count, pot.storage]);
+  return hashText(JSON.stringify(base));
+}
+
+/** What the recipe call is told about a meal's share of a pot. */
+export function recipePot(portion: PotPortion | null): RecipePot | null {
+  if (!portion) return null;
+  const { pot } = portion;
+  return {
+    name: pot.name,
+    method: pot.method,
+    food: foodById(pot.foodId)?.zh ?? pot.foodId,
+    rawG: pot.rawG,
+    count: portion.count,
+    cooks: portion.cooks,
+    storage: portion.storage,
+  };
 }
 
 /** The request for one made meal, or null for a meal the page has nothing to write for. */
 export function recipeRequest(view: MealView, profile: Profile, language: AiLanguage): RecipeRequest | null {
   if (view.mode !== "make" || view.rows.length === 0) return null;
   const rows = view.rows.map((r) => ({ foodId: r.foodId, name: r.name, grams: r.grams, units: r.units }));
+  const pot = recipePot(view.pot);
   return {
-    key: recipeKey(view.name, rows, profile.kitchen, language),
+    key: recipeKey(view.name, rows, profile.kitchen, language, pot),
     name: view.name,
     flavour: view.flavourLabel,
     minutes: view.minutes,
@@ -85,6 +107,7 @@ export function recipeRequest(view: MealView, profile: Profile, language: AiLang
     kitchen: profile.kitchen,
     effort: profile.effort,
     language,
+    pot,
   };
 }
 
@@ -107,23 +130,35 @@ export function recipeSystemPrompt(request: Pick<RecipeRequest, "effort" | "lang
     "- Write to the reader's kitchen as they described it and keep to its limits. If the steamer rack holds one bun, steam one and heat the rest another way. Frozen steamed buns go straight onto the rack, no thawing. If the dish wants a tool they do not have, use one they do.",
     "- Say when something has to be cooked through to be safe to eat (green beans, chicken, pork, eggs).",
     `- ${EFFORT_LINE[request.effort]}`,
-    "",
-    "Batch: whether this dish is worth cooking ahead for several meals.",
-    "- null for a dish that suffers from it: noodles, shrimp, salmon and other fish, soft eggs, salads, anything crisp, anything that takes under ten minutes anyway.",
-    "- For one that keeps (stews, braises, sauced meat, beans, grains cooked in a pot): servings 2 to 4, this meal included. cook lists the numbers of the ingredients that are cooked ahead; leave out what is better fresh each time (steamed buns, raw fruit, yogurt).",
-    "- note: one sentence on what changes when cooking that much (a longer simmer, the pot it fits in) or what is made fresh each time. pack, keep, reheat: one sentence each — how to portion it, how long it keeps in the fridge and the freezer, how to reheat it with this kitchen.",
-    "- Never write an amount in batch: the app multiplies the list by the servings and prints it.",
+    "- Some meals cook a pot of meat that several meals eat from, or eat one box of such a pot. The message says which and what to write. The app adds the step that packs the pot into boxes and says where each box is kept: never write packing, storage times or which day a box is for.",
     "",
     `Write every sentence in ${language}.`,
     "",
     "Reply with one JSON object and nothing else:",
-    '{"steps": ["…", "…"], "batch": null}',
-    "or",
-    '{"steps": ["…"], "batch": {"servings": 3, "cook": [1, 3], "note": "…", "pack": "…", "keep": "…", "reheat": "…"}}',
+    '{"steps": ["…", "…"]}',
   ].join("\n");
 }
 
-/** The user message: the meal, numbered so batch.cook can point at rows. */
+// What the user message says about the pot, after the ingredients.
+function potLines(pot: RecipePot): string[] {
+  if (pot.cooks) {
+    return [
+      `This meal cooks a pot: ${pot.name}, ${pot.rawG} g of raw ${pot.food}. How: ${pot.method}`,
+      `The pot feeds ${pot.count} meals and this one eats its share now; the ingredient list gives this meal's share of the ${pot.food}.`,
+      `Write the steps for cooking the whole ${pot.rawG} g, then for putting this meal together with its fresh parts. Stop before packing the rest: the app adds that step.`,
+    ];
+  }
+  const where =
+    pot.storage === "freezer"
+      ? "It was moved from the freezer to the fridge last night and has thawed."
+      : "It is in the fridge.";
+  return [
+    `This meal eats one box from a pot cooked earlier: ${pot.name} (${pot.food}), cooked like this: ${pot.method}. ${where}`,
+    `The ${pot.food} is already cooked; the list gives its raw weight. Do not cook it again: take the box out, heat it through with this kitchen, and make the fresh parts (the staple, the vegetables) while it heats.`,
+  ];
+}
+
+/** The user message: the meal, numbered, then the pot it cooks or eats from. */
 export function recipeUserText(request: RecipeRequest): string {
   const lines = [
     `Dish: ${request.name}`,
@@ -134,6 +169,7 @@ export function recipeUserText(request: RecipeRequest): string {
     ...request.rows.map((r, i) => `${i + 1}. ${r.name} ${r.grams} g${r.units ? ` (${r.units})` : ""}`),
     "Kitchen:",
     ...(request.kitchen.length > 0 ? request.kitchen.map((k) => `- ${k}`) : ["- (not described: assume a stove, one pot, one pan and a microwave)"]),
+    ...(request.pot ? ["", ...potLines(request.pot)] : []),
   ];
   return lines.join("\n");
 }
@@ -145,33 +181,12 @@ function sentence(raw: unknown): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
-function parseBatch(raw: unknown, rowCount: number, tally?: ParseTally): RecipeBatch | null {
-  if (raw === null || raw === undefined || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const b = raw as Record<string, unknown>;
-  const servings = typeof b.servings === "number" && Number.isFinite(b.servings) ? Math.round(b.servings) : 0;
-  const cook = Array.isArray(b.cook)
-    ? [...new Set(b.cook.filter((n): n is number => Number.isInteger(n) && n >= 1 && n <= rowCount))].sort((x, y) => x - y)
-    : [];
-  const pack = sentence(b.pack);
-  const keep = sentence(b.keep);
-  const reheat = sentence(b.reheat);
-  if (servings < 2 || servings > 6 || cook.length === 0 || !pack || !keep || !reheat) {
-    if (tally) tally.repaired++;
-    return null;
-  }
-  return { servings, cook, note: sentence(b.note), pack, keep, reheat };
-}
-
 /**
  * The model's reply as a recipe, or an error. Steps that are not text are
- * dropped and a leading number is taken off; a batch that is not whole is
- * dropped rather than shown half.
+ * dropped and a leading number is taken off. Anything else in the reply is
+ * ignored.
  */
-export function parseRecipe(
-  text: string,
-  rowCount: number,
-  tally?: ParseTally,
-): { ok: true; value: RecipeText } | { ok: false; error: string } {
+export function parseRecipe(text: string, tally?: ParseTally): { ok: true; value: RecipeText } | { ok: false; error: string } {
   const read = readObject(text);
   if (!read.ok) return read;
   const raw = read.value.steps;
@@ -185,45 +200,27 @@ export function parseRecipe(
     if (tally) tally.fail = all.length === 0 ? "missing-field" : "empty-result";
     return { ok: false, error: "no steps in reply" };
   }
-  return { ok: true, value: { steps, batch: parseBatch(read.value.batch, rowCount, tally) } };
+  return { ok: true, value: { steps } };
 }
 
-/** One row of the cook-ahead amounts. */
-export interface BatchAmount {
-  name: string;
-  grams: number;
-  // "6 个" for a food counted in units.
-  units: string | null;
-}
-
-/** The cooked-ahead rows at their weight for every serving, by the program. */
-export function batchAmounts(
-  rows: ReadonlyArray<Pick<IngredientRow, "foodId" | "name" | "grams">>,
-  batch: Pick<RecipeBatch, "servings" | "cook">,
-): BatchAmount[] {
-  return batch.cook.flatMap((n) => {
-    const row = rows[n - 1];
-    if (!row) return [];
-    const grams = Math.round(row.grams * batch.servings);
-    const unit = foodById(row.foodId)?.unit;
-    return [{ name: row.name, grams, units: unit ? `${Math.round(grams / unit.grams)} ${unit.label}` : null }];
-  });
-}
-
-/** The first line of the cook-ahead card: how many meals, the amounts, the model's note. */
-export function batchMakeLine(
-  rows: ReadonlyArray<Pick<IngredientRow, "foodId" | "name" | "grams">>,
-  batch: RecipeBatch,
-): string {
-  const items = batchAmounts(rows, batch)
-    .map((a) =>
-      a.units
-        ? t("meals.recipe.batchItemUnits", { name: a.name, grams: a.grams, units: a.units })
-        : t("meals.recipe.batchItem", { name: a.name, grams: a.grams }),
-    )
-    .join(t("meals.recipe.listSep"));
-  const line = t("meals.recipe.batchMake", { count: batch.servings, items });
-  if (!batch.note) return line;
-  // A line that ends in a full-width stop (Chinese, Japanese) takes the note without a space.
-  return /[。！？]$/.test(line) ? `${line}${batch.note}` : `${line} ${batch.note}`;
+/**
+ * The last step of the meal a pot is cooked at, by the program: how many boxes
+ * the rest goes into, which go in the fridge and which in the freezer, each
+ * marked with its day and meal. Null for any other meal.
+ */
+export function packStep(portion: PotPortion | null): string | null {
+  if (!portion?.cooks || portion.boxes.length === 0) return null;
+  const sep = t("meals.recipe.listSep");
+  const names = (storage: PotStorage) =>
+    portion.boxes
+      .filter((b) => b.storage === storage)
+      .map((b) => boxName(b.ref))
+      .join(sep);
+  const fridge = names("fridge");
+  const freezer = names("freezer");
+  const where = [
+    ...(fridge ? [t("meals.recipe.packFridge", { boxes: fridge })] : []),
+    ...(freezer ? [t("meals.recipe.packFreezer", { boxes: freezer })] : []),
+  ].join(t("meals.recipe.packJoin"));
+  return t("meals.recipe.pack", { count: portion.boxes.length, where });
 }
