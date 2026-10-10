@@ -31,7 +31,7 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 
 1. 读者那句照今天写进对话文件。
 2. 对话忙时 `startTurn` 抛 `TurnBusy`（reset 落在 run 中间会结束那个 run）。不忙则一次 commit 写本对话的 `rp.desk` 文档：这回合装配好的系统提示各段、工具名单，加 `purpose`、`maxRounds`、`excludeTs`（读者那句在文件里的 ts，历史读取器据此排除）；`configure()` 写模型和思考档（[75](./75-两档模型.md)）。
-3. 建一个回合任务 `rp.turn`（我们 extension 的 `tasks`，`background: true`，所以对话 `abort()` 不会连带它）。它的步骤：`submit({ type: "input", requestId: <任务 id> })`，memo 记下 submission id；`wait()`；落盘，memo 记已落。
+3. 建一个回合任务 `rp.turn`（我们 extension 的 `tasks`，`background: true`，所以对话 `abort()` 不会连带它）。它的步骤：`submit({ type: "input", requestId: <任务 id> })`，memo 记下 submission id；`wait()` 这次 submission，再 `conversation.waitForIdle()`；落盘，memo 记已落。一个回合可以跨多个 run：最后一轮回答结束时取到的 steer 会结束原 run、原 submission 先结算，再开下一个 run（坑 519），所以 `rp.turn` 等对话空闲才落盘。
 4. 界面订阅这个对话的 `viewState()`：`pi.live` 的半句喂流式行，`pi.live` 的工具调用喂阶段行，`pi.inbox` 喂 steer 行。
 
 系统提示由 section 渲染，section 读 `rp.desk`。系统提示拆成几段（soul 的稳定部分、桌上的东西等）。每回合 `reset()` 之后各段都会重写成 `pi.system` 条目（坑 517），库的增长按每回合一份完整系统提示算；发给 provider 的文本没变，prompt cache 不受影响。
@@ -42,9 +42,9 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 
 ## 上下文与 budget
 
-`GenerationTask` 的 `beforeRequest` hook 换掉每次请求的 messages：对话文件里的历史（今天的 `HISTORY_KEEP` 裁剪不变，不含本回合读者那句）加上本 run 在库里的条目（读者那句、各轮回答和工具结果、steer）。每回合开始前对话 `reset()`，模型只看得见本 run。不往库里灌历史。
+`GenerationTask` 的 `beforeRequest` hook 换掉每次请求的 messages：对话文件里的历史（今天的 `HISTORY_KEEP` 裁剪不变，不含本回合读者那句）加上本回合在库里的条目（读者那句、各轮回答和工具结果、steer）。每回合开始前对话 `reset()`，模型只看得见本回合。不往库里灌历史。
 
-同一个 hook 里走 `src/budget` 的 `fitRoundToBudget`，每轮重算不写回。被裁成桩的工具结果按 submission 记在进程内，重启后从头量。轮数上限也在这里，从 `request.messages` 数本 run 的 assistant 消息。量不下或超轮数时 hook 拦不住请求（坑 516）：`beforeRequest` 记下拒绝，从外面 `abort()` 对话，自己挂在 `awaitWithContext` 上不让请求发出；run 以 aborted 结算，`rp.turn` 把记下的拒绝作为 `refusal` 交给 lander 落盘，同今天两种拒绝。拒绝记在进程内，记下后进程被杀就只落已说的话。
+同一个 hook 里走 `src/budget` 的 `fitRoundToBudget`，每轮重算不写回。被裁成桩的工具结果按对话记在进程内，回合结算时清，重启后从头量。轮数上限也在这里，从 `request.messages` 数本回合的 assistant 消息。量不下或超轮数时 hook 拦不住请求（坑 516）：`beforeRequest` 记下拒绝，从外面 `abort()` 对话，自己挂在 `awaitWithContext` 上不让请求发出；run 以 aborted 结算，`rp.turn` 把记下的拒绝作为 `refusal` 交给 lander 落盘，同今天两种拒绝。拒绝记在进程内，记下后进程被杀就只落已说的话。
 
 遥测和用量走 `afterResponse`：每条从 provider 回来的消息调一次 `ai/model-usage.ts` 的 `recordModelCall`，重问也记（那是真花的钱）；hook 在崩溃后重跑时用 memo 去重。`pi.usage` 不读：它在库里、随换代清零，用量的记录仍是 `recordModelCall` 那份日志。
 
@@ -52,7 +52,7 @@ pi-durable 只管在途。对话的存档仍是 `threads-*.json` 等对话文件
 
 `rp.turn` 的落盘那步只做一次：
 
-- 读本 run 的条目（从这次 submission 的 `pi.user` 起），只取 `pi.assistant` 的文字，`stopReason: "aborted"` 的那条除外（坑 511：被杀的半句，和重问的回答不拼接）。被杀的回合怎么处理见下一节。
+- 读本回合的条目（从原 submission 的 `pi.user` 起，到本回合内所有 requestId 为 `steer:` 的 run 为止），只取 `pi.assistant` 的文字，`stopReason: "aborted"` 的那条除外（坑 511：被杀的半句，和重问的回答不拼接）。被杀的回合怎么处理见下一节。
 - 按 steer 的 `pi.user` 条目切成几条消息，steer 那几行读者的话夹在中间，顺序同 transcript。工具的 trace、回执单从 `pi.tool-result` 的 details 派生（[72](./72-聊天的可见性与steer.md) 的 `receipt` 走 details）。
 - 每条消息的 ts 由 `rp.turn` 输入里记下的开始时刻定，按行序递增（pi-durable 的 id 是整数，推不出时间，坑 518）；steer 行用 requestId `steer:<界面行 ts>` 里的界面 ts，落盘时从 `storage.scanSubmissions`（本对话最近 200 条）找回。对话文件的写入遇到同 ts 的消息跳过。先写文件，再 memo「已落」，中间被杀则重跑时按 ts 跳过。
 - 不在看这条线程时照今天放盒子卡片（`soul/landing.ts` 的顺序：先落文件、flush，再放卡片）。
