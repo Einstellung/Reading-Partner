@@ -340,3 +340,15 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 带思考（low）首包 2.9 / 3.9 s，屏幕第一个字 5.7 / 6.5 s；`stream.timeoutMs` 取 60 s。
 - 修了 durable 工具目录漏登记 `statement_write`、`read_supplement`（坑 524）。
 - 没修：`read_chapter` 按书有没有章节表是两种同名 schema，目录登记的是 `from`/`to` 那种，有章节的书 desk 收 `chapter`，每次 NaN。要定拆名还是合 schema。
+
+## iOS 模拟器验收第二轮（分支 `verify/pi-durable-ios2`，从 `dev/pi-durable` 411c56b8 起）
+
+2026-10-10，iPhone 17 Pro 模拟器，`~/rp-flow` 切到 411c56b8 后按 PID 杀掉上一轮的 dev server 重起，curl 确认 `durable-book.ts` 带 `load`。要抓时机的场景经 sim bridge 把 anthropic 换成慢速 faux（scratchpad `ios2/faux2.js`）；杀在工具中靠宿主侧轮询 durable 库（`ios2/killer.py`，坑 520）。真 Haiku 只用在工具中被杀后重启接着跑的那几轮，model-calls 记 4 次。截图和报告页在 scratchpad `verify-ios/`（`r2-*`）。
+
+- 正文中间杀：过。半句一次进线程文件，屏幕上读者那句下面就是半句，重启后无模型请求；Lumen 卡片 +1（启动时没人在看这本书，按设计放卡片）。
+- 工具里杀：过。`find_paper` 调用已提交、结果未提交时 SIGKILL，重启后工具重放、模型接着写完，回合 done，正文落盘。
+- 重启后打开在途回合：看得到在流（Stop 在、工具行在），插话进同一回合（round 3）。停止没按成：第一次回合先跑完，第二次插话后 Stop 不见了（下条的 bug），按在输入框上。在途回合上的停止待补。
+- 插话：纯文字和带 `read_pages` 工具轮各一次，插话行落在当轮正文之后、下一轮之前，回合多一轮跑完。修了一个 bug：手机 EPUB 课堂 `replyStreaming` 只看最后一行，插话的排队行一出来 Stop 就消失直到回合结束；改成跳过末尾的排队行（67be5583）。修后插话下 Stop 仍在，按下后半句留下、排队那句开下一回合。
+- 停止：过。正文流中停止，半句留在线程和屏幕；带工具轮时工具回执行（trace）也留下。
+- 手机 PDF 课堂、切后台：预算用完没走。退出重进 app 本轮做了五次，界面都回到首页、线程内容完整。
+- 观察：重开线程时视图停在旧位置（看不到在流的那行，要点向下箭头）；工具轮插话后新发的那句没滚到上方。都未查。

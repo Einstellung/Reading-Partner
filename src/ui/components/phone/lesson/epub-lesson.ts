@@ -23,9 +23,15 @@ export function lessonOnScreen(call: { view: CallView } | null): boolean {
   return call?.view === "chat-main";
 }
 
-/** Whether the conversation's newest row is a reply still being written. */
-export function replyStreaming(messages: readonly Pick<CallRow, "role" | "streaming">[]): boolean {
-  const last = messages[messages.length - 1];
+/**
+ * Whether the conversation's newest row is a reply still being written. Lines
+ * the reader said into the running turn (queued, docs/72) are drawn under the
+ * reply and do not end it: Stop stays up until the turn does.
+ */
+export function replyStreaming(messages: readonly Pick<CallRow, "role" | "streaming" | "queued">[]): boolean {
+  let i = messages.length - 1;
+  while (i >= 0 && messages[i].role === "user" && messages[i].queued === true) i--;
+  const last = messages[i];
   return last?.role === "ai" && last.streaming === true;
 }
 

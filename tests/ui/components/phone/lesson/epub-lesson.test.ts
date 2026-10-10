@@ -29,6 +29,9 @@ test("a reply is streaming only while the newest row is one being written", () =
   expect(replyStreaming([{ role: "user" }, { role: "ai", streaming: true }])).toBe(true);
   expect(replyStreaming([{ role: "ai", streaming: true }, { role: "user" }])).toBe(false);
   expect(replyStreaming([{ role: "ai" }])).toBe(false);
+  // A line steered into the running turn is queued under the reply; Stop stays.
+  expect(replyStreaming([{ role: "ai", streaming: true }, { role: "user", queued: true }])).toBe(true);
+  expect(replyStreaming([{ role: "ai" }, { role: "user", queued: true }])).toBe(false);
 });
 
 test("the focus line names the chapter and its pages, and nothing without one", () => {
