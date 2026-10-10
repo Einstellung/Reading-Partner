@@ -292,3 +292,16 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 没做：
 
 - 真机和模拟器都没跑。
+
+## Linux 桌面验收（分支 `verify/pi-durable-linux`，从 `dev/pi-durable` 6cffd52f 起）
+
+做法：独立 identifier `com.xinyuan.readingpartner.verifylinux`（`cargo build` 时 `TAURI_CONFIG` 覆盖 identifier 和 `devUrl`，不带 custom-protocol，二进制加载 dev server），vite 在 1437 端口跑，经 `scripts/sim-bridge.ts` 的通道在页面里执行脚本；`Xvfb :97` 虚拟显示，PIL 截图。凭据只拷用户 credentials.json 的 access 和 expires，refresh 填假值（Anthropic 换新会作废旧 refresh token，测试 app 刷新会把用户登出）；开始时用户的 token 已过期，等用户自己的 app 刷新后才拷到。驱动脚本和截图在会话 scratchpad 的 `verify-linux/`，报告页 `verify-linux/report.html`。
+
+走到的：
+
+- 正常回合（Haiku，不带思考，三轮含两次 `read_chapter`）：流式和结束都对，turn-log 有 start、每轮 first-byte 和 round、end，字段同旧路径。不带思考的首包 2402–2578 ms。
+- 正文中间 SIGKILL：重启后不重问（没有新的 reading 请求），库里 `rp.partial` 有半句、`rp.turn` 结果 `landed: true`，但线程文件里没有半句，屏幕上只有读者那句。查出一处原因（坑 523，线程文件没加载时 append 被吞），修在 58ec415a；修后重测半句仍没进文件，还有别的原因没查明。下一步：在 `bookLander` 里打日志看 rows 和 `threads.messages(home, threadId)` 是否为 undefined（怀疑 home 和线程文件的 key 不一致，或 `getThread` 在 load 后找不到 threadId）。
+- 重启后 app 自己发了一次 surface `subagent` 的 Haiku 请求（2773 入、153 出），来源没查。
+- 库增长：第一回合（三轮）WAL 从 119 KB 到 2.39 MB，被杀的一回合约 +845 KB；WAL 没 checkpoint，偏大，不能直接当每回合字节数。
+
+没走成（预算用完）：工具里杀、重启后在途回合的停止和插话、插话两种、停止、铃、带思考的首包。`stream.timeoutMs` 只能按不带思考的首包给下限：取 60 s 以上，带思考的要补测。
