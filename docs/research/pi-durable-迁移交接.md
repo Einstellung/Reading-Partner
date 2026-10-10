@@ -151,3 +151,33 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - `live-turns.ts` 的 `openRow`、`patch`、`split` 只剩旧书回合用过，没删（`live-turns.test.ts` 有 5 个测试用 `patch`，要一起改）。`delivered` 字段和 `delivered.ts` 等 `deliver.ts` 改 submit 时删。
 - `deliver.ts` 的 `deliverIntoReadingTurn` 现在永远返回 null（书回合条目不再带 `delivered`），bell 会走自己的回合；它的 `holdReadingTurn` 在书回合还在跑时 `turns.start` 会打印「second turn」并 abort 我们的 controller（不会停掉运行时的 run，但条目会被换掉，该回合结局时 `settle` 找不到条目就静默）。改 submit 那棒一起处理。
 - 回前台判死、真机和模拟器验收没做。
+
+## 第五棒 A（分支 `dev/pi-durable-p1e`，从 `dev/pi-durable` dff1d60c 起）
+
+做了：
+
+- 答进书里的铃走新运行时：`reading/turn/deliver.ts` 的 `deliverBookBell`，经 `soul/delivery.ts` 新的 `registerTurnDelivery` / `turnDeliverer`（替换 `registerLiveDelivery` / `liveDeliverer`）。线程在 liveTurns 有登记就等登记撤掉再起回合；`startTurn` 抛 `TurnBusy`（重启后恢复的回合，没有界面登记）就等该对话的 `onTurnSettled` 再试。
+- 铃的回合在 liveTurns 登记为 `visiting: { after }`，带 rows 和 durable 句柄。use-call 用 `listen` 在读者看着时画它的 rows；停止、插话和自己的回合走同一条路；没被收下的话写进文件，不开新回合。
+- 铃是 `startTurn` 的输入（`TurnInput.bell`），不进文件。lander 给读者开口之前的 AI 行盖 `origin.runId`，不放通用卡片；卡片照旧由 `bell.ts` 放，cover 取回答第一句。回合落盘后 `bell.ts` 才 delivered、ack、markDelivered；失败（停摆、模型错、停止时一句没说）走 onTrouble，铃留着。
+- 重启不重投：`legion/durable/turn.ts` 的 `bellTurn()` 按 `rp.turn` 任务输入里的铃 id 找本对话已有的回合并等它结束；`done`，或 aborted 且落了东西，算答过，直接 ack（cover 取文件里盖了这个 runId 的最后一行）。
+- 缓存遥测：`ResponseRecorder` 的 `about` 加 `round`（`beforeRequest` 按对话记），`AssembledBookTurn` 加 `telemetry`（surface、inline），`recordResponse` 同时调 `recordCacheTurn`（`bookCacheTurn`：startedAt 用 `message.timestamp`，retention 用 `resolveRetention()`）。use-call 传 `reading` 加 `turn.inline`，铃传 `bell`。恢复后的回合没有装配，按 `reading`、inline 缺省记。
+- live-turns 删 `openRow`、`patch`、`split`、`steering`、`delivered`、`silent`，加 `visiting`、`listen`、`touch`。删 `delivered.ts`、`deliverIntoReadingTurn`、`holdReadingTurn`；`openBookDelivery` 不再给 `hold`，所以 `soul/recover.ts` 收尾旧 session 里书的回合时不再占线程。
+- 测试：`tests/reading/turn/deliver-bell.test.ts`（faux：空闲时投、忙时等且不顶掉书回合的登记、重启不重投、失败不答）；`tests/soul/bell.test.ts` 的三个 live delivery 测试换成 turn deliverer 的四个；删 `deliver-live.test.ts`、`delivered.test.ts`；`tests/legion/durable/runtime.test.ts` 断言 round。全量 `scripts/t.sh` 7346 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+没做：
+
+- visiting 回合在 use-call 里的显示、插话、停止没有 hook 层测试。
+- 等忙线程时整个铃 pass 阻塞在那里，读者那一回合跑多久，后面的铃就等多久。
+- `startTurn` 的忙判断只看 `pi.live.run`：恢复的回合正在落盘那一步时判为不忙，铃的 reset 会落在它落盘之前。第一棒的判断，没动。
+- 真机、模拟器没验。
+
+拍板的：
+
+- 铃的回合用 talk 档模型和 `chatThinking`（同今天 `sendHeadless`）；文件 home 取 bookId（同今天）。
+- 停止的铃回合说了话算答过并 ack，一句没说算失败、下一轮再投；停摆算失败。
+- 「线程空闲」看 liveTurns 登记是否撤掉（书回合的登记在 `rp.turn` 落盘之后才撤），没有登记的看 `onTurnSettled`。
+- bell.test.ts 的 opener 路测试在 helper 里登记一个返回 null 的 turn deliverer：别的测试文件会留下 `registerBookDelivery()` 的登记。
+
+文档问题：
+
+- 87「概念对照」bell 一行写 requestId 是 `bell:` 加铃 id。实际 requestId 仍是 `turn:<任务 id>`，铃 id 记在 `rp.turn` 的任务输入里，靠 `scanTasks` 找回。没改。
