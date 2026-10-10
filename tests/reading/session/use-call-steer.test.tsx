@@ -1,22 +1,23 @@
-// The reader talking while the answer is still being written (docs/72), in the
-// session that has to do something with it: it is not a second turn, and it is
-// not the stop button. The model call is a spy, so what this drives is the
-// hook's side — which row is drawn when, what the thread file ends up holding,
-// and what happens to a line the model was never handed.
+// A reading turn on the durable runtime, from the session's side (docs/72,
+// docs/soul/87): the reader talking while the answer is still being written is
+// not a second turn and not the stop button, and every way a turn ends leaves
+// the right rows on screen. The book turn is a stand-in the test drives
+// (tests/support/use-call.ts), so this covers which rows are drawn when, what
+// is handed to the runtime, and what happens to a line no run took. What the
+// runtime projects and lands in the thread file is tested on its own
+// (tests/reading/turn/durable-*.test.ts).
 //
 // Same setup as use-call-open.test.tsx: static imports (pitfall 121).
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
 import { resetReadingTurns } from "../../../src/reading/turn/live-turns";
-import * as agent from "../../../src/legion/execute/turn";
 import * as threads from "../../../src/platform/app/threads";
 import * as turn from "../../../src/reading/turn/turn";
-import type { RunAgentTurnOptions, SteerPort } from "../../../src/legion/execute/contract";
 import type { CallRow } from "../../../src/reading/turn/call-state";
 import type { StagedImage } from "../../../src/reading/turn/pending-images";
 import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
-import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn } from "../../support/use-call";
+import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn, fakeBookTurns } from "../../support/use-call";
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
@@ -24,388 +25,267 @@ afterEach(resetReadingTurns);
 
 const THREAD = "t1";
 const MARK = "mark-1";
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-// One turn in flight, with its callbacks in hand. A steer port is handed out
-// the way the harness hands one out: it records what it was asked to queue and
-// the caller decides when the model is told it landed.
-interface Rig {
-  stored: ThreadMessage[];
-  options: () => RunAgentTurnOptions;
-  first: () => RunAgentTurnOptions;
-  queued: string[];
-  inject: (index: number) => void;
-  turns: () => number;
-  restore: () => void;
-}
-
-function rig(): Rig {
+function rig() {
   const stored: ThreadMessage[] = [];
-  const queued: string[] = [];
-  const calls: RunAgentTurnOptions[] = [];
+  const toasts: string[] = [];
+  const book = fakeBookTurns();
   const spies = [
     spyOn(threads, "getThread").mockImplementation((bookId, threadId) =>
-      bookId === BOOK && threadId === THREAD
-        ? ({ id: THREAD, messages: stored.slice() } as Thread)
-        : undefined,
+      bookId === BOOK && threadId === THREAD ? ({ id: THREAD, messages: stored.slice() } as Thread) : undefined,
     ),
-    spyOn(threads, "appendMessage").mockImplementation(
-      (_bookId, _threadId, message) => void stored.push(message),
-    ),
+    spyOn(threads, "appendMessage").mockImplementation((_bookId, _threadId, message) => void stored.push(message)),
     spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn()),
-    spyOn(agent, "runAgentTurn").mockImplementation((options) => {
-      calls.push(options);
-      const port: SteerPort = async (message) => {
-        const text = typeof message === "string" ? message : message.text;
-        queued.push(text);
-        return { ok: true, id: `e${queued.length}` };
-      };
-      options.onSteerable?.(port);
-      return new Promise<void>(() => {}); // still writing, for as long as the test wants
-    }),
   ];
   return {
     stored,
-    options: () => calls[calls.length - 1],
-    first: () => calls[0],
-    queued,
-    inject: (index) => calls[calls.length - 1].onSteered?.([`e${index + 1}`]),
-    turns: () => calls.length,
-    restore: () => spies.forEach((s) => s.mockRestore()),
+    toasts,
+    book,
+    spies,
+    restore: () => {
+      spies.forEach((s) => s.mockRestore());
+      book.restore();
+    },
   };
 }
+type Rig = ReturnType<typeof rig>;
 
 async function mounted(r: Rig) {
-  const view = renderHook(() => useCall<CallRow, StagedImage>(host()));
+  const view = renderHook(() =>
+    useCall<CallRow, StagedImage>(host({ pushToast: (_kind, message) => void r.toasts.push(message) })),
+  );
   act(() => {
-    view.result.current.openThread(
-      { threadId: THREAD, annotationId: MARK, view: "bubble", anchor: { x: 0, y: 0 } },
-      [],
-    );
+    view.result.current.openThread({ threadId: THREAD, annotationId: MARK, view: "bubble", anchor: { x: 0, y: 0 } }, []);
   });
-  await act(async () => {
-    view.result.current.send("why this?");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-  expect(r.turns()).toBe(1);
+  await say(view, "why this?");
+  expect(r.book.turns).toHaveLength(1);
   return view;
 }
 
-const rows = (view: { result: { current: { call: { messages: CallRow[] } | null } } }) =>
-  view.result.current.call!.messages;
+type View = Awaited<ReturnType<typeof mounted>>;
+const rows = (view: View) => view.result.current.call!.messages;
+const shape = (view: View) => rows(view).map((m) => [m.role, m.text, m.queued ?? false]);
+async function say(view: { result: { current: { send(text: string): void } } }, text: string) {
+  await act(async () => {
+    view.result.current.send(text);
+    await tick();
+  });
+}
+async function settle(fn: () => void) {
+  await act(async () => {
+    fn();
+    await tick();
+  });
+}
+const ai = (ts: number, text: string, over: Partial<CallRow> = {}): CallRow => ({ role: "ai", text, ts, ...over });
+
+test("the turn is asked with the reader's line as the file holds it, and a row streams at once", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    const { request } = r.book.last();
+    expect(request.line).toEqual({ text: "why this?", ts: r.stored[0]!.ts });
+    expect(request.model).toEqual({ provider: "anthropic", modelId: "some-model" });
+    expect(request.origin).toMatchObject({ place: "book", bookId: BOOK, threadId: THREAD, home: BOOK });
+    expect(shape(view)).toEqual([
+      ["user", "why this?", false],
+      ["ai", "", false],
+    ]);
+    expect(rows(view)[1]!.streaming).toBe(true);
+  } finally {
+    r.restore();
+  }
+});
 
 test("a line said mid-answer steers the turn instead of starting a second one", async () => {
   const r = rig();
   try {
     const view = await mounted(r);
-    act(() => r.options().onDelta("because"));
+    const asked = r.stored[0]!.ts;
+    await settle(() => r.book.last().view([ai(asked + 1, "because", { streaming: true })]));
+    await say(view, "and the other one?");
 
-    await act(async () => {
-      view.result.current.send("and the other one?");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    // No second turn, and nothing was aborted.
-    expect(r.turns()).toBe(1);
-    expect(r.options().signal?.aborted).toBe(false);
-    expect(r.queued).toEqual(["and the other one?"]);
-
+    // No second turn, and nothing was stopped.
+    expect(r.book.turns).toHaveLength(1);
+    expect(r.book.last().stops).toBe(0);
+    expect(r.book.last().steered.map((s) => s.text)).toEqual(["and the other one?"]);
     // On screen under the reply still being written, marked as waiting.
-    expect(rows(view).map((m) => [m.role, m.text, m.queued])).toEqual([
-      ["user", "why this?", undefined],
-      ["ai", "because", undefined],
+    expect(shape(view)).toEqual([
+      ["user", "why this?", false],
+      ["ai", "because", false],
       ["user", "and the other one?", true],
     ]);
-    expect(rows(view)[1].streaming).toBe(true);
-    // Not in the thread file: the model has not been handed it yet.
+    expect(rows(view)[1]!.streaming).toBe(true);
+    // Not written by the session: the runtime lands it with the turn.
     expect(r.stored.map((m) => m.text)).toEqual(["why this?"]);
   } finally {
     r.restore();
   }
 });
 
-test("the model handed the line: the file reads user / ai / user / ai and a new row opens", async () => {
+test("the runtime's view takes the line over: one copy, and unchanged rows stay the rows they were", async () => {
   const r = rig();
   try {
     const view = await mounted(r);
-    act(() => r.options().onDelta("because"));
-    await act(async () => {
-      view.result.current.send("and the other one?");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    const asked = r.stored[0]!.ts;
+    await settle(() => r.book.last().view([ai(asked + 1, "because", { streaming: true })]));
+    await say(view, "and the other one?");
+    const line = r.book.last().steered[0]!;
 
-    act(() => r.inject(0));
-    // The mark is off, and both lines are down in the order they happened.
-    expect(rows(view)[2].queued).toBeUndefined();
-    expect(r.stored.map((m) => [m.role, m.text])).toEqual([
-      ["user", "why this?"],
-      ["ai", "because"],
-      ["user", "and the other one?"],
+    const handed = [
+      ai(asked + 1, "because"),
+      { role: "user" as const, text: line.text, ts: line.ts },
+      ai(line.ts + 1, "the other one is", { streaming: true }),
+    ];
+    await settle(() => r.book.last().view(handed));
+    expect(shape(view)).toEqual([
+      ["user", "why this?", false],
+      ["ai", "because", false],
+      ["user", "and the other one?", false],
+      ["ai", "the other one is", false],
     ]);
 
-    // What the model writes next is a row of its own, under the reader's line.
-    act(() => r.options().onDelta("the other one is"));
-    expect(rows(view).map((m) => [m.role, m.text])).toEqual([
-      ["user", "why this?"],
-      ["ai", "because"],
-      ["user", "and the other one?"],
-      ["ai", "the other one is"],
-    ]);
-    expect(rows(view)[1].streaming).toBeUndefined();
-
-    // `turnText` is every round's words joined, the head included
-    // (ai/turn-view/turn-rows.ts); what goes in the file is what is not already there.
-    act(() =>
-      r.options().onDone(
-        "the other one is the 1962 figure",
-        undefined,
-        "because\n\nthe other one is the 1962 figure",
-      ),
+    // A token into the last row re-renders that row and nothing else.
+    const above = rows(view)[1];
+    await settle(() =>
+      r.book.last().view([handed[0]!, handed[1]!, ai(line.ts + 1, "the other one is the 1962 figure", { streaming: true })]),
     );
-    // Only the tail is persisted: the row above it is already in the file.
-    expect(r.stored.map((m) => [m.role, m.text])).toEqual([
-      ["user", "why this?"],
-      ["ai", "because"],
-      ["user", "and the other one?"],
-      ["ai", "the other one is the 1962 figure"],
-    ]);
+    expect(rows(view)[1]).toBe(above);
+    expect(rows(view)[3]!.text).toBe("the other one is the 1962 figure");
   } finally {
     r.restore();
   }
 });
 
-test("stopping keeps the half sentence and opens the next turn with what was never sent", async () => {
+test("stopping keeps what the runtime kept and opens the next turn with what no run took", async () => {
   const r = rig();
   try {
     const view = await mounted(r);
-    act(() => r.options().onDelta("because the mark"));
-    await act(async () => {
-      view.result.current.send("never mind, the other one?");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    const asked = r.stored[0]!.ts;
+    await settle(() => r.book.last().view([ai(asked + 1, "because the mark", { streaming: true })]));
+    await say(view, "never mind, the other one?");
+    const line = r.book.last().steered[0]!;
 
-    await act(async () => {
-      view.result.current.stop();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    await settle(() => view.result.current.stop());
+    expect(r.book.last().stops).toBe(1);
+    // Still answering until the runtime says the turn is over.
+    expect(view.result.current.isAnswering(THREAD)).toBe(true);
 
-    expect(r.first().signal?.aborted).toBe(true);
-    // The partial, then the line the model never saw, then a turn for it.
+    await settle(() => r.book.turns[0]!.end({ kind: "stopped", rows: [ai(asked + 1, "because the mark")], steers: [line] }));
+    // The half sentence is the runtime's to land; the line the model never saw
+    // is the session's, and a turn opens for it.
     expect(r.stored.map((m) => [m.role, m.text])).toEqual([
       ["user", "why this?"],
-      ["ai", "because the mark"],
       ["user", "never mind, the other one?"],
     ]);
-    expect(r.turns()).toBe(2);
-    expect(rows(view).find((m) => m.text === "never mind, the other one?")?.queued).toBeUndefined();
+    expect(r.book.turns).toHaveLength(2);
+    expect(r.book.last().request.line).toEqual({ text: line.text, ts: line.ts });
+    expect(shape(view)).toEqual([
+      ["user", "why this?", false],
+      ["ai", "because the mark", false],
+      ["user", "never mind, the other one?", false],
+      ["ai", "", false],
+    ]);
+    expect(rows(view)[1]!.streaming).toBeFalsy();
   } finally {
     r.restore();
   }
 });
 
-test("an answer that landed before the queue drained is followed by a turn for it", async () => {
+test("an answer that landed before a run took the line is followed by a turn for it", async () => {
   const r = rig();
   try {
     const view = await mounted(r);
-    act(() => r.options().onDelta("because"));
-    await act(async () => {
-      view.result.current.send("and the other one?");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    const asked = r.stored[0]!.ts;
+    r.book.last().taking = false;
+    await settle(() => r.book.last().view([ai(asked + 1, "because", { streaming: true })]));
+    await say(view, "and the other one?");
 
-    await act(async () => {
-      r.options().onDone("because the mark is there", undefined, "because the mark is there");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
+    await settle(() => r.book.turns[0]!.end({ kind: "answered", rows: [ai(asked + 1, "because the mark is there")] }));
     expect(r.stored.map((m) => [m.role, m.text])).toEqual([
       ["user", "why this?"],
-      ["ai", "because the mark is there"],
       ["user", "and the other one?"],
     ]);
-    expect(r.turns()).toBe(2);
+    expect(r.book.turns).toHaveLength(2);
+    expect(shape(view).slice(0, 3)).toEqual([
+      ["user", "why this?", false],
+      ["ai", "because the mark is there", false],
+      ["user", "and the other one?", false],
+    ]);
   } finally {
     r.restore();
   }
 });
-
-// --- what the stop button keeps ---------------------------------------------
 
 const RECEIPT = { label: "Updated your profile", summary: "Prefers short answers" };
 const PROFILE = { name: "profile_update", label: "Updating your profile", state: "done" as const, receipt: RECEIPT };
 
-test("stopping a turn that wrote no word yet keeps its receipt, on screen and in the file", async () => {
+test("stopping a turn that wrote no word yet keeps its receipt on screen", async () => {
   const r = rig();
   try {
     const view = await mounted(r);
-    act(() => {
-      r.options().onToolStart({ name: "profile_update", args: {}, label: "Updating your profile" });
-      r.options().onToolEnd({ name: "profile_update", isError: false, receipt: RECEIPT });
-      r.options().onToolStart({ name: "read_chapter", args: {}, label: "Reading chapter 2" });
-    });
-    await act(async () => {
-      view.result.current.stop();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    const last = rows(view)[rows(view).length - 1];
+    const asked = r.stored[0]!.ts;
+    await settle(() => view.result.current.stop());
+    await settle(() =>
+      r.book.last().end({ kind: "stopped", rows: [ai(asked + 1, "", { tools: [PROFILE] })], steers: [] }),
+    );
+    const last = rows(view)[rows(view).length - 1]!;
     expect([last.role, last.text, last.streaming, last.tools]).toEqual(["ai", "", undefined, [PROFILE]]);
-    expect(r.stored.map((m) => [m.role, m.text, m.parts])).toEqual([
-      ["user", "why this?", undefined],
-      ["ai", "", [{ type: "trace", tools: [PROFILE] }]],
-    ]);
+    expect(view.result.current.isAnswering(THREAD)).toBe(false);
   } finally {
     r.restore();
   }
 });
 
-test("stopping a turn that produced nothing still leaves no row", async () => {
+test("stopping a turn that produced nothing leaves no row", async () => {
   const r = rig();
   try {
     const view = await mounted(r);
-    act(() => r.options().onToolStart({ name: "read_chapter", args: {}, label: "Reading chapter 2" }));
-    await act(async () => {
-      view.result.current.stop();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
+    await settle(() => view.result.current.stop());
+    await settle(() => r.book.last().end({ kind: "stopped", rows: [ai(r.stored[0]!.ts + 1, "")], steers: [] }));
     expect(rows(view).map((m) => m.role)).toEqual(["user"]);
-    expect(r.stored.map((m) => m.role)).toEqual(["user"]);
   } finally {
     r.restore();
   }
 });
 
-// The row above the reader's line goes into the file at the handover; what it
-// did goes with it, or a reopened thread shows its words without the receipt.
-test("the row handed over to a steered line is stored with its trace", async () => {
+test("a refusal is a notice with no Retry; a failure is an error row with Retry and a toast", async () => {
   const r = rig();
   try {
     const view = await mounted(r);
-    act(() => {
-      r.options().onToolStart({ name: "profile_update", args: {}, label: "Updating your profile" });
-      r.options().onToolEnd({ name: "profile_update", isError: false, receipt: RECEIPT });
-      r.options().onDelta("Noted.");
-    });
-    await act(async () => {
-      view.result.current.send("and the other one?");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    act(() => r.inject(0));
+    await settle(() => r.book.last().end({ kind: "refused", rows: [], message: "That is too much to read at once." }));
+    expect(view.result.current.call!.error).toBe(false);
+    expect(rows(view)[rows(view).length - 1]!.failed).toBeFalsy();
 
-    expect(r.stored.map((m) => [m.role, m.text, m.parts])).toEqual([
-      ["user", "why this?", undefined],
-      ["ai", "Noted.", [{ type: "trace", tools: [PROFILE] }]],
-      ["user", "and the other one?", undefined],
-    ]);
+    await settle(() => view.result.current.retry());
+    expect(r.book.turns).toHaveLength(2);
+    await settle(() => r.book.last().end({ kind: "failed", rows: [], message: "overloaded" }));
+    const last = rows(view)[rows(view).length - 1]!;
+    expect([last.role, last.failed]).toEqual(["ai", true]);
+    expect(view.result.current.call!.error).toBe(true);
+    expect(r.toasts.length).toBeGreaterThan(0);
   } finally {
     r.restore();
   }
 });
 
-// --- a line handed over after a round that wrote no word (docs/pitfall/510) --
-
-const shape = (m: { role: string; text: string; parts?: { type: string }[] }) => [
-  m.role,
-  m.text,
-  (m.parts ?? []).map((p) => p.type),
-];
-
-// Round one only called a tool. Its receipt is what the row produced: the row
-// stays above the reader's line, on screen and in the file, and the answer
-// opens under the line, keyed after it.
-test("a row with only a receipt is stored above the line and the answer opens under it", async () => {
+test("a stalled turn is asked again once, and a second stall is shown as a failure", async () => {
   const r = rig();
   try {
     const view = await mounted(r);
-    act(() => {
-      r.options().onToolStart({ name: "profile_update", args: {}, label: "Updating your profile" });
-      r.options().onToolEnd({ name: "profile_update", isError: false, receipt: RECEIPT });
-    });
-    await act(async () => {
-      view.result.current.send("and keep it short");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    act(() => r.inject(0));
-    act(() => {
-      r.options().onDelta("Noted, short it is.");
-      r.options().onDone("Noted, short it is.", undefined, "Noted, short it is.");
-    });
-
-    expect(rows(view).map((m) => [m.role, m.text])).toEqual([
-      ["user", "why this?"],
-      ["ai", ""],
-      ["user", "and keep it short"],
-      ["ai", "Noted, short it is."],
+    await settle(() => r.book.last().end({ kind: "stalled", steers: [] }));
+    expect(r.book.turns).toHaveLength(2);
+    // The dead turn's row went; the one asked again is streaming.
+    expect(shape(view)).toEqual([
+      ["user", "why this?", false],
+      ["ai", "", false],
     ]);
-    expect(rows(view)[1].tools).toEqual([PROFILE]);
-    expect(r.stored.map(shape)).toEqual([
-      ["user", "why this?", []],
-      ["ai", "", ["trace"]],
-      ["user", "and keep it short", []],
-      ["ai", "Noted, short it is.", []],
-    ]);
-    expect(r.stored[1].parts).toEqual([{ type: "trace", tools: [PROFILE] }]);
-    expect(r.stored[3].ts).toBeGreaterThan(r.stored[2].ts);
-  } finally {
-    r.restore();
-  }
-});
+    expect(rows(view)[1]!.streaming).toBe(true);
 
-test("a line handed over before the row held anything moves the reply under it", async () => {
-  const r = rig();
-  try {
-    const view = await mounted(r);
-    act(() => r.options().onThinking?.("…"));
-    await act(async () => {
-      view.result.current.send("in French, please");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    act(() => r.inject(0));
-    act(() => {
-      r.options().onDelta("En français.");
-      r.options().onDone("En français.", undefined, "En français.");
-    });
-
-    expect(rows(view).map((m) => [m.role, m.text])).toEqual([
-      ["user", "why this?"],
-      ["user", "in French, please"],
-      ["ai", "En français."],
-    ]);
-    expect(r.stored.map((m) => [m.role, m.text])).toEqual([
-      ["user", "why this?"],
-      ["user", "in French, please"],
-      ["ai", "En français."],
-    ]);
-    expect(r.stored[2].ts).toBeGreaterThan(r.stored[1].ts);
-  } finally {
-    r.restore();
-  }
-});
-
-test("stopping right after a receipt row was handed over stores it once", async () => {
-  const r = rig();
-  try {
-    const view = await mounted(r);
-    act(() => {
-      r.options().onToolStart({ name: "profile_update", args: {}, label: "Updating your profile" });
-      r.options().onToolEnd({ name: "profile_update", isError: false, receipt: RECEIPT });
-    });
-    await act(async () => {
-      view.result.current.send("and keep it short");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    act(() => r.inject(0));
-    await act(async () => {
-      view.result.current.stop();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    expect(r.stored.map((m) => [m.role, m.text])).toEqual([
-      ["user", "why this?"],
-      ["ai", ""],
-      ["user", "and keep it short"],
-    ]);
-    expect(r.turns()).toBe(1);
+    await settle(() => r.book.last().end({ kind: "stalled", steers: [] }));
+    expect(r.book.turns).toHaveLength(2);
+    expect(rows(view)[rows(view).length - 1]!.failed).toBe(true);
   } finally {
     r.restore();
   }

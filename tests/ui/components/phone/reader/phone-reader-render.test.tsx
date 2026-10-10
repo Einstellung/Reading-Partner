@@ -12,10 +12,8 @@ import * as events from "../../../../../src/platform/app/events";
 import * as memory from "../../../../../src/memory";
 import * as threads from "../../../../../src/platform/app/threads";
 import * as annotations from "../../../../../src/platform/app/annotations";
-import * as agent from "../../../../../src/legion/execute/turn";
 import * as turn from "../../../../../src/reading/turn/turn";
-import type { AgentCallbacks } from "../../../../../src/legion/execute/contract";
-import { callSettings, emptyReadingTurn } from "../../../../support/use-call";
+import { callSettings, emptyReadingTurn, fakeBookTurns } from "../../../../support/use-call";
 import { bookThreadIo } from "../../../../../src/reading/session/book-thread";
 import type { LessonTopic } from "../../../../../src/ui/components/phone/lesson/use-book-lesson";
 import type { FlowMarkSpec, FlowReaderPaneProps } from "../../../../../src/reading/epub/flow/flow-contract";
@@ -352,11 +350,7 @@ async function failTurn(view: Awaited<ReturnType<typeof openLesson>>, pageFirst:
   );
   spyOn(threads, "appendMessage").mockImplementation((_b, _t, m) => void stored.push(m));
   spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn());
-  let fail: ((message: string) => void) | null = null;
-  spyOn(agent, "runAgentTurn").mockImplementation((params) => {
-    fail = (message) => (params as unknown as AgentCallbacks).onError(message);
-    return new Promise<void>(() => {});
-  });
+  const book = fakeBookTurns();
   const box = view.container.querySelector('[aria-label="Lesson"] textarea') as HTMLTextAreaElement;
   await act(async () => {
     fireEvent.change(box, { target: { value: "Teach me chapter 1." } });
@@ -365,7 +359,7 @@ async function failTurn(view: Awaited<ReturnType<typeof openLesson>>, pageFirst:
     fireEvent.click(view.getByLabelText("Send"));
     await new Promise((r) => setTimeout(r, 0));
   });
-  expect(fail).not.toBeNull();
+  expect(book.turns).toHaveLength(1);
   if (pageFirst) {
     await act(async () => {
       fireEvent.click(view.getByLabelText("Back to the page"));
@@ -373,7 +367,8 @@ async function failTurn(view: Awaited<ReturnType<typeof openLesson>>, pageFirst:
   }
   toasts.length = 0;
   await act(async () => {
-    fail!("503 overloaded");
+    book.last().end({ kind: "failed", rows: [], message: "503 overloaded" });
+    await new Promise((r) => setTimeout(r, 0));
   });
 }
 

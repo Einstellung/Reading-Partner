@@ -11,7 +11,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
 import { resetReadingTurns } from "../../../src/reading/turn/live-turns";
-import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
 import * as threads from "../../../src/platform/app/threads";
@@ -23,6 +22,7 @@ import type { Annotation } from "../../../src/platform/app/reader-contract";
 import type { Thread } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
 import {
+  fakeBookTurns,
   CALL_BOOK as BOOK,
   callHost,
   callThread as thread,
@@ -92,7 +92,7 @@ function fakeWorld(seed: Record<string, Thread>) {
     spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn()),
     // Answering forever: what matters here is that a turn is running on the
     // thread, never what it writes.
-    spyOn(agent, "runAgentTurn").mockImplementation(() => new Promise<void>(() => {})),
+    ...fakeBookTurns().spies,
   ];
   return { held, restore: () => spies.forEach((s) => s.mockRestore()) };
 }

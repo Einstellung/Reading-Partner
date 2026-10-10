@@ -14,7 +14,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
 import { resetReadingTurns } from "../../../src/reading/turn/live-turns";
-import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
 import * as threads from "../../../src/platform/app/threads";
@@ -24,7 +23,7 @@ import type { StagedImage } from "../../../src/reading/turn/pending-images";
 import type { HangupPass } from "../../../src/reading/session/hangup";
 import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
-import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn } from "../../support/use-call";
+import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn, fakeBookTurns } from "../../support/use-call";
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
@@ -62,11 +61,8 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
   // The turn's assembly and the model call, which this test has nothing to say
   // about: the turn is only here to be in flight.
   const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn());
-  let onDone: ((full: string) => void) | undefined;
-  const runAgentTurn = spyOn(agent, "runAgentTurn").mockImplementation((options) => {
-    onDone = options.onDone;
-    return new Promise<void>(() => {}); // still writing, for as long as this test wants
-  });
+  // Still writing, for as long as this test wants.
+  const book = fakeBookTurns();
 
   try {
     const view = renderHook(() => useCall<CallRow, StagedImage>(host()));
@@ -82,8 +78,7 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
       view.result.current.send("why?");
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(runAgentTurn).toHaveBeenCalledTimes(1);
-    expect(onDone).toBeDefined();
+    expect(book.turns).toHaveLength(1);
 
     // The âœ•, mid-answer. Nothing may have been read off the thread yet: what is
     // there now is a question with no answer under it.
@@ -92,9 +87,15 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
     expect(getThread).not.toHaveBeenCalled();
     expect(distilled).toEqual([]);
 
-    // The reply lands and writes itself into the thread file, and only then is
+    // The reply lands â€” the runtime writes it into the thread file
+    // (reading/turn/durable-book.ts), then the turn settles â€” and only then is
     // the pass built.
-    act(() => onDone?.("because the mark is on that page"));
+    const landed = { role: "ai" as const, text: "because the mark is on that page", ts: Date.now() + 1 };
+    await act(async () => {
+      threads.appendMessage(BOOK, THREAD, landed);
+      book.last().end({ kind: "answered", rows: [landed] });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
     expect(getThread).toHaveBeenCalledTimes(1);
     expect(distilled).toHaveLength(1);
@@ -103,16 +104,10 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
     expect(distilled[0]?.messages).toEqual([
       { role: "user", text: "what is this mark about?", ts: 1, threadId: "t1" },
       { role: "ai", text: "the 1962 figure", ts: 2, threadId: "t1" },
-      // The two the session wrote itself carry the id it minted for them
+      // The reader's line the session wrote carries the id it minted for it
       // (reading/thread-arrivals.ts), which is what an anchor points at.
       { id: expect.any(String), role: "user", text: "why?", ts: expect.any(Number), threadId: "t1" },
-      {
-        id: expect.any(String),
-        role: "ai",
-        text: "because the mark is on that page",
-        ts: expect.any(Number),
-        threadId: "t1",
-      },
+      { role: "ai", text: "because the mark is on that page", ts: landed.ts, threadId: "t1" },
     ]);
   } finally {
     getThread.mockRestore();
@@ -120,6 +115,6 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
     logEvent.mockRestore();
     distillThread.mockRestore();
     buildReadingTurn.mockRestore();
-    runAgentTurn.mockRestore();
+    book.restore();
   }
 });

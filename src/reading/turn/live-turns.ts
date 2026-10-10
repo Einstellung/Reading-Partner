@@ -61,6 +61,9 @@ export interface LiveTurn<M extends LiveMessage> {
   // stops it. `message` is then the last of `rows`.
   rows?: M[];
   durable?: { steer(text: string, ts: number): Promise<boolean>; stop(): void };
+  // The reader's lines said into a durable turn that no run has taken yet:
+  // drawn queued after `rows`, and filed when the turn ends.
+  unsent?: M[];
   // Run once the turn lands. Hanging up mid-stream defers the observation
   // distillation to here, so it reads a whole answer instead of half a sentence.
   onSettled?: () => void;

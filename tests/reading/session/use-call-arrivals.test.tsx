@@ -9,13 +9,12 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
 import { resetReadingTurns } from "../../../src/reading/turn/live-turns";
-import * as agent from "../../../src/legion/execute/turn";
 import { appendMessage, createThread, rebuildThreadStoreForTests } from "../../../src/platform/app/threads";
 import * as turn from "../../../src/reading/turn/turn";
 import type { CallRow } from "../../../src/reading/turn/call-state";
 import type { StagedImage } from "../../../src/reading/turn/pending-images";
 import { useDom } from "../../support/dom";
-import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn } from "../../support/use-call";
+import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn, fakeBookTurns } from "../../support/use-call";
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
@@ -59,7 +58,7 @@ test("an append to another conversation leaves the open one alone", () => {
 
 test("the reader's own message is not shown twice", async () => {
   const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn());
-  const runAgentTurn = spyOn(agent, "runAgentTurn").mockResolvedValue(undefined as never);
+  const book = fakeBookTurns();
   try {
     const view = openCall("t-send");
     await act(async () => {
@@ -73,6 +72,6 @@ test("the reader's own message is not shown twice", async () => {
     expect(view.result.current.call?.messages.map((m) => m.text)).toEqual(["why?", ""]);
   } finally {
     buildReadingTurn.mockRestore();
-    runAgentTurn.mockRestore();
+    book.restore();
   }
 });

@@ -11,14 +11,13 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
 import { resetReadingTurns } from "../../../src/reading/turn/live-turns";
-import * as agent from "../../../src/legion/execute/turn";
 import * as threads from "../../../src/platform/app/threads";
 import * as turn from "../../../src/reading/turn/turn";
 import type { CallRow } from "../../../src/reading/turn/call-state";
 import type { StagedImage } from "../../../src/reading/turn/pending-images";
 import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
-import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn } from "../../support/use-call";
+import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn, fakeBookTurns } from "../../support/use-call";
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
@@ -33,7 +32,7 @@ const MARK = "mark-1";
 // fire the explain kickoff on its own.
 test("opening an empty thread assembles no turn and leaves the conversation empty", async () => {
   const buildReadingTurn = spyOn(turn, "buildReadingTurn");
-  const runAgentTurn = spyOn(agent, "runAgentTurn");
+  const book = fakeBookTurns();
   try {
     const view = renderHook(() => useCall<CallRow, StagedImage>(host()));
     act(() => {
@@ -46,13 +45,13 @@ test("opening an empty thread assembles no turn and leaves the conversation empt
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(buildReadingTurn).not.toHaveBeenCalled();
-    expect(runAgentTurn).not.toHaveBeenCalled();
+    expect(book.turns).toHaveLength(0);
     // Empty is what the shell keys the intent chips (and the no-provider
     // guidance) off, so it has to stay empty rather than gaining a streaming row.
     expect(view.result.current.call?.messages).toEqual([]);
   } finally {
     buildReadingTurn.mockRestore();
-    runAgentTurn.mockRestore();
+    book.restore();
   }
 });
 
@@ -60,7 +59,7 @@ test("opening an empty thread assembles no turn and leaves the conversation empt
 // kickoff spoke of a passage it does not have.
 test("opening the empty book-level thread assembles no turn either", async () => {
   const buildReadingTurn = spyOn(turn, "buildReadingTurn");
-  const runAgentTurn = spyOn(agent, "runAgentTurn");
+  const book = fakeBookTurns();
   try {
     const view = renderHook(() => useCall<CallRow, StagedImage>(host()));
     act(() => {
@@ -73,10 +72,10 @@ test("opening the empty book-level thread assembles no turn either", async () =>
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(buildReadingTurn).not.toHaveBeenCalled();
-    expect(runAgentTurn).not.toHaveBeenCalled();
+    expect(book.turns).toHaveLength(0);
   } finally {
     buildReadingTurn.mockRestore();
-    runAgentTurn.mockRestore();
+    book.restore();
   }
 });
 
@@ -93,9 +92,7 @@ test("picking an intent sends it like anything else the reader types", async () 
     (_bookId, _threadId, message) => void stored.push(message),
   );
   const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn());
-  const runAgentTurn = spyOn(agent, "runAgentTurn").mockImplementation(
-    () => new Promise<void>(() => {}),
-  );
+  const book = fakeBookTurns();
   try {
     const view = renderHook(() => useCall<CallRow, StagedImage>(host()));
     act(() => {
@@ -109,11 +106,11 @@ test("picking an intent sends it like anything else the reader types", async () 
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(stored.map((m) => [m.role, m.text])).toEqual([["user", turn.EXPLAIN_KICKOFF]]);
-    expect(runAgentTurn).toHaveBeenCalledTimes(1);
+    expect(book.turns).toHaveLength(1);
   } finally {
     getThread.mockRestore();
     appendMessage.mockRestore();
     buildReadingTurn.mockRestore();
-    runAgentTurn.mockRestore();
+    book.restore();
   }
 });

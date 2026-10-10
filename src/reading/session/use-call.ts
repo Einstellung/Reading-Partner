@@ -14,10 +14,7 @@
 // so it is handed the constructors rather than the types.
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import type { ProviderId } from "../../ai";
-import { runAgentTurn } from "../../legion/execute/turn";
-import { isStall } from "../../legion/execute/stall";
-import { soulHarness } from "../../soul";
+import { toolLabel } from "../../legion/execute/tool-result";
 import type { CompressedImage } from "../../ai/image-utils";
 import { logEvent } from "../../platform/app/events";
 import type { Annotation } from "../../platform/app/reader-contract";
@@ -42,24 +39,15 @@ import { markExcerpt, reopenCall } from "../turn/reopen";
 import type { Fulltext } from "../../fulltext";
 import { distillThread, type DistillAnnotation } from "../../memory";
 import { callReducer, type CallRow, type CallState, type CallView } from "../turn/call-state";
-import {
-  applyRowChange,
-  keptOnStop,
-  phaseOnToolStart,
-  type RowChange,
-  type TurnPhase,
-} from "../../ai/turn-view/turn-rows";
 import { annotationPage } from "../context";
-import { persistedTrace, type ToolStatus } from "../../ai/turn-view/tool-status";
-import type { AgentToolEnd, AgentToolStart } from "../../legion/execute/contract";
 import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { readingTurns, type LiveTurn } from "../turn/live-turns";
-import { createDelivered } from "../turn/delivered";
-import { createSteering, type Steering } from "../turn/steering";
-import { createRowSplit, rowTsAfter } from "../turn/turn-row-split";
-import { boxUnseenTurn, setOpenCallPeek, watching, type TurnOutcome } from "../turn/turn-box";
+import { afterStall, driveBookTurn, type BookTurnEnd } from "../turn/book-turn-rows";
+import { splitAssembled, type BookOrigin } from "../turn/durable-book";
+import { readingDurable, setBookWatching } from "../turn/durable-runtime";
+import { boxUnseenTurn, setOpenCallPeek, watching } from "../turn/turn-box";
 import { arrivedMessage, createOwnAppends } from "../turn/thread-arrivals";
 import { deferHangup } from "./hangup";
 import { threadHome, type ThreadOwner } from "./documents";
@@ -75,6 +63,17 @@ import {
 
 // A ref the shell owns and this hook only reads.
 type HostRef<T> = { readonly current: T };
+
+// A line into a running durable turn. It stays among the entry's unsent lines
+// until a run takes it; one no run takes is filed when the turn ends.
+function steerIn<M extends CallRow>(live: LiveTurn<M>, row: M): void {
+  void live.durable?.steer(row.text, row.ts).then(
+    (taken) => {
+      if (taken) live.unsent = (live.unsent ?? []).filter((u) => u !== row);
+    },
+    () => {},
+  );
+}
 
 // What the composer renders with no call open. A constant, so hanging up twice
 // does not hand React a second empty array.
@@ -314,6 +313,15 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     () => setOpenCallPeek(() => ({ open: callRef.current, bookId: bookIdRef.current })),
     [bookIdRef],
   );
+  // The same question for the durable runtime's lander, which puts up a card
+  // only for an answer nobody watched land (reading/turn/durable-book.ts).
+  useEffect(
+    () =>
+      setBookWatching((origin) =>
+        watching(callRef.current, bookIdRef.current, { threadId: origin.threadId, bookId: origin.bookId }),
+      ),
+    [bookIdRef],
+  );
 
   // Every message this hook writes to a thread file carries an id it minted, so
   // the channel below can tell its own appends from everyone else's.
@@ -482,165 +490,79 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     })();
   }, []);
 
-  // The reader's lines the model was never handed (docs/72): the turn ended —
-  // stopped, failed, or answered — with some of the queue still in it. They are
-  // not thrown away: each goes into the thread file at the moment it was said,
-  // under whatever the turn left there, and its queued mark comes off. Whether
-  // a turn is then started on them is the caller's call.
-  const flushSteering = useCallback(
-    (threadId: string, home: string, steering: Steering | undefined): boolean => {
-      const left = steering?.outstanding() ?? [];
-      for (const line of left) {
+  // The reader's lines that no run took (docs/72): the turn ended — stopped,
+  // failed, answered, or cut by the stall watch — with them still waiting.
+  // Each goes into the thread file at the moment it was said, and its queued
+  // mark comes off. Whether a turn is then started on them is the caller's call.
+  const fileLines = useCallback(
+    (threadId: string, home: string, lines: readonly { text: string; ts: number }[]): boolean => {
+      for (const line of lines) {
         appendOwn(home, threadId, { role: "user", text: line.text, ts: line.ts });
         dispatch({ type: "row-delivered", threadId, ts: line.ts });
       }
-      return left.length > 0;
+      return lines.length > 0;
     },
     [appendOwn],
   );
 
-  // runTurn calls itself: a turn that answered before the model was handed
-  // what the reader said next opens the turn that answers it. Through a ref
+  // runTurn calls itself: lines the reader said that no run took open the
+  // turn that answers them, and a stalled turn is asked again. Through a ref
   // rather than the binding, which does not exist yet inside its own body.
   const runTurnRef = useRef<
     ((threadId: string, annotationId: string, home: string, attempt?: number) => void) | null
   >(null);
 
-  // Run one assistant turn for a thread: assemble the reading context, stream the
-  // reply into the bubble, persist on done. Stable (reads refs). No-ops when no
-  // provider is configured — the shell puts the Settings guidance where the
-  // conversation would be, so nothing reaches this anyway.
+  // Run one assistant turn for a thread on the durable runtime (docs/soul/87):
+  // assemble the reading context, start the turn, and draw every view of it
+  // as the turn's rows. What landed is written into the thread file by the
+  // runtime (reading/turn/durable-book.ts); this writes only the reader's lines
+  // no run took. Stable (reads refs). No-ops when no provider is configured —
+  // the shell puts the Settings guidance where the conversation would be.
   //
-  // The turn belongs to its thread, not to the view: closing the bubble leaves it
-  // running (docs/03) and every callback below writes through liveTurns, so the
-  // row survives a bubble that stopped re-rendering.
+  // The turn belongs to its thread, not to the view: closing the bubble leaves
+  // it running (docs/03), and its rows are kept on the liveTurns entry so a
+  // reopened conversation picks the stream back up.
   const runTurn = useCallback((threadId: string, annotationId: string, home: string, attempt = 0) => {
     const bookId = bookIdRef.current;
     const docId = docIdRef.current;
     const s = settingsRef.current;
-    if (!bookId || !docId || !s.defaultProviderId || !s.defaultModelId) return;
+    const providerId = s.defaultProviderId;
+    const modelId = s.defaultModelId;
+    if (!bookId || !docId || !providerId || !modelId) return;
     const liveTurns = liveTurnsRef.current;
     const controller = new AbortController();
 
-    // One change to the row, applied to both mirrors of it: the registry's copy,
-    // which goes on being written after the bubble is closed, and the one on
-    // screen, which is only there while the conversation is open.
-    const write = (change: RowChange, ts: number, error?: boolean) => {
-      liveTurns.patch(threadId, ts, (m) => applyRowChange(m, change));
-      dispatch({ type: "row-changed", threadId, ts, change, error });
-    };
-
-    // The row this turn is writing, and what of the turn is already in the
-    // thread file (reading/turn-row-split.ts). It moves when the reader speaks
-    // into the turn or a delegated run comes back into it (docs/72).
-    const rows = createRowSplit();
-    // Every row this turn opens is stamped after what the file already holds:
-    // the question it answers, and the lines said into it (rowTsAfter).
-    const rowTs = () => rowTsAfter(Date.now(), getThread(home, threadId)?.messages ?? []);
-
-    // Called by everything that puts something in the row, and by nothing that
-    // ends the turn: an ending writes into the row that is already there.
-    const writingRow = (): number => {
-      const at = rows.writing(rowTs);
-      if (at.split) {
-        const { was, origin, drop } = at.split;
-        const row = shapes.current.newRow({
-          role: "ai",
-          text: "",
-          ts: at.ts,
-          streaming: true,
-          ...(origin ? { origin } : {}),
-        });
-        liveTurns.openRow(threadId, controller, row);
-        dispatch({ type: "row-split", threadId, ts: was, row, ...(drop ? { drop } : {}) });
-        phase = null;
-      }
-      return at.ts;
-    };
-
-    // The phase the row was last told about. A thinking delta arrives by the
-    // hundred and says nothing the status line does not already say, so only a
-    // change of phase is written through; delta and tool-start carry their own
-    // phase (call-state.ts), so this only has to follow them.
-    let phase: TurnPhase | null = null;
-    const onThinking = (ts: number) => {
-      if (phase === "thinking") return;
-      phase = "thinking";
-      write({ kind: "phase", phase: "thinking" }, ts);
-    };
-
-    // The reader's lines into this turn. Each one is drawn the moment it is
-    // said and goes into the thread file when the model is handed it — with
-    // the row above it, so the file reads user / ai / user / ai in the order
-    // it all happened rather than every question before every answer.
-    const steering = createSteering((lines) => {
-      const message = liveTurns.get(threadId)?.message as { text: string; tools?: ToolStatus[] } | undefined;
-      // With what it did: the receipts of the rounds above the reader's line
-      // are part of that row, and a reopened thread would otherwise show its
-      // words without them. A receipt alone is something the row produced
-      // (keptOnStop), so it stays above the line.
-      const trace = persistedTrace(message?.tools ?? []);
-      const down = rows.steered((message?.text ?? "").trim(), trace !== null);
-      if (down) {
-        appendOwn(home, threadId, {
-          role: "ai",
-          ...down,
-          ...(trace ? { parts: [{ type: "trace" as const, tools: trace }] } : {}),
-        });
-      }
-      for (const line of lines) {
-        appendOwn(home, threadId, { role: "user", text: line.text, ts: line.ts });
-        dispatch({ type: "row-delivered", threadId, ts: line.ts });
-      }
+    // The reader's line this turn answers is the last one in the file, and
+    // every row the turn draws comes after it.
+    const stored = getThread(home, threadId)?.messages ?? [];
+    let said: ThreadMessage | undefined;
+    for (const m of stored) if (m.role === "user") said = m;
+    const after = said?.ts ?? 0;
+    // On screen until the runtime projects the turn's first row.
+    const placeholder = shapes.current.newRow({
+      role: "ai",
+      text: "",
+      ts: Math.max(Date.now(), ...stored.map((m) => m.ts + 1)),
+      streaming: true,
     });
+    // Rides the answering row on screen only: persisted, it would replay next
+    // turn as if the model had written it.
+    let notice = "";
 
-    // A run this conversation delegated, come back while the turn that asked
-    // for it is still running (docs/72). The model is handed it the way the
-    // reader's line is handed over, and nothing else about it is the same: the
-    // bell said nothing the reader can be shown, so no row is drawn for it and
-    // nothing goes into the thread file. What is left behind is the reply — a
-    // row of its own, marked with the run it answers.
-    const delivered = createDelivered((runId) => {
-      const message = liveTurns.get(threadId)?.message as { text: string; tools?: ToolStatus[] } | undefined;
-      const trace = persistedTrace(message?.tools ?? []);
-      const down = rows.delivered((message?.text ?? "").trim(), runId, trace !== null);
-      if (down) {
-        appendOwn(home, threadId, {
-          role: "ai",
-          ...down,
-          ...(trace ? { parts: [{ type: "trace" as const, tools: trace }] } : {}),
-        });
-      }
-      // Handed it before a word was written: the row already on screen is the
-      // answer, so it is marked now rather than only once the file is reopened.
-      if (rows.origin?.runId === runId) write({ kind: "origin", origin: rows.origin }, rows.ts);
-    });
-
-    // A quiet call is not named on screen, so the phase stays where it was
-    // (ai/turn-view/turn-rows.ts): the row goes on saying "Thinking…", or on writing.
-    const onToolStart = (info: AgentToolStart, ts: number) => {
-      phase = phaseOnToolStart(phase, info.quiet) ?? null;
-      write(
-        {
-          kind: "tool-start",
-          name: info.name,
-          label: info.label,
-          ...(info.quiet ? { quiet: true as const } : {}),
-        },
-        ts,
-      );
+    // The turn's rows as the runtime last projected them, then the reader's
+    // lines no run has taken yet. Mirrored on the registry entry, which goes
+    // on being written after the bubble is closed.
+    const withUnsent = (rows: M[], unsent: readonly M[]): M[] => [
+      ...rows,
+      ...unsent.filter((u) => !rows.some((r) => r.role === "user" && r.ts === u.ts)),
+    ];
+    const draw = (projected: M[]) => {
+      const live = liveTurns.get(threadId);
+      if (live?.controller !== controller) return;
+      const rows = withUnsent(projected.length > 0 ? projected : [placeholder], live.unsent ?? []);
+      live.rows = rows;
+      dispatch({ type: "turn-rows", threadId, after, rows });
     };
-    const onToolEnd = (info: AgentToolEnd, ts: number) =>
-      write(
-        {
-          kind: "tool-end",
-          name: info.name,
-          isError: info.isError,
-          ...(info.receipt ? { receipt: info.receipt } : {}),
-          ...(info.error ? { error: info.error } : {}),
-        },
-        ts,
-      );
 
     // The mark this conversation hangs off, and where a card pointing back at it
     // would land. Both read now rather than when the turn settles: the marks and
@@ -652,60 +574,116 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       annotationPage(ann as { position?: { pageIndex?: number } } | undefined) ??
       (typeof pageIndex === "number" ? pageIndex + 1 : null);
 
-    // A turn that landed with nobody looking at it becomes a card in the box,
-    // pointing back at the thread it was written into (docs/68). A watched one
-    // needs none — the reader read it as it arrived.
-    const reportUnseen = (outcome: TurnOutcome, ts: number) => {
-      if (watching(callRef.current, bookIdRef.current, { threadId, bookId })) return;
-      void boxUnseenTurn({ threadId, ts, bookId, annotationId, page, outcome });
-    };
-
     // A turn that ends without a reply. The row it leaves behind, whether a
     // toast goes up and whether Retry is offered all follow from which kind it
     // was (reading/turn.ts), so the refusal paths cannot pick up the error
-    // path's red banner or its "couldn't reach the model".
+    // path's red banner or its "couldn't reach the model". The failure is a row
+    // of its own under what the turn wrote.
     //
     // With the conversation closed there is no row to leave behind and no Retry
-    // to press: the toast carries the whole failure, for every kind. The turn is
-    // then gone — reopening the mark shows the thread as it was, and asking
-    // again is the way back.
-    const showFailure = (kind: TurnFailure, message: string, ts: number) => {
-      const live = liveTurns.settle(threadId, controller);
-      delivered.close();
-      if (controller.signal.aborted) return; // deleted thread / closed book, not a failure
+    // to press: the toast carries the whole failure, for every kind. A turn
+    // that failed unseen leaves nothing in the thread, so the card is its only
+    // trace; a refusal is the turn declining to be taken and gets none. An
+    // answer's card is the runtime's to put up (reading/turn/durable-book.ts).
+    const showFailure = (kind: TurnFailure, message: string, rows: M[], tail: M[]) => {
       const view = turnFailureView(kind, message);
       if (callRef.current?.threadId === threadId) {
         const inline = shapes.current.failureInline && callRef.current.view === "chat-main";
         if (view.toast && !inline) pushToast("error", view.toast);
-        write(
-          view.as === "notice"
-            ? { kind: "refusal", text: view.text }
-            : { kind: "error", text: view.text },
+        const ts = Math.max(placeholder.ts, ...rows.map((r) => r.ts + 1));
+        const failed = shapes.current.newRow({ role: "ai", text: "", ts });
+        dispatch({ type: "turn-rows", threadId, after, rows: [...rows, failed, ...tail] });
+        dispatch({
+          type: "row-changed",
+          threadId,
           ts,
-          view.retry,
-        );
+          change: view.as === "notice" ? { kind: "refusal", text: view.text } : { kind: "error", text: view.text },
+          error: view.retry,
+        });
       } else {
         const marked = annsRef.current.get(annotationId)?.text;
         pushToast("error", backgroundFailureToast(kind, typeof marked === "string" ? marked : ""));
       }
-      // A turn that failed unseen leaves nothing behind in the thread, so the
-      // card is its only trace — and one the reader has to decide about. A
-      // refusal is the turn declining to be taken, not a delivery gone missing;
-      // it gets no card.
-      if (kind === "error") reportUnseen({ kind: "error", message }, ts);
-      live?.onSettled?.();
-      // Anything the reader said into this turn was never handed to the model.
-      // It goes into the thread file where they said it and loses its mark; no
-      // turn is started on it, because the one that just failed is what Retry
-      // and asking again are for.
-      flushSteering(threadId, home, steering);
+      if (kind === "error" && !watching(callRef.current, bookIdRef.current, { threadId, bookId })) {
+        void boxUnseenTurn({ threadId, ts: placeholder.ts, bookId, annotationId, page, outcome: { kind: "error", message } });
+      }
     };
 
-    const ts = rowTs();
-    rows.start(ts);
-    const streamingRow = shapes.current.newRow({ role: "ai", text: "", ts, streaming: true });
-    liveTurns.start({ threadId, bookId, home, controller, message: streamingRow, steering, delivered, split: rows });
-    dispatch({ type: "turn-started", threadId, row: streamingRow });
+    // How the turn ended, drawn and filed. A thread deleted meanwhile has no
+    // entry left: nothing to show and nowhere to write.
+    const finish = (end: BookTurnEnd) => {
+      const live = liveTurns.settle(threadId, controller);
+      if (!live) return;
+      const unsent = live.unsent ?? [];
+      const withdrawn = end.kind === "stopped" || end.kind === "stalled" ? end.steers : [];
+      const steers = withdrawn.map((steer) => ({ text: steer.text, ts: steer.ts ?? Date.now() }));
+      // Everything the reader said that no run took, in the order it was said.
+      const owed = [...steers, ...unsent.filter((u) => !steers.some((steer) => steer.ts === u.ts))].sort(
+        (a, b) => a.ts - b.ts,
+      );
+      const lines = (list: readonly { text: string; ts: number }[]) =>
+        list.map((line) => shapes.current.newRow({ role: "user", text: line.text, ts: line.ts }));
+
+      if (end.kind === "stalled") {
+        // The stream went silent and the watch cut it (legion/execute/stall.ts):
+        // the app was switched away mid-answer and the connection did not
+        // survive being frozen. The run was superseded, so nothing landed; the
+        // half-written rows go, what the reader said goes into the file, and the
+        // question is asked again — once (docs/pitfall/390). A second stall is
+        // shown like any other failure.
+        const said = lines(owed);
+        dispatch({ type: "turn-rows", threadId, after, rows: said });
+        fileLines(threadId, home, owed);
+        live.onSettled?.();
+        const next = afterStall(attempt);
+        if (next.askAgain) runTurnRef.current?.(threadId, annotationId, home, attempt + 1);
+        else showFailure("error", next.message, said, []);
+        return;
+      }
+
+      const rows = end.rows.map((row) => shapes.current.newRow(row));
+      // The owed lines the last view did not carry go under the turn's rows.
+      const tail = lines(owed.filter((line) => !rows.some((r) => r.role === "user" && r.ts === line.ts)));
+      if (end.kind === "answered") {
+        let last = -1;
+        rows.forEach((row, i) => {
+          if (row.role === "ai") last = i;
+        });
+        if (notice && last >= 0) rows[last] = { ...rows[last]!, notice };
+        dispatch({ type: "turn-rows", threadId, after, rows: [...rows, ...tail] });
+        // read_chapter may have parked the conversation on a chapter while the
+        // turn ran (docs/09); the status row is how the reader finds out.
+        syncFocusChapter();
+        // A hangup that happened mid-answer waited for this (see captureHangup):
+        // distillation reads the thread file, which now holds the reply.
+        live.onSettled?.();
+        // The reader spoke and the turn finished before a run took it: what
+        // they said is still owed an answer, and it opens the next turn.
+        if (fileLines(threadId, home, owed)) runTurnRef.current?.(threadId, annotationId, home);
+        return;
+      }
+
+      // What a stopped or failed turn produced stays as finished rows; a row
+      // that produced nothing is not a row.
+      const kept = rows.filter((r) => r.role === "user" || r.text !== "" || (r.tools?.length ?? 0) > 0);
+      if (end.kind === "stopped") {
+        dispatch({ type: "turn-rows", threadId, after, rows: [...kept, ...tail] });
+        live.onSettled?.();
+        // Stopping cuts off the answer, not the reader: anything they said that
+        // no run took opens the next turn instead of going down with this one.
+        if (fileLines(threadId, home, owed)) runTurnRef.current?.(threadId, annotationId, home);
+        return;
+      }
+      if (end.kind === "failed") console.error("agent turn failed", end.message);
+      showFailure(end.kind === "refused" ? "refusal" : "error", end.message, kept, tail);
+      live.onSettled?.();
+      // Retry and asking again are for the turn that just failed, so nothing
+      // is started on what the reader said into it.
+      fileLines(threadId, home, owed);
+    };
+
+    liveTurns.start({ threadId, bookId, home, controller, message: placeholder, rows: [placeholder] });
+    dispatch({ type: "turn-started", threadId, row: placeholder });
 
     void (async () => {
       // Assemble the live reading context and topic-scoped tools (M6). The
@@ -735,9 +713,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         onSupplementGone: (hash) => shapes.current.onSupplementGone?.(hash),
         signal: controller.signal,
       });
-      if (!turn) {
-        liveTurns.settle(threadId, controller); // aborted while reading history
-        delivered.close();
+      if (!turn || controller.signal.aborted) {
+        liveTurns.settle(threadId, controller); // stopped or deleted while reading history
         return;
       }
       // The turn could not be assembled small enough to leave the model room to
@@ -746,132 +723,58 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       // reads as a one-word reply. No Retry offered — the same inputs assemble
       // the same call, so there is nothing for a second press to change.
       if (turn.refusal) {
-        showFailure("refusal", turn.refusal, rows.ts);
+        finish({ kind: "refused", rows: [], message: turn.refusal });
         return;
       }
-
-      void runAgentTurn({
-        providerId: s.defaultProviderId as ProviderId,
-        modelId: s.defaultModelId as string,
-        systemPrompt: turn.systemPrompt,
-        messages: turn.messages,
-        tools: turn.tools,
-        signal: controller.signal,
-        reasoning: toReasoning(s.chatThinking),
-        // Which prompt this turn was actually assembled with, not which mode the
-        // toggle is in: the two diverge while a book is still being extracted.
-        // One surface for every reading turn, whatever it was loaded with:
-        // "classroom" was a surface and retiring it would have broken the
-        // comparison with every line logged before today. How much of the book
-        // went in is the second axis (docs/09).
-        telemetry: { surface: "reading", inline: turn.inline, thread: threadId },
-        about: { bookId },
-        harness: soulHarness(),
-        // Where this turn's reply goes, if this process does not live to give
-        // it (src/soul/recover.ts).
-        ...(turn.origin ? { deliverTo: turn.origin } : {}),
-        onDelta: (chunk) => {
-          const at = writingRow();
-          phase = "writing";
-          write({ kind: "delta", chunk }, at);
-        },
-        // The thinking itself is dropped; only that it is happening is shown.
-        onThinking: () => onThinking(writingRow()),
-        onToolStart: (info) => onToolStart(info, writingRow()),
-        onToolEnd: (info) => onToolEnd(info, rows.ts),
-        onSteerable: (port) => {
-          steering.open(port);
-          delivered.open(port);
-        },
-        onSteered: (ids) => steering.injected(ids),
-        onDelivered: (ids) => delivered.injected(ids),
-        // Every round's words, not only the answering round's: a round that
-        // called a tool may have written a sentence first, and it has been on
-        // screen since (ai/turn-view/turn-rows.ts). A single-round turn is the same text
-        // either way.
-        onDone: (finalText, _assistant, turnText) => {
-          const live = liveTurns.settle(threadId, controller);
-          delivered.close();
-          if (controller.signal.aborted) return; // stopTurn already kept the partial
-          // A turn nobody spoke into is the whole reply, persisted here. One
-          // that was steered has already written the rows above the reader's
-          // last line into the file, so what is left is this row's own text —
-          // the answer to what they said. Nothing at all, when the model was
-          // handed their line and then stopped: the row above is already down.
-          const tail = rows.answerTail(turnText || finalText, live?.message.text ?? "");
-          if (tail !== null) {
-            // The notice rides the displayed row only. Persisting it would replay it
-            // next turn as if the model had written it, and it would then describe a
-            // turn whose assembly no longer applies.
-            write({ kind: "answer", text: tail, ...(turn.notice ? { notice: turn.notice } : {}) }, rows.ts);
-            // The settled trace goes to disk with the answer: what the turn did
-            // is part of the reply, and a reopened thread that shows the words
-            // without them is a thread that says the answer came from nowhere.
-            const trace = persistedTrace(
-              (live?.message as { tools?: ToolStatus[] } | undefined)?.tools ?? [],
-            );
-            appendOwn(home, threadId, {
-              role: "ai",
-              text: tail,
-              ts: rows.ts,
-              ...(rows.origin ? { origin: rows.origin } : {}),
-              ...(trace ? { parts: [{ type: "trace" as const, tools: trace }] } : {}),
-            });
-          } else {
-            write({ kind: "handed-over" }, rows.ts);
-          }
-          // read_chapter may have parked the conversation on a chapter while the
-          // turn ran (docs/09); the status row is how the reader finds out.
-          syncFocusChapter();
-          // Nobody was looking: the answer is in the thread file and the card in
-          // the corner is how the reader finds out it is there (docs/68).
-          reportUnseen({ kind: "answer", text: tail ?? "" }, rows.ts);
-          // A hangup that happened mid-answer waited for this (see captureHangup):
-          // distillation reads the thread file, which only now holds the reply.
-          live?.onSettled?.();
-          // The reader spoke and the model finished before the queue drained:
-          // what they said is still owed an answer, and it opens the next turn.
-          if (flushSteering(threadId, home, steering)) {
-            runTurnRef.current?.(threadId, annotationId, home);
-          }
-        },
-        onError: (message: string, _assistant?: unknown, thrown?: unknown) => {
-          // The stream went silent and the watch cut it (legion/execute/stall.ts)
-          // — the app was switched away mid-answer and the connection did not
-          // survive being frozen. Nothing is shown for it: the question is in
-          // the thread file, so the turn is simply asked again, and what the
-          // reader gets is a reply that arrived late.
-          //
-          // Asked again rather than resumed, and the half-written row thrown
-          // away with it. pi will keep an interrupted run open for its own
-          // retry, but only for a failure its classifier calls retryable, and
-          // that classifier reads provider wording (execute/watchdog.ts) — a
-          // stall reaches it as an abort with no verdict attached. A second
-          // ask costs the turn's tool rounds over again and answers the whole
-          // question; a resume would cost nothing and answer half of it
-          // (docs/pitfall/390).
-          //
-          // Once. A second stall is a failure like any other, and the reader is
-          // shown it rather than left watching the same turn go around.
-          if (isStall(thrown) && attempt === 0 && !controller.signal.aborted) {
-            const dead = liveTurns.settle(threadId, controller);
-            delivered.close();
-            dispatch({ type: "row-dropped", threadId, ts: rows.ts });
-            // Anything said into the dead turn goes into the file first, so the
-            // turn that follows is assembled with it and answers it too.
-            flushSteering(threadId, home, steering);
-            dead?.onSettled?.();
-            runTurnRef.current?.(threadId, annotationId, home, attempt + 1);
-            return;
-          }
-          if (!controller.signal.aborted) console.error("agent turn failed", message);
-          showFailure("error", message, rows.ts);
-        },
-        // The loop gave up mid-turn: the call outgrew the window, or it spent the
-        // round cap fetching without answering. Shown like the refusal above,
-        // because that is what it is.
-        onRefusal: (message: string) => showFailure("refusal", message, rows.ts),
-      });
+      notice = turn.notice;
+      try {
+        const durable = await readingDurable();
+        if (!durable) throw new Error("the turn runtime has not started");
+        const { history, line } = splitAssembled(turn.messages);
+        // The page window's images ride the reader's line (reading/turn.ts).
+        const content = line?.role === "user" && typeof line.content !== "string" ? line.content : undefined;
+        const byName = new Map(turn.tools.map((tool) => [tool.name, tool]));
+        const thinkingLevel = toReasoning(s.chatThinking);
+        const origin: BookOrigin = {
+          ...(turn.origin?.place === "book"
+            ? turn.origin
+            : { place: "book" as const, bookId, threadId, ...(annotationId ? { annotationId } : {}) }),
+          home,
+        };
+        const driven = await driveBookTurn(
+          durable,
+          {
+            origin,
+            line: { text: said?.text ?? "", ts: after, ...(content ? { content } : {}) },
+            systemPrompt: turn.systemPrompt,
+            history,
+            tools: turn.tools,
+            model: { provider: providerId, modelId },
+            ...(thinkingLevel ? { thinkingLevel } : {}),
+            describe: (name, args) => {
+              const tool = byName.get(name);
+              if (!tool) return { label: name };
+              return {
+                label: toolLabel(tool, args as Record<string, unknown>),
+                ...(tool.quiet ? { quiet: true as const } : {}),
+              };
+            },
+          },
+          (rows) => draw(rows.map((row) => shapes.current.newRow(row))),
+        );
+        const live = liveTurns.get(threadId);
+        if (live?.controller !== controller) {
+          // Stopped, or the thread deleted, while the turn was starting.
+          driven.stop();
+        } else {
+          live.durable = { steer: driven.steer, stop: driven.stop };
+          // Lines said while the turn was being assembled go in now.
+          for (const row of live.unsent ?? []) steerIn(live, row);
+        }
+        finish(await driven.ended);
+      } catch (e) {
+        finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) });
+      }
     })();
   }, [
     annsRef,
@@ -884,7 +787,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     currentFulltextRef,
     distillAnnotations,
     pipelineRef,
-    flushSteering,
+    fileLines,
     pushToast,
     settingsRef,
     syncFocusChapter,
@@ -1106,29 +1009,29 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       if (!trimmed && images.length === 0) return;
       // A turn is already running on this thread, so this is not a second turn
       // but a line into the one in flight (docs/72): it is drawn under the
-      // reply being written, marked as waiting, and goes into the thread file
-      // when the model is actually handed it — at the end of the round, one
-      // round at most. Nothing is aborted and nothing is rewound.
+      // reply being written, marked as waiting, and the runtime hands it to the
+      // model at the end of the round. Nothing is aborted and nothing is
+      // rewound.
       //
       // Images do not ride a steer (the queue carries text), so they stay
       // staged for the next ordinary send rather than being dropped, and a
       // send that is only images is not one this can carry.
       const live = liveTurnsRef.current.get(c.threadId);
-      if (live?.steering) {
+      if (live) {
         if (!trimmed) return;
         const at = Math.max(Date.now(), steerTsRef.current + 1);
         steerTsRef.current = at;
         // A turn this session did not start writes its own rows into the thread
         // file and they arrive here from outside the view (reading/deliver.ts).
         // Drawing one now would leave a second copy of the line on screen.
-        if (!live.silent) {
-          dispatch({
-            type: "row-appended",
-            threadId: c.threadId,
-            row: shapes.current.newRow({ role: "user", text: trimmed, ts: at, queued: true }),
-          });
+        if (live.silent) {
+          live.steering?.say(at, trimmed);
+          return;
         }
-        live.steering.say(at, trimmed);
+        const row = shapes.current.newRow({ role: "user", text: trimmed, ts: at, queued: true });
+        live.unsent = [...(live.unsent ?? []), row];
+        dispatch({ type: "row-appended", threadId: c.threadId, row });
+        steerIn(live, row);
         return;
       }
       // Both before the await below, because both are what the reader just did:
@@ -1184,55 +1087,33 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     if (c && home) runTurn(c.threadId, c.annotationId, home);
   }, [homeOf, runTurn]);
 
-  // Keep what a cut-short turn produced: the abort silences the agent (no
-  // onDone/onError follows), so persisting it here is the only way it survives.
-  // The half sentence and every call that settled, receipts included, with the
-  // trace onDone would have stored (ai/turn-view/turn-rows.ts: keptOnStop).
-  // Neither: nothing to keep, and null back.
-  const keepPartial = useCallback((live: LiveTurn<M>) => {
-    const kept = keptOnStop(live.message as { text: string; tools?: ToolStatus[] });
-    // Handed over with nothing written since: the row is in the file already.
-    if (kept && !live.split?.down) {
-      const { ts, origin } = live.message;
-      appendOwn(live.home, live.threadId, {
-        role: "ai",
-        text: kept.text,
-        ts,
-        ...(origin ? { origin } : {}),
-        ...(kept.trace ? { parts: [{ type: "trace" as const, tools: kept.trace }] } : {}),
-      });
-    }
-    live.onSettled?.();
-    return kept;
-  }, []);
-
-  // The stop button: end the open thread's turn, keeping the half sentence.
+  // The stop button: end the open thread's turn. The runtime keeps the half
+  // sentence and the receipts and lands them; how the turn ended is drawn by
+  // runTurn when it settles.
   const stop = useCallback(() => {
     const c = callRef.current;
     if (!c) return;
-    const live = liveTurnsRef.current.stop(c.threadId);
+    const live = liveTurnsRef.current.get(c.threadId);
     if (!live) return;
+    if (live.durable) {
+      live.durable.stop();
+      return;
+    }
+    liveTurnsRef.current.stop(c.threadId);
     // A turn started elsewhere and answered into this conversation (a bell:
     // soul/bell.ts): the abort above is the whole of stopping it. It drew no
-    // row here to keep half of, and what the reader said into it is its own
-    // holder's to put back (reading/deliver.ts).
+    // row here, and what the reader said into it is its own holder's to put
+    // back (reading/deliver.ts).
     if (live.silent) return;
-    const { ts } = live.message;
-    const kept = keepPartial(live);
-    // What it produced stays as a finished row; a turn that produced nothing
-    // leaves no row behind at all.
-    dispatch(
-      kept
-        ? { type: "row-changed", threadId: c.threadId, ts, change: { kind: "stopped", text: kept.text } }
-        : { type: "row-dropped", threadId: c.threadId, ts },
-    );
-    // Stopping cuts off the answer, not the reader: anything they said that
-    // the model was never handed opens the next turn instead of going down
-    // with this one (docs/72).
-    if (flushSteering(live.threadId, live.home, live.steering)) {
+    // Still being assembled: nothing was asked, so nothing is kept.
+    dispatch({ type: "row-dropped", threadId: c.threadId, ts: live.message.ts });
+    live.onSettled?.();
+    // Stopping cuts off the answer, not the reader: anything they said opens
+    // the next turn instead of going down with this one (docs/72).
+    if (fileLines(live.threadId, live.home, live.unsent ?? [])) {
       runTurnRef.current?.(live.threadId, c.annotationId, live.home);
     }
-  }, [flushSteering, keepPartial]);
+  }, [fileLines]);
 
   // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
   // kick the silent observation distillation over its persisted transcript. Reads
@@ -1383,7 +1264,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       for (const id of gone) {
         // The one close that does stop the turn: the conversation it would land
         // in is being thrown away.
-        liveTurnsRef.current.stop(id);
+        liveTurnsRef.current.stop(id)?.durable?.stop();
         // Nothing is left to send them to, and nothing left to report about
         // them: a remembered question would otherwise leave a chip pointing at a
         // conversation that has just gone.

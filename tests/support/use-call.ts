@@ -9,7 +9,13 @@
 // Each file overrides the one or two fields it is about (the marks it drew, a
 // removeMark that records, the card channel) and leaves the rest alone.
 
+import { spyOn } from "bun:test";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
+import * as bookTurnRows from "../../src/reading/turn/book-turn-rows";
+import type { BookTurnEnd } from "../../src/reading/turn/book-turn-rows";
+import * as durableRuntime from "../../src/reading/turn/durable-runtime";
+import type { ReadingDurable } from "../../src/reading/turn/durable-runtime";
+import type { BookTurnRequest } from "../../src/reading/turn/durable-turn";
 import type { CallRow } from "../../src/reading/turn/call-state";
 import type { StagedImage } from "../../src/reading/turn/pending-images";
 import type { Thread, ThreadMessage } from "../../src/platform/app/threads";
@@ -77,5 +83,58 @@ export function emptyReadingTurn() {
     messages: [],
     notice: "",
     refusal: "",
+  };
+}
+
+// One book turn on the durable runtime as the session sees it
+// (reading/turn/book-turn-rows.ts): every view arrives as the rows after the
+// reader's line, and the turn ends one way or another. The runtime itself —
+// its projection, steers and landing — is tested on its own
+// (tests/reading/turn/durable-*.test.ts); here it is a stand-in the test drives.
+export interface FakeBookTurn {
+  request: Omit<BookTurnRequest, "onView">;
+  /** A view of the turn arrives. */
+  view(rows: CallRow[]): void;
+  /** The turn settles. */
+  end(end: BookTurnEnd): void;
+  /** The lines steered into it, in order. */
+  steered: { text: string; ts: number }[];
+  /** What a steer answers: whether a run is there to take the line. */
+  taking: boolean;
+  stops: number;
+}
+
+/** Stand in for the durable runtime and the book turn it drives. Restore the spies after. */
+export function fakeBookTurns() {
+  const turns: FakeBookTurn[] = [];
+  const spies = [
+    spyOn(durableRuntime, "readingDurable").mockImplementation(() => Promise.resolve({} as ReadingDurable)),
+    spyOn(bookTurnRows, "driveBookTurn").mockImplementation(async (_durable, request, onRows) => {
+      let settle!: (end: BookTurnEnd) => void;
+      const ended = new Promise<BookTurnEnd>((resolve) => (settle = resolve));
+      const turn: FakeBookTurn = {
+        request,
+        view: (rows) => onRows(rows),
+        end: (end) => settle(end),
+        steered: [],
+        taking: true,
+        stops: 0,
+      };
+      turns.push(turn);
+      return {
+        steer: async (text: string, ts: number) => {
+          turn.steered.push({ text, ts });
+          return turn.taking;
+        },
+        stop: () => void (turn.stops += 1),
+        ended,
+      };
+    }),
+  ];
+  return {
+    turns,
+    last: (): FakeBookTurn => turns[turns.length - 1]!,
+    spies,
+    restore: () => spies.forEach((s) => s.mockRestore()),
   };
 }

@@ -18,7 +18,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
 import { resetReadingTurns } from "../../../src/reading/turn/live-turns";
-import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
 import * as threads from "../../../src/platform/app/threads";
@@ -28,6 +27,7 @@ import type { StagedImage } from "../../../src/reading/turn/pending-images";
 import type { Annotation } from "../../../src/platform/app/reader-contract";
 import { useDom } from "../../support/dom";
 import {
+  fakeBookTurns,
   callHost,
   callThread as thread,
   emptyReadingTurn,
@@ -50,7 +50,7 @@ function fakeWorld() {
     spyOn(observation, "distillThread").mockImplementation(async () => {}),
     spyOn(threads, "getThread").mockImplementation(() => undefined),
     spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn()),
-    spyOn(agent, "runAgentTurn").mockImplementation(() => new Promise<void>(() => {})),
+    ...fakeBookTurns().spies,
   ];
   return { restore: () => spies.forEach((s) => s.mockRestore()) };
 }
