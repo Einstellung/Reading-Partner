@@ -64,12 +64,14 @@ test("the rows stream, a steer is queued then answered below, and the screen's s
   expect(result?.status).toBe("done");
   expect(views.some((v) => v.rows.some((r) => r.role === "user" && r.queued && r.ts === 5000))).toBe(true);
   const landed = messages.slice(1).map((m) => [m.role, m.ts]);
-  // The answer to a steer injected after the last text round is missing: see the handoff (docs/research/pi-durable-迁移交接.md).
-  expect(landed.slice(0, 2)).toEqual([
+  // The steer was taken at the final boundary, so its answer ran as the next run (docs/pitfall/519).
+  expect(landed).toEqual([
     ["ai", 1001],
     ["user", 5000],
+    ["ai", 5001],
   ]);
+  expect(messages[3]?.text).toBe("Shorter: the moon.");
   const last = views[views.length - 1]!;
-  expect(last.rows.slice(0, 2).map((r) => [r.role, r.ts])).toEqual(landed.slice(0, 2));
+  expect(last.rows.map((r) => [r.role, r.ts])).toEqual(landed);
   await durable.runtime.close(ctx);
 });

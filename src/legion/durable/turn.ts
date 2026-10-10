@@ -20,6 +20,7 @@ import {
   type ModelRef,
   type Storage,
   type SubmissionId,
+  type SubmissionRecord,
   type TaskId,
   type ToolRegistration,
 } from "@earendil-works/pi-durable";
@@ -139,20 +140,27 @@ export function projectRun(entries: readonly EntryRecord[], from: EntryId, optio
   return rows.filter((row) => row.role === "user" || row.text !== "" || row.tools.length > 0);
 }
 
+function steerTs(records: readonly SubmissionRecord[]): Map<EntryId, number> {
+  const out = new Map<EntryId, number>();
+  for (const record of records) {
+    if (record.entry === undefined || !record.requestId?.startsWith(STEER_REQUEST_PREFIX)) continue;
+    const ts = Number(record.requestId.slice(STEER_REQUEST_PREFIX.length));
+    if (Number.isFinite(ts)) out.set(record.entry, ts);
+  }
+  return out;
+}
+
+async function recentSubmissions(storage: Storage, conversationId: ConversationId, context: Context) {
+  return (await storage.scanSubmissions({ conversationId, order: "descending" }, 200, undefined, context)).items;
+}
+
 /** Entry id to the reader's row timestamp, from the steer submissions' request ids. */
 export async function steerTimestamps(
   storage: Storage,
   conversationId: ConversationId,
   context: Context,
 ): Promise<Map<EntryId, number>> {
-  const page = await storage.scanSubmissions({ conversationId, order: "descending" }, 200, undefined, context);
-  const out = new Map<EntryId, number>();
-  for (const record of page.items) {
-    if (record.entry === undefined || !record.requestId?.startsWith(STEER_REQUEST_PREFIX)) continue;
-    const ts = Number(record.requestId.slice(STEER_REQUEST_PREFIX.length));
-    if (Number.isFinite(ts)) out.set(record.entry, ts);
-  }
-  return out;
+  return steerTs(await recentSubmissions(storage, conversationId, context));
 }
 
 export interface LandDeps {
@@ -163,29 +171,44 @@ export interface LandDeps {
 
 export function createLandStep(deps: LandDeps): LandStep {
   return async (task, runtime, record, context) => {
-    if (record.type !== "input" || (record.status !== "done" && record.status !== "unanswered")) return false;
+    if (record.type !== "input" || (record.status !== "done" && record.status !== "unanswered")) {
+      return { status: record.status, landed: false };
+    }
+    const recent = await recentSubmissions(deps.storage(), task.conversationId, context);
+    // The turn's runs: its own, then one per steer the final boundary took
+    // (docs/pitfall/519). The last one says how the turn ended.
+    const runs = recent
+      .filter(
+        (r) =>
+          r.id === record.id ||
+          (r.id > record.id && r.entry !== undefined && r.requestId?.startsWith(STEER_REQUEST_PREFIX) === true),
+      )
+      .sort((x, y) => x.id - y.id);
+    const last = runs[runs.length - 1] ?? record;
+    const status = last.status === "done" || last.status === "unanswered" ? last.status : record.status;
+    const ids = new Set(runs.map((r) => String(r.id)));
     const recovery = await runtime.snapshot(RecoveryDoc, task.conversationId, context);
-    if (recovery?.submissions[String(record.id)]?.superseded) return false;
+    if ([...ids].some((id) => recovery?.submissions[id]?.superseded)) return { status, landed: false };
     const refusal = deps.takeRefusal(task.conversationId);
     let rows: LandedRow[] = [];
     if (record.entry !== undefined) {
       const view = await runtime.context(task.conversationId, context);
       const partial = await runtime.snapshot(PartialDoc, task.conversationId, context);
-      const steerTs = await steerTimestamps(deps.storage(), task.conversationId, context);
+      const half = status === "unanswered" && partial && ids.has(String(partial.submission)) ? partial.text : "";
       rows = projectRun(view.entries, record.entry, {
         startedAt: task.input.startedAt,
-        steerTs,
-        ...(record.status === "unanswered" && partial?.submission === record.id ? { partial: partial.text } : {}),
+        steerTs: steerTs(recent),
+        ...(half ? { partial: half } : {}),
       });
     }
-    if (rows.length === 0 && refusal === undefined) return false;
+    if (rows.length === 0 && refusal === undefined) return { status, landed: false };
     const origin = (await runtime.snapshot(ThreadDoc, task.conversationId, context))?.origin;
-    if (!origin) return false;
+    if (!origin) return { status, landed: false };
     const lander = deps.landers[origin.place];
     if (!lander) throw new Error(`no lander for place "${origin.place}"`);
-    const turn: LandedTurn = { conversationId: task.conversationId, status: record.status, rows };
+    const turn: LandedTurn = { conversationId: task.conversationId, status, rows };
     await lander(origin, refusal === undefined ? turn : { ...turn, refusal }, context);
-    return true;
+    return { status, landed: true };
   };
 }
 

@@ -16,7 +16,6 @@ import {
   defineTask,
   GenerationTask,
   hook,
-  LiveDoc,
   section,
   type ConversationId,
   type Extension,
@@ -112,13 +111,17 @@ export type TurnInput = { content: string; startedAt: number };
 export type TurnCheckpoint = { phase: "submit" } | { phase: "wait" } | { phase: "land" };
 export type TurnResult = { status: SubmissionRecord["status"]; landed: boolean };
 
-/** The landing step of `rp.turn`, implemented in turn.ts; true when something was written. */
+/**
+ * The landing step of `rp.turn`, implemented in turn.ts. `record` is the
+ * turn's own submission; the result's `status` is how the turn's last run
+ * ended, `landed` whether something was written.
+ */
 export type LandStep = (
   task: { id: number; conversationId: ConversationId; input: TurnInput },
   runtime: TaskRuntime<TurnInput, TurnCheckpoint, TurnResult, object>,
   record: SubmissionRecord,
   context: Context,
-) => Promise<boolean>;
+) => Promise<TurnResult>;
 
 export interface ExtensionDeps {
   sectionKeys: readonly string[];
@@ -149,10 +152,6 @@ function textOf(message: Message): string {
   return content.map((part: { type?: string; text?: string }) => (part.type === "text" ? (part.text ?? "") : "")).join("");
 }
 
-async function runKey(api: HookApi, context: Context): Promise<string> {
-  const live = await api.snapshot(LiveDoc, api.conversationId, context);
-  return `${api.conversationId}:${live?.run?.inputs[0] ?? "none"}`;
-}
 
 /** Hold the request until the abort `refuse` asked for cancels this context. */
 function refused(deps: ExtensionDeps, api: HookApi, message: string, context: Context): Promise<never> {
@@ -163,15 +162,16 @@ function refused(deps: ExtensionDeps, api: HookApi, message: string, context: Co
 export interface DurableExtension {
   extension: Extension;
   turnTask: Task<TurnInput, TurnCheckpoint, TurnResult, object>;
-  /** Forget the stubs of a conversation's runs; called when its turn settles. */
+  /** Forget the stubs of a conversation's turn; called when it settles. */
   forgetStubs(conversationId: ConversationId): void;
 }
 
 export function durableExtension(deps: ExtensionDeps): DurableExtension {
-  // Stubbed tool results of a run, by conversation and the run's first input,
-  // so a result stubbed in one round stays a stub in the next. In memory only:
-  // a restarted process measures again from the start.
-  const stubsByRun = new Map<string, Map<string, Message>>();
+  // Stubbed tool results of the conversation's turn, so a result stubbed in
+  // one round stays a stub in the next, including the runs a steer started
+  // (docs/pitfall/519). Forgotten when the turn settles. In memory only: a
+  // restarted process measures again from the start.
+  const stubsByTurn = new Map<ConversationId, Map<string, Message>>();
 
   const turn = defineTask<TurnInput, TurnCheckpoint, TurnResult>({
     name: "rp.turn",
@@ -188,24 +188,26 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
         const handle = (await runtime.conversation(task.conversationId, context))!;
         const request = { type: "input", content: task.input.content, requestId: turnRequestId(task.id) } as const;
         await (await handle.submit(request, context)).wait(context);
+        // A steer taken at the final boundary starts the next run, and the
+        // submission above settles with the run before it (docs/pitfall/519).
+        // That run answers the steer within this turn; wait for every such run
+        // (`waitForIdle` leaves out background tasks, so not this one).
+        await handle.waitForIdle(context);
         await runtime.commit(() => ({ status: "running", checkpoint: { phase: "land" } }), context);
       },
       land: async (task, runtime, context) => {
         const handle = (await runtime.conversation(task.conversationId, context))!;
         const request = { type: "input", content: task.input.content, requestId: turnRequestId(task.id) } as const;
         const record = await (await handle.submit(request, context)).status(context);
-        let landed = (await runtime.memo<boolean>("landed", context)) ?? false;
-        if (!landed) {
+        let result = await runtime.memo<TurnResult>("landing", context);
+        if (!result) {
           // The file first, then the memo: killed in between, the rerun's
           // writes are skipped by timestamp.
-          landed = await deps.land(task, runtime, record, context);
-          await runtime.memo("landed", landed, context);
+          result = await runtime.memo("landing", await deps.land(task, runtime, record, context), context);
         }
-        await runtime.commit(
-          () => ({ status: "terminal", outcome: { status: "completed", result: { status: record.status, landed } } }),
-          context,
-        );
-        deps.settled?.(task.conversationId, { status: record.status, landed });
+        const settled = result;
+        await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: settled } }), context);
+        deps.settled?.(task.conversationId, settled);
       },
     },
     abort: async (_task, runtime, context) => {
@@ -229,11 +231,10 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
     const origin = (await api.snapshot(ThreadDoc, api.conversationId, context))?.origin;
     if (!desk || !origin) return undefined;
     const system = request.messages.filter((m) => m.role === "system");
-    const key = await runKey(api, context);
-    const stubs = stubsByRun.get(key) ?? new Map<string, Message>();
-    stubsByRun.set(key, stubs);
+    const stubs = stubsByTurn.get(api.conversationId) ?? new Map<string, Message>();
+    stubsByTurn.set(api.conversationId, stubs);
     // Every turn starts from a reset, so what the request holds besides the
-    // system entries is this run: the reader's line, the rounds, the steers.
+    // system entries is this turn: the reader's line, the rounds, the steers.
     const run = request.messages
       .filter((m) => m.role !== "system")
       .map((m) => (m.role === "toolResult" ? (stubs.get(m.toolCallId) ?? m) : m));
@@ -278,7 +279,7 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
     tasks: [turn],
   });
   const forgetStubs = (conversationId: ConversationId) => {
-    for (const key of stubsByRun.keys()) if (key.startsWith(`${conversationId}:`)) stubsByRun.delete(key);
+    stubsByTurn.delete(conversationId);
   };
   return { extension, turnTask: turn, forgetStubs };
 }
