@@ -176,6 +176,15 @@ export function mergeTurnRows<M extends CallRow>(prev: readonly M[], next: reado
   });
 }
 
+// The rows after the reader's line at `after` replaced by a turn's rows, the
+// ones that did not change kept as they were. The `turn-rows` action, for a
+// surface that holds its rows without this reducer (the phone lesson).
+export function withTurnRows<M extends CallRow>(messages: readonly M[], after: number, rows: readonly M[]): M[] {
+  const before = messages.filter((m) => m.ts <= after);
+  const turn = messages.filter((m) => m.ts > after);
+  return [...before, ...mergeTurnRows(turn, rows)];
+}
+
 export function callReducer<M extends CallRow>(
   state: CallState<M> | null,
   action: CallAction<M>,
@@ -263,11 +272,8 @@ export function callReducer<M extends CallRow>(
         ...state,
         messages: state.messages.filter((m) => !(m.ts === action.ts && m.role === "ai")),
       };
-    case "turn-rows": {
-      const before = state.messages.filter((m) => m.ts <= action.after);
-      const turn = state.messages.filter((m) => m.ts > action.after);
-      return { ...state, messages: [...before, ...mergeTurnRows(turn, action.rows)] };
-    }
+    case "turn-rows":
+      return { ...state, messages: withTurnRows(state.messages, action.after, action.rows) };
   }
 }
 

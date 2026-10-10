@@ -1,8 +1,9 @@
 // One AI turn streaming into a conversation: the rows it writes, the controller
 // that stops it, and the callbacks runAgentTurn hands the surface back.
 //
-// Every chat surface but the reading call streams through this: the coach
-// (rehearsal), the retell, the phone lesson and the info companion. What
+// Every chat surface but the book's streams through this: the coach
+// (rehearsal), the retell and the info companion. The reading call and the
+// phone lesson run on the durable runtime (reading/turn/book-turn-rows.ts). What
 // differs between them is only what the turn is made of and what happens once
 // it settles, so that is what stays at the call sites. What a turn does to its
 // row is applyRowChange (ai/turn-view/turn-rows.ts), the reducer the reading call runs

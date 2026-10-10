@@ -45,7 +45,7 @@ export default function PhoneLessonScreen(props: {
   const aside = useLessonAside(props.bookId, call.threadId);
 
   // Stepping out stops the lesson's turn first. The half sentence is kept, on
-  // screen and on disk (chat/useStreamingTurn.ts: stop), because a reply left
+  // screen and on disk (use-lesson-call.ts: stop), because a reply left
   // streaming into a conversation nobody is looking at would land in the middle
   // of the receipt the way back is about to write.
   const { ask } = aside;
