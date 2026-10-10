@@ -37,7 +37,7 @@
 
 全部有自动化测试，faux provider，杀进程用真 SIGKILL：
 
-- (a) 流式回答写到 200 多字时杀掉，重开后 `pi.live` 里是杀前最后一次提交的半句（最多丢 100ms）；`resume()` 后 run 跑完、submission `done`。但重问是全新请求，半句不带上去，最后 transcript 里只有重问的回答，半句挂在 `pi.live` 里直到被换掉（坑 511）。
+- (a) 流式回答写到 200 多字时杀掉，重开后 `pi.live` 里是杀前最后一次提交的半句（最多丢 100ms）；`resume()` 后 run 跑完、submission `done`。但重问是全新请求，半句不带上去；结算后半句以 `stopReason: "aborted"` 的 `pi.assistant` 留在 transcript 里、排在重问回答前面（坑 511，初版写的「只有重问的回答」是错的）。
 - (b) 不可重放的 `note` 执行中被杀，重开后不再调用它，模型收到 `isError` 的工具结果 `<harness>\n[error] Tool note was interrupted and may have partially run\n</harness>`，据此回答，run `done`。可重放的 `lookup` 同样场景会重跑一次再交给模型。
 - (c) 工具执行中 `submit({ whenBusy: "steer" })`，下一次请求的消息序列是 `system, user, assistant, toolResult, user(steer)`，transcript 顺序同此，两个 submission 都 `done`。
 - (d) 同一 harness 两个 ownerless 对话同时提交，两边的 `pi.live` 有同时在流的时刻，各自回答正确。并行是 harness 内建的，不需要 lane。
@@ -95,6 +95,30 @@ breakage inventory（分支上的 `Breakage inventory` 提交）：pi-agent-core
 
 阶段 1 和 2 不能长期并存：两套运行时会抢同一线程。建议阶段 1 先只换阅读回合，soul 继续跑 0.87.1，此时 pi-agent-core 留 0.87.1 + overrides（已验能和 pi-durable 共存），阶段 2 完成再升 1.1.0。
 
+## 8. SQLite 后端
+
+2026-10-10，分支 `spike/pi-durable-sqlite`（从 f274e6f3 起）。全部用 faux provider，没有调真模型。
+
+做法：SQLite 在 Rust 侧，`src-tauri/src/durable_sqlite.rs`，rusqlite 0.40.2（`bundled`，MIT；libsqlite3-sys MIT，SQLite 公有领域；锁文件里新增的 rsqlite-vfs、sqlite-wasm-rs 只在 wasm 目标上，MIT），7 个异步命令：`open`（AppData 相对路径，WAL、`synchronous = NORMAL`、busy_timeout 5 s、语句缓存 128）、`exec`、`run`、`get`、`all`、`close`（先 `wal_checkpoint(TRUNCATE)`）、`remove`（连 `-wal`、`-shm` 一起删）。前端门面 `src/platform/app/durable-sqlite.ts`：每个库一条串行队列，事务占住队列从 `BEGIN IMMEDIATE` 到 `COMMIT`/`ROLLBACK`，回滚失败抛另一个错误；超出安全整数的整数和 blob 打标签过 IPC。测试 `tests/platform/app/durable-sqlite.test.ts` 在 bun:sqlite 仿的宿主上跑 pi-durable 自带的存储一致性套件（`registerStorageConformance`，24 项全过）和事务语义；场景在 `src/legion/durable/sqlite-scenes.ts`，bun 下的测试 `tests/legion/durable/sqlite-scenes.test.ts`，app 里的入口 `sqlite-probe-main.ts`。
+
+app 里的数字来自真 Tauri app（WebKitGTK 2.52，私有 Xvfb 显示，换了 identifier 所以 AppData 独立，经真 IPC 到 rusqlite）。WebKitGTK 的 `performance.now()` 只到整毫秒（坑 515）。
+
+延迟：1440 字（4320 字节）的回答，faux 70 token/s，`partialIntervalMs` 100，每轮约 54 次提交，3 轮共 162 次。每次提交 p50 4 ms、p95 6 ms、max 14 ms，平均 10 次 IPC；单次 IPC（`SELECT 1`）均值 0.22 ms。不拖慢流式：MemoryStorage 基线整轮 5745 ms、`pi.live` 两次更新最大间隔 135 ms，SQLite 三轮 5753 到 5769 ms、最大间隔 129 到 130 ms。iOS 模拟器没跑。
+
+并发：同一 Harness 12 个对话同时提交，4 个调子 agent（子对话归工具任务所有）、4 个在 `lookup` 执行中被 steer、4 个直答。app 里 1329 ms 全部 `done`，没有卡住，4 个子对话，steer 的对话条目序列是 `user, assistant, tool-result, user(steer), assistant`；库 200 KB（记录本身 57.6 KB）。bun 下同场景 560 ms。
+
+跨对话协作：pi-durable 原生支持。A 的工具里 `api.conversation(B.id, context)` 拿到 B 的句柄，`submit({ type: "input", content, requestId: "ask:" + api.taskId })` 再 `wait()`，B 照常跑完一轮，A 的工具拿到 B 的回答交回模型。工具 API 只能读自己对话的条目，B 的回答按 `settled.answer`（EntryId）经 Harness 句柄读。app 里一来一回 143 ms。`requestId` 绑在工具任务上，工具重放时不会重复投递。
+
+增长：一问一答让记录增加约 5.2 KB（回答本身 4.3 KB），库文件长 1 页（4 KB）。部分提交不留痕迹：`document_revisions` 不随提交增长，三轮后还是 5 行 300 字节；对比 JSONL 一问一答落盘约为回答的 2.9 倍、打开要整份回放（坑 512），SQLite 按索引读，打开不随历史变慢。按这个速度，100 MB 的阈值约两万轮一问一答。
+
+换代：`waitForIdle()` 后 `inspect()` 没有活任务和未结算的 submission，`harness.close()` 会连带关掉 `SqliteDatabase`，删旧库、开新库、把对话文件里的历史写成一条 `model` 带多条消息的自定义 entry，下一问的请求里是 `user, assistant, user, assistant, user`，跑通（bun 和 app 都过）。系统提示条目落在灌入的历史之后，faux 收到的 `system` 在消息序列末尾，原因没查；正式做法按第 5 节走 `beforeRequest` hook 从对话文件组装上下文，不依赖灌入的 entry。
+
+长任务不结束：没有办法在不空闲时安全换代。`harness.close()` 等在途工具返回（工具不看 `context` 就一直等，看 `context` 的 2 ms 返回），关完任务以 `pi.generation waiting`、`pi.tool running` 留在旧库（坑 514）。存储之间没有迁移任务或对话的接口（`migrate` 只是任务状态的版本迁移）。`waitForIdle()` 只看非 background 任务，background 任务不挡它但仍是活任务，要看 `inspect()`。所以换代的前提是所有任务都会结束，跑不完的只能 `abort()` 或者等。
+
+崩溃：SQLite 下流到 208 字时 SIGKILL 整个 app 进程，重开后 `pi.live` 里是 288 字的半句（杀前最后一次提交），有 1 个未结算的 submission；`resume()` 后同一 `requestId` 拿回原 submission、`done`，重问请求是 `system, user`，transcript 是 `pi.user`、半句 `pi.assistant`（`aborted`，288 字）、完整回答（1440 字）。和 JSONL 一致（复测 JSONL 也是这三条），坑 511 已改正。
+
 ## 交接
 
 没做的：在 app 里经 Tauri fs 插件真写盘跑一次 crash 场景（需要 dev 入口和起 app，本机用户的 dev app 在跑，没碰）；`tsconfig.test.json` 那段在 1.1.0 下的错误数（第一段失败后没跑，8 个测试文件 import 了 pi-agent-core）；真模型（Anthropic）下的首包延迟和 `stream.timeoutMs` 与 90 秒看门狗的分工。spike 的代码和测试在 pi-agent-core 0.87.1 的提交上全绿，分支最后的 breakage inventory 提交有意编译不过。
+
+SQLite 这一轮没做的：iOS 模拟器里经 WKWebView 的同一组测量（预算内没跑；做法是把 `sqlite-probe-main.ts` 作为窗口页打 .dev 包装进 Mac mini 的模拟器，结果从 app 容器的 `durable-probe/*.json` 取，iOS 的 rusqlite bundled 编译没验过）；灌入历史后 `system` 落到消息末尾的原因。app 里的探针构建方式：用 vite 单独打 `sqlite-probe-main.ts` 成一页，`tauri build --debug --no-bundle --config` 覆盖 `identifier`（`com.xinyuan.readingpartner.durableprobe`）和 `frontendDist`，在私有 Xvfb 显示上起二进制，等 `crash-armed.json` 出现后 SIGKILL 再起一次。

@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 511）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 516）。
 
 ## EmbedPDF 引擎
 
@@ -316,6 +316,7 @@
 - [242-an-xml-sanitizer-does-not-need-the-html-compensations](./webview/242-an-xml-sanitizer-does-not-need-the-html-compensations.md) — EPUB 的 XHTML 清洗器照抄坑 127 的 `<pre>` 补偿，`sanitize(sanitize(x))` 每趟多一个换行：那条补偿是 HTML 树构建器的规则，而良构 XML 输出的回程走 XML 解析器，没有这条规则，scope boundary 和 foster parenting 那三类也没有。判据是「回程用哪个解析器」不是「输入像不像 HTML」；只有字面 CR 写成 `&#13;` 要留。命名空间声明必须自己用固定前缀写在 `<html>` 上，`XMLSerializer` 生成的 `ns1`/`ns2` 编号两趟之间会变
 - [98-tauri-replaces-window-confirm-with-a-promise](./webview/98-tauri-replaces-window-confirm-with-a-promise.md) — dialog 插件的 init 脚本把 `window.confirm` 换成 async 版本，返回的 Promise 恒为真值（`lib.dom.d.ts` 仍写 `boolean`，tsc 全绿），`if (!confirm(...)) return` 形同虚设；那次 invoke 还被 ACL 拒掉，只留一条没人接的 rejection。破坏性确认一律走 AlertDialog
 - [99-on-navigation-sees-every-frame-and-cancels-in-silence](./webview/99-on-navigation-sees-every-frame-and-cancels-in-silence.md) — `on_navigation` 拿到的是每个 frame 的导航（WKWebView 不看 `targetFrame`，WebKitGTK 的 NavigationAction 含子框架；Windows 只接顶层，反而盖不到 iframe），而取消是静默的：没有 error、不算 CSP 违规、控制台无输出。`blob:` 放行（自己页面的产物），`data:` 继续取消，所有 Cancel 打日志
+- [515-webkitgtk-performance-now-is-whole-milliseconds](./webview/515-webkitgtk-performance-now-is-whole-milliseconds.md) — WebKitGTK 里 `performance.now()` 粗化到整毫秒，亚毫秒计时只有 0 和 1；看大量样本的均值或整批计时，别信单次分布的 p50/p95
 - [108-a-modernised-user-agent-is-what-gets-you-blocked](./webview/108-a-modernised-user-agent-is-what-gets-you-blocked.md) — 把 WebKitGTK 默认 UA 的 `Version/60.5` 换新、或只去掉 `Ubuntu;`、或换成 Chrome UA，彭博冷 profile 一律 403 + 验证码；显式 pin 成引擎默认那一整条才 200。PerimeterX 拿 UA 和引擎其他特征对账，任何偏离都不行
 - [109-a-dead-host-never-fires-load-failed](./webview/109-a-dead-host-never-fires-load-failed.md) — 域名解析不了时只发一个 `load-changed started`，25 秒不发 `load-failed` 也不发 `finished`；TLS 失败 1.3 秒就发。`network` 只能覆盖连上以后的失败，DNS 死掉的只能按 `timeout` 报
 - [370-a-cancelled-load-is-reported-as-a-failed-one](./webview/370-a-cancelled-load-is-reported-as-a-failed-one.md) — 页面自己换地址（Bing 图片搜索加了 `first=1&cw=…`），被取代的那次导航照样发 `load-failed`，取页面 2.9 秒就判 `network` 失败，而 DOM 其实是好的；`connect_load_failed` 里放过 `NetworkError::Cancelled`
@@ -407,7 +408,8 @@
 - [324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness](./ai/324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness.md) — soul 每个回合挂一份 `statement_write`，简报的 desk item 又挂一份，回合组装照过、harness 的 `validateToolNames` 才抛 `Duplicate tool name`，而且说不出两边是谁；`assembleTurn` 的重名检查当时只比角色和 item，漏了 soul 自己那套基础工具。工具只挂在一处，检查改成走一遍最终清单、按 name 记 owner
 - [360-a-steer-queued-before-drive-lands-in-the-first-round](./ai/360-a-steer-queued-before-drive-lands-in-the-first-round.md) — `accept` 之后 `drive` 之前塞的 steer 在第一次请求前就被 drain 进 transcript（run 自己的起始边界也是边界）；界面上那一刻 AI 行还是空的，切行会留空行，空行不留在插话上面、删掉后在插话下面重开（判据见 510）
 - [510-a-steer-after-a-tool-only-round-lands-above-its-answer](./ai/510-a-steer-after-a-tool-only-round-lands-above-its-answer.md) — 只调了工具、一个字没写的那一轮之后插话，按「行里有没有字」不切行，回答写进插话上面那一行，重开后又排到插话下面。交接判据改成「产出过东西没有」（同 `keptOnStop`，回执算）：有就封口落盘、回答在插话下面开新行；什么都没有就删掉那行在插话下面重开，两种新行的 ts 都在插话之后
-- [511-pi-durable-retries-a-killed-stream-from-zero](./ai/511-pi-durable-retries-a-killed-stream-from-zero.md) — pi-durable 1.1.0 杀在半句后重开，`pi.live` 里挂着最后一次提交的半句，`resume()` 却发一次不带半句的全新请求，半句挂到重问第一次提交就被换掉、不进 transcript（和 0.87 的坑 395 相反）。半句只当临时稿显示，要留就自己在重开时另存成 entry
+- [511-pi-durable-retries-a-killed-stream-from-zero](./ai/511-pi-durable-retries-a-killed-stream-from-zero.md) — pi-durable 1.1.0 杀在半句后重开，`pi.live` 里挂着最后一次提交的半句，`resume()` 发一次不带半句的全新请求；结算后半句作为 `stopReason: "aborted"` 的 `pi.assistant` 留在 transcript 里、排在重问回答前面（JSONL 和 SQLite 一样）。投影到对话文件时按 `stopReason` 过滤
+- [514-pi-durable-close-waits-for-a-running-tool](./ai/514-pi-durable-close-waits-for-a-running-tool.md) — `harness.close()` 等在途工具返回，工具不看 `context` 就一直挂着；关完任务仍以 `running`/`waiting` 留在旧库，存储之间没有迁移接口。长等待一律走 `awaitWithContext`，换代只在 `inspect()` 没有活任务时做
 - [335-accepting-a-prompt-announces-every-replayed-message](./ai/335-accepting-a-prompt-announces-every-replayed-message.md) — harness 为它写进 session 的每条消息发 `message_end`，`lane.accept` 把整段重放历史逐条播出来，埋点把里面的 assistant 消息当成一轮，记出一串 `round: 0`、用量全 null、`ms` 等于 Unix 时间戳的幽灵行。按 `runId` 等于本回合的 `operationId` 分辨，不按 role；另记 `model-calls-*.jsonl` 是读改整体写回加 fire-and-forget，并发写只留最后一个
 - [379-typebox-object-makes-every-property-required](./ai/379-typebox-object-makes-every-property-required.md) — `Type.Object` 把每个属性都写进 `required`，可选只能 `Type.Optional`；只对某些情况有意义的嵌套对象/数组留成必填，模型发 `null` 报 `must be object`、发 `{}` 报 `must have required properties`，工具循环两句之间来回重试永远到不了 execute。pi-ai 的 `validateToolCall` 只把 `null` 转成基本类型的零值（string 转 `""`、number 转 `0`、boolean 转 `false`），object 和 array 不在里面；`normalizeOptionalNulls` 也只删非必填的 `null`。漏掉不发对所有类型都是硬失败，所以描述里写着「哪种模式才有」「可以为空」的字段一律可选，缺了让 execute 用模型看得懂的话拒绝一次
 - [397-the-system-prompt-moved-into-the-transcript](./ai/397-the-system-prompt-moved-into-the-transcript.md) — pi 0.87 的 `normalizeContext()` 把 `systemPrompt` 和 `tools` 折进一条打头的 system 消息，provider 面只收带 brand 的 `TranscriptContext`；`Context` 的三个字段还在类型里但到 provider 手上全空，读它们编得过、跑不对，`messages[0]` 也不再是调用方的第一条消息。发送路径进 provider 前 normalize 一次，读 transcript 用 `withoutInitialSystemMessage` / `getCurrentSystemPrompt` / `getCurrentTools`

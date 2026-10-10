@@ -1,4 +1,6 @@
 mod atomic_fs;
+// SQLite for pi-durable's storage, behind the frontend's SqliteDatabase facade.
+mod durable_sqlite;
 mod image_proxy;
 mod navigation;
 mod oauth_callback;
@@ -80,6 +82,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             atomic_fs::write_text_file_atomic,
             atomic_fs::quarantine_file,
+            durable_sqlite::durable_sqlite_open,
+            durable_sqlite::durable_sqlite_exec,
+            durable_sqlite::durable_sqlite_run,
+            durable_sqlite::durable_sqlite_get,
+            durable_sqlite::durable_sqlite_all,
+            durable_sqlite::durable_sqlite_close,
+            durable_sqlite::durable_sqlite_remove,
             oauth_callback::start_oauth_callback_listener,
             voice::start_voice_recording,
             voice::stop_voice_recording,
@@ -105,10 +114,18 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             atomic_fs::write_text_file_atomic,
             atomic_fs::quarantine_file,
+            durable_sqlite::durable_sqlite_open,
+            durable_sqlite::durable_sqlite_exec,
+            durable_sqlite::durable_sqlite_run,
+            durable_sqlite::durable_sqlite_get,
+            durable_sqlite::durable_sqlite_all,
+            durable_sqlite::durable_sqlite_close,
+            durable_sqlite::durable_sqlite_remove,
             oauth_callback::start_oauth_callback_listener
         ]);
 
     builder
+        .manage(durable_sqlite::DurableSqliteState::default())
         .register_asynchronous_uri_scheme_protocol(image_proxy::SCHEME, image_proxy::handle)
         .setup(|app| {
             // App-wide root directory guarantee. Tauri derives the per-app data

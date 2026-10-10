@@ -10,6 +10,7 @@ import {
   createRegistry,
   defineExtension,
   defineTool,
+  type Extension,
   Harness,
   type HarnessSettings,
   type Storage,
@@ -45,6 +46,8 @@ export interface SpikeOptions {
   faux: FauxProviderHandle;
   tools: SpikeTools;
   settings?: HarnessSettings;
+  /** Installed next to the spike's own two tools. */
+  extensions?: readonly Extension[];
 }
 
 export function openSpike(options: SpikeOptions): Promise<Harness> {
@@ -52,6 +55,7 @@ export function openSpike(options: SpikeOptions): Promise<Harness> {
   models.setProvider(options.faux.provider);
   const registry = createRegistry();
   registry.install(spikeExtension(options.tools));
+  for (const extension of options.extensions ?? []) registry.install(extension);
   return Harness.open(
     options.storage,
     { models, registry, settings: options.settings },

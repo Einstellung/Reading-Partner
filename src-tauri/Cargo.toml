@@ -69,6 +69,9 @@ tauri-plugin-voice = { path = "../plugins/voice" }
 # the same reason voice is — off iOS `is_available` answers false, which is what
 # hides the control instead of leaving a command that does not exist.
 tauri-plugin-openin = { path = "../plugins/openin" }
+# SQLite under pi-durable's storage (src/durable_sqlite.rs). bundled: the same
+# SQLite on every target, no system library to find on iOS or Android.
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 
 # The two taps the hand feels when a hold on Lumen opens or ends the voice
 # session (docs/68). The mirror image of autostart below: a motor exists only on

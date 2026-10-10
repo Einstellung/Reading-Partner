@@ -22,7 +22,7 @@ static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Join an AppData-relative path onto `root`, rejecting anything that is not a
 /// plain descending path (absolute, `..`, `.`, or empty).
-fn safe_join(root: &Path, rel: &str) -> Result<PathBuf, String> {
+pub(crate) fn safe_join(root: &Path, rel: &str) -> Result<PathBuf, String> {
     let path = Path::new(rel);
     let mut any = false;
     for component in path.components() {
