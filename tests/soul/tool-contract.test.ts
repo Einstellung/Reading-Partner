@@ -25,6 +25,8 @@ import { buildTranslateTools } from "../../src/reading/translate/tool";
 import { buildSourceTools as buildPrepSourceTools } from "../../src/reading/prep/papers/source-tool";
 import { buildClassroomTools } from "../../src/reading/prep/papers/tools";
 import { buildSupplementTools } from "../../src/reading/ingest/remove-tool";
+import { buildReadSupplementTools } from "../../src/reading/ingest/read-supplement-tool";
+import { appToolCatalog } from "../../src/ui/components/common/durable-catalog";
 import { buildSavedArticleTools } from "../../src/reading/saved/saved-article-tools";
 import { buildCitationTools } from "../../src/reading/papers/citation-tool";
 import { buildPaperSearchTools } from "../../src/reading/papers/search-tool";
@@ -128,6 +130,11 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     names: ["remove_supplement"],
   },
   {
+    where: "reading/ingest (read)",
+    tools: buildReadSupplementTools(any({ list: async () => [], fulltext: async () => null })),
+    names: ["read_supplement"],
+  },
+  {
     where: "reading/saved/saved-articles",
     tools: buildSavedArticleTools(any({ list: async () => [], add: async () => ({ status: "failed" }) })),
     names: ["list_saved_articles", "add_saved_article"], safe: ["list_saved_articles"],
@@ -187,6 +194,9 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
   },
 ];
 
+// Built while the place is registered, as the app builds it after the shell's places.
+const catalog = appToolCatalog();
+
 // Put the registry back the way it was found: it is process-wide, and the next
 // file's "no places registered, no tool" is a real assertion.
 unregisterPlaces();
@@ -212,6 +222,14 @@ test("every factory mounts the tools the roster names", () => {
       `${where}: ${[...names].sort().join(",")}`,
     );
   }
+});
+
+// The durable runtime registers tools from the catalog; a desk tool missing
+// there fails every call with "Tool … is not available".
+test("the durable catalog registers every tool in the roster", () => {
+  const registered = new Set(catalog.map((t) => t.name));
+  const missing = ROSTER.flatMap(({ names }) => names).filter((name) => !registered.has(name));
+  expect(missing).toEqual([]);
 });
 
 // The companion's replay column: the online reads are safe, the rest unsafe.

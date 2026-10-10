@@ -23,6 +23,7 @@ import { buildTranslateTools } from "../../../reading/translate/tool";
 import { buildSourceTools as buildPrepSourceTools } from "../../../reading/prep/papers/source-tool";
 import { buildClassroomTools } from "../../../reading/prep/papers/tools";
 import { buildSupplementTools } from "../../../reading/ingest/remove-tool";
+import { buildReadSupplementTools } from "../../../reading/ingest/read-supplement-tool";
 import { buildSavedArticleTools } from "../../../reading/saved/saved-article-tools";
 import { buildCitationTools } from "../../../reading/papers/citation-tool";
 import { buildPaperSearchTools } from "../../../reading/papers/search-tool";
@@ -42,7 +43,8 @@ const noFetch = async () => new Response("");
 export function appToolCatalog(): AgentTool[] {
   const tools: AgentTool[] = [
     ...buildObservationTools(inert({ listObservations: async () => [] })),
-    ...buildStatementTools(inert({ store: {}, threadId: "", message: { role: "user", text: "", ts: 0 } })),
+    // statement_write mounts only on a reader message it can date (statements/tools.ts).
+    ...buildStatementTools(inert({ store: {}, threadId: "catalog", message: { role: "user", text: "", ts: 1 } })),
     buildProposeTopicTool(inert({ topics: async () => [], onTopicCard: () => {}, threadId: "" })),
     ...buildDelegateTools({}),
     ...buildPlaceTools(),
@@ -60,6 +62,7 @@ export function appToolCatalog(): AgentTool[] {
     ...buildPrepSourceTools(inert({ start: async () => ({ runId: "" }) })),
     ...buildClassroomTools(() => []),
     ...buildSupplementTools(inert({ list: async () => [], remove: async () => {} })),
+    ...buildReadSupplementTools(inert({ list: async () => [], fulltext: async () => null })),
     ...buildSavedArticleTools(inert({ list: async () => [], add: async () => ({ status: "failed" }) })),
     ...buildCitationTools(inert({ fetchFn: noFetch, canIngest: false })),
     ...buildPaperSearchTools(inert({ search: async () => [], canIngest: false })),

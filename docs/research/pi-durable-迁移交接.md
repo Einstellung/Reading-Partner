@@ -331,3 +331,12 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 库增长：基线 4 KB + WAL 117 KB；8 个书回合后主库 356 KB（约 45 KB/回合），WAL 4.0 MB 未 checkpoint。
 - 没走：工具里杀进程、重启后打开在途回合、带工具轮的插话、手机 PDF 课堂（PDF 已铺进容器）。
 - 环境：Mac `~/rp-flow` detached 在 6cffd52f，驱动脚本 `~/pdv.sh`，vite PID 在 `/tmp/pdv/devpid`。凭据只放 access token，refresh 是假值，过期后要从 Linux 再拷一次 access。
+
+## Linux 桌面验收第二轮（分支 `verify/pi-durable-linux2`，从 `dev/pi-durable` 411c56b8 起）
+
+除带思考首包外全用慢速 faux：未提交的脚手架在 `main.tsx` 最先 import，把 `providers.anthropic` 换成按 localStorage 计划出牌的 faux（启动时恢复的回合也走它），并包 `AssembledTurns.prototype.put` 给 desk 工具加延时。驱动在会话 scratchpad `linux2/`，报告页 `verify-linux/report.html`。Haiku 2 次。
+
+- 正文中间杀、工具里杀（unsafe 得 interrupted 后接着说、safe 重跑）、重启后接上在途回合（在流、停止、插话、落盘中发话等结算）、两种插话、两种停止、三种铃都过；被停止且没回答的那句新旧路径都进下一回合，一致。
+- 带思考（low）首包 2.9 / 3.9 s，屏幕第一个字 5.7 / 6.5 s；`stream.timeoutMs` 取 60 s。
+- 修了 durable 工具目录漏登记 `statement_write`、`read_supplement`（坑 524）。
+- 没修：`read_chapter` 按书有没有章节表是两种同名 schema，目录登记的是 `from`/`to` 那种，有章节的书 desk 收 `chapter`，每次 NaN。要定拆名还是合 schema。
