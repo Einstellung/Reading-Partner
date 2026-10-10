@@ -104,12 +104,14 @@ export type HistoryReader = (
 /** One provider message that came back, for `recordModelCall`. */
 export type ResponseRecorder = (
   message: AssistantMessage,
-  about: { conversationId: ConversationId; origin: ThreadOrigin },
+  about: { conversationId: ConversationId; origin: ThreadOrigin; round: number },
 ) => void;
 
 /** The reader's line as the model gets it: text, or text and the page window's images. */
 export type TurnContent = string | (TextContent | ImageContent)[];
-export type TurnInput = { content: TurnContent; startedAt: number };
+/** The bell a turn answers (soul/bell.ts): found again after a restart so it is not answered twice. */
+export type TurnBell = { id: string; runId?: string };
+export type TurnInput = { content: TurnContent; startedAt: number; bell?: TurnBell };
 export type TurnCheckpoint = { phase: "submit" } | { phase: "wait" } | { phase: "land" };
 /**
  * How the turn's last run settled. `reason` and `detail` are the submission's
@@ -185,6 +187,8 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
   // (docs/pitfall/519). Forgotten when the turn settles. In memory only: a
   // restarted process measures again from the start.
   const stubsByTurn = new Map<ConversationId, Map<string, Message>>();
+  // The round of the request each conversation sent last, for its response's usage line.
+  const rounds = new Map<ConversationId, number>();
 
   const turn = defineTask<TurnInput, TurnCheckpoint, TurnResult>({
     name: "rp.turn",
@@ -252,6 +256,7 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
       .filter((m) => m.role !== "system")
       .map((m) => (m.role === "toolResult" ? (stubs.get(m.toolCallId) ?? m) : m));
     const round = run.filter((m) => m.role === "assistant").length + 1;
+    rounds.set(api.conversationId, round);
     if (round > desk.maxRounds) return refused(deps, api, REFUSE_ROUNDS, context);
     const history = await deps.readHistory(origin, desk.excludeTs === null ? {} : { excludeTs: desk.excludeTs }, context);
     const messages = [...history, ...run];
@@ -280,7 +285,7 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
     // new message with its own timestamp, and is recorded (it was paid for).
     const name = `usage:${message.timestamp}:${message.responseId ?? ""}`;
     if ((await api.memo<boolean>(name, context)) !== undefined) return;
-    deps.recordResponse(message, { conversationId: api.conversationId, origin });
+    deps.recordResponse(message, { conversationId: api.conversationId, origin, round: rounds.get(api.conversationId) ?? 1 });
     await api.memo(name, true, context);
   };
 
@@ -293,6 +298,7 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
   });
   const forgetStubs = (conversationId: ConversationId) => {
     stubsByTurn.delete(conversationId);
+    rounds.delete(conversationId);
   };
   return { extension, turnTask: turn, forgetStubs };
 }

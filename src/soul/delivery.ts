@@ -75,27 +75,35 @@ export interface Delivery {
  */
 export type DeliveryOpener = (input: DeliveryInput) => Promise<Delivery | null>;
 
-/** A bell for a place where a turn is already running. */
-export interface LiveDelivery {
+/** A bell a place answers with a turn on its own runtime (docs/soul/87). */
+export interface TurnDelivery {
   origin: BoxOrigin;
-  /** The bell rendered as prose — the same text a trailing message carries. */
+  settings: Settings;
+  /** The bell rendered as prose: the turn's input, never written to the conversation. */
   bell: string;
-  /** Stamped on the line the soul writes once the model has been handed this. */
+  bellId: string;
+  /** The run the bell is about; the reply is stamped with it. */
   runId: string;
+  signal?: AbortSignal;
 }
 
 /**
- * Put a bell into the turn already running in that place. Resolves null when
- * nothing was running there, or when the turn ended before the model was handed
- * it — and then the bell is answered by a turn of its own, unacked until it is.
- * `watching` is the same question Delivery asks, asked at the moment it landed.
+ * How a bell's turn ended. `reply` is what the soul said to the bell, for the
+ * card's cover; `watching` whether the reader was looking as it landed.
  */
-export type LiveDeliverer = (
-  input: LiveDelivery,
-) => Promise<{ threadId: string; watching: boolean } | null>;
+export type TurnDeliveryOutcome =
+  | { status: "answered"; reply: string; watching: boolean }
+  | { status: "failed"; reason: string };
+
+/**
+ * Answer a bell with a turn of the place's own. A conversation that is busy
+ * is waited for: the bell starts its turn once that one has landed. Null when
+ * there is nothing to answer in after all, and the bell goes to the door.
+ */
+export type TurnDeliverer = (input: TurnDelivery) => Promise<TurnDeliveryOutcome | null>;
 
 const OPENERS = new Map<BoxOrigin["place"], DeliveryOpener>();
-const LIVE = new Map<BoxOrigin["place"], LiveDeliverer>();
+const TURNS = new Map<BoxOrigin["place"], TurnDeliverer>();
 
 /**
  * Register how one place assembles a delivery. Returns the undo. A second
@@ -113,20 +121,17 @@ export function deliveryOpener(place: BoxOrigin["place"]): DeliveryOpener | null
   return OPENERS.get(place) ?? null;
 }
 
-/**
- * Say how one place hands a bell to a turn it already has running. Returns the
- * undo. A place that registers none never takes this path.
- */
-export function registerLiveDelivery(place: BoxOrigin["place"], into: LiveDeliverer): () => void {
-  LIVE.set(place, into);
+/** Say how one place answers a bell on its own runtime. Returns the undo. */
+export function registerTurnDelivery(place: BoxOrigin["place"], deliver: TurnDeliverer): () => void {
+  TURNS.set(place, deliver);
   return () => {
-    if (LIVE.get(place) === into) LIVE.delete(place);
+    if (TURNS.get(place) === deliver) TURNS.delete(place);
   };
 }
 
-/** How a place takes a bell into a running turn, or null where none does. */
-export function liveDeliverer(place: BoxOrigin["place"]): LiveDeliverer | null {
-  return LIVE.get(place) ?? null;
+/** How a place answers a bell on its own runtime, or null where it does not. */
+export function turnDeliverer(place: BoxOrigin["place"]): TurnDeliverer | null {
+  return TURNS.get(place) ?? null;
 }
 
 /**

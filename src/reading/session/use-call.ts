@@ -323,6 +323,19 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     [bookIdRef],
   );
 
+  // A bell's turn on a thread (reading/turn/deliver.ts) is not this hook's, so
+  // its rows are drawn whenever the registry says they changed.
+  useEffect(
+    () =>
+      liveTurnsRef.current.listen((threadId) => {
+        const live = liveTurnsRef.current.get(threadId);
+        if (!live?.visiting || !live.rows || callRef.current?.threadId !== threadId) return;
+        const rows = live.rows.map((row) => shapes.current.newRow(row));
+        dispatch({ type: "turn-rows", threadId, after: live.visiting.after, rows });
+      }),
+    [],
+  );
+
   // Every message this hook writes to a thread file carries an id it minted, so
   // the channel below can tell its own appends from everyone else's.
   const ownRef = useRef(createOwnAppends());
@@ -751,6 +764,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
             tools: turn.tools,
             model: { provider: providerId, modelId },
             ...(thinkingLevel ? { thinkingLevel } : {}),
+            telemetry: { surface: "reading", inline: turn.inline },
             describe: (name, args) => {
               const tool = byName.get(name);
               if (!tool) return { label: name };
@@ -1021,13 +1035,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         if (!trimmed) return;
         const at = Math.max(Date.now(), steerTsRef.current + 1);
         steerTsRef.current = at;
-        // A turn this session did not start writes its own rows into the thread
-        // file and they arrive here from outside the view (reading/deliver.ts).
-        // Drawing one now would leave a second copy of the line on screen.
-        if (live.silent) {
-          live.steering?.say(at, trimmed);
-          return;
-        }
         const row = shapes.current.newRow({ role: "user", text: trimmed, ts: at, queued: true });
         live.unsent = [...(live.unsent ?? []), row];
         dispatch({ type: "row-appended", threadId: c.threadId, row });
@@ -1100,11 +1107,12 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       return;
     }
     liveTurnsRef.current.stop(c.threadId);
-    // A turn started elsewhere and answered into this conversation (a bell:
-    // soul/bell.ts): the abort above is the whole of stopping it. It drew no
-    // row here, and what the reader said into it is its own holder's to put
-    // back (reading/deliver.ts).
-    if (live.silent) return;
+    // A bell's turn still being assembled (reading/turn/deliver.ts): the abort
+    // is the whole of stopping it, and what the reader said goes into the file.
+    if (live.visiting) {
+      fileLines(live.threadId, live.home, live.unsent ?? []);
+      return;
+    }
     // Still being assembled: nothing was asked, so nothing is kept.
     dispatch({ type: "row-dropped", threadId: c.threadId, ts: live.message.ts });
     live.onSettled?.();

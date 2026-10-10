@@ -10,7 +10,7 @@
 import type { Context } from "@earendil-works/chord";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { LiveDoc, type Conversation, type ModelRef } from "@earendil-works/pi-durable";
-import type { TurnContent, TurnResult } from "../../legion/durable/extension";
+import type { TurnBell, TurnContent, TurnResult } from "../../legion/durable/extension";
 import {
   startTurn,
   steerTimestamps,
@@ -23,14 +23,19 @@ import {
 import type { AgentTool } from "../../legion/execute/contract";
 import { stallWatches, type StallWatches } from "../../legion/execute/stall";
 import type { ReadingTurnMessage } from "../desk-history";
-import { bookThreadKey, bookThreadOrigin, type BookOrigin } from "./durable-book";
+import { bookThreadKey, bookThreadOrigin, type BookOrigin, type BookTelemetry } from "./durable-book";
 import { projectView, runStart, type TurnView, type ViewSource } from "./durable-view";
 import { TURN_SECTION, type ReadingDurable } from "./durable-runtime";
 
 export interface BookTurnRequest {
   origin: BookOrigin;
-  /** The reader's line, already in the thread file at `ts`; `content` when it carries images. */
-  line: { text: string; ts: number; content?: TurnContent };
+  /**
+   * The reader's line, already in the thread file at `ts`; `content` when it
+   * carries images. For a bell's turn it is the bell, in no file, and `ts` is absent.
+   */
+  line: { text: string; ts?: number; content?: TurnContent };
+  bell?: TurnBell;
+  telemetry?: BookTelemetry;
   systemPrompt: string;
   /** The assembled history before the reader's line. */
   history: readonly ReadingTurnMessage[];
@@ -57,7 +62,11 @@ type Live = { run?: { inputs: number[] }; generation?: { message?: unknown }; to
 export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequest, context: Context): Promise<BookTurn> {
   const { runtime } = durable;
   const key = bookThreadKey(request.origin);
-  durable.assembled.put(key, { history: request.history, tools: request.tools });
+  durable.assembled.put(key, {
+    history: request.history,
+    tools: request.tools,
+    ...(request.telemetry ? { telemetry: request.telemetry } : {}),
+  });
   const started = await startTurn(
     runtime,
     {
@@ -68,7 +77,8 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
       tools: request.tools.map((tool) => tool.name).filter((name) => runtime.registrations.has(name)),
       model: request.model,
       ...(request.thinkingLevel ? { thinkingLevel: request.thinkingLevel } : {}),
-      excludeTs: request.line.ts,
+      ...(request.line.ts !== undefined ? { excludeTs: request.line.ts } : {}),
+      ...(request.bell ? { bell: request.bell } : {}),
     },
     context,
   );

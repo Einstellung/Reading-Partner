@@ -32,7 +32,9 @@ import {
   ThreadDoc,
   type LandStep,
   type ThreadOrigin,
+  type TurnBell,
   type TurnContent,
+  type TurnInput,
   type TurnResult,
 } from "./extension";
 import type { DurableRuntime } from "./harness";
@@ -54,6 +56,8 @@ export type LandedTurn = {
   status: "done" | "unanswered";
   rows: LandedRow[];
   refusal?: string;
+  /** The bell this turn answered, when a bell started it. */
+  bell?: TurnBell;
 };
 
 /** Writes a turn into the place's conversation file; a message whose `ts` is already there is skipped. */
@@ -214,7 +218,12 @@ export function createLandStep(deps: LandDeps): LandStep {
     if (!origin) return { ...why, landed: false };
     const lander = deps.landers[origin.place];
     if (!lander) throw new Error(`no lander for place "${origin.place}"`);
-    const turn: LandedTurn = { conversationId: task.conversationId, status, rows };
+    const turn: LandedTurn = {
+      conversationId: task.conversationId,
+      status,
+      rows,
+      ...(task.input.bell ? { bell: task.input.bell } : {}),
+    };
     await lander(origin, refusal === undefined ? turn : { ...turn, refusal }, context);
     return { ...why, landed: true };
   };
@@ -235,6 +244,8 @@ export interface TurnRequest {
   maxRounds?: number;
   /** Timestamp of the reader's line in the file, which the history reader leaves out. */
   excludeTs?: number;
+  /** The bell this turn answers; `content` is then the bell, which is never written to the file. */
+  bell?: TurnBell;
 }
 
 export interface StartedTurn {
@@ -286,7 +297,7 @@ export async function startTurn(runtime: DurableRuntime, request: TurnRequest, c
     });
     return tx.createTask(
       runtime.turnTask,
-      { content: request.content, startedAt },
+      { content: request.content, startedAt, ...(request.bell ? { bell: request.bell } : {}) },
       { ownership: { kind: "conversation" }, background: true },
     );
   }, context);
@@ -355,4 +366,28 @@ export async function supersede(
     recovery.submissions[key] = { attempts: recovery.submissions[key]?.attempts ?? 0, superseded: true };
   }, context);
   return stopTurn(runtime, conversation, context);
+}
+
+/**
+ * The `rp.turn` a bell started in this conversation, and its end. A process
+ * killed mid-answer leaves the bell unacked and the turn resumed, so the next
+ * pass waits for that turn instead of starting a second one.
+ */
+export async function bellTurn(
+  runtime: DurableRuntime,
+  conversationId: ConversationId,
+  bellId: string,
+  context: Context,
+): Promise<Promise<TurnResult | undefined> | undefined> {
+  const page = await runtime.storage.scanTasks(
+    { conversationId, kind: "rp.turn", order: "descending" },
+    50,
+    undefined,
+    context,
+  );
+  const task = page.items.find((t) => (t.input as TurnInput | null)?.bell?.id === bellId);
+  if (!task) return undefined;
+  return runtime.harness
+    .waitForTask(task.id as TaskId<TurnResult>, context)
+    .then((done) => (done.state.outcome.status === "completed" ? done.state.outcome.result : undefined));
 }

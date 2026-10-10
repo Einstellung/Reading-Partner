@@ -124,6 +124,8 @@ export interface TestRuntime {
   requests: string[][];
   historyCalls: { excludeTs?: number }[];
   recorded: number;
+  // The round each recorded response answered, in order.
+  rounds: number[];
 }
 
 export function messageLine(message: Message): string {
@@ -148,6 +150,7 @@ export async function openTestRuntime(options: TestRuntimeOptions): Promise<Test
     requests: [],
     historyCalls: [],
     recorded: 0,
+    rounds: [],
   };
   faux.setResponses(
     options.responses.map((step) =>
@@ -180,8 +183,9 @@ export async function openTestRuntime(options: TestRuntimeOptions): Promise<Test
       result.historyCalls.push(excludeTs === undefined ? {} : { excludeTs });
       return result.file.history(excludeTs);
     },
-    recordResponse: () => {
+    recordResponse: (_message, about) => {
       result.recorded++;
+      result.rounds.push(about.round);
     },
     sectionKeys: ["soul", "desk"],
     ...(options.rotateAtBytes !== undefined ? { rotateAtBytes: options.rotateAtBytes } : {}),

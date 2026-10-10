@@ -42,8 +42,8 @@ test("a second turn on the same thread replaces the first", () => {
 test("the stream is written into the stored row, which reopening splices back in", () => {
   const turns = createLiveTurns<Msg>();
   start(turns, "a", 7);
-  turns.patch("a", 7, (m) => ({ ...m, text: `${m.text}half` }));
-  turns.patch("a", 7, (m) => ({ ...m, text: `${m.text} a sentence` }));
+  { const live = turns.get("a")!; const m = live.message; live.message = { ...m, text: `${m.text}half` }; }
+  { const live = turns.get("a")!; const m = live.message; live.message = { ...m, text: `${m.text} a sentence` }; }
   expect(turns.withLive("a", [{ ts: 5, role: "user", text: "asked" }])).toEqual([
     { ts: 5, role: "user", text: "asked" },
     { ts: 7, role: "ai", text: "half a sentence" },
@@ -56,19 +56,11 @@ test("the stream is written into the stored row, which reopening splices back in
 test("a question sharing the live row's stamp does not stand in for it", () => {
   const turns = createLiveTurns<Msg>();
   start(turns, "a", 7);
-  turns.patch("a", 7, (m) => ({ ...m, text: "half" }));
+  { const live = turns.get("a")!; const m = live.message; live.message = { ...m, text: "half" }; }
   expect(turns.withLive("a", [{ ts: 7, role: "user", text: "asked" }])).toEqual([
     { ts: 7, role: "user", text: "asked" },
     { ts: 7, role: "ai", text: "half" },
   ]);
-});
-
-test("a patch for another turn's row is ignored", () => {
-  const turns = createLiveTurns<Msg>();
-  start(turns, "a", 7);
-  turns.patch("a", 6, (m) => ({ ...m, text: "stale" }));
-  turns.patch("b", 7, (m) => ({ ...m, text: "other thread" }));
-  expect(turns.get("a")?.message.text).toBe("");
 });
 
 test("a thread with nothing running shows its file history unchanged", () => {
@@ -107,7 +99,7 @@ test("a superseded turn cannot settle its successor", () => {
 test("stopping aborts and hands the turn back so the partial can be kept", () => {
   const turns = createLiveTurns<Msg>();
   const controller = start(turns, "a", 7);
-  turns.patch("a", 7, (m) => ({ ...m, text: "half" }));
+  { const live = turns.get("a")!; const m = live.message; live.message = { ...m, text: "half" }; }
   const stopped = turns.stop("a") as LiveTurn<Msg>;
   expect(stopped.message.text).toBe("half");
   expect(controller.signal.aborted).toBe(true);

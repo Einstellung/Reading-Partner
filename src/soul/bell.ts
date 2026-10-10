@@ -22,12 +22,9 @@
 // held.ts), but a pass that fired every bell at once would queue a stack of
 // turns behind a reader who is in the middle of one.
 //
-// Except where the reader is in the middle of one right there: a bell for a
-// conversation that already has a turn running is put into that turn instead
-// (docs/72). The soul is mid-answer to the reader, and a second turn behind it
-// would answer the machine into a room the reader has left. The bell is acked
-// when the model has actually been handed it, so a turn that ends first leaves
-// the bell queued for the next pass.
+// A place with a turn runtime of its own (a book, docs/soul/87) answers the
+// bell there with a turn of its own. A conversation that is busy is waited for:
+// the bell starts its turn once that one has landed, and is acked only after.
 
 import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
@@ -43,10 +40,11 @@ import { appBox, type BoxOrigin, type BoxStore } from "../box";
 import { doorDate, doorKey, openDoorTurn } from "./door";
 import {
   deliveryOpener,
-  liveDeliverer,
   parseOrigin,
+  turnDeliverer,
   type DeliveredTurn,
   type Delivery,
+  type TurnDeliveryOutcome,
 } from "./delivery";
 import { landReply } from "./landing";
 import { soulHarness } from "./harness";
@@ -372,35 +370,33 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     const substance =
       bell.type === "run-done" ? await runSubstance(bell.payload, readFile) : null;
     const rendered = renderBell(bell, substance, { tellFailure });
-    // A turn already running where the question was asked takes the bell as it
-    // stands (docs/72): it goes into that turn's context as an internal steer
-    // and nowhere else — no line in the thread file, no row of its own — and
-    // what the soul says next is the delivery. Acked only once the model has
-    // really been handed it; anything short of that leaves the bell queued.
+    // A place that answers on its own runtime (docs/soul/87). Null means there
+    // is nothing there to answer in any more, and the bell goes to the door.
     if (origin && bell.type !== "wake") {
       const { runId, kind } = bell.payload;
-      const into = liveDeliverer(origin.place);
-      const handed = into
-        ? await into({ origin, bell: rendered, runId }).catch((e) => {
-            console.warn(`a bell could not be put into the turn running at ${origin.place}`, e);
-            return null;
-          })
+      const deliver = turnDeliverer(origin.place);
+      const outcome = deliver
+        ? await deliver({
+            origin,
+            settings: deps.settings,
+            bell: rendered,
+            bellId: bell.id,
+            runId,
+            ...(deps.signal ? { signal: deps.signal } : {}),
+          }).catch((e): TurnDeliveryOutcome => ({ status: "failed", reason: e instanceof Error ? e.message : String(e) }))
         : null;
-      if (handed) {
-        // Same rule as below: a card only where nobody was looking. A turn
-        // running on a conversation is not the same thing as a reader in front
-        // of it, so the question is asked rather than assumed.
-        if (!handed.watching) {
+      if (outcome?.status === "failed") {
+        deps.onTrouble?.(bell, outcome.reason);
+        break;
+      }
+      if (outcome) {
+        // The reply is on disk; the card only where nobody was looking.
+        if (!outcome.watching) {
           await box
             .put({
               boxId: runId,
               source: "run",
-              // No reply to take a first sentence from: the soul is still
-              // writing it. The run's own brief is what the card says instead.
-              cover:
-                bell.type === "run-failed"
-                  ? coverOf(bell.payload.reason)
-                  : coverOf(substance?.brief ?? "") || `${kind} came back`,
+              cover: coverOf(outcome.reply),
               ...(substance?.output ? { body: substance.output } : {}),
               origin,
               kind,

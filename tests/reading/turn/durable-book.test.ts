@@ -14,6 +14,7 @@ import {
   type BookThreads,
 } from "../../../src/reading/turn/durable-book";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { bookCacheTurn as cacheLine } from "../../../src/reading/turn/durable-book";
 
 const BOOK: BookOrigin = { place: "book", bookId: "b1", threadId: "t1", home: "b1" };
 
@@ -80,4 +81,27 @@ test("the history is the live assembly's while there is one, else the file witho
   const live = await read(bookThreadOrigin(BOOK), { excludeTs: 2 }, ctx);
   expect(live).toHaveLength(1);
   expect(live[0]).toMatchObject({ role: "user", content: "Assembled" });
+});
+
+test("a response's cache line carries the turn's surface, inline mode, thread, round and request start", () => {
+  const message = {
+    role: "assistant",
+    content: [],
+    provider: "anthropic",
+    model: "claude",
+    usage: { input: 10, output: 5, cacheRead: 100, cacheWrite: 0, totalTokens: 115, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    stopReason: "stop",
+    timestamp: 4242,
+  } as unknown as Parameters<typeof cacheLine>[0];
+  const origin = { place: "book", bookId: "b1", threadId: "t1", home: "b1" } as unknown as Parameters<typeof cacheLine>[1];
+  const line = cacheLine(message, origin, 2, { surface: "reading", inline: "chapter" });
+  expect(line).toMatchObject({
+    telemetry: { surface: "reading", inline: "chapter", thread: "t1" },
+    providerId: "anthropic",
+    modelId: "claude",
+    round: 2,
+    startedAt: 4242,
+    ok: true,
+  });
+  expect(cacheLine(message, origin, 1).telemetry).toEqual({ surface: "reading", thread: "t1" });
 });

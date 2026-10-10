@@ -94,7 +94,7 @@ test("a turn nobody is watching still settles into its thread", () => {
     controller,
     message: { ts: 1, role: "ai", text: "" },
   });
-  turns.patch("t", 1, (m) => ({ ...m, text: "a whole answer" }));
+  { const live = turns.get("t")!; const m = live.message; live.message = { ...m, text: "a whole answer" }; }
   const settled = turns.settle("t", controller);
   expect(settled?.message.text).toBe("a whole answer");
   expect(turns.has("t")).toBe(false);

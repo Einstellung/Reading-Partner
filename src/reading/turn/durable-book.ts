@@ -16,6 +16,7 @@ import type { HistoryReader, ThreadOrigin } from "../../legion/durable/extension
 import type { DeskResolver } from "../../legion/durable/tools";
 import type { LandedRow, LandedTurn, Lander } from "../../legion/durable/turn";
 import type { ModelCallReport } from "../../ai/model-usage";
+import { resolveRetention, type CacheTurnInput, type TurnTelemetry } from "../../platform/app/cache-telemetry";
 import type { ThreadMessage } from "../../platform/app/threads";
 import { composeMessages, HISTORY_KEEP, type ReadingTurnMessage } from "../desk-history";
 
@@ -39,10 +40,14 @@ export function bookThreadKey(origin: Pick<BookOrigin, "home" | "threadId">): st
   return `book:${origin.home}:${origin.threadId}`;
 }
 
-/** What a turn assembled in this process for a thread: its history and its desk's tools. */
+/** Who a book turn's requests are logged under, and how much of the book it inlined. */
+export type BookTelemetry = Pick<TurnTelemetry, "surface" | "inline">;
+
+/** What a turn assembled in this process for a thread: its history, its desk's tools, its log surface. */
 export interface AssembledBookTurn {
   history: readonly ReadingTurnMessage[];
   tools: readonly AgentTool[];
+  telemetry?: BookTelemetry;
 }
 
 /**
@@ -134,20 +139,30 @@ export function threadMessageOf(row: LandedRow, deps: Pick<BookLandingDeps, "des
  * file is flushed, and only then is a card put — and none when the reader is
  * looking at the thread (soul/landing.ts's order). A refusal is not written: it
  * is the app talking, shown on the row and never replayed as the model's words.
+ *
+ * A bell's turn puts no card here: the bell puts the run's own (soul/bell.ts).
+ * Its replies before the reader said anything are stamped with the run they
+ * answer, as soul/landing.ts stamps a bell's reply.
  */
 export function bookLander(deps: BookLandingDeps): Lander {
   return async (origin, turn: LandedTurn) => {
     const book = asBookOrigin(origin);
     const have = new Set((deps.threads.messages(book.home, book.threadId) ?? []).map((m) => `${m.role}:${m.ts}`));
     let wrote = false;
+    let readerSpoke = false;
     for (const row of turn.rows) {
-      const message = threadMessageOf(row, deps);
+      if (row.role === "user") readerSpoke = true;
+      const runId = turn.bell?.runId;
+      const message = {
+        ...threadMessageOf(row, deps),
+        ...(runId && row.role === "assistant" && !readerSpoke ? { origin: { runId } } : {}),
+      };
       if (have.has(`${message.role}:${message.ts}`)) continue;
       deps.threads.append(book.home, book.threadId, message);
       wrote = true;
     }
     if (wrote) await deps.threads.flush();
-    if (turn.refusal !== undefined || deps.watching(book)) return;
+    if (turn.refusal !== undefined || turn.bell || deps.watching(book)) return;
     const reply = [...turn.rows].reverse().find((row) => row.role === "assistant");
     if (!reply) return;
     await deps.card(book, reply.ts, reply.text);
@@ -155,15 +170,39 @@ export function bookLander(deps: BookLandingDeps): Lander {
 }
 
 /** One provider response, for the model-call log. */
-export function bookUsageReport(message: AssistantMessage, origin: ThreadOrigin): ModelCallReport {
+export function bookUsageReport(
+  message: AssistantMessage,
+  origin: ThreadOrigin,
+  telemetry: BookTelemetry = { surface: "reading" },
+): ModelCallReport {
   const book = asBookOrigin(origin);
   return {
-    caller: "reading",
+    caller: telemetry.surface,
     bookId: book.bookId,
     provider: message.provider,
     model: message.model,
     usage: message.usage,
     ok: message.stopReason !== "error",
+  };
+}
+
+/** One provider response, for the cache log: the round and its start are the request's. */
+export function bookCacheTurn(
+  message: AssistantMessage,
+  origin: ThreadOrigin,
+  round: number,
+  telemetry: BookTelemetry = { surface: "reading" },
+): CacheTurnInput {
+  const book = asBookOrigin(origin);
+  return {
+    telemetry: { ...telemetry, thread: book.threadId },
+    providerId: message.provider,
+    modelId: message.model,
+    round,
+    startedAt: message.timestamp,
+    usage: message.usage,
+    ok: message.stopReason !== "error",
+    retention: resolveRetention(),
   };
 }
 

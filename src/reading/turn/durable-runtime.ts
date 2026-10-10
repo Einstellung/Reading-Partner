@@ -16,6 +16,7 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { ConversationId } from "@earendil-works/pi-durable";
 import { recordModelCall } from "../../ai/model-usage";
+import { recordCacheTurn } from "../../platform/app/cache-telemetry";
 import { createAppModels } from "../../ai/durable-models";
 import { toolLabel } from "../../legion/execute/tool-result";
 import type { AgentTool } from "../../legion/execute/contract";
@@ -30,7 +31,9 @@ import {
   asBookOrigin,
   bookDeskResolver,
   bookHistoryReader,
+  bookCacheTurn,
   bookLander,
+  bookThreadKey,
   bookUsageReport,
   type BookLandingDeps,
   type BookOrigin,
@@ -140,7 +143,11 @@ export async function openReadingDurable(options: ReadingDurableOptions): Promis
     landers: { book: bookLander(landing) },
     readHistory: async (origin, read, context) => (origin.place === "book" ? readBook(origin, read, context) : []),
     recordResponse: (message, about) => {
-      if (about.origin.place === "book") recordModelCall(bookUsageReport(message, about.origin));
+      if (about.origin.place !== "book") return;
+      // A turn resumed after a restart was not assembled here: it is logged as reading, inline unknown.
+      const telemetry = assembled.get(bookThreadKey(asBookOrigin(about.origin)))?.telemetry;
+      recordModelCall(bookUsageReport(message, about.origin, telemetry));
+      recordCacheTurn(bookCacheTurn(message, about.origin, about.round, telemetry));
     },
     onSettled: (conversationId, origin, result) => {
       for (const listener of listeners) listener({ conversationId, origin, result });

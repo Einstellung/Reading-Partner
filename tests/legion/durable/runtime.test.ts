@@ -67,6 +67,8 @@ test("a steer during a tool round joins the run and splits the landed rows in or
     ["assistant", "Page one says the moon.", 5001],
   ]);
   expect((rows[0] as { tools: { name: string }[] }).tools.map((x) => x.name)).toEqual(["lookup"]);
+  // The usage lines carry the round each request was: the tool round, then the answer.
+  expect(t.rounds).toEqual([1, 2]);
   expect(await steerTurn(t.runtime, turn.conversation, "too late", 6000, ctx)).toBe(false);
   await t.runtime.close(ctx);
 });

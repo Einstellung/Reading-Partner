@@ -15,7 +15,13 @@ import {
   rebuildThreadStoreForTests,
   threadFileName,
 } from "../../src/platform/app/threads";
-import { registerDelivery, registerLiveDelivery, type Delivery, type LiveDelivery } from "../../src/soul";
+import {
+  registerDelivery,
+  registerTurnDelivery,
+  type Delivery,
+  type TurnDelivery,
+  type TurnDeliveryOutcome,
+} from "../../src/soul";
 import type { SteerPort } from "../../src/legion/execute/contract";
 import { createBoxStore, type BoxStore } from "../../src/box";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
@@ -254,8 +260,11 @@ const RUN_FILES = leftOnDisk({
 // goes and hands back a turn. The bell knows nothing else about a book.
 // `seen` is what reading answers off what is on screen (reading/turn-box.ts);
 // left out, the place has no notion of it, the way the door has none.
+// The opener path only: a turn deliverer another test file left registered is
+// set aside (null sends the bell on to the opener).
 function bookDelivery(seen?: boolean): () => void {
-  return registerDelivery("book", async (input) => {
+  const noTurns = registerTurnDelivery("book", async () => null);
+  const opener = registerDelivery("book", async (input) => {
     if (input.origin.place !== "book") return null;
     return {
       key: input.origin.bookId,
@@ -269,6 +278,10 @@ function bookDelivery(seen?: boolean): () => void {
       ...(seen === undefined ? {} : { watching: () => seen }),
     } satisfies Delivery;
   });
+  return () => {
+    opener();
+    noTurns();
+  };
 }
 
 function bookThreadFile(): { messages: { role: string; text: string }[] } | null {
@@ -776,25 +789,21 @@ test("a failure told in one sentence is not asked to be decided about at length"
   expect(renderBell(failed)).toContain("Decide what to do about it");
 });
 
-// --- a bell for a conversation that already has a turn running (docs/72) ---
+// --- a bell answered on the place's own runtime (docs/soul/87) ---------------
 
-// The other half of what a domain registers: how it hands a bell to the turn it
-// already has in flight. `watching` is the same question the opener answers.
-function liveBookDelivery(
-  taken: LiveDelivery[],
-  answer: { threadId: string; watching: boolean } | null,
-): () => void {
-  return registerLiveDelivery("book", async (input) => {
+// What a domain with a turn runtime of its own registers: it answers the bell
+// with a turn there, waiting for a busy conversation itself.
+function turnBookDelivery(taken: TurnDelivery[], outcome: TurnDeliveryOutcome | null): () => void {
+  return registerTurnDelivery("book", async (input) => {
     taken.push(input);
-    return answer;
+    return outcome;
   });
 }
 
-test("a bell for a conversation with a turn running goes into that turn, not a second one", async () => {
-  const taken: LiveDelivery[] = [];
-  const off = liveBookDelivery(taken, { threadId: "thread-1", watching: true });
+test("a bell for a book is answered by the book's own turn, and acked after it", async () => {
+  const taken: TurnDelivery[] = [];
+  const off = turnBookDelivery(taken, { status: "answered", reply: "Back.", watching: true });
   try {
-    createBookThread(BOOK, "thread-1");
     const { bells } = bellStore();
     const { box, files: cards } = boxStore();
     const { runs } = runFiles();
@@ -807,60 +816,69 @@ test("a bell for a conversation with a turn running goes into that turn, not a s
 
     expect(await answerBell({ settings, bells, runs, box, send, now: () => NOW })).toBe(1);
 
-    // No turn of its own, and the bell text is what a trailing message carries.
     expect(rounds).toEqual([]);
     expect(taken.length).toBe(1);
     expect(taken[0]!.runId).toBe("r-1");
+    expect(taken[0]!.bellId).toBe("run-done-r-1");
     expect(taken[0]!.bell).toContain("not said by the reader");
     expect(taken[0]!.origin).toEqual(JSON.parse(bookOrigin));
-    // Nothing of the bell's is written into the conversation — the file was
-    // never touched, so there is nothing on disk at all.
-    expect(bookThreadFile()).toBeNull();
-    expect(doorFile()).toBeNull();
-    // Handed over is answered: the ledger is stamped and the inbox is empty.
     expect((await bells.read()).length).toBe(0);
     expect((await bells.get("run-done-r-1"))?.state).toBe("acked");
-    // The reader is looking at it, so there is no card.
+    // The reader was looking, so there is no card.
     expect([...cards.values()].length).toBe(0);
   } finally {
     off();
   }
 });
 
-test("a delivery into a running turn nobody is watching still leaves a card", async () => {
-  const off = liveBookDelivery([], { threadId: "thread-1", watching: false });
+test("a book's turn that landed unseen leaves the run's card, covered by the reply", async () => {
+  const off = turnBookDelivery([], { status: "answered", reply: "Four papers came back. The first settles it.", watching: false });
   try {
-    createBookThread(BOOK, "thread-1");
     const { bells } = bellStore();
     const { box, files: cards } = boxStore();
     await bells.ring(
       "run-done",
-      {
-        runId: "r-1",
-        kind: "research-literature",
-        brief: "Four papers came back. The first settles it.",
-        output: "legion/outputs/r-1.md",
-        deliverTo: bookOrigin,
-      },
+      { runId: "r-1", kind: "research-literature", brief: "b", output: "legion/outputs/r-1.md", deliverTo: bookOrigin },
       { at: NOW - 1000 },
     );
     const { send } = sender([]);
-    expect(
-      await answerBell({ settings, bells, box, send, readFile: RUN_FILES, now: () => NOW }),
-    ).toBe(1);
+    expect(await answerBell({ settings, bells, box, send, readFile: RUN_FILES, now: () => NOW })).toBe(1);
 
     const item = JSON.parse([...cards.values()][0]!) as Record<string, unknown>;
     expect(item.runId).toBe("r-1");
     expect(item.body).toBe(OUTPUT_TEXT);
-    // No reply to take a first sentence from: the run's own brief says it.
     expect(item.cover).toBe("Four papers came back.");
   } finally {
     off();
   }
 });
 
-test("a bell the running turn never took is answered by a turn of its own", async () => {
-  const offLive = liveBookDelivery([], null);
+test("a book's turn that failed leaves the bell queued and unacked", async () => {
+  const off = turnBookDelivery([], { status: "failed", reason: "model down" });
+  try {
+    const { bells } = bellStore();
+    const { box, files: cards } = boxStore();
+    await bells.ring(
+      "run-done",
+      { runId: "r-1", kind: "research-literature", brief: "in", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    const trouble: string[] = [];
+    const { send } = sender([]);
+    expect(
+      await answerBell({ settings, bells, box, send, now: () => NOW, onTrouble: (_b, why) => trouble.push(why) }),
+    ).toBe(0);
+    expect(trouble).toEqual(["model down"]);
+    expect((await bells.get("run-done-r-1"))?.state).not.toBe("acked");
+    expect((await bells.read()).length).toBe(1);
+    expect([...cards.values()].length).toBe(0);
+  } finally {
+    off();
+  }
+});
+
+test("a book that is gone sends the bell to the place's opener, and then the door", async () => {
+  const offTurns = turnBookDelivery([], null);
   const off = bookDelivery(true);
   try {
     createBookThread(BOOK, "thread-1");
@@ -874,12 +892,9 @@ test("a bell the running turn never took is answered by a turn of its own", asyn
     const { send, rounds } = sender([{ text: "Back." }]);
     expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
     expect(rounds.length).toBe(1);
-    expect(bookThreadFile()!.messages).toEqual([
-      expect.objectContaining({ role: "ai", text: "Back." }),
-    ]);
   } finally {
     off();
-    offLive();
+    offTurns();
   }
 });
 

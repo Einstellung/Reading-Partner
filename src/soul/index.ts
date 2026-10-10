@@ -28,18 +28,19 @@ export {
 } from "./delegate";
 export {
   deliveryOpener,
-  liveDeliverer,
   originLabel,
   parseOrigin,
   registerDelivery,
-  registerLiveDelivery,
+  registerTurnDelivery,
+  turnDeliverer,
   type Delivery,
   type DeliveredTurn,
   type DeliveryHold,
   type DeliveryInput,
   type DeliveryOpener,
-  type LiveDelivery,
-  type LiveDeliverer,
+  type TurnDeliverer,
+  type TurnDelivery,
+  type TurnDeliveryOutcome,
 } from "./delivery";
 export {
   listRoles,
