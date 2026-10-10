@@ -32,6 +32,7 @@ import {
   ThreadDoc,
   type LandStep,
   type ThreadOrigin,
+  type TurnContent,
   type TurnResult,
 } from "./extension";
 import type { DurableRuntime } from "./harness";
@@ -187,9 +188,16 @@ export function createLandStep(deps: LandDeps): LandStep {
     const last = runs[runs.length - 1] ?? record;
     const status = last.status === "done" || last.status === "unanswered" ? last.status : record.status;
     const ids = new Set(runs.map((r) => String(r.id)));
+    const ended = last as { reason?: string; detail?: unknown };
+    const why: Omit<TurnResult, "landed"> = {
+      status,
+      ...(status === "unanswered" && ended.reason ? { reason: ended.reason } : {}),
+      ...(status === "unanswered" && typeof ended.detail === "string" ? { detail: ended.detail } : {}),
+    };
     const recovery = await runtime.snapshot(RecoveryDoc, task.conversationId, context);
-    if ([...ids].some((id) => recovery?.submissions[id]?.superseded)) return { status, landed: false };
+    if ([...ids].some((id) => recovery?.submissions[id]?.superseded)) return { ...why, landed: false };
     const refusal = deps.takeRefusal(task.conversationId);
+    if (refusal !== undefined) why.refusal = refusal;
     let rows: LandedRow[] = [];
     if (record.entry !== undefined) {
       const view = await runtime.context(task.conversationId, context);
@@ -201,14 +209,14 @@ export function createLandStep(deps: LandDeps): LandStep {
         ...(half ? { partial: half } : {}),
       });
     }
-    if (rows.length === 0 && refusal === undefined) return { status, landed: false };
+    if (rows.length === 0 && refusal === undefined) return { ...why, landed: false };
     const origin = (await runtime.snapshot(ThreadDoc, task.conversationId, context))?.origin;
-    if (!origin) return { status, landed: false };
+    if (!origin) return { ...why, landed: false };
     const lander = deps.landers[origin.place];
     if (!lander) throw new Error(`no lander for place "${origin.place}"`);
     const turn: LandedTurn = { conversationId: task.conversationId, status, rows };
     await lander(origin, refusal === undefined ? turn : { ...turn, refusal }, context);
-    return { status, landed: true };
+    return { ...why, landed: true };
   };
 }
 
@@ -217,7 +225,7 @@ export interface TurnRequest {
   key: string;
   origin: ThreadOrigin;
   /** The reader's line, already written to the conversation file. */
-  content: string;
+  content: TurnContent;
   /** The turn's system prompt, by section key. */
   sections: Readonly<Record<string, string>>;
   tools: readonly string[];

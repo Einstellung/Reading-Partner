@@ -56,6 +56,11 @@ export interface LiveTurn<M extends LiveMessage> {
   // so the thread is known to be busy — the reader talking into it steers it
   // rather than opening a second turn on the same conversation.
   silent?: boolean;
+  // A turn on the durable runtime (reading/turn/book-turn-rows.ts): every row
+  // after the reader's line as last projected, and the handle that steers and
+  // stops it. `message` is then the last of `rows`.
+  rows?: M[];
+  durable?: { steer(text: string, ts: number): Promise<boolean>; stop(): void };
   // Run once the turn lands. Hanging up mid-stream defers the observation
   // distillation to here, so it reads a whole answer instead of half a sentence.
   onSettled?: () => void;
@@ -153,6 +158,10 @@ export function createLiveTurns<M extends LiveMessage>(): LiveTurns<M> {
     withLive(threadId, messages) {
       const turn = turns.get(threadId);
       if (!turn || turn.silent) return messages;
+      if (turn.rows) {
+        const have = new Set(messages.map((m) => `${m.role}:${m.ts}`));
+        return [...messages, ...turn.rows.filter((m) => !have.has(`${m.role}:${m.ts}`))];
+      }
       const { ts, role } = turn.message;
       if (messages.some((m) => m.ts === ts && m.role === role)) return messages;
       return [...messages, turn.message];

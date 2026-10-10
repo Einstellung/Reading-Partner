@@ -10,7 +10,7 @@
 import type { Context } from "@earendil-works/chord";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { LiveDoc, type Conversation, type ModelRef } from "@earendil-works/pi-durable";
-import type { TurnResult } from "../../legion/durable/extension";
+import type { TurnContent, TurnResult } from "../../legion/durable/extension";
 import {
   startTurn,
   steerTimestamps,
@@ -29,8 +29,8 @@ import { TURN_SECTION, type ReadingDurable } from "./durable-runtime";
 
 export interface BookTurnRequest {
   origin: BookOrigin;
-  /** The reader's line, already in the thread file at `ts`. */
-  line: { text: string; ts: number };
+  /** The reader's line, already in the thread file at `ts`; `content` when it carries images. */
+  line: { text: string; ts: number; content?: TurnContent };
   systemPrompt: string;
   /** The assembled history before the reader's line. */
   history: readonly ReadingTurnMessage[];
@@ -63,7 +63,7 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
     {
       key,
       origin: bookThreadOrigin(request.origin),
-      content: request.line.text,
+      content: request.line.content ?? request.line.text,
       sections: { [TURN_SECTION]: request.systemPrompt },
       tools: request.tools.map((tool) => tool.name).filter((name) => runtime.registrations.has(name)),
       model: request.model,

@@ -8,7 +8,7 @@
 
 import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
-import type { AssistantMessage, Message, Tool } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ImageContent, Message, TextContent, Tool } from "@earendil-works/pi-ai";
 import {
   AgentDoc,
   defineDoc,
@@ -107,9 +107,22 @@ export type ResponseRecorder = (
   about: { conversationId: ConversationId; origin: ThreadOrigin },
 ) => void;
 
-export type TurnInput = { content: string; startedAt: number };
+/** The reader's line as the model gets it: text, or text and the page window's images. */
+export type TurnContent = string | (TextContent | ImageContent)[];
+export type TurnInput = { content: TurnContent; startedAt: number };
 export type TurnCheckpoint = { phase: "submit" } | { phase: "wait" } | { phase: "land" };
-export type TurnResult = { status: SubmissionRecord["status"]; landed: boolean };
+/**
+ * How the turn's last run settled. `reason` and `detail` are the submission's
+ * when it went unanswered (`aborted`, `model_error`, ...); `refusal` is the
+ * request the turn declined to send (docs/pitfall/516).
+ */
+export type TurnResult = {
+  status: SubmissionRecord["status"];
+  landed: boolean;
+  reason?: string;
+  detail?: string;
+  refusal?: string;
+};
 
 /**
  * The landing step of `rp.turn`, implemented in turn.ts. `record` is the

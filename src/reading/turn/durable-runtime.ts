@@ -165,18 +165,23 @@ export async function openReadingDurable(options: ReadingDurableOptions): Promis
 }
 
 let started: Promise<ReadingDurable> | undefined;
-let watchingProbe: ((origin: BookOrigin) => boolean) | undefined;
+const watchingProbes = new Set<(origin: BookOrigin) => boolean>();
 
-/** The reading session says how to tell whether the reader is looking at a book thread. */
-export function setBookWatching(probe: ((origin: BookOrigin) => boolean) | undefined): void {
-  watchingProbe = probe;
+/**
+ * A surface that shows book threads (the reading session, the phone lesson)
+ * says how to tell whether the reader is looking at one; the returned function
+ * takes it back.
+ */
+export function setBookWatching(probe: (origin: BookOrigin) => boolean): () => void {
+  watchingProbes.add(probe);
+  return () => watchingProbes.delete(probe);
 }
 
 /** Open the device's durable runtime once, at app start. Failures are logged; the next call tries again. */
 export function startReadingDurable(catalog: () => readonly AgentTool[]): Promise<ReadingDurable> {
   started ??= openReadingDurable({
     catalog: catalog(),
-    watching: (origin) => watchingProbe?.(origin) ?? false,
+    watching: (origin) => [...watchingProbes].some((probe) => probe(origin)),
     onReport: (error) => console.warn("durable runtime", error),
   }).catch((error: unknown) => {
     started = undefined;

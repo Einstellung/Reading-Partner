@@ -128,7 +128,11 @@ export type CallAction<M extends CallRow> =
   // The view's own writes never come through here (reading/thread-arrivals.ts).
   | { type: "row-arrived"; threadId: string; row: M }
   // A turn stopped before writing anything, so its row is not a row.
-  | { type: "row-dropped"; threadId: string; ts: number };
+  | { type: "row-dropped"; threadId: string; ts: number }
+  // A durable turn's rows after the reader's line at `after`, as its view
+  // state projects them (reading/turn/book-turn-rows.ts): they replace every
+  // row after that line, unchanged rows kept as they were.
+  | { type: "turn-rows"; threadId: string; after: number; rows: M[] };
 
 // The one place the open call changes. Pure: it starts no turn, writes no file
 // and touches no engine — the session (reading/session/) does all of that around
@@ -146,6 +150,32 @@ export type CallAction<M extends CallRow> =
 //     stays a bubble — this is what a citation tapped inside a bubble does.
 //   - the state object is returned unchanged whenever nothing moved, so a
 //     streaming reply does not re-render the surfaces that did not change.
+function sameRow(a: CallRow, b: CallRow): boolean {
+  return (
+    a.role === b.role &&
+    a.ts === b.ts &&
+    a.text === b.text &&
+    a.streaming === b.streaming &&
+    a.queued === b.queued &&
+    a.phase === b.phase &&
+    a.failed === b.failed &&
+    a.notice === b.notice &&
+    JSON.stringify(a.tools ?? null) === JSON.stringify(b.tools ?? null)
+  );
+}
+
+/**
+ * The turn's new rows, keeping every row that did not change as the object it
+ * was: a streamed token re-renders the row it went into and nothing else.
+ */
+export function mergeTurnRows<M extends CallRow>(prev: readonly M[], next: readonly M[]): M[] {
+  const before = new Map(prev.map((m) => [`${m.role}:${m.ts}`, m]));
+  return next.map((m) => {
+    const was = before.get(`${m.role}:${m.ts}`);
+    return was && sameRow(was, m) ? was : m;
+  });
+}
+
 export function callReducer<M extends CallRow>(
   state: CallState<M> | null,
   action: CallAction<M>,
@@ -227,6 +257,11 @@ export function callReducer<M extends CallRow>(
         ...state,
         messages: state.messages.filter((m) => !(m.ts === action.ts && m.role === "ai")),
       };
+    case "turn-rows": {
+      const before = state.messages.filter((m) => m.ts <= action.after);
+      const turn = state.messages.filter((m) => m.ts > action.after);
+      return { ...state, messages: [...before, ...mergeTurnRows(turn, action.rows)] };
+    }
   }
 }
 
