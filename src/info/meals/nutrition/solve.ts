@@ -1,12 +1,11 @@
-// Grams for a meal the model composed (docs/research/健身饮食与快手三餐调研.md,
-// 算法 step 9).
+// Grams for a meal the model composed (docs/73 每顿怎么搭).
 //
 // The model names the foods and their roles; the program solves the amounts.
-// One energy basis throughout, the foods' listed kcal: the protein food and
-// the staple are solved together so the meal lands on both its protein and its
-// kcal. The oil or spread starts at its default and moves (within its range)
-// only when the staple would leave its own range; past the oil's cap the
-// staple may grow to 1.5× its usual maximum.
+// The protein food gets a normal portion, not the meal's protein target: the
+// target is a floor the portions usually clear. The staple then fills the
+// meal's kcal within its usual range, and the oil or spread moves up from its
+// default only when the staple is full. The snack is solved last and its fat
+// item (the nuts) closes what the day's main meals left of the day's kcal.
 
 import { foodById, isProduce, type Food } from "./foods";
 import type { DayTargets, MealSlot, MealTarget } from "./targets";
@@ -67,7 +66,16 @@ export interface DaySolution {
 
 const MAX_FAT_ROUNDS = 4;
 const FAT_BUMP_STEP = 5;
-const STAPLE_STRETCH = 1.5;
+
+/**
+ * The protein a meal's protein food brings, together with any non-dairy
+ * protein the model fixed beside it (milk and yogurt on the side do not
+ * count): two eggs at breakfast, an ordinary piece of meat at lunch and
+ * dinner, a cup of soy milk or yogurt at the snack.
+ */
+export const PORTION_PROTEIN: Readonly<Record<MealSlot, number>> = { breakfast: 12, lunch: 25, dinner: 25, snack: 9 };
+/** The most kcal a staple brings to one meal. */
+export const STAPLE_KCAL_CAP = 400;
 
 const round5 = (x: number) => Math.round(x / 5) * 5;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -104,53 +112,72 @@ function addUp(parts: readonly Nutrition[]): Nutrition {
   );
 }
 
+/** A fixed item whose protein counts toward the portion: a protein food that is not dairy. */
+function countsTowardPortion(food: Food): boolean {
+  return food.roles.includes("protein") && !food.roles.includes("dairy");
+}
+
 /**
- * Solve one meal. `fatBumpG` raises the fat item's starting amount (the
- * day-level fat-floor loop uses it); the fat item stays within its max.
+ * The grams of a protein food that make the slot's portion, given the protein
+ * the fixed items beside it already count for: whole units (eggs) or 5 g,
+ * within the food's range.
  */
-export function solveMeal(slot: MealSlot, items: readonly TemplateItem[], target: MealTarget, fatBumpG = 0): MealSolution {
+export function portionGrams(food: Food, slot: MealSlot, beside = 0): number {
+  const want = Math.max(0, PORTION_PROTEIN[slot] - beside);
+  const unit = food.unit?.grams ?? 5;
+  return Math.round(clamp((want / food.protein) * 100, food.minG, food.maxG) / unit) * unit;
+}
+
+/** The most of a staple one meal takes: its usual max, or 400 kcal of it when that is less. */
+export function stapleCapG(food: Food): number {
+  return Math.max(food.minG, Math.min(food.maxG, (STAPLE_KCAL_CAP / food.kcal) * 100));
+}
+
+export interface SolveOptions {
+  /** Raises a main meal's fat item over its default; the day-level fat-floor loop uses it. */
+  fatBumpG?: number;
+  /** The kcal to fill when it is not the target's: the snack fills what the day has left. */
+  kcal?: number;
+}
+
+/**
+ * Solve one meal: exactly one protein item, at most one staple and at most one
+ * fat (which slots need a staple is the checks' rule). The protein food gets
+ * its portion; the staple fills the kcal within [its min, stapleCapG]; the fat
+ * item starts at its default plus `fatBumpG` (the snack's at its minimum) and
+ * moves up, within its max, to close what is still short.
+ */
+export function solveMeal(
+  slot: MealSlot,
+  items: readonly TemplateItem[],
+  target: MealTarget,
+  opts: SolveOptions = {},
+): MealSolution {
   const rows = items.map((i) => ({ item: i, food: need(i.foodId), grams: i.role === "fixed" ? (i.grams ?? 0) : 0 }));
   const proteinRows = rows.filter((r) => r.item.role === "protein");
   const stapleRows = rows.filter((r) => r.item.role === "staple");
   const fatRows = rows.filter((r) => r.item.role === "fat");
-  if (proteinRows.length !== 1 || stapleRows.length !== 1 || fatRows.length > 1) {
-    throw new Error("A meal template needs exactly one protein, one staple and at most one fat item");
-  }
   const P = proteinRows[0];
+  if (!P || proteinRows.length !== 1 || stapleRows.length > 1 || fatRows.length > 1) {
+    throw new Error("A meal template needs exactly one protein, at most one staple and at most one fat item");
+  }
   const C = stapleRows[0];
   const O = fatRows[0];
-  const fixed = rows.filter((r) => r.item.role === "fixed");
-  const fixedN = addUp(fixed.map((r) => rowNutrition(r.food, r.grams)));
-
+  const kcal = opts.kcal ?? target.kcal;
   const kc = (f: Food) => f.kcal / 100;
-  const pr = (f: Food) => f.protein / 100;
-  const pUnit = P.food.unit?.grams ?? 5;
+  const sum = () => rows.reduce((s, r) => s + kc(r.food) * r.grams, 0);
+  const beside = rows
+    .filter((r) => r.item.role === "fixed" && countsTowardPortion(r.food))
+    .reduce((s, r) => s + (r.food.protein * r.grams) / 100, 0);
 
-  if (O) O.grams = Math.min(O.food.maxG, (O.food.defaultG ?? O.food.minG) + fatBumpG);
-
-  const solve = () => {
-    const restP = target.protein - fixedN.protein - (O ? pr(O.food) * O.grams : 0);
-    const restK = target.kcal - fixedN.kcal - (O ? kc(O.food) * O.grams : 0);
-    const det = pr(P.food) * kc(C.food) - pr(C.food) * kc(P.food);
-    const raw = det !== 0 ? (restP * kc(C.food) - pr(C.food) * restK) / det : restP / pr(P.food);
-    const x = Math.round(clamp(raw, P.food.minG, P.food.maxG) / pUnit) * pUnit;
-    P.grams = x;
-    C.grams = (restK - kc(P.food) * x) / kc(C.food);
-  };
-
-  solve();
+  P.grams = portionGrams(P.food, slot, beside);
   if (O) {
-    if (C.grams > C.food.maxG) {
-      O.grams = Math.min(O.food.maxG, O.grams + ((C.grams - C.food.maxG) * kc(C.food)) / kc(O.food));
-      solve();
-    } else if (C.grams < C.food.minG) {
-      O.grams = Math.max(O.food.minG, O.grams - ((C.food.minG - C.grams) * kc(C.food)) / kc(O.food));
-      solve();
-    }
-    O.grams = round5(O.grams);
-    solve();
+    const start = slot === "snack" ? O.food.minG : (O.food.defaultG ?? O.food.minG) + (opts.fatBumpG ?? 0);
+    O.grams = Math.min(O.food.maxG, start);
   }
-  C.grams = round5(clamp(C.grams, C.food.minG, C.food.maxG * STAPLE_STRETCH));
+  if (C) C.grams = round5(clamp((kcal - sum()) / kc(C.food), C.food.minG, stapleCapG(C.food)));
+  const short = kcal - sum();
+  if (O && short > 0) O.grams = Math.min(O.food.maxG, round5(O.grams + short / kc(O.food)));
 
   const solved: SolvedRow[] = rows
     .filter((r) => r.grams > 0)
@@ -171,9 +198,11 @@ export function mealCells(slot: MealSlot, target: MealTarget, totals: Nutrition,
 }
 
 /**
- * Solve a day's meals against its targets, in the day's eating order. When
- * the day's fat lands under its floor, each main meal's fat item gets 5 g more
- * and the day is solved again, up to four solves in all.
+ * Solve a day's meals against its targets, returned in the day's eating order.
+ * The main meals are solved first; the snack then fills its own share plus
+ * whatever they left under theirs. When the day's fat lands under its floor,
+ * each main meal's fat item gets 5 g more and the day is solved again, up to
+ * four solves in all.
  */
 export function solveDay(meals: readonly DayMealInput[], day: DayTargets): DaySolution {
   const order = (m: DayMealInput) => {
@@ -181,11 +210,20 @@ export function solveDay(meals: readonly DayMealInput[], day: DayTargets): DaySo
     return i < 0 ? day.order.length : i;
   };
   const sorted = [...meals].sort((a, b) => order(a) - order(b));
+  const solveAll = (bump: number): MealSolution[] => {
+    const mains = sorted.map((m) =>
+      m.slot === "snack" ? null : solveMeal(m.slot, m.items, day.meals[m.slot], { fatBumpG: bump }),
+    );
+    const left = mains.reduce((s, m) => s + (m ? m.target.kcal - m.totals.kcal : 0), 0);
+    return sorted.map(
+      (m, i) => mains[i] ?? solveMeal(m.slot, m.items, day.meals[m.slot], { kcal: day.meals[m.slot].kcal + left }),
+    );
+  };
   let bump = 0;
   let solved: MealSolution[] = [];
   let totals: Nutrition = { kcal: 0, protein: 0, fat: 0, carbs: 0 };
   for (let round = 0; round < MAX_FAT_ROUNDS; round++) {
-    solved = sorted.map((m) => solveMeal(m.slot, m.items, day.meals[m.slot], m.slot === "snack" ? 0 : bump));
+    solved = solveAll(bump);
     totals = addUp(solved.map((m) => m.totals));
     if (totals.fat >= day.fatFloor || round === MAX_FAT_ROUNDS - 1) break;
     bump += FAT_BUMP_STEP;

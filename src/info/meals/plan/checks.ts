@@ -5,13 +5,14 @@
 // Order: the template first (only foods in the table, the roles the solver
 // needs), because nothing can be solved until it holds; then the grams are
 // solved; then the rules that read the solved week — minutes, dislikes,
-// protein reached, flavour next to flavour, fish twice a week.
+// protein reached, each day's kcal reached, flavour next to flavour, fish
+// twice a week.
 
 import { foodAllowed, foodById, type Food } from "../nutrition/foods";
 import type { TemplateItem } from "../nutrition/solve";
 import { minuteCap, type Profile, type Targets } from "../nutrition/targets";
 import { dayTargetsOn, mealNumbers, solvePlan } from "./solve-week";
-import { MAIN_MEAL_KEYS, MEAL_KEYS, type Meal, type MealRef, type WeekPlan } from "./types";
+import { MAIN_MEAL_KEYS, MEAL_KEYS, type Meal, type MealKey, type MealRef, type WeekPlan } from "./types";
 import { dayIndexOf, mealsInOrder, sameMeal } from "./week";
 
 export interface CheckInput {
@@ -40,12 +41,18 @@ function where(plan: WeekPlan, ref: MealRef): string {
 
 const ROLE_FITS: Record<Exclude<TemplateItem["role"], "fixed">, (f: Food) => boolean> = {
   protein: (f) => f.roles.includes("protein"),
-  staple: (f) => f.roles.includes("staple") || f.roles.includes("fruit"),
+  staple: (f) => f.roles.includes("staple"),
   fat: (f) => f.roles.includes("fat"),
 };
 
-/** What is wrong with one made meal's template, before anything is solved. */
-export function templateProblems(at: string, meal: Meal): string[] {
+/** A day whose meals solve to less than this share of their kcal goes back to the model. */
+export const DAY_KCAL_FLOOR = 0.9;
+
+/**
+ * What is wrong with one made meal's template, before anything is solved.
+ * Breakfast, lunch and dinner need one staple; the snack may have none.
+ */
+export function templateProblems(at: string, meal: Meal, key: MealKey): string[] {
   const out: string[] = [];
   if (!meal.name) out.push(`${at} needs a name.`);
   if (!meal.searchName) out.push(`${at} needs a searchName.`);
@@ -67,12 +74,20 @@ export function templateProblems(at: string, meal: Meal): string[] {
         out.push(`${at}: ${g} g of ${food.id} is outside its ${food.minG}–${food.maxG} g range.`);
       }
     } else if (!ROLE_FITS[item.role](food)) {
-      out.push(`${at}: ${food.id} cannot be the ${item.role}; its roles are ${food.roles.join(", ")}.`);
+      out.push(
+        item.role === "staple" && food.roles.includes("fruit")
+          ? `${at}: ${food.id} is a fruit and never the staple; make it a fixed item of 150–200 g.`
+          : `${at}: ${food.id} cannot be the ${item.role}; its roles are ${food.roles.join(", ")}.`,
+      );
     }
   }
   const count = (role: TemplateItem["role"]) => items.filter((i) => i.role === role).length;
   if (count("protein") !== 1) out.push(`${at} needs exactly one protein item; it has ${count("protein")}.`);
-  if (count("staple") !== 1) out.push(`${at} needs exactly one staple item; it has ${count("staple")}.`);
+  if (key === "snack") {
+    if (count("staple") > 1) out.push(`${at} has ${count("staple")} staple items; at most one.`);
+  } else if (count("staple") !== 1) {
+    out.push(`${at} needs exactly one staple item; it has ${count("staple")}.`);
+  }
   if (count("fat") > 1) out.push(`${at} has ${count("fat")} fat items; at most one.`);
   return out;
 }
@@ -118,7 +133,7 @@ export function checkPlan(input: CheckInput): CheckResult {
     for (const key of MEAL_KEYS) {
       const ref = { date: day.date, meal: key };
       if (day[key].mode !== "make" || !inScope(ref)) continue;
-      for (const text of templateProblems(where(input.plan, ref), day[key])) fail(text, ref);
+      for (const text of templateProblems(where(input.plan, ref), day[key], key)) fail(text, ref);
     }
   }
   if (problems.length) return { plan: input.plan, problems, failing: failing(input.plan) };
@@ -152,6 +167,28 @@ export function checkPlan(input: CheckInput): CheckResult {
           ref,
         );
       }
+    }
+  }
+
+  // Calories: the portions are normal ones and every staple has a cap, so a
+  // day of light foods can fall well short. Any meal of the day can mend it,
+  // so the text names the day and no meal.
+  for (const day of plan.days) {
+    if (!MEAL_KEYS.some((key) => inScope({ date: day.date, meal: key }))) continue;
+    const dayT = dayTargetsOn(targets, profile, day.date);
+    let got = 0;
+    let want = 0;
+    for (const key of MEAL_KEYS) {
+      const numbers = mealNumbers(day[key], key, dayT);
+      if (!numbers) continue;
+      got += numbers.totals.kcal;
+      want += numbers.target.kcal;
+    }
+    if (want > 0 && got < DAY_KCAL_FLOOR * want) {
+      problems.push(
+        `Day ${dayIndexOf(plan, day.date)} comes to ${Math.round(got)} kcal of the ${Math.round(want)} its meals are ` +
+          "for, under 90%. Add a fixed item to one of its meals: milk, a second serving of a staple, or nuts.",
+      );
     }
   }
 

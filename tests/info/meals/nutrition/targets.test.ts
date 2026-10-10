@@ -29,43 +29,43 @@ const EXAMPLE: Profile = {
 const withP = (p: Partial<Profile>): Profile => ({ ...EXAMPLE, ...p });
 
 describe("computeTargets", () => {
-  test("the prototype's example user: 2450 / 2150 kcal, 135 g protein", () => {
+  test("the prototype's example user: 2300 / 2150 kcal, 135 g protein", () => {
     const t = computeTargets(EXAMPLE, "CN");
     expect(t.bmrFormula).toBe("cunningham");
     expect(t.ffm).toBeCloseTo(59.04, 2);
     expect(t.bmr).toBeCloseTo(1798.88, 2);
-    expect(t.palTraining).toBeCloseTo(1.6, 10);
+    expect(t.palTraining).toBeCloseTo(1.5, 10);
     expect(t.palRest).toBeCloseTo(1.4, 10);
-    expect(t.palAverage).toBeCloseTo(10.4 / 7, 10);
+    expect(t.palAverage).toBeCloseTo(10.1 / 7, 10);
     expect(t.cutRule).toBe("weight-percent");
     expect(t.deficit).toBeCloseTo(396, 0);
-    expect(t.training.kcal).toBe(2450);
+    expect(t.training.kcal).toBe(2300);
     expect(t.rest.kcal).toBe(2150);
     expect(t.protein).toBe(135);
     expect(t.training.protein).toBe(135);
     expect(t.rest.protein).toBe(135);
     expect(t.proteinRule).toEqual({ kind: "ffm", perKg: 2.3, ffmKg: t.ffm as number });
-    expect(t.training.fat).toBe(70);
-    expect(t.training.carbs).toBe(320);
+    expect(t.training.fat).toBe(65);
+    expect(t.training.carbs).toBe(295);
     expect(t.rest.fat).toBe(60);
     expect(t.rest.carbs).toBe(270);
     expect(t.weightChangeKgPerWeek).toBeLessThan(0);
   });
 
   test("the research doc's worked example", () => {
-    // 70 kg, 20% body fat. Every intermediate matches the doc; the training day
-    // comes out at 2350 rather than the doc's 2400 because the day targets are
-    // the weekly target scaled by PAL (the prototype's split), not TDEE minus a
-    // flat deficit.
+    // 70 kg, 20% body fat. The rest-day intermediates match the doc. A training
+    // day is 0.1 over the base PAL (docs/73 目标), not the doc's 0.2, so its
+    // TDEE is 2598 rather than 2771; and the day targets are the weekly target
+    // scaled by PAL (the prototype's split), not TDEE minus a flat deficit.
     const t = computeTargets(withP({ weightKg: 70, bodyFatPct: 20 }), "CN");
     expect(t.ffm).toBeCloseTo(56, 6);
     expect(Math.round(t.bmr)).toBe(1732);
     expect(Math.round(t.tdeeRest)).toBe(2425);
-    expect(Math.round(t.tdeeTraining)).toBe(2771);
+    expect(Math.round(t.tdeeTraining)).toBe(2598);
     expect(t.bmi).toBeCloseTo(22.9, 1);
     expect(Math.round(t.deficit)).toBe(385);
     expect(t.rest.kcal).toBe(2050);
-    expect(t.training.kcal).toBe(2350);
+    expect(t.training.kcal).toBe(2200);
     expect(t.protein).toBe(130);
   });
 
@@ -119,16 +119,29 @@ describe("computeTargets", () => {
     expect(t.rest.kcal).toBe(1000);
   });
 
-  test("gain: weekly average × 1.10, split by PAL, carbs at least 3 g/kg", () => {
+  test("gain: weekly average × 1.05, split by PAL, carbs at least 3 g/kg", () => {
     const t = computeTargets(withP({ goal: "gain", bodyFatPct: undefined }), "CN");
-    expect(t.weeklyKcal).toBeCloseTo(t.tdeeAverage * 1.1, 6);
-    expect(t.training.kcal).toBe(Math.round((t.weeklyKcal * 1.6) / t.palAverage / 50) * 50);
+    expect(t.weeklyKcal).toBeCloseTo(t.tdeeAverage * 1.05, 6);
+    expect(t.training.kcal).toBe(Math.round((t.weeklyKcal * 1.5) / t.palAverage / 50) * 50);
     expect(t.rest.kcal).toBe(Math.round((t.weeklyKcal * 1.4) / t.palAverage / 50) * 50);
     expect(t.training.kcal).toBeGreaterThan(t.rest.kcal);
     expect(t.training.carbFloor).toBe(216);
     expect(t.rest.carbs).toBeGreaterThanOrEqual(216);
     expect(t.protein).toBe(130); // 1.8 × 72
     expect(t.weightChangeKgPerWeek).toBeGreaterThan(0);
+  });
+
+  test("the project owner's profile: 2600 / 2450 kcal, 115 g protein", () => {
+    const t = computeTargets(
+      withP({ goal: "gain", heightCm: 172, weightKg: 63.5, bodyFatPct: 17.5, trainingDays: [1, 2, 4, 5, 6], trainTime: "morning" }),
+      "CN",
+    );
+    expect(t.palTraining).toBeCloseTo(1.5, 10);
+    expect(t.weeklyKcal).toBeCloseTo(t.tdeeAverage * 1.05, 6);
+    expect(t.training.kcal).toBe(2600);
+    expect(t.rest.kcal).toBe(2450);
+    expect(t.protein).toBe(115);
+    expect(t.training.postWorkout).toBe("breakfast");
   });
 
   test("steady: each day at its own TDEE", () => {
@@ -140,12 +153,12 @@ describe("computeTargets", () => {
     expect(t.protein).toBe(Math.round((1.4 * 72) / 5) * 5);
   });
 
-  test("activity: stand and labor bases, training capped at 2.0", () => {
+  test("activity: stand and labor bases, a training day 0.1 over its base", () => {
     const stand = computeTargets(withP({ work: "stand" }), "CN");
     expect(stand.palRest).toBeCloseTo(1.6, 10);
-    expect(stand.palTraining).toBeCloseTo(1.8, 10);
+    expect(stand.palTraining).toBeCloseTo(1.7, 10);
     const labor = computeTargets(withP({ work: "labor" }), "CN");
-    expect(labor.palTraining).toBeCloseTo(2.0, 10);
+    expect(labor.palTraining).toBeCloseTo(1.9, 10);
     const none = computeTargets(withP({ trainingDays: [] }), "CN");
     expect(none.palAverage).toBeCloseTo(1.4, 10);
   });
@@ -212,7 +225,7 @@ describe("meal split", () => {
 
     const t = computeTargets(withP({ trainTime: "morning" }), "CN");
     expect(t.training.postWorkout).toBe("breakfast");
-    expect(t.training.meals.breakfast.kcal).toBeCloseTo(2450 * 0.3, 6);
+    expect(t.training.meals.breakfast.kcal).toBeCloseTo(2300 * 0.3, 6);
     expect(targetsForWeekday(t, EXAMPLE, 1)).toBe(t.training);
     expect(targetsForWeekday(t, EXAMPLE, 2)).toBe(t.rest);
   });

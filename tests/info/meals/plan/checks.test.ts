@@ -3,7 +3,7 @@
 
 import { expect, test } from "bun:test";
 import { checkPlan, fishMeals } from "../../../../src/info/meals/plan/checks";
-import { targetsOf } from "../../../../src/info/meals/plan/solve-week";
+import { solvePlan, targetsOf } from "../../../../src/info/meals/plan/solve-week";
 import type { Meal, WeekPlan } from "../../../../src/info/meals/plan/types";
 import { MEAL_KEYS } from "../../../../src/info/meals/plan/types";
 import { charter, draftWeek, eggToast, MON, profile, shrimpRice } from "../fixtures/week";
@@ -121,4 +121,114 @@ test("fish at least twice, unless an adjustment inherited fewer", () => {
   });
   expect(adjusted.problems).toEqual([]);
   expect(checkPlan({ plan, profile: profile({ dislikes: ["seafood"] }), targets, changed: [] }).problems).toEqual([]);
+});
+
+const meal = (flavour: Meal["flavour"], items: NonNullable<Meal["items"]>): Meal => ({
+  mode: "make",
+  name: "测试",
+  searchName: "test dish",
+  flavour,
+  minutes: 10,
+  method: "Assemble.",
+  items,
+});
+
+test("a fruit is never the staple, at the snack or at breakfast", () => {
+  const orangeSnack = meal("sweet", [{ foodId: "greek_yogurt", role: "protein" }, { foodId: "orange", role: "staple" }]);
+  const bananaBreakfast = meal("plain", [{ foodId: "egg", role: "protein" }, { foodId: "banana", role: "staple" }]);
+  let plan = withMeal(draftWeek(), 1, "snack", orangeSnack);
+  plan = withMeal(plan, 1, "breakfast", bananaBreakfast);
+  const { problems, failing } = checkPlan({ plan, profile: profile(), targets });
+  expect(problems).toEqual([
+    "Day 2 breakfast: banana is a fruit and never the staple; make it a fixed item of 150–200 g.",
+    "Day 2 snack: orange is a fruit and never the staple; make it a fixed item of 150–200 g.",
+  ]);
+  expect(failing).toEqual([
+    { date: "2026-09-22", meal: "breakfast" },
+    { date: "2026-09-22", meal: "snack" },
+  ]);
+});
+
+test("the snack may go without a staple; breakfast, lunch and dinner may not", () => {
+  const snack = meal("sweet", [
+    { foodId: "plain_yogurt", role: "protein" },
+    { foodId: "kiwi", role: "fixed", grams: 150 },
+    { foodId: "walnuts", role: "fat" },
+  ]);
+  const plan = withMeal(draftWeek(), 1, "snack", snack);
+  expect(checkPlan({ plan, profile: profile(), targets }).problems).toEqual([]);
+  const noStaple = meal("plain", [{ foodId: "egg", role: "protein" }, { foodId: "cucumber", role: "fixed", grams: 100 }]);
+  expect(checkPlan({ plan: withMeal(plan, 1, "breakfast", noStaple), profile: profile(), targets }).problems).toEqual([
+    "Day 2 breakfast needs exactly one staple item; it has 0.",
+  ]);
+  const twoStaples = meal("sweet", [
+    { foodId: "plain_yogurt", role: "protein" },
+    { foodId: "oats", role: "staple" },
+    { foodId: "whole_wheat_toast", role: "staple" },
+  ]);
+  expect(checkPlan({ plan: withMeal(plan, 1, "snack", twoStaples), profile: profile(), targets }).problems).toEqual([
+    "Day 2 snack has 2 staple items; at most one.",
+  ]);
+});
+
+test("a day under 90% of its kcal goes back naming the day, and no meal", () => {
+  // Light staples at their caps and no fat item anywhere on day 2.
+  let plan = withMeal(
+    draftWeek(),
+    1,
+    "breakfast",
+    meal("plain", [
+      { foodId: "egg_white", role: "protein" },
+      { foodId: "chinese_yam", role: "staple" },
+      { foodId: "cucumber", role: "fixed", grams: 100 },
+      { foodId: "low_fat_milk", role: "fixed", grams: 200 },
+    ]),
+  );
+  plan = withMeal(
+    plan,
+    1,
+    "lunch",
+    meal("garlic", [
+      { foodId: "cod", role: "protein" },
+      { foodId: "potato", role: "staple" },
+      { foodId: "spinach", role: "fixed", grams: 200 },
+    ]),
+  );
+  plan = withMeal(
+    plan,
+    1,
+    "dinner",
+    meal("lemon-pepper", [
+      { foodId: "frozen_shrimp", role: "protein" },
+      { foodId: "baby_potato", role: "staple" },
+      { foodId: "broccoli", role: "fixed", grams: 200 },
+    ]),
+  );
+  const thinSnack = meal("sweet", [
+    { foodId: "greek_yogurt", role: "protein" },
+    { foodId: "strawberries", role: "fixed", grams: 150 },
+  ]);
+  plan = withMeal(plan, 1, "snack", thinSnack);
+  const { problems, failing } = checkPlan({ plan, profile: profile(), targets });
+  expect(problems).toEqual([expect.any(String)]);
+  expect(problems[0]).toMatch(/^Day 2 comes to \d+ kcal of the 1850 its meals are for, under 90%\. Add a fixed item/);
+  expect(failing).toEqual([]);
+  // An adjustment elsewhere in the week does not answer for this day.
+  expect(checkPlan({ plan, profile: profile(), targets, changed: [{ date: "2026-09-24", meal: "lunch" }] }).problems).toEqual([]);
+  // Milk and nuts at the snack bring it back over.
+  const fuller = meal("sweet", [...(thinSnack.items ?? []), { foodId: "whole_milk", role: "fixed", grams: 300 }, { foodId: "mixed_nuts", role: "fat" }]);
+  expect(checkPlan({ plan: withMeal(plan, 1, "snack", fuller), profile: profile(), targets }).problems).toEqual([]);
+});
+
+test("a stored week's fruit staple is solved as 200 g of fixed fruit", () => {
+  const stored = withMeal(
+    draftWeek(),
+    1,
+    "snack",
+    meal("sweet", [{ foodId: "greek_yogurt", role: "protein" }, { foodId: "orange", role: "staple" }]),
+  );
+  expect(solvePlan(stored, targets, profile()).days[1]?.snack.solved).toEqual([
+    { foodId: "greek_yogurt", role: "protein", grams: 100 },
+    { foodId: "orange", role: "fixed", grams: 200 },
+  ]);
 });

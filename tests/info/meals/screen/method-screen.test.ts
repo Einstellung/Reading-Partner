@@ -39,13 +39,13 @@ test("basal rate: body fat known, so Cunningham on fat-free mass", () => {
   expect(yours(1)).toContain("Mifflin-St Jeor would give 1669");
 });
 
-test("activity and calories: 2450 on a training day, 2150 on a rest day", () => {
-  expect(yours(2)).toContain("Training day PAL 1.60");
+test("activity and calories: 2300 on a training day, 2150 on a rest day", () => {
+  expect(yours(2)).toContain("Training day PAL 1.50");
   expect(yours(2)).toContain("rest day 1.40");
   const three = yours(3);
   expect(three).toContain("BMI 23.5 is under 24");
   expect(three).toContain("0.005 × 72 × 7700 ÷ 7 = 396 kcal/day");
-  expect(three).toContain("→ 2450");
+  expect(three).toContain("→ 2300");
   expect(three).toContain("→ 2150");
 });
 
@@ -57,11 +57,11 @@ test("protein: 2.3 g per kg of fat-free mass, 135 g every day", () => {
 test("the meal split adds each day back up, and protein is split three ways plus the snack", () => {
   const t = computeTargets(EXAMPLE, "CN");
   const sum = (d: typeof t.training) => d.meals.breakfast.kcal + d.meals.lunch.kcal + d.meals.dinner.kcal + d.meals.snack.kcal;
-  expect(sum(t.training)).toBeCloseTo(2450, 6);
+  expect(sum(t.training)).toBeCloseTo(2300, 6);
   expect(sum(t.rest)).toBeCloseTo(2150, 6);
   // Evening training: dinner is the post-workout meal and carries more.
   expect(yours(6)).toContain(`dinner ${Math.round(t.training.meals.dinner.kcal)}`);
-  expect(t.training.meals.dinner.kcal).toBeGreaterThan(2450 * 0.3);
+  expect(t.training.meals.dinner.kcal).toBeGreaterThan(2300 * 0.3);
   expect(yours(6)).toContain("Protein: 42 g at each main meal, 10 g at the snack.");
 });
 

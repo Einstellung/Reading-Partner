@@ -104,7 +104,8 @@ test("applying a plan writes the week with its grams solved and the list derived
   expect(mealOn(h.saved.plan, MON, "lunch")!.solved!.length).toBe(5);
   const list = currentList(h.saved.shopping!);
   expect(list).toEqual(deriveShoppingList(week(), MON, 1));
-  expect(list.find((i) => i.foodId === "salmon")?.qty).toBe("240 g");
+  // Three salmon dinners at a 25 g-protein portion each, 120 g.
+  expect(list.find((i) => i.foodId === "salmon")?.qty).toBe("360 g");
   expect(h.reloads).toBe(1);
   expect(applied.note).toContain(`${list.length} things`);
 });

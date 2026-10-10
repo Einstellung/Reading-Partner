@@ -40,20 +40,36 @@ export function dayTargetsOn(targets: Targets, profile: Pick<Profile, "trainingD
 
 /**
  * Whether the solver can take a template: every food known, exactly one
- * protein and one staple, at most one fat, and grams on every fixed item.
- * checks.ts says what is wrong in words; this only decides.
+ * protein, at most one staple and one fat, and grams on every fixed item.
+ * checks.ts says what is wrong in words, and which meals need a staple; this
+ * only decides.
  */
 export function templateSolvable(items: readonly TemplateItem[] | undefined): items is TemplateItem[] {
   if (!items?.length) return false;
   if (items.some((i) => !foodById(i.foodId))) return false;
   const count = (role: TemplateItem["role"]) => items.filter((i) => i.role === role).length;
-  if (count("protein") !== 1 || count("staple") !== 1 || count("fat") > 1) return false;
+  if (count("protein") !== 1 || count("staple") > 1 || count("fat") > 1) return false;
   return items.every((i) => i.role !== "fixed" || (typeof i.grams === "number" && i.grams > 0));
+}
+
+// Weeks planned before 2026-10-10 could make a fruit the staple of a snack or
+// a breakfast. A fruit is now a fixed item the model gives grams for, so a
+// stored one is solved as fixed at the top of the range the model is told.
+const STORED_FRUIT_G = 200;
+
+/** A stored template as the solver takes it: a staple whose food is no staple becomes fixed fruit. */
+export function asSolvable(items: readonly TemplateItem[]): TemplateItem[] {
+  return items.map((i) => {
+    const food = i.role === "staple" ? foodById(i.foodId) : undefined;
+    if (!food || food.roles.includes("staple")) return i;
+    return { foodId: i.foodId, role: "fixed", grams: Math.min(food.maxG, Math.max(food.minG, STORED_FRUIT_G)) };
+  });
 }
 
 /** One day's made meals solved together, so the day's fat floor holds. */
 function solveOneDay(day: DayPlan, target: DayTargets): DayPlan {
-  const keys = MEAL_KEYS.filter((k) => day[k].mode === "make" && templateSolvable(day[k].items));
+  const items = (k: MealKey) => asSolvable(day[k].items ?? []);
+  const keys = MEAL_KEYS.filter((k) => day[k].mode === "make" && templateSolvable(items(k)));
   const next: DayPlan = { ...day };
   for (const key of MEAL_KEYS) {
     const meal = day[key];
@@ -65,7 +81,7 @@ function solveOneDay(day: DayPlan, target: DayTargets): DayPlan {
   }
   if (!keys.length) return next;
   const solution = solveDay(
-    keys.map((k) => ({ slot: k, items: day[k].items as TemplateItem[] })),
+    keys.map((k) => ({ slot: k, items: items(k) })),
     target,
   );
   for (const m of solution.meals) {
