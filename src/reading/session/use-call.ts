@@ -44,7 +44,14 @@ import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { readingTurns, type LiveTurn } from "../turn/live-turns";
-import { afterStall, driveBookTurn, type BookTurnEnd } from "../turn/book-turn-rows";
+import {
+  afterStall,
+  driveBookTurn,
+  resumedBookTurn,
+  type BookTurnEnd,
+  type DrivenBookTurn,
+  type ResumedBookTurn,
+} from "../turn/book-turn-rows";
 import { splitAssembled, type BookOrigin } from "../turn/durable-book";
 import { readingDurable, setBookWatching } from "../turn/durable-runtime";
 import { boxUnseenTurn, setOpenCallPeek, watching } from "../turn/turn-box";
@@ -522,7 +529,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // turn that answers them, and a stalled turn is asked again. Through a ref
   // rather than the binding, which does not exist yet inside its own body.
   const runTurnRef = useRef<
-    ((threadId: string, annotationId: string, home: string, attempt?: number) => void) | null
+    | ((threadId: string, annotationId: string, home: string, attempt?: number, resumed?: ResumedBookTurn) => void)
+    | null
   >(null);
 
   // Run one assistant turn for a thread on the durable runtime (docs/soul/87):
@@ -535,22 +543,34 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // The turn belongs to its thread, not to the view: closing the bubble leaves
   // it running (docs/03), and its rows are kept on the liveTurns entry so a
   // reopened conversation picks the stream back up.
-  const runTurn = useCallback((threadId: string, annotationId: string, home: string, attempt = 0) => {
+  //
+  // `resumed` is a turn already in flight on the thread when it was opened —
+  // after a restart, the one recovery resumed (docs/soul/87, "被杀之后"). It
+  // is followed instead of assembled and started, and from there on it is
+  // this session's turn like any other: drawn, stopped, steered and ended here.
+  const runTurn = useCallback((
+    threadId: string,
+    annotationId: string,
+    home: string,
+    attempt = 0,
+    resumed?: ResumedBookTurn,
+  ) => {
     const bookId = bookIdRef.current;
     const docId = docIdRef.current;
     const s = settingsRef.current;
     const providerId = s.defaultProviderId;
     const modelId = s.defaultModelId;
-    if (!bookId || !docId || !providerId || !modelId) return;
+    if (!bookId || (!resumed && (!docId || !providerId || !modelId))) return;
     const liveTurns = liveTurnsRef.current;
     const controller = new AbortController();
 
     // The reader's line this turn answers is the last one in the file, and
-    // every row the turn draws comes after it.
+    // every row the turn draws comes after it. A resumed turn's rows come
+    // after its start: a bell's turn answers no line in the file.
     const stored = getThread(home, threadId)?.messages ?? [];
     let said: ThreadMessage | undefined;
     for (const m of stored) if (m.role === "user") said = m;
-    const after = said?.ts ?? 0;
+    const after = resumed?.after ?? said?.ts ?? 0;
     // On screen until the runtime projects the turn's first row.
     const placeholder = shapes.current.newRow({
       role: "ai",
@@ -695,10 +715,35 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       fileLines(threadId, home, owed);
     };
 
+    const onRows = (rows: CallRow[]) => draw(rows.map((row) => shapes.current.newRow(row)));
+    // The turn's handle goes on the entry, and its ending is drawn when it comes.
+    const follow = async (driven: DrivenBookTurn) => {
+      const live = liveTurns.get(threadId);
+      if (live?.controller !== controller) {
+        // Stopped, or the thread deleted, while the turn was starting.
+        driven.stop();
+      } else {
+        live.durable = { steer: driven.steer, stop: driven.stop };
+        // Lines said while the turn was being assembled go in now.
+        for (const row of live.unsent ?? []) steerIn(live, row);
+      }
+      finish(await driven.ended);
+    };
+
     liveTurns.start({ threadId, bookId, home, controller, message: placeholder, rows: [placeholder] });
     dispatch({ type: "turn-started", threadId, row: placeholder });
 
+    if (resumed) {
+      resumed
+        .follow(onRows)
+        .then(follow)
+        .catch((e: unknown) => finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) }));
+      return;
+    }
+
     void (async () => {
+      // Checked above; a resumed turn needs none of them.
+      if (!docId || !providerId || !modelId) return;
       // Assemble the live reading context and topic-scoped tools (M6). The
       // current book's extraction may still be running; await it so the AI can
       // see the page. Thread images (stored as filenames) are read back too.
@@ -774,18 +819,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
               };
             },
           },
-          (rows) => draw(rows.map((row) => shapes.current.newRow(row))),
+          onRows,
         );
-        const live = liveTurns.get(threadId);
-        if (live?.controller !== controller) {
-          // Stopped, or the thread deleted, while the turn was starting.
-          driven.stop();
-        } else {
-          live.durable = { steer: driven.steer, stop: driven.stop };
-          // Lines said while the turn was being assembled go in now.
-          for (const row of live.unsent ?? []) steerIn(live, row);
-        }
-        finish(await driven.ended);
+        await follow(driven);
       } catch (e) {
         finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) });
       }
@@ -906,6 +942,28 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     [annsRef, bookIdRef, parentOf],
   );
 
+  // A thread opened with a turn in flight that no entry here holds — after a
+  // restart, the one recovery resumed — is joined: drawn as it streams, with
+  // Stop and steering on it (docs/soul/87, "被杀之后"). Until the runtime has
+  // said whether there is one, a line said on the thread waits (send).
+  const lookingRef = useRef(new Map<string, Promise<void>>());
+  const joinInFlight = useCallback((threadId: string, annotationId: string, home: string) => {
+    if (liveTurnsRef.current.has(threadId)) return;
+    const pending = readingDurable();
+    if (!pending) return;
+    const looking: Promise<void> = (async () => {
+      const resumed = await resumedBookTurn(await pending, { home, threadId });
+      if (resumed && !liveTurnsRef.current.has(threadId)) {
+        runTurnRef.current?.(threadId, annotationId, home, 0, resumed);
+      }
+    })()
+      .catch((e: unknown) => console.warn("could not look for a turn in flight", e))
+      .finally(() => {
+        if (lookingRef.current.get(threadId) === looking) lookingRef.current.delete(threadId);
+      });
+    lookingRef.current.set(threadId, looking);
+  }, []);
+
   const openThread = useCallback(
     (opening: OpeningCall<M>, stored: ThreadMessage[]) => {
       const { threadId } = opening;
@@ -922,12 +980,15 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       const messages = liveTurnsRef.current.withLive(threadId, shapes.current.toDisplay(stored));
       dispatch({ type: "opened", call: { ...opening, messages } });
       hydrateThreadImages(threadId, stored);
+      // A turn starts on a line in the file, so an empty thread has none in flight.
+      const home = homeOf(opening);
+      if (home && stored.length > 0) joinInFlight(threadId, opening.annotationId, home);
       // An empty thread sends nothing (docs/03). Marking a passage says the
       // reader wants something here, not which thing, so the empty conversation
       // offers the opening intents (reading/intents.ts) and waits — one press is
       // an ordinary send from there on.
     },
-    [hydrateThreadImages, writeAsideReceipt],
+    [hydrateThreadImages, writeAsideReceipt, homeOf, joinInFlight],
   );
 
   // Every door back into a conversation that already exists: a mark on the page,
@@ -1007,6 +1068,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     [bookIdRef],
   );
 
+  // Sending again once the thread's turn in flight is known (joinInFlight).
+  const sendRef = useRef<(text: string) => void>(() => {});
   // Sending appends the user line (with any ready staged images, persisted to
   // disk) then streams the reply. Empty text with images is allowed; images
   // still compressing block the send (the composer disables it too).
@@ -1015,6 +1078,13 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       const c = callRef.current;
       const home = homeOf(c);
       if (!c || !home) return;
+      // Not yet known whether the thread has a turn in flight: the line waits
+      // to steer it, or to start the next one once it has landed.
+      const looking = lookingRef.current.get(c.threadId);
+      if (looking) {
+        void looking.then(() => sendRef.current(text));
+        return;
+      }
       const pending = pendingRef.current;
       const staged = pending.images(c.threadId);
       const trimmed = text.trim();
@@ -1087,6 +1157,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     },
     [homeOf, ensureAsideRecord, pushToast, runTurn, showPending],
   );
+  sendRef.current = send;
 
   const retry = useCallback(() => {
     const c = callRef.current;

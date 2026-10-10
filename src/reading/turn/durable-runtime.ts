@@ -66,6 +66,8 @@ export interface ReadingDurable {
   assembled: AssembledTurns;
   /** What recovery did with the runs the last process left, for logging and tests. */
   recovered: Recovered[];
+  /** A tool call's label from the catalog, for a turn this process did not assemble. */
+  describe(name: string, args: unknown): { label: string; quiet?: true };
   onTurnSettled(listener: (event: SettledEvent) => void): () => void;
 }
 
@@ -164,6 +166,7 @@ export async function openReadingDurable(options: ReadingDurableOptions): Promis
     runtime,
     assembled,
     recovered,
+    describe,
     onTurnSettled(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

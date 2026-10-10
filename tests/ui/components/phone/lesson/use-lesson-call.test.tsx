@@ -360,3 +360,59 @@ test("leaving stops the turn, files what the runtime handed back, and opens noth
     r.restore();
   }
 });
+
+// A turn in flight when the lesson opens — after a restart, the one recovery
+// resumed (docs/soul/87, "被杀之后") — is the lesson's turn: drawn, stopped,
+// and steered like one it started.
+test("a lesson opened with a turn in flight streams it, and Stop reaches it", async () => {
+  const r = rig();
+  try {
+    r.book.inFlight(200);
+    const view = await mounted();
+    expect(r.book.turns).toHaveLength(1);
+    const turn = r.book.last();
+    expect(turn.resumed).toEqual({ home: BOOK, threadId: THREAD });
+    expect(view.result.current.streaming).toBe(true);
+    expect(r.probes.size).toBe(1);
+    await act(async () => {
+      turn.view([{ role: "ai", text: "Attention is", ts: 201, streaming: true } as CallRow]);
+      await tick();
+    });
+    expect(texts(view)).toEqual([OPENING, "Attention is"]);
+
+    act(() => view.result.current.stop());
+    expect(turn.stops).toBe(1);
+    await settle(turn, { kind: "stopped", rows: [{ role: "ai", text: "Attention is", ts: 201 }], steers: [] });
+    expect(view.result.current.streaming).toBe(false);
+    expect(texts(view)).toEqual([OPENING, "Attention is"]);
+    expect(r.probes.size).toBe(0);
+    expect(r.book.turns).toHaveLength(1);
+  } finally {
+    r.restore();
+  }
+});
+
+test("a line said while the turn in flight lands waits for it and then opens the next turn", async () => {
+  const r = rig();
+  try {
+    r.book.inFlight(200);
+    const view = await mounted();
+    const turn = r.book.last();
+    turn.taking = false;
+    await act(async () => {
+      turn.view([{ role: "ai", text: "Attention weighs tokens.", ts: 201 } as CallRow]);
+      view.result.current.send("And heads?");
+      await tick();
+    });
+    expect(turn.steered.map((s) => s.text)).toEqual(["And heads?"]);
+    expect(tail(view.result.current.messages)).toMatchObject({ role: "user", text: "And heads?", queued: true });
+
+    await settle(turn, { kind: "answered", rows: [{ role: "ai", text: "Attention weighs tokens.", ts: 201 }] });
+    expect(tail(r.stored)).toMatchObject({ role: "user", text: "And heads?" });
+    expect(r.book.turns).toHaveLength(2);
+    expect(r.book.last().request.line).toEqual({ text: "And heads?", ts: tail(r.stored)!.ts });
+    expect(view.result.current.streaming).toBe(true);
+  } finally {
+    r.restore();
+  }
+});

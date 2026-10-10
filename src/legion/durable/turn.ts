@@ -26,6 +26,7 @@ import {
 } from "@earendil-works/pi-durable";
 import type { BudgetPurpose } from "../../budget";
 import {
+  ConversationsDoc,
   DeskDoc,
   PartialDoc,
   RecoveryDoc,
@@ -276,13 +277,32 @@ async function isRunning(runtime: DurableRuntime, conversationId: ConversationId
  */
 async function isBusy(runtime: DurableRuntime, conversationId: ConversationId, context: Context): Promise<boolean> {
   if (await isRunning(runtime, conversationId, context)) return true;
+  const task = await latestTurn(runtime, conversationId, context);
+  return task !== undefined && task.state.status !== "terminal";
+}
+
+async function latestTurn(runtime: DurableRuntime, conversationId: ConversationId, context: Context) {
   const page = await runtime.storage.scanTasks(
     { conversationId, kind: TURN_TASK, order: "descending" },
     1,
     undefined,
     context,
   );
-  return page.items.some((task) => task.state.status !== "terminal");
+  return page.items[0];
+}
+
+/** Resolves once `rp.turn` is terminal, with its result when it completed. */
+function turnSettled(
+  runtime: DurableRuntime,
+  conversationId: ConversationId,
+  taskId: TaskId<TurnResult>,
+  context: Context,
+): Promise<TurnResult | undefined> {
+  return runtime.harness.waitForTask(taskId, context).then(async (task) => {
+    runtime.forgetStubs(conversationId);
+    await runtime.maybeRotate(context);
+    return task.state.outcome.status === "completed" ? task.state.outcome.result : undefined;
+  });
 }
 
 /**
@@ -319,13 +339,33 @@ export async function startTurn(runtime: DurableRuntime, request: TurnRequest, c
       { ownership: { kind: "conversation" }, background: true },
     );
   }, context);
-  const harness = runtime.harness;
-  const settled = harness.waitForTask(taskId, context).then(async (task) => {
-    runtime.forgetStubs(conversation.id);
-    await runtime.maybeRotate(context);
-    return task.state.outcome.status === "completed" ? task.state.outcome.result : undefined;
-  });
+  const settled = turnSettled(runtime, conversation.id, taskId, context);
   return { conversation, taskId, settled, startedAt };
+}
+
+/**
+ * The turn in flight in a thread's conversation: a run going or `rp.turn`
+ * still landing. After a restart it is the one recovery resumed, which nothing
+ * on screen started (docs/soul/87, "被杀之后"). Undefined when the thread has
+ * no conversation in this generation or its last turn has settled; looking
+ * creates nothing.
+ */
+export async function turnInFlight(
+  runtime: DurableRuntime,
+  key: string,
+  context: Context,
+): Promise<Omit<StartedTurn, "taskId"> | undefined> {
+  const id = (await runtime.harness.snapshot(ConversationsDoc, context))?.threads[key] as ConversationId | undefined;
+  if (id === undefined) return undefined;
+  const task = await latestTurn(runtime, id, context);
+  if (!task || task.state.status === "terminal") return undefined;
+  const conversation = await runtime.harness.conversation(id, context);
+  if (!conversation) return undefined;
+  return {
+    conversation,
+    startedAt: (task.input as TurnInput).startedAt,
+    settled: turnSettled(runtime, id, task.id as TaskId<TurnResult>, context),
+  };
 }
 
 /** A reader's line while the run goes; false when nothing is running to take it. */

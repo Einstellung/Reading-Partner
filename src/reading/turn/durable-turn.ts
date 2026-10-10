@@ -5,6 +5,10 @@
 // app comes back). A cut turn is superseded, so it lands nothing; the caller
 // asks again once, as today.
 //
+// A turn already in flight when the reader opens its thread — one recovery
+// resumed after a restart — is followed, steered and stopped the same way
+// (resumedTurn, docs/soul/87 "被杀之后").
+//
 // No React here: the session hands `onView` the projected rows and draws them.
 
 import type { Context } from "@earendil-works/chord";
@@ -18,6 +22,7 @@ import {
   STEER_REQUEST_PREFIX,
   stopTurn,
   supersede,
+  turnInFlight,
   type WithdrawnSteer,
 } from "../../legion/durable/turn";
 import type { AgentTool } from "../../legion/execute/contract";
@@ -59,6 +64,56 @@ export interface BookTurn {
 
 type Live = { run?: { inputs: number[] }; generation?: { message?: unknown }; tools?: { status: string }[] };
 
+interface Following {
+  startedAt: number;
+  describe(name: string, args: unknown): { label: string; quiet?: true };
+  onView(view: TurnView): void;
+  /** Every view's `pi.live`, before it is projected. */
+  pulse?(live: Live | undefined): void;
+}
+
+/**
+ * Follow a conversation's view state as the turn's rows: the steers' row
+ * timestamps are looked up as they show, queued or taken. The returned
+ * function stops following.
+ */
+async function followTurn(
+  durable: ReadingDurable,
+  conversation: Conversation,
+  following: Following,
+  context: Context,
+): Promise<() => void> {
+  const { runtime } = durable;
+  const queuedTs = new Map<number, number>();
+  let steerTs: Awaited<ReturnType<typeof steerTimestamps>> = new Map();
+  let steerEntries = 0;
+  const view = await conversation.viewState(context);
+  const follow = async (value: ViewSource) => {
+    following.pulse?.(value.docs["pi.live"] as Live | undefined);
+    for (const item of (value.docs["pi.inbox"] as { items?: { id: number; mode: string }[] } | undefined)?.items ?? []) {
+      if (item.mode !== "steer" || queuedTs.has(item.id)) continue;
+      const record = await (await runtime.harness.submission(item.id as never, context))?.status(context);
+      const ts = Number(record?.requestId?.slice(STEER_REQUEST_PREFIX.length));
+      if (Number.isFinite(ts)) queuedTs.set(item.id, ts);
+    }
+    const from = runStart(value.entries);
+    const users = value.entries.filter((e) => e.kind === "pi.user" && e.id !== from).length;
+    if (users !== steerEntries) {
+      steerEntries = users;
+      steerTs = await steerTimestamps(runtime.storage, conversation.id, context);
+    }
+    following.onView(
+      projectView(value, { startedAt: following.startedAt, steerTs, queuedTs, describe: following.describe }),
+    );
+  };
+  const unsubscribe = view.subscribe((value) => follow(value));
+  if (view.value) await follow(view.value);
+  return () => {
+    unsubscribe();
+    view.dispose();
+  };
+}
+
 export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequest, context: Context): Promise<BookTurn> {
   const { runtime } = durable;
   const key = bookThreadKey(request.origin);
@@ -83,9 +138,6 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
     context,
   );
   const { conversation } = started;
-  const queuedTs = new Map<number, number>();
-  let steerTs: Awaited<ReturnType<typeof steerTimestamps>> = new Map();
-  let steerEntries = 0;
   let stalled: WithdrawnSteer[] | undefined;
   let lastHalf = "";
   let holding = false;
@@ -102,44 +154,33 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
     },
   });
 
-  const view = await conversation.viewState(context);
-  const project = (value: ViewSource) => {
-    request.onView(projectView(value, { startedAt: started.startedAt, steerTs, queuedTs, describe: request.describe }));
-  };
-  const follow = async (value: ViewSource) => {
-    const live = value.docs["pi.live"] as Live | undefined;
-    const half = JSON.stringify(live?.generation?.message ?? null);
-    if (half !== lastHalf) {
-      lastHalf = half;
-      watch.beat();
-    }
-    const toolRunning = live?.tools?.some((slot) => slot.status === "running") ?? false;
-    if (toolRunning !== holding) {
-      holding = toolRunning;
-      if (holding) watch.hold();
-      else watch.unhold();
-    }
-    for (const item of (value.docs["pi.inbox"] as { items?: { id: number; mode: string }[] } | undefined)?.items ?? []) {
-      if (item.mode !== "steer" || queuedTs.has(item.id)) continue;
-      const record = await (await runtime.harness.submission(item.id as never, context))?.status(context);
-      const ts = Number(record?.requestId?.slice(STEER_REQUEST_PREFIX.length));
-      if (Number.isFinite(ts)) queuedTs.set(item.id, ts);
-    }
-    const from = runStart(value.entries);
-    const users = value.entries.filter((e) => e.kind === "pi.user" && e.id !== from).length;
-    if (users !== steerEntries) {
-      steerEntries = users;
-      steerTs = await steerTimestamps(runtime.storage, conversation.id, context);
-    }
-    project(value);
-  };
-  const unsubscribe = view.subscribe((value) => follow(value));
-  if (view.value) await follow(view.value);
+  const unfollow = await followTurn(
+    durable,
+    conversation,
+    {
+      startedAt: started.startedAt,
+      describe: request.describe,
+      onView: request.onView,
+      pulse: (live) => {
+        const half = JSON.stringify(live?.generation?.message ?? null);
+        if (half !== lastHalf) {
+          lastHalf = half;
+          watch.beat();
+        }
+        const toolRunning = live?.tools?.some((slot) => slot.status === "running") ?? false;
+        if (toolRunning !== holding) {
+          holding = toolRunning;
+          if (holding) watch.hold();
+          else watch.unhold();
+        }
+      },
+    },
+    context,
+  );
 
   const settled = started.settled.then((result) => {
     watch.stop();
-    unsubscribe();
-    view.dispose();
+    unfollow();
     return stalled ? { result, stalled } : { result };
   });
 
@@ -150,5 +191,43 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
     },
     stop: () => stopTurn(runtime, conversation, context),
     settled,
+  };
+}
+
+/** A turn in flight on a thread that nothing on screen holds. */
+export interface ResumedTurn {
+  /** `rp.turn`'s start: every row of the turn is stamped after it. */
+  startedAt: number;
+  /** Follow it as rows; steering and stopping it work as on a turn started here. */
+  follow(onView: (view: TurnView) => void): Promise<BookTurn>;
+}
+
+/**
+ * The turn in flight on a book thread, for the reader who opens it: after a
+ * restart, the one recovery resumed. Undefined when the thread is idle.
+ */
+export async function resumedTurn(
+  durable: ReadingDurable,
+  origin: Pick<BookOrigin, "home" | "threadId">,
+  context: Context,
+): Promise<ResumedTurn | undefined> {
+  const { runtime } = durable;
+  const found = await turnInFlight(runtime, bookThreadKey(origin), context);
+  if (!found) return undefined;
+  const { conversation, startedAt } = found;
+  return {
+    startedAt,
+    async follow(onView) {
+      const unfollow = await followTurn(durable, conversation, { startedAt, describe: durable.describe, onView }, context);
+      return {
+        conversation,
+        steer: (text, ts) => steerTurn(runtime, conversation, text, ts, context),
+        stop: () => stopTurn(runtime, conversation, context),
+        settled: found.settled.then((result) => {
+          unfollow();
+          return { result };
+        }),
+      };
+    },
   };
 }

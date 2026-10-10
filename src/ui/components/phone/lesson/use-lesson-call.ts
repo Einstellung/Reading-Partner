@@ -40,8 +40,10 @@ import { resolveBookThread } from "../../../../reading/session/book-thread";
 import {
   afterStall,
   driveBookTurn,
+  resumedBookTurn,
   type BookTurnEnd,
   type DrivenBookTurn,
+  type ResumedBookTurn,
 } from "../../../../reading/turn/book-turn-rows";
 import { withTurnRows } from "../../../../reading/turn/call-state";
 import { splitAssembled, type BookOrigin } from "../../../../reading/turn/durable-book";
@@ -194,30 +196,38 @@ export function useLessonCall(book: LessonBook): LessonCall {
   // runTurn calls itself: lines the reader said that no run took open the
   // turn that answers them, and a stalled turn is asked again. Through a ref
   // rather than the binding, which does not exist yet inside its own body.
-  const runTurnRef = useRef<((attempt?: number) => void) | null>(null);
+  const runTurnRef = useRef<((attempt?: number, resumed?: ResumedBookTurn) => void) | null>(null);
+  // The thread was just opened and the runtime has not yet said whether a turn
+  // is in flight on it; a line said meanwhile waits for the answer (send).
+  const lookingRef = useRef<Promise<void> | null>(null);
 
   // One turn on the thread as it stands. The history is not passed: the desk
   // reads it out of the thread file (reading/desk.ts), which is why the
   // reader's line is appended before this is called.
+  //
+  // `resumed` is a turn already in flight when the lesson opened — after a
+  // restart, the one recovery resumed (docs/soul/87, "被杀之后"). It is
+  // followed instead of assembled, and is the lesson's turn from there on.
   const runTurn = useCallback(
-    (attempt = 0) => {
+    (attempt = 0, resumed?: ResumedBookTurn) => {
       const s = settingsRef.current;
       const ft = fulltextRef.current;
       const id = threadIdRef.current;
-      if (!s || !ft || !id) return;
-      const providerId = s.defaultProviderId;
-      const modelId = s.defaultModelId;
-      if (!providerId || !modelId) {
+      if (!id || (!resumed && (!s || !ft))) return;
+      const providerId = s?.defaultProviderId;
+      const modelId = s?.defaultModelId;
+      if (!resumed && (!providerId || !modelId)) {
         setStatus(noProviderLine());
         return;
       }
 
       // The reader's line this turn answers is the last one in the file, and
-      // every row the turn draws comes after it.
+      // every row the turn draws comes after it. A resumed turn's rows come
+      // after its start.
       const stored = getThread(bookId, id)?.messages ?? [];
       let said: { text: string; ts: number } | undefined;
       for (const m of stored) if (m.role === "user") said = m;
-      const after = said?.ts ?? 0;
+      const after = resumed?.after ?? said?.ts ?? 0;
       const placeholder: ThreadMessage = {
         role: "ai",
         text: "",
@@ -354,8 +364,37 @@ export function useLessonCall(book: LessonBook): LessonCall {
       // out lands is not taken for a reply nobody saw.
       const unwatch = setBookWatching((origin) => origin.bookId === bookId && origin.threadId === id);
 
+      const onRows = (projected: ThreadMessage[]) => {
+        if (liveRef.current !== live) return;
+        draw(withUnsent(projected.length > 0 ? projected : [placeholder]));
+        follow(projected);
+      };
+      // The turn's handle goes on the live turn, and its ending is drawn when it comes.
+      const hold = async (driven: DrivenBookTurn) => {
+        if (liveRef.current !== live) {
+          // Stopped, or the reader left, while the turn was starting.
+          driven.stop();
+        } else {
+          live.driven = driven;
+          // Lines said while the turn was being assembled go in now.
+          for (const row of live.unsent) steerIn(live, row);
+        }
+        finish(await driven.ended);
+      };
+
+      if (resumed) {
+        resumed
+          .follow(onRows)
+          .then(hold)
+          .catch((e: unknown) => finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) }))
+          .finally(unwatch);
+        return;
+      }
+
       void (async () => {
         try {
+          // Checked above; a resumed turn needs neither.
+          if (!s || !ft || !providerId || !modelId) return;
           const turn = await buildReadingTurn({
             bookId,
             threadId: id,
@@ -428,21 +467,9 @@ export function useLessonCall(book: LessonBook): LessonCall {
                 };
               },
             },
-            (projected) => {
-              if (liveRef.current !== live) return;
-              draw(withUnsent(projected.length > 0 ? projected : [placeholder]));
-              follow(projected);
-            },
+            onRows,
           );
-          if (liveRef.current !== live) {
-            // Stopped, or the reader left, while the turn was starting.
-            driven.stop();
-          } else {
-            live.driven = driven;
-            // Lines said while the turn was being assembled go in now.
-            for (const row of live.unsent) steerIn(live, row);
-          }
-          finish(await driven.ended);
+          await hold(driven);
         } catch (e) {
           finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) });
         } finally {
@@ -459,6 +486,13 @@ export function useLessonCall(book: LessonBook): LessonCall {
       const trimmed = text.trim();
       const id = threadIdRef.current;
       if (!trimmed || !id || !fulltextRef.current) return;
+      // Not yet known whether a turn is in flight: the line waits to steer it,
+      // or to start the next one once it has landed.
+      const looking = lookingRef.current;
+      if (looking) {
+        void looking.then(() => sendRef.current(text));
+        return;
+      }
       // Said while the answer is still being written: not a second turn but a
       // line into this one, drawn queued under it until a run takes it
       // (docs/72).
@@ -573,6 +607,20 @@ export function useLessonCall(book: LessonBook): LessonCall {
       threadIdRef.current = id;
       setThreadId(id);
       setMessages(thread ? thread.messages.map(rehydrateMessage) : []);
+      // A turn in flight on the thread — after a restart, the one recovery
+      // resumed — is joined: drawn as it streams, with Stop and steering on it.
+      const pending = readingDurable();
+      if (pending && thread && thread.messages.length > 0 && !liveRef.current) {
+        const looking: Promise<void> = (async () => {
+          const resumed = await resumedBookTurn(await pending, { home: bookId, threadId: id });
+          if (!cancelled && resumed && !liveRef.current) runTurnRef.current?.(0, resumed);
+        })()
+          .catch((e: unknown) => console.warn("could not look for a turn in flight", e))
+          .finally(() => {
+            if (lookingRef.current === looking) lookingRef.current = null;
+          });
+        lookingRef.current = looking;
+      }
       // The lecture state is the lesson's. An aside reads its parent's focus at
       // turn time (reading/desk.ts) and draws neither the focus line nor the
       // chapter sheet, so there is nothing here for it to hold.

@@ -12,7 +12,7 @@
 import { spyOn } from "bun:test";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
 import * as bookTurnRows from "../../src/reading/turn/book-turn-rows";
-import type { BookTurnEnd } from "../../src/reading/turn/book-turn-rows";
+import type { BookTurnEnd, DrivenBookTurn } from "../../src/reading/turn/book-turn-rows";
 import * as durableRuntime from "../../src/reading/turn/durable-runtime";
 import type { ReadingDurable } from "../../src/reading/turn/durable-runtime";
 import type { BookTurnRequest } from "../../src/reading/turn/durable-turn";
@@ -93,6 +93,8 @@ export function emptyReadingTurn() {
 // (tests/reading/turn/durable-*.test.ts); here it is a stand-in the test drives.
 export interface FakeBookTurn {
   request: Omit<BookTurnRequest, "onView">;
+  /** For a turn joined in flight instead of started: the thread it was looked up on. */
+  resumed?: { home: string; threadId: string };
   /** A view of the turn arrives. */
   view(rows: CallRow[]): void;
   /** The turn settles. */
@@ -104,36 +106,59 @@ export interface FakeBookTurn {
   stops: number;
 }
 
-/** Stand in for the durable runtime and the book turn it drives. Restore the spies after. */
+/**
+ * Stand in for the durable runtime and the book turn it drives. Restore the
+ * spies after. No thread has a turn in flight unless `inFlight` says the next
+ * one looked up does.
+ */
 export function fakeBookTurns() {
   const turns: FakeBookTurn[] = [];
+  let next: number | undefined;
+  const lookups: { home: string; threadId: string }[] = [];
+  const fake = (
+    request: Omit<BookTurnRequest, "onView">,
+    onRows: (rows: CallRow[]) => void,
+    resumed?: { home: string; threadId: string },
+  ): DrivenBookTurn => {
+    let settle!: (end: BookTurnEnd) => void;
+    const ended = new Promise<BookTurnEnd>((resolve) => (settle = resolve));
+    const turn: FakeBookTurn = {
+      request,
+      ...(resumed ? { resumed } : {}),
+      view: (rows) => onRows(rows),
+      end: (end) => settle(end),
+      steered: [],
+      taking: true,
+      stops: 0,
+    };
+    turns.push(turn);
+    return {
+      steer: async (text: string, ts: number) => {
+        turn.steered.push({ text, ts });
+        return turn.taking;
+      },
+      stop: () => void (turn.stops += 1),
+      ended,
+    };
+  };
   const spies = [
     spyOn(durableRuntime, "readingDurable").mockImplementation(() => Promise.resolve({} as ReadingDurable)),
-    spyOn(bookTurnRows, "driveBookTurn").mockImplementation(async (_durable, request, onRows) => {
-      let settle!: (end: BookTurnEnd) => void;
-      const ended = new Promise<BookTurnEnd>((resolve) => (settle = resolve));
-      const turn: FakeBookTurn = {
-        request,
-        view: (rows) => onRows(rows),
-        end: (end) => settle(end),
-        steered: [],
-        taking: true,
-        stops: 0,
-      };
-      turns.push(turn);
-      return {
-        steer: async (text: string, ts: number) => {
-          turn.steered.push({ text, ts });
-          return turn.taking;
-        },
-        stop: () => void (turn.stops += 1),
-        ended,
-      };
+    spyOn(bookTurnRows, "driveBookTurn").mockImplementation(async (_durable, request, onRows) => fake(request, onRows)),
+    spyOn(bookTurnRows, "resumedBookTurn").mockImplementation(async (_durable, origin) => {
+      const where = { home: origin.home, threadId: origin.threadId };
+      lookups.push(where);
+      if (next === undefined) return undefined;
+      const after = next;
+      next = undefined;
+      return { after, follow: async (onRows) => fake({} as Omit<BookTurnRequest, "onView">, onRows, where) };
     }),
   ];
   return {
     turns,
     last: (): FakeBookTurn => turns[turns.length - 1]!,
+    /** The next thread looked up has a turn in flight, its rows after `after`. */
+    inFlight: (after: number) => void (next = after),
+    lookups,
     spies,
     restore: () => spies.forEach((s) => s.mockRestore()),
   };

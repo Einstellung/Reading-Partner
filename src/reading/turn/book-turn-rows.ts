@@ -15,7 +15,8 @@ import type { WithdrawnSteer } from "../../legion/durable/turn";
 import { STALL_MESSAGE } from "../../legion/execute/stall";
 import type { CallRow } from "./call-state";
 import type { ReadingDurable } from "./durable-runtime";
-import { runBookTurn, type BookTurnRequest } from "./durable-turn";
+import type { BookOrigin } from "./durable-book";
+import { resumedTurn, runBookTurn, type BookTurn, type BookTurnRequest } from "./durable-turn";
 import type { TurnView } from "./durable-view";
 
 export type BookTurnEnd =
@@ -79,25 +80,47 @@ export function turnEnd(
 }
 
 /** Start a book turn and follow it as rows. `onRows` gets every view, mapped. */
-export async function driveBookTurn(
+export function driveBookTurn(
   durable: ReadingDurable,
   request: Omit<BookTurnRequest, "onView">,
   onRows: (rows: CallRow[]) => void,
   context: Context = BACKGROUND_CONTEXT,
 ): Promise<DrivenBookTurn> {
+  return asRows((onView) => runBookTurn(durable, { ...request, onView }, context), onRows);
+}
+
+/** A turn in flight on a thread that nothing on screen holds, before it is followed. */
+export interface ResumedBookTurn {
+  /** Every row of the turn comes after this timestamp. */
+  after: number;
+  follow(onRows: (rows: CallRow[]) => void): Promise<DrivenBookTurn>;
+}
+
+/**
+ * The turn in flight on a book thread the reader is opening — after a
+ * restart, the one recovery resumed (docs/soul/87, "被杀之后") — so it can be
+ * drawn, stopped and steered like one started here. Undefined when idle.
+ */
+export async function resumedBookTurn(
+  durable: ReadingDurable,
+  origin: Pick<BookOrigin, "home" | "threadId">,
+  context: Context = BACKGROUND_CONTEXT,
+): Promise<ResumedBookTurn | undefined> {
+  const found = await resumedTurn(durable, origin, context);
+  if (!found) return undefined;
+  return { after: found.startedAt, follow: (onRows) => asRows((onView) => found.follow(onView), onRows) };
+}
+
+async function asRows(
+  begin: (onView: (view: TurnView) => void) => Promise<BookTurn>,
+  onRows: (rows: CallRow[]) => void,
+): Promise<DrivenBookTurn> {
   let rows: CallRow[] = [];
   let stopping: Promise<WithdrawnSteer[]> | undefined;
-  const turn = await runBookTurn(
-    durable,
-    {
-      ...request,
-      onView: (view) => {
-        rows = viewRows(view);
-        onRows(rows);
-      },
-    },
-    context,
-  );
+  const turn = await begin((view) => {
+    rows = viewRows(view);
+    onRows(rows);
+  });
   const ended = turn.settled.then(async ({ result, stalled }): Promise<BookTurnEnd> => {
     if (stalled) return { kind: "stalled", steers: stalled };
     // The last view before the run ended is what landed: every row committed.
