@@ -36,6 +36,7 @@ import {
   bookLander,
   bookThreadKey,
   bookUsageReport,
+  storeBookThreads,
   type BookLandingDeps,
   type BookOrigin,
   type BookThreads,
@@ -77,14 +78,7 @@ export interface ReadingDurable {
   onTurnSettled(listener: (event: SettledEvent) => void): () => void;
 }
 
-const appThreads: BookThreads = {
-  load: async (home) => {
-    await loadThreads(home);
-  },
-  messages: (home, threadId) => getThread(home, threadId)?.messages,
-  append: (home, threadId, message) => appendMessage(home, threadId, message),
-  flush: () => flushThreads(),
-};
+const appThreads = storeBookThreads({ load: loadThreads, get: getThread, append: appendMessage, flush: flushThreads });
 
 async function openBookDesk(origin: BookOrigin): Promise<readonly AgentTool[]> {
   const open = deliveryOpener("book");
@@ -175,8 +169,12 @@ export async function openReadingDurable(options: ReadingDurableOptions): Promis
       recordCacheTurn(bookCacheTurn(message, about.origin, about.round, telemetry));
       turnLog.response(key, about.round, message.stopReason);
     },
-    onSettled: (conversationId, origin, result) => {
-      if (origin.place === "book") turnLog.end(bookThreadKey(asBookOrigin(origin)), result);
+    onSettled: (conversationId, origin, result, startedAt) => {
+      if (origin.place === "book") {
+        const key = bookThreadKey(asBookOrigin(origin));
+        turnLog.end(key, result);
+        turnLog.endUnbegun(key, result, asBookOrigin(origin).threadId, startedAt);
+      }
       for (const listener of listeners) listener({ conversationId, origin, result });
     },
     sectionKeys: [TURN_SECTION],

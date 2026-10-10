@@ -48,6 +48,8 @@ export function turnLogEnd(result: TurnResult | undefined, stalled: boolean): { 
 
 export class BookTurnLog {
   private readonly open = new Map<string, OpenTurn>();
+  /** Threads a turn began on in this process. */
+  private readonly begun = new Set<string>();
 
   constructor(
     private readonly sink: TurnLogSink,
@@ -61,6 +63,7 @@ export class BookTurnLog {
   /** A turn begins on `key`; a turn already open there is kept. */
   begin(key: string, start: TurnLogStart): void {
     if (this.open.has(key)) return;
+    this.begun.add(key);
     const entry: OpenTurn = { turn: newRunId(), begunAt: this.now(), round: 0, awaiting: false, stalled: false };
     this.open.set(key, entry);
     this.note(entry, { event: "start", ...start, held: false });
@@ -105,5 +108,25 @@ export class BookTurnLog {
     this.open.delete(key);
     const { reason, error } = turnLogEnd(result, entry.stalled);
     this.note(entry, { event: "end", reason, ms: this.now() - entry.begunAt, ...(error !== undefined ? { error } : {}) });
+  }
+
+  /**
+   * A turn settled on a thread no turn began on in this process: one the last
+   * process was killed in, settled by recovery. Its start line is the dead
+   * process's, so the end names the conversation to pair with it.
+   */
+  endUnbegun(key: string, result: TurnResult | undefined, conversation: string, startedAt: number): void {
+    if (this.begun.has(key)) return;
+    this.begun.add(key);
+    const { reason, error } = turnLogEnd(result, false);
+    this.sink({
+      at: this.now(),
+      turn: newRunId(),
+      event: "end",
+      reason,
+      ms: this.now() - startedAt,
+      conversation,
+      ...(error !== undefined ? { error } : {}),
+    });
   }
 }

@@ -59,8 +59,9 @@ export type TurnLogEvent =
     | { event: "first-byte"; round: number; ms: number }
     // A round's answer came back; `ms` since its request went out.
     | { event: "round"; round: number; stop: string; ms: number }
-    // `ms` since start.
-    | { event: "end"; reason: TurnEnd; ms: number; error?: string }
+    // `ms` since start. `conversation` only on the end of a turn a killed process
+    // began: its start line is under another turn id.
+    | { event: "end"; reason: TurnEnd; ms: number; error?: string; conversation?: string }
   );
 
 export type TurnLogSink = (line: TurnLogLine) => void;

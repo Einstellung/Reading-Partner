@@ -82,8 +82,8 @@ export interface DurableOptions {
   recordResponse?: ResponseRecorder;
   /** Each request as it is prepared (extension.ts `requested`). */
   onRequest?: RequestNotice;
-  /** A conversation's `rp.turn` landed and the conversation is free again. */
-  onSettled?: (conversationId: ConversationId, origin: ThreadOrigin, result: TurnResult) => void;
+  /** A conversation's `rp.turn` landed and the conversation is free again; `startedAt` is the turn's. */
+  onSettled?: (conversationId: ConversationId, origin: ThreadOrigin, result: TurnResult, startedAt: number) => void;
   /** The system prompt's sections in order; `rp.desk` holds each turn's text for them. */
   sectionKeys: readonly string[];
   stream?: ConversationStreamOptions;
@@ -132,10 +132,10 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   let path = "";
   let code = 0;
 
-  const settledWith = async (conversationId: ConversationId, result: TurnResult) => {
+  const settledWith = async (conversationId: ConversationId, result: TurnResult, startedAt: number) => {
     try {
       const origin = (await harness.snapshot(ThreadDoc, conversationId, BACKGROUND_CONTEXT))?.origin;
-      if (origin) options.onSettled?.(conversationId, origin, result);
+      if (origin) options.onSettled?.(conversationId, origin, result, startedAt);
     } catch (error) {
       options.onReport?.(error);
     }
@@ -147,7 +147,7 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     ...(options.recordResponse ? { recordResponse: options.recordResponse } : {}),
     ...(options.onRequest ? { requested: options.onRequest } : {}),
     registrations,
-    ...(options.onSettled ? { settled: (conversationId: ConversationId, result: TurnResult) => void settledWith(conversationId, result) } : {}),
+    ...(options.onSettled ? { settled: (conversationId: ConversationId, result: TurnResult, startedAt: number) => void settledWith(conversationId, result, startedAt) } : {}),
     land: createLandStep({
       landers: options.landers,
       storage: () => storage,

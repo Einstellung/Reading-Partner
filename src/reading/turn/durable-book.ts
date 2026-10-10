@@ -17,7 +17,7 @@ import type { DeskResolver } from "../../legion/durable/tools";
 import type { LandedRow, LandedTurn, Lander } from "../../legion/durable/turn";
 import type { ModelCallReport } from "../../ai/model-usage";
 import { resolveRetention, type CacheTurnInput, type TurnTelemetry } from "../../platform/app/cache-telemetry";
-import type { ThreadMessage } from "../../platform/app/threads";
+import type { ThreadMessage, ThreadStore } from "../../platform/app/threads";
 import { composeMessages, HISTORY_KEEP, type ReadingTurnMessage } from "../desk-history";
 
 export type BookOrigin = Extract<BoxOrigin, { place: "book" }> & { home: string };
@@ -76,6 +76,20 @@ export interface BookThreads {
   messages(home: string, threadId: string): readonly ThreadMessage[] | undefined;
   append(home: string, threadId: string, message: ThreadMessage): void;
   flush(): Promise<void>;
+}
+
+/** A thread store's calls as the book runtime uses them: the app's store, or a test's over a directory. */
+export function storeBookThreads(store: Pick<ThreadStore, "load" | "get" | "append" | "flush">): BookThreads {
+  return {
+    load: async (home) => {
+      await store.load(home);
+    },
+    messages: (home, threadId) => store.get(home, threadId)?.messages,
+    append: (home, threadId, message) => {
+      store.append(home, threadId, message);
+    },
+    flush: () => store.flush(),
+  };
 }
 
 /** The file's history, `HISTORY_KEEP` long, without the reader's line of this turn. */
