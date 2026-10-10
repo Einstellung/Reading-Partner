@@ -6,8 +6,12 @@
 // asks again once, as today.
 //
 // A turn already in flight when the reader opens its thread — one recovery
-// resumed after a restart — is followed, steered and stopped the same way
-// (resumedTurn, docs/soul/87 "被杀之后").
+// resumed after a restart — is followed, steered, stopped and watched the same
+// way (resumedTurn, docs/soul/87 "被杀之后").
+//
+// Both write the turn log's lines (durable-turn-log.ts) and, in a development
+// build, the turn's longest silence (stall.ts recordLongestSilence), as the
+// old turn loop did.
 //
 // No React here: the session hands `onView` the projected rows and draws them.
 
@@ -26,11 +30,17 @@ import {
   type WithdrawnSteer,
 } from "../../legion/durable/turn";
 import type { AgentTool } from "../../legion/execute/contract";
-import { stallWatches, type StallWatches } from "../../legion/execute/stall";
+import { recordLongestSilence, stallWatches, type StallWatches } from "../../legion/execute/stall";
 import type { ReadingTurnMessage } from "../desk-history";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin, type BookTelemetry } from "./durable-book";
 import { projectView, runStart, type TurnView, type ViewSource } from "./durable-view";
 import { TURN_SECTION, type ReadingDurable } from "./durable-runtime";
+
+/** The stall watch's registry and window: the app's shared one and TURN_STALL_MS unless said. */
+export interface StallOptions {
+  watches?: StallWatches;
+  stallMs?: number;
+}
 
 export interface BookTurnRequest {
   origin: BookOrigin;
@@ -62,7 +72,11 @@ export interface BookTurn {
   settled: Promise<{ result: TurnResult | undefined; stalled?: WithdrawnSteer[] }>;
 }
 
-type Live = { run?: { inputs: number[] }; generation?: { message?: unknown }; tools?: { status: string }[] };
+type Live = {
+  run?: { inputs: number[] };
+  generation?: { message?: { timestamp?: number } };
+  tools?: { status: string }[];
+};
 
 interface Following {
   startedAt: number;
@@ -114,6 +128,73 @@ async function followTurn(
   };
 }
 
+interface TurnWatch {
+  /** Every view's `pi.live`: generation progress beats the watch, a running tool holds it. */
+  pulse(live: Live | undefined): void;
+  /** The steers the cut withdrew; undefined unless the watch cut the turn. */
+  stalled(): WithdrawnSteer[] | undefined;
+  stop(): void;
+}
+
+/**
+ * The stall watch on one turn (docs/soul/87 "停摆"): silent past the window,
+ * the run in flight is superseded, so it lands nothing. The view's first
+ * partial of each round is the turn log's first byte.
+ */
+function watchTurn(
+  durable: ReadingDurable,
+  conversation: Conversation,
+  key: string,
+  surface: string,
+  stall: StallOptions,
+  context: Context,
+): TurnWatch {
+  const { runtime } = durable;
+  let stalled: WithdrawnSteer[] | undefined;
+  let lastHalf = "";
+  let holding = false;
+  const watch = (stall.watches ?? stallWatches()).watch({
+    ...(stall.stallMs ? { stallMs: stall.stallMs } : {}),
+    onStall: () => {
+      void (async () => {
+        const live = await runtime.harness.snapshot(LiveDoc, conversation.id, context);
+        const submission = live?.run?.inputs[0];
+        if (submission === undefined) return;
+        durable.turnLog.stalled(key);
+        stalled = await supersede(runtime, conversation, submission, context);
+      })();
+    },
+  });
+  return {
+    pulse(live) {
+      const message = live?.generation?.message;
+      if (message?.timestamp !== undefined) durable.turnLog.heard(key, message.timestamp);
+      const half = JSON.stringify(message ?? null);
+      if (half !== lastHalf) {
+        lastHalf = half;
+        watch.beat();
+      }
+      const toolRunning = live?.tools?.some((slot) => slot.status === "running") ?? false;
+      if (toolRunning !== holding) {
+        holding = toolRunning;
+        if (holding) watch.hold();
+        else watch.unhold();
+      }
+    },
+    stalled: () => stalled,
+    stop() {
+      // What the stall window has to clear, measured on a real turn; read back
+      // off a development build only (legion/execute/turn.ts did the same).
+      if (import.meta.env?.DEV) {
+        const ms = watch.longestSilence();
+        recordLongestSilence({ surface, ms, at: Date.now() });
+        console.log(`[stall] ${surface} longest silence ${ms}ms`);
+      }
+      watch.stop();
+    },
+  };
+}
+
 export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequest, context: Context): Promise<BookTurn> {
   const { runtime } = durable;
   const key = bookThreadKey(request.origin);
@@ -138,49 +219,34 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
     context,
   );
   const { conversation } = started;
-  let stalled: WithdrawnSteer[] | undefined;
-  let lastHalf = "";
-  let holding = false;
-
-  const watch = (request.watches ?? stallWatches()).watch({
-    ...(request.stallMs ? { stallMs: request.stallMs } : {}),
-    onStall: () => {
-      void (async () => {
-        const live = await runtime.harness.snapshot(LiveDoc, conversation.id, context);
-        const submission = live?.run?.inputs[0];
-        if (submission === undefined) return;
-        stalled = await supersede(runtime, conversation, submission, context);
-      })();
-    },
+  const surface = request.telemetry?.surface ?? "reading";
+  durable.turnLog.begin(key, {
+    surface,
+    conversation: request.origin.threadId,
+    provider: request.model.provider,
+    model: request.model.modelId,
   });
+  const watch = watchTurn(
+    durable,
+    conversation,
+    key,
+    surface,
+    { ...(request.watches ? { watches: request.watches } : {}), ...(request.stallMs ? { stallMs: request.stallMs } : {}) },
+    context,
+  );
 
   const unfollow = await followTurn(
     durable,
     conversation,
-    {
-      startedAt: started.startedAt,
-      describe: request.describe,
-      onView: request.onView,
-      pulse: (live) => {
-        const half = JSON.stringify(live?.generation?.message ?? null);
-        if (half !== lastHalf) {
-          lastHalf = half;
-          watch.beat();
-        }
-        const toolRunning = live?.tools?.some((slot) => slot.status === "running") ?? false;
-        if (toolRunning !== holding) {
-          holding = toolRunning;
-          if (holding) watch.hold();
-          else watch.unhold();
-        }
-      },
-    },
+    { startedAt: started.startedAt, describe: request.describe, onView: request.onView, pulse: watch.pulse },
     context,
   );
 
   const settled = started.settled.then((result) => {
     watch.stop();
     unfollow();
+    durable.turnLog.end(key, result);
+    const stalled = watch.stalled();
     return stalled ? { result, stalled } : { result };
   });
 
@@ -198,7 +264,7 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
 export interface ResumedTurn {
   /** `rp.turn`'s start: every row of the turn is stamped after it. */
   startedAt: number;
-  /** Follow it as rows; steering and stopping it work as on a turn started here. */
+  /** Follow it as rows; steering, stopping and the stall watch work as on a turn started here. */
   follow(onView: (view: TurnView) => void): Promise<BookTurn>;
 }
 
@@ -210,22 +276,34 @@ export async function resumedTurn(
   durable: ReadingDurable,
   origin: Pick<BookOrigin, "home" | "threadId">,
   context: Context,
+  stall: StallOptions = {},
 ): Promise<ResumedTurn | undefined> {
   const { runtime } = durable;
-  const found = await turnInFlight(runtime, bookThreadKey(origin), context);
+  const key = bookThreadKey(origin);
+  const found = await turnInFlight(runtime, key, context);
   if (!found) return undefined;
   const { conversation, startedAt } = found;
   return {
     startedAt,
     async follow(onView) {
-      const unfollow = await followTurn(durable, conversation, { startedAt, describe: durable.describe, onView }, context);
+      const surface = durable.assembled.get(key)?.telemetry?.surface ?? "reading";
+      const watch = watchTurn(durable, conversation, key, surface, stall, context);
+      const unfollow = await followTurn(
+        durable,
+        conversation,
+        { startedAt, describe: durable.describe, onView, pulse: watch.pulse },
+        context,
+      );
       return {
         conversation,
         steer: (text, ts) => steerTurn(runtime, conversation, text, ts, context),
         stop: () => stopTurn(runtime, conversation, context),
         settled: found.settled.then((result) => {
+          watch.stop();
           unfollow();
-          return { result };
+          durable.turnLog.end(key, result);
+          const stalled = watch.stalled();
+          return stalled ? { result, stalled } : { result };
         }),
       };
     },

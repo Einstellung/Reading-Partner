@@ -211,3 +211,28 @@ test("a line said before the runtime has answered goes into the turn in flight",
     r.restore();
   }
 });
+
+test("a joined turn the stall watch cut is asked again once; the second stall is a failure", async () => {
+  const r = rig();
+  try {
+    const view = await joined(r);
+    await settle(() => r.book.last().view([ai(ASKED + 1, "because the", { streaming: true })]));
+    await settle(() => r.book.last().end({ kind: "stalled", steers: [] }));
+    // Nothing landed: the half row goes, and the question in the file is asked again.
+    expect(r.book.turns).toHaveLength(2);
+    expect(r.book.last().resumed).toBeUndefined();
+    expect(r.book.last().request.line).toEqual({ text: "why this?", ts: ASKED });
+    expect(shape(view)).toEqual([
+      ["user", "why this?", false],
+      ["ai", "", false],
+    ]);
+    expect(rows(view)[1]!.streaming).toBe(true);
+
+    await settle(() => r.book.last().end({ kind: "stalled", steers: [] }));
+    expect(r.book.turns).toHaveLength(2);
+    expect(rows(view)[rows(view).length - 1]!.failed).toBe(true);
+    expect(view.result.current.isAnswering(THREAD)).toBe(false);
+  } finally {
+    r.restore();
+  }
+});

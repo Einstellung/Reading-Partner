@@ -3,6 +3,8 @@
 // the turn so it lands nothing; a running tool holds the watch; coming back to
 // the app after longer than that judges it at once; the caller asks again once
 // and shows the second stall as a failure (reading/turn/book-turn-rows.ts).
+// A turn joined after a restart (resumedBookTurn) is watched the same way.
+// The turn log's end line says the turn stalled.
 
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
@@ -12,11 +14,26 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { startTurn } from "../../../src/legion/durable/turn";
 import type { AgentTool } from "../../../src/legion/execute/contract";
-import { createStallWatches, STALL_MESSAGE, TURN_STALL_MS, type StallTimers } from "../../../src/legion/execute/stall";
-import { afterStall, driveBookTurn, turnEnd } from "../../../src/reading/turn/book-turn-rows";
-import type { BookOrigin } from "../../../src/reading/turn/durable-book";
-import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
+import {
+  createStallWatches,
+  STALL_MESSAGE,
+  TURN_STALL_MS,
+  type SilenceRecord,
+  type StallTimers,
+} from "../../../src/legion/execute/stall";
+import type { TurnLogLine } from "../../../src/legion/execute/turn-log";
+import {
+  afterStall,
+  driveBookTurn,
+  resumedBookTurn,
+  turnEnd,
+  type DrivenBookTurn,
+} from "../../../src/reading/turn/book-turn-rows";
+import type { CallRow } from "../../../src/reading/turn/call-state";
+import { bookThreadKey, bookThreadOrigin, type BookOrigin } from "../../../src/reading/turn/durable-book";
+import { openReadingDurable, TURN_SECTION, type ReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { testHost, deferred } from "../../legion/durable/support/runtime";
 import { fakeThreads } from "./support/durable-threads";
 
@@ -54,6 +71,7 @@ async function setup(responses: Parameters<ReturnType<typeof fauxProvider>["setR
   const models = createModels();
   models.setProvider(faux.provider);
   const { threads, messages } = fakeThreads([{ role: "user", ts: 1000, text: "Why tides?" }]);
+  const lines: TurnLogLine[] = [];
   const durable = await openReadingDurable({
     catalog: tools,
     host: testHost(mkdtempSync(join(tmpdir(), "reading-stall-"))),
@@ -62,8 +80,9 @@ async function setup(responses: Parameters<ReturnType<typeof fauxProvider>["setR
     watching: () => true,
     openDesk: async () => tools,
     now: () => 1000,
+    log: (line) => lines.push(line),
   });
-  return { durable, messages };
+  return { durable, messages, lines };
 }
 
 function request(clock: ReturnType<typeof fakeClock>, tools: AgentTool[] = []) {
@@ -81,19 +100,52 @@ function request(clock: ReturnType<typeof fakeClock>, tools: AgentTool[] = []) {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
-test("ninety silent seconds supersede the turn: nothing lands, and it ends stalled", async () => {
-  const { durable, messages } = await setup([silent]);
+type Request = ReturnType<typeof request>;
+type Drive = (durable: ReadingDurable, req: Request, onRows: (rows: CallRow[]) => void) => Promise<DrivenBookTurn>;
+
+/** A turn started here, and one already in flight when the thread is opened, as recovery leaves it. */
+const drivers: [string, Drive][] = [
+  ["started here", (durable, req, onRows) => driveBookTurn(durable, req, onRows, ctx)],
+  [
+    "joined after a restart",
+    async (durable, req, onRows) => {
+      await startTurn(
+        durable.runtime,
+        {
+          key: bookThreadKey(BOOK),
+          origin: bookThreadOrigin(BOOK),
+          content: req.line.text,
+          sections: { [TURN_SECTION]: req.systemPrompt },
+          tools: req.tools.map((tool) => tool.name),
+          model: req.model,
+          excludeTs: req.line.ts,
+        },
+        ctx,
+      );
+      const found = await resumedBookTurn(durable, BOOK, ctx, { watches: req.watches });
+      return found!.follow(onRows);
+    },
+  ],
+];
+
+const ended = (lines: TurnLogLine[]) => lines.filter((line) => line.event === "end").map((line) => (line as { reason: string }).reason);
+
+for (const [how, drive] of drivers) {
+
+test(`${how}: ninety silent seconds supersede the turn: nothing lands, and it ends stalled`, async () => {
+  const { durable, messages, lines } = await setup([silent]);
   const clock = fakeClock();
-  const turn = await driveBookTurn(durable, request(clock), () => {}, ctx);
+  const turn = await drive(durable, request(clock), () => {});
   await settle();
   clock.advance(TURN_STALL_MS + 1_000);
   const end = await turn.ended;
   expect(end.kind).toBe("stalled");
   expect(messages.length).toBe(1);
+  expect(ended(lines)).toEqual(["stalled"]);
   await durable.runtime.close(ctx);
 });
 
-test("a running tool holds the watch, and the turn answers after it", async () => {
+test(`${how}: a running tool holds the watch, and the turn answers after it`, async () => {
   const release = deferred();
   const slow = {
     name: "read_pages",
@@ -107,7 +159,7 @@ test("a running tool holds the watch, and the turn answers after it", async () =
       return { content: [{ type: "text", text: "the pages" }], details: undefined };
     },
   } as unknown as AgentTool;
-  const { durable, messages } = await setup(
+  const { durable, messages, lines } = await setup(
     [fauxAssistantMessage([fauxToolCall("read_pages", {})], { stopReason: "toolUse" }), fauxAssistantMessage(fauxText("The moon."))],
     [slow],
   );
@@ -117,7 +169,7 @@ test("a running tool holds the watch, and the turn answers after it", async () =
   const onRows = (rows: { tools?: { state: string }[] }[]) => {
     if (rows.some((r) => r.tools?.some((t) => t.state === "running"))) toolRuns();
   };
-  const turn = await driveBookTurn(durable, request(clock, [slow]), onRows, ctx);
+  const turn = await drive(durable, request(clock, [slow]), onRows);
   await running;
   await settle();
   clock.advance(3 * TURN_STALL_MS);
@@ -125,14 +177,15 @@ test("a running tool holds the watch, and the turn answers after it", async () =
   const end = await turn.ended;
   expect(end.kind).toBe("answered");
   expect(messages[messages.length - 1]?.text).toBe("The moon.");
+  expect(ended(lines)).toEqual(["done"]);
   await durable.runtime.close(ctx);
 });
 
-test("back in the app after longer than the stall window: judged at once", async () => {
+test(`${how}: back in the app after longer than the stall window: judged at once`, async () => {
   const { durable, messages } = await setup([silent]);
   const clock = fakeClock();
   const req = request(clock);
-  const turn = await driveBookTurn(durable, req, () => {}, ctx);
+  const turn = await drive(durable, req, () => {});
   await settle();
   req.watches.away(clock.now());
   clock.advance(0);
@@ -141,6 +194,27 @@ test("back in the app after longer than the stall window: judged at once", async
   expect(end.kind).toBe("stalled");
   expect(messages.length).toBe(1);
   await durable.runtime.close(ctx);
+});
+}
+
+test("a development build keeps each turn's longest silence", async () => {
+  const before = process.env.DEV;
+  process.env.DEV = "1";
+  try {
+    const host = globalThis as { __stallSilences?: SilenceRecord[] };
+    host.__stallSilences = [];
+    const { durable } = await setup([silent]);
+    const clock = fakeClock();
+    const turn = await driveBookTurn(durable, request(clock), () => {}, ctx);
+    await settle();
+    clock.advance(TURN_STALL_MS + 1_000);
+    await turn.ended;
+    expect(host.__stallSilences.map((r) => [r.surface, r.ms])).toEqual([["reading", TURN_STALL_MS + 1_000]]);
+    await durable.runtime.close(ctx);
+  } finally {
+    if (before === undefined) delete process.env.DEV;
+    else process.env.DEV = before;
+  }
 });
 
 test("a stalled turn is asked again once; the second stall is a failure", () => {

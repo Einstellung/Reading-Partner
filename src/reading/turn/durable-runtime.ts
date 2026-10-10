@@ -19,6 +19,7 @@ import { recordModelCall } from "../../ai/model-usage";
 import { recordCacheTurn } from "../../platform/app/cache-telemetry";
 import { createAppModels } from "../../ai/durable-models";
 import { toolLabel } from "../../legion/execute/tool-result";
+import { appTurnLog, type TurnLogSink } from "../../legion/execute/turn-log";
 import type { AgentTool } from "../../legion/execute/contract";
 import { ThreadDoc, type ThreadOrigin, type TurnResult } from "../../legion/durable/extension";
 import { appDurableHost, openDurable, type DurableHost, type DurableRuntime } from "../../legion/durable/harness";
@@ -39,6 +40,7 @@ import {
   type BookOrigin,
   type BookThreads,
 } from "./durable-book";
+import { BookTurnLog } from "./durable-turn-log";
 import { boxUnseenTurn } from "./turn-box";
 
 /** The system prompt is one section: every turn starts from a reset, which writes every section anyway (docs/pitfall/517). */
@@ -59,6 +61,8 @@ export interface ReadingDurableOptions {
   rotateAtBytes?: number;
   now?: () => number;
   onReport?: (error: unknown) => void;
+  /** Where the turn log's lines go (legion/execute/turn-log.ts); the app's file unless said. */
+  log?: TurnLogSink;
 }
 
 export interface ReadingDurable {
@@ -66,6 +70,8 @@ export interface ReadingDurable {
   assembled: AssembledTurns;
   /** What recovery did with the runs the last process left, for logging and tests. */
   recovered: Recovered[];
+  /** The book turns' diagnostic lines (durable-turn-log.ts). */
+  turnLog: BookTurnLog;
   /** A tool call's label from the catalog, for a turn this process did not assemble. */
   describe(name: string, args: unknown): { label: string; quiet?: true };
   onTurnSettled(listener: (event: SettledEvent) => void): () => void;
@@ -137,6 +143,7 @@ export async function openReadingDurable(options: ReadingDurableOptions): Promis
         })),
   };
   const readBook = bookHistoryReader(threads, assembled);
+  const turnLog = new BookTurnLog(options.log ?? appTurnLog, now);
   const runtime = await openDurable({
     host: options.host ?? appDurableHost(),
     models: options.models ?? createAppModels(),
@@ -144,14 +151,28 @@ export async function openReadingDurable(options: ReadingDurableOptions): Promis
     resolvers: { book: bookDeskResolver(assembled, options.openDesk ?? openBookDesk) },
     landers: { book: bookLander(landing) },
     readHistory: async (origin, read, context) => (origin.place === "book" ? readBook(origin, read, context) : []),
+    onRequest: (about) => {
+      if (about.origin.place !== "book") return;
+      const book = asBookOrigin(about.origin);
+      const key = bookThreadKey(book);
+      turnLog.request(key, about.round, {
+        surface: assembled.get(key)?.telemetry?.surface ?? "reading",
+        conversation: book.threadId,
+        provider: about.model?.provider ?? "",
+        model: about.model?.modelId ?? "",
+      });
+    },
     recordResponse: (message, about) => {
       if (about.origin.place !== "book") return;
+      const key = bookThreadKey(asBookOrigin(about.origin));
       // A turn resumed after a restart was not assembled here: it is logged as reading, inline unknown.
-      const telemetry = assembled.get(bookThreadKey(asBookOrigin(about.origin)))?.telemetry;
+      const telemetry = assembled.get(key)?.telemetry;
       recordModelCall(bookUsageReport(message, about.origin, telemetry));
       recordCacheTurn(bookCacheTurn(message, about.origin, about.round, telemetry));
+      turnLog.response(key, about.round, message.stopReason);
     },
     onSettled: (conversationId, origin, result) => {
+      if (origin.place === "book") turnLog.end(bookThreadKey(asBookOrigin(origin)), result);
       for (const listener of listeners) listener({ conversationId, origin, result });
     },
     sectionKeys: [TURN_SECTION],
@@ -166,6 +187,7 @@ export async function openReadingDurable(options: ReadingDurableOptions): Promis
     runtime,
     assembled,
     recovered,
+    turnLog,
     describe,
     onTurnSettled(listener) {
       listeners.add(listener);

@@ -16,7 +16,7 @@ import { STALL_MESSAGE } from "../../legion/execute/stall";
 import type { CallRow } from "./call-state";
 import type { ReadingDurable } from "./durable-runtime";
 import type { BookOrigin } from "./durable-book";
-import { resumedTurn, runBookTurn, type BookTurn, type BookTurnRequest } from "./durable-turn";
+import { resumedTurn, runBookTurn, type BookTurn, type BookTurnRequest, type StallOptions } from "./durable-turn";
 import type { TurnView } from "./durable-view";
 
 export type BookTurnEnd =
@@ -99,14 +99,16 @@ export interface ResumedBookTurn {
 /**
  * The turn in flight on a book thread the reader is opening — after a
  * restart, the one recovery resumed (docs/soul/87, "被杀之后") — so it can be
- * drawn, stopped and steered like one started here. Undefined when idle.
+ * drawn, stopped, steered and cut on a stall like one started here, and a
+ * stall ends it `stalled` for the caller to ask again. Undefined when idle.
  */
 export async function resumedBookTurn(
   durable: ReadingDurable,
   origin: Pick<BookOrigin, "home" | "threadId">,
   context: Context = BACKGROUND_CONTEXT,
+  stall: StallOptions = {},
 ): Promise<ResumedBookTurn | undefined> {
-  const found = await resumedTurn(durable, origin, context);
+  const found = await resumedTurn(durable, origin, context, stall);
   if (!found) return undefined;
   return { after: found.startedAt, follow: (onRows) => asRows((onView) => found.follow(onView), onRows) };
 }

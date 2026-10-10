@@ -36,6 +36,7 @@ import {
   durableExtension,
   ThreadDoc,
   type HistoryReader,
+  type RequestNotice,
   type ResponseRecorder,
   type ThreadOrigin,
   type TurnCheckpoint,
@@ -79,6 +80,8 @@ export interface DurableOptions {
   landers: Readonly<Record<string, Lander>>;
   readHistory: HistoryReader;
   recordResponse?: ResponseRecorder;
+  /** Each request as it is prepared (extension.ts `requested`). */
+  onRequest?: RequestNotice;
   /** A conversation's `rp.turn` landed and the conversation is free again. */
   onSettled?: (conversationId: ConversationId, origin: ThreadOrigin, result: TurnResult) => void;
   /** The system prompt's sections in order; `rp.desk` holds each turn's text for them. */
@@ -142,6 +145,7 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     sectionKeys: options.sectionKeys,
     readHistory: options.readHistory,
     ...(options.recordResponse ? { recordResponse: options.recordResponse } : {}),
+    ...(options.onRequest ? { requested: options.onRequest } : {}),
     registrations,
     ...(options.onSettled ? { settled: (conversationId: ConversationId, result: TurnResult) => void settledWith(conversationId, result) } : {}),
     land: createLandStep({

@@ -107,6 +107,14 @@ export type ResponseRecorder = (
   about: { conversationId: ConversationId; origin: ThreadOrigin; round: number },
 ) => void;
 
+/** A request about to go out: its round within the turn, and the model the conversation is configured with. */
+export type RequestNotice = (about: {
+  conversationId: ConversationId;
+  origin: ThreadOrigin;
+  round: number;
+  model?: { provider: string; modelId: string };
+}) => void;
+
 /** The reader's line as the model gets it: text, or text and the page window's images. */
 export type TurnContent = string | (TextContent | ImageContent)[];
 /** The bell a turn answers (soul/bell.ts): found again after a restart so it is not answered twice. */
@@ -142,6 +150,8 @@ export interface ExtensionDeps {
   sectionKeys: readonly string[];
   readHistory: HistoryReader;
   recordResponse?: ResponseRecorder;
+  /** Each request as it is prepared, for the turn log (legion/execute/turn-log.ts). */
+  requested?: RequestNotice;
   land: LandStep;
   /** Tool registrations by name, for sizing a request's tool schemas. */
   registrations: ReadonlyMap<string, ToolRegistration>;
@@ -257,10 +267,16 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
       .map((m) => (m.role === "toolResult" ? (stubs.get(m.toolCallId) ?? m) : m));
     const round = run.filter((m) => m.role === "assistant").length + 1;
     rounds.set(api.conversationId, round);
+    const agent = await api.snapshot(AgentDoc, api.conversationId, context);
+    deps.requested?.({
+      conversationId: api.conversationId,
+      origin,
+      round,
+      ...(agent?.model ? { model: { provider: agent.model.provider, modelId: agent.model.modelId } } : {}),
+    });
     if (round > desk.maxRounds) return refused(deps, api, REFUSE_ROUNDS, context);
     const history = await deps.readHistory(origin, desk.excludeTs === null ? {} : { excludeTs: desk.excludeTs }, context);
     const messages = [...history, ...run];
-    const agent = await api.snapshot(AgentDoc, api.conversationId, context);
     const model = agent?.model ? api.models.getModel(agent.model.provider, agent.model.modelId) : undefined;
     if (!model) return { messages: [...system, ...messages] };
     const names = Array.isArray(agent?.tools) ? agent.tools : [];
