@@ -54,6 +54,7 @@ export function buildFigureTools(opts: BuildFigureToolsOptions): AgentTool[] {
   return [
     {
       name: "view_figure",
+      replay: "safe",
       label: (args) =>
         args.id ? t("chat.figures.lookingAtId", { id: String(args.id) }) : t("chat.figures.lookingAt"),
       effect: "read",

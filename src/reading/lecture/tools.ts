@@ -80,6 +80,7 @@ export function buildReadChapterTool(deps: ReadChapterDeps): AgentTool {
   if (chapters && chapters.length > 0) {
     return {
       name: "read_chapter",
+      replay: "safe",
       label: (args) => readChapterLabel(args.chapter),
       effect: "read",
       description:
@@ -112,6 +113,7 @@ export function buildReadChapterTool(deps: ReadChapterDeps): AgentTool {
 
   return {
     name: "read_chapter",
+    replay: "safe",
     label: (args) => pageRangeLabel(args),
     effect: "read",
     description:

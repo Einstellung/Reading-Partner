@@ -199,6 +199,7 @@ export function buildReadingTools(ctx: {
   if (currentFulltext?.status === "ok") {
     tools.push({
       name: "read_pages",
+      replay: "safe",
       label: (args) => pageRangeLabel(args),
       effect: "read",
       description:
@@ -223,6 +224,7 @@ export function buildReadingTools(ctx: {
   if (searchable.some((m) => m.fulltext?.status === "ok")) {
     tools.push({
       name: "search_topic",
+      replay: "safe",
       label: (args) => args.query ? `Searching the topic for “${args.query}”` : "Searching the topic",
       effect: "read",
       description:
@@ -237,6 +239,7 @@ export function buildReadingTools(ctx: {
   if (materials.some((m) => m.annotations.length > 0)) {
     tools.push({
       name: "read_annotations",
+      replay: "safe",
       label: (args) => args.material ? `Reading your notes on ${args.material}` : "Reading your notes",
       effect: "read",
       description:

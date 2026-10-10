@@ -109,6 +109,7 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
     },
     {
       name: "read_chapter_note",
+      replay: "safe",
       label: (args) =>
         args.chapter === undefined
           ? t("study.tools.readingChapterNote")
@@ -133,6 +134,7 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
     },
     {
       name: "read_retell_outline",
+      replay: "safe",
       label: () => t("study.tools.readRetellOutline"),
       effect: "read",
       description:

@@ -132,6 +132,8 @@ export interface ExtensionDeps {
    * and abort the conversation. The hook then waits for the abort.
    */
   refuse(conversationId: ConversationId, message: string): void;
+  /** After `rp.turn` landed: the conversation is free for the next turn. */
+  settled?(conversationId: ConversationId, result: TurnResult): void;
 }
 
 export const TURN_REQUEST_PREFIX = "turn:";
@@ -203,6 +205,7 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
           () => ({ status: "terminal", outcome: { status: "completed", result: { status: record.status, landed } } }),
           context,
         );
+        deps.settled?.(task.conversationId, { status: record.status, landed });
       },
     },
     abort: async (_task, runtime, context) => {

@@ -47,11 +47,14 @@ const unregisterPlaces = registerPlaces([
 ]);
 
 // Factory -> the tool names it is expected to mount, in any order.
-const ROSTER: { where: string; tools: AgentTool[]; names: string[] }[] = [
+// `safe` is the replay column (docs/soul/87, "工具的 replay"): the names a
+// rerun after a killed process may call again. Every other name is unsafe and
+// gets an interrupted result instead.
+const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: string[] }[] = [
   {
     where: "memory/observations",
     tools: buildObservationTools(any({ listObservations: async () => [] })),
-    names: ["observation_search", "observation_read", "observation_update"],
+    names: ["observation_search", "observation_read", "observation_update"], safe: ["observation_search", "observation_read"],
   },
   {
     where: "memory/statements",
@@ -73,11 +76,11 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[] }[] = [
     names: ["delegate"],
   },
   { where: "soul/places", tools: buildPlaceTools(), names: ["go_to"] },
-  { where: "soul/catalogue", tools: buildCatalogueTools(any({})), names: ["list_palace", "list_kind"] },
+  { where: "soul/catalogue", tools: buildCatalogueTools(any({})), names: ["list_palace", "list_kind"], safe: ["list_palace", "list_kind"] },
   {
     where: "conversations",
     tools: buildConversationTools(any({}), any({})),
-    names: ["search_conversations", "read_conversation"],
+    names: ["search_conversations", "read_conversation"], safe: ["search_conversations", "read_conversation"],
   },
   {
     where: "reading/context",
@@ -95,18 +98,18 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[] }[] = [
         ],
       }),
     ),
-    names: ["read_pages", "search_topic", "read_annotations"],
+    names: ["read_pages", "search_topic", "read_annotations"], safe: ["read_pages", "search_topic", "read_annotations"],
   },
   {
     where: "reading/lecture",
     tools: [buildReadChapterTool(any({ chapters: [], pages: async () => [] }))],
-    names: ["read_chapter"],
+    names: ["read_chapter"], safe: ["read_chapter"],
   },
   {
     where: "reading/figures",
     // Not mounted at all on a document with no figures (tools.ts).
     tools: buildFigureTools(any({ figures: [{ id: "3", caption: "A chart" }], modelSupportsImages: true })),
-    names: ["view_figure"],
+    names: ["view_figure"], safe: ["view_figure"],
   },
   {
     where: "reading/translate",
@@ -118,7 +121,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[] }[] = [
     tools: buildPrepSourceTools(any({ start: async () => ({ runId: "r" }) })),
     names: ["ingest_url"],
   },
-  { where: "reading/prep/papers/tools", tools: buildClassroomTools(() => []), names: ["read_paper", "read_note"] },
+  { where: "reading/prep/papers/tools", tools: buildClassroomTools(() => []), names: ["read_paper", "read_note"], safe: ["read_paper", "read_note"] },
   {
     where: "reading/ingest",
     tools: buildSupplementTools(any({ list: async () => [], remove: async () => {} })),
@@ -127,22 +130,22 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[] }[] = [
   {
     where: "reading/saved/saved-articles",
     tools: buildSavedArticleTools(any({ list: async () => [], add: async () => ({ status: "failed" }) })),
-    names: ["list_saved_articles", "add_saved_article"],
+    names: ["list_saved_articles", "add_saved_article"], safe: ["list_saved_articles"],
   },
   {
     where: "reading/papers/citations",
     tools: buildCitationTools(any({ fetchFn: async () => new Response(""), canIngest: false })),
-    names: ["find_paper", "walk_citations"],
+    names: ["find_paper", "walk_citations"], safe: ["find_paper", "walk_citations"],
   },
   {
     where: "reading/papers/search",
     tools: buildPaperSearchTools(any({ search: async () => [], canIngest: false })),
-    names: ["search_papers"],
+    names: ["search_papers"], safe: ["search_papers"],
   },
   {
     where: "reading/retell",
     tools: buildRetellTools(any({ chapters: [], record: async () => {}, read: async () => null, outline: async () => null })),
-    names: ["record_chapter_decision", "read_chapter_note", "read_retell_outline"],
+    names: ["record_chapter_decision", "read_chapter_note", "read_retell_outline"], safe: ["read_chapter_note", "read_retell_outline"],
   },
   {
     where: "reading/talk",
@@ -153,24 +156,24 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[] }[] = [
       "move_talk_segment",
       "remove_talk_segment",
       "read_talk_outline",
-    ],
+    ], safe: ["read_talk_outline"],
   },
   {
     where: "info/sources",
     tools: buildSourceTools(any({ fetchFn: async () => new Response(""), extract: async () => null, addSource: async () => {}, onProbeCard: () => {} })),
-    names: ["probe_source", "trial_source", "add_source"],
+    names: ["probe_source", "trial_source", "add_source"], safe: ["probe_source"],
   },
   {
     where: "info/sources/read-page-tool",
     tools: [buildReadPageTool(any({ fetchFn: async () => new Response("") }))],
-    names: ["read_page"],
+    names: ["read_page"], safe: ["read_page"],
   },
   {
     where: "info/tasking",
     tools: buildTaskingTools({}),
     // A tasking run reads pages the way the collection does, so it mounts the
     // extractor's read_page as well as its own three.
-    names: ["search_cables", "read_cable", "read_picture", "read_page"],
+    names: ["search_cables", "read_cable", "read_picture", "read_page"], safe: ["search_cables", "read_cable", "read_picture", "read_page"],
   },
   {
     where: "legion/subagent",
@@ -208,6 +211,22 @@ test("every factory mounts the tools the roster names", () => {
     expect(`${where}: ${tools.map((t) => t.name).sort().join(",")}`).toBe(
       `${where}: ${[...names].sort().join(",")}`,
     );
+  }
+});
+
+// The companion's replay column: the online reads are safe, the rest unsafe.
+const COMPANION_SAFE = ["probe_source", "read_page"];
+
+test("every tool declares its replay, and the roster says which", () => {
+  for (const { where, tools, safe = [] } of ROSTER) {
+    for (const tool of tools) {
+      const expected = safe.includes(tool.name) ? "safe" : "unsafe";
+      expect(`${where}: ${tool.name} ${tool.replay ?? "unsafe"}`).toBe(`${where}: ${tool.name} ${expected}`);
+    }
+  }
+  for (const tool of companion) {
+    const expected = COMPANION_SAFE.includes(tool.name) ? "safe" : "unsafe";
+    expect(`companion: ${tool.name} ${tool.replay ?? "unsafe"}`).toBe(`companion: ${tool.name} ${expected}`);
   }
 });
 

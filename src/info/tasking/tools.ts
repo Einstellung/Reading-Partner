@@ -101,6 +101,7 @@ export function cableLine(cable: Cable): string {
 function buildSearchCablesTool(io: Stores): AgentTool {
   return {
     name: "search_cables",
+    replay: "safe",
     label: (args) =>
       args.query
         ? t("sources.tasking.searchingCablesFor", { query: String(args.query) })
@@ -160,6 +161,7 @@ function buildSearchCablesTool(io: Stores): AgentTool {
 function buildReadCableTool(io: Stores): AgentTool {
   return {
     name: "read_cable",
+    replay: "safe",
     label: () => t("sources.tasking.readingCable"),
     effect: "read",
     description:
@@ -227,6 +229,7 @@ function buildReadCableTool(io: Stores): AgentTool {
 function buildReadPictureTool(io: Stores): AgentTool {
   return {
     name: "read_picture",
+    replay: "safe",
     label: (args) =>
       args.lab
         ? t("sources.tasking.readingPictureFor", { lab: String(args.lab) })

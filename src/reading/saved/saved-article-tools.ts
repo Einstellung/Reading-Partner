@@ -280,6 +280,7 @@ export function buildSavedArticleTools(ports: SavedArticlePorts): AgentTool[] {
   return [
     {
       name: "list_saved_articles",
+      replay: "safe",
       label: (args) =>
         args.query
           ? t("chat.saved.lookingThroughFor", { query: String(args.query) })

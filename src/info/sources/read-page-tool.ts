@@ -47,6 +47,7 @@ function formatReadout(url: string, r: PageReadout): string {
 export function buildReadPageTool(deps: { fetchFn: FetchFn }): AgentTool {
   return {
     name: "read_page",
+    replay: "safe",
     label: (args) => t("sources.readPage.reading", { url: String(args.url ?? t("sources.readPage.thePage")) }),
     effect: "read",
     description:

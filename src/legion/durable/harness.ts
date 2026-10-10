@@ -79,6 +79,8 @@ export interface DurableOptions {
   landers: Readonly<Record<string, Lander>>;
   readHistory: HistoryReader;
   recordResponse?: ResponseRecorder;
+  /** A conversation's `rp.turn` landed and the conversation is free again. */
+  onSettled?: (conversationId: ConversationId, origin: ThreadOrigin, result: TurnResult) => void;
   /** The system prompt's sections in order; `rp.desk` holds each turn's text for them. */
   sectionKeys: readonly string[];
   stream?: ConversationStreamOptions;
@@ -127,11 +129,21 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   let path = "";
   let code = 0;
 
+  const settledWith = async (conversationId: ConversationId, result: TurnResult) => {
+    try {
+      const origin = (await harness.snapshot(ThreadDoc, conversationId, BACKGROUND_CONTEXT))?.origin;
+      if (origin) options.onSettled?.(conversationId, origin, result);
+    } catch (error) {
+      options.onReport?.(error);
+    }
+  };
+
   const { extension, turnTask, forgetStubs } = durableExtension({
     sectionKeys: options.sectionKeys,
     readHistory: options.readHistory,
     ...(options.recordResponse ? { recordResponse: options.recordResponse } : {}),
     registrations,
+    ...(options.onSettled ? { settled: (conversationId: ConversationId, result: TurnResult) => void settledWith(conversationId, result) } : {}),
     land: createLandStep({
       landers: options.landers,
       storage: () => storage,

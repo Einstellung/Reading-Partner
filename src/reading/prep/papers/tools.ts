@@ -57,6 +57,7 @@ export function buildClassroomTools(getStates: () => readonly PrepState[]): Agen
   return [
     {
       name: "read_paper",
+      replay: "safe",
       label: (args) => pageRangeLabel(args),
       effect: "read",
       description:
@@ -98,6 +99,7 @@ export function buildClassroomTools(getStates: () => readonly PrepState[]): Agen
     },
     {
       name: "read_note",
+      replay: "safe",
       label: () => t("chat.prep.readingNote"),
       effect: "read",
       description: "Read the whole prep note of a pre-read reference paper, by slug.",

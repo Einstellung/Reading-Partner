@@ -1483,6 +1483,19 @@ export const PALACE = [
     note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). A process start settles the previous session and begins a fresh one; the group keeps its newest five files (legion/execute/harness.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/71)",
   },
 
+  {
+    kind: "durable",
+    domain: "memory",
+    match: subtree("durable/"),
+    samples: ["durable/turns-1760000000000.sqlite", "durable/turns-1760000000000.sqlite-wal"],
+    id: "fixed",
+    refs: [],
+    sync: "local",
+    deleteWith: "never",
+    retention: inline(flow("src/legion/durable/harness.ts", "rotateIfDue")),
+    note: "the device's one pi-durable database of turns in flight (src/legion/durable, docs/soul/87). Machine-local runtime: a turn lands in its conversation file, which travels on its own; the database only grows and is swapped for a fresh generation past a size threshold",
+  },
+
   // -- the red box ----------------------------------------------------------
   {
     kind: "box-item",

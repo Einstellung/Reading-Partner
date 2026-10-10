@@ -72,6 +72,7 @@ function parseLimit(raw: unknown): number | undefined {
 export function buildFindPaperTool(fetchDeps: CitationDeps): AgentTool {
   return {
     name: "find_paper",
+    replay: "safe",
     label: (args) =>
       args.paper
         ? t("chat.papers.lookingUpFor", { paper: String(args.paper) })
@@ -117,6 +118,7 @@ export function buildWalkCitationsTool(deps: CitationToolDeps): AgentTool {
   const { canIngest, ...fetchDeps } = deps;
   return {
     name: "walk_citations",
+    replay: "safe",
     label: (args) =>
       args.paper
         ? t("chat.papers.walkingCitationsFor", { paper: String(args.paper) })

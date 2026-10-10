@@ -63,6 +63,7 @@ export function buildPaperSearchTools(deps: PaperSearchToolDeps): AgentTool[] {
   return [
     {
       name: "search_papers",
+      replay: "safe",
       label: (args) =>
         args.query
           ? t("chat.papers.searchingFor", { query: String(args.query) })

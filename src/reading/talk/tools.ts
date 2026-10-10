@@ -315,6 +315,7 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
     },
     {
       name: "read_talk_outline",
+      replay: "safe",
       label: () => t("study.tools.readTalkOutline"),
       effect: "read",
       description:

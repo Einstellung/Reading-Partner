@@ -13,6 +13,8 @@ import type { Settings } from "../../../platform/app/settings";
 import { initSync, TICK_MS } from "../../../platform/sync";
 import { registerPullRoute } from "../../../platform/sync/pull-routes";
 import { startBellWatch, startSoulSession } from "../../../soul";
+import { startReadingDurable } from "../../../reading/turn/durable-runtime";
+import { appToolCatalog } from "./durable-catalog";
 import { startRunner } from "../../../legion/execute/runner";
 import { SCHEDULE_TICK_MS, startScheduleClock } from "../../../legion/schedule";
 import { currentDeviceId } from "../../../platform/app/device";
@@ -96,6 +98,9 @@ export function useBackgroundServices({
   // for another one before they see it (docs/pitfall/394).
   useEffect(() => {
     void startSoulSession();
+    // Book turns run on the durable runtime (docs/soul/87); opening it sorts out what
+    // the last process left running before anything resumes.
+    startReadingDurable(appToolCatalog).catch((e: unknown) => console.warn("the durable runtime could not be opened", e));
   }, []);
 
   // Where the app is, for the turns that are streaming (legion/execute/stall.ts).

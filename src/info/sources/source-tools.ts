@@ -207,6 +207,7 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
   return [
     {
       name: "probe_source",
+      replay: "safe",
       label: (args) => t("sources.tool.probingSite", { input: String(args.input ?? t("sources.tool.theSite")) }),
       effect: "read",
       description:
