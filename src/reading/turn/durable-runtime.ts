@@ -24,7 +24,7 @@ import type { AgentTool } from "../../legion/execute/contract";
 import { ThreadDoc, type ThreadOrigin, type TurnResult } from "../../legion/durable/extension";
 import { appDurableHost, openDurable, type DurableHost, type DurableRuntime } from "../../legion/durable/harness";
 import { recoverBeforeResume, type Recovered } from "../../legion/durable/recover";
-import { appendMessage, flushThreads, getThread } from "../../platform/app/threads";
+import { appendMessage, flushThreads, getThread, loadThreads } from "../../platform/app/threads";
 import { loadSettings } from "../../platform/app/settings";
 import { deliveryOpener } from "../../soul/delivery";
 import {
@@ -78,6 +78,9 @@ export interface ReadingDurable {
 }
 
 const appThreads: BookThreads = {
+  load: async (home) => {
+    await loadThreads(home);
+  },
   messages: (home, threadId) => getThread(home, threadId)?.messages,
   append: (home, threadId, message) => appendMessage(home, threadId, message),
   flush: () => flushThreads(),
@@ -104,6 +107,7 @@ export async function landWithdrawnSteers(
     const origin = (await runtime.harness.snapshot(ThreadDoc, run.conversationId, context))?.origin;
     if (origin?.place !== "book") continue;
     const book = asBookOrigin(origin);
+    await threads.load(book.home);
     const have = new Set((threads.messages(book.home, book.threadId) ?? []).map((m) => `${m.role}:${m.ts}`));
     for (const steer of run.steers) {
       const ts = steer.ts ?? now();

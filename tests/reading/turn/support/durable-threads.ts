@@ -4,12 +4,19 @@
 import type { ThreadMessage } from "../../../../src/platform/app/threads";
 import type { BookThreads } from "../../../../src/reading/turn/durable-book";
 
-export function fakeThreads(initial: ThreadMessage[] = []) {
+// `unloaded` behaves like the app's store before the book is opened: nothing
+// to read and appends dropped until `load` (docs/pitfall/523).
+export function fakeThreads(initial: ThreadMessage[] = [], options: { unloaded?: boolean } = {}) {
   const log: string[] = [];
   const messages = [...initial];
+  let loaded = !options.unloaded;
   const threads: BookThreads = {
-    messages: () => messages,
+    load: async () => {
+      loaded = true;
+    },
+    messages: () => (loaded ? messages : undefined),
     append: (_home, _threadId, message) => {
+      if (!loaded) return;
       messages.push(message);
       log.push(`append:${message.role}:${message.ts}`);
     },

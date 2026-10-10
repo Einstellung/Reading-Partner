@@ -61,6 +61,13 @@ test("a landing rerun skips the rows already there and puts no card while the re
   expect(log).toEqual(["append:ai:5001", "flush"]);
 });
 
+test("a turn landing before anything opened the book loads its file first", async () => {
+  const { threads, messages, log } = fakeThreads([{ role: "user", ts: 1000, text: "Q" }], { unloaded: true });
+  await lander(threads, log, true)(bookThreadOrigin(BOOK), turn, ctx);
+  expect(log).toEqual(["append:ai:1001", "append:user:5000", "append:ai:5001", "flush"]);
+  expect(messages.map((m) => `${m.role}:${m.ts}`)).toEqual(["user:1000", "ai:1001", "user:5000", "ai:5001"]);
+});
+
 test("a refusal is not written and puts no card", async () => {
   const { threads, log } = fakeThreads();
   await lander(threads, log)(bookThreadOrigin(BOOK), { conversationId: 1 as never, status: "unanswered", rows: [], refusal: "Too long" }, ctx);

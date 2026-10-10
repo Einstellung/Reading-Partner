@@ -121,6 +121,9 @@ function appBellDeps(): BookBellDeps {
     open: openBookDelivery,
     turns: readingTurns<CallRow>(),
     threads: {
+      load: async (home) => {
+        await loadThreads(home);
+      },
       messages: (home, threadId) => getThread(home, threadId)?.messages,
       append: (home, threadId, message) => appendMessage(home, threadId, message),
       flush: () => flushThreads(),

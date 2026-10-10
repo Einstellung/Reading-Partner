@@ -67,6 +67,12 @@ export class AssembledTurns {
 }
 
 export interface BookThreads {
+  /**
+   * Read the thread file into memory. The app's store drops appends to a file it
+   * has not loaded, and a turn recovered at startup lands before any surface
+   * has opened the book (docs/pitfall/523).
+   */
+  load(home: string): Promise<void>;
   messages(home: string, threadId: string): readonly ThreadMessage[] | undefined;
   append(home: string, threadId: string, message: ThreadMessage): void;
   flush(): Promise<void>;
@@ -84,6 +90,7 @@ export function bookHistoryReader(threads: BookThreads, assembled: AssembledTurn
   return async (origin, options) => {
     const book = asBookOrigin(origin);
     const live = assembled.get(bookThreadKey(book));
+    if (!live) await threads.load(book.home);
     const history = live?.history ?? bookHistoryFromFile(threads.messages(book.home, book.threadId) ?? [], options.excludeTs);
     return toPiMessages([...history]);
   };
@@ -147,6 +154,7 @@ export function threadMessageOf(row: LandedRow, deps: Pick<BookLandingDeps, "des
 export function bookLander(deps: BookLandingDeps): Lander {
   return async (origin, turn: LandedTurn) => {
     const book = asBookOrigin(origin);
+    await deps.threads.load(book.home);
     const have = new Set((deps.threads.messages(book.home, book.threadId) ?? []).map((m) => `${m.role}:${m.ts}`));
     let wrote = false;
     let readerSpoke = false;

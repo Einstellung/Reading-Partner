@@ -66,6 +66,7 @@ function rig() {
     }),
     turns: readingTurns<CallRow>(),
     threads: {
+      load: async () => {},
       messages: () => stored,
       append: (_home, _threadId, message) => void stored.push(message),
       flush: async () => {},
