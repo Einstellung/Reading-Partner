@@ -151,3 +151,35 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - `live-turns.ts` 的 `openRow`、`patch`、`split` 只剩旧书回合用过，没删（`live-turns.test.ts` 有 5 个测试用 `patch`，要一起改）。`delivered` 字段和 `delivered.ts` 等 `deliver.ts` 改 submit 时删。
 - `deliver.ts` 的 `deliverIntoReadingTurn` 现在永远返回 null（书回合条目不再带 `delivered`），bell 会走自己的回合；它的 `holdReadingTurn` 在书回合还在跑时 `turns.start` 会打印「second turn」并 abort 我们的 controller（不会停掉运行时的 run，但条目会被换掉，该回合结局时 `settle` 找不到条目就静默）。改 submit 那棒一起处理。
 - 回前台判死、真机和模拟器验收没做。
+
+## 第五棒 B（分支 `dev/pi-durable-p1f`，从 `dev/pi-durable` dff1d60c 起）
+
+做完的：
+
+- `use-lesson-call.ts` 切到新运行时，照第四棒 use-call 的做法：读者那句先写文件，ts 取文件里最后一条 user；先画占位流式行；`buildReadingTurn` → `splitAssembled` → `readingDurable()` → `driveBookTurn`，origin 优先 `turn.origin`，`home` 是 bookId；每次 view 替换读者那句之后的行。课堂不经 reducer，`call-state.ts` 把 `turn-rows` 的逻辑提成 `withTurnRows()`，reducer 和课堂共用，没变的行保持原对象。
+- steer：回合进行中 `send` 画 queued 行、记进 `unsent`、`driven.steer(text, ts)`，收下才从 `unsent` 去掉；装配期间说的话等 `driven` 接上后逐条 steer。
+- 结局：answered 最后一个 AI 行带 `notice`；stopped 去掉空 AI 行；refused / failed 在回合行之后另起一行（refusal 是 notice，error 是 `⚠️ Couldn't reach the model. …`，文案同旧课堂）；stalled 清掉回合行按 `afterStall` 重问一次。交回的 steer 和 `unsent` 合并按 ts 写文件，answered、stopped 之后开下一回合，失败不开。
+- 停止：有 `driven` 时只调 `stop()`，回合留到结算，期间 `streaming` 仍为 true；装配中停止则 abort、删占位行、写 `unsent` 并开下一回合。离开（卸载）对运行时调 `stop()`，结算时只写交回的 steer，不画、不开下一回合。
+- `read_chapter`：view 里出现就勾章节，工具结算数增加时读一次 focus。
+- 删掉课堂里的 `runAgentTurn`、`soulHarness`、`deliverTo` 和 `useStreamingTurn`。
+- 测试：新增 `tests/ui/components/phone/lesson/use-lesson-call.test.tsx` 11 个，用第四棒的 `fakeBookTurns()`，另 spy `setBookWatching`。全量 `scripts/t.sh` 7369 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+删掉的测试：无。课堂原来没有 hook 的测试。
+
+拍板的：
+
+- 课堂接了 steer。旧 `send` 在回合进行中直接 return，CallView 的输入框照样能发，话就丢了；现在和 use-call 一样进回合。第三棒写的「课堂不 steer」作废。
+- 离开课堂时半句落进线程文件。旧路是丢掉半句；新运行时只有 `stop()`，在线 abort 时半句由 pi-durable 落盘，`driveBookTurn` 没有丢弃的出口。
+- `setBookWatching` 按回合登记、结算后撤销，不按屏幕。课堂回合跑着时课堂一定在屏幕上，离开就停，所以课堂的回答永远不放卡片，同旧路；离开时 stop 落下的半句也不会被当成没人看的回答。
+- 失败行另起一行，不写进回答行，同第四棒 use-call。
+- `line` 不带 `content`：课堂不栅格化页面，没有页窗图片。
+
+还剩的：
+
+- app 和模拟器里没跑过课堂（xvfb、iPhone 模拟器、真模型）。
+- telemetry 同第四棒：只有 `recordModelCall`，课堂的 `surface: "reading"`、inline、thread 日志没了。
+- `useStreamingTurn` 的 steer 部分（`steering.ts`、`turn-row-split.ts`）只剩 coach、retell、info 和 `deliver.ts` 用，课堂切走后没删。
+
+文档的问题：
+
+- 第四棒和派活说明都把 `use-lesson-call.ts` 叫「EPUB 课堂」。它是手机 PDF 课堂（docs/74，`openPhonePdf`）；手机 EPUB 课堂（docs/77）是 `use-book-lesson.ts`，走 `useCall`，第四棒已经跟着切了。
