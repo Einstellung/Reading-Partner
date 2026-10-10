@@ -82,7 +82,8 @@ export const salmonRice = () =>
     X("bok_choy", 200),
     X("teriyaki_sauce", 20),
   ]);
-export const yogurtBanana = () => make("酸奶香蕉", "yogurt banana", "sweet", 2, [P("greek_yogurt"), C("banana")]);
+export const yogurtBanana = () =>
+  make("酸奶香蕉", "yogurt banana", "sweet", 2, [P("greek_yogurt"), X("banana", 150), F("almonds")]);
 
 /** The week as the model drafted it: templates, no grams. */
 export function draftWeek(): WeekPlan {

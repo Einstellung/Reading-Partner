@@ -121,6 +121,16 @@ test("the instruction gives the program's targets and every meal of every day", 
   expect(text).toContain("soy-ginger (");
 });
 
+test("the instruction gives the portion rules: normal protein, a capped staple, fruit fixed and never the staple", () => {
+  const text = mealsGuidance(state(), MON).replace(/\n/g, " ");
+  expect(text).toContain("about 25 g of protein at lunch and dinner, 12 g at breakfast (two eggs), 9 g at the snack");
+  expect(text).toContain("at most 400 kcal of it");
+  expect(text).toContain("fruit (150–200 g; a fruit is never the staple)");
+  expect(text).toContain("whether each day reaches 90% of its calories");
+  expect(text).not.toContain("a fruit can be the staple");
+  expect(mealsGuidance(state({ charter: charter({ goal: "gain" }) }), MON)).toContain("not from more meat");
+});
+
 test("the food listing leaves out what they do not eat, by id, name or tag", () => {
   const all = foodListing([]);
   expect(all.some((l) => l.startsWith("frozen_shrimp "))).toBe(true);

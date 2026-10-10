@@ -79,7 +79,7 @@ export const CONSENT_OPTIONS: readonly { value: Consent; label: string }[] = [
 ];
 export const GOAL_OPTIONS: readonly { value: Goal; label: string; sub: string }[] = [
   { value: "cut", label: "减脂", sub: "每周掉体重的 0.5% 左右，蛋白拉高保肌肉" },
-  { value: "gain", label: "增肌", sub: "比维持量多吃 10%，练的那天多给" },
+  { value: "gain", label: "增肌", sub: "比维持量多吃 5%，练的那天多给" },
   { value: "steady", label: "精力稳", sub: "吃够维持量，三餐匀开，不犯困" },
 ];
 export const SEX_OPTIONS: readonly { value: Sex; label: string }[] = [
