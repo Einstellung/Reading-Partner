@@ -16,6 +16,8 @@ import type { CallRow } from "../../../src/reading/turn/call-state";
 import { deliverBookBell, type BookBellDeps } from "../../../src/reading/turn/deliver";
 import { openReadingDurable, type ReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { createLiveTurns } from "../../../src/reading/turn/live-turns";
+import { startTurn } from "../../../src/legion/durable/turn";
+import { bookThreadKey, bookThreadOrigin } from "../../../src/reading/turn/durable-book";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fakeThreads } from "./support/durable-threads";
 
@@ -37,7 +39,7 @@ function faux(replies: string[]) {
   return { models, provider };
 }
 
-async function setup(replies: string[], dir = mkdtempSync(join(tmpdir(), "deliver-bell-"))) {
+async function setup(replies: string[], dir = mkdtempSync(join(tmpdir(), "deliver-bell-")), now = () => 2000) {
   const { models, provider } = faux(replies);
   const file = fakeThreads([{ role: "user", ts: 1000, text: "Find me the literature." }]);
   const cards: number[] = [];
@@ -51,7 +53,7 @@ async function setup(replies: string[], dir = mkdtempSync(join(tmpdir(), "delive
       cards.push(ts);
     },
     openDesk: async () => [],
-    now: () => 2000,
+    now,
   });
   const turns = createLiveTurns<CallRow>();
   const deps: BookBellDeps = {
@@ -72,7 +74,7 @@ async function setup(replies: string[], dir = mkdtempSync(join(tmpdir(), "delive
     turns,
     threads: file.threads,
     watching: () => false,
-    now: () => 2000,
+    now,
   };
   return { durable, deps, turns, file, cards, provider, dir };
 }
@@ -134,6 +136,59 @@ test("after a restart the bell's earlier turn is found, and it is not answered t
   expect(again.provider.state.callCount).toBe(0);
   expect(again.file.messages.filter((m) => m.role === "ai").length).toBe(1);
   await close(again.durable);
+});
+
+test("a turn landing with no run left is busy: the bell starts only once it has landed", async () => {
+  let clock = 2000;
+  const { durable, deps, file, provider } = await setup(["The resumed answer.", "The bell's answer."], undefined, () =>
+    (clock += 10),
+  );
+  // A turn resumed after a restart, with no row of anyone's registered on the
+  // thread, held in its landing at the flush: its run is over, its `rp.turn` is not.
+  let reachedLanding!: () => void;
+  const landing = new Promise<void>((resolve) => (reachedLanding = resolve));
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const flush = file.threads.flush;
+  file.threads.flush = async () => {
+    reachedLanding();
+    await held;
+    await flush();
+  };
+  const book = { place: "book" as const, bookId: "b1", threadId: "t1", home: "b1" };
+  const resumed = await startTurn(
+    durable.runtime,
+    {
+      key: bookThreadKey(book),
+      origin: bookThreadOrigin(book),
+      content: "Find me the literature.",
+      sections: { turn: "You are a reading partner." },
+      tools: [],
+      model: { provider: "faux", modelId: "faux-1" },
+      excludeTs: 1000,
+    },
+    ctx,
+  );
+  await landing;
+  file.threads.flush = flush;
+
+  let outcome: unknown;
+  const delivering = deliverBookBell(input, deps).then((o) => (outcome = o));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  // The bell's turn has not started: nothing reset the conversation under the landing.
+  expect(outcome).toBeUndefined();
+  expect(provider.state.callCount).toBe(1);
+
+  release();
+  expect((await resumed.settled)?.landed).toBe(true);
+  await delivering;
+  expect(outcome).toMatchObject({ status: "answered", reply: "The bell's answer." });
+  expect(file.messages.map((m) => m.text)).toEqual([
+    "Find me the literature.",
+    "The resumed answer.",
+    "The bell's answer.",
+  ]);
+  await close(durable);
 });
 
 test("a failed bell turn says so, so the bell stays queued", async () => {

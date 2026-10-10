@@ -41,6 +41,7 @@ import type { DurableRuntime } from "./harness";
 
 export const DEFAULT_MAX_ROUNDS = 8;
 export const STEER_REQUEST_PREFIX = "steer:";
+const TURN_TASK = "rp.turn";
 
 export type LandedTool = { callId: string; name: string; args: unknown; isError: boolean; details?: unknown };
 export type LandedRow =
@@ -263,15 +264,32 @@ export class TurnBusy extends Error {
   }
 }
 
-async function isBusy(runtime: DurableRuntime, conversationId: ConversationId, context: Context): Promise<boolean> {
+async function isRunning(runtime: DurableRuntime, conversationId: ConversationId, context: Context): Promise<boolean> {
   const live = await runtime.harness.snapshot(LiveDoc, conversationId, context);
   return live?.run !== undefined;
 }
 
 /**
+ * A run is going, or the conversation's `rp.turn` has not settled: one that is
+ * landing has no run left, and a reset then would land under the next turn.
+ * `startTurn` refuses while busy, so only the newest `rp.turn` can be live.
+ */
+async function isBusy(runtime: DurableRuntime, conversationId: ConversationId, context: Context): Promise<boolean> {
+  if (await isRunning(runtime, conversationId, context)) return true;
+  const page = await runtime.storage.scanTasks(
+    { conversationId, kind: TURN_TASK, order: "descending" },
+    1,
+    undefined,
+    context,
+  );
+  return page.items.some((task) => task.state.status !== "terminal");
+}
+
+/**
  * Reset the conversation, write `rp.desk`, configure the model, thinking level
  * and tools, and create `rp.turn` in that same commit. A busy conversation is
- * refused: a reset placed during a run would end it.
+ * refused: a reset placed during a run would end it, and one placed while the
+ * last turn lands would land in its place.
  */
 export async function startTurn(runtime: DurableRuntime, request: TurnRequest, context: Context): Promise<StartedTurn> {
   const conversation = await runtime.conversationFor(request.key, request.origin, context);
@@ -318,7 +336,7 @@ export async function steerTurn(
   ts: number,
   context: Context,
 ): Promise<boolean> {
-  if (!(await isBusy(runtime, conversation.id, context))) return false;
+  if (!(await isRunning(runtime, conversation.id, context))) return false;
   const request = { type: "input", content: text, whenBusy: "steer", requestId: `${STEER_REQUEST_PREFIX}${ts}` } as const;
   await conversation.submit(request, context);
   return true;
@@ -380,7 +398,7 @@ export async function bellTurn(
   context: Context,
 ): Promise<Promise<TurnResult | undefined> | undefined> {
   const page = await runtime.storage.scanTasks(
-    { conversationId, kind: "rp.turn", order: "descending" },
+    { conversationId, kind: TURN_TASK, order: "descending" },
     50,
     undefined,
     context,
