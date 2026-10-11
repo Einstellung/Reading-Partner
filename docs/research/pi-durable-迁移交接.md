@@ -622,3 +622,18 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 关掉后、回合还在装配时（`drivePlaceTurn` 没交回句柄前）重开，新 session 的 `resume()` 查不到，回合在后台跑完落盘，重开的屏幕要靠 store 的追加通知才看到回答（没测）。
 - 重开接上时同一回合有两个停摆看门狗（老 session 和新 session 各一个），都会在停摆时 supersede；没实测重复 supersede 会怎样。
 - 真 app 验收（xvfb 或模拟器上门口、info、三餐各关一次对话看卡片、重开接上）没跑。
+
+## 第二阶段 iOS 模拟器验收（分支 `verify/pi-durable-2-sim`，从 `origin/dev/pi-durable-2` f425983f 起）
+
+2026-10-11，iPhone 17 Pro 模拟器，idb 真触摸，`~/rp-flow` detached 在 f425983f，dev server 带 `VITE_VERIFY_FAUX=1`（仓库里的 `src/dev-faux.ts`，12 token/s、每段 20 句）。没改代码。驱动在 Mac `/tmp/pdv2/`（`p2.sh`、`flow.sh`、`surface.sh`、`bell.sh`、`seed.py`），源和报告页在会话 scratchpad `verify-phase2-sim/`。真 Haiku 2 次。
+
+- 门口：发问流式；插话标「after this step」钉在上方，进同一回合第 2 轮；停止留半句（244 字）；流式中关掉，回合跑完落盘一次，盒子 5→6，卡片 origin `door`；关掉再开，在流的行接着长、Stop 在、落盘一次、不出卡片；正文中 SIGKILL，重启后 faux 0 次，半句一次进文件，盒子 +1。
+- info（主页「Tell the companion」进简报线程；要铺一个 `feed` 源，否则卡片只说没源）、三餐（铺带 charter 的 `info-meals.json`、`settings.meals`）：同门口六项都过。两处关闭键都是「Hang up」。三餐的插话进了同一回合第 2 轮，停止另测一次（324 字半句）。
+- 铃（info）：空闲时投，铃回合在打开的对话里流式，落盘带 runId；读者回合在流时投，读者回合落盘后铃回合才起；重启后 turn-log 无新 start、faux 0 次、runId 不重复。`__bell.ring` 的 `deliverTo` 要 JSON 字符串，传对象会当作没写、投到门口（第一次这样投了两只，落门口带卡片，行为正确）。
+- 书（手机 EPUB 课堂）：插话后停止，被撤回的那句开下一回合；回合中插话又停止，最后那句留在线程文件末尾。「插话后几百毫秒内停止」那次 idb 的停止点没打中（键盘弹着时按钮位置变了），回合照常把插话当第 2 轮答了，没测到真正同一刻的竞争，那条仍只有单测。
+- 卡死检测重复（「关对话不停回合」第 3 条）：没写复现单测，预算不够。读代码：`place-session.ts` 的 `settle` 对 `gone` 的老 session 在 `start` 之前返回，重问只会由新 session 发一次；但 `deps.file(owed)` 在 `gone` 判断之前，两边都拿到撤回的插话时可能写两遍，没验证。
+- 升级收尾：容器里有第一阶段留下的 5 个 soul session。没配凭据的第一次启动不动它（组留着，符合设计）；放进凭据后的第一次启动把组删空（目录还在、0 个文件），faux 0 次，说明没有在途回合要续；之后十几次重启目录一直是空的，worker session 没被碰。切代码那一刻踩了坑 537，旧 dev server 的那次重启用新源码跑过一次，组当时还在。
+- 真模型 claude-haiku-5-5：门口首字节 1.62 s、全程 5.3 s；info 首字节 1.81 s、全程 5.3 s。
+- 观察：杀进程恢复后 turn-log 的 `end aborted` 行和同回合 `start` 行的 turn id 不同（门口、info、三餐都这样），没查。重开对话时视图停在旧位置、出「Jump to latest」，与「对话不自动跟随」一致。
+- 没走：排练、复述、语音、iPad 模拟器（下一棒）；工具里杀进程（本轮 faux 计划只有 text）。坑 538、539 没用。
+- 环境：dev server PID 12428（`/tmp/pdv2/devpid`）留着在跑，旧的 24214、24327 已杀；模拟器 app 里的凭据已删、`__fauxPlan` 已清；`~/rp-flow` 工作区干净（只有原来就有的 `plugins/openin/openin-untracked-backup/`），第一阶段的旧 `src/dev-faux.ts` 存在 `/tmp/pdv2/dev-faux.old.ts`。容器里多了今天的 briefing、`info-sources.json`（一个关着的 feed 源）、`info-meals.json` 和 settings 里的 Haiku 设置。
