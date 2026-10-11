@@ -512,3 +512,28 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 2. `registerTurnDelivery("<place>", …)` 在外壳 `useShellBootstrap` 注册；`bell.ts` 不用改（有 turn deliverer 的 place 自动走 `byTurn`）；该 place 的 `registerDelivery` opener 留着，`recover.ts` 收尾旧 session 还要用。
 3. 界面开对话时 `registerOpenSession(key, session)`，关时撤销，铃的回合才会在打开的对话里流式出现。
 4. 测试照 `tests/reading/turn/door-bell.test.ts`；`bell.test.ts` 的 `beforeEach` 里同样撤掉该 place 遗留的 deliverer。
+
+## 第二阶段第三棒 A（分支 `dev/pi-durable-2e`，从 `origin/dev/pi-durable-2` 011b9dd3 起）
+
+做完的：
+
+- `reading/turn/info-bell.ts`：`deliverInfoBell` 把 `{ briefing, date }` 的铃投进当天文件的 `briefingThreadId(date)` 线程（info place，键 `info:<date>:<threadId>`），`{ meals }` 的铃投进 `info-meals` 的 `meals` 线程；线程不在就建（launch card 委派的 run 可能先于任何对话回来）。装配用 `layBriefingTurn` / `layMealsTurn`（不带出卡片的工具），历史取线程文件经 `replayableHistory`，铃作最后一条 user，装配结果放进 `infoAssemblies` 供 place 的 `readHistory` / `resolve` 用；模型对话档、surface `bell`。`registerInfoDelivery()` 在 `useShellBootstrap` 里注册 briefing 和 meals 两个 turn deliverer，旧 opener 照旧注册给 `recover.ts`。`info-durable.ts` 导出 `infoWatchingNow`。
+- `use-info-call.ts` 只改了打开登记那几行：建 session 后 `registerOpenSession(key, session)`，和 `watchInfoConversation` 合进同一个 `unwatch`，关掉时随它撤（在途回合落盘后才撤，同门口）。
+- 测试：`tests/reading/turn/info-bell.test.ts` 7 个（简报铃没人看 headless 落盘一次带 runId、铃不进文件、重开数据库后同一只铃不重投；三餐铃落进三餐线程；简报对话忙时铃等落盘后在 session 里流式出现；简报忙时三餐的铃不等；开着的三餐对话里铃的回合能停、留半句；插话进铃的回合；别处的铃返回 null）。`bell.test.ts` 的 `beforeEach` 撤掉 briefing、meals 遗留的 deliverer。全量 7488 过、1 跳过、0 失败，typecheck 过。
+
+真 app 验收（Linux，Xvfb :96，复用 `verifylinux` identifier 的 debug 二进制加载本 worktree 的 vite 1437，`VITE_VERIFY_FAUX=1` 慢速 faux，测试 AppData 先挪成 `.bak-2e-*` 再新建，凭据占位值、用完删；写一个 disabled 的 `info-sources.json` 让 Today 出 launch card，「Tell the companion」打开当天简报对话）。Haiku 0 次。
+
+- info：发问流式、插话进同一回合（第二次模型调用）、停止留半句 140 字；正文中 SIGKILL 重开，半句 176 字一次、重启后模型调用 0 次：过。
+- info 的铃：对话开着且空闲时铃的回合在对话里流式出现（停止键在），落盘带 runId，铃清空；读者回合在跑时铃保持 queued，读者回答落盘后才起，文件顺序 读者那句、读者回答、铃的回答；重启后模型调用 0 次，两只铃各一条：过。
+- 三餐没走成：桌面上三餐对话的入口在 onboarding 问卷之后，Lumen 菜单的 Text 打开的是门口；预算不够走完问卷。三餐的投递和 info 同一条 `deliverPlaceBell`，单测覆盖了空闲、开着时停止、和简报互不等。
+- 截图和驱动在会话 scratchpad `verify-info/`（`tools/vd.py`、`tools/run2.py info|meals ask kill bell`、`log-info-*.json`）。
+
+拍板的：
+
+- `info-bell.ts` 放 `reading/turn`，不放 `info/briefer`：info 目前不 import reading，`place-bell.ts` 在 `reading/turn`，反过来要加 info → reading 的边。
+- 铃的回合用对话档模型（同门口铃和旧 headless 路）。
+- `layBriefingTurn` / `layMealsTurn` 带上铃的 BoxOrigin，铃的回答里再委派的 run 回到同一处（旧 opener 没传）。
+
+没做的：
+
+- 三餐的真 app 验收（一回合发问、插话、停止、杀进程，以及铃）。要先在测试 AppData 里铺一个带 charter 的 `meals` 状态文件跳过问卷，或走完问卷；然后三餐页的 ask 入口打开对话，`run2.py meals ask kill bell` 可直接用（`open-meals.js` 要改成点那个入口）。
