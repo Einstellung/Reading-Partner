@@ -19,6 +19,10 @@
 // and talked into, and what the reader said into it opens the next turn as
 // after any answer. Only a stall ends a bell's turn differently: it is not
 // asked again here, the bell stays queued.
+//
+// A voice call's turn on the conversation runs here the same way while the
+// chat is open (reading/turn/info-voice.ts): the chat draws it, the spoken line
+// above it, and a line typed meanwhile goes into it.
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { applyRowChange } from "../../ai/turn-view/turn-rows";
@@ -78,12 +82,26 @@ export interface PlaceSession {
    * running; rejects when the turn could not start (the runtime is busy).
    */
   bell(after: number, request: PlaceBellRequest): Promise<BookTurnEnd> | null;
+  /**
+   * Run a voice call's turn here (info/briefer/voice-durable.ts), ending as a
+   * bell's does; every view's rows go to `onRows` as well, for the call to
+   * speak. Null when a turn is running; `ended` rejects when the turn could
+   * not start.
+   */
+  voice(after: number, request: PlaceBellRequest, onRows: (rows: CallRow[]) => void): GuestTurn | null;
   /** Resolves once no turn is running here. */
   idle(): Promise<void>;
 }
 
 /** A bell's turn, assembled; the line is the bell and carries no timestamp. */
 export type PlaceBellRequest = Omit<PlaceTurnRequest, "onView" | "watches" | "stallMs">;
+
+/** A turn another party asked for, running in the open conversation. */
+export interface GuestTurn {
+  ended: Promise<BookTurnEnd>;
+  /** Stop it; nothing when the session has moved on to another turn. */
+  stop(): void;
+}
 
 const openSessions = new Map<string, PlaceSession>();
 
@@ -102,6 +120,8 @@ export function openPlaceSession(key: string): PlaceSession | undefined {
 
 interface Live {
   after: number;
+  /** A voice call's line: in the conversation file but not on this screen, so drawn above the turn. */
+  line?: CallRow;
   placeholder: CallRow;
   controller: AbortController;
   rows: CallRow[];
@@ -148,10 +168,14 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
 
   const queued = (lines: Live["unsent"]): CallRow[] => lines.map((u) => ({ role: "user", text: u.text, ts: u.ts, queued: true }));
   const plain = (lines: Live["unsent"]): CallRow[] => lines.map((u) => ({ role: "user", text: u.text, ts: u.ts }));
+  const draw = (turn: Live, rows: CallRow[]) => {
+    const line = turn.line;
+    deps.draw(turn.after, line ? [line, ...rows.filter((r) => !(r.role === "user" && r.ts === line.ts))] : rows);
+  };
   const drawLive = (turn: Live) => {
     const rows = turn.rows.length > 0 ? turn.rows : [turn.placeholder];
     const unsent = turn.unsent.filter((u) => !rows.some((r) => r.role === "user" && r.ts === u.ts));
-    deps.draw(turn.after, [...rows, ...queued(unsent)]);
+    draw(turn, [...rows, ...queued(unsent)]);
   };
 
   const steerIn = (turn: Live, line: { text: string; ts: number }) => {
@@ -195,7 +219,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     const lines = plain(owed);
 
     if (end.kind === "stalled" && turn.bell) {
-      deps.draw(turn.after, lines);
+      draw(turn, lines);
       return;
     }
     if (end.kind === "stalled") {
@@ -203,10 +227,10 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       // again once (docs/pitfall/390). A second stall is a failure.
       const next = afterStall(attempt);
       if (next.askAgain) {
-        deps.draw(turn.after, lines);
+        draw(turn, lines);
         start(attempt + 1);
       } else {
-        deps.draw(turn.after, [...lines, failureRow("error", next.message, turn.placeholder.ts)]);
+        draw(turn, [...lines, failureRow("error", next.message, turn.placeholder.ts)]);
       }
       return;
     }
@@ -215,7 +239,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     if (end.kind === "answered") {
       const last = rows.map((r) => r.role).lastIndexOf("ai");
       if (notice && last >= 0) rows[last] = { ...rows[last]!, notice };
-      deps.draw(turn.after, [...rows, ...tail]);
+      draw(turn, [...rows, ...tail]);
       // The model finished before a run took what the reader said: it opens the next turn.
       if (owed.length > 0) start(0);
       return;
@@ -223,24 +247,25 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     // What a stopped or failed turn produced stays; a row that produced nothing is not a row.
     const kept = rows.filter((r) => r.role === "user" || r.text !== "" || (r.tools?.length ?? 0) > 0);
     if (end.kind === "stopped") {
-      deps.draw(turn.after, [...kept, ...tail]);
+      draw(turn, [...kept, ...tail]);
       // Stopping cuts off the answer, not the reader (docs/72).
       if (owed.length > 0) start(0);
       return;
     }
     // A bell's turn that failed leaves no row: the bell stays queued.
     if (turn.bell) {
-      deps.draw(turn.after, [...kept, ...tail]);
+      draw(turn, [...kept, ...tail]);
       return;
     }
     const at = Math.max(turn.placeholder.ts, ...kept.map((r) => r.ts + 1));
     // Retry and asking again are for the turn that failed: nothing is started on what was said into it.
-    deps.draw(turn.after, [...kept, failureRow(end.kind === "refused" ? "refusal" : "error", end.message, at), ...tail]);
+    draw(turn, [...kept, failureRow(end.kind === "refused" ? "refusal" : "error", end.message, at), ...tail]);
   };
 
-  const open = (after: number): Live => {
+  const open = (after: number, line?: CallRow): Live => {
     const turn: Live = {
       after,
+      ...(line ? { line } : {}),
       placeholder: { role: "ai", text: "", ts: Math.max(now(), after + 1), streaming: true },
       controller: new AbortController(),
       rows: [],
@@ -309,6 +334,29 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     })();
   };
 
+  // A bell's or a voice call's turn: it ends for whoever asked, is not asked
+  // again on a stall and leaves no failure row.
+  const guest = (after: number, request: PlaceBellRequest, voice?: (rows: CallRow[]) => void): GuestTurn | null => {
+    if (live) return null;
+    const { text, ts } = request.line;
+    const turn = open(after, voice && ts !== undefined ? { role: "user", text, ts } : undefined);
+    const ended = new Promise<BookTurnEnd>((resolve, reject) => (turn.bell = { resolve, reject }));
+    const durable = deps.durable();
+    follow(turn, 0, undefined, async (onRows) => {
+      if (!durable) throw new Error("the turn runtime has not started");
+      return drivePlaceTurn(await durable, { ...request, ...deps.stall }, (rows) => {
+        onRows(rows);
+        voice?.(rows);
+      });
+    });
+    return {
+      ended,
+      stop: () => {
+        if (live === turn) session.stop();
+      },
+    };
+  };
+
   const session: PlaceSession = {
     ask: () => start(0),
     say(text, ts) {
@@ -334,7 +382,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       live = null;
       deps.streaming(false);
       if (turn.unsent.length > 0) deps.file(turn.unsent);
-      deps.draw(turn.after, plain(turn.unsent));
+      draw(turn, plain(turn.unsent));
       if (turn.unsent.length > 0) start(0);
       notifyIdle();
     },
@@ -363,17 +411,8 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       return true;
     },
     running: () => live !== null,
-    bell(after, request) {
-      if (live) return null;
-      const turn = open(after);
-      const ended = new Promise<BookTurnEnd>((resolve, reject) => (turn.bell = { resolve, reject }));
-      const durable = deps.durable();
-      follow(turn, 0, undefined, async (onRows) => {
-        if (!durable) throw new Error("the turn runtime has not started");
-        return drivePlaceTurn(await durable, { ...request, ...deps.stall }, onRows);
-      });
-      return ended;
-    },
+    bell: (after, request) => guest(after, request)?.ended ?? null,
+    voice: (after, request, onRows) => guest(after, request, onRows),
     idle() {
       if (!live) return Promise.resolve();
       return new Promise((resolve) => waiters.add(resolve));

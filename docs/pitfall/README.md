@@ -422,6 +422,8 @@
 - [397-the-system-prompt-moved-into-the-transcript](./ai/397-the-system-prompt-moved-into-the-transcript.md) — pi 0.87 的 `normalizeContext()` 把 `systemPrompt` 和 `tools` 折进一条打头的 system 消息，provider 面只收带 brand 的 `TranscriptContext`；`Context` 的三个字段还在类型里但到 provider 手上全空，读它们编得过、跑不对，`messages[0]` 也不再是调用方的第一条消息。发送路径进 provider 前 normalize 一次，读 transcript 用 `withoutInitialSystemMessage` / `getCurrentSystemPrompt` / `getCurrentTools`
 - [524-durable-catalog-is-built-from-inert-deps](./ai/524-durable-catalog-is-built-from-inert-deps.md) — pi-durable 的工具登记来自 `appToolCatalog()` 拿假依赖建的那份，模型看到的 schema 和校验都用它；条件挂载的工具（`statement_write`）没登记就是 `not available`，同名两种 schema 的 `read_chapter` 在有章节的书上收到 `from`/`to`、读出 NaN。前者已修并有 roster 测试，后者待定
 - [528-steer-then-stop-in-one-tick-loses-the-steer](./ai/528-steer-then-stop-in-one-tick-loses-the-steer.md) — 插话的 `steerTurn` 还在提交时按停止，`stopTurn` 读 inbox 早于 steer 进去，没撤回它，steer 却报已收下，那句话哪儿都不落。`place-session.ts` 的停止等在途 steer 返回再停；书的两个界面没走它，竞争还在
+- [529-voice-barge-in-asks-while-the-stopped-turn-lands](./ai/529-voice-barge-in-asks-while-the-stopped-turn-lands.md) — 语音打断后状态机同一批里 `abort` 上一回合、`ask` 下一回合，停下的回合还在落盘，`startTurn` 报 `TurnBusy`，历史里也没有那半句。`info-voice.ts` 让下一回合等上一回合整个结束
+- [530-turn-view-rows-leave-out-the-readers-line](./ai/530-turn-view-rows-leave-out-the-readers-line.md) — `drivePlaceTurn` 的行只有这次运行产生的，不含作 prompt 的读者那句；语音的句子不在文本界面的镜像里，开着的对话只见回答。`place-session.ts` 的 `voice()` 把那句画在回合行前面
 
 ## 开发环境
 
