@@ -13,7 +13,8 @@
 // the conversation is opened — after a restart, the one recovery resumed — is
 // followed the same way. Closing the conversation does not stop its turn
 // (detach): it runs on out of sight and lands, and nothing more is drawn; the
-// conversation opened again follows it, and the closed one lets go of it then
+// conversation opened again follows it — one still being assembled is waited
+// for (detached-turns.ts holdStarting) — and the closed one lets go of it then
 // (no stall watch, nothing filed). Every surface closes this way; only Stop
 // stops. `leave` (stop, and draw nothing more) is left for tests to tear down.
 //
@@ -33,7 +34,7 @@ import { catalogDescribe, type DeviceDurable } from "../../legion/durable/device
 import type { AiSurface } from "../../platform/app/cache-telemetry";
 import { afterStall, drivePlaceTurn, resumedPlaceRows, type BookTurnEnd, type DrivenBookTurn } from "./book-turn-rows";
 import { mergeTurnRows, type CallRow } from "./call-state";
-import { holdDetached, releaseDetached } from "./detached-turns";
+import { holdDetached, holdStarting, releaseDetached } from "./detached-turns";
 import type { PlaceTurnRequest, StallOptions } from "./durable-turn";
 
 /** A turn assembled over the conversation as it stands. */
@@ -143,6 +144,8 @@ interface Live {
   gone: boolean;
   /** Detached, and another session joined the turn: it watches and files for it. */
   released: boolean;
+  /** Being started here: says when the runtime holds it, for a view opened meanwhile (detached-turns.ts holdStarting). */
+  begun?: () => void;
   /** A bell's turn: who waits on its ending. */
   bell?: { resolve(end: BookTurnEnd): void; reject(e: unknown): void };
 }
@@ -312,6 +315,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     begin(onRows)
       .then(async (driven) => {
         turn.driven = driven;
+        turn.begun?.();
         if (turn.released) driven.unwatch();
         // Stopped, or the surface left, while the turn was starting.
         if (live !== turn) driven.stop();
@@ -320,6 +324,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
         finish(turn, attempt, notice, await driven.ended);
       })
       .catch((e: unknown) => {
+        turn.begun?.();
         turn.bell?.reject(e);
         finish(turn, attempt, notice, { kind: "failed", rows: turn.rows, message: e instanceof Error ? e.message : String(e) });
       });
@@ -328,29 +333,41 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
   const start = (attempt: number) => {
     if (live) return;
     const turn = open(deps.lastLine());
+    turn.begun = holdStarting(deps.key);
     void (async () => {
-      let assembled: PlaceAssembled;
+      let followed = false;
       try {
-        assembled = await deps.assemble(turn.controller.signal);
-      } catch (e) {
-        assembled = { kind: "failed", message: e instanceof Error ? e.message : String(e) };
+        followed = await assembleAndFollow(turn, attempt);
+      } finally {
+        if (!followed) turn.begun?.();
       }
-      // A stop while assembling has already put things right.
-      if (turn.settled || turn.controller.signal.aborted) return;
-      if (assembled.kind === "aborted") return;
-      if (assembled.kind !== "turn") {
-        finish(turn, attempt, undefined, { kind: assembled.kind, rows: [], message: assembled.message });
-        return;
-      }
-      const durable = deps.durable();
-      if (!durable) {
-        finish(turn, attempt, undefined, { kind: "failed", rows: [], message: "the turn runtime has not started" });
-        return;
-      }
-      const runtime = await durable;
-      const request = { ...assembled.request, describe: catalogDescribe(assembled.request.tools), ...deps.stall };
-      follow(turn, attempt, assembled.notice, (onRows) => drivePlaceTurn(runtime, request, onRows));
     })();
+  };
+
+  /** True when the turn was handed to the runtime (follow), which then says when it has begun. */
+  const assembleAndFollow = async (turn: Live, attempt: number): Promise<boolean> => {
+    let assembled: PlaceAssembled;
+    try {
+      assembled = await deps.assemble(turn.controller.signal);
+    } catch (e) {
+      assembled = { kind: "failed", message: e instanceof Error ? e.message : String(e) };
+    }
+    // A stop while assembling has already put things right.
+    if (turn.settled || turn.controller.signal.aborted) return false;
+    if (assembled.kind === "aborted") return false;
+    if (assembled.kind !== "turn") {
+      finish(turn, attempt, undefined, { kind: assembled.kind, rows: [], message: assembled.message });
+      return false;
+    }
+    const durable = deps.durable();
+    if (!durable) {
+      finish(turn, attempt, undefined, { kind: "failed", rows: [], message: "the turn runtime has not started" });
+      return false;
+    }
+    const runtime = await durable;
+    const request = { ...assembled.request, describe: catalogDescribe(assembled.request.tools), ...deps.stall };
+    follow(turn, attempt, assembled.notice, (onRows) => drivePlaceTurn(runtime, request, onRows));
+    return true;
   };
 
   // A bell's or a voice call's turn: it ends for whoever asked, is not asked
@@ -360,6 +377,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     const { text, ts } = request.line;
     const turn = open(after, voice && ts !== undefined ? { role: "user", text, ts } : undefined);
     const ended = new Promise<BookTurnEnd>((resolve, reject) => (turn.bell = { resolve, reject }));
+    turn.begun = holdStarting(deps.key);
     const durable = deps.durable();
     follow(turn, 0, undefined, async (onRows) => {
       if (!durable) throw new Error("the turn runtime has not started");
@@ -398,6 +416,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       // Still being assembled: nothing was sent.
       turn.settled = true;
       turn.controller.abort();
+      turn.begun?.();
       live = null;
       deps.streaming(false);
       if (turn.unsent.length > 0) deps.file(turn.unsent);
@@ -415,6 +434,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       }
       turn.settled = true;
       turn.controller.abort();
+      turn.begun?.();
       live = null;
       if (turn.unsent.length > 0) deps.file(turn.unsent);
       notifyIdle();

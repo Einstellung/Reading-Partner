@@ -45,9 +45,9 @@ import {
   type DrivenBookTurn,
   type ResumedBookTurn,
 } from "../../../../reading/turn/book-turn-rows";
-import { withTurnRows } from "../../../../reading/turn/call-state";
 import { bookThreadKey, splitAssembled, type BookOrigin } from "../../../../reading/turn/durable-book";
-import { holdDetached, releaseDetached } from "../../../../reading/turn/detached-turns";
+import { holdDetached, holdStarting, releaseDetached } from "../../../../reading/turn/detached-turns";
+import { withPlaceTurnRows } from "../../../../reading/turn/place-session";
 import { readingDurable, setBookWatching } from "../../../../reading/turn/durable-runtime";
 import { buildReadingTurn } from "../../../../reading/turn/turn";
 import { gateSteers } from "../../../../reading/turn/steer-gate";
@@ -60,6 +60,10 @@ const NO_CHAPTERS: ReadonlySet<number> = new Set<number>();
 // The turn in flight.
 interface LessonTurn {
   threadId: string;
+  // The reader's line it answers: every row of the turn comes after it.
+  after: number;
+  // The turn's rows as last drawn, for a re-read of the file while it runs.
+  shown: ThreadMessage[];
   controller: AbortController;
   // The streaming row drawn before the runtime projects the turn's first one.
   placeholder: number;
@@ -79,7 +83,12 @@ interface LessonTurn {
   released: boolean;
   // Called once its ending has been dealt with.
   onSettled?: () => void;
+  // Being started: says when the runtime holds it, for a lesson opened
+  // meanwhile (detached-turns.ts holdStarting).
+  begun?: () => void;
 }
+
+const isCardRow = (m: ThreadMessage) => m.parts?.some((part) => part.type === "card") ?? false;
 
 // A line into the running turn. It stays among the unsent lines until a run
 // takes it.
@@ -120,6 +129,9 @@ export interface LessonBook {
   // as the lesson itself and answer with the lesson's prompt.
   // Absent = the record exists already.
   ensureThread?: () => void;
+  // The lesson is under an aside (PhoneLessonScreen.tsx): its turn runs on,
+  // but its rows are not on screen, so a reply landing then is nobody's.
+  covered?: () => boolean;
 }
 
 export interface LessonCall {
@@ -146,6 +158,8 @@ export function useLessonCall(book: LessonBook): LessonCall {
   // that owns the aside, and the effect below must not re-run for it.
   const ensureRef = useRef(book.ensureThread);
   ensureRef.current = book.ensureThread;
+  const coveredRef = useRef(book.covered);
+  coveredRef.current = book.covered;
 
   const [threadId, setThreadId] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -244,6 +258,8 @@ export function useLessonCall(book: LessonBook): LessonCall {
       const controller = new AbortController();
       const live: LessonTurn = {
         threadId: id,
+        after,
+        shown: [placeholder],
         controller,
         placeholder: placeholder.ts,
         unsent: [],
@@ -257,7 +273,11 @@ export function useLessonCall(book: LessonBook): LessonCall {
       // turn as if the model had written it.
       let notice = "";
 
-      const draw = (rows: ThreadMessage[]) => setMessages((prev) => withTurnRows(prev, after, rows));
+      // A card written while the turn runs — an aside's receipt — stays above its rows, as in the file.
+      const draw = (rows: ThreadMessage[]) => {
+        live.shown = rows;
+        setMessages((prev) => withPlaceTurnRows(prev, after, rows, isCardRow));
+      };
       // The turn's rows as the runtime last projected them, then the reader's
       // lines no run has taken yet.
       const withUnsent = (rows: ThreadMessage[]): ThreadMessage[] => [
@@ -395,6 +415,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
         return;
       }
 
+      live.begun = holdStarting(bookThreadKey({ home: bookId, threadId: id }));
       void (async () => {
         try {
           // Checked above; a resumed turn needs neither.
@@ -473,9 +494,12 @@ export function useLessonCall(book: LessonBook): LessonCall {
             },
             onRows,
           );
+          live.begun?.();
           await hold(driven);
         } catch (e) {
           finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) });
+        } finally {
+          live.begun?.();
         }
       })();
     },
@@ -533,6 +557,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
     // Still being assembled: nothing was asked, so nothing is kept.
     live.settled = true;
     live.controller.abort();
+    live.begun?.();
     liveRef.current = null;
     setStreaming(false);
     setMessages((rows) =>
@@ -678,10 +703,15 @@ export function useLessonCall(book: LessonBook): LessonCall {
   // out: what a lesson leaves behind has not been decided (docs/74).
   useEffect(() => () => detach(), [bookId, detach]);
 
-  // While the lesson is open its thread is watched: a reply that lands then
-  // puts no box card (reading/turn/durable-book.ts). Closed, it is nobody's.
+  // While the lesson is on screen its thread is watched: a reply that lands
+  // then puts no box card (reading/turn/durable-book.ts). Closed, or under an
+  // aside, it is nobody's, as the desk's parent is under its aside.
   useEffect(
-    () => setBookWatching((origin) => origin.bookId === bookId && origin.threadId !== "" && origin.threadId === threadIdRef.current),
+    () =>
+      setBookWatching(
+        (origin) =>
+          !coveredRef.current?.() && origin.bookId === bookId && origin.threadId !== "" && origin.threadId === threadIdRef.current,
+      ),
     [bookId],
   );
 
@@ -689,7 +719,17 @@ export function useLessonCall(book: LessonBook): LessonCall {
     const id = threadIdRef.current;
     if (!id) return;
     const thread = getThread(bookId, id);
-    if (thread) setMessages(thread.messages.map(rehydrateMessage));
+    if (!thread) return;
+    const filed = thread.messages.map(rehydrateMessage);
+    const live = liveRef.current;
+    if (!live || live.threadId !== id) {
+      setMessages(filed);
+      return;
+    }
+    // A turn still running is not in the file yet: its rows and the lines said
+    // into it stay, under what the file gained meanwhile (an aside's receipt).
+    const unsent = live.unsent.filter((u) => !live.shown.some((r) => r.role === "user" && r.ts === u.ts));
+    setMessages(withPlaceTurnRows(filed, live.after, [...live.shown, ...unsent], isCardRow));
   }, [bookId, setMessages]);
 
   const page = useMemo(() => lastCitedPage(messages), [messages]);

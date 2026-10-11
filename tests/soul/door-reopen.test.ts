@@ -69,10 +69,15 @@ async function rig(responses: Responses) {
     places: { door: doorPlace({ assembled, openDesk: async () => [], watching: () => true, card: async () => {} }) },
     log: (line) => log.push(line),
   });
-  return { durable, faux, assembled, log };
+  return { durable, faux, assembled, log, file };
 }
 
-function session(durable: ReadingDurable, assembled: Map<string, AssembledDoorTurn>, watches: StallWatches) {
+function session(
+  durable: ReadingDurable,
+  assembled: Map<string, AssembledDoorTurn>,
+  watches: StallWatches,
+  gate: Promise<void> = Promise.resolve(),
+) {
   let screen: CallRow[] = [LINE];
   const filed: { text: string; ts: number }[] = [];
   let ended = 0;
@@ -81,6 +86,7 @@ function session(durable: ReadingDurable, assembled: Map<string, AssembledDoorTu
     key: KEY,
     surface: "door",
     assemble: async () => {
+      await gate;
       assembled.set(KEY, { history: [{ role: "ai", text: "Morning." }], tools: [] });
       return {
         kind: "turn",
@@ -167,5 +173,63 @@ test("reopened, a stop files the withdrawn line once and opens one next turn for
   expect(r.faux.state.callCount).toBe(2);
   expect(failures(r.again.screen())).toEqual([]);
   expect(ends(r.log)).toEqual(["aborted", "done"]);
+  await r.durable.runtime.close(ctx);
+});
+
+// Closed before the runtime holds the turn (docs/soul/87, 「装配中重开」): the
+// view opened meanwhile waits for it to start and follows it, rather than
+// finding nothing and only seeing the answer once it has landed.
+test("closed while its turn is assembled and opened again, the new view joins the turn once it starts", async () => {
+  let answer!: () => void;
+  const answered = new Promise<void>((resolve) => (answer = resolve));
+  const r = await rig([
+    async () => {
+      await answered;
+      return fauxAssistantMessage(fauxText("Try the essays."));
+    },
+  ]);
+  const watches = createStallWatches({ timers: fakeClock().timers });
+  let assemble!: () => void;
+  const first = session(r.durable, r.assembled, watches, new Promise((resolve) => (assemble = resolve)));
+  first.s.ask();
+  first.s.detach();
+  const again = session(r.durable, r.assembled, watches);
+  let joined: boolean | undefined;
+  const resuming = again.s.resume().then((found) => (joined = found));
+  await pause();
+  // Still being assembled: the new view is waiting, not told there is nothing.
+  expect(joined).toBeUndefined();
+  assemble();
+  expect(await resuming).toBe(true);
+  expect(again.s.running()).toBe(true);
+  answer();
+  await until(() => again.ended() > 0);
+  await again.s.idle();
+  await first.s.idle();
+  await pause(100);
+  expect(r.faux.state.callCount).toBe(1);
+  expect(again.screen().map((row) => [row.role, row.text])).toEqual([
+    ["user", LINE.text],
+    ["ai", "Try the essays."],
+  ]);
+  // Landed once; the closed view drew nothing and filed nothing.
+  expect(r.file.messages.filter((m) => m.text === "Try the essays.")).toHaveLength(1);
+  expect(first.screen().map((row) => row.text)).toEqual([LINE.text, ""]);
+  expect([...first.filed, ...again.filed]).toEqual([]);
+  expect(ends(r.log)).toEqual(["done"]);
+  await r.durable.runtime.close(ctx);
+});
+
+test("a view opened while a turn is assembled and then stopped finds nothing in flight", async () => {
+  const r = await rig([fauxAssistantMessage(fauxText("Try the essays."))]);
+  const watches = createStallWatches({ timers: fakeClock().timers });
+  const first = session(r.durable, r.assembled, watches, new Promise(() => {}));
+  first.s.ask();
+  const again = session(r.durable, r.assembled, watches);
+  const resuming = again.s.resume();
+  await pause();
+  first.s.stop();
+  expect(await resuming).toBe(false);
+  expect(r.faux.state.callCount).toBe(0);
   await r.durable.runtime.close(ctx);
 });

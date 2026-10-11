@@ -672,7 +672,7 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 手机 PDF 课堂（`ui/components/phone/lesson/use-lesson-call.ts`）：卸载原来 `abort()`（停）。改成 `detach()`：在途回合打 `gone`，不画、不停，装配中的照样起跑，结算时只把没被收下的话写文件，不开下一回合、停摆不重问（同门口）。`setBookWatching` 原来按回合挂（关掉时停下的半句不放卡），改成按屏幕挂：课堂开着就算看着。再开课堂时 `resumedBookTurn` 接上同进程的在途回合，并叫老 hook 放手（`unwatch` 看门狗、结算什么都不写），坑 540 同款。放手的登记抽成 `reading/turn/detached-turns.ts`，`place-session.ts` 也改用它。
 - 盒子卡片：`BoxOrigin` 加 `talk`、`retell` 两种（不存主题 id，跟随时 `App.tsx` 读大纲或复述的 `topicId`，`LibraryScreen` 收 `open` 请求打开教练或复述）；`box-jump.ts` 加 `open-coach`、`open-retell`、手机的 `open-book-conversation`。手机原来书的卡片一律「请在 iPad 或桌面打开」，现在开那本书的对话：PDF 进课堂（`shelf-list.ts` 的 `conversationDoor`），EPUB 开阅读器并在书载入后 `reopenThread` 那条线程（`PhoneReader` / `use-book-lesson.ts` 的 `openThreadId`）。教练、复述的卡片在手机上说「这一条请在 iPad 或桌面端打开」（`shell.box.notOnPhone`，9 种语言），旧的 `box.notReadable` 删了。
 
-保留的例外：手机课堂里点「问这一段」进 aside 时仍先停课堂的回合（`PhoneLessonScreen.tsx` 的 `enter`）。这不是关对话，是在课堂里开另一条对话；不停的话回来时 aside 的回执行会写在还没落盘的回答前面（文件顺序乱）。要统一得先把回执改成按时间插，没做，等主会话定。课堂开着、在 aside 里时课堂线程仍算「看着」，落盘不放卡，回来 `reload()` 读文件看到。
+保留的例外（同日后来改掉，见下一节）：手机课堂里点「问这一段」进 aside 时仍先停课堂的回合（`PhoneLessonScreen.tsx` 的 `enter`）。这不是关对话，是在课堂里开另一条对话；不停的话回来时 aside 的回执行会写在还没落盘的回答前面（文件顺序乱）。要统一得先把回执改成按时间插，没做，等主会话定。课堂开着、在 aside 里时课堂线程仍算「看着」，落盘不放卡，回来 `reload()` 读文件看到。
 
 测试：`one-thread-place.test.ts` 教练、复述各加两条（faux：关掉后回合不停、落盘一次、放一张卡、老视图不再画；关掉再开接上、落盘一次、不放卡）；`use-lesson-call.test.tsx` 原「离开停回合」换成三条（关掉不停、落盘后写没收下的话、不开新回合、不再算看着；装配中关掉照样起跑；再开接上、老 hook `unwatch` 一次、老回合停摆什么都不写）；`box-jump`、`box-cards`、`phone-shelf-list` 各加一条；`tests/palace/derived.test.ts` 登记 `LibraryScreen.tsx`（内存里带主题 id）。全量 `scripts/t.sh` 7478 过、1 跳过、0 失败，`bun run typecheck` 过。坑 542、543 没用。
 
@@ -681,3 +681,18 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - Linux xvfb 真 app 验收（教练、手机课堂窄屏：答到一半关掉看卡片、点卡片看到全文一次；答到一半再开接上；停止留半句）没跑，工具调用预算用完。下一棒照第二棒 B 的做法（Xvfb、`verifylinux` identifier 的 debug 二进制、本 worktree 的 vite、`VITE_VERIFY_FAUX=1`，换代码后重起 vite，坑 403）。
 - hook 层：`use-place-chat` 没有 hook 测试（同上一节），关掉不停只在 place 层测了；`LibraryScreen` 的 `open` 请求和两个外壳的跟随卡片是 tsx，只过了类型检查。
 - 关掉后、回合还在装配时重开（`drivePlaceTurn` / `driveBookTurn` 还没交回句柄），新视图查不到在途回合，要等落盘后靠追加通知或重开才看到（同上一节，没测）。
+
+## 关对话不停回合：aside 与装配中重开（分支 `dev/pi-durable-2-close`，从 b390f36e 起）
+
+2026-10-11，补上一节留的两处。
+
+- 手机课堂进 aside 不再停课堂的回合（`PhoneLessonScreen.tsx` 的 `enter` 去掉 `stop()`）。回合在 aside 底下照常跑、照常画进课堂的行。顺序照教练卡片的做法：回执行回来时就写进文件（追加在末尾），回合落盘的行追加在它后面，所以文件里是「问题、回执、回答」；屏幕上 `use-lesson-call.ts` 的 `draw` 改用 `withPlaceTurnRows` 带 `isCardRow`，卡片行留在回合的行上面；`reload()` 碰到还在跑的回合，把文件读回来再接上回合最后画的行和没收下的话，不清掉正在流的回答。回来只看到一次，落盘后再 `reload` 和屏幕一致。看着：在 aside 里课堂不算看着（`LessonBook.covered`，屏幕传 `() => aside 开着`），落盘放卡片，同桌面 aside 打开时父对话不算看着。
+- 装配中重开：`detached-turns.ts` 加 `holdStarting(key)` / `turnsStarting(key)`。每个回合从开始装配到运行时接手（`drivePlaceTurn` / `driveBookTurn` 交回句柄）登记在这里，装配失败、停止、拒绝也放开。查在途回合的唯一入口 `durable-turn.ts` 的 `resumedPlaceTurn` 先等调用那一刻登记着的回合，再 `turnInFlight`，所以门口、info、三餐、教练、复述（`place-session.ts` 的 `start` 和铃/语音的 `guest`）和手机课堂（`use-lesson-call.ts`）重开都在起跑后接上。只等调用那一刻已登记的，新屏幕自己后来起的回合不会让它等自己。书的线程（`use-call.ts`）不受影响：在途回合登记在模块级的 `readingTurns()`，装配时就在，重开的 `joinInFlight` 看到它就不去查运行时，没改。
+
+测试：`tests/soul/door-reopen.test.ts` 加两条（faux：装配中关掉再开，新 session 的 `resume()` 等到起跑、接上、落盘一次、老 session 不画不写；装配中再开、原 session 停止，`resume()` 返回 false，不调模型），第一条去掉等待就红。`use-lesson-call.test.tsx` 加三条（回合在跑时文件多了回执，`reload` 后回执在流的回答上面、回合不停，落盘后屏幕和读回的文件一致；`covered` 为真时不算看着；装配中关掉，`turnsStarting` 等到 `driveBookTurn` 交回，停止也放开）。全量 `scripts/t.sh` 7483 过、1 跳过、0 失败，`bun run typecheck` 过。坑 542、543 没用。
+
+没做：
+
+- 真 app 验收没跑（本棒不开 app）：手机课堂答到一半点「问这一段」、在 aside 里问一句再回来，看回答接着流、回执在它上面、落盘后只有一次、盒子有一张卡；门口或三餐发问后立刻关掉再开，看到在流的回答。
+- `PhoneLessonScreen` 的 `enter` / `covered` 接线是 tsx，只过了类型检查。
+- 回执行的 ts 比它下面落盘的回答大，文件按追加顺序不按 ts。教练卡片原来就是这样；按 ts 找位置的代码（`withTurnRows` 一类）只用在回合还在跑的那段屏幕上，没发现别处受影响。

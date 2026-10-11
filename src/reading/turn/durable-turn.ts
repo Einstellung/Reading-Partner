@@ -37,6 +37,7 @@ import type { ReadingTurnMessage } from "../desk-history";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin, type BookTelemetry } from "./durable-book";
 import { projectView, runStart, type TurnView, type ViewSource } from "./durable-view";
 import type { ReadingDurable } from "./durable-runtime";
+import { turnsStarting } from "./detached-turns";
 
 /** The stall watch's registry and window: the app's shared one and TURN_STALL_MS unless said. */
 export interface StallOptions {
@@ -327,7 +328,8 @@ export interface ResumedTurn {
 
 /**
  * The turn in flight on a place's conversation, for the reader who opens it:
- * after a restart, the one recovery resumed. Undefined when it is idle.
+ * one a closed view left running, or after a restart, the one recovery
+ * resumed. A turn still being started on it is waited for. Undefined when it is idle.
  * `surface` is read when the turn is followed.
  */
 export async function resumedPlaceTurn(
@@ -338,6 +340,8 @@ export async function resumedPlaceTurn(
   stall: StallOptions = {},
 ): Promise<ResumedTurn | undefined> {
   const { runtime } = durable;
+  // A turn still being assembled or started is not in the runtime yet: wait for it.
+  await turnsStarting(key);
   const found = await turnInFlight(runtime, key, context);
   if (!found) return undefined;
   const { conversation, startedAt } = found;
