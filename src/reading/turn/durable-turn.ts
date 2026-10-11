@@ -72,6 +72,8 @@ export interface BookTurn {
   stop(): Promise<WithdrawnSteer[]>;
   /** The turn's end: `stalled` when the watch cut it, with the steers it withdrew. */
   settled: Promise<{ result: TurnResult | undefined; stalled?: WithdrawnSteer[] }>;
+  /** This follower stops watching for a stall: another follower of the turn has taken it over. */
+  unwatch(): void;
 }
 
 type Live = {
@@ -135,6 +137,8 @@ interface TurnWatch {
   pulse(live: Live | undefined): void;
   /** The steers the cut withdrew; undefined unless the watch cut the turn. */
   stalled(): WithdrawnSteer[] | undefined;
+  /** Stop watching, recording nothing: another follower watches the turn now. */
+  unwatch(): void;
   stop(): void;
 }
 
@@ -184,6 +188,7 @@ function watchTurn(
       }
     },
     stalled: () => stalled,
+    unwatch: () => watch.stop(),
     stop() {
       // What the stall window has to clear, measured on a real turn; read back
       // off a development build only (legion/execute/turn.ts did the same).
@@ -247,7 +252,7 @@ export async function runPlaceTurn(durable: DeviceDurable, request: PlaceTurnReq
     conversation: request.conversation,
     provider: request.model.provider,
     model: request.model.modelId,
-  });
+  }, started.turn);
   const watch = watchTurn(
     durable,
     conversation,
@@ -279,6 +284,7 @@ export async function runPlaceTurn(durable: DeviceDurable, request: PlaceTurnReq
     },
     stop: () => stopTurn(runtime, conversation, context),
     settled,
+    unwatch: () => watch.unwatch(),
   };
 }
 
@@ -356,6 +362,7 @@ export async function resumedPlaceTurn(
           const stalled = watch.stalled();
           return stalled ? { result, stalled } : { result };
         }),
+        unwatch: () => watch.unwatch(),
       };
     },
   };

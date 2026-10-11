@@ -13,7 +13,8 @@
 // the conversation is opened — after a restart, the one recovery resumed — is
 // followed the same way. Closing the conversation does not stop its turn
 // (detach): it runs on out of sight and lands, and nothing more is drawn; the
-// conversation opened again follows it. Leaving (the coach, a retell not yet
+// conversation opened again follows it, and the closed one lets go of it then
+// (no stall watch, nothing filed). Leaving (the coach, a retell not yet
 // begun) stops it, its half sentence lands, and nothing more is drawn.
 //
 // A bell rung for the conversation while it is open runs here too
@@ -121,6 +122,14 @@ export function registerOpenSession(key: string, session: PlaceSession): () => v
   };
 }
 
+/**
+ * A detached session's turn, by conversation key, until the conversation is
+ * opened again: the session that joins the turn calls it, and the detached one
+ * lets go of the turn — no stall watch, nothing filed — so a stall is cut and
+ * asked again once and a withdrawn line is filed once (docs/pitfall/540).
+ */
+const detachedTurns = new Map<string, () => void>();
+
 /** The session a surface has open on the conversation `key`, if any. */
 export function openPlaceSession(key: string): PlaceSession | undefined {
   return openSessions.get(key);
@@ -139,6 +148,8 @@ interface Live {
   driven?: DrivenBookTurn;
   settled: boolean;
   gone: boolean;
+  /** Detached, and another session joined the turn: it watches and files for it. */
+  released: boolean;
   /** A bell's turn: who waits on its ending. */
   bell?: { resolve(end: BookTurnEnd): void; reject(e: unknown): void };
 }
@@ -215,6 +226,10 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
   const settle = (turn: Live, attempt: number, notice: string | undefined, end: BookTurnEnd) => {
     if (turn.settled) return;
     turn.settled = true;
+    if (turn.released) {
+      if (live === turn) live = null;
+      return;
+    }
     const withdrawn = end.kind === "stopped" || end.kind === "stalled" ? end.steers : [];
     const steers = withdrawn.map((steer) => ({ text: steer.text, ts: steer.ts ?? now() }));
     // Everything the reader said that no run took, in the order it was said.
@@ -282,6 +297,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       steering: [],
       settled: false,
       gone: false,
+      released: false,
     };
     live = turn;
     deps.streaming(true);
@@ -303,6 +319,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     begin(onRows)
       .then(async (driven) => {
         turn.driven = driven;
+        if (turn.released) driven.unwatch();
         // Stopped, or the surface left, while the turn was starting.
         if (live !== turn) driven.stop();
         // Lines said while the turn was being assembled go in now.
@@ -410,7 +427,18 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       notifyIdle();
     },
     detach() {
-      if (live) live.gone = true;
+      const turn = live;
+      if (!turn) return;
+      turn.gone = true;
+      const release = () => {
+        if (detachedTurns.get(deps.key) === release) detachedTurns.delete(deps.key);
+        turn.released = true;
+        turn.driven?.unwatch();
+      };
+      detachedTurns.set(deps.key, release);
+      void session.idle().then(() => {
+        if (detachedTurns.get(deps.key) === release) detachedTurns.delete(deps.key);
+      });
     },
     async resume() {
       if (live) return false;
@@ -418,6 +446,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       if (!durable) return false;
       const found = await resumedPlaceRows(await durable, deps.key, deps.surface, BACKGROUND_CONTEXT, deps.stall);
       if (!found || live) return false;
+      detachedTurns.get(deps.key)?.();
       const turn = open(found.after);
       follow(turn, 0, undefined, (onRows) => found.follow(onRows));
       return true;

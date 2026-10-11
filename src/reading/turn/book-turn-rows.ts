@@ -44,6 +44,8 @@ export interface DrivenBookTurn {
   steer(text: string, ts: number): Promise<boolean>;
   stop(): void;
   ended: Promise<BookTurnEnd>;
+  /** Stop watching for a stall: another follower of the turn has taken it over. */
+  unwatch(): void;
 }
 
 /** A stalled turn is asked again once (docs/pitfall/390); a second stall is shown as a failure. */
@@ -169,5 +171,6 @@ async function asRows(
       stopping ??= turn.stop();
     },
     ended,
+    unwatch: () => turn.unwatch(),
   };
 }

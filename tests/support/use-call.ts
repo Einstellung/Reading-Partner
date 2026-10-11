@@ -148,6 +148,7 @@ export function fakeBookTurns() {
         turn.stops += 1;
         turn.withdrawn ??= turn.inbox.slice();
       },
+      unwatch: () => {},
       ended,
     };
   };
