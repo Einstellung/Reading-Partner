@@ -17,6 +17,7 @@ export {
   type RunSubstance,
   type SendBellTurn,
 } from "./bell";
+export { coverOf } from "./bell";
 export { BOX_COVER_CAP, soulMemorySection, openSoul, type LoadedRole, type Soul, type SoulExtras } from "./self";
 export {
   BRIEFS_DIR,

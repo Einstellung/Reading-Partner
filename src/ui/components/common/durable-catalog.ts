@@ -36,6 +36,7 @@ import { buildTaskingTools } from "../../../info/tasking/tools";
 import { buildResearchAgent } from "../../../reading/papers/research-agent";
 import { subagentTool } from "../../../legion/subagent/tool";
 import { buildTakeLinkTool } from "../../../reading/ingest/take-link-tool";
+import { buildMealsCatalogTools } from "../../../info/meals/tools";
 import type { AgentTool } from "../../../legion/execute/contract";
 
 const inert = (value: unknown): never => value as never;
@@ -74,6 +75,7 @@ export function appToolCatalog(): AgentTool[] {
     ...buildTaskingTools({}),
     subagentTool(buildResearchAgent(inert({})), inert({})),
     buildTakeLinkTool(inert({ links: () => [], origin: { place: "door", date: "" } })),
+    ...buildMealsCatalogTools(inert({ threadId: "", ports: {} })),
     ...buildCompanionTools(
       inert({
         fetchFn: noFetch,

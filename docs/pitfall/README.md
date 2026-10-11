@@ -421,6 +421,7 @@
 - [379-typebox-object-makes-every-property-required](./ai/379-typebox-object-makes-every-property-required.md) — `Type.Object` 把每个属性都写进 `required`，可选只能 `Type.Optional`；只对某些情况有意义的嵌套对象/数组留成必填，模型发 `null` 报 `must be object`、发 `{}` 报 `must have required properties`，工具循环两句之间来回重试永远到不了 execute。pi-ai 的 `validateToolCall` 只把 `null` 转成基本类型的零值（string 转 `""`、number 转 `0`、boolean 转 `false`），object 和 array 不在里面；`normalizeOptionalNulls` 也只删非必填的 `null`。漏掉不发对所有类型都是硬失败，所以描述里写着「哪种模式才有」「可以为空」的字段一律可选，缺了让 execute 用模型看得懂的话拒绝一次
 - [397-the-system-prompt-moved-into-the-transcript](./ai/397-the-system-prompt-moved-into-the-transcript.md) — pi 0.87 的 `normalizeContext()` 把 `systemPrompt` 和 `tools` 折进一条打头的 system 消息，provider 面只收带 brand 的 `TranscriptContext`；`Context` 的三个字段还在类型里但到 provider 手上全空，读它们编得过、跑不对，`messages[0]` 也不再是调用方的第一条消息。发送路径进 provider 前 normalize 一次，读 transcript 用 `withoutInitialSystemMessage` / `getCurrentSystemPrompt` / `getCurrentTools`
 - [524-durable-catalog-is-built-from-inert-deps](./ai/524-durable-catalog-is-built-from-inert-deps.md) — pi-durable 的工具登记来自 `appToolCatalog()` 拿假依赖建的那份，模型看到的 schema 和校验都用它；条件挂载的工具（`statement_write`）没登记就是 `not available`，同名两种 schema 的 `read_chapter` 在有章节的书上收到 `from`/`to`、读出 NaN。前者已修并有 roster 测试，后者待定
+- [528-steer-then-stop-in-one-tick-loses-the-steer](./ai/528-steer-then-stop-in-one-tick-loses-the-steer.md) — 插话的 `steerTurn` 还在提交时按停止，`stopTurn` 读 inbox 早于 steer 进去，没撤回它，steer 却报已收下，那句话哪儿都不落。`place-session.ts` 的停止等在途 steer 返回再停；书的两个界面没走它，竞争还在
 
 ## 开发环境
 

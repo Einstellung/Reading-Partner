@@ -75,6 +75,8 @@ interface Live {
   controller: AbortController;
   rows: CallRow[];
   unsent: { text: string; ts: number }[];
+  /** Steers on their way into the run: a stop waits for them, or it would read the inbox before they are in it (docs/pitfall/528). */
+  steering: Promise<void>[];
   driven?: DrivenBookTurn;
   settled: boolean;
   gone: boolean;
@@ -114,13 +116,22 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
   };
 
   const steerIn = (turn: Live, line: { text: string; ts: number }) => {
-    turn.driven
+    const going = turn.driven
       ?.steer(line.text, line.ts)
       .then((taken) => {
         if (taken) turn.unsent = turn.unsent.filter((u) => u.ts !== line.ts);
       })
       // A steer that would not go is not taken: it stays to be filed.
       .catch(() => {});
+    if (going) turn.steering.push(going);
+  };
+
+  // The runtime's stop withdraws the steers already in the run's inbox; one
+  // still being submitted would be taken after the run ended and lost.
+  const stopDriven = (turn: Live) => {
+    const driven = turn.driven;
+    if (!driven) return;
+    void Promise.all(turn.steering).then(() => driven.stop());
   };
 
   const finish = (turn: Live, attempt: number, notice: string | undefined, end: BookTurnEnd) => {
@@ -180,6 +191,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       controller: new AbortController(),
       rows: [],
       unsent: [],
+      steering: [],
       settled: false,
       gone: false,
     };
@@ -258,7 +270,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       if (!turn) return;
       if (turn.driven) {
         // The ending comes from the runtime: the half sentence and receipts land, and are drawn then.
-        turn.driven.stop();
+        stopDriven(turn);
         return;
       }
       // Still being assembled: nothing was sent.
@@ -275,7 +287,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       if (!turn) return;
       turn.gone = true;
       if (turn.driven) {
-        turn.driven.stop();
+        stopDriven(turn);
         return;
       }
       turn.settled = true;

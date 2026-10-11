@@ -1229,3 +1229,17 @@ export function toDayDrafts(raw: unknown): DayDraft[] {
   }
   return out;
 }
+
+/** Every meals tool over `deps`: the desk mounts them through live.ts, the durable catalog registers them. */
+export function buildMealsCatalogTools(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool[] {
+  return [
+    buildProposeMealsPlanTool(deps),
+    buildUpdateProfileTool(deps),
+    buildRecordDeviationTool(deps),
+    buildAddShoppingItemsTool(deps),
+    buildRemoveShoppingItemTool(deps),
+    buildReplaceShoppingItemTool(deps),
+    buildWriteMethodTool(deps),
+    buildRefreshMealsPhotosTool(deps),
+  ];
+}
