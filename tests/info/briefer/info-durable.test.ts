@@ -55,7 +55,10 @@ test("the two conversations are keyed and filed apart", () => {
   expect(setup("2026-10-11")).not.toBe(setup("2026-10-12"));
 });
 
-async function rig(replies: string[], options: { watching?: boolean; tokensPerSecond?: number; empty?: boolean } = {}) {
+async function rig(
+  replies: string[],
+  options: { watching?: boolean | { on: boolean }; tokensPerSecond?: number; empty?: boolean } = {},
+) {
   const faux = fauxProvider({
     tokensPerSecond: options.tokensPerSecond ?? 400,
     tokenSize: { min: 2, max: 3 },
@@ -70,7 +73,7 @@ async function rig(replies: string[], options: { watching?: boolean; tokensPerSe
   const deps = {
     assembled,
     openDesk: async () => [],
-    watching: () => options.watching ?? true,
+    watching: () => (typeof options.watching === "object" ? options.watching.on : (options.watching ?? true)),
     card: async (origin: InfoOrigin | MealsOrigin, _ts: number, text: string) => {
       cards.push({ origin, text });
     },
@@ -235,6 +238,39 @@ for (const { name, origin } of PLACES) {
       view.s.ask();
       await ended;
       expect(cards).toEqual([{ origin, text: "Rates first." }]);
+      await durable.runtime.close(ctx);
+    });
+
+    test("closing the conversation does not stop its turn: opened again it is joined, and closed it lands once with a card", async () => {
+      const looking = { on: true };
+      const reply = LONG.slice(0, 900);
+      const { durable, faux, file, cards, assembled } = await rig([reply], { watching: looking, tokensPerSecond: 80 });
+      const first = session(durable, assembled, origin);
+      first.s.ask();
+      await first.streaming;
+      first.s.detach();
+      looking.on = false;
+      const frozen = first.screen();
+
+      const again = session(durable, assembled, origin);
+      looking.on = true;
+      expect(await again.s.resume()).toBe(true);
+      await again.streaming;
+      again.s.detach();
+      looking.on = false;
+
+      const end = Date.now() + 10_000;
+      while (cards.length === 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
+      expect(file.messages.slice(1).map((m) => [m.role, m.text])).toEqual([
+        ["user", LINE.text],
+        ["ai", reply],
+      ]);
+      expect(cards).toEqual([{ origin, text: reply }]);
+      // Nothing is drawn on a closed screen, nothing is filed for it, and the turn is not asked again.
+      expect(first.screen()).toBe(frozen);
+      expect(first.filed).toEqual([]);
+      expect(again.filed).toEqual([]);
+      expect(faux.state.callCount).toBe(1);
       await durable.runtime.close(ctx);
     });
   });

@@ -16,8 +16,9 @@
 // info or meals place. The reader can talk into a running turn (docs/72); Stop
 // keeps the half sentence and the receipts; a turn in flight when the
 // conversation opens — one a killed process left, resumed at start — is drawn,
-// stoppable and steerable like one started here. Closing the call stops its
-// turn, and what it had said lands.
+// stoppable and steerable like one started here. Closing the call does not stop
+// its turn: it runs on and lands, with a box card if nobody has the
+// conversation open by then, and the call opened again follows it.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyTopicProposal, type TopicProposalCardData } from "../../../memory";
@@ -309,28 +310,9 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     })();
     return () => {
       live = false;
-      const session = sessionRef.current;
+      sessionRef.current?.detach();
       sessionRef.current = null;
-      const durable = readingDurable();
-      if (!session?.running() || !durable) {
-        session?.leave();
-        unwatch?.();
-        return;
-      }
-      // The half sentence a close cuts off lands as one the reader saw: no box
-      // card is owed for it. The conversation counts as open until it has.
-      void durable.then((d) => {
-        const off = d.onTurnSettled((event) => {
-          if (d.places.get(event.origin.place)?.key(event.origin) !== key) return;
-          off();
-          unwatch?.();
-        });
-        session.leave();
-        if (!session.running()) {
-          off();
-          unwatch?.();
-        }
-      });
+      unwatch?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId, anchor.threadId]);

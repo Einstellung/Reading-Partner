@@ -8,7 +8,9 @@
 // The reader can talk into a running turn (docs/72); Stop keeps the half
 // sentence and the receipts; a turn in flight when the conversation opens —
 // one a killed process left, resumed at start — is drawn, stoppable and
-// steerable like one started here. Closing the conversation stops its turn.
+// steerable like one started here. Closing the conversation does not stop its
+// turn: it runs on and lands, with a box card if nobody has the conversation
+// open by then, and the conversation opened again follows it.
 //
 // What lands in the conversation while it is open without this view writing it
 // — a bell answering a delegated run at the door (soul/bell.ts), a turn's rows
@@ -216,7 +218,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     });
     return () => {
       live = false;
-      sessionRef.current?.leave();
+      sessionRef.current?.detach();
       sessionRef.current = null;
       unwatch?.();
       forgetScroll(stickKey);
