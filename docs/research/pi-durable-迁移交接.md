@@ -389,3 +389,35 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 注意：课堂第一次打开会对每章跑一次 prep（这本书 63 章），走默认模型。真模型前要让 prep 已完成，否则一开课就是 63 次 Haiku。这次用快速 faux 跑完 prep，23 章失败（faux 队列耗尽，失败章不自动重跑），overview 手工标了 done。
 - 观察：课堂内容滚上去后，左上角关闭/删除按钮压在正文上（截图 s3c）。
 - 环境：Mac `~/rp-ipad`（worktree，detached 在 96caede7），构建 `~/build.sh`、设备助手 `~/d.sh`（launch/kill/shot/js/send/stop/st/open）、`~/rp.py`；ipa 在 `/tmp/rp-dev-ipad.ipa`，探针包 `/tmp/rp-dev-probe.ipa`。iPad 上 `.dev` app PID 7204（第二棒重起，去掉进程里残留的 faux）留着在跑，ios_webkit_debug_proxy PID 78195 在 Mac 上跑。容器里占位凭据已删，faux 的 localStorage 键已清，`settings.json` 三个模型都是 claude-haiku-5-5。
+
+## 第二阶段第一棒（分支 `dev/pi-durable-2a`，从 `origin/main` 40a8c6a0 起）
+
+做完的：
+
+- 按 place 推广：`legion/durable/device.ts` 是设备运行时，`openDeviceDurable({ places })`，每个 place 给 `key`（`rp.conversations` 的键）、`address`（落进哪个线程文件的哪条线程）、`resolve`（桌面解析器）、`land`、`readHistory`、`telemetry`（surface、thread、bookId、inline）。共用的在这里：打开、`recoverBeforeResume`、撤回的 steer 按 place 写回文件（`fileWithdrawnSteers`）、`recordModelCall` / `recordCacheTurn`、turn-log、`onTurnSettled`。`legion/durable/thread-files.ts` 是通用的 `ThreadFiles`、`threadMessageOf`、`threadLander`（按 role+ts 跳过、flush 后放卡片、在看或拒绝或铃时不放、铃的 runId 盖章）、`fileSteers`。turn-log 从 `reading/turn/durable-turn-log.ts` `git mv` 到 `legion/durable/turn-log.ts`，类名 `DurableTurnLog`。
+- 书那条路：`durable-book.ts` 的 `bookLander`、`storeBookThreads`、`threadMessageOf`、`bookUsageReport`、`bookCacheTurn` 改成通用件的薄包装，加 `bookPlace()`；`openReadingDurable` 组装 book place 后调 `openDeviceDurable`，`ReadingDurable` = `DeviceDurable` + `assembled`。`durable-turn.ts` 提出 `runPlaceTurn` / `resumedPlaceTurn`，`runBookTurn` / `resumedTurn` 委托给它；`book-turn-rows.ts` 加 `drivePlaceTurn` / `resumedPlaceRows`。书的测试一个没改断言。
+- 门口：`soul/door-durable.ts` 是门口的 place。origin `{ place: "door", date, threadId }`，键 `door:<date>:<threadId>`，落进 `doorKey(date)` 那个文件（对话按归属存）。本进程装配的历史和工具放 `doorAssemblies`（模块级），重启后历史读文件（排除 `excludeTs`，丢空文字行），工具走 `openDoorTurn` 重新摆桌（没有界面那几个出卡片的工具）。没人开着门口对话时落盘放卡片，同 `soul/recover.ts` 的那张（`coverOf`，origin 是 door）；门口对话开着时用 `setDoorWatching` 登记。`soul/door-chat.ts` 加 `prepareDoorTurn`：同 `sendAtTheDoor` 的装配，交回 system prompt、读者那句（带链接的 app note）、工具、notice、talk 档模型和 `chatThinking`。
+- `reading/turn/place-session.ts`：一条对话的回合控制器，不依赖 React，照第四、五棒 use-call / 课堂的做法：读者那句先进文件，占位行，装配，`drivePlaceTurn`，每次 view 替换那句之后的行；插话进 `unsent` 画 queued，`steer` 收下才去掉；结局 answered（最后一个 AI 行带 notice）、stopped（去空行）、refused / failed（另起失败行）、stalled（清行，`afterStall` 重问一次）；没被收下的话和撤回的 steer 按 ts 写文件，answered、stopped 后开下一回合；装配中停止删占位行、写 `unsent` 再开回合；`leave()` 停回合不再画；`resume()` 接上在途回合。`withPlaceTurnRows` 替换回合行时把回合中出的卡片行留在回合行上面。
+- `use-door-chat.ts` 切到新运行时：不再用 `useStreamingTurn`，自己管行；打开时建 session、登记 watching、`resume()`，查完之前发的话等它；`send` 在回合进行中走 `say`（插话），否则写文件再 `ask()`；`raiseCard` 自己做（插在流式行前面，写文件）；卸载 `leave()`。`useBackgroundServices` 以 `startReadingDurable(appToolCatalog, () => ({ door: doorPlace() }))` 打开运行时。
+- `take_link` 加进 `appToolCatalog` 和 tool-contract 的 ROSTER（unsafe、quiet）：不在目录里的工具会被 `runPlaceTurn` 静默滤掉。
+- 测试：`tests/soul/door-durable.test.ts` 7 个（faux：落盘一次且历史用装配、停止留半句、插话进同一回合且回答另起一行、关着时放卡片、接上在途回合且历史读文件、空闲不接、卡片留在回合行上面），`tests/soul/door-kill.test.ts` 1 个（真 SIGKILL：半句进当天文件一次、不重问、放卡片、turn-log 补 end）。全量 `scripts/t.sh` 7452 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+拍板的（和 87 不一致或 87 没写的）：
+
+- 87「分层」的表没有 `device.ts`、`thread-files.ts`、`turn-log.ts`，现在 `legion/durable` 多这三个文件。运行时的入口仍叫 `startReadingDurable` / `readingDurable`（在 `reading/turn/durable-runtime.ts`），别的 place 由外壳传进来；改名牵动几十个测试，没改。
+- 门口接了插话：旧的门口在回合进行中发话直接 return。
+- 关掉门口对话 = 停止，半句落进文件（旧路是 abort 丢半句），同第五棒 B 课堂的决定。
+- 门口回合落盘时没人开着对话就放卡片（旧路只有恢复时放）。
+- 门口的工具标签用本回合工具的 `toolLabel`（`catalogDescribe(request.tools)`），恢复的回合用目录的。
+
+没做的：
+
+- 真 app 验收（xvfb 下门口发问、停止、杀进程恢复）没跑，预算不够。Haiku 0 次。
+- 第 3 项：`soul/headless.ts` 建 `rp.turn`、`soul/bell.ts` 非书分支改 `startTurn`。门口的铃仍走旧路（`openDoorTurn` + `sendHeadless` + held harness），和新运行时上的门口回合并存：两者不互相判忙，读者在门口对话里有回合时铃的回合会同时跑（旧路也是这样，门口没有 hold）。
+- `use-door-chat` 没有 hook 层测试（只有控制器和 place 的）。`sendAtTheDoor` 和 `tests` 里它的测试留着，app 里已经不调。
+- 已知边角：装配完、`drivePlaceTurn` 还没交回句柄的那几毫秒里按停止，下一回合会撞 `TurnBusy` 出失败行（书那条路同样）。
+
+下一棒：
+
+- 先做第 3 项：仿 `reading/turn/deliver.ts` 的 `deliverBookBell` 写门口（和之后每个 place）的 `TurnDeliverer`，`bell.ts` 的门口分支改走它（目标对话忙则等 `onTurnSettled`，重启按 `bellTurn` 不重投）；`headless.ts` 改成建 `rp.turn` 不等界面（铃和恢复是它仅有的调用方）。同时跑门口的 xvfb 验收（`VITE_VERIFY_FAUX=1` 的 `src/dev-faux.ts`）。
+- info（`use-info-call.ts`、`voice-call-live.ts`、`info/briefer/deliver.ts`）、三餐、排练教练（`useCoach.ts`）、复述（`useRetell.ts`）各写一个 place（照 `door-durable.ts`）加用 `place-session.ts` 换调用，互相不碰文件，可以并行；冲突只在 `useBackgroundServices` 的 places 那一行和 catalog / ROSTER（没登记的工具会被滤掉，每棒先核一遍自己面上的工具名都在目录里）。铃的 `TurnDeliverer` 每个 place 一个，最好等第 3 项把门口那份写成样板后再并行。
