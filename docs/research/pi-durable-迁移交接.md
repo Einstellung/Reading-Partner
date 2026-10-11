@@ -724,3 +724,16 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 第二棒「切回 1280 宽后 `close.py` 没打开复述页」是驱动的毛病：reload 后驱动从 Topics 进，找文字以「Verify talk」开头的元素，主题行的文字前面带头像字母（「PVerify talk1 file」），匹配不到就抛错。直接点那一行能正常进主题和复述。
 - 本轮的复述那一跑覆盖了第一棒的 `retell-bg-1-streaming.png`、`retell-bg-2-landed-home.png`（同一场景）。坑 542、543 没用。
 - 环境：Xvfb `:93`、vite、app 的 PID 记在 `scratchpad/vcl4/pids/history`，收尾已杀。本棒 worktree 跑过 `bun run wasm`（`public/pdfium/` 未跟踪，没提交）。
+
+## 关对话不停回合：模拟器验收（分支 `verify/pi-durable-2-close-sim`，从 `dev/pi-durable-2-close` 64ce077a 起）
+
+2026-10-12，iPad Pro 11-inch (M5)（C1F7689F）和 iPhone 17 Pro（18CF1932）模拟器，`.dev` 包，idb 真触摸，Mac `~/rp-flow` detached 在 64ce077a，只起 vite（`VITE_VERIFY_FAUX=1`，20 token/s、每段 30 句 2700 字），原生部分自 f425983f 没变所以没重装 app。容器里放占位凭据（跑完已删）。没调真模型，没改代码。驱动 Mac `/tmp/pdv4/d.py`，截图、日志和报告页在会话 scratchpad `verify-close-sim/`。11 项全过。
+
+- iPad 教练、复述：答到一半点叉再点 Today，落盘一次、一张卡（origin `talk` / `retell`），点卡进教练或复述页、回答一次；关掉再开，Stop 在、正文接着长、落盘一次、不放卡；停止留半句（588 / 596 字）、不放卡。复述落盘后多一次模型调用是延后的蒸馏。
+- iPad 书（平板课堂）：答到一半点 Hang up，落盘一次，对话关着所以放一张书的卡；再开课堂回答一次。
+- iPhone 门口：答到一半关掉，落盘一次、一张卡。装配中重开：页面脚本让发送后 2.5 s 内开始的 `appData` 读延迟 6 s，回车发送、0.52 s 后点 Close（模型调用 0 次），长按卢明点 Text 在 4.6 s 重开（仍 0 次），重开的视图出 Stop、接着流、落盘一次、不放卡。前一次重开没点中菜单，回合落盘一次、放一张卡。
+- iPhone 教练卡片（页面脚本 `putOneThreadCard` 铺的，手机上没有教练）：点了显示「This one opens on the iPad or the desk.」。
+- iPhone PDF 课堂（attention.pdf）：答到一半点返回，落盘一次、一张书的卡；点卡进课堂、回答一次，盒子少一张。
+- 观察：iPad 教练页卢明盖住发送键，idb 点 Send 发不出去（上一棒也见过），回车能发。盒子列表可滚动，卡片多时下面的卡在屏幕外，idb 要点列表顶上那张。
+- 没走：手机课堂答到一半再开、停止、「问这一段」进 aside；手机上点复述卡片。坑 544、545 没用。
+- 环境：vite PID 93151（子进程 93153，`/tmp/pdv4/vitepid`）留着在跑；旧 dev server 29859 一组已停；ios_webkit_debug_proxy 78195 没动；iPhone 的 `__fauxPlan` 已清，iPad 的还在（app 没开着）。
