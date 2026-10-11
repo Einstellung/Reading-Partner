@@ -192,7 +192,7 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 - 回合控制器是 `reading/turn/place-session.ts`；门口的 place 在 `soul/door-durable.ts`，info 和三餐在 `info/briefer/info-durable.ts`，教练和复述走 `reading/turn/one-thread-place.ts`，info 语音在 `reading/turn/info-voice.ts`。
 - 铃不在 `soul/bell.ts` 里起回合：各 place 的铃在 `reading/turn/*-bell.ts`（通用的 `place-bell.ts`，门口 `door-bell.ts`，简报和三餐 `info-bell.ts`，书 `deliver.ts`），外壳注册；`bell.ts` 只按 place 分派，没注册门口时铃留在队列。`soul/headless.ts` 没改成建 `rp.turn`，删掉了：铃的 headless 回合是 `place-bell.ts` 的 `headlessPlaceTurn`，收尾旧 session 的发送并进 `recover.ts`。
 - `soul/harness.ts` 整个删掉。`startSoulSession` 换成 `recover.ts` 的 `finishOldSoulSession`：soul 的 session 组为空就什么都不开；有就开一次、等收尾跑完、删掉整组，之后启动不再碰。旧 session 里门口的回合没有 opener，收尾时 abort，同旧行为。
-- 门口、info、三餐关掉对话不停回合（2026-10-11 用户改定，原为「关掉 = 停止」）：回合在后台跑完落盘，落盘时没人开着这个对话就放 Lumen 的盒子卡片；再打开对话接上在途回合；只有按停止才停。读者的回合、铃的回合、通话中的语音回合都一样，挂断电话照旧停。排练教练、手机课堂关掉仍是停止；复述开过口后本来就继续跑。
+- 关掉对话不停回合，所有对话面统一（2026-10-11 用户改定，原为「关掉 = 停止」）：只有按停止才停。点叉、离开页面、返回都不停，回合在后台跑完落盘；落盘时没人开着这个对话就放 Lumen 的盒子卡片，点卡片打开那个对话；再打开对话接上在途回合，正文接着长。关掉后打的、没被回合收下的话写进文件，不开新回合。门口、info、三餐、排练教练、复述、手机 PDF 课堂、书的线程（iPad、桌面、手机 EPUB 课堂、划线提问）都是这样；读者的回合、铃的回合、通话中的语音回合都一样，挂断电话照旧停。教练和复述的卡片 origin 是 `{ place: "talk", outlineId }` / `{ place: "retell", retellId }`，桌面打开时按大纲或复述查主题再进去，手机没有这两个页面，卡片说明去 iPad 或桌面打开。书的卡片在手机上开论文的课堂或 EPUB 的那条线程。
 - `runAgentTurn` 不再收 `deliverTo`，app 不再写 `DELIVERY_ENTRY`、`PROMPT_ENTRY`；`runHarnessTurn` 的 `deliverTo` 只剩恢复测试用来造旧 session，第四阶段随 `legion/execute` 删。书、简报、三餐的 opener（`registerDelivery`）留给 `recover.ts` 重建桌面。
 
 ### 第三阶段：子 agent 和后台

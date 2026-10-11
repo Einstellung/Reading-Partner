@@ -603,7 +603,7 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 
 ## 第二阶段：关对话不停回合（分支 `dev/pi-durable-2i`，从 `origin/dev/pi-durable-2` e631ea00 起）
 
-2026-10-11 用户改定：关掉门口、info、三餐对话不等于停止，只有按停止才停。回合在后台跑完、照常落盘；落盘时没人开着这个对话，就放 Lumen 的盒子卡片（`doorPlace` / `infoPlace` 的 `card`，原来只有恢复的回合走到）。排练教练、手机课堂关掉仍是停止；复述开过口后本来就继续跑，不动。
+2026-10-11 用户改定：关掉门口、info、三餐对话不等于停止，只有按停止才停。回合在后台跑完、照常落盘；落盘时没人开着这个对话，就放 Lumen 的盒子卡片（`doorPlace` / `infoPlace` 的 `card`，原来只有恢复的回合走到）。排练教练、手机课堂关掉仍是停止；复述开过口后本来就继续跑，不动。（同日后来统一：教练、复述、手机课堂关掉也不停，见文末「关对话不停回合（统一）」。）
 
 做了什么：
 
@@ -660,3 +660,24 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 观察：iPad 教练页 Lumen 在右下角盖住发送键，没隐藏时两次 idb 点发送没发出去，点「Hide Lumen」后正常，原因没查；恢复后 turn-log 的 end 行 turn id 与 start 不同（同上一棒，2k 在改）；课堂逐章预备吃光 faux 的 40 步（坑 538）。
 - 语音要真机做的：① 主页点 Lumen 开通话，开场白念完后说「今天有什么值得看的」，听回答念完，再看 info 对话里这句和回答各一次、Lumen 盒子没有新卡；② 回答念到一半时插话说「停一下，换个话题」，念到的那句截断，打开对话看回答末尾有 interrupted 标记，下一句正常答；③ 回答在念时点主页「Tell the companion」打开文本对话，看这条回答在对话里接着流、Stop 在，打一句字发出，听这句的回答也被念出；④ 文本对话开着时说一句，回答在念时点 Hang up 关掉对话，语音继续念完，再开对话这条只有一次；⑤ 回答念到一半时上划杀 app，重开后对话里半句一次、不出声、盒子一张卡；⑥ 问需要查资料的问题，工具调用时 Lumen 低头；⑦ 挂断后过一会看记忆里有这通电话的蒸馏。
 - 环境：dev server PID 29859（`/tmp/pdv3/pids.txt`）留着在跑，旧的 12428 一组已杀；`~/rp-flow` detached 在 6357b583，工作区干净；iPad `.dev` 容器里的凭据已删、`__fauxPlan` 等已清；容器里有 Verify talk 主题（复述、大纲）、Pride and Prejudice（EPUB 从 iPhone 容器拷来）、`info-sources.json` 和今天的 briefing。
+
+## 关对话不停回合（统一）（分支 `dev/pi-durable-2-close`，从 `origin/dev/pi-durable-2` 0fb61d95 起）
+
+2026-10-11 用户定：所有对话面只有停止键停回合，关掉（点叉、离开页面、返回）一律不停，回合在后台跑完落盘，没人开着就放盒子卡片，再开接上。
+
+扫了一遍哪里关掉会停：
+
+- 已经是这样、没动：门口、info、三餐（上一节）；书的线程（`reading/session/use-call.ts`，iPad、桌面、手机 EPUB 课堂、划线提问）从 docs/03 起就只有停止和删线程才停，卸载不停，`setBookWatching` 按屏幕上开着的 call 判断，落盘没人看就放书的卡片。
+- 排练教练、复述（`ui/components/chat/use-place-chat.ts`）：cleanup 原来 `leave()`（停），复述只有开过口才 `keepOnLeave`。改成一律 `detach()`；`keepOnLeave` 改名 `onLeave`，只表示要不要听「落盘了」（复述延后的蒸馏用，靠 `session.idle()`）。开着时 `registerOpenSession` 加 `watchOneThread`。`reading/turn/one-thread-place.ts` 的 lander 原来 `watching: () => true`、不放卡；现在按 `watchOneThread` 判断，没人开着就调 place 的 `card`。教练、复述的卡片在 `coach-durable.ts` / `retell-durable.ts` 的 `putCoachCard` / `putRetellCard`（`putOneThreadCard`，boxId `<id>:<ts>`）。
+- 手机 PDF 课堂（`ui/components/phone/lesson/use-lesson-call.ts`）：卸载原来 `abort()`（停）。改成 `detach()`：在途回合打 `gone`，不画、不停，装配中的照样起跑，结算时只把没被收下的话写文件，不开下一回合、停摆不重问（同门口）。`setBookWatching` 原来按回合挂（关掉时停下的半句不放卡），改成按屏幕挂：课堂开着就算看着。再开课堂时 `resumedBookTurn` 接上同进程的在途回合，并叫老 hook 放手（`unwatch` 看门狗、结算什么都不写），坑 540 同款。放手的登记抽成 `reading/turn/detached-turns.ts`，`place-session.ts` 也改用它。
+- 盒子卡片：`BoxOrigin` 加 `talk`、`retell` 两种（不存主题 id，跟随时 `App.tsx` 读大纲或复述的 `topicId`，`LibraryScreen` 收 `open` 请求打开教练或复述）；`box-jump.ts` 加 `open-coach`、`open-retell`、手机的 `open-book-conversation`。手机原来书的卡片一律「请在 iPad 或桌面打开」，现在开那本书的对话：PDF 进课堂（`shelf-list.ts` 的 `conversationDoor`），EPUB 开阅读器并在书载入后 `reopenThread` 那条线程（`PhoneReader` / `use-book-lesson.ts` 的 `openThreadId`）。教练、复述的卡片在手机上说「这一条请在 iPad 或桌面端打开」（`shell.box.notOnPhone`，9 种语言），旧的 `box.notReadable` 删了。
+
+保留的例外：手机课堂里点「问这一段」进 aside 时仍先停课堂的回合（`PhoneLessonScreen.tsx` 的 `enter`）。这不是关对话，是在课堂里开另一条对话；不停的话回来时 aside 的回执行会写在还没落盘的回答前面（文件顺序乱）。要统一得先把回执改成按时间插，没做，等主会话定。课堂开着、在 aside 里时课堂线程仍算「看着」，落盘不放卡，回来 `reload()` 读文件看到。
+
+测试：`one-thread-place.test.ts` 教练、复述各加两条（faux：关掉后回合不停、落盘一次、放一张卡、老视图不再画；关掉再开接上、落盘一次、不放卡）；`use-lesson-call.test.tsx` 原「离开停回合」换成三条（关掉不停、落盘后写没收下的话、不开新回合、不再算看着；装配中关掉照样起跑；再开接上、老 hook `unwatch` 一次、老回合停摆什么都不写）；`box-jump`、`box-cards`、`phone-shelf-list` 各加一条；`tests/palace/derived.test.ts` 登记 `LibraryScreen.tsx`（内存里带主题 id）。全量 `scripts/t.sh` 7478 过、1 跳过、0 失败，`bun run typecheck` 过。坑 542、543 没用。
+
+没做：
+
+- Linux xvfb 真 app 验收（教练、手机课堂窄屏：答到一半关掉看卡片、点卡片看到全文一次；答到一半再开接上；停止留半句）没跑，工具调用预算用完。下一棒照第二棒 B 的做法（Xvfb、`verifylinux` identifier 的 debug 二进制、本 worktree 的 vite、`VITE_VERIFY_FAUX=1`，换代码后重起 vite，坑 403）。
+- hook 层：`use-place-chat` 没有 hook 测试（同上一节），关掉不停只在 place 层测了；`LibraryScreen` 的 `open` 请求和两个外壳的跟随卡片是 tsx，只过了类型检查。
+- 关掉后、回合还在装配时重开（`drivePlaceTurn` / `driveBookTurn` 还没交回句柄），新视图查不到在途回合，要等落盘后靠追加通知或重开才看到（同上一节，没测）。
