@@ -347,6 +347,7 @@ const LAYER: Record<string, Layer> = {
   "PhoneApp.tsx": "shell",
 
   "main.tsx": "entry",
+  "dev-faux.ts": "entry",
   smoke: "entry",
 };
 

@@ -1,3 +1,4 @@
+import "./dev-faux";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { installFetchBridge } from "./ai/fetch-bridge";
