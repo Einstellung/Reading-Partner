@@ -737,3 +737,11 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 观察：iPad 教练页卢明盖住发送键，idb 点 Send 发不出去（上一棒也见过），回车能发。盒子列表可滚动，卡片多时下面的卡在屏幕外，idb 要点列表顶上那张。
 - 没走：手机课堂答到一半再开、停止、「问这一段」进 aside；手机上点复述卡片。坑 544、545 没用。
 - 环境：vite PID 93151（子进程 93153，`/tmp/pdv4/vitepid`）留着在跑；旧 dev server 29859 一组已停；ios_webkit_debug_proxy 78195 没动；iPhone 的 `__fauxPlan` 已清，iPad 的还在（app 没开着）。
+
+第二棒（2026-10-12，分支 `verify/pi-durable-2-close-sim2`，从 `dev/pi-durable-2` 8d6a7d8b 起，含 aside 修复和 b4419e0e）：Mac `~/rp-flow` 切到 8d6a7d8b、重起 vite（坑 403），只用 iPhone 17 Pro，同样的 faux 和占位凭据（跑完已删、`__fauxPlan` 已清）。驱动 Mac `/tmp/pdv5/d.py`（`round2 reopen-stop|aside-live|aside-stay`），副本、截图、日志在会话 scratchpad `verify-close-sim2/`，报告页 `verify-close-sim/report.html` 加了「Round 2」一节。6 项全过，没改代码。
+
+- 手机课堂答到一半返回再开：Stop 在、正文接着长（4 s 13808→14143 字）、落盘一次、屏幕上一次（两个问题之间 30 句）、不放卡、模型调用一次。停止：半句 600 字留在文件，15 s 后不变，不放卡，没有多的调用。
+- 「问这一段」：回答在流时真长按一段已落盘的回答，菜单 0.6 s、3.1 s 都还开着（b4419e0e 修好了）。在 aside 里问一句、4 s 后回来：Stop 在、回答接着流，回执在流的回答上面（屏幕和文件都是问题、回执、回答），回答一次，课堂不放卡；aside 自己的回答在后台跑完，放一张指向 aside 线程的书卡（同 Linux）。在 aside 里待到课堂落盘：放一张课堂线程的书卡，aside 的回答在开着时落盘不放卡，回来回执在回答后面。两种情况再开课堂顺序都不变。
+- 手机点复述卡（页面脚本 `putOneThreadCard` 铺的，origin `retell`）：显示「This one opens on the iPad or the desk.」，卡留在盒子里。
+- 观察：从 aside 回来不滚动（不自动跟随），回执要按 DOM 顺序查或滚过去看。在 aside 里放的课堂卡片，回来读过回答后仍留在盒子里，只有点卡才收走。驱动找段落时要按「和视口相交」取：faux 的回答是一个 1560 px 高的 `<p>`，整段落在视口内的条件永远不成立。坑 544、545 没用。
+- 环境：vite PID 6861（子进程 6863，`/tmp/pdv4/vitepid`，`/tmp/pdv4/pids-history`）在 `~/rp-flow` 8d6a7d8b 上留着跑；旧的 93151/93153 已停。iPhone 盒子里多了 seed 复述卡和本轮的几张书卡。
