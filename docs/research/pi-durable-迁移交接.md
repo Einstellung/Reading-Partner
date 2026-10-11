@@ -584,3 +584,14 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - `tests/info/briefer/handoff.test.ts` 单独跑会挂（"collect" 这个 kind 没人注册，`electFor` 返回 null），全量跑过。和本棒无关，是测试顺序依赖，没修。
 - 实测没有踩到意外，531–533 没用。
 
+
+## 第二阶段第四棒 B（分支 `dev/pi-durable-2h`，从 `origin/dev/pi-durable-2` 1558f8d1 起）
+
+Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` identifier 的 debug 二进制加载本 worktree 的 vite 1437，`VITE_VERIFY_FAUX=1` 慢速 faux，测试 AppData 先挪成 `.bak-2h-*` 再新建，凭据占位值、用完删）。没调真模型，没发现产品 bug。截图、报告页和驱动在会话 scratchpad `verify-phase2/`（`report.html`、`tools/`、`log-*.json`）。
+
+- 三餐：测试 AppData 铺一个 version 2、带 charter、没有周计划的 `info-meals.json` 就跳过问卷，三餐页点「Ask about this week」开对话（`tools/open-meals.js`）。发问流式、插话进同一回合、停止留半句、正文中杀进程重开半句一次且重启后模型调用 0 次、铃空闲时在对话里流式且落盘带 runId、读者回合在跑时铃等落盘、重启不重投：都过。工具里杀进程：读类 `search_conversations` 重启后重跑、接着写完；写类 `add_shopping_items` 不重跑，回执 interrupted 错误、模型接着答，这是 pi-durable 的 `replay` 策略（坑 534），三餐八个工具都是写类。
+- 复述：页内 `createTopic` / `createRetell(topicId, [])` / `talkOutlineForRetell` 建记录（`tools/seed-talk.js`），主题页 Retell 点那一行。开场回合自动起、停止留半句（kickoff 不进文件）、正文中杀进程半句一次不重问、工具里杀进程（`read_retell_outline`）重跑接着写、恢复的回合读文件历史时 kickoff 在最前（`window.__fauxContexts` 核对）、开过口后离开回合在看不见处跑完，回来接上在途回合继续流式、落盘一次：都过。重启后 `__fauxCalls` 多一次是启动蒸馏，不是复述回合（坑 536）。
+- 教练：主题页 Rehearsal 那一行点「How it went」进教练，不经过说一遍。回答一遍、停止留半句、正文中杀进程半句一次且重启后 0 次、工具里杀进程（`read_talk_outline`）重跑接着写：都过。离开 = 停止（2d 的决定），半句落盘，再进不重问；教练没有离开后的在途回合可接。
+- `src/dev-faux.ts`：`__fauxToolDelayMs` 也拖慢 `infoAssemblies`、`retellAssemblies`、`coachAssemblies` 里的工具；新增 `window.__fauxContexts`（每次调用发出去的消息的角色和开头）。工具里杀进程前要把 `__fauxPlan` 改成 `["text"]`，否则新进程的 faux 从第一步重来（坑 535）。
+- 没走：排练的说一遍（要麦克风和转写）。教练、复述的铃（这两面没有铃）。
+- 全量 `scripts/t.sh` 7493 过、0 失败，`bun run typecheck` 过。坑 534–536 用了。
