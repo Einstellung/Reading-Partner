@@ -421,3 +421,36 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 
 - 先做第 3 项：仿 `reading/turn/deliver.ts` 的 `deliverBookBell` 写门口（和之后每个 place）的 `TurnDeliverer`，`bell.ts` 的门口分支改走它（目标对话忙则等 `onTurnSettled`，重启按 `bellTurn` 不重投）；`headless.ts` 改成建 `rp.turn` 不等界面（铃和恢复是它仅有的调用方）。同时跑门口的 xvfb 验收（`VITE_VERIFY_FAUX=1` 的 `src/dev-faux.ts`）。
 - info（`use-info-call.ts`、`voice-call-live.ts`、`info/briefer/deliver.ts`）、三餐、排练教练（`useCoach.ts`）、复述（`useRetell.ts`）各写一个 place（照 `door-durable.ts`）加用 `place-session.ts` 换调用，互相不碰文件，可以并行；冲突只在 `useBackgroundServices` 的 places 那一行和 catalog / ROSTER（没登记的工具会被滤掉，每棒先核一遍自己面上的工具名都在目录里）。铃的 `TurnDeliverer` 每个 place 一个，最好等第 3 项把门口那份写成样板后再并行。
+
+## 第二阶段第二棒 A（分支 `dev/pi-durable-2b`，从 `origin/dev/pi-durable-2` 87ef3abf 起）
+
+做完的：
+
+- 通用的铃投递 `reading/turn/place-bell.ts`：`deliverPlaceBell(input, place, deps)`。先 `bellTurn` 按铃 id 找已起的回合，有就等它、从线程文件按 runId 取回复，不重投；然后循环：该对话有打开的 place session 且在跑（读者回合在装配、在跑或在落盘）就 `onWait` 并等 `session.idle()`；装配；开着对话就 `session.bell(after, request)` 在那个 session 里跑（流式、能停、能插话，插话由 session 照常落文件、开下一回合），没人开着就 `headlessPlaceTurn`（`drivePlaceTurn` 不画行，带停滞看门狗）；撞 `TurnBusy`（重启后恢复的回合、别的铃的回合）就等该对话的 `onTurnSettled` 再来。结局同 `deliverBookBell`：answered、停下且有 AI 行算 answered、停滞和失败算 failed（铃留着下次投）。
+- `place-session.ts` 加 `bell()`、`idle()` 和打开登记 `registerOpenSession(key, session)` / `openPlaceSession(key)`。铃的回合在 session 里停滞不重问、失败不出失败行。登记是显式的，界面开对话时登记、关时撤（隐式登记会让没 `leave()` 的测试 session 串到下一个测试文件）。
+- 门口：`reading/turn/door-bell.ts` 的 `deliverDoorBell` + `registerDoorDelivery()`（外壳 `useShellBootstrap` 里和书的一起注册）。当天门口那条对话（`openDoorThread`），`prepareDoorTurn` 以文件里的历史加铃为输入装配（不带界面那几个出卡片的工具），surface `bell`。`use-door-chat` 打开时 `registerOpenSession`。`soul/door-durable.ts` 导出 `doorWatchingNow`。
+- `soul/bell.ts`：投递那段抽成 `byTurn(deliver, place, cardOrigin)`，place 分支和门口分支共用（忙则这只铃单独等、同对话后来的铃排在它后面、落盘后才 delivered、ack、markDelivered）。门口分支：没有 place 接住（无 origin、wake、opener 返回 null）且注册了门口 deliverer 就走它，place 是 `{ place: "door", date: 今天 }`，卡片的 origin 仍是 run 原来的地方。wake 铃也走它（`TurnDelivery.runId` 改成可选，wake 不放卡片、不 markDelivered）。
+- 测试：`tests/reading/turn/door-bell.test.ts` 4 个（faux：没人开着时 headless 落盘一次带 runId、同一只铃再投不起新回合；读者回合在跑时铃等落盘后在 session 里流式出现；session 里停下留半句；插话进铃的回合）；`tests/soul/bell.test.ts` 加 1 个（门口 deliverer 接住无处可去的铃和 wake 铃，卡片只给 run）。`bell.test.ts` 的 `beforeEach` 撤掉别的测试文件留下的门口 deliverer。全量 7457 过、1 跳过、0 失败，typecheck 过。
+
+真 app 验收（Linux，`xvfb-run` 同款的 Xvfb :96，复用 `verifylinux` identifier 的 debug 二进制加载本 worktree 的 vite 1437，`VITE_VERIFY_FAUX=1` 慢速 faux，测试 AppData 先挪成 `.bak-2b-*` 再新建，凭据是占位值、用完删）：
+
+- 发问流式、插话进同一回合（第二次模型调用接着答）、停止留半句：过（截图 01–03）。
+- 正文中 SIGKILL 重开：线程文件里读者那句下面半句一次（312 字），重启后模型调用 0 次：过（04）。
+- 门口开着且空闲时铃：回合在打开的对话里流式出现，落盘带 runId，铃清空：过（05、06）。
+- 读者回合在跑时铃：铃保持 queued、模型调用只多读者那一次；读者回答落盘后铃的回合才起，文件顺序是 读者那句、读者回答、铃的回答：过（07、08）。
+- 重启不重投：重启后模型调用 0 次，两只铃各只有一条回复：过（09）。
+- 没走：工具里杀进程后重启接上在途回合（门口工具没有慢速包装，`__fauxToolDelayMs` 只包书的 `AssembledTurns`）。单测有（第一棒 door-durable「接上在途回合」）。
+- 截图和驱动在会话 scratchpad `verify-door/`（`tools/vd.py`、`tools/run.py`、`log-*.json`）。Haiku 0 次。
+
+拍板的：
+
+- `soul/headless.ts` 没有改成建 `rp.turn`：它的两个调用方是 `recover.ts`（续旧 soul session 的 held 运行，第四阶段删）和 `bell.ts` 里还走 `deliveryOpener` 的 place（简报、三餐，等 2c 搬走），都不是新回合。铃的 headless `rp.turn` 是 `place-bell.ts` 的 `headlessPlaceTurn`；放 `reading/turn` 是因为 `reading/turn` 已经 import `soul`，反过来就成环，且停滞看门狗在 `reading/turn/durable-turn.ts`。
+- 门口铃的回合在读者开着的对话里跑时，关掉对话 = 停止（同读者回合），有半句就算 answered。
+- 门口的旧路（`openDoorTurn` + `sendHeadless` + held harness）只在没注册门口 deliverer 时走，app 里注册了就不会走；`bell.test.ts` 里门口那批旧测试靠它。删它和删 `soul/harness.ts` 回合入口一起做。
+
+别的 place 接铃投递：
+
+1. 写 place 的 `PlaceBell`：`key`（`rp.conversations` 的键）、`origin`、`address`（回复落进的线程文件 key 和 threadId）、`assemble(bell, signal)`（把历史和桌面工具放到 place 的 `readHistory` / `resolve` 找得到的地方，返回 `PlaceBellAssembly` 或 `{ failed }`，没东西可答返回 null）、`watching()`。照 `door-bell.ts`，deps 用 `appPlaceBellDeps(readingDurable)`。
+2. `registerTurnDelivery("<place>", …)` 在外壳 `useShellBootstrap` 注册；`bell.ts` 不用改（有 turn deliverer 的 place 自动走 `byTurn`）；该 place 的 `registerDelivery` opener 留着，`recover.ts` 收尾旧 session 还要用。
+3. 界面开对话时 `registerOpenSession(key, session)`，关时撤销，铃的回合才会在打开的对话里流式出现。
+4. 测试照 `tests/reading/turn/door-bell.test.ts`；`bell.test.ts` 的 `beforeEach` 里同样撤掉该 place 遗留的 deliverer。
