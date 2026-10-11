@@ -397,7 +397,7 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 按 place 推广：`legion/durable/device.ts` 是设备运行时，`openDeviceDurable({ places })`，每个 place 给 `key`（`rp.conversations` 的键）、`address`（落进哪个线程文件的哪条线程）、`resolve`（桌面解析器）、`land`、`readHistory`、`telemetry`（surface、thread、bookId、inline）。共用的在这里：打开、`recoverBeforeResume`、撤回的 steer 按 place 写回文件（`fileWithdrawnSteers`）、`recordModelCall` / `recordCacheTurn`、turn-log、`onTurnSettled`。`legion/durable/thread-files.ts` 是通用的 `ThreadFiles`、`threadMessageOf`、`threadLander`（按 role+ts 跳过、flush 后放卡片、在看或拒绝或铃时不放、铃的 runId 盖章）、`fileSteers`。turn-log 从 `reading/turn/durable-turn-log.ts` `git mv` 到 `legion/durable/turn-log.ts`，类名 `DurableTurnLog`。
 - 书那条路：`durable-book.ts` 的 `bookLander`、`storeBookThreads`、`threadMessageOf`、`bookUsageReport`、`bookCacheTurn` 改成通用件的薄包装，加 `bookPlace()`；`openReadingDurable` 组装 book place 后调 `openDeviceDurable`，`ReadingDurable` = `DeviceDurable` + `assembled`。`durable-turn.ts` 提出 `runPlaceTurn` / `resumedPlaceTurn`，`runBookTurn` / `resumedTurn` 委托给它；`book-turn-rows.ts` 加 `drivePlaceTurn` / `resumedPlaceRows`。书的测试一个没改断言。
 - 门口：`soul/door-durable.ts` 是门口的 place。origin `{ place: "door", date, threadId }`，键 `door:<date>:<threadId>`，落进 `doorKey(date)` 那个文件（对话按归属存）。本进程装配的历史和工具放 `doorAssemblies`（模块级），重启后历史读文件（排除 `excludeTs`，丢空文字行），工具走 `openDoorTurn` 重新摆桌（没有界面那几个出卡片的工具）。没人开着门口对话时落盘放卡片，同 `soul/recover.ts` 的那张（`coverOf`，origin 是 door）；门口对话开着时用 `setDoorWatching` 登记。`soul/door-chat.ts` 加 `prepareDoorTurn`：同 `sendAtTheDoor` 的装配，交回 system prompt、读者那句（带链接的 app note）、工具、notice、talk 档模型和 `chatThinking`。
-- `reading/turn/place-session.ts`：一条对话的回合控制器，不依赖 React，照第四、五棒 use-call / 课堂的做法：读者那句先进文件，占位行，装配，`drivePlaceTurn`，每次 view 替换那句之后的行；插话进 `unsent` 画 queued，`steer` 收下才去掉；结局 answered（最后一个 AI 行带 notice）、stopped（去空行）、refused / failed（另起失败行）、stalled（清行，`afterStall` 重问一次）；没被收下的话和撤回的 steer 按 ts 写文件，answered、stopped 后开下一回合；装配中停止删占位行、写 `unsent` 再开回合；`leave()` 停回合不再画；`resume()` 接上在途回合。`withPlaceTurnRows` 替换回合行时把回合中出的卡片行留在回合行上面。
+- `reading/turn/place-session.ts`：一条对话的回合控制器，不依赖 React，照第四、五棒 use-call / 课堂的做法：读者那句先进文件，占位行，装配，`drivePlaceTurn`，每次 view 替换那句之后的行；插话进 `unsent` 画 queued，`steer` 收下才去掉；结局 answered（最后一个 AI 行带 notice）、stopped（去空行）、refused / failed（另起失败行）、stalled（清行，`afterStall` 重问一次）；没被收下的话和撤回的 steer 按 ts 写文件，answered、stopped 后开下一回合；装配中停止删占位行、写 `unsent` 再开回合；`leave()` 停回合不再画（2026-10-11 起门口、info、三餐关对话改用 `detach()`，不停回合，见末节）；`resume()` 接上在途回合。`withPlaceTurnRows` 替换回合行时把回合中出的卡片行留在回合行上面。
 - `use-door-chat.ts` 切到新运行时：不再用 `useStreamingTurn`，自己管行；打开时建 session、登记 watching、`resume()`，查完之前发的话等它；`send` 在回合进行中走 `say`（插话），否则写文件再 `ask()`；`raiseCard` 自己做（插在流式行前面，写文件）；卸载 `leave()`。`useBackgroundServices` 以 `startReadingDurable(appToolCatalog, () => ({ door: doorPlace() }))` 打开运行时。
 - `take_link` 加进 `appToolCatalog` 和 tool-contract 的 ROSTER（unsafe、quiet）：不在目录里的工具会被 `runPlaceTurn` 静默滤掉。
 - 测试：`tests/soul/door-durable.test.ts` 7 个（faux：落盘一次且历史用装配、停止留半句、插话进同一回合且回答另起一行、关着时放卡片、接上在途回合且历史读文件、空闲不接、卡片留在回合行上面），`tests/soul/door-kill.test.ts` 1 个（真 SIGKILL：半句进当天文件一次、不重问、放卡片、turn-log 补 end）。全量 `scripts/t.sh` 7452 过、1 跳过、0 失败，`bun run typecheck` 过。
@@ -406,7 +406,7 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 
 - 87「分层」的表没有 `device.ts`、`thread-files.ts`、`turn-log.ts`，现在 `legion/durable` 多这三个文件。运行时的入口仍叫 `startReadingDurable` / `readingDurable`（在 `reading/turn/durable-runtime.ts`），别的 place 由外壳传进来；改名牵动几十个测试，没改。
 - 门口接了插话：旧的门口在回合进行中发话直接 return。
-- 关掉门口对话 = 停止，半句落进文件（旧路是 abort 丢半句），同第五棒 B 课堂的决定。
+- 关掉门口对话不停回合：回合在后台跑完落盘，落盘时没人开着对话就放卡片；只有按停止才停（2026-10-11 用户改定，原为「关掉 = 停止」，见末节）。
 - 门口回合落盘时没人开着对话就放卡片（旧路只有恢复时放）。
 - 门口的工具标签用本回合工具的 `toolLabel`（`catalogDescribe(request.tools)`），恢复的回合用目录的。
 
@@ -436,7 +436,7 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 和旧行为不同的：
 
 - 回合进行中发话：旧路 `begin` 另起一个回合（旧的那个看不见地接着跑）；现在插进正在跑的回合（docs/72）。Composer 本来就允许回合中发送，没加新交互。
-- 离开教练、或离开没开过口的复述 = 停止，半句落进文件（旧路 abort 丢半句），同门口和课堂的决定。开过口的复述离开时回合照旧在看不见处跑完，落盘后再蒸馏。
+- 离开教练、或离开没开过口的复述 = 停止，半句落进文件（旧路 abort 丢半句），同课堂的决定（门口 2026-10-11 改成关掉不停，教练和复述不变）。开过口的复述离开时回合照旧在看不见处跑完，落盘后再蒸馏。
 - 模型失败、卡死的样子跟 place session（失败行、卡死重问一次），不再是 `useStreamingTurn` 的。没配模型仍是原来的错误条，拒绝仍是拒绝行。
 - 重启接上的回合里，工具出的卡片不画（行上的工具回执照记），桌面装配时 topicName 为空（只影响工具，不影响已在对话里的系统提示）。
 - 模型仍用 `defaultModelId`（旧路如此），没改成门口那样的 `modelIdFor(settings, "talk")`。
@@ -461,8 +461,8 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 
 拍板的（和旧行为不同）：
 
-- 关掉 info / 三餐对话 = 停止，半句落进文件（旧路 abort 丢半句），同门口。关掉时停下的那个回合不放卡片：hook 的 cleanup 保持 watching，等该回合 `onTurnSettled` 再撤。
-- 没人看时落盘放卡片。旧路只有被杀恢复时放；新路上实际也只在重启后恢复的回合于打开对话前落盘时出现。
+- 关掉 info / 三餐对话不停回合，同门口：回合在后台跑完落盘，cleanup 立刻撤 watching，落盘时没人开着就放卡片（2026-10-11 用户改定，原为「关掉 = 停止、停下的回合不放卡片」，见末节）。
+- 没人看时落盘放卡片：被杀后恢复的回合于打开对话前落盘，和关掉对话后才落盘的回合。
 - 恢复的 article 回合用当天 briefing 的桌，工具不缺（article 本来不带工具），只是不挂出卡片的工具。
 - 三餐回合的 telemetry surface 仍是 `info`（旧路也是），thread 是 `meals`。
 - info 对话仍不订阅 `onThreadMessage`（旧路也没有）：开着对话时铃落进来不即时显示，重开才见。
@@ -503,7 +503,7 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 拍板的：
 
 - `soul/headless.ts` 没有改成建 `rp.turn`：它的两个调用方是 `recover.ts`（续旧 soul session 的 held 运行，第四阶段删）和 `bell.ts` 里还走 `deliveryOpener` 的 place（简报、三餐，等 2c 搬走），都不是新回合。铃的 headless `rp.turn` 是 `place-bell.ts` 的 `headlessPlaceTurn`；放 `reading/turn` 是因为 `reading/turn` 已经 import `soul`，反过来就成环，且停滞看门狗在 `reading/turn/durable-turn.ts`。
-- 门口铃的回合在读者开着的对话里跑时，关掉对话 = 停止（同读者回合），有半句就算 answered。
+- 门口铃的回合在读者开着的对话里跑时，关掉对话不停它，回合跑完落盘后铃照常 delivered（同读者回合，2026-10-11 用户改定，原为「关掉 = 停止」）；按停止时有半句就算 answered。
 - 门口的旧路（`openDoorTurn` + `sendHeadless` + held harness）只在没注册门口 deliverer 时走，app 里注册了就不会走；`bell.test.ts` 里门口那批旧测试靠它。删它和删 `soul/harness.ts` 回合入口一起做。
 
 别的 place 接铃投递：
@@ -518,7 +518,7 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 做完的：
 
 - `reading/turn/info-bell.ts`：`deliverInfoBell` 把 `{ briefing, date }` 的铃投进当天文件的 `briefingThreadId(date)` 线程（info place，键 `info:<date>:<threadId>`），`{ meals }` 的铃投进 `info-meals` 的 `meals` 线程；线程不在就建（launch card 委派的 run 可能先于任何对话回来）。装配用 `layBriefingTurn` / `layMealsTurn`（不带出卡片的工具），历史取线程文件经 `replayableHistory`，铃作最后一条 user，装配结果放进 `infoAssemblies` 供 place 的 `readHistory` / `resolve` 用；模型对话档、surface `bell`。`registerInfoDelivery()` 在 `useShellBootstrap` 里注册 briefing 和 meals 两个 turn deliverer，旧 opener 照旧注册给 `recover.ts`。`info-durable.ts` 导出 `infoWatchingNow`。
-- `use-info-call.ts` 只改了打开登记那几行：建 session 后 `registerOpenSession(key, session)`，和 `watchInfoConversation` 合进同一个 `unwatch`，关掉时随它撤（在途回合落盘后才撤，同门口）。
+- `use-info-call.ts` 只改了打开登记那几行：建 session 后 `registerOpenSession(key, session)`，和 `watchInfoConversation` 合进同一个 `unwatch`，关掉时随它撤（2026-10-11 起关掉即撤，不等在途回合落盘，见末节）。
 - 测试：`tests/reading/turn/info-bell.test.ts` 7 个（简报铃没人看 headless 落盘一次带 runId、铃不进文件、重开数据库后同一只铃不重投；三餐铃落进三餐线程；简报对话忙时铃等落盘后在 session 里流式出现；简报忙时三餐的铃不等；开着的三餐对话里铃的回合能停、留半句；插话进铃的回合；别处的铃返回 null）。`bell.test.ts` 的 `beforeEach` 撤掉 briefing、meals 遗留的 deliverer。全量 7488 过、1 跳过、0 失败，typecheck 过。
 
 真 app 验收（Linux，Xvfb :96，复用 `verifylinux` identifier 的 debug 二进制加载本 worktree 的 vite 1437，`VITE_VERIFY_FAUX=1` 慢速 faux，测试 AppData 先挪成 `.bak-2e-*` 再新建，凭据占位值、用完删；写一个 disabled 的 `info-sources.json` 让 Today 出 launch card，「Tell the companion」打开当天简报对话）。Haiku 0 次。
@@ -555,7 +555,7 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 
 - 模型用 `modelIdFor(settings, "talk")`（同文本对话），旧路是 `defaultModelId`。有运行时的停滞看门狗，卡死时这句语音 failed，不重问。
 - 回答是运行时写的：带工具回执的 trace，工具前后的话分成几行；旧路是一整条纯文本。
-- 文本对话开着时，语音回合在对话里流式出现，打字成插话，插话的回答也念出来；关掉对话会停掉在跑的语音回合（同铃）。
+- 文本对话开着时，语音回合在对话里流式出现，打字成插话，插话的回答也念出来；关掉文本对话不停语音回合，回合归通话管，挂断才停（2026-10-11 用户改定，原为「关掉对话会停掉在跑的语音回合」）。
 
 没做的：
 
@@ -600,3 +600,25 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 ## 书界面的插话竞争（分支 `dev/pi-durable-2j`，从 `origin/dev/pi-durable-2` e631ea00 起）
 
 坑 528 在书的两个界面上的修法。`reading/turn/steer-gate.ts` 的 `gateSteers` 包住 runtime 的句柄：记下还在提交中的 steer，停止等它们都返回再调 runtime 的 stop；没有在途 steer 时停止立刻发出。`session/use-call.ts`（手机 EPUB 课堂经 `use-book-lesson.ts` 也走它）和 `phone/lesson/use-lesson-call.ts` 拿到句柄时各包一层，停止、离开、删线程都经过它。`place-session.ts` 没动。测试的假 book turn（`tests/support/use-call.ts`）照 runtime 建模：steer 晚一个 microtask 进 inbox，第一次停止时记下 inbox 快照（`withdrawn`）。`use-call-steer.test.tsx`、`use-lesson-call.test.tsx` 各加一个「插话后同一刻停止」的用例（不修时红），`steer-gate.test.ts` 三个单测。
+
+## 第二阶段：关对话不停回合（分支 `dev/pi-durable-2i`，从 `origin/dev/pi-durable-2` e631ea00 起）
+
+2026-10-11 用户改定：关掉门口、info、三餐对话不等于停止，只有按停止才停。回合在后台跑完、照常落盘；落盘时没人开着这个对话，就放 Lumen 的盒子卡片（`doorPlace` / `infoPlace` 的 `card`，原来只有恢复的回合走到）。排练教练、手机课堂关掉仍是停止；复述开过口后本来就继续跑，不动。
+
+做了什么：
+
+- `place-session.ts` 加 `detach()`：给在途回合打 `gone`，之后不画（`draw` 见 `gone` 就返回）、不报 streaming、结算时只把没被收下的话写文件，不开下一回合。不停运行时，装配中的回合照样装配完、起跑。`leave()` 留给 `use-place-chat`（教练、没开口的复述）。
+- `use-door-chat.ts`：cleanup 由 `leave()` 改成 `detach()`，撤 `registerOpenSession` 和 `setDoorWatching`（原来就是立刻撤）。
+- `use-info-call.ts`：cleanup 改成 `detach()` 加立刻 `unwatch()`（撤 `registerOpenSession` 和 `watchInfoConversation`），删掉「等 `onTurnSettled` 再撤 watching」那段。
+- 再打开对话时新 session 的 `resume()` 用 `turnInFlight` 接上同进程里还在跑的回合（原来只碰到重启后恢复的），老 session 也还跟着它到结算，两边都不重复写文件：撤回的 steer 只回给调 `stop()` 的那个。
+- 铃的回合、通话中的语音回合跑在打开的 session 里时，关文本对话同样只 detach：铃落盘后照常 delivered，语音照常念完，挂断（`GuestTurn.stop`）照旧停。
+- 87「第二阶段」加一条；本文第一棒、第二棒 A/B、第三棒 A/B 的相反拍板句改成新规矩并注明日期。
+
+测试：`door-durable.test.ts`、`info-durable.test.ts`（info、三餐各一）加「关掉后回合不停：再开接上、再关后落盘一次、放卡片、老屏不再画、不重问」；`info-call-turn.test.ts` 加 hook 层同一条（卸载、重开接上、再卸载，落盘一次带卡片）；`info-voice.test.ts` 加「通话中关文本对话，语音回合念完、落盘一次」。原来没有「关掉 = 停止」的单测可改，都是新加的。全量 `scripts/t.sh` 7462 过、1 跳过、0 失败，`bun run typecheck` 过。坑 540、541 没用到。
+
+没做、已知边角：
+
+- 关掉后回合答完时还有没被收下的话（来不及 steer 进去的），写进文件但不开下一回合：开回合要装配，装配读的是已卸载 hook 的 `messagesRef`，是旧的。在后台停摆同理，不重问，读者那句留在文件里没有回答。
+- 关掉后、回合还在装配时（`drivePlaceTurn` 没交回句柄前）重开，新 session 的 `resume()` 查不到，回合在后台跑完落盘，重开的屏幕要靠 store 的追加通知才看到回答（没测）。
+- 重开接上时同一回合有两个停摆看门狗（老 session 和新 session 各一个），都会在停摆时 supersede；没实测重复 supersede 会怎样。
+- 真 app 验收（xvfb 或模拟器上门口、info、三餐各关一次对话看卡片、重开接上）没跑。

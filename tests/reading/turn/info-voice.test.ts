@@ -292,6 +292,44 @@ test("a line typed into the open chat during a voice turn goes into it, not into
   }
 }, 30_000);
 
+test("closing the chat during a voice turn does not stop it: the call speaks it to the end and it lands once", async () => {
+  const A = `The rates held. ${"Markets shrugged. ".repeat(25)}`;
+  const { faux, durable: d } = await runtime([GREETING, A], 200);
+  let screen: CallRow[] = [];
+  const session = createPlaceSession({
+    durable: () => Promise.resolve(d),
+    key: KEY,
+    surface: "info",
+    assemble: async () => ({ kind: "failed", message: "the chat was not asked" }),
+    lastLine: () => 0,
+    draw: (after, rows) => {
+      screen = withPlaceTurnRows(screen, after, rows);
+    },
+    file: () => {},
+    streaming: () => {},
+  });
+  const closed = registerOpenSession(KEY, session);
+  const h = harness(d);
+  await h.call.start();
+  await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
+  await h.played(KICKOFF_TURN);
+  await h.emit({ kind: "speech-end", turn: 1, text: "What about rates?", silentMs: 900 });
+  await until(() => session.running() && screen.some((r) => r.role === "ai" && r.streaming && r.text.length > 20), "the voice turn streaming in the chat");
+  // The chat closes as the hook's cleanup does it.
+  session.detach();
+  closed();
+  await h.played(1);
+  await session.idle();
+
+  expect(messages().map((m) => [m.role, m.text.trim()])).toEqual([
+    ["ai", GREETING],
+    ["user", "What about rates?"],
+    ["ai", A.trim()],
+  ]);
+  expect(h.pushed.join("")).toContain("Markets shrugged. Markets shrugged.");
+  expect(faux.state.callCount).toBe(2);
+}, 30_000);
+
 test("the stream joins a turn's replies, and every tool that goes out comes back once", () => {
   const deltas: string[] = [];
   const activity: string[] = [];

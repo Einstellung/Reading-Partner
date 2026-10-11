@@ -3,7 +3,8 @@
 // (reading/turn/place-session.ts), on a faux provider. A turn lands in the
 // day's file, Stop keeps the half sentence, a line said into the turn is
 // steered into it, a reply nobody saw gets a card, a turn left in flight is
-// joined, and a turn this process did not assemble reads its history off the file.
+// joined, a turn whose conversation is closed runs on, and a turn this process
+// did not assemble reads its history off the file.
 
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -26,7 +27,7 @@ const KEY = doorThreadKey(ORIGIN);
 const LINE = { role: "user" as const, text: "What should I read next?", ts: 1000 };
 const LONG = "Start with the short essays, then the long one. ".repeat(30);
 
-async function rig(replies: string[], options: { watching?: boolean; tokensPerSecond?: number } = {}) {
+async function rig(replies: string[], options: { watching?: boolean | { on: boolean }; tokensPerSecond?: number } = {}) {
   const faux = fauxProvider({
     tokensPerSecond: options.tokensPerSecond ?? 400,
     tokenSize: { min: 2, max: 3 },
@@ -48,7 +49,7 @@ async function rig(replies: string[], options: { watching?: boolean; tokensPerSe
       door: doorPlace({
         assembled,
         openDesk: async () => [],
-        watching: () => options.watching ?? true,
+        watching: () => (typeof options.watching === "object" ? options.watching.on : (options.watching ?? true)),
         card: async (_origin, ts, text) => {
           cards.push({ ts, text });
         },
@@ -170,6 +171,45 @@ test("a reply that lands with the conversation closed gets a card", async () => 
   view.s.ask();
   await ended;
   expect(cards.map((c) => c.text)).toEqual(["Read the essays."]);
+  await durable.runtime.close(ctx);
+});
+
+async function until(check: () => boolean, ms = 10_000) {
+  const end = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > end) throw new Error("timed out");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+test("closing the conversation does not stop its turn: opened again it is joined, and closed it lands once with a card", async () => {
+  const looking = { on: true };
+  const { durable, faux, file, cards, assembled } = await rig([LONG.slice(0, 900)], { watching: looking, tokensPerSecond: 80 });
+  const first = session(durable, assembled);
+  first.s.ask();
+  await first.streaming;
+  first.s.detach();
+  looking.on = false;
+  const frozen = first.screen();
+
+  const again = session(durable, assembled);
+  looking.on = true;
+  expect(await again.s.resume()).toBe(true);
+  await again.streaming;
+  again.s.detach();
+  looking.on = false;
+
+  await until(() => cards.length > 0);
+  expect(file.messages.slice(1).map((m) => [m.role, m.text])).toEqual([
+    ["user", LINE.text],
+    ["ai", LONG.slice(0, 900)],
+  ]);
+  expect(cards.map((c) => c.text)).toEqual([LONG.slice(0, 900)]);
+  // Nothing is drawn on a closed screen, nothing is filed for it, and the turn is not asked again.
+  expect(first.screen()).toBe(frozen);
+  expect(first.filed).toEqual([]);
+  expect(again.filed).toEqual([]);
+  expect(faux.state.callCount).toBe(1);
   await durable.runtime.close(ctx);
 });
 

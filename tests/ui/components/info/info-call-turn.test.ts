@@ -112,6 +112,11 @@ async function stubHost(replies: string[], tokensPerSecond = 400) {
   faux.setResponses(replies.map((text) => fauxAssistantMessage(fauxText(text))));
   const models = createModels();
   models.setProvider(faux.provider);
+  // The box cards put for replies that landed with nobody looking.
+  const cards: string[] = [];
+  const card = async (_origin: unknown, _ts: number, text: string) => {
+    cards.push(text);
+  };
   // What the runtime lands, by file and thread.
   const landed: { key: string; threadId: string; message: ThreadMessage }[] = [];
   const files: ThreadFiles = {
@@ -128,11 +133,11 @@ async function stubHost(replies: string[], tokensPerSecond = 400) {
     models,
     threads: files,
     openDesk: async () => [],
-    places: { info: infoPlace({ card: async () => {} }), meals: mealsPlace({ card: async () => {} }) },
+    places: { info: infoPlace({ card }), meals: mealsPlace({ card }) },
     log: () => {},
   });
   spyOn(durableRuntime, "readingDurable").mockReturnValue(Promise.resolve(durable));
-  return { faux, append, landed, durable };
+  return { faux, append, landed, durable, cards };
 }
 
 const said = (append: ReturnType<typeof spyOn>) =>
@@ -183,6 +188,30 @@ test("Stop keeps the partial answer, lands it once, and frees the composer", asy
   });
   await until(() => !result.current.streaming && lastRow(result.current.messages)?.text === "Yesterday was quiet.");
   expect(faux.state.callCount).toBe(2);
+  await durable.runtime.close(ctx);
+}, 20_000);
+
+test("closing the call does not stop its turn: opened again it is joined, and closed it lands once with a card", async () => {
+  const reply = LONG.slice(0, 900);
+  const { faux, landed, durable, cards } = await stubHost([reply], 80);
+  const first = await open();
+  await act(async () => {
+    await first.result.current.send("what happened today?");
+  });
+  await until(() => (lastRow(first.result.current.messages)?.text.length ?? 0) > 30);
+  first.unmount();
+
+  const again = await open();
+  await until(() => {
+    const last = lastRow(again.result.current.messages);
+    return again.result.current.streaming && last?.role === "ai" && last.text.length > 0;
+  });
+  again.unmount();
+
+  await until(() => cards.length > 0);
+  expect(landed.map((l) => [l.message.role, l.message.text])).toEqual([["ai", reply]]);
+  expect(cards).toEqual([reply]);
+  expect(faux.state.callCount).toBe(1);
   await durable.runtime.close(ctx);
 }, 20_000);
 

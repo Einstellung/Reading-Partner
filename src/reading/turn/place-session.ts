@@ -11,8 +11,10 @@
 // half sentence and the receipts (the runtime lands them). A stall cuts the
 // turn, which lands nothing, and it is asked again once. A turn in flight when
 // the conversation is opened — after a restart, the one recovery resumed — is
-// followed the same way. Leaving stops the turn; its half sentence lands, and
-// nothing more is drawn.
+// followed the same way. Closing the conversation does not stop its turn
+// (detach): it runs on out of sight and lands, and nothing more is drawn; the
+// conversation opened again follows it. Leaving (the coach, a retell not yet
+// begun) stops it, its half sentence lands, and nothing more is drawn.
 //
 // A bell rung for the conversation while it is open runs here too
 // (place-bell.ts): its turn streams in the open conversation, can be stopped
@@ -74,6 +76,12 @@ export interface PlaceSession {
   stop(): void;
   /** The surface is going away: the turn is stopped and nothing more is drawn. */
   leave(): void;
+  /**
+   * The surface is going away and the turn is not stopped: it runs on out of
+   * sight, lands, and nothing more is drawn. What the reader said that no run
+   * took is filed when it ends; no next turn is opened for it.
+   */
+  detach(): void;
   /** Follow the turn in flight on the conversation, if there is one. */
   resume(): Promise<boolean>;
   running(): boolean;
@@ -169,6 +177,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
   const queued = (lines: Live["unsent"]): CallRow[] => lines.map((u) => ({ role: "user", text: u.text, ts: u.ts, queued: true }));
   const plain = (lines: Live["unsent"]): CallRow[] => lines.map((u) => ({ role: "user", text: u.text, ts: u.ts }));
   const draw = (turn: Live, rows: CallRow[]) => {
+    if (turn.gone) return;
     const line = turn.line;
     deps.draw(turn.after, line ? [line, ...rows.filter((r) => !(r.role === "user" && r.ts === line.ts))] : rows);
   };
@@ -399,6 +408,9 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       live = null;
       if (turn.unsent.length > 0) deps.file(turn.unsent);
       notifyIdle();
+    },
+    detach() {
+      if (live) live.gone = true;
     },
     async resume() {
       if (live) return false;
