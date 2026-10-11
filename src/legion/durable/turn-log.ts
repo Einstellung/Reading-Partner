@@ -12,8 +12,8 @@
 // There is no lane on the durable runtime (a busy conversation is steered,
 // not queued), so `queued` and `lane` are never written and `held` is false.
 
-import type { TurnResult } from "../../legion/durable/extension";
-import type { TurnEnd, TurnLogEvent, TurnLogSink } from "../../legion/execute/turn-log";
+import type { TurnResult } from "./extension";
+import type { TurnEnd, TurnLogEvent, TurnLogSink } from "../execute/turn-log";
 import { newRunId, type AiSurface } from "../../platform/app/cache-telemetry";
 
 export interface TurnLogStart {
@@ -46,7 +46,7 @@ export function turnLogEnd(result: TurnResult | undefined, stalled: boolean): { 
   return { reason: "error", error: result.detail ?? result.reason ?? "the turn ended without an answer" };
 }
 
-export class BookTurnLog {
+export class DurableTurnLog {
   private readonly open = new Map<string, OpenTurn>();
   /** Threads a turn began on in this process. */
   private readonly begun = new Set<string>();

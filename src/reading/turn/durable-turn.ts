@@ -18,7 +18,9 @@
 import type { Context } from "@earendil-works/chord";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { LiveDoc, type Conversation, type ModelRef } from "@earendil-works/pi-durable";
-import type { TurnBell, TurnContent, TurnResult } from "../../legion/durable/extension";
+import type { ThreadOrigin, TurnBell, TurnContent, TurnResult } from "../../legion/durable/extension";
+import { TURN_SECTION, type DeviceDurable } from "../../legion/durable/device";
+import type { AiSurface } from "../../platform/app/cache-telemetry";
 import {
   startTurn,
   steerTimestamps,
@@ -34,7 +36,7 @@ import { recordLongestSilence, stallWatches, type StallWatches } from "../../leg
 import type { ReadingTurnMessage } from "../desk-history";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin, type BookTelemetry } from "./durable-book";
 import { projectView, runStart, type TurnView, type ViewSource } from "./durable-view";
-import { TURN_SECTION, type ReadingDurable } from "./durable-runtime";
+import type { ReadingDurable } from "./durable-runtime";
 
 /** The stall watch's registry and window: the app's shared one and TURN_STALL_MS unless said. */
 export interface StallOptions {
@@ -92,7 +94,7 @@ interface Following {
  * function stops following.
  */
 async function followTurn(
-  durable: ReadingDurable,
+  durable: DeviceDurable,
   conversation: Conversation,
   following: Following,
   context: Context,
@@ -142,7 +144,7 @@ interface TurnWatch {
  * partial of each round is the turn log's first byte.
  */
 function watchTurn(
-  durable: ReadingDurable,
+  durable: DeviceDurable,
   conversation: Conversation,
   key: string,
   surface: string,
@@ -195,19 +197,40 @@ function watchTurn(
   };
 }
 
-export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequest, context: Context): Promise<BookTurn> {
+/** One turn at any place (legion/durable/device.ts), as a surface drives it. */
+export interface PlaceTurnRequest {
+  /** The conversation's key in `rp.conversations`, as the place keys it. */
+  key: string;
+  origin: ThreadOrigin;
+  /** The conversation's id in the turn log: the thread. */
+  conversation: string;
+  surface: AiSurface;
+  /** The reader's line, already in the conversation file at `ts`; for a bell's turn the bell, with no `ts`. */
+  line: { text: string; ts?: number; content?: TurnContent };
+  bell?: TurnBell;
+  systemPrompt: string;
+  tools: readonly AgentTool[];
+  model: ModelRef;
+  thinkingLevel?: ModelThinkingLevel;
+  describe(name: string, args: unknown): { label: string; quiet?: true };
+  onView(view: TurnView): void;
+  watches?: StallWatches;
+  stallMs?: number;
+}
+
+/**
+ * Start a turn on a place's conversation and follow it as rows. The place's
+ * own assembly (history, desk tools) is put where its history reader and desk
+ * resolver find it before this is called.
+ */
+export async function runPlaceTurn(durable: DeviceDurable, request: PlaceTurnRequest, context: Context): Promise<BookTurn> {
   const { runtime } = durable;
-  const key = bookThreadKey(request.origin);
-  durable.assembled.put(key, {
-    history: request.history,
-    tools: request.tools,
-    ...(request.telemetry ? { telemetry: request.telemetry } : {}),
-  });
+  const { key } = request;
   const started = await startTurn(
     runtime,
     {
       key,
-      origin: bookThreadOrigin(request.origin),
+      origin: request.origin,
       content: request.line.content ?? request.line.text,
       sections: { [TURN_SECTION]: request.systemPrompt },
       tools: request.tools.map((tool) => tool.name).filter((name) => runtime.registrations.has(name)),
@@ -219,10 +242,9 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
     context,
   );
   const { conversation } = started;
-  const surface = request.telemetry?.surface ?? "reading";
   durable.turnLog.begin(key, {
-    surface,
-    conversation: request.origin.threadId,
+    surface: request.surface,
+    conversation: request.conversation,
     provider: request.model.provider,
     model: request.model.modelId,
   });
@@ -230,7 +252,7 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
     durable,
     conversation,
     key,
-    surface,
+    request.surface,
     { ...(request.watches ? { watches: request.watches } : {}), ...(request.stallMs ? { stallMs: request.stallMs } : {}) },
     context,
   );
@@ -260,6 +282,35 @@ export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequ
   };
 }
 
+export async function runBookTurn(durable: ReadingDurable, request: BookTurnRequest, context: Context): Promise<BookTurn> {
+  const key = bookThreadKey(request.origin);
+  durable.assembled.put(key, {
+    history: request.history,
+    tools: request.tools,
+    ...(request.telemetry ? { telemetry: request.telemetry } : {}),
+  });
+  return runPlaceTurn(
+    durable,
+    {
+      key,
+      origin: bookThreadOrigin(request.origin),
+      conversation: request.origin.threadId,
+      surface: request.telemetry?.surface ?? "reading",
+      line: request.line,
+      ...(request.bell ? { bell: request.bell } : {}),
+      systemPrompt: request.systemPrompt,
+      tools: request.tools,
+      model: request.model,
+      ...(request.thinkingLevel ? { thinkingLevel: request.thinkingLevel } : {}),
+      describe: request.describe,
+      onView: request.onView,
+      ...(request.watches ? { watches: request.watches } : {}),
+      ...(request.stallMs ? { stallMs: request.stallMs } : {}),
+    },
+    context,
+  );
+}
+
 /** A turn in flight on a thread that nothing on screen holds. */
 export interface ResumedTurn {
   /** `rp.turn`'s start: every row of the turn is stamped after it. */
@@ -269,25 +320,25 @@ export interface ResumedTurn {
 }
 
 /**
- * The turn in flight on a book thread, for the reader who opens it: after a
- * restart, the one recovery resumed. Undefined when the thread is idle.
+ * The turn in flight on a place's conversation, for the reader who opens it:
+ * after a restart, the one recovery resumed. Undefined when it is idle.
+ * `surface` is read when the turn is followed.
  */
-export async function resumedTurn(
-  durable: ReadingDurable,
-  origin: Pick<BookOrigin, "home" | "threadId">,
+export async function resumedPlaceTurn(
+  durable: DeviceDurable,
+  key: string,
+  surface: () => AiSurface,
   context: Context,
   stall: StallOptions = {},
 ): Promise<ResumedTurn | undefined> {
   const { runtime } = durable;
-  const key = bookThreadKey(origin);
   const found = await turnInFlight(runtime, key, context);
   if (!found) return undefined;
   const { conversation, startedAt } = found;
   return {
     startedAt,
     async follow(onView) {
-      const surface = durable.assembled.get(key)?.telemetry?.surface ?? "reading";
-      const watch = watchTurn(durable, conversation, key, surface, stall, context);
+      const watch = watchTurn(durable, conversation, key, surface(), stall, context);
       const unfollow = await followTurn(
         durable,
         conversation,
@@ -308,4 +359,18 @@ export async function resumedTurn(
       };
     },
   };
+}
+
+/**
+ * The turn in flight on a book thread, for the reader who opens it: after a
+ * restart, the one recovery resumed. Undefined when the thread is idle.
+ */
+export function resumedTurn(
+  durable: ReadingDurable,
+  origin: Pick<BookOrigin, "home" | "threadId">,
+  context: Context,
+  stall: StallOptions = {},
+): Promise<ResumedTurn | undefined> {
+  const key = bookThreadKey(origin);
+  return resumedPlaceTurn(durable, key, () => durable.assembled.get(key)?.telemetry?.surface ?? "reading", context, stall);
 }

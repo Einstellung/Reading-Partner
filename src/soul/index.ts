@@ -62,11 +62,23 @@ export {
   type DoorTurnInput,
 } from "./door";
 export {
+  prepareDoorTurn,
   sendAtTheDoor,
   type DoorSendDeps,
   type DoorSendInput,
   type DoorSendOutcome,
+  type DoorTurnPrepared,
 } from "./door-chat";
+export {
+  asDoorOrigin,
+  doorAssemblies,
+  doorOrigin,
+  doorPlace,
+  doorThreadKey,
+  setDoorWatching,
+  type DoorOrigin,
+  type DoorPlaceDeps,
+} from "./door-durable";
 export { GO_TO_TOOL, buildPlaceTools, placesDescription } from "./places";
 export {
   LIST_CAP,

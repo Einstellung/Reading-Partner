@@ -16,7 +16,7 @@ import type { TurnLogLine } from "../../../src/legion/execute/turn-log";
 import { driveBookTurn } from "../../../src/reading/turn/book-turn-rows";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin } from "../../../src/reading/turn/durable-book";
 import { openReadingDurable, TURN_SECTION } from "../../../src/reading/turn/durable-runtime";
-import { BookTurnLog, turnLogEnd } from "../../../src/reading/turn/durable-turn-log";
+import { DurableTurnLog, turnLogEnd } from "../../../src/legion/durable/turn-log";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fakeThreads } from "./support/durable-threads";
 
@@ -31,7 +31,7 @@ const shape = (lines: TurnLogLine[]) =>
 test("one turn's lines: start, first byte and answer per round, one end, all under one id", () => {
   const lines: TurnLogLine[] = [];
   let now = 0;
-  const log = new BookTurnLog((line) => lines.push(line), () => now);
+  const log = new DurableTurnLog((line) => lines.push(line), () => now);
   log.begin("k", START);
   log.begin("k", { ...START, model: "other" });
   now = 10;

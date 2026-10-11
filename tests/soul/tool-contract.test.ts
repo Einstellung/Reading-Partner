@@ -37,6 +37,7 @@ import { buildCompanionTools } from "../../src/info/briefer/companion-tools";
 import { buildReadPageTool } from "../../src/info/sources/read-page-tool";
 import { buildTaskingTools } from "../../src/info/tasking/tools";
 import { subagentTool } from "../../src/legion/subagent/tool";
+import { buildTakeLinkTool } from "../../src/reading/ingest/take-link-tool";
 import { normalizeToolResult, toolLabel } from "../../src/legion/execute/tool-result";
 import type { AgentTool } from "../../src/legion/execute/contract";
 
@@ -192,6 +193,11 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     ],
     names: ["research_literature"],
   },
+  {
+    where: "reading/ingest/take-link-tool",
+    tools: [buildTakeLinkTool(any({ links: () => [], origin: { place: "door", date: "" } }))],
+    names: ["take_link"],
+  },
 ];
 
 // Built while the place is registered, as the app builds it after the shell's places.
@@ -307,7 +313,7 @@ const GATES = new Set(["card", "trial", "instruction"]);
 // The tools the reader is shown nothing about (docs/72). Written out here for
 // the same reason the roster is: a tool that starts or stops being quiet is a
 // change to what the reader sees, and it fails this line until it is meant.
-const QUIET = ["observation_update", "statement_write"];
+const QUIET = ["observation_update", "statement_write", "take_link"];
 
 test("every tool declares a label, an effect and — where it has one — a known gate", () => {
   const all = [...ROSTER.flatMap((r) => r.tools), ...companion];
