@@ -16,10 +16,11 @@ import type { DeskMessage } from "../../desk";
 import type { AgentTool } from "../../legion/execute/turn";
 import { loadDeviceSettings } from "../../platform/app/device";
 import { hasWebviewFetch } from "../../platform/app/platform";
-import { loadSettings } from "../../platform/app/settings";
+import { loadSettings, type Settings } from "../../platform/app/settings";
 import { createThread, getThread, loadThreads } from "../../platform/app/threads";
 import { assembleReaderSection } from "../../memory";
-import { assembleTurn, registerDelivery, type Delivery, type DeliveryInput } from "../../soul";
+import type { BoxOrigin } from "../../box";
+import { assembleTurn, registerDelivery, type AssembledTurn, type Delivery, type DeliveryInput } from "../../soul";
 import { loadBriefing } from "../boxes/store";
 import { loadPublishedBriefing } from "../boxes/publish";
 import type { Briefing } from "../boxes/types";
@@ -99,6 +100,36 @@ const liveTools = (): Promise<AgentTool[]> =>
   );
 
 /**
+ * The secretary's turn over a day's briefing as this device holds it, with the
+ * tools a turn nobody is watching can hold. A bell's answer is laid here, and
+ * so is the desk a briefing conversation's turn resumed after a restart calls
+ * its tools through (info-durable.ts).
+ */
+export async function layBriefingTurn(
+  date: string,
+  input: { settings: Settings; messages: DeskMessage[]; signal?: AbortSignal; origin?: BoxOrigin },
+  deps: BriefingDeliveryDeps = {},
+): Promise<AssembledTurn | null> {
+  const ctx = await (deps.context ?? liveContext)();
+  const briefing = await (deps.briefing ?? loadDayBriefing)(date);
+  const anchor = briefing
+    ? briefingAnchor(briefing, ctx)
+    : noBriefingAnchor(ctx, { dateKey: date, notices: [] });
+
+  const desk = await openDesk(bindItemTools(anchor.desk, INFO_BRIEFING_KIND, deps.tools ?? liveTools), {
+    settings: input.settings,
+    thread: { key: infoBookId(date), id: briefingThreadId(date) },
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  return assembleTurn({
+    desk,
+    messages: input.messages,
+    role: SECRETARY_ROLE_ID,
+    ...(input.origin ? { origin: input.origin } : {}),
+  });
+}
+
+/**
  * Assemble the turn that answers a bell in a day's briefing. Null when the turn
  * could not be assembled — the bell then falls back to the door.
  */
@@ -123,24 +154,17 @@ export async function openBriefingDelivery(
   // written to that day's thread. The reply needs somewhere to land.
   if (!existing) createThread(key, "info", threadId);
 
-  const ctx = await (deps.context ?? liveContext)();
-  const briefing = await (deps.briefing ?? loadDayBriefing)(date);
-  const anchor = briefing
-    ? briefingAnchor(briefing, ctx)
-    : noBriefingAnchor(ctx, { dateKey: date, notices: [] });
-
-  const desk = await openDesk(bindItemTools(anchor.desk, INFO_BRIEFING_KIND, deps.tools ?? liveTools), {
-    settings: input.settings,
-    thread: { key, id: threadId },
-    ...(input.signal ? { signal: input.signal } : {}),
-  });
-  const turn = await assembleTurn({
-    desk,
-    // The bell rides as one trailing user message and is never written to the
-    // thread: what the day's file keeps is only what the secretary said.
-    messages: [...history, { role: "user", text: input.bell }],
-    role: SECRETARY_ROLE_ID,
-  });
+  const turn = await layBriefingTurn(
+    date,
+    {
+      settings: input.settings,
+      // The bell rides as one trailing user message and is never written to the
+      // thread: what the day's file keeps is only what the secretary said.
+      messages: [...history, { role: "user", text: input.bell }],
+      ...(input.signal ? { signal: input.signal } : {}),
+    },
+    deps,
+  );
   if (!turn) return null;
   return {
     key,
@@ -179,6 +203,30 @@ const liveMealsTools = async (): Promise<AgentTool[]> =>
   });
 
 /**
+ * The secretary's turn over the meals desk, with the tools a turn nobody is
+ * watching can hold: a bell's answer, and the desk a meals turn resumed after a
+ * restart calls its tools through (info-durable.ts).
+ */
+export async function layMealsTurn(
+  input: { settings: Settings; messages: DeskMessage[]; signal?: AbortSignal; origin?: BoxOrigin },
+  deps: MealsDeliveryDeps = {},
+): Promise<AssembledTurn | null> {
+  const state = await (deps.state ?? (() => loadMeals()))();
+  const anchor = mealsAnchor(state, (deps.today ?? todayLocal)());
+  const desk = await openDesk(bindItemTools(anchor.desk, INFO_MEALS_KIND, deps.tools ?? liveMealsTools), {
+    settings: input.settings,
+    thread: { key: MEALS_BOOK_ID, id: MEALS_THREAD_ID },
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  return assembleTurn({
+    desk,
+    messages: input.messages,
+    role: SECRETARY_ROLE_ID,
+    ...(input.origin ? { origin: input.origin } : {}),
+  });
+}
+
+/**
  * Assemble the turn that answers a bell in the meals conversation: the one
  * standing thread, on the meals desk with its tools. Null when it could not be
  * assembled — the bell then falls back to the door.
@@ -198,18 +246,14 @@ export async function openMealsDelivery(
   }));
   if (!existing) createThread(key, "info", threadId);
 
-  const state = await (deps.state ?? (() => loadMeals()))();
-  const anchor = mealsAnchor(state, (deps.today ?? todayLocal)());
-  const desk = await openDesk(bindItemTools(anchor.desk, INFO_MEALS_KIND, deps.tools ?? liveMealsTools), {
-    settings: input.settings,
-    thread: { key, id: threadId },
-    ...(input.signal ? { signal: input.signal } : {}),
-  });
-  const turn = await assembleTurn({
-    desk,
-    messages: [...history, { role: "user", text: input.bell }],
-    role: SECRETARY_ROLE_ID,
-  });
+  const turn = await layMealsTurn(
+    {
+      settings: input.settings,
+      messages: [...history, { role: "user", text: input.bell }],
+      ...(input.signal ? { signal: input.signal } : {}),
+    },
+    deps,
+  );
   if (!turn) return null;
   return {
     key,

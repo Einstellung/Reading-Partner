@@ -171,12 +171,12 @@ test("a notice-only row is cleared by the next attempt; a card row is not", () =
   expect(rows.filter((m) => !holdsNoAnswer(m)).map((m) => m.ts)).toEqual([1, 3, 6]);
 });
 
-// The bug was a missing callback, so the guard is that the callback is there:
+// The bug was a missing callback, so the guard is that the exit is there:
 // nothing else in this file can tell whether the companion wires it. The
-// companion hands its turn the streaming hook's callbacks, and the hook is
-// where the refusal exit is.
+// companion's assembly hands a refusal to the place session
+// (reading/turn/place-session.ts), which draws it as a refusal row.
 test("the companion's agent turn wires the refusal exit", () => {
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-  expect(read("../../../../src/ui/components/info/use-info-call.ts")).toContain("...run.handlers(");
-  expect(read("../../../../src/ui/components/chat/useStreamingTurn.ts")).toContain("onRefusal:");
+  expect(read("../../../../src/ui/components/info/use-info-call.ts")).toContain('return { kind: "refused", message: prepared.text }');
+  expect(read("../../../../src/reading/turn/place-session.ts")).toContain('kind: "refusal"');
 });

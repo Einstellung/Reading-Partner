@@ -20,16 +20,7 @@ import {
   saveShopping,
 } from "./plan/store";
 import { hasWebviewFetch } from "../../platform/app/platform";
-import {
-  buildAddShoppingItemsTool,
-  buildUpdateProfileTool,
-  buildProposeMealsPlanTool,
-  buildRecordDeviationTool,
-  buildRefreshMealsPhotosTool,
-  buildRemoveShoppingItemTool,
-  buildReplaceShoppingItemTool,
-  buildWriteMethodTool,
-} from "./tools";
+import { buildMealsCatalogTools } from "./tools";
 import { hostRegion } from "./region";
 import type { AgentTool } from "../../legion/execute/turn";
 
@@ -88,14 +79,5 @@ export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
     region: () => hostRegion(),
     onMealsCard: opts.onMealsCard,
   };
-  return [
-    buildProposeMealsPlanTool(deps),
-    buildUpdateProfileTool({ ...deps, ports }),
-    buildRecordDeviationTool({ ...deps, ports }),
-    buildAddShoppingItemsTool({ ...deps, ports }),
-    buildRemoveShoppingItemTool({ ...deps, ports }),
-    buildReplaceShoppingItemTool({ ...deps, ports }),
-    buildWriteMethodTool({ ...deps, ports }),
-    buildRefreshMealsPhotosTool({ ...deps, ports }),
-  ];
+  return buildMealsCatalogTools({ ...deps, ports });
 }

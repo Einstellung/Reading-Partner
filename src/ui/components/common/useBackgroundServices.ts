@@ -17,6 +17,7 @@ import { startReadingDurable } from "../../../reading/turn/durable-runtime";
 import { COACH_PLACE, coachPlace } from "../../../reading/rehearsal";
 import { RETELL_PLACE, retellPlace } from "../../../reading/retell";
 import { appToolCatalog } from "./durable-catalog";
+import { infoPlace, mealsPlace } from "../../../info/briefer/info-durable";
 import { startRunner } from "../../../legion/execute/runner";
 import { SCHEDULE_TICK_MS, startScheduleClock } from "../../../legion/schedule";
 import { currentDeviceId } from "../../../platform/app/device";
@@ -100,9 +101,15 @@ export function useBackgroundServices({
   // for another one before they see it (docs/pitfall/394).
   useEffect(() => {
     void startSoulSession();
-    // Book and door turns run on the durable runtime (docs/soul/87); opening it sorts out what
+    // Book, door, info, meals, coach and retell turns run on the durable runtime (docs/soul/87); opening it sorts out what
     // the last process left running before anything resumes.
-    startReadingDurable(appToolCatalog, () => ({ door: doorPlace(), [COACH_PLACE]: coachPlace(), [RETELL_PLACE]: retellPlace() })).catch((e: unknown) => console.warn("the durable runtime could not be opened", e));
+    startReadingDurable(appToolCatalog, () => ({
+      door: doorPlace(),
+      info: infoPlace(),
+      meals: mealsPlace(),
+      [COACH_PLACE]: coachPlace(),
+      [RETELL_PLACE]: retellPlace(),
+    })).catch((e: unknown) => console.warn("the durable runtime could not be opened", e));
   }, []);
 
   // Where the app is, for the turns that are streaming (legion/execute/stall.ts).

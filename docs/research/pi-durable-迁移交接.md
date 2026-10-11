@@ -446,3 +446,36 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 真 app 验收（xvfb 或模拟器上教练回答一遍、复述开场、停止、杀进程恢复）没跑；两面语音依赖重，留给统一验收。hook 层没有测试（只有 place 和控制器的）。
 - 这两面没有铃（桌面不是 place，`assembled.origin` 恒空，旧路也从不传 `deliverTo`），铃投递不涉及。
 - 实测没有踩到意外，531–533 没用。
+
+## 第二阶段第二棒 B（分支 `dev/pi-durable-2c`，从 `origin/dev/pi-durable-2` 87ef3abf 起）
+
+做完的：
+
+- 三餐确实走 `use-info-call.ts`（`use-info-home.ts` 的 `setInfoCall(mealsAnchor(...))` 开 `InfoCall`），和 info 一起换。
+- `info/briefer/info-durable.ts` 是两个 place。info：origin `{ place: "info", date, threadId }`，键 `info:<date>:<threadId>`（日期把每天文件里都重复的 `onboarding` 分开），落进 `infoBookId(date)` 文件的那条线程；meals：origin `{ place: "meals" }`，键 `meals:meals`，落进 `info-meals` 的 `meals` 线程。本进程装配的历史和工具放 `infoAssemblies`；重启后历史读文件（排除 `excludeTs`、丢空文字行），工具走桌面解析器：`deliver.ts` 拆出 `layBriefingTurn` / `layMealsTurn`，铃的 opener 和解析器共用（不挂出卡片的工具，`generate_briefing` 抛错），解析器把 BoxOrigin 传给 `assembleTurn`，恢复的回合里 `delegate` 照样回铃到原处。没人看时落盘放的卡片和 `soul/recover.ts` 同一张（boxId `<threadId>:<ts>`，origin `{ briefing, date }` 或 `{ meals }`）。`watchInfoConversation(key)` 登记在看。`prepareInfoTurn` 装配一个回合并把历史和工具放进 `infoAssemblies`，文本和以后的语音共用。
+- `use-info-call.ts` 换成 `place-session.ts`：读者那句先写文件再 `ask()`，回合中发话走 `say()`（插话），Stop 留半句和回执，打开时 `resume()` 接上在途回合（查完之前发的话等它），看门狗和被杀恢复由运行时和控制器给。卡片照旧：`raiseCard` 插在流式行前并写文件，`withPlaceTurnRows` 的 keep 留住卡片行和本视图在回合中写的 note 行（briefing 进度卡、应用三餐计划后的说明卡、card gesture 的 note）。setup 开场照旧只在空线程、只开一次，`OPENING_KICKOFF` 作 prompt 发出，运行时不落 prompt 行，所以不进文件；kickoff 只进空线程。
+- `appToolCatalog` 原来没有三餐的 8 个工具，换过来后会被 `runPlaceTurn` 全部滤掉。加了 `info/meals/tools.ts` 的 `buildMealsCatalogTools`，`live.ts` 和目录共用这一份清单；ROSTER 加 `info/meals` 行；「目录登记了 roster 每个名字」那条测试也查 companion 的工具名。info 面上其余工具（companion、source、soul 的）原来就在目录里，article 不带工具。
+- `useBackgroundServices` 的 places 加 `info: infoPlace(), meals: mealsPlace()`。
+- `place-session.ts`：停止和离开先等在途的 steer 提交完再调运行时的停止（坑 528），门口一起受益。
+- 测试：`tests/info/briefer/info-durable.test.ts` 12 个（两个 place 各五个：落盘一次且历史用装配、停止留半句、插话进同一回合、接上在途回合且历史读文件、关着放卡片；另有键和地址、setup 开场只落 AI 的话），`tests/info/briefer/info-kill.test.ts` 2 个真 SIGKILL（两个 place 各一：半句进文件一次、不重问、放卡片、turn-log 补 end），`tests/ui/components/info/info-call-turn.test.ts` 改写成 hook 跑真运行时（faux）5 个（停止留半句且落盘一次、装配中停止不发、三餐落进 `info-meals`、插话进同一回合、和停止同一刻的插话写文件并开下一回合），`info-refusal.test.ts` 的源码守卫改查新路径。全量 `scripts/t.sh` 7466 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+拍板的（和旧行为不同）：
+
+- 关掉 info / 三餐对话 = 停止，半句落进文件（旧路 abort 丢半句），同门口。关掉时停下的那个回合不放卡片：hook 的 cleanup 保持 watching，等该回合 `onTurnSettled` 再撤。
+- 没人看时落盘放卡片。旧路只有被杀恢复时放；新路上实际也只在重启后恢复的回合于打开对话前落盘时出现。
+- 恢复的 article 回合用当天 briefing 的桌，工具不缺（article 本来不带工具），只是不挂出卡片的工具。
+- 三餐回合的 telemetry surface 仍是 `info`（旧路也是），thread 是 `meals`。
+- info 对话仍不订阅 `onThreadMessage`（旧路也没有）：开着对话时铃落进来不即时显示，重开才见。
+
+没做的：
+
+- 真 app xvfb 验收（info 和三餐各一回合发问、停止、杀进程恢复）没跑，预算不够。Haiku 0 次。下一棒照第一阶段的做法跑：`VITE_VERIFY_FAUX=1` 慢速 faux，换代码后重起 dev server（坑 403）。
+- 铃：`openBriefingDelivery` / `openMealsDelivery` 仍走旧 held harness，等 2b 的 `TurnDeliverer` 样板。新运行时上的 info 回合和铃回合不互相判忙。
+- 书的两个界面（`use-call.ts`、`use-lesson-call.ts`）没走 `place-session.ts`，坑 528 的竞争还在。
+- `useStreamingTurn` 现在只剩 `useCoach.ts`、`useRetell.ts`（2d 在换）和 `door-tools.ts` 的类型引用。
+
+语音接这个 place 要做的（`info/briefer/voice-call-live.ts`）：
+
+- 每句转写照旧 `appendMessage` 进线程，记下它的 ts；用 `prepareInfoTurn({ anchor, key: bookId, dateKey, signal, messages, companionTools: opts.tools })` 装配（不给 mealsTools，通话只锚在某一天），`line` 带那句的 ts，`excludeTs` 才对得上。
+- 用 `drivePlaceTurn` 或 `runPlaceTurn` 的 `onView` 跟回合：从 TurnView 的流式文字取增量喂合成（今天的 `onDelta`），工具起止喂 `onActivity`；`ended` 是 answered / refused 时 resolve，failed reject。打断（barge-in）调 `stop()`，半句落盘。
+- 语音和文本是同一个对话键：语音回合进行中，文本那边发话会成插话；两边各自 `startTurn` 会撞 `TurnBusy`，语音那边要先问 `turnInFlight` 或干脆复用一个 `PlaceSession`。

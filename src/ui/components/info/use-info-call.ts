@@ -9,14 +9,20 @@
 // (briefer/call.ts), what an Add or an Apply does in what order
 // (briefer/card-actions.ts) — is in the domain and tested there; what is left
 // here is wiring and the effects it drives.
+//
+// The turns run on the device's durable runtime (docs/soul/87): assembled by
+// info/briefer/info-durable.ts prepareInfoTurn, driven by
+// reading/turn/place-session.ts, landed into the conversation's file by the
+// info or meals place. The reader can talk into a running turn (docs/72); Stop
+// keeps the half sentence and the receipts; a turn in flight when the
+// conversation opens — one a killed process left, resumed at start — is drawn,
+// stoppable and steerable like one started here. Closing the call stops its
+// turn, and what it had said lands.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { runAgentTurn } from "../../../legion/execute/turn";
-import { soulHarness, type AssembledTurn } from "../../../soul";
 import { applyTopicProposal, type TopicProposalCardData } from "../../../memory";
 import type { DeskItem } from "../../../desk";
-import { assembleInfoTurn } from "../../../info/briefer/info-turn";
-import { loadSettings, toReasoning } from "../../../platform/app/settings";
+import { infoThreadKey, infoThreadOrigin, prepareInfoTurn, watchInfoConversation } from "../../../info/briefer/info-durable";
 import { createTopic } from "../../../platform/app/topics";
 import {
   appendMessage,
@@ -55,12 +61,14 @@ import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
 import { distillInfoThread } from "../../../memory";
+import { readingDurable } from "../../../reading/turn/durable-runtime";
+import type { CallRow } from "../../../reading/turn/call-state";
+import { createPlaceSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
 import { forgetScroll } from "../common/scroll-memory";
-import { modelIdFor } from "../../../ai/model-tier";
 import { navigateAway } from "../chat/call/call-layout";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
-import { t } from "../../../i18n";
 import {
+  cardRow,
   findCardPart,
   nextCardId,
   patchCardPayload,
@@ -70,8 +78,6 @@ import {
   type CardAction,
   type CardPayload,
 } from "../chat/chatParts";
-import { useStreamingTurn, type StreamingTurnRun } from "../chat/useStreamingTurn";
-import type { ChatMessage, ProviderId } from "../../../ai/providers";
 import type { BriefingView, RequestOutcome } from "../../../info/briefer/reader";
 import type {
   LabArchiveCardData,
@@ -121,6 +127,8 @@ export function infoStickKey(dateKey: string, threadId: string): string {
   return `info:${dateKey}:${threadId}`;
 }
 
+const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
+
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged } =
     opts;
@@ -129,13 +137,38 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // (meals's) names its own, so its thread outlives any day (anchors.ts).
   const bookId = anchor.bookKey ?? infoBookId(dateKey);
   const stickKey = infoStickKey(dateKey, anchor.threadId);
-  // The turn in flight and the rows it writes into. Stop settles it the way
-  // every chat surface does: runAgentTurn says nothing once the reader has
-  // aborted it, so the hook keeps what was written. A line said while it runs
-  // is steered into it (docs/72).
-  const { messages, setMessages, streaming, begin, rows, steer, raiseCard, stop, abort } = useStreamingTurn(
-    bookId,
-    anchor.threadId,
+  const [messages, setRendered] = useState<UiMessage[]>([]);
+  const [streaming, setStreaming] = useState(false);
+  const sessionRef = useRef<PlaceSession | null>(null);
+  // The conversation was just opened and the runtime has not yet said whether
+  // a turn is in flight on it; a line said meanwhile waits for the answer.
+  const lookingRef = useRef<Promise<unknown> | null>(null);
+
+  // Every change lands on the mirror at once, so a turn started in the same
+  // tick reads the conversation it is answering, and the (id-keyed) card
+  // dispatcher can look up a card's payload without being rebuilt on every delta.
+  const messagesRef = useRef<UiMessage[]>([]);
+  const setMessages = useCallback<React.Dispatch<React.SetStateAction<UiMessage[]>>>((action) => {
+    messagesRef.current = typeof action === "function" ? action(messagesRef.current) : action;
+    setRendered(messagesRef.current);
+  }, []);
+
+  // Rows this view makes are keyed by when they were made; kept strictly
+  // increasing so two in one millisecond stay two rows.
+  const lastTsRef = useRef(0);
+  const stamp = useCallback(() => {
+    const at = Math.max(Date.now(), lastTsRef.current + 1);
+    lastTsRef.current = at;
+    return at;
+  }, []);
+
+  // The notes this view put in while a turn may be drawing: a turn's draw
+  // replaces the rows after the reader's line with its own, and keeps these
+  // and the cards above them.
+  const notesRef = useRef(new Set<string>());
+  const keepRow = useCallback(
+    (m: UiMessage) => isCardRow(m) || notesRef.current.has(`${m.role}:${m.ts}`),
+    [],
   );
 
   // An info call ends by its component unmounting, where a reading call ends at
@@ -155,11 +188,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     },
     [threadId],
   );
-
-  // Latest messages, mirrored to a ref so the (id-keyed) card dispatcher can look
-  // up a card's payload without being torn down and rebuilt on every delta.
-  const messagesRef = useRef<UiMessage[]>(messages);
-  messagesRef.current = messages;
 
   // The desk the last turn was assembled over, for the card gestures that reach
   // back into it: applying a topic tells every item it settled (src/desk:
@@ -182,11 +210,12 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const noteTurn = useCallback(
     (text: string, opts?: { role?: "user" | "ai"; persist?: boolean }) => {
       const role = opts?.role ?? "user";
-      const ts = Date.now();
+      const ts = stamp();
+      notesRef.current.add(`${role}:${ts}`);
       setMessages((prev) => [...prev, { role, text, ts }]);
       if (opts?.persist !== false) appendMessage(bookId, anchor.threadId, { role, text, ts });
     },
-    [bookId, anchor.threadId],
+    [bookId, anchor.threadId, setMessages, stamp],
   );
 
   // A note for the model drawn as a card: the row's text goes to the model on
@@ -194,18 +223,38 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // receipt is written (reading/aside.ts). Always persisted.
   const noteCardTurn = useCallback(
     (text: string, cardId: string, card: CardPayload) => {
-      const ts = Date.now();
+      const ts = stamp();
       setMessages((prev) => [...prev, { role: "ai", text, ts, parts: [{ type: "card", id: cardId, card }] }]);
       appendMessage(bookId, anchor.threadId, { role: "ai", text, ts, parts: [toPersistedCardPart(cardId, card)] });
     },
-    [bookId, anchor.threadId],
+    [bookId, anchor.threadId, setMessages, stamp],
   );
 
-  // Load (or start) the anchor's thread whenever it changes; open the chat
-  // window. In onboarding, kick the AI's opening turn once the empty thread loads.
+  // A receipt for something the AI just wrote, shown above the turn's rows and
+  // persisted, so a reopened conversation still shows what landed.
+  const raiseCard = useCallback(
+    (prefix: string, payload: CardPayload) => {
+      const cardId = nextCardId(prefix);
+      const cardTs = stamp();
+      setMessages((prev) => {
+        const card = cardRow(cardId, payload, cardTs);
+        const at = prev.findIndex((m) => m.ts > cardTs || m.streaming === true);
+        return at === -1 ? [...prev, card] : [...prev.slice(0, at), card, ...prev.slice(at)];
+      });
+      appendMessage(bookId, anchor.threadId, { role: "ai", text: "", ts: cardTs, parts: [toPersistedCardPart(cardId, payload)] });
+    },
+    [bookId, anchor.threadId, setMessages, stamp],
+  );
+
+  // Load (or start) the anchor's thread whenever it changes, and join a turn
+  // in flight on it. In onboarding, kick the AI's opening turn once the empty
+  // thread loads.
   useEffect(() => {
     let live = true;
+    let unwatch: (() => void) | undefined;
     setSwapped(false);
+    const origin = infoThreadOrigin(anchor, dateKey);
+    const key = infoThreadKey(origin);
     (async () => {
       try {
         await loadThreads(bookId);
@@ -216,21 +265,66 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       let thread = getThread(bookId, anchor.threadId);
       if (!thread) thread = createThread(bookId, "info", anchor.threadId);
       setMessages(thread.messages.map(rehydrateMessage));
+      const session = createPlaceSession({
+        durable: readingDurable,
+        key,
+        surface: "info",
+        assemble,
+        lastLine: () => {
+          let ts = 0;
+          for (const m of messagesRef.current) if (m.role === "user" && !m.queued) ts = m.ts;
+          return ts;
+        },
+        draw: (after, rows) =>
+          setMessages((prev) => withPlaceTurnRows<CallRow & UiMessage>(prev, after, rows as (CallRow & UiMessage)[], keepRow)),
+        file: (lines) => {
+          for (const line of lines) appendMessage(bookId, anchor.threadId, { role: "user", text: line.text, ts: line.ts });
+        },
+        streaming: setStreaming,
+      });
+      sessionRef.current = session;
+      unwatch = watchInfoConversation(key);
+      const looking = session.resume().catch((e: unknown) => {
+        console.warn("info turn could not be resumed", e);
+        return false;
+      });
+      lookingRef.current = looking;
+      if ((await looking) || !live) return;
+      const empty = thread.messages.length === 0;
       // Onboarding: the AI opens the conversation itself when the thread is empty.
       // Gated on the on-disk thread being empty, so a reopened conversation never
       // re-greets.
-      if (anchor.onboarding && thread.messages.length === 0) {
-        begin((run) => void ask(run));
-      }
+      if (anchor.onboarding && empty) session.ask();
       // A screen's button opened this conversation with something to say ("Plan
       // this week."). Sent as the reader's own turn, shown and persisted, and
       // only into an empty thread — a standing conversation reopened next week
       // would otherwise re-say it every time.
-      if (anchor.kickoff && thread.messages.length === 0) void send(anchor.kickoff);
+      if (anchor.kickoff && empty) void send(anchor.kickoff);
     })();
     return () => {
       live = false;
-      abort();
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      const durable = readingDurable();
+      if (!session?.running() || !durable) {
+        session?.leave();
+        unwatch?.();
+        return;
+      }
+      // The half sentence a close cuts off lands as one the reader saw: no box
+      // card is owed for it. The conversation counts as open until it has.
+      void durable.then((d) => {
+        const off = d.onTurnSettled((event) => {
+          if (d.places.get(event.origin.place)?.key(event.origin) !== key) return;
+          off();
+          unwatch?.();
+        });
+        session.leave();
+        if (!session.running()) {
+          off();
+          unwatch?.();
+        }
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId, anchor.threadId]);
@@ -477,122 +571,87 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     ],
   );
 
-  // The companion's agent turn: the anchor's desk (the day's briefing, and the
-  // article where there is one) assembled into one call (src/soul), then
-  // run with the tool trace and confirm cards this surface draws. The row it
-  // answers into is already open (useStreamingTurn); for the onboarding opener
-  // there is no visible user message above it, otherwise the caller already
-  // appended the user turn.
-  async function runAgent(history: ChatMessage[], run: StreamingTurnRun) {
-    const settings = await loadSettings();
-    if (!settings.defaultProviderId || !settings.defaultModelId) {
-      run.fail(t("info.errors.noProvider"));
-      return;
-    }
-    // The briefing controller for generate_briefing: a background job through the
-    // one card's lifecycle, answering with which of the three things happened —
-    // a run started here, a run was already going here, or the request was left
-    // for the machine that collects — so the companion reports the right one.
-    //
-    // The desk is laid inside a catch: opening
-    // the briefing builds those tools, which awaits the article extractor's
-    // chunk (workshop/extract/readable-lazy). That is a fetch, and a fetch can fail
-    // — a chunk 404ing after a redeploy, a dropped connection, a CSP that turns
-    // it down. Nothing upstream would catch it.
-    // `send` is handed to the composer as a void-returning prop and the
-    // onboarding opener kicks this with `void`, so an escaping rejection is an
-    // unhandled one and the reply row spins for good. The turn stops here
-    // instead, in the row the reader is already looking at; the next send tries
-    // the chunk again, since cacheUntilFailure drops a rejected load.
-    let turn: AssembledTurn | null;
-    try {
-      const assembled = await assembleInfoTurn({
-        anchor,
-        key: bookId,
-        dateKey,
-        settings,
-        signal: run.signal,
-        messages: history,
-        companionTools: () =>
-          buildLiveCompanionTools(
-            (payload) => raiseCard("probe", payload),
-            { start: (scope) => runBriefingJob(scope) },
-            {
-              collecting,
-              lab: {
-                threadId: anchor.threadId,
-                onLabCard: (payload) => raiseCard("lab", payload),
-              },
+  // A turn on the conversation as it stands when it is asked, which is not
+  // always when it was first asked (place-session.ts: a stall asks again, and
+  // so do lines the reader said into a turn that never took them): the
+  // anchor's desk (the day's briefing, and the article where there is one, or
+  // the meals desk) assembled into one call with the tools this surface draws
+  // the cards of. The onboarding opener has nothing above it; the AI speaks first.
+  async function assemble(signal: AbortSignal): Promise<PlaceAssembled> {
+    const history = messagesRef.current.filter((m) => !m.streaming && !m.queued);
+    const said = replayableHistory(history);
+    const opening = anchor.onboarding && said.length === 0;
+    const latest = opening ? undefined : [...history].reverse().find((m) => m.role === "user");
+    const prepared = await prepareInfoTurn({
+      anchor,
+      key: bookId,
+      dateKey,
+      signal,
+      messages: opening ? [{ role: "user", text: OPENING_KICKOFF }] : said,
+      // The briefing controller for generate_briefing: a background job through
+      // the one card's lifecycle, answering with which of the three things
+      // happened — a run started here, a run was already going here, or the
+      // request was left for the machine that collects — so the companion
+      // reports the right one.
+      companionTools: () =>
+        buildLiveCompanionTools(
+          (payload) => raiseCard("probe", payload),
+          { start: (scope) => runBriefingJob(scope) },
+          {
+            collecting,
+            lab: {
+              threadId: anchor.threadId,
+              onLabCard: (payload) => raiseCard("lab", payload),
             },
-          ),
-        mealsTools: async () =>
-          buildLiveMealsTools({
-            threadId: anchor.threadId,
-            onMealsCard: (payload) => raiseCard("meals", payload),
-            today: () => todayLocal(),
-            changed: () => onMealsChanged?.(),
-          }),
-        topic: { onCard: (payload) => raiseCard("topic", payload) },
-      });
-      deskRef.current = assembled.items;
-      turn = assembled.turn;
-    } catch (e) {
-      console.error("failed to load the article extractor", e);
-      run.fail(t("info.errors.extractorFailed"));
-      return;
-    }
-    // The reader walked away while the desk was being laid.
-    if (!turn) return;
-    // Too big to leave the model room to answer, and nothing to retry.
-    if (turn.refusal) {
-      run.fail(turn.refusal);
-      return;
-    }
-    void runAgentTurn({
-      providerId: settings.defaultProviderId as ProviderId,
-      // Which of the two models this thread runs on (ai/model-tier.ts): the
-      // meals conversation is everyday work, the day's briefing chat is not.
-      modelId: modelIdFor(settings, "talk") as string,
-      systemPrompt: turn.systemPrompt,
-      messages: turn.messages,
-      tools: turn.tools,
-      reasoning: toReasoning(settings.chatThinking),
-      signal: run.signal,
-      telemetry: { surface: "info", thread: anchor.threadId },
-      harness: soulHarness(),
-      ...(turn.origin ? { deliverTo: turn.origin } : {}),
-      ...run.handlers(),
+          },
+        ),
+      mealsTools: async () =>
+        buildLiveMealsTools({
+          threadId: anchor.threadId,
+          onMealsCard: (payload) => raiseCard("meals", payload),
+          today: () => todayLocal(),
+          changed: () => onMealsChanged?.(),
+        }),
+      topic: { onCard: (payload) => raiseCard("topic", payload) },
     });
-  }
-
-  // What a turn is asked with: the conversation as it stands when it is asked,
-  // which is not always when it was first asked (useStreamingTurn: a stall asks
-  // again, and so do lines the reader said into a turn that never took them).
-  // The onboarding opener has nothing above it; the AI speaks first.
-  function ask(run: StreamingTurnRun): Promise<void> {
-    const history: ChatMessage[] = replayableHistory(rows());
-    const opening = anchor.onboarding && history.length === 0;
-    return runAgent(opening ? [{ role: "user", text: OPENING_KICKOFF }] : history, run);
+    if (prepared.kind === "failed") return prepared;
+    if (prepared.kind === "refused") return { kind: "refused", message: prepared.text };
+    if (prepared.kind === "aborted") return prepared;
+    deskRef.current = prepared.items;
+    return {
+      kind: "turn",
+      request: {
+        key: prepared.key,
+        origin: prepared.origin,
+        conversation: anchor.threadId,
+        surface: "info",
+        line: { text: prepared.line, ...(latest ? { ts: latest.ts } : {}) },
+        systemPrompt: prepared.systemPrompt,
+        tools: prepared.tools,
+        model: prepared.model,
+        ...(prepared.thinkingLevel ? { thinkingLevel: prepared.thinkingLevel } : {}),
+      },
+      ...(prepared.notice ? { notice: prepared.notice } : {}),
+    };
   }
 
   async function send(text: string) {
     const said = text.trim();
     if (!said) return;
+    await lookingRef.current;
+    const session = sessionRef.current;
+    if (!session) return;
+    const ts = stamp();
     // A turn is running: this is a line into it, not a second turn (docs/72).
     // It is drawn under the reply, handed to the model at the end of the round
     // in flight, and opens the next turn if this one ends without taking it.
-    if (steer(said)) return;
-    const now = Date.now();
-    const userMsg: UiMessage = { role: "user", text, ts: now };
-    setMessages((prev) => [...prev, userMsg]);
-    appendMessage(bookId, anchor.threadId, { role: "user", text, ts: now });
-    let sent: Promise<void> | undefined;
-    begin((run) => {
-      const asked = ask(run);
-      sent ??= asked;
-    });
-    await sent;
+    if (session.say(text, ts)) return;
+    setMessages((prev) => [...prev, { role: "user", text, ts }]);
+    appendMessage(bookId, anchor.threadId, { role: "user", text, ts });
+    session.ask();
   }
+
+  const stop = useCallback(() => sessionRef.current?.stop(), []);
 
   return { messages, stickKey, streaming, swapped, setSwapped, send, stop, onCardAction };
 }

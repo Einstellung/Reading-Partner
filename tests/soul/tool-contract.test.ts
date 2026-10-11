@@ -38,6 +38,7 @@ import { buildReadPageTool } from "../../src/info/sources/read-page-tool";
 import { buildTaskingTools } from "../../src/info/tasking/tools";
 import { subagentTool } from "../../src/legion/subagent/tool";
 import { buildTakeLinkTool } from "../../src/reading/ingest/take-link-tool";
+import { buildMealsCatalogTools } from "../../src/info/meals/tools";
 import { normalizeToolResult, toolLabel } from "../../src/legion/execute/tool-result";
 import type { AgentTool } from "../../src/legion/execute/contract";
 
@@ -198,6 +199,20 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     tools: [buildTakeLinkTool(any({ links: () => [], origin: { place: "door", date: "" } }))],
     names: ["take_link"],
   },
+  {
+    where: "info/meals",
+    tools: buildMealsCatalogTools(any({ threadId: "meals", ports: {} })),
+    names: [
+      "propose_meals_plan",
+      "update_meals_profile",
+      "record_meals_deviation",
+      "add_shopping_items",
+      "remove_shopping_item",
+      "replace_shopping_item",
+      "write_meals_method",
+      "refresh_meals_photos",
+    ],
+  },
 ];
 
 // Built while the place is registered, as the app builds it after the shell's places.
@@ -234,7 +249,9 @@ test("every factory mounts the tools the roster names", () => {
 // there fails every call with "Tool … is not available".
 test("the durable catalog registers every tool in the roster", () => {
   const registered = new Set(catalog.map((t) => t.name));
-  const missing = ROSTER.flatMap(({ names }) => names).filter((name) => !registered.has(name));
+  const missing = [...ROSTER.flatMap(({ names }) => names), ...companion.map((t) => t.name)].filter(
+    (name) => !registered.has(name),
+  );
   expect(missing).toEqual([]);
 });
 
