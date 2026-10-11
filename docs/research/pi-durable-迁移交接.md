@@ -637,3 +637,16 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 观察：杀进程恢复后 turn-log 的 `end aborted` 行和同回合 `start` 行的 turn id 不同（门口、info、三餐都这样），没查。重开对话时视图停在旧位置、出「Jump to latest」，与「对话不自动跟随」一致。
 - 没走：排练、复述、语音、iPad 模拟器（下一棒）；工具里杀进程（本轮 faux 计划只有 text）。坑 538、539 没用。
 - 环境：dev server PID 12428（`/tmp/pdv2/devpid`）留着在跑，旧的 24214、24327 已杀；模拟器 app 里的凭据已删、`__fauxPlan` 已清；`~/rp-flow` 工作区干净（只有原来就有的 `plugins/openin/openin-untracked-backup/`），第一阶段的旧 `src/dev-faux.ts` 存在 `/tmp/pdv2/dev-faux.old.ts`。容器里多了今天的 briefing、`info-sources.json`（一个关着的 feed 源）、`info-meals.json` 和 settings 里的 Haiku 设置。
+
+## 第二阶段 iPad 模拟器验收（分支 `verify/pi-durable-2-sim2`，从 `origin/dev/pi-durable-2` 6357b583 起）
+
+2026-10-11，iPad Pro 11-inch (M5) 模拟器（C1F7689F），平板外壳，idb 真触摸，`.dev` 包，慢速 faux（12 token/s、每段 20 句）。没改产品代码。驱动在 Mac `/tmp/pdv3/`（`pdv.sh`、`p3.sh`、`talk3.py`、`book3.py`、`voice.js`、`voiceflow.sh`、`startdev.sh`），源、截图和报告页在会话 scratchpad `verify-phase2-sim2/`。真 Haiku 1 个回合（2 次请求）。
+
+- 排练教练：回答一遍落盘一次；停止留半句（428 字，aborted）；正文中 SIGKILL，重启后 faux 0 次，半句一次进文件，不重问。
+- 复述：开场回合自动起，停止留半句（kickoff 不进文件）；正文中杀进程半句一次、不重问；离开后回合在看不见处跑，回来 Stop 在、正文在长，落盘一次，之后才是蒸馏。
+- 书（平板课堂「Learn this book with AI」）：插话后约 0.2 s 停止（发送用 idb，停止用页面 JS 点按钮），前一回合 aborted、半句留下，被撤回的插话开下一回合答完；隔 1.5 s 用 idb 点停止结果相同。idb 在发送后 0.1–0.3 s 点停止会落空（坑 539）。工具里杀进程：`read_pages` 重跑、接着写完、回合 done；恢复回合第 2 轮首字节 12.8 s，正好落在重新打开书之后，没查是不是在等书载入。
+- info 语音：模拟器起不了音频栈，代码里没有不经麦克风注入转写的入口（`__orbStub` 只驱动球的样子）。用页面脚本 `voice.js` 照 `voice-call-live.ts` 装 `infoVoiceThread` 的两个口直接驱动：问答一轮落盘、不放卡；打断后落「听到的部分」带标记，下一句正常答；通话中打开文本对话接上在流的语音回合，打字成插话（同回合第 2 轮）、插话的回答也进语音流；通话中关文本对话，语音回合跑完、落盘一次、不放卡。通话状态机、识别、合成没走。
+- 真模型 claude-haiku-5-5：教练一回合先调大纲工具再答，11.5 s done。
+- 观察：iPad 教练页 Lumen 在右下角盖住发送键，没隐藏时两次 idb 点发送没发出去，点「Hide Lumen」后正常，原因没查；恢复后 turn-log 的 end 行 turn id 与 start 不同（同上一棒，2k 在改）；课堂逐章预备吃光 faux 的 40 步（坑 538）。
+- 语音要真机做的：① 主页点 Lumen 开通话，开场白念完后说「今天有什么值得看的」，听回答念完，再看 info 对话里这句和回答各一次、Lumen 盒子没有新卡；② 回答念到一半时插话说「停一下，换个话题」，念到的那句截断，打开对话看回答末尾有 interrupted 标记，下一句正常答；③ 回答在念时点主页「Tell the companion」打开文本对话，看这条回答在对话里接着流、Stop 在，打一句字发出，听这句的回答也被念出；④ 文本对话开着时说一句，回答在念时点 Hang up 关掉对话，语音继续念完，再开对话这条只有一次；⑤ 回答念到一半时上划杀 app，重开后对话里半句一次、不出声、盒子一张卡；⑥ 问需要查资料的问题，工具调用时 Lumen 低头；⑦ 挂断后过一会看记忆里有这通电话的蒸馏。
+- 环境：dev server PID 29859（`/tmp/pdv3/pids.txt`）留着在跑，旧的 12428 一组已杀；`~/rp-flow` detached 在 6357b583，工作区干净；iPad `.dev` 容器里的凭据已删、`__fauxPlan` 等已清；容器里有 Verify talk 主题（复述、大纲）、Pride and Prejudice（EPUB 从 iPhone 容器拷来）、`info-sources.json` 和今天的 briefing。
