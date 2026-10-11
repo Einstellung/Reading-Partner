@@ -18,6 +18,14 @@ export {
   type CoachTurnInput,
   type CoachTurnMessage,
 } from "./coach-turn";
+export {
+  coachAssemblies,
+  coachConversationKey,
+  coachOrigin,
+  coachPlace,
+  COACH_PLACE,
+  prepareCoachTurn,
+} from "./coach-durable";
 export { passMessage, type PassHandoff } from "./handoff";
 export { createDesktopTranscriptSource } from "./desktop-source";
 export {

@@ -14,6 +14,8 @@ import { initSync, TICK_MS } from "../../../platform/sync";
 import { registerPullRoute } from "../../../platform/sync/pull-routes";
 import { doorPlace, startBellWatch, startSoulSession } from "../../../soul";
 import { startReadingDurable } from "../../../reading/turn/durable-runtime";
+import { COACH_PLACE, coachPlace } from "../../../reading/rehearsal";
+import { RETELL_PLACE, retellPlace } from "../../../reading/retell";
 import { appToolCatalog } from "./durable-catalog";
 import { startRunner } from "../../../legion/execute/runner";
 import { SCHEDULE_TICK_MS, startScheduleClock } from "../../../legion/schedule";
@@ -100,7 +102,7 @@ export function useBackgroundServices({
     void startSoulSession();
     // Book and door turns run on the durable runtime (docs/soul/87); opening it sorts out what
     // the last process left running before anything resumes.
-    startReadingDurable(appToolCatalog, () => ({ door: doorPlace() })).catch((e: unknown) => console.warn("the durable runtime could not be opened", e));
+    startReadingDurable(appToolCatalog, () => ({ door: doorPlace(), [COACH_PLACE]: coachPlace(), [RETELL_PLACE]: retellPlace() })).catch((e: unknown) => console.warn("the durable runtime could not be opened", e));
   }, []);
 
   // Where the app is, for the turns that are streaming (legion/execute/stall.ts).
