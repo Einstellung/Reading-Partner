@@ -42,6 +42,9 @@ beforeEach(() => {
   // A door deliverer another test file left registered (the shell's bootstrap)
   // is set aside: these tests answer at the door on the harness unless they register one.
   registerTurnDelivery("door", async () => null)();
+  // The same for the briefing's and the meals conversation's (reading/turn/info-bell.ts).
+  registerTurnDelivery("briefing", async () => null)();
+  registerTurnDelivery("meals", async () => null)();
 });
 
 function bellStore(): { bells: BellStore; files: Map<string, string> } {

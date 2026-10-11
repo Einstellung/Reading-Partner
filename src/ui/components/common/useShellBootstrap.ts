@@ -40,6 +40,7 @@ import { registerReadingDistillSources } from "../../../reading/distill/source";
 import { registerReadingDesk } from "../../../reading/desk";
 import { registerBookDelivery } from "../../../reading/turn/deliver";
 import { registerDoorDelivery } from "../../../reading/turn/door-bell";
+import { registerInfoDelivery } from "../../../reading/turn/info-bell";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
 import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerSourceSiteAdapters } from "../../../info/sources/plugins/all";
@@ -224,6 +225,9 @@ export function bootDomains(): void {
   registerTaskingWorker();
   registerBriefingDelivery();
   registerMealsDelivery();
+  // Their bells now run on the durable runtime; the openers above stay for the
+  // old soul sessions recover.ts finishes.
+  registerInfoDelivery();
   // The day's collection, as a run (docs/55 step 12). Registered on every
   // device: which one collects is the election's answer, and a device with no
   // worker for the kind could not win it.

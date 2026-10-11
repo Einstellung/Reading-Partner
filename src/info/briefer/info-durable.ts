@@ -93,6 +93,11 @@ export function watchInfoConversation(key: string): () => void {
   };
 }
 
+/** Whether a surface has the conversation under `key` open now. */
+export function infoWatchingNow(key: string): boolean {
+  return watched.has(key);
+}
+
 export interface InfoPlaceDeps {
   assembled?: Map<string, AssembledInfoTurn>;
   /** The desk after a restart: the one a bell's answer is laid on. */
@@ -132,7 +137,7 @@ function conversationPlace<O extends InfoOrigin | MealsOrigin>(
 ): PlaceFactory {
   const assembled = deps.assembled ?? infoAssemblies;
   const openDesk = deps.openDesk ?? openRestartDesk;
-  const watching = deps.watching ?? ((key: string) => watched.has(key));
+  const watching = deps.watching ?? infoWatchingNow;
   const card = deps.card ?? putInfoCard;
   return (shared: PlaceShared): Place => ({
     key: (origin) => infoThreadKey(asOrigin(origin)),

@@ -63,7 +63,7 @@ import { addSource, hasSources, loadSources } from "../../../info/sources/source
 import { distillInfoThread } from "../../../memory";
 import { readingDurable } from "../../../reading/turn/durable-runtime";
 import type { CallRow } from "../../../reading/turn/call-state";
-import { createPlaceSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
+import { createPlaceSession, registerOpenSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
 import { forgetScroll } from "../common/scroll-memory";
 import { navigateAway } from "../chat/call/call-layout";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
@@ -283,7 +283,13 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         streaming: setStreaming,
       });
       sessionRef.current = session;
-      unwatch = watchInfoConversation(key);
+      // A bell rung for this conversation while it is open runs in this session (place-bell.ts).
+      const closed = registerOpenSession(key, session);
+      const unwatchInfo = watchInfoConversation(key);
+      unwatch = () => {
+        closed();
+        unwatchInfo();
+      };
       const looking = session.resume().catch((e: unknown) => {
         console.warn("info turn could not be resumed", e);
         return false;
