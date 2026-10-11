@@ -707,3 +707,12 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 门口答到一半关掉（回归）三次，每次落盘一次、一张卡。手机上点教练卡片显示「This one opens on the iPad or the desk.」。
 - 没走（工具调用预算用完）：手机课堂答到一半再开、停止，以及「问这一段」进 aside 再回来（回执在回答上面、只一次、在 aside 里落盘放卡、重开顺序不变）；iPad 宽度的书线程关掉；手机上点复述卡片。下一棒照本节做法，课堂书已铺好：测试数据目录 `library/b39e958bfae6fe29ccf67974459bb93e.pdf` 挂在 Verify talk 主题下。
 - 环境坑（非产品）：worktree 的 vite 起来后再放进 `public/` 的文件取回的是 index.html（坑 403 同因），铺书要直接拷进数据目录的 `library/`。Tauri 窗口没有 `set_size` 权限，改尺寸用 xdotool。坑 542、543 没用。
+
+第二棒（2026-10-12，同分支，驱动 `scratchpad/vcl3/tools/phone.py`，截图和报告页仍在 `verify-close-linux/`，报告页加了「Round 3」一节）：
+
+- 手机课堂答到一半再开：Stop 在、正文接着长、落盘一次（2700 字）、不放卡、模型调用一次。停止：半句 556 字留在文件，不放卡。
+- 「问这一段」答到一半点不出来，是真 bug，修在 b4419e0e：`PhoneLesson.tsx` 在 `messages` 每次变化时清掉长按选中的段落，回答在流时每个 token 都是新数组，菜单出来约 150 ms 就关。改成只在那段所在的回答不在课堂里时才清（`lesson-aside.ts` 的 `heldSpanStands`，单测在 `lesson-aside.test.ts`）。全量 `scripts/t.sh` 7485 过、0 失败，`bun run typecheck` 过。
+- 修后 aside：在 aside 里待到课堂回答落盘，落盘一次、放一张书的卡片（盒子 5→6），回来时回执写在回答后面（按时间）。回答还在流时回来，回执在流的回答上面，屏幕和文件一致（回执 ts 1791734713772 在回答 ts 1791734696699 上面），回答一次、不放卡。aside 自己的回合在回来时还没答完，在后台跑完落进 aside 线程，放一张指向 aside 线程的书卡（盒子 6→7），符合关掉不停的规矩。再开课堂，屏幕顺序和文件顺序都不变，没有按 ts 重排。
+- 合成长按要点在视口内一段已落盘回答的 `[data-reply-ts] p` 上，流着的回答没有 `data-reply-ts`，按它什么都不出（设计如此）。
+- 没走（工具调用预算用完）：iPad 宽度的书线程关掉（落盘一次、没人看时卡片怎样）；手机上点复述卡片（盒子里唯一的复述卡已是 told，要先在桌面宽度用 `close.py retell <id> bg` 造一张新的；这一棒切回 1280 宽后 `close.py` 没打开复述页，没查）。坑 542、543 没用。
+- 环境：本棒起的 Xvfb `:93`、vite、app 的 PID 记在 `scratchpad/vcl3/pids/history`，收尾已杀。
