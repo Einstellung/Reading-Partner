@@ -184,7 +184,7 @@ export async function openDeviceDurable(options: DeviceDurableOptions): Promise<
         conversation: telemetry.thread,
         provider: about.model?.provider ?? "",
         model: about.model?.modelId ?? "",
-      });
+      }, about.turn);
     },
     recordResponse: (message, about) => {
       const place = placeOf(about.origin);
@@ -195,12 +195,12 @@ export async function openDeviceDurable(options: DeviceDurableOptions): Promise<
       recordCacheTurn(cacheTurn(message, about.round, telemetry));
       turnLog.response(place.key(about.origin), about.round, message.stopReason);
     },
-    onSettled: (conversationId, origin, result, startedAt) => {
+    onSettled: (conversationId, origin, result, startedAt, turn) => {
       const place = placeOf(origin);
       if (place) {
         const key = place.key(origin);
         turnLog.end(key, result);
-        turnLog.endUnbegun(key, result, place.telemetry(origin).thread, startedAt);
+        turnLog.endUnbegun(key, result, place.telemetry(origin).thread, startedAt, turn);
       }
       for (const listener of listeners) listener({ conversationId, origin, result });
     },

@@ -83,7 +83,13 @@ export interface DurableOptions {
   /** Each request as it is prepared (extension.ts `requested`). */
   onRequest?: RequestNotice;
   /** A conversation's `rp.turn` landed and the conversation is free again; `startedAt` is the turn's. */
-  onSettled?: (conversationId: ConversationId, origin: ThreadOrigin, result: TurnResult, startedAt: number) => void;
+  onSettled?: (
+    conversationId: ConversationId,
+    origin: ThreadOrigin,
+    result: TurnResult,
+    startedAt: number,
+    turn: string | undefined,
+  ) => void;
   /** The system prompt's sections in order; `rp.desk` holds each turn's text for them. */
   sectionKeys: readonly string[];
   stream?: ConversationStreamOptions;
@@ -132,10 +138,10 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   let path = "";
   let code = 0;
 
-  const settledWith = async (conversationId: ConversationId, result: TurnResult, startedAt: number) => {
+  const settledWith = async (conversationId: ConversationId, result: TurnResult, startedAt: number, turn: string | undefined) => {
     try {
       const origin = (await harness.snapshot(ThreadDoc, conversationId, BACKGROUND_CONTEXT))?.origin;
-      if (origin) options.onSettled?.(conversationId, origin, result, startedAt);
+      if (origin) options.onSettled?.(conversationId, origin, result, startedAt, turn);
     } catch (error) {
       options.onReport?.(error);
     }
@@ -147,7 +153,12 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     ...(options.recordResponse ? { recordResponse: options.recordResponse } : {}),
     ...(options.onRequest ? { requested: options.onRequest } : {}),
     registrations,
-    ...(options.onSettled ? { settled: (conversationId: ConversationId, result: TurnResult, startedAt: number) => void settledWith(conversationId, result, startedAt) } : {}),
+    ...(options.onSettled
+      ? {
+          settled: (conversationId: ConversationId, result: TurnResult, startedAt: number, turn: string | undefined) =>
+            void settledWith(conversationId, result, startedAt, turn),
+        }
+      : {}),
     land: createLandStep({
       landers: options.landers,
       storage: () => storage,

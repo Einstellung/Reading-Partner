@@ -53,6 +53,8 @@ export type DeskState = {
   purpose: BudgetPurpose;
   maxRounds: number;
   excludeTs: number | null;
+  /** The turn log's id for the turn on the desk (turn-log.ts), so a process that did not start it logs under it. */
+  turn?: string;
 };
 export const DeskDoc = defineDoc<DeskState>({
   kind: "rp.desk",
@@ -113,13 +115,16 @@ export type RequestNotice = (about: {
   origin: ThreadOrigin;
   round: number;
   model?: { provider: string; modelId: string };
+  /** The turn log's id for the turn, when the turn kept one. */
+  turn?: string;
 }) => void;
 
 /** The reader's line as the model gets it: text, or text and the page window's images. */
 export type TurnContent = string | (TextContent | ImageContent)[];
 /** The bell a turn answers (soul/bell.ts): found again after a restart so it is not answered twice. */
 export type TurnBell = { id: string; runId?: string };
-export type TurnInput = { content: TurnContent; startedAt: number; bell?: TurnBell };
+/** `turn` is the turn log's id (turn-log.ts); a turn started before it was kept has none. */
+export type TurnInput = { content: TurnContent; startedAt: number; bell?: TurnBell; turn?: string };
 export type TurnCheckpoint = { phase: "submit" } | { phase: "wait" } | { phase: "land" };
 /**
  * How the turn's last run settled. `reason` and `detail` are the submission's
@@ -160,8 +165,8 @@ export interface ExtensionDeps {
    * and abort the conversation. The hook then waits for the abort.
    */
   refuse(conversationId: ConversationId, message: string): void;
-  /** After `rp.turn` landed: the conversation is free for the next turn. `startedAt` is the turn's. */
-  settled?(conversationId: ConversationId, result: TurnResult, startedAt: number): void;
+  /** After `rp.turn` landed: the conversation is free for the next turn. `startedAt` and `turn` are the turn's. */
+  settled?(conversationId: ConversationId, result: TurnResult, startedAt: number, turn: string | undefined): void;
 }
 
 export const TURN_REQUEST_PREFIX = "turn:";
@@ -234,7 +239,7 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
         }
         const settled = result;
         await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: settled } }), context);
-        deps.settled?.(task.conversationId, settled, task.input.startedAt);
+        deps.settled?.(task.conversationId, settled, task.input.startedAt, task.input.turn);
       },
     },
     abort: async (_task, runtime, context) => {
@@ -273,6 +278,7 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
       origin,
       round,
       ...(agent?.model ? { model: { provider: agent.model.provider, modelId: agent.model.modelId } } : {}),
+      ...(desk.turn ? { turn: desk.turn } : {}),
     });
     if (round > desk.maxRounds) return refused(deps, api, REFUSE_ROUNDS, context);
     const history = await deps.readHistory(origin, desk.excludeTs === null ? {} : { excludeTs: desk.excludeTs }, context);

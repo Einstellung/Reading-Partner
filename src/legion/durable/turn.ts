@@ -25,6 +25,7 @@ import {
   type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import type { BudgetPurpose } from "../../budget";
+import { newRunId } from "../../platform/app/cache-telemetry";
 import {
   ConversationsDoc,
   DeskDoc,
@@ -257,6 +258,8 @@ export interface StartedTurn {
   settled: Promise<TurnResult | undefined>;
   /** `rp.turn`'s start time: the landed rows are stamped after it. */
   startedAt: number;
+  /** The turn log's id for the turn (turn-log.ts), kept with it so a restarted process logs under it. */
+  turn: string;
 }
 
 export class TurnBusy extends Error {
@@ -321,6 +324,7 @@ export async function startTurn(runtime: DurableRuntime, request: TurnRequest, c
   });
   runtime.desks.forget(conversation.id);
   const startedAt = runtime.now();
+  const turn = newRunId();
   await conversation.reset(undefined, context);
   const taskId = await conversation.commit(async (tx) => {
     const desk = await tx.doc(DeskDoc, conversation.id);
@@ -328,6 +332,7 @@ export async function startTurn(runtime: DurableRuntime, request: TurnRequest, c
     desk.purpose = request.purpose ?? "chat";
     desk.maxRounds = request.maxRounds ?? DEFAULT_MAX_ROUNDS;
     desk.excludeTs = request.excludeTs ?? null;
+    desk.turn = turn;
     await configure(tx, conversation.id, {
       model: request.model,
       thinkingLevel: request.thinkingLevel ?? null,
@@ -335,12 +340,12 @@ export async function startTurn(runtime: DurableRuntime, request: TurnRequest, c
     });
     return tx.createTask(
       runtime.turnTask,
-      { content: request.content, startedAt, ...(request.bell ? { bell: request.bell } : {}) },
+      { content: request.content, startedAt, turn, ...(request.bell ? { bell: request.bell } : {}) },
       { ownership: { kind: "conversation" }, background: true },
     );
   }, context);
   const settled = turnSettled(runtime, conversation.id, taskId, context);
-  return { conversation, taskId, settled, startedAt };
+  return { conversation, taskId, settled, startedAt, turn };
 }
 
 /**
@@ -354,7 +359,7 @@ export async function turnInFlight(
   runtime: DurableRuntime,
   key: string,
   context: Context,
-): Promise<Omit<StartedTurn, "taskId"> | undefined> {
+): Promise<Omit<StartedTurn, "taskId" | "turn"> | undefined> {
   const id = (await runtime.harness.snapshot(ConversationsDoc, context))?.threads[key] as ConversationId | undefined;
   if (id === undefined) return undefined;
   const task = await latestTurn(runtime, id, context);

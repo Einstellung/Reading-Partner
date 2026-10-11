@@ -6,7 +6,7 @@
 
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnLogLine } from "../../src/legion/execute/turn-log";
@@ -82,5 +82,13 @@ test("killed mid-text at the door: the half sentence lands in the day's file onc
   expect(log.map((line) => [line.event, (line as { reason?: string }).reason, (line as { conversation?: string }).conversation])).toEqual([
     ["end", "aborted", DOOR.threadId],
   ]);
+  // Under the start line's turn id, so the two pair up.
+  const started = readFileSync(join(root, "child-turn-log.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as TurnLogLine)
+    .filter((line) => line.event === "start");
+  expect(started).toHaveLength(1);
+  expect(log[0]!.turn).toBe(started[0]!.turn);
   await durable.runtime.close(ctx);
 });

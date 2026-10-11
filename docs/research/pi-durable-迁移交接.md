@@ -637,3 +637,13 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 观察：杀进程恢复后 turn-log 的 `end aborted` 行和同回合 `start` 行的 turn id 不同（门口、info、三餐都这样），没查。重开对话时视图停在旧位置、出「Jump to latest」，与「对话不自动跟随」一致。
 - 没走：排练、复述、语音、iPad 模拟器（下一棒）；工具里杀进程（本轮 faux 计划只有 text）。坑 538、539 没用。
 - 环境：dev server PID 12428（`/tmp/pdv2/devpid`）留着在跑，旧的 24214、24327 已杀；模拟器 app 里的凭据已删、`__fauxPlan` 已清；`~/rp-flow` 工作区干净（只有原来就有的 `plugins/openin/openin-untracked-backup/`），第一阶段的旧 `src/dev-faux.ts` 存在 `/tmp/pdv2/dev-faux.old.ts`。容器里多了今天的 briefing、`info-sources.json`（一个关着的 feed 源）、`info-meals.json` 和 settings 里的 Haiku 设置。
+
+## 重开双看门狗与 turn-log 回合号（分支 `dev/pi-durable-2k`，从 `origin/dev/pi-durable-2` 6357b583 起）
+
+2026-10-11，两处上一节留的疑问，都先写测试，都是真的，都修了。
+
+- 关对话再开接上：老 session（detach）和新 session 各挂一个停摆看门狗。停摆时重问只一次、没有失败行，但撤回的插话两边都写进文件（`tests/soul/door-reopen.test.ts` 红）。改成新 session 的 `resume()` 叫被 detach 的老 session 放手：`DrivenBookTurn.unwatch()` 撤它的看门狗，结算时它什么都不写；没人再打开时老 session 照旧看门、写文件。按停止本来就只有调 `stop()` 的那个拿到撤回的插话，同一测试文件里有一条，修前修后都绿。坑 540。
+- 杀进程恢复后 `end aborted` 行另起回合号（`door-kill.test.ts` 让子进程把 turn-log 写进文件后比对，红）。回合号改由 `startTurn` 生成，存进 `rp.desk.turn` 和 `rp.turn` 输入的 `turn`，`begin`、请求钩子、`onSettled` 都用它。升级前起的回合没有这个字段，仍现生成。坑 541。
+
+全量 `scripts/t.sh` 7469 过、1 跳过、0 失败，`bun run typecheck` 过。没上模拟器。
+

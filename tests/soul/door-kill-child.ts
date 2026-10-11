@@ -1,9 +1,12 @@
 // Child process of door-kill.test.ts: start a turn at the door on the device
 // runtime over the app's thread store, and print ARMED once 200 characters of
-// the answer are on the live view, for the parent to SIGKILL it.
+// the answer are on the live view, for the parent to SIGKILL it. Its turn log
+// goes to <root>/child-turn-log.jsonl.
 // Usage: bun door-kill-child.ts <root>
 
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 import { TURN_SECTION } from "../../src/legion/durable/device";
 import { storeThreadFiles } from "../../src/legion/durable/thread-files";
 import { startTurn, textOf } from "../../src/legion/durable/turn";
@@ -21,7 +24,7 @@ const durable = await openReadingDurable({
   threads: storeThreadFiles(fileThreadStore(root)),
   openDesk: async () => [],
   places: { door: doorPlace({ assembled: new Map(), openDesk: async () => [], watching: () => true, card: async () => {} }) },
-  log: () => {},
+  log: (line) => appendFileSync(join(root, "child-turn-log.jsonl"), `${JSON.stringify(line)}\n`),
 });
 const turn = await startTurn(
   durable.runtime,
