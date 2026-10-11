@@ -18,6 +18,7 @@ import {
   oneThreadOrigin,
   oneThreadPlace,
   oneThreadTurn,
+  putOneThreadCard,
   type AssembledThreadTurn,
   type OneThreadOrigin,
 } from "../turn/one-thread-place";
@@ -44,6 +45,13 @@ export const retellAssemblies = new Map<string, AssembledThreadTurn>();
 export interface RetellPlaceDeps {
   assembled?: Map<string, AssembledThreadTurn>;
   openDesk?: (retellId: string, context: Context) => Promise<readonly AgentTool[]>;
+  watching?: (retellId: string) => boolean;
+  card?: (retellId: string, ts: number, text: string) => Promise<void>;
+}
+
+/** The card for a retell reply nobody saw: it opens the retell in its topic. */
+async function putRetellCard(retellId: string, ts: number, text: string): Promise<void> {
+  await putOneThreadCard({ id: retellId, ts, text, origin: { place: "retell", retellId } });
 }
 
 async function openRetellDesk(retellId: string): Promise<readonly AgentTool[]> {
@@ -81,6 +89,8 @@ export function retellPlace(deps: RetellPlaceDeps = {}): PlaceFactory {
     openDesk: deps.openDesk ?? openRetellDesk,
     // The opening turn's line is the kickoff; every later one is sent after it.
     history: (said, lineInFile) => (lineInFile ? [{ role: "user", text: RETELL_KICKOFF }, ...said] : said),
+    ...(deps.watching ? { watching: deps.watching } : {}),
+    card: deps.card ?? putRetellCard,
   });
 }
 

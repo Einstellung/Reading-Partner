@@ -73,6 +73,8 @@ export interface PhoneBookOpen {
   name: string;
   topicId: string;
   path: string;
+  /** An EPUB's conversation to open over the page once the book is up: a box card followed. */
+  threadId?: string;
 }
 
 export default function PhoneShelf(props: {

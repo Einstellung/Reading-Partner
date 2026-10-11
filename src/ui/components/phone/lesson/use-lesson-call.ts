@@ -46,7 +46,8 @@ import {
   type ResumedBookTurn,
 } from "../../../../reading/turn/book-turn-rows";
 import { withTurnRows } from "../../../../reading/turn/call-state";
-import { splitAssembled, type BookOrigin } from "../../../../reading/turn/durable-book";
+import { bookThreadKey, splitAssembled, type BookOrigin } from "../../../../reading/turn/durable-book";
+import { holdDetached, releaseDetached } from "../../../../reading/turn/detached-turns";
 import { readingDurable, setBookWatching } from "../../../../reading/turn/durable-runtime";
 import { buildReadingTurn } from "../../../../reading/turn/turn";
 import { gateSteers } from "../../../../reading/turn/steer-gate";
@@ -70,9 +71,14 @@ interface LessonTurn {
   // Its ending has been dealt with: by the ending itself, or by a stop or a
   // leave that came while it was still being assembled.
   settled: boolean;
-  // The screen went away: the ending files what the reader said and draws
-  // nothing.
+  // The screen went away and the turn runs on: the ending files what the
+  // reader said and draws nothing, and opens no next turn.
   gone: boolean;
+  // Gone, and the lesson opened again has joined the turn: it watches and
+  // files for it (docs/pitfall/540).
+  released: boolean;
+  // Called once its ending has been dealt with.
+  onSettled?: () => void;
 }
 
 // A line into the running turn. It stays among the unsent lines until a run
@@ -243,6 +249,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
         unsent: [],
         settled: false,
         gone: false,
+        released: false,
       };
       liveRef.current = live;
       setStreaming(true);
@@ -300,6 +307,8 @@ export function useLessonCall(book: LessonBook): LessonCall {
       const finish = (end: BookTurnEnd) => {
         if (live.settled) return;
         live.settled = true;
+        live.onSettled?.();
+        if (live.released) return;
         const withdrawn = end.kind === "stopped" || end.kind === "stalled" ? end.steers : [];
         const steers = withdrawn.map((steer) => ({ text: steer.text, ts: steer.ts ?? Date.now() }));
         // Everything the reader said that no run took, in the order it was said.
@@ -359,12 +368,6 @@ export function useLessonCall(book: LessonBook): LessonCall {
         draw([...kept, failureRow(end.kind === "refused" ? "refusal" : "error", end.message, kept), ...tail]);
       };
 
-      // No box card for a lesson's reply (reading/turn/durable-book.ts): the
-      // lesson is on screen while its turn runs, and leaving it stops the turn.
-      // Held for the turn rather than the screen, so what a stop on the way
-      // out lands is not taken for a reply nobody saw.
-      const unwatch = setBookWatching((origin) => origin.bookId === bookId && origin.threadId === id);
-
       const onRows = (projected: ThreadMessage[]) => {
         if (liveRef.current !== live) return;
         draw(withUnsent(projected.length > 0 ? projected : [placeholder]));
@@ -372,8 +375,9 @@ export function useLessonCall(book: LessonBook): LessonCall {
       };
       // The turn's handle goes on the live turn, and its ending is drawn when it comes.
       const hold = async (driven: DrivenBookTurn) => {
-        if (liveRef.current !== live) {
-          // Stopped, or the reader left, while the turn was starting.
+        if (live.released) driven.unwatch();
+        if (liveRef.current !== live && !live.gone) {
+          // Stopped while the turn was starting. A lesson closed meanwhile lets it run.
           driven.stop();
         } else {
           live.driven = gateSteers(driven);
@@ -387,8 +391,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
         resumed
           .follow(onRows)
           .then(hold)
-          .catch((e: unknown) => finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) }))
-          .finally(unwatch);
+          .catch((e: unknown) => finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) }));
         return;
       }
 
@@ -473,8 +476,6 @@ export function useLessonCall(book: LessonBook): LessonCall {
           await hold(driven);
         } catch (e) {
           finish({ kind: "failed", rows: [], message: e instanceof Error ? e.message : String(e) });
-        } finally {
-          unwatch();
         }
       })();
     },
@@ -544,22 +545,24 @@ export function useLessonCall(book: LessonBook): LessonCall {
     if (fileLines(live.threadId, live.unsent)) runTurnRef.current?.();
   }, [fileLines]);
 
-  // The view is going away. The turn is stopped — the runtime lands what it
-  // had said — and what the reader said into it still goes into the thread
-  // file; nothing is left on screen to answer it in.
-  const abort = useCallback(() => {
+  // The view is going away and the turn is not stopped (only Stop stops): it
+  // runs on out of sight — one still being assembled is sent — and lands in
+  // the thread file, with a box card when nobody has the lesson open then.
+  // What the reader said into it that no run took is filed when it ends; no
+  // next turn is opened for it. Opening the lesson again joins the turn, and
+  // this view lets go of it then.
+  const detach = useCallback(() => {
     const live = liveRef.current;
     if (!live) return;
     live.gone = true;
     liveRef.current = null;
-    live.controller.abort();
-    if (live.driven) {
-      live.driven.stop();
-      return;
-    }
-    live.settled = true;
-    fileLines(live.threadId, live.unsent);
-  }, [fileLines]);
+    setStreaming(false);
+    const settled = holdDetached(bookThreadKey({ home: bookId, threadId: live.threadId }), () => {
+      live.released = true;
+      live.driven?.unwatch();
+    });
+    live.onSettled = settled;
+  }, [bookId]);
 
   // Open the paper and the conversation about it. The thread comes first so a
   // lesson already under way is on screen while the PDF is still being read.
@@ -614,7 +617,11 @@ export function useLessonCall(book: LessonBook): LessonCall {
       if (pending && thread && thread.messages.length > 0 && !liveRef.current) {
         const looking: Promise<void> = (async () => {
           const resumed = await resumedBookTurn(await pending, { home: bookId, threadId: id });
-          if (!cancelled && resumed && !liveRef.current) runTurnRef.current?.(0, resumed);
+          if (!cancelled && resumed && !liveRef.current) {
+            // The lesson closed on this turn lets go of it (docs/pitfall/540).
+            releaseDetached(bookThreadKey({ home: bookId, threadId: id }));
+            runTurnRef.current?.(0, resumed);
+          }
         })()
           .catch((e: unknown) => console.warn("could not look for a turn in flight", e))
           .finally(() => {
@@ -667,9 +674,16 @@ export function useLessonCall(book: LessonBook): LessonCall {
     };
   }, [asideThreadId, bookId, setMessages]);
 
-  // Leaving stops the turn. Nothing is distilled on the way out: what a lesson
-  // leaves behind has not been decided (docs/74).
-  useEffect(() => () => abort(), [bookId, abort]);
+  // Leaving does not stop the turn (detach). Nothing is distilled on the way
+  // out: what a lesson leaves behind has not been decided (docs/74).
+  useEffect(() => () => detach(), [bookId, detach]);
+
+  // While the lesson is open its thread is watched: a reply that lands then
+  // puts no box card (reading/turn/durable-book.ts). Closed, it is nobody's.
+  useEffect(
+    () => setBookWatching((origin) => origin.bookId === bookId && origin.threadId !== "" && origin.threadId === threadIdRef.current),
+    [bookId],
+  );
 
   const reload = useCallback(() => {
     const id = threadIdRef.current;

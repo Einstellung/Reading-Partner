@@ -121,3 +121,8 @@ test("a swipe dismisses only when it is sideways and long enough", () => {
   // A finger scrolling the column travels further down than across.
   expect(isDismissSwipe(80, 120)).toBe(false);
 });
+
+test("a coaching or retell card says where it came from", () => {
+  expect(originLabel({ place: "talk", outlineId: "o1" }, null)).toBe("Talk coach");
+  expect(originLabel({ place: "retell", retellId: "r1" }, null)).toBe("Retell");
+});

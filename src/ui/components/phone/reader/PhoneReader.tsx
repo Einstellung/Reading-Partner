@@ -96,6 +96,8 @@ export default function PhoneReader(props: {
   onOverlayChange?(dismiss: (() => void) | null): void;
   onBack: () => void;
   io?: PhoneBookIo;
+  // A conversation to open over the page once the book is up (a box card followed).
+  threadId?: string;
 }) {
   const t = useT();
   const { Pane, bookId, name, topicId, path } = props;
@@ -160,6 +162,7 @@ export default function PhoneReader(props: {
     settingsRef: props.settingsRef,
     pushToast: props.pushToast,
     ...(props.onOverlayChange ? { onOverlayChange: props.onOverlayChange } : {}),
+    ...(props.threadId ? { openThreadId: props.threadId } : {}),
     book,
     stats,
     marksRef,

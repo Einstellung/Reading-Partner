@@ -51,10 +51,12 @@ export default {
   "box.originDoor": "En la puerta · {date}",
   "box.originBriefing": "Resumen · {date}",
   "box.originMeals": "Comidas",
+  "box.originTalk": "Entrenador de charla",
+  "box.originRetell": "Relato",
+  "box.notOnPhone": "Esto se abre en el iPad o en el escritorio.",
   "box.label": "La bandeja",
   "box.waiting": { one: "La bandeja, {count} pendiente", other: "La bandeja, {count} pendientes" },
   "box.empty": "No hay nada en la bandeja.",
-  "box.notReadable": "Esto está dentro de un libro. Ábrelo en el iPad o en el escritorio.",
 
   "figure.label": "Fig. {id} · p.{page}",
   "figure.number": "Fig. {id}",

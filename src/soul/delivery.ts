@@ -190,5 +190,7 @@ export function originLabel(origin: BoxOrigin): string {
   }
   if (origin.place === "briefing") return `the briefing of ${origin.date}`;
   if (origin.place === "meals") return "the meals conversation";
+  if (origin.place === "talk") return "coaching a talk";
+  if (origin.place === "retell") return "a retell";
   return `at the door, ${origin.date}`;
 }

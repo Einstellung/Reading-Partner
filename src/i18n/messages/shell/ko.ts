@@ -51,10 +51,12 @@ export default {
   "box.originDoor": "문 앞에서 · {date}",
   "box.originBriefing": "브리핑 · {date}",
   "box.originMeals": "식단",
+  "box.originTalk": "발표 코치",
+  "box.originRetell": "다시 말하기",
+  "box.notOnPhone": "이 항목은 iPad나 데스크톱에서 열립니다.",
   "box.label": "박스",
   "box.waiting": { other: "박스, {count}개 대기 중" },
   "box.empty": "박스에 아무것도 없습니다.",
-  "box.notReadable": "이 항목은 책 안에 있습니다. iPad나 데스크에서 열어 주세요.",
 
   "figure.label": "그림 {id} · {page}쪽",
   "figure.number": "그림 {id}",

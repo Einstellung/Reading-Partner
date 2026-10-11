@@ -51,10 +51,12 @@ export default {
   "box.originDoor": "在门口 · {date}",
   "box.originBriefing": "简报 · {date}",
   "box.originMeals": "三餐",
+  "box.originTalk": "演讲教练",
+  "box.originRetell": "复述",
+  "box.notOnPhone": "这一条请在 iPad 或桌面端打开。",
   "box.label": "盒子",
   "box.waiting": { other: "盒子，{count} 件待处理" },
   "box.empty": "盒子里什么都没有。",
-  "box.notReadable": "这一条在一本书里，请在 iPad 或桌面端打开。",
 
   "figure.label": "图 {id} · 第{page}页",
   "figure.number": "图 {id}",

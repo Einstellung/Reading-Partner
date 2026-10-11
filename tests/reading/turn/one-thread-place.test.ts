@@ -22,7 +22,12 @@ import { prepareRetellTurn, retellConversationKey, retellOrigin, retellPlace, RE
 import { RETELL_KICKOFF } from "../../../src/reading/retell/prompt";
 import type { CallRow } from "../../../src/reading/turn/call-state";
 import { openReadingDurable, type ReadingDurable } from "../../../src/reading/turn/durable-runtime";
-import type { AssembledThreadTurn, BuiltThreadTurn, OneThreadOrigin } from "../../../src/reading/turn/one-thread-place";
+import {
+  watchOneThread,
+  type AssembledThreadTurn,
+  type BuiltThreadTurn,
+  type OneThreadOrigin,
+} from "../../../src/reading/turn/one-thread-place";
 import { createPlaceSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../src/reading/turn/place-session";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fakeThreads } from "./support/durable-threads";
@@ -37,13 +42,15 @@ interface Case {
   place: string;
   key: string;
   origin: OneThreadOrigin;
-  factory(assembled: Map<string, AssembledThreadTurn>): PlaceFactory;
+  factory(assembled: Map<string, AssembledThreadTurn>, card: Card): PlaceFactory;
   /** The turn's messages before the reader's line, as the domain's builder answers them. */
   before: BuiltThreadTurn["messages"];
   /** The roles a turn resumed after a restart sends before its line. */
   restartHistory: ("user" | "assistant")[];
   prepare(assembled: Map<string, AssembledThreadTurn>, built: BuiltThreadTurn, lineTs?: number): Promise<PlaceAssembled>;
 }
+
+type Card = (id: string, ts: number, text: string) => Promise<void>;
 
 const built = (messages: BuiltThreadTurn["messages"]): BuiltThreadTurn => ({
   systemPrompt: "You are the coach.",
@@ -59,7 +66,7 @@ const CASES: Case[] = [
     place: COACH_PLACE,
     key: coachConversationKey("o1"),
     origin: coachOrigin("o1"),
-    factory: (assembled) => coachPlace({ assembled, openDesk: async () => [] }),
+    factory: (assembled, card) => coachPlace({ assembled, openDesk: async () => [], card }),
     before: [{ role: "ai", text: EARLIER.text }],
     restartHistory: ["assistant"],
     prepare: (assembled, turn, lineTs) =>
@@ -73,7 +80,7 @@ const CASES: Case[] = [
     place: RETELL_PLACE,
     key: retellConversationKey("r1"),
     origin: retellOrigin("r1"),
-    factory: (assembled) => retellPlace({ assembled, openDesk: async () => [] }),
+    factory: (assembled, card) => retellPlace({ assembled, openDesk: async () => [], card }),
     before: [
       { role: "user", text: RETELL_KICKOFF },
       { role: "ai", text: EARLIER.text },
@@ -88,6 +95,7 @@ const CASES: Case[] = [
 ];
 
 async function rig(c: Case, replies: string[], options: { tokensPerSecond?: number; file?: ThreadMessage[] } = {}) {
+  const cards: { id: string; ts: number; text: string }[] = [];
   const faux = fauxProvider({
     tokensPerSecond: options.tokensPerSecond ?? 400,
     tokenSize: { min: 2, max: 3 },
@@ -104,10 +112,10 @@ async function rig(c: Case, replies: string[], options: { tokensPerSecond?: numb
     models,
     threads: file.threads,
     openDesk: async () => [],
-    places: { [c.place]: c.factory(assembled) },
+    places: { [c.place]: c.factory(assembled, async (id, ts, text) => void cards.push({ id, ts, text })) },
     log: () => {},
   });
-  return { durable, faux, file, assembled };
+  return { durable, faux, file, assembled, cards };
 }
 
 function session(c: Case, durable: ReadingDurable, assembled: Map<string, AssembledThreadTurn>, options: { line?: boolean } = {}) {
@@ -212,6 +220,55 @@ for (const c of CASES) {
     // Read off the file without the turn's line: what was said before it, then the reply that has landed.
     const history = await durable.places.get(c.place)!.readHistory(c.origin, { excludeTs: LINE.ts }, ctx);
     expect(history.map((m) => m.role)).toEqual([...c.restartHistory, "assistant"]);
+    expect(faux.state.callCount).toBe(1);
+    await durable.runtime.close(ctx);
+  });
+
+  // Closing the view is not Stop (docs/soul/87, 第二阶段「关对话不停回合」).
+  test(`${c.name}: closed mid-answer, the turn runs on, lands once and puts one box card`, async () => {
+    const reply = LONG.slice(0, 500);
+    const { durable, faux, file, assembled, cards } = await rig(c, [reply], { tokensPerSecond: 100 });
+    const open = watchOneThread(c.key);
+    const view = session(c, durable, assembled);
+    view.s.ask();
+    await view.streaming;
+    const drawn = view.screen().length;
+    open();
+    view.s.detach();
+    await view.s.idle();
+    expect(file.messages.filter((m) => m.role === "ai" && m.text === reply)).toHaveLength(1);
+    expect(cards).toEqual([{ id: c.origin.id, ts: file.messages[file.messages.length - 1]!.ts, text: reply }]);
+    // The closed view draws nothing more.
+    expect(view.screen().length).toBe(drawn);
+    expect(view.screen().some((r) => r.text === reply)).toBe(false);
+    expect(faux.state.callCount).toBe(1);
+    await durable.runtime.close(ctx);
+  });
+
+  test(`${c.name}: closed and opened again mid-answer, the new view follows the turn; it lands once, no card`, async () => {
+    const reply = LONG.slice(0, 500);
+    const { durable, faux, file, assembled, cards } = await rig(c, [reply], { tokensPerSecond: 100 });
+    const first = watchOneThread(c.key);
+    const view = session(c, durable, assembled);
+    view.s.ask();
+    await view.streaming;
+    first();
+    view.s.detach();
+    const second = watchOneThread(c.key);
+    const again = session(c, durable, assembled);
+    const ended = again.ended();
+    expect(await again.s.resume()).toBe(true);
+    await again.streaming;
+    expect(again.s.running()).toBe(true);
+    await ended;
+    second();
+    expect(again.screen().map((r) => [r.role, r.text])).toEqual([
+      ["ai", EARLIER.text],
+      ["user", LINE.text],
+      ["ai", reply],
+    ]);
+    expect(file.messages.filter((m) => m.role === "ai" && m.text === reply)).toHaveLength(1);
+    expect(cards).toEqual([]);
     expect(faux.state.callCount).toBe(1);
     await durable.runtime.close(ctx);
   });

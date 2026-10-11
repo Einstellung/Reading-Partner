@@ -32,6 +32,8 @@ import { getThread, type ThreadMessage } from "./platform/app/threads";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { defaultModelTakesImages } from "./ai";
+import { loadTalkOutline } from "./reading/talk";
+import { loadRetell } from "./reading/retell";
 import { prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
@@ -102,7 +104,7 @@ import type { ReaderShell } from "./reading/session/shell";
 import { keepReadingPosition } from "./reading/reading-position";
 import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
-import LibraryScreen from "./ui/components/library/LibraryScreen";
+import LibraryScreen, { type StudyOpen } from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
@@ -226,6 +228,9 @@ export default function App() {
   // has twenty books, a moment before their most recent one appears in its place.
   const [topics, setTopics] = useState<Topic[] | null>(null);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
+  // A coaching conversation or a retell a box card asked for (LibraryScreen opens it).
+  const [studyOpen, setStudyOpen] = useState<StudyOpen | null>(null);
+  const clearStudyOpen = useCallback(() => setStudyOpen(null), []);
 
   // The launch layer in front of the library, only meaningful when not in the
   // reader. InfoHome renders every screen but the library.
@@ -1204,6 +1209,24 @@ export default function App() {
         if (inReader) closeReader();
         setHomeScreen("meals");
       },
+      // A talk's coaching and a retell are drawn in their topic, read off the
+      // thing itself; one that has gone since opens nothing.
+      openCoach: async (outlineId: string) => {
+        const topicId = (await loadTalkOutline(outlineId).catch(() => null))?.topicId;
+        if (!topicId) return;
+        if (inReader) closeReader();
+        setActiveTopicId(topicId);
+        setHomeScreen("library");
+        setStudyOpen({ kind: "coach", topicId, id: outlineId });
+      },
+      openRetell: async (retellId: string) => {
+        const topicId = (await loadRetell(retellId).catch(() => null))?.topicId;
+        if (!topicId) return;
+        if (inReader) closeReader();
+        setActiveTopicId(topicId);
+        setHomeScreen("library");
+        setStudyOpen({ kind: "retell", topicId, id: retellId });
+      },
       // An intake card's 「打开阅读」: the document was attached a moment ago,
       // so the shelf is read fresh rather than out of the state above.
       openDocument: async (doc: { hash: string; topicId: string }) => {
@@ -1562,6 +1585,8 @@ export default function App() {
               onTopicsChanged={refreshTopics}
               onSay={(line) => pushToast("error", line)}
               onTell={(line) => pushToast("info", line)}
+              open={studyOpen}
+              onOpened={clearStudyOpen}
             />
           )}
         </div>

@@ -15,6 +15,7 @@ import {
   oneThreadOrigin,
   oneThreadPlace,
   oneThreadTurn,
+  putOneThreadCard,
   type AssembledThreadTurn,
   type OneThreadOrigin,
 } from "../turn/one-thread-place";
@@ -39,6 +40,13 @@ export const coachAssemblies = new Map<string, AssembledThreadTurn>();
 export interface CoachPlaceDeps {
   assembled?: Map<string, AssembledThreadTurn>;
   openDesk?: (outlineId: string, context: Context) => Promise<readonly AgentTool[]>;
+  watching?: (outlineId: string) => boolean;
+  card?: (outlineId: string, ts: number, text: string) => Promise<void>;
+}
+
+/** The card for a coaching reply nobody saw: it opens the talk's conversation in its topic. */
+async function putCoachCard(outlineId: string, ts: number, text: string): Promise<void> {
+  await putOneThreadCard({ id: outlineId, ts, text, origin: { place: "talk", outlineId } });
 }
 
 async function openCoachDesk(outlineId: string): Promise<readonly AgentTool[]> {
@@ -60,6 +68,8 @@ export function coachPlace(deps: CoachPlaceDeps = {}): PlaceFactory {
     surface: "talk",
     assembled: deps.assembled ?? coachAssemblies,
     openDesk: deps.openDesk ?? openCoachDesk,
+    ...(deps.watching ? { watching: deps.watching } : {}),
+    card: deps.card ?? putCoachCard,
   });
 }
 

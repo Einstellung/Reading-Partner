@@ -14,8 +14,8 @@
 // followed the same way. Closing the conversation does not stop its turn
 // (detach): it runs on out of sight and lands, and nothing more is drawn; the
 // conversation opened again follows it, and the closed one lets go of it then
-// (no stall watch, nothing filed). Leaving (the coach, a retell not yet
-// begun) stops it, its half sentence lands, and nothing more is drawn.
+// (no stall watch, nothing filed). Every surface closes this way; only Stop
+// stops. `leave` (stop, and draw nothing more) is left for tests to tear down.
 //
 // A bell rung for the conversation while it is open runs here too
 // (place-bell.ts): its turn streams in the open conversation, can be stopped
@@ -33,6 +33,7 @@ import { catalogDescribe, type DeviceDurable } from "../../legion/durable/device
 import type { AiSurface } from "../../platform/app/cache-telemetry";
 import { afterStall, drivePlaceTurn, resumedPlaceRows, type BookTurnEnd, type DrivenBookTurn } from "./book-turn-rows";
 import { mergeTurnRows, type CallRow } from "./call-state";
+import { holdDetached, releaseDetached } from "./detached-turns";
 import type { PlaceTurnRequest, StallOptions } from "./durable-turn";
 
 /** A turn assembled over the conversation as it stands. */
@@ -75,7 +76,7 @@ export interface PlaceSession {
   /** The reader said `text` at `ts`: into the running turn. False when none is running. */
   say(text: string, ts: number): boolean;
   stop(): void;
-  /** The surface is going away: the turn is stopped and nothing more is drawn. */
+  /** The turn is stopped and nothing more is drawn. No surface closes this way (detach); tests tear down with it. */
   leave(): void;
   /**
    * The surface is going away and the turn is not stopped: it runs on out of
@@ -121,14 +122,6 @@ export function registerOpenSession(key: string, session: PlaceSession): () => v
     if (openSessions.get(key) === session) openSessions.delete(key);
   };
 }
-
-/**
- * A detached session's turn, by conversation key, until the conversation is
- * opened again: the session that joins the turn calls it, and the detached one
- * lets go of the turn — no stall watch, nothing filed — so a stall is cut and
- * asked again once and a withdrawn line is filed once (docs/pitfall/540).
- */
-const detachedTurns = new Map<string, () => void>();
 
 /** The session a surface has open on the conversation `key`, if any. */
 export function openPlaceSession(key: string): PlaceSession | undefined {
@@ -430,15 +423,12 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       const turn = live;
       if (!turn) return;
       turn.gone = true;
-      const release = () => {
-        if (detachedTurns.get(deps.key) === release) detachedTurns.delete(deps.key);
+      // Another session joining the turn takes over its stall watch and filing (docs/pitfall/540).
+      const settled = holdDetached(deps.key, () => {
         turn.released = true;
         turn.driven?.unwatch();
-      };
-      detachedTurns.set(deps.key, release);
-      void session.idle().then(() => {
-        if (detachedTurns.get(deps.key) === release) detachedTurns.delete(deps.key);
       });
+      void session.idle().then(settled);
     },
     async resume() {
       if (live) return false;
@@ -446,7 +436,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       if (!durable) return false;
       const found = await resumedPlaceRows(await durable, deps.key, deps.surface, BACKGROUND_CONTEXT, deps.stall);
       if (!found || live) return false;
-      detachedTurns.get(deps.key)?.();
+      releaseDetached(deps.key);
       const turn = open(found.after);
       follow(turn, 0, undefined, (onRows) => found.follow(onRows));
       return true;

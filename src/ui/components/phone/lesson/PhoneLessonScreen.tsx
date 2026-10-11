@@ -1,10 +1,11 @@
 // The lesson screen with a lesson running in it: the hook that holds the turn
 // (use-lesson-call.ts) bound to the screen that draws it (PhoneLesson.tsx).
 //
-// Two files and not one so the turn starts when the screen appears and stops
-// when it goes: the shell renders this only while the lesson is the screen, so
-// mounting is opening the paper and unmounting is leaving it. PhoneApp would
-// have to hold a hook for a screen that is not there.
+// Two files and not one so the lesson opens when the screen appears and lets
+// go when it goes: the shell renders this only while the lesson is the screen,
+// so mounting is opening the paper and unmounting is leaving it. Leaving does
+// not stop a turn: it lands out of sight and puts a box card (use-lesson-call.ts).
+// PhoneApp would have to hold a hook for a screen that is not there.
 //
 // An aside is the same arrangement one level in (docs/74). It replaces the
 // lesson's view rather than sitting beside it, and runs its own turn on its own

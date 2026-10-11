@@ -84,6 +84,8 @@ export interface BookLessonArgs {
   marksRef: { readonly current: readonly Annotation[] };
   removeMark(id: string): void;
   gate: ViewGate<FlowReaderView>;
+  // A conversation to open over the page once the book is up: a box card followed.
+  openThreadId?: string;
 }
 
 /** A passage conversation opened on a mark and left with nothing asked. */
@@ -259,6 +261,23 @@ export function useBookLesson(args: BookLessonArgs) {
     dropThread(c.annotationId, c.threadId);
     removeMark(c.annotationId);
   }, [showReading, dropThread, removeMark]);
+
+  // A box card's conversation, opened once the book is up. One the store does
+  // not hold (deleted since) opens nothing; the page is still the book.
+  const { openThreadId } = args;
+  useEffect(() => {
+    if (!book || !openThreadId) return;
+    let alive = true;
+    void loadThreads(bookId)
+      .then(() => {
+        const thread = alive ? getThread(bookId, openThreadId) : undefined;
+        if (thread) reopenThread(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
+      })
+      .catch((e: unknown) => console.warn("threads did not load", e));
+    return () => {
+      alive = false;
+    };
+  }, [book, bookId, openThreadId, reopenThread]);
 
   const onScreen = lessonOnScreen(call);
   useEffect(() => {

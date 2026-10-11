@@ -73,6 +73,10 @@ export function originLabel(origin: BoxOrigin, title: string | null): string {
       return t("shell.box.originBriefing", { date: origin.date });
     case "meals":
       return t("shell.box.originMeals");
+    case "talk":
+      return t("shell.box.originTalk");
+    case "retell":
+      return t("shell.box.originRetell");
   }
 }
 

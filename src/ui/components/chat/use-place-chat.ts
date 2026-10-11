@@ -6,16 +6,24 @@
 //
 // A line said while a turn runs goes into it (docs/72). Stop keeps the half
 // sentence and the receipts. A card raised during a turn goes above the
-// turn's rows and into the file. Leaving stops the turn — its half sentence
-// lands — unless the surface keeps it running out of sight; it is then only
-// landed, and the surface hears when.
+// turn's rows and into the file. Leaving does not stop the turn (the place
+// session's detach): it runs on out of sight and lands, a reply nobody had
+// open puts Lumen's box card (reading/turn/one-thread-place.ts), and opening
+// the conversation again follows the turn. Only Stop stops.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { appendMessage } from "../../../platform/app/threads";
 import type { AiSurface } from "../../../platform/app/cache-telemetry";
 import { readingDurable } from "../../../reading/turn/durable-runtime";
 import type { CallRow } from "../../../reading/turn/call-state";
-import { createPlaceSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
+import { watchOneThread } from "../../../reading/turn/one-thread-place";
+import {
+  createPlaceSession,
+  registerOpenSession,
+  withPlaceTurnRows,
+  type PlaceAssembled,
+  type PlaceSession,
+} from "../../../reading/turn/place-session";
 import { cardRow, nextCardId, toPersistedCardPart, type CardPayload } from "./chatParts";
 import type { ThreadMessage as UiMessage } from "./types";
 
@@ -30,9 +38,9 @@ export interface PlaceChatConfig {
   canAsk(): boolean;
   /** Assemble a turn on the conversation as it stands: the rows on screen, none streaming or queued. */
   assemble(signal: AbortSignal, rows: readonly UiMessage[]): Promise<PlaceAssembled>;
-  /** Called on every leave, saying whether a turn is running: true keeps it running out of sight. */
-  keepOnLeave?(running: boolean): boolean;
-  /** A turn kept running out of sight has landed. */
+  /** Called on every leave, saying whether a turn is running: true asks to hear when it has landed (settledAway). */
+  onLeave?(running: boolean): boolean;
+  /** The turn left running out of sight has landed. */
   settledAway?(): void;
 }
 
@@ -83,7 +91,6 @@ export function usePlaceChat(config: PlaceChatConfig): PlaceChat {
     // Leaving is this conversation's, not whichever one the surface has moved on to.
     const leaving = configRef.current;
     let gone = false;
-    let away = false;
     const session = createPlaceSession({
       durable: readingDurable,
       key: conversation,
@@ -102,28 +109,23 @@ export function usePlaceChat(config: PlaceChatConfig): PlaceChat {
         for (const line of lines) appendMessage(storeKey, threadId, { role: "user", text: line.text, ts: line.ts });
       },
       streaming: (on) => {
-        if (!gone) {
-          setStreaming(on);
-          return;
-        }
-        // Out of sight, the turn has landed — unless its ending opened another (a stall asked again).
-        if (!on && away)
-          queueMicrotask(() => {
-            if (!away || session.running()) return;
-            away = false;
-            leaving.settledAway?.();
-          });
+        if (!gone) setStreaming(on);
       },
     });
     sessionRef.current = session;
+    // A bell for this conversation runs here while it is open (place-bell.ts),
+    // and a reply that lands while it is open puts no box card.
+    const closed = registerOpenSession(conversation, session);
+    const unwatch = watchOneThread(conversation);
     return () => {
       gone = true;
       sessionRef.current = null;
-      if (leaving.keepOnLeave?.(session.running()) && session.running()) {
-        away = true;
-        return;
-      }
-      session.leave();
+      closed();
+      unwatch();
+      const running = session.running();
+      const hear = leaving.onLeave?.(running) ?? false;
+      session.detach();
+      if (hear && running) void session.idle().then(() => leaving.settledAway?.());
     };
   }, [storeKey, threadId, conversation, surface, setMessages]);
 

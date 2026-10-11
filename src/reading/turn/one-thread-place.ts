@@ -7,11 +7,13 @@
 //
 // The turn this process assembled — its history and its desk's tools, the
 // card-raising ones among them — is used while it is there, as at the door
-// (soul/door-durable.ts). These surfaces never put a box card: a reply that
-// lands with nobody looking is in the file for the next time the view opens,
-// as it always was.
+// (soul/door-durable.ts). Closing the view does not stop its turn (the place
+// session's detach): a reply that lands with nobody looking puts Lumen's box
+// card, which opens the view again (lumen/box-jump.ts).
 
 import type { Context } from "@earendil-works/chord";
+import { appBox, type BoxOrigin, type BoxStore } from "../../box";
+import { coverOf } from "../../soul/bell";
 import { toPiMessages } from "../../ai/providers";
 import type { DeskMessage } from "../../desk";
 import type { Place, PlaceFactory, PlaceShared } from "../../legion/durable/device";
@@ -46,6 +48,51 @@ export interface OneThreadPlaceSpec {
    * row of the file). The file's lines as they are unless said.
    */
   history?(said: DeskMessage[], lineInFile: boolean): DeskMessage[];
+  /** Whether the reader has the thing's conversation open as a turn lands; the open views' word unless said. */
+  watching?(id: string): boolean;
+  /** The box card for a reply nobody saw; none unless said. */
+  card?(id: string, ts: number, text: string): Promise<void>;
+}
+
+const watched = new Map<string, number>();
+
+/** A view has the conversation `key` open; the returned function says it closed. */
+export function watchOneThread(key: string): () => void {
+  watched.set(key, (watched.get(key) ?? 0) + 1);
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    const n = (watched.get(key) ?? 1) - 1;
+    if (n > 0) watched.set(key, n);
+    else watched.delete(key);
+  };
+}
+
+/** Whether a view has the conversation `key` open now. */
+export function oneThreadWatchedNow(key: string): boolean {
+  return watched.has(key);
+}
+
+/**
+ * The box card for a reply that landed in a one-thread conversation nobody had
+ * open: named by the thread and the moment, as every turn's is (turn-box.ts).
+ * Never throws: the reply is already written.
+ */
+export async function putOneThreadCard(
+  input: { id: string; ts: number; text: string; origin: BoxOrigin },
+  box: BoxStore = appBox(),
+): Promise<void> {
+  await box
+    .put({
+      boxId: `${input.id}:${input.ts}`,
+      source: "turn",
+      cover: coverOf(input.text),
+      origin: input.origin,
+      needsDecision: false,
+      at: input.ts,
+    })
+    .catch((e: unknown) => console.warn("a reply landed but its box item would not write", e));
 }
 
 export function oneThreadOrigin(place: string, id: string): OneThreadOrigin {
@@ -78,8 +125,10 @@ export function oneThreadPlace(spec: OneThreadPlaceSpec): PlaceFactory {
       describe: shared.describe,
       origin: own,
       address,
-      watching: () => true,
-      card: async () => {},
+      watching: (o) => (spec.watching ?? ((id) => oneThreadWatchedNow(oneThreadKey(spec.place, id))))(o.id),
+      card: async (o, ts, text) => {
+        await spec.card?.(o.id, ts, text);
+      },
     }),
     readHistory: async (origin, options) => {
       const o = own(origin);

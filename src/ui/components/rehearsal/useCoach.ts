@@ -170,7 +170,8 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
     };
   }, [outlineId, passKey, running, resume, ask, setMessages, t]);
 
-  // Leaving stops the turn; its half sentence lands (the place session). Nothing
+  // Leaving does not stop the turn: it lands out of sight and, with the view
+  // closed, puts a box card (use-place-chat.ts). Nothing
   // is distilled here: what the coach hears is the reader giving a talk rather
   // than answering for a chapter, and what an observation would be made of has
   // not been decided (docs/44).

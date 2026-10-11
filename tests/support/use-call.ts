@@ -108,6 +108,8 @@ export interface FakeBookTurn {
   /** The inbox as the first stop read it: what the runtime's stop withdraws (legion/durable/turn.ts). */
   withdrawn?: { text: string; ts: number }[];
   stops: number;
+  /** How many times a follower let go of its stall watch (docs/pitfall/540). */
+  unwatches: number;
 }
 
 /**
@@ -135,6 +137,7 @@ export function fakeBookTurns() {
       taking: true,
       inbox: [],
       stops: 0,
+      unwatches: 0,
     };
     turns.push(turn);
     return {
@@ -148,7 +151,9 @@ export function fakeBookTurns() {
         turn.stops += 1;
         turn.withdrawn ??= turn.inbox.slice();
       },
-      unwatch: () => {},
+      unwatch: () => {
+        turn.unwatches += 1;
+      },
       ended,
     };
   };

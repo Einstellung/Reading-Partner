@@ -45,7 +45,7 @@ import PhoneReader from "./ui/components/phone/reader/PhoneReader";
 import PhoneLessonScreen from "./ui/components/phone/lesson/PhoneLessonScreen";
 import PhoneLessonIntroSheet from "./ui/components/phone/lesson/PhoneLessonIntroSheet";
 import PhoneShelf, { type PhoneBookOpen } from "./ui/components/phone/PhoneShelf";
-import { continueReading } from "./ui/components/phone/shelf-list";
+import { continueReading, conversationDoor } from "./ui/components/phone/shelf-list";
 import SavedList from "./ui/components/phone/SavedList";
 import {
   back,
@@ -491,6 +491,7 @@ export default function PhoneApp({
               pushToast={pushToast}
               onOverlayChange={onOverlayChange}
               onBack={goBack}
+              {...(openedBook.threadId ? { threadId: openedBook.threadId } : {})}
             />
           )}
           </ComposerSlotContext.Provider>
@@ -529,9 +530,9 @@ export default function PhoneApp({
       </div>
 
       {/* Lumen, bottom right, on every screen this shell draws (docs/68). A card
-          born over a book still shows here and can still be pressed away; what
-          it cannot do is jump, because this shell has no reader to jump into
-          (lumen/box-jump.ts). Typing to Lumen opens a chat of its own here,
+          born over a book opens that book's conversation: a paper's lesson, an
+          EPUB's thread over its page (lumen/box-jump.ts). One born in the
+          coach or a retell cannot jump here and says so. Typing to Lumen opens a chat of its own here,
           which draws cards like every other chat, so it gets the card table
           too. */}
       <CardRegistryProvider>
@@ -545,6 +546,18 @@ export default function PhoneApp({
         targets={{
           goToBriefing: () => onNavigate("briefing"),
           goToMeals: () => onNavigate("meals"),
+          // A book's conversation: a paper's lesson, or an EPUB's thread over its page.
+          openBookConversation: (bookId, threadId) => {
+            for (const topic of topics ?? []) {
+              const file = topic.files.find((one) => one.hash === bookId);
+              if (!file) continue;
+              const entry = entries[bookId];
+              const book = { bookId, name: entry?.title || file.name, topicId: topic.id, path: file.path };
+              if (conversationDoor(entry?.format) === "lesson") openLesson(book);
+              else openReader({ ...book, threadId });
+              return;
+            }
+          },
           // An intake card's 「打开阅读」 (lumen/IntakeCard.tsx).
           openDocument: (doc) =>
             openReader({ bookId: doc.hash, name: doc.title, topicId: doc.topicId, path: doc.path }),

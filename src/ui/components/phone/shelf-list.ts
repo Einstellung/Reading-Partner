@@ -140,6 +140,15 @@ export interface FetchAbility {
 // Which door a book opens: the reflow reader, or the lesson.
 export type MaterialDoor = "open" | "lesson";
 
+/**
+ * Where a book's conversation is on this shell, for a box card followed: a
+ * paper's in its lesson, an EPUB's over its page. A book the library has no
+ * format for is a PDF, as everywhere else (platform/app/library.ts).
+ */
+export function conversationDoor(format: "pdf" | "epub" | undefined): MaterialDoor {
+  return format === "epub" ? "open" : "lesson";
+}
+
 export type MaterialTap =
   // Open it in the phone's reader.
   | { kind: "open" }

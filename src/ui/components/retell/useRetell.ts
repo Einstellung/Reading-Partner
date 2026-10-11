@@ -165,8 +165,8 @@ export function useRetell(retellId: string, topicName: string): RetellController
   // Returns true when the pass was handed to a turn still streaming instead of
   // being run now: half a sentence is not what the reader said, and summarising
   // it would put a judgement about them on record over an answer they had not
-  // finished giving. A deferred pass is also why the turn is then left running
-  // rather than stopped — it has to land for there to be anything to read.
+  // finished giving. Leaving never stops the turn (use-place-chat.ts), so it
+  // lands and the pass runs then.
   //
   // A retell the reader never spoke in is not deferred and not distilled: an
   // opening question with no answer under it holds nothing that cannot be
@@ -218,7 +218,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
       return false;
     },
     assemble,
-    keepOnLeave: captureExit,
+    onLeave: captureExit,
     settledAway: () => {
       const pending = exitRef.current;
       exitRef.current = null;
