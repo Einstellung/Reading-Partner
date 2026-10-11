@@ -82,8 +82,8 @@ export interface TurnDelivery {
   /** The bell rendered as prose: the turn's input, never written to the conversation. */
   bell: string;
   bellId: string;
-  /** The run the bell is about; the reply is stamped with it. */
-  runId: string;
+  /** The run the bell is about; the reply is stamped with it. None for a wake bell. */
+  runId?: string;
   signal?: AbortSignal;
   /** Called when the conversation is busy and the delivery starts waiting for it to land. */
   onWait?: () => void;

@@ -183,7 +183,7 @@ export async function deliverBookBell(
     input.onWait?.();
     const result = await earlier;
     if (result?.status === "done" || (result?.reason === "aborted" && result.landed)) {
-      return answered(replyTo(deps.threads, book, input.runId));
+      return answered(input.runId === undefined ? "" : replyTo(deps.threads, book, input.runId));
     }
   }
 
@@ -251,7 +251,7 @@ export async function deliverBookBell(
         {
           origin: book,
           line: { text: input.bell },
-          bell: { id: input.bellId, runId: input.runId },
+          bell: { id: input.bellId, ...(input.runId !== undefined ? { runId: input.runId } : {}) },
           systemPrompt: placed.turn.systemPrompt,
           history,
           tools: placed.turn.tools,

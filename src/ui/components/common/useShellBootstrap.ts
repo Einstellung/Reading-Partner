@@ -39,6 +39,7 @@ import { registerInfoDistillSource } from "../../../info/briefer/distill-source"
 import { registerReadingDistillSources } from "../../../reading/distill/source";
 import { registerReadingDesk } from "../../../reading/desk";
 import { registerBookDelivery } from "../../../reading/turn/deliver";
+import { registerDoorDelivery } from "../../../reading/turn/door-bell";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
 import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerSourceSiteAdapters } from "../../../info/sources/plugins/all";
@@ -217,6 +218,7 @@ export function bootDomains(): void {
   // start one is the device that can do it (photo-sweep.ts, pitfall 380).
   registerMealsPhotosWorker();
   registerBookDelivery();
+  registerDoorDelivery();
   // The same pair on the info side: a question the briefing did not answer, and
   // the day's briefing thread it is answered back into (docs/63, docs/68).
   registerTaskingWorker();

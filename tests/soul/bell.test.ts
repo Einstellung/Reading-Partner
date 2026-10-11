@@ -39,6 +39,9 @@ let disk: FakeDisk;
 beforeEach(() => {
   disk = installAppData();
   rebuildThreadStoreForTests();
+  // A door deliverer another test file left registered (the shell's bootstrap)
+  // is set aside: these tests answer at the door on the harness unless they register one.
+  registerTurnDelivery("door", async () => null)();
 });
 
 function bellStore(): { bells: BellStore; files: Map<string, string> } {
@@ -1014,7 +1017,7 @@ test("a bell waiting on a busy conversation holds up only that conversation's be
   let release!: () => void;
   const busy = new Promise<void>((resolve) => (release = resolve));
   const off = registerTurnDelivery("book", async (input) => {
-    taken.push(input.runId);
+    taken.push(input.runId ?? "");
     if (input.runId === "r-1") {
       input.onWait?.();
       await busy;
@@ -1047,6 +1050,34 @@ test("a bell waiting on a busy conversation holds up only that conversation's be
     expect(taken).toEqual(["r-1", "r-2", "r-3"]);
     expect((await bells.get("run-done-r-1"))?.state).toBe("acked");
     expect((await bells.get("run-done-r-3"))?.state).toBe("acked");
+  } finally {
+    off();
+  }
+});
+
+test("with the door on its own runtime, a bell with nowhere else to go and a wake bell are its turns, carded where nobody looked", async () => {
+  const taken: { origin: unknown; runId?: string; bell: string }[] = [];
+  const off = registerTurnDelivery("door", async (input) => {
+    taken.push({ origin: input.origin, ...(input.runId ? { runId: input.runId } : {}), bell: input.bell });
+    return { status: "answered", reply: "The run is back. It found two essays.", watching: false };
+  });
+  try {
+    const { bells } = bellStore();
+    const { box } = boxStore();
+    await bells.ring("run-done", { runId: "r-door", kind: "research-literature", brief: "in" }, { at: NOW - 2000 });
+    await bells.ring("wake", { scheduleId: "s-1", brief: "Look at the week." }, { at: NOW - 1000 });
+    const { send } = sender([]);
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(2);
+    const today = { place: "door" as const, date: doorDate(new Date(NOW)) };
+    expect(taken.map((t) => [t.origin, t.runId])).toEqual([
+      [today, "r-door"],
+      [today, undefined],
+    ]);
+    expect(taken[1]!.bell).toContain("Look at the week.");
+    expect(await bells.read()).toEqual([]);
+    // One card, for the run; a wake bell is about a schedule and leaves none.
+    const cards = await box.list();
+    expect(cards.map((c) => [c.runId, c.origin, c.cover])).toEqual([["r-door", today, "The run is back."]]);
   } finally {
     off();
   }

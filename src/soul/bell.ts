@@ -27,6 +27,12 @@
 // the bell starts its turn once that one has landed, and is acked only after.
 // Only that bell waits, and any rung after it for the same conversation; the
 // pass goes on with the rest.
+//
+// The door is such a place (reading/turn/door-bell.ts, registered by the shell): a
+// bell with nowhere else to go is answered by a turn in the day's conversation
+// at the door, on the same runtime as the reader's turns there. Where no door
+// deliverer is registered the turn below runs on the soul's harness, as do the
+// places that lay a desk for it (deliveryOpener) until they move over.
 
 import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
@@ -46,6 +52,7 @@ import {
   turnDeliverer,
   type DeliveredTurn,
   type Delivery,
+  type TurnDeliverer,
   type TurnDeliveryOutcome,
 } from "./delivery";
 import { landReply } from "./landing";
@@ -383,36 +390,40 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     const substance =
       bell.type === "run-done" ? await runSubstance(bell.payload, readFile) : null;
     const rendered = renderBell(bell, substance, { tellFailure });
-    // A place that answers on its own runtime (docs/soul/87). Null means there
-    // is nothing there to answer in any more, and the bell goes to the door.
-    const deliver = origin && bell.type !== "wake" ? turnDeliverer(origin.place) : null;
-    if (origin && deliver && bell.type !== "wake") {
-      const { runId, kind } = bell.payload;
-      const place = origin;
+    const runId = bell.type === "wake" ? undefined : bell.payload.runId;
+    // Answer the bell with a turn on the place's own runtime (docs/soul/87).
+    // "next" when it is answered or waiting for its conversation, "stop" when
+    // the turn failed and the queue waits for the next tick, null when there
+    // is nothing to answer in there any more.
+    const byTurn = async (
+      deliver: TurnDeliverer,
+      place: BoxOrigin,
+      cardOrigin: BoxOrigin,
+    ): Promise<"next" | "stop" | null> => {
       // The reply is on disk; the card only where nobody was looking, then the ledger.
       const settle = async (outcome: TurnDeliveryOutcome): Promise<boolean> => {
         if (outcome.status === "failed") {
           deps.onTrouble?.(bell, outcome.reason);
           return false;
         }
-        if (!outcome.watching) {
+        if (!outcome.watching && bell.type !== "wake") {
           await box
             .put({
-              boxId: runId,
+              boxId: bell.payload.runId,
               source: "run",
               cover: coverOf(outcome.reply),
               ...(substance?.output ? { body: substance.output } : {}),
-              origin: place,
-              kind,
-              runId,
+              origin: cardOrigin,
+              kind: bell.payload.kind,
+              runId: bell.payload.runId,
               needsDecision: bell.type === "run-failed",
               at,
             })
-            .catch((e) => console.warn(`run ${runId} was delivered but its box item would not write`, e));
+            .catch((e) => console.warn(`run ${bell.payload.runId} was delivered but its box item would not write`, e));
         }
         await bells.delivered(bell.id);
         await bells.ack(bell.id);
-        await runs.markDelivered(runId, now()).catch(() => null);
+        if (runId !== undefined) await runs.markDelivered(runId, now()).catch(() => null);
         return true;
       };
       let parked!: () => void;
@@ -423,7 +434,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
           settings: deps.settings,
           bell: rendered,
           bellId: bell.id,
-          runId,
+          ...(runId !== undefined ? { runId } : {}),
           onWait: parked,
           ...(deps.signal ? { signal: deps.signal } : {}),
         }).catch((e): TurnDeliveryOutcome => ({ status: "failed", reason: e instanceof Error ? e.message : String(e) }));
@@ -446,15 +457,31 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
             waiting.delete(bell.id);
             if (waitingOn.get(target) === delivering) waitingOn.delete(target);
           });
-        continue;
+        return "next";
       }
-      if (first) {
-        if (!(await settle(first))) break;
-        answered += 1;
-        continue;
-      }
+      if (!first) return null;
+      if (!(await settle(first))) return "stop";
+      answered += 1;
+      return "next";
+    };
+    // A place that answers on its own runtime. Null means there is nothing
+    // there to answer in any more, and the bell goes to the door.
+    const deliver = origin && bell.type !== "wake" ? turnDeliverer(origin.place) : null;
+    if (origin && deliver) {
+      const step = await byTurn(deliver, origin, origin);
+      if (step === "next") continue;
+      if (step === "stop") break;
     }
     const placed = origin ? await openDelivery(origin, rendered, deps) : null;
+    // The door, on its own runtime: a bell about a run that named no place, or
+    // one whose place could not be laid any more, and every wake bell. The
+    // day's one conversation at the door; the card goes where the run was asked.
+    const door = placed ? null : turnDeliverer("door");
+    if (door) {
+      const step = await byTurn(door, { place: "door", date }, origin ?? { place: "door", date });
+      if (step === "next") continue;
+      break;
+    }
 
     let key: string;
     let threadId: string;

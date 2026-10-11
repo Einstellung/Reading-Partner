@@ -67,6 +67,11 @@ export function setDoorWatching(probe: (origin: DoorOrigin) => boolean): () => v
   return () => watchingProbes.delete(probe);
 }
 
+/** Whether a door chat has this conversation open now. */
+export function doorWatchingNow(origin: DoorOrigin): boolean {
+  return [...watchingProbes].some((probe) => probe(origin));
+}
+
 async function openDoorDesk(origin: DoorOrigin): Promise<readonly AgentTool[]> {
   const turn = await openDoorTurn({ settings: await loadSettings(), threadId: origin.threadId, date: origin.date });
   return turn?.tools ?? [];
@@ -89,7 +94,7 @@ async function putDoorCard(origin: DoorOrigin, ts: number, text: string): Promis
 export function doorPlace(deps: DoorPlaceDeps = {}): PlaceFactory {
   const assembled = deps.assembled ?? doorAssemblies;
   const openDesk = deps.openDesk ?? openDoorDesk;
-  const watching = deps.watching ?? ((origin: DoorOrigin) => [...watchingProbes].some((probe) => probe(origin)));
+  const watching = deps.watching ?? doorWatchingNow;
   const card = deps.card ?? putDoorCard;
   return (shared: PlaceShared): Place => ({
     key: (origin) => doorThreadKey(asDoorOrigin(origin)),
