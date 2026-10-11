@@ -421,3 +421,28 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 
 - 先做第 3 项：仿 `reading/turn/deliver.ts` 的 `deliverBookBell` 写门口（和之后每个 place）的 `TurnDeliverer`，`bell.ts` 的门口分支改走它（目标对话忙则等 `onTurnSettled`，重启按 `bellTurn` 不重投）；`headless.ts` 改成建 `rp.turn` 不等界面（铃和恢复是它仅有的调用方）。同时跑门口的 xvfb 验收（`VITE_VERIFY_FAUX=1` 的 `src/dev-faux.ts`）。
 - info（`use-info-call.ts`、`voice-call-live.ts`、`info/briefer/deliver.ts`）、三餐、排练教练（`useCoach.ts`）、复述（`useRetell.ts`）各写一个 place（照 `door-durable.ts`）加用 `place-session.ts` 换调用，互相不碰文件，可以并行；冲突只在 `useBackgroundServices` 的 places 那一行和 catalog / ROSTER（没登记的工具会被滤掉，每棒先核一遍自己面上的工具名都在目录里）。铃的 `TurnDeliverer` 每个 place 一个，最好等第 3 项把门口那份写成样板后再并行。
+
+## 第二阶段第二棒 C（分支 `dev/pi-durable-2d`，从 `origin/dev/pi-durable-2` 87ef3abf 起）
+
+做完的：
+
+- `reading/turn/one-thread-place.ts`：「一样东西一条线程」的 place 通用件（`oneThreadPlace`、`oneThreadTurn`），照 `door-durable.ts`：本进程装配的历史和工具放 assemblies，重启后历史读文件（排除 `excludeTs`、丢空文字行），桌面由 place 自己重摆；落盘用 `threadLander`，从不放卡片（旧路这两面也不放）。
+- 排练教练 `reading/rehearsal/coach-durable.ts`：place 名 `talk`，origin `{ place: "talk", id: outlineId }`，键 `talk:<outlineId>`，落进 `talkThreadKey(outlineId)` 那个文件、线程 id 即 outlineId（存储格式不变）。重启的桌面从盘上的大纲重摆（`buildCoachTurn`，大纲工具照写，卡片不画）。`prepareCoachTurn` 交给 place session。
+- 复述 `reading/retell/retell-durable.ts`：place 名 `retell`，键 `retell:<retellId>`，落进 `retellThreadKey(retellId)`。复述的每个回合都排在 kickoff 后面，kickoff 不是文件里的行：开场回合以 kickoff 为那句、不带 ts（不落盘）；重启后读文件的历史在前面补 kickoff（那句不在文件里时不补）。重启的桌面从盘上的复述、材料重摆，决定和讲稿工具照写。
+- `ui/components/chat/use-place-chat.ts`：两面共用的薄包装（行、镜像 ref、卡片插在流式行前并写文件、`send` 回合中走 `say` 否则写文件再 `ask`、`resume`、离开时 `leave()`，或由面决定让回合在看不见处跑完并在落盘后回调）。`useCoach.ts`、`useRetell.ts` 换成它，不再用 `useStreamingTurn` / `runAgentTurn` / `soulHarness`。打开时先 `resume()`，接上了就不再问；教练没接上才按 `awaitingReply` 自动回答，复述没接上且对话为空才自动开场。
+- `useBackgroundServices` 的 places 加 `[COACH_PLACE]: coachPlace()`、`[RETELL_PLACE]: retellPlace()`。两面的工具全在 `appToolCatalog` 里（读、图、课堂、复述、讲稿、soul 那几组都已登记）；`tests/reading/rehearsal/coach.test.ts`、`tests/reading/retell/turn.test.ts` 加了「本回合工具都在目录里」的断言。
+- 测试：`tests/reading/turn/one-thread-place.test.ts` 8 个（两面各：落盘一次且历史用装配、停止留半句不重问、接上在途回合且历史读文件；复述开场以 kickoff 发出且文件只进回答；prepare 的拒绝和错形状），`tests/reading/turn/one-thread-kill.test.ts` 2 个真 SIGKILL（教练带 ts 的那句、复述开场无 ts：半句进文件一次、不重问、turn-log 补 end）。全量 `scripts/t.sh` 7462 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+和旧行为不同的：
+
+- 回合进行中发话：旧路 `begin` 另起一个回合（旧的那个看不见地接着跑）；现在插进正在跑的回合（docs/72）。Composer 本来就允许回合中发送，没加新交互。
+- 离开教练、或离开没开过口的复述 = 停止，半句落进文件（旧路 abort 丢半句），同门口和课堂的决定。开过口的复述离开时回合照旧在看不见处跑完，落盘后再蒸馏。
+- 模型失败、卡死的样子跟 place session（失败行、卡死重问一次），不再是 `useStreamingTurn` 的。没配模型仍是原来的错误条，拒绝仍是拒绝行。
+- 重启接上的回合里，工具出的卡片不画（行上的工具回执照记），桌面装配时 topicName 为空（只影响工具，不影响已在对话里的系统提示）。
+- 模型仍用 `defaultModelId`（旧路如此），没改成门口那样的 `modelIdFor(settings, "talk")`。
+
+没做的：
+
+- 真 app 验收（xvfb 或模拟器上教练回答一遍、复述开场、停止、杀进程恢复）没跑；两面语音依赖重，留给统一验收。hook 层没有测试（只有 place 和控制器的）。
+- 这两面没有铃（桌面不是 place，`assembled.origin` 恒空，旧路也从不传 `deliverTo`），铃投递不涉及。
+- 实测没有踩到意外，531–533 没用。
