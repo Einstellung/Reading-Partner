@@ -595,3 +595,9 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - `src/dev-faux.ts`：`__fauxToolDelayMs` 也拖慢 `infoAssemblies`、`retellAssemblies`、`coachAssemblies` 里的工具；新增 `window.__fauxContexts`（每次调用发出去的消息的角色和开头）。工具里杀进程前要把 `__fauxPlan` 改成 `["text"]`，否则新进程的 faux 从第一步重来（坑 535）。
 - 没走：排练的说一遍（要麦克风和转写）。教练、复述的铃（这两面没有铃）。
 - 全量 `scripts/t.sh` 7493 过、0 失败，`bun run typecheck` 过。坑 534–536 用了。
+
+## 第二阶段 iPad 真机验收（分支 `verify/pi-durable-2-ipad`，从 `origin/dev/pi-durable-2` e631ea00 起）
+
+2026-10-11 没跑成：iPad 不在 Mac mini 的 usbmux 上（`pymobiledevice3 usbmux list` 空、`system_profiler` 没有 iPad），也没插 Linux，轮询三分钟仍不在。iPad 上的 `.dev` app 没动，容器没读，旧 soul session 还在原处（若有）。
+
+已备好：Mac `~/rp-ipad` detached 在 e631ea00，`~/build.sh` 出的 `.dev` 包在 `/tmp/rp-dev-ipad.ipa`（CFBundleIdentifier 读回 `com.xinyuan.readingpartner.dev`，描述文件含这台 iPad 的 UDID，`dist` 里带 dev-faux）。下一棒插上 iPad 后先按任务第 1 步从容器拉 `session/` 再装这个包。
