@@ -5,6 +5,7 @@
 // so a turn the runtime resumes after a restart streams from it too.
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { providers } from "./ai/providers";
+import { AssembledTurns, type AssembledBookTurn } from "./reading/turn/durable-book";
 
 if (import.meta.env.VITE_VERIFY_FAUX === "1") {
   const raw = localStorage.getItem("__fauxPlan");
@@ -39,6 +40,24 @@ if (import.meta.env.VITE_VERIFY_FAUX === "1") {
     a.streamSimple = (model: never, context: never, options: never) => (
       w.__fauxCalls++, faux.provider.streamSimple(model, context, options)
     );
+    // A tool that runs long enough to kill the process inside it. Only tools of
+    // turns assembled in this process are slowed; a turn resumed after a
+    // restart opens its desk again and runs them at full speed.
+    const delay = Number(localStorage.getItem("__fauxToolDelayMs") || 0);
+    if (delay > 0) {
+      const put = AssembledTurns.prototype.put;
+      AssembledTurns.prototype.put = function (key: string, turn: AssembledBookTurn) {
+        const tools = turn.tools.map((t) => ({
+          ...t,
+          execute: async (...args: Parameters<typeof t.execute>) => {
+            (window as unknown as { __fauxToolLive: string }).__fauxToolLive = t.name;
+            await new Promise((r) => setTimeout(r, delay));
+            return t.execute(...args);
+          },
+        }));
+        put.call(this, key, { ...turn, tools });
+      };
+    }
     console.warn("dev-faux on", raw);
   }
 }
