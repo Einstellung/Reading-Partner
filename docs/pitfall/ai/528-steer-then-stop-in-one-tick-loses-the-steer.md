@@ -10,4 +10,4 @@ info 对话的 hook 测试（faux，`tests/ui/components/info/info-call-turn.tes
 
 ## 解法
 
-`place-session.ts` 记下每个还在提交中的 steer，`stop()` 和 `leave()` 等它们都返回后再调 runtime 的 stop，这时 steer 已在 inbox 里，`stopTurn` 照常撤回、写文件、开下一回合。书的两个界面（`session/use-call.ts`、`phone/lesson/use-lesson-call.ts`）不走这个控制器，同样的竞争还在。
+`place-session.ts` 记下每个还在提交中的 steer，`stop()` 和 `leave()` 等它们都返回后再调 runtime 的 stop，这时 steer 已在 inbox 里，`stopTurn` 照常撤回、写文件、开下一回合。书的两个界面（`session/use-call.ts`、`phone/lesson/use-lesson-call.ts`）不走这个控制器，已修：拿到 runtime 的句柄就用 `reading/turn/steer-gate.ts` 的 `gateSteers` 包一层，停止同样等在途 steer 返回。

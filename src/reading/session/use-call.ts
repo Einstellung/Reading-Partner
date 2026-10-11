@@ -59,6 +59,7 @@ import { arrivedMessage, createOwnAppends } from "../turn/thread-arrivals";
 import { deferHangup } from "./hangup";
 import { threadHome, type ThreadOwner } from "./documents";
 import { createPendingImages, type StagedImage } from "../turn/pending-images";
+import { gateSteers } from "../turn/steer-gate";
 import type { PrepPipeline } from "../prep/papers/pipeline";
 import {
   backgroundFailureToast,
@@ -723,7 +724,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         // Stopped, or the thread deleted, while the turn was starting.
         driven.stop();
       } else {
-        live.durable = { steer: driven.steer, stop: driven.stop };
+        live.durable = gateSteers({ steer: driven.steer, stop: driven.stop });
         // Lines said while the turn was being assembled go in now.
         for (const row of live.unsent ?? []) steerIn(live, row);
       }

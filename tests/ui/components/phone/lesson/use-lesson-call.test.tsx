@@ -238,6 +238,30 @@ test("stop keeps the half sentence and the receipt; a withdrawn line opens the n
   }
 });
 
+test("a stop in the same tick as a line waits for the line to reach the run, so it opens the next turn", async () => {
+  const r = rig();
+  try {
+    const view = await mounted();
+    const { turn, at } = await ask(view, r, "What is attention?");
+    act(() => turn.view([{ role: "ai", text: "Attention is", ts: at + 1, streaming: true }]));
+    // The steer is still being submitted when the stop goes (docs/pitfall/528).
+    await act(async () => {
+      view.result.current.send("Wait, heads?");
+      view.result.current.stop();
+      await tick();
+    });
+    expect(turn.stops).toBe(1);
+    expect(turn.withdrawn?.map((s) => s.text)).toEqual(["Wait, heads?"]);
+
+    await settle(turn, { kind: "stopped", rows: [{ role: "ai", text: "Attention is", ts: at + 1 }], steers: turn.withdrawn! });
+    expect(tail(r.stored)).toMatchObject({ role: "user", text: "Wait, heads?" });
+    expect(r.book.turns).toHaveLength(2);
+    expect(r.book.last().request.line.text).toBe("Wait, heads?");
+  } finally {
+    r.restore();
+  }
+});
+
 test("a stop before any word leaves no row behind", async () => {
   const r = rig();
   try {

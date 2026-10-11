@@ -595,3 +595,8 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - `src/dev-faux.ts`：`__fauxToolDelayMs` 也拖慢 `infoAssemblies`、`retellAssemblies`、`coachAssemblies` 里的工具；新增 `window.__fauxContexts`（每次调用发出去的消息的角色和开头）。工具里杀进程前要把 `__fauxPlan` 改成 `["text"]`，否则新进程的 faux 从第一步重来（坑 535）。
 - 没走：排练的说一遍（要麦克风和转写）。教练、复述的铃（这两面没有铃）。
 - 全量 `scripts/t.sh` 7493 过、0 失败，`bun run typecheck` 过。坑 534–536 用了。
+
+
+## 书界面的插话竞争（分支 `dev/pi-durable-2j`，从 `origin/dev/pi-durable-2` e631ea00 起）
+
+坑 528 在书的两个界面上的修法。`reading/turn/steer-gate.ts` 的 `gateSteers` 包住 runtime 的句柄：记下还在提交中的 steer，停止等它们都返回再调 runtime 的 stop；没有在途 steer 时停止立刻发出。`session/use-call.ts`（手机 EPUB 课堂经 `use-book-lesson.ts` 也走它）和 `phone/lesson/use-lesson-call.ts` 拿到句柄时各包一层，停止、离开、删线程都经过它。`place-session.ts` 没动。测试的假 book turn（`tests/support/use-call.ts`）照 runtime 建模：steer 晚一个 microtask 进 inbox，第一次停止时记下 inbox 快照（`withdrawn`）。`use-call-steer.test.tsx`、`use-lesson-call.test.tsx` 各加一个「插话后同一刻停止」的用例（不修时红），`steer-gate.test.ts` 三个单测。

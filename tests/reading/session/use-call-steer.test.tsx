@@ -193,6 +193,30 @@ test("stopping keeps what the runtime kept and opens the next turn with what no 
   }
 });
 
+test("a stop in the same tick as a line waits for the line to reach the run, so it is withdrawn, not lost", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    const asked = r.stored[0]!.ts;
+    await settle(() => r.book.last().view([ai(asked + 1, "because the mark", { streaming: true })]));
+    // The steer is still being submitted when the stop goes (docs/pitfall/528).
+    await settle(() => {
+      view.result.current.send("never mind, the other one?");
+      view.result.current.stop();
+    });
+    const first = r.book.turns[0]!;
+    expect(first.stops).toBe(1);
+    expect(first.withdrawn?.map((s) => s.text)).toEqual(["never mind, the other one?"]);
+
+    await settle(() => first.end({ kind: "stopped", rows: [ai(asked + 1, "because the mark")], steers: first.withdrawn! }));
+    expect(r.stored.map((m) => m.text)).toEqual(["why this?", "never mind, the other one?"]);
+    expect(r.book.turns).toHaveLength(2);
+    expect(r.book.last().request.line.text).toBe("never mind, the other one?");
+  } finally {
+    r.restore();
+  }
+});
+
 test("an answer that landed before a run took the line is followed by a turn for it", async () => {
   const r = rig();
   try {

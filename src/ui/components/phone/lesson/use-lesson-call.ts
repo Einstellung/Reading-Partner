@@ -49,6 +49,7 @@ import { withTurnRows } from "../../../../reading/turn/call-state";
 import { splitAssembled, type BookOrigin } from "../../../../reading/turn/durable-book";
 import { readingDurable, setBookWatching } from "../../../../reading/turn/durable-runtime";
 import { buildReadingTurn } from "../../../../reading/turn/turn";
+import { gateSteers } from "../../../../reading/turn/steer-gate";
 import { rehydrateMessage } from "../../chat/chatParts";
 import type { ThreadMessage } from "../../chat/types";
 import type { LessonFocus } from "./lesson-view";
@@ -375,7 +376,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
           // Stopped, or the reader left, while the turn was starting.
           driven.stop();
         } else {
-          live.driven = driven;
+          live.driven = gateSteers(driven);
           // Lines said while the turn was being assembled go in now.
           for (const row of live.unsent) steerIn(live, row);
         }

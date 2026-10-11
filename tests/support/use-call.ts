@@ -103,6 +103,10 @@ export interface FakeBookTurn {
   steered: { text: string; ts: number }[];
   /** What a steer answers: whether a run is there to take the line. */
   taking: boolean;
+  /** The lines a steer has put in the run's inbox: one microtask after it is sent, like the runtime's submit. */
+  inbox: { text: string; ts: number }[];
+  /** The inbox as the first stop read it: what the runtime's stop withdraws (legion/durable/turn.ts). */
+  withdrawn?: { text: string; ts: number }[];
   stops: number;
 }
 
@@ -129,15 +133,21 @@ export function fakeBookTurns() {
       end: (end) => settle(end),
       steered: [],
       taking: true,
+      inbox: [],
       stops: 0,
     };
     turns.push(turn);
     return {
       steer: async (text: string, ts: number) => {
         turn.steered.push({ text, ts });
+        await Promise.resolve();
+        if (turn.taking) turn.inbox.push({ text, ts });
         return turn.taking;
       },
-      stop: () => void (turn.stops += 1),
+      stop: () => {
+        turn.stops += 1;
+        turn.withdrawn ??= turn.inbox.slice();
+      },
       ended,
     };
   };
