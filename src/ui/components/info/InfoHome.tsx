@@ -8,13 +8,13 @@
 
 import { useState } from "react";
 import { savedArticleId } from "../../../reading/saved/saved-articles";
-import type { HomeScreen } from "../base/shell-nav";
+import { showsLaunchCard, type HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
 import { mealsKickoff } from "../../../info/briefer/anchors";
-import { EMPTY_MEALS } from "../../../info/meals/plan/types";
+import { EMPTY_MEALS, type MealKey } from "../../../info/meals/plan/types";
 import type { SignInSite } from "../../../info/sources/site-session";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
@@ -23,6 +23,7 @@ import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
 import { MealsHome } from "./meals/MealsPage";
 import { MealsDay } from "./meals/MealsDay";
+import { MealsRecipe } from "./meals/MealsRecipe";
 import { MealsShopping } from "./meals/MealsShopping";
 import { MealsMethod } from "./meals/MealsMethod";
 import { MealsOnboarding } from "./meals/MealsOnboarding";
@@ -49,6 +50,7 @@ function isMealsScreen(screen: HomeScreen | null): boolean {
     screen === "meals" ||
     screen === "meals-shopping" ||
     screen === "meals-day" ||
+    screen === "meals-recipe" ||
     screen === "meals-method" ||
     screen === "meals-onboarding"
   );
@@ -153,6 +155,10 @@ export default function InfoHome(props: {
   // (the desktop's) leaves both out and this screen remembers it itself.
   mealsDay?: string | null;
   onOpenMealsDay?: (date: string) => void;
+  // Which meal's recipe is open over the day, and how one is opened: the same
+  // split as the day's, the phone's stack entry or this screen's own memory.
+  mealsRecipe?: MealKey | null;
+  onOpenMealsRecipe?: (date: string, meal: MealKey) => void;
   // Back from Method & sources and from a replayed onboarding, both of which
   // are opened from more than one screen. The phone passes its stack's pop; the
   // desktop leaves it out and this screen goes back to where it opened them.
@@ -170,6 +176,7 @@ export default function InfoHome(props: {
   // The day the desktop shell has open. It has no navigation stack to hold it,
   // and the phone's entry overrides this the moment it supplies one.
   const [localMealsDay, setLocalMealsDay] = useState<string | null>(null);
+  const [localMealsRecipe, setLocalMealsRecipe] = useState<MealKey | null>(null);
   // Where the desktop shell opened Method & sources from, to go back to it.
   const [methodFrom, setMethodFrom] = useState<HomeScreen>("meals");
   const info = useInfoHome({
@@ -196,7 +203,7 @@ export default function InfoHome(props: {
 
   return (
     <>
-      {screen === "vestibule" && (
+      {showsLaunchCard(screen, !!info.snap?.briefing) && (
         <div className="absolute inset-0 overflow-y-auto bg-background">
           {props.renderLaunch ? (
             props.renderLaunch({
@@ -281,11 +288,22 @@ export default function InfoHome(props: {
             ...(kickoff ? { kickoff } : {}),
           });
         const day = props.mealsDay ?? localMealsDay;
+        // The phone pushes the day onto its stack; the desktop and tablet shell
+        // has no stack, so this screen remembers the day and switches to it.
         const openDay = (date: string) => {
           setLocalMealsDay(date);
-          props.onOpenMealsDay?.(date);
+          if (props.onOpenMealsDay) props.onOpenMealsDay(date);
+          else onNavigate("meals-day");
         };
         const back = () => onNavigate("meals");
+        const recipeMeal = props.mealsRecipe ?? localMealsRecipe;
+        const openRecipe = (meal: MealKey) => {
+          if (!day) return;
+          setLocalMealsRecipe(meal);
+          if (props.onOpenMealsRecipe) props.onOpenMealsRecipe(day, meal);
+          else onNavigate("meals-recipe");
+        };
+        const backFromRecipe = () => (props.onMealsBack ? props.onMealsBack() : onNavigate("meals-day"));
         const backFromSide = () => (props.onMealsBack ? props.onMealsBack() : onNavigate(methodFrom));
         const openMethod = () => {
           setMethodFrom(screen);
@@ -314,6 +332,9 @@ export default function InfoHome(props: {
         // so a new screen starts at its top instead of at wherever the last
         // one was scrolled to (they all share this one element otherwise).
         let shown: string;
+        // The recipe is drawn over its day rather than in place of it, so the
+        // day keeps its scroll and comes back as it was left.
+        let over: React.ReactNode = null;
         if (screen === "meals-onboarding" || (screen === "meals" && meals.state && !meals.state.charter)) {
           const replay = screen === "meals-onboarding";
           shown = replay ? "onboarding-replay" : "onboarding";
@@ -343,8 +364,22 @@ export default function InfoHome(props: {
               onDone={meals.markDone}
             />
           );
-        } else if (screen === "meals-day" && day) {
+        } else if ((screen === "meals-day" || screen === "meals-recipe") && day) {
           shown = `day:${day}`;
+          if (screen === "meals-recipe" && recipeMeal) {
+            over = (
+              <div className="absolute inset-0 z-20 overflow-y-auto bg-background animate-in slide-in-from-right duration-300 motion-reduce:animate-none">
+                <MealsRecipe
+                  state={meals.state}
+                  photos={meals.photos}
+                  today={meals.today}
+                  date={day}
+                  meal={recipeMeal}
+                  onBack={backFromRecipe}
+                />
+              </div>
+            );
+          }
           const label =
             day === meals.today ? t("info.ask.aboutToday") : t("info.ask.aboutWeekday", { weekday: weekdayName(day) });
           ask = { label, onAsk: () => openChat({ kind: "day", date: day }) };
@@ -357,6 +392,7 @@ export default function InfoHome(props: {
               onBack={back}
               onAsk={ask.onAsk}
               onOpenMethod={openMethod}
+              onOpenRecipe={openRecipe}
             />
           );
         } else {
@@ -383,7 +419,12 @@ export default function InfoHome(props: {
         );
         // The same pull-down the briefing has, on all three: the phone's way
         // into a chat is one gesture everywhere (docs/22).
-        return props.wrapScreen ? props.wrapScreen(ask, page) : page;
+        return (
+          <>
+            {props.wrapScreen ? props.wrapScreen(ask, page) : page}
+            {over}
+          </>
+        );
       })()}
 
       {screen === "sources" && (

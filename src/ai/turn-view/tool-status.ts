@@ -60,6 +60,17 @@ export function visibleTrace(tools: readonly ToolStatus[]): ToolStatus[] {
   return tools.filter((t) => !t.quiet || t.state === "error");
 }
 
+// The labels the grey line under a settled answer names, in the order the
+// calls ran. A call that came back with a receipt is left out: the receipt is
+// drawn beside the trace (chatParts.ts tracedReceipts) and says what was done
+// in the past tense, where the label is the running sentence ("Drafting this
+// week's meals"), which under a finished answer reads as work still going on.
+export function doneTraceLabels(tools: readonly ToolStatus[]): string[] {
+  return visibleTrace(tools)
+    .filter((t) => t.state === "done" && !t.receipt)
+    .map((t) => t.label);
+}
+
 // Project a settled trace into the durable shape the thread store writes
 // (platform/app/threads.ts). A call still running belongs to a turn that never
 // landed, and is dropped on the way to disk; null when nothing is left to keep.

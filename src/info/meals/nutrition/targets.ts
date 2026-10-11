@@ -138,6 +138,10 @@ const FAT_PCT: Record<Region, { default: number; cap: number }> = {
 };
 const PAL_BASE: Record<Work, number> = { sit: 1.4, stand: 1.6, labor: 1.8 };
 const KCAL_PER_KG = 7700;
+/** What a training day adds to the work PAL: training an office worker does, not a hard block. */
+export const TRAINING_PAL_BONUS = 0.1;
+/** Building muscle eats this share over the weekly average TDEE, split by PAL. */
+export const GAIN_SURPLUS = 0.05;
 
 /** Share of the day's kcal per meal before the post-workout shift. */
 export const MEAL_SHARE: Readonly<Record<MealSlot, number>> = {
@@ -213,7 +217,7 @@ export function computeTargets(profile: Profile, region: Region): Targets {
   // 2. Activity
   const nTrain = new Set(profile.trainingDays.filter((d) => d >= 1 && d <= 7)).size;
   const palBase = PAL_BASE[profile.work];
-  const palTraining = Math.min(2.0, palBase + 0.2);
+  const palTraining = Math.min(2.0, palBase + TRAINING_PAL_BONUS);
   const palRest = palBase;
   const palAverage = (nTrain * palTraining + (7 - nTrain) * palRest) / 7;
   const tdeeTraining = bmr * palTraining;
@@ -236,7 +240,7 @@ export function computeTargets(profile: Profile, region: Region): Targets {
       cutRule = bmiClass === "overweight" ? "overweight-85" : "obese-80";
     }
   } else if (profile.goal === "gain") {
-    weeklyKcal = tdeeAverage * 1.1;
+    weeklyKcal = tdeeAverage * (1 + GAIN_SURPLUS);
   }
   const kcalFloor = Math.max(bmr, male ? 1200 : 1000);
   const dayKcal = (pal: number) => {

@@ -8,6 +8,7 @@
 //
 // Pure, and apart from the .tsx, so the rule can be tested without React.
 
+import { t } from "../../../i18n";
 import { currentList, isChecked, leftToBuy, missed, shoppingItemKey, stillToGet } from "../plan/shopping";
 import { CATEGORY_ORDER, type IngredientCategory, type ShoppingItem, type ShoppingState } from "../plan/types";
 import { categoryLabel, weekdayName } from "./view";
@@ -92,9 +93,10 @@ export function aislesOf(items: readonly ShoppingItem[]): ShoppingAisle[] {
  */
 export function shoppingStatus(state: ShoppingState, lines: readonly ShoppingItem[]): string {
   const done = state.doneOn;
-  if (!done) return `${leftToBuy(state, lines)} left`;
+  if (!done) return t("meals.shopping.left", { count: leftToBuy(state, lines) });
   const toGet = stillToGet(state, lines).length;
-  return `Bought · ${weekdayName(done)}${toGet ? ` · ${toGet} to get` : ""}`;
+  const bought = t("meals.shopping.bought", { weekday: weekdayName(done) });
+  return toGet ? `${bought} · ${t("meals.shopping.toGet", { count: toGet })}` : bought;
 }
 
 /** The three lines the card previews, and the line of text under them. */
@@ -115,12 +117,12 @@ export function shoppingPreview(
     const missedCount = missed(state, lines).length;
     return {
       items: [],
-      more: missedCount ? `${missedCount} you didn't get` : "Everything on the list.",
+      more: missedCount ? t("meals.shopping.missed", { count: missedCount }) : t("meals.shopping.allGot"),
     };
   }
   const left = lines.filter((i) => !isChecked(state, i));
   const rest = Math.max(0, left.length - limit);
-  return { items: left.slice(0, limit), more: rest ? `and ${rest} more` : null };
+  return { items: left.slice(0, limit), more: rest ? t("meals.shopping.more", { count: rest }) : null };
 }
 
 // A list longer than this puts its Done button on a bar that follows the thumb

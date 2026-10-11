@@ -18,6 +18,7 @@ import {
   type ShoppingState,
   type WeekPlan,
 } from "./types";
+import { potPortions, refKey } from "./pots";
 import { daysBetween } from "./week";
 
 // How many days ahead a thing that keeps a day or two has to be needed before
@@ -42,38 +43,49 @@ export function quantityText(food: Food, grams: number): string {
  * eating, merged per food. Name, aisle and shelf life come from the food
  * table, so nothing on the list is the model's.
  *
+ * A pot's food is bought whole: the pot's raw grams, needed by the day it is
+ * cooked, rather than its meals' shares added up (docs/73 一锅).
+ *
  * The order is the walk through a shop — categories in aisle order — and
  * inside a category the shortest shelf life first.
  */
 export function deriveShoppingList(plan: WeekPlan, today: string, people = 1): ShoppingItem[] {
   const byFood = new Map<string, ShoppingItem & { food: Food }>();
   const times = Math.max(1, Math.round(people));
+  const add = (foodId: string, grams: number, date: string) => {
+    const food = foodById(foodId);
+    if (!food || grams <= 0) return;
+    const seen = byFood.get(food.id);
+    if (!seen) {
+      byFood.set(food.id, {
+        food,
+        name: food.zh,
+        en: food.en,
+        qty: "",
+        category: food.category,
+        keeps: food.keeps,
+        foodId: food.id,
+        grams: grams * times,
+        freezeOnArrival: false,
+        neededBy: date,
+      });
+      return;
+    }
+    seen.grams = (seen.grams ?? 0) + grams * times;
+    if (date < seen.neededBy) seen.neededBy = date;
+  };
 
+  const portions = potPortions(plan);
+  const pots = new Map([...portions.values()].map((p) => [p.pot.id, p.pot]));
+  for (const pot of pots.values()) add(pot.foodId, pot.rawG, pot.cook.date);
   for (const day of plan.days) {
     for (const key of MEAL_KEYS) {
       const meal = day[key];
       if (meal.mode !== "make") continue;
+      const portion = portions.get(refKey({ date: day.date, meal: key }));
       for (const row of meal.solved ?? []) {
-        const food = foodById(row.foodId);
-        if (!food || row.grams <= 0) continue;
-        const seen = byFood.get(food.id);
-        if (!seen) {
-          byFood.set(food.id, {
-            food,
-            name: food.zh,
-            en: food.en,
-            qty: "",
-            category: food.category,
-            keeps: food.keeps,
-            foodId: food.id,
-            grams: row.grams * times,
-            freezeOnArrival: false,
-            neededBy: day.date,
-          });
-          continue;
-        }
-        seen.grams = (seen.grams ?? 0) + row.grams * times;
-        if (day.date < seen.neededBy) seen.neededBy = day.date;
+        if (portion && row.role === "protein" && row.foodId === portion.pot.foodId) continue;
+        add(row.foodId, row.grams, day.date);
       }
     }
   }

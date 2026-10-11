@@ -8,6 +8,7 @@ import {
   activeNavFor,
   screenForNav,
   shellNavItems,
+  showsLaunchCard,
   SHELL_NAV_ITEMS,
   type HomeScreen,
 } from "../../../../src/ui/components/base/shell-nav";
@@ -72,4 +73,15 @@ test("Settings is a screen, and it lights the row at the foot", () => {
   expect(screenForNav("settings")).toBe("settings");
   expect(activeNavFor("settings")).toBe("settings");
   expect(SHELL_NAV_ITEMS.map((i) => i.id)).not.toContain("settings");
+});
+
+// The Briefing item opens a screen that has nothing to draw until today's
+// briefing exists; it shows the launch card instead of a blank pane.
+test("the briefing screen falls back to the launch card without a briefing", () => {
+  expect(showsLaunchCard("briefing", false)).toBe(true);
+  expect(showsLaunchCard("briefing", true)).toBe(false);
+  expect(showsLaunchCard("vestibule", true)).toBe(true);
+  expect(showsLaunchCard("vestibule", false)).toBe(true);
+  expect(showsLaunchCard("library", false)).toBe(false);
+  expect(showsLaunchCard("article", false)).toBe(false);
 });

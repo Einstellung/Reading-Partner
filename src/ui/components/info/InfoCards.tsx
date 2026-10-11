@@ -19,8 +19,8 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
 } from "../../../info/boxes/cards";
-import type { MealsPlanCardData } from "../../../info/meals/cards";
-import { modeWord, weekdayName } from "../../../info/meals/screen/view";
+import type { MealsAppliedCardData, MealsPlanCardData } from "../../../info/meals/cards";
+import { appliedLine, modeWord, weekdayName } from "../../../info/meals/screen/view";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -385,6 +385,13 @@ export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPla
   );
 }
 
+// The row the plan card's Apply leaves: one quiet line in the reader's language.
+// The row's text is the model's note and is not drawn (info/meals/cards.ts).
+export function MealsAppliedCard({ payload }: CardComponentProps<MealsAppliedCardData>) {
+  useT();
+  return <div className="text-[12px] leading-snug text-faint-foreground">{appliedLine(payload)}</div>;
+}
+
 export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "probe-confirm": ProbeConfirmCard,
   "briefing-progress": BriefingProgressCard,
@@ -394,4 +401,5 @@ export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "lab-archive": LabArchiveCard,
   "briefing-failed": BriefingFailedCard,
   "meals-plan": MealsPlanCard,
+  "meals-applied": MealsAppliedCard,
 };

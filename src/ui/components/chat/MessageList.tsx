@@ -17,7 +17,7 @@ import { listChange, snapshotOf, type ListSnapshot } from './list-change';
 import { copyText } from '../common/clipboard';
 import type { ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
-import { visibleTrace, type ToolStatus } from '../../../ai/turn-view/tool-status';
+import { doneTraceLabels, visibleTrace, type ToolStatus } from '../../../ai/turn-view/tool-status';
 import { QUEUED_NOTE, type TurnPhase } from '../../../ai/turn-view/turn-rows';
 import { phaseLabel } from './phase-line';
 import { mayMarkReply } from '../../../reading/chat-marks';
@@ -108,11 +108,12 @@ function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) 
 	const t = useT();
 	const text = traceText(size);
 	// The calls that finished collapse into one grey line under the answer, in the
-	// order they ran; a running call keeps its own line with the ellipsis, and a
-	// failure keeps its own line in red with the sentence the tool threw. Quiet
-	// calls are not here at all (ai/turn-view/tool-status.ts) unless they failed.
+	// order they ran, less the ones whose receipt is drawn instead; a running call
+	// keeps its own line with the ellipsis, and a failure keeps its own line in
+	// red with the sentence the tool threw. Quiet calls are not here at all
+	// (ai/turn-view/tool-status.ts) unless they failed.
 	const shown = visibleTrace(tools);
-	const done = shown.filter((tool) => tool.state === 'done');
+	const done = doneTraceLabels(tools);
 	return (
 		<div className="flex flex-col gap-0.5">
 			{shown.map((tool, i) =>
@@ -127,7 +128,7 @@ function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) 
 				) : null,
 			)}
 			{done.length > 0 && (
-				<div className={'text-neutral-400 ' + text}>{done.map((tool) => tool.label).join(' · ')}</div>
+				<div className={'text-neutral-400 ' + text}>{done.join(' · ')}</div>
 			)}
 		</div>
 	);

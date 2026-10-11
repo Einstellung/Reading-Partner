@@ -138,6 +138,11 @@ function DayCard({
       {dayTotalsLine(view) && (
         <div className="mt-1 text-[13px] tabular-nums text-faint-foreground">{dayTotalsLine(view)}</div>
       )}
+      {view.thaw.map((line) => (
+        <p key={line} className="m-0 mt-1.5 text-[13px] leading-snug text-foreground">
+          {line}
+        </p>
+      ))}
       <DayPicture view={view} photos={photos} big={big} />
       {/* Label and dish on the first line, the numbers and the three squares
           under it. A long name wraps rather than truncating — a Chinese name

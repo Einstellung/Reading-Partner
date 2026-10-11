@@ -13,6 +13,7 @@ import { ingredientImageUrl } from "../photos/images";
 import { foodById, isProduce } from "../nutrition/foods";
 import type { MealCells, Nutrition, TemplateItem, TemplateRole } from "../nutrition/solve";
 import type { DayTargets, Goal, MealTarget, Profile, Region, Targets } from "../nutrition/targets";
+import { potPortions, refKey, thawTonight, type PotPortion } from "../plan/pots";
 import { dayTargetsOn, mealNumbers, sumNutrition, targetsOf } from "../plan/solve-week";
 import {
   FLAVOURS,
@@ -172,6 +173,8 @@ export interface IngredientRow {
   grams: number;
   // "2 个" for a food counted in units, else null.
   units: string | null;
+  // "卤牛腱一锅的 1/4", standing in for the name on a meal's share of a pot.
+  potLabel: string | null;
   kcal: number;
   protein: number;
 }
@@ -198,6 +201,8 @@ export interface MealView {
   cells: MealCells | null;
   rows: IngredientRow[];
   note: string;
+  // This meal's share of a pot, or null.
+  pot: PotPortion | null;
   meal: Meal;
 }
 
@@ -214,10 +219,27 @@ export interface DayView {
   meals: MealView[];
   // How the day is arranged, one sentence.
   arrangement: string;
+  // Tonight's move from the freezer to the fridge, one line per box.
+  thaw: string[];
   day: DayPlan;
 }
 
-function ingredientRows(meal: Meal, key: MealKey, dayT: DayTargets | null): {
+/** "卤牛腱一锅的 1/4": a meal's share of a pot, as its ingredient row reads. */
+export function potLabel(portion: Pick<PotPortion, "pot" | "count">): string {
+  return t("meals.pot.label", { name: portion.pot.name, count: portion.count });
+}
+
+/** One meal of the week by its weekday and label: "星期三午餐". */
+export function boxName(ref: { date: string; meal: MealKey }): string {
+  return t("meals.pot.box", { weekday: weekdayName(ref.date), meal: mealLabel(ref.meal) });
+}
+
+/** The day card's line for a frozen share eaten tomorrow. */
+export function thawLine(entry: { pot: { name: string }; ref: { date: string; meal: MealKey } }): string {
+  return t("meals.pot.thaw", { box: boxName(entry.ref), name: entry.pot.name });
+}
+
+function ingredientRows(meal: Meal, key: MealKey, dayT: DayTargets | null, portion: PotPortion | null): {
   rows: IngredientRow[];
   totals: Nutrition | null;
   cells: MealCells | null;
@@ -232,15 +254,17 @@ function ingredientRows(meal: Meal, key: MealKey, dayT: DayTargets | null): {
     category: r.food.category,
     grams: r.grams,
     units: r.food.unit ? `${Math.round(r.grams / r.food.unit.grams)} ${r.food.unit.label}` : null,
+    potLabel: portion && r.role === "protein" && r.foodId === portion.pot.foodId ? potLabel(portion) : null,
     kcal: r.kcal,
     protein: r.protein,
   }));
   return { rows, totals: numbers.totals, cells: numbers.cells };
 }
 
-export function mealView(meal: Meal, key: MealKey, dayT: DayTargets | null): MealView {
+export function mealView(meal: Meal, key: MealKey, dayT: DayTargets | null, portion: PotPortion | null = null): MealView {
   const made = meal.mode === "make";
-  const { rows, totals, cells } = made ? ingredientRows(meal, key, dayT) : { rows: [], totals: null, cells: null };
+  const pot = made ? portion : null;
+  const { rows, totals, cells } = made ? ingredientRows(meal, key, dayT, pot) : { rows: [], totals: null, cells: null };
   return {
     key,
     label: mealLabel(key),
@@ -258,14 +282,23 @@ export function mealView(meal: Meal, key: MealKey, dayT: DayTargets | null): Mea
     cells,
     rows,
     note: meal.note ?? "",
+    pot,
     meal,
   };
 }
 
-export function dayView(day: DayPlan, today: string, targets: Targets | null, profile: Profile | null): DayView {
+/** One day as the screen draws it. `plan` is the week it belongs to, which its pots are read from. */
+export function dayView(
+  day: DayPlan,
+  today: string,
+  targets: Targets | null,
+  profile: Profile | null,
+  plan: WeekPlan | null = null,
+): DayView {
   const dayT = targets && profile ? dayTargetsOn(targets, profile, day.date) : null;
   const order: readonly MealKey[] = dayT?.order ?? MEAL_KEYS;
-  const meals = order.map((k) => mealView(day[k], k, dayT));
+  const portions = plan ? potPortions(plan) : new Map<string, PotPortion>();
+  const meals = order.map((k) => mealView(day[k], k, dayT, portions.get(refKey({ date: day.date, meal: k })) ?? null));
   const training = dayT?.kind === "training";
   return {
     date: day.date,
@@ -277,6 +310,7 @@ export function dayView(day: DayPlan, today: string, targets: Targets | null, pr
     totals: sumNutrition(meals.flatMap((m) => (m.totals ? [m.totals] : []))),
     meals,
     arrangement: training ? t("meals.arrangementTraining") : t("meals.arrangementRest"),
+    thaw: plan ? thawTonight(plan, day.date).map(thawLine) : [],
     day,
   };
 }
@@ -331,7 +365,7 @@ export function mealsView(state: MealsState, today: string, region: Region): Mea
   const profile = state.charter?.profile ?? null;
   const targets = targetsOf(state.charter, region);
   const plan = state.plan;
-  const week = plan ? plan.days.map((d) => dayView(d, today, targets, profile)) : [];
+  const week = plan ? plan.days.map((d) => dayView(d, today, targets, profile, plan)) : [];
   const upcoming = week.filter((d) => d.date >= today);
   return {
     profile,
@@ -350,7 +384,7 @@ export function mealsView(state: MealsState, today: string, region: Region): Mea
 export function dayViewOn(state: MealsState, date: string, today: string, region: Region): DayView | null {
   const day = state.plan?.days.find((d) => d.date === date);
   if (!day) return null;
-  return dayView(day, today, targetsOf(state.charter, region), state.charter?.profile ?? null);
+  return dayView(day, today, targetsOf(state.charter, region), state.charter?.profile ?? null, state.plan);
 }
 
 // --- pictures ----------------------------------------------------------------
@@ -432,4 +466,51 @@ export function shoppingNote(item: ShoppingItem): string {
   return item.freezeOnArrival
     ? t("meals.shoppingNoteFreeze", { keeps: keepsLabel(item.keeps) })
     : keepsLabel(item.keeps);
+}
+
+/** A run of meals by weekday and label, joined the way the language lists them. */
+export function mealsList(refs: readonly { date: string; meal: MealKey }[]): string {
+  return refs.map(boxName).join(t("meals.listJoin"));
+}
+
+/**
+ * The one line drawn after the plan card's Apply (cards.ts MealsAppliedCardData,
+ * by shape: screen does not import the cards): what was saved and what the
+ * shopping list now holds. The model's note on the same row is never drawn.
+ */
+export function appliedLine(card: {
+  adjustment: boolean;
+  changed: readonly { date: string; meal: MealKey }[];
+  toBuy: number;
+  freeze: number;
+}): string {
+  const head = card.adjustment
+    ? t("meals.applied.change", { meals: mealsList(card.changed), count: card.toBuy })
+    : t("meals.applied.week", { count: card.toBuy });
+  return card.freeze ? `${head} · ${t("meals.applied.freeze", { count: card.freeze })}` : head;
+}
+
+const PROFILE_FIELDS = [
+  "weightKg",
+  "heightCm",
+  "bodyFatPct",
+  "waistCm",
+  "goal",
+  "trainingDays",
+  "trainTime",
+  "work",
+  "effort",
+  "people",
+  "dislikes",
+  "shops",
+  "kitchen",
+  "notes",
+] as const;
+
+/** The profile fields a change named, as the reader calls them. Unknown names are dropped. */
+export function profileFieldsLine(fields: readonly string[]): string {
+  return fields
+    .filter((f): f is (typeof PROFILE_FIELDS)[number] => (PROFILE_FIELDS as readonly string[]).includes(f))
+    .map((f) => t(`meals.field.${f}`))
+    .join(t("meals.listJoin"));
 }

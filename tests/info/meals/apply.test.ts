@@ -104,9 +104,19 @@ test("applying a plan writes the week with its grams solved and the list derived
   expect(mealOn(h.saved.plan, MON, "lunch")!.solved!.length).toBe(5);
   const list = currentList(h.saved.shopping!);
   expect(list).toEqual(deriveShoppingList(week(), MON, 1));
-  expect(list.find((i) => i.foodId === "salmon")?.qty).toBe("240 g");
+  // Three salmon dinners at a 25 g-protein portion each, 120 g.
+  expect(list.find((i) => i.foodId === "salmon")?.qty).toBe("360 g");
   expect(h.reloads).toBe(1);
   expect(applied.note).toContain(`${list.length} things`);
+  // The reader is shown counts on a card, never the model's note.
+  expect(applied.note.startsWith("[")).toBe(true);
+  expect(applied.shown).toEqual({
+    kind: "meals-applied",
+    adjustment: false,
+    changed: [],
+    toBuy: list.length,
+    freeze: list.filter((i) => i.freezeOnArrival).length,
+  });
 });
 
 test("Apply re-solves against the profile as it is now, not the one the card was drafted for", async () => {
@@ -269,7 +279,7 @@ test("the notes are said in the reader's voice and never read the list back", ()
     ],
   });
   expect(planNote(planCard(), list)).toContain("1 things, 1 to freeze");
-  expect(planNote(planCard(), list)).toContain("Don't read it back");
+  expect(planNote(planCard(), list)).toContain("Do not read it back");
   expect(
     planNote(planCard({ adjustment: true, changed: [{ date: MON, meal: "lunch" }] }), list),
   ).toContain("2026-09-21 lunch");

@@ -26,13 +26,14 @@ export const AI_EVENT_TOPIC = "ai";
 // per site: prep-plan counts chapters + references + nominations, notes-plan
 // counts chapters, slides-plan counts slides, info-triage counts item
 // references across the four tiers, info-screen counts per-item verdicts in one
-// screening batch. tool-args counts nothing.
+// screening batch, meals-recipe counts steps. tool-args counts nothing.
 export type ParseSite =
   | "prep-plan"
   | "notes-plan"
   | "info-screen"
   | "info-analyst"
   | "info-synthesis"
+  | "meals-recipe"
   | "tool-args";
 
 // Why the output was unusable.

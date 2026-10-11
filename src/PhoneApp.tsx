@@ -90,6 +90,8 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
       return "meals-shopping";
     case "meals-day":
       return "meals-day";
+    case "meals-recipe":
+      return "meals-recipe";
     case "meals-method":
       return "meals-method";
     case "meals-onboarding":
@@ -268,7 +270,7 @@ export default function PhoneApp({
   const onNavigate = useCallback((next: HomeScreen) => {
     // A day carries its date, so it is opened by onOpenMealsDay rather than by
     // naming a destination; nothing asks for it through here.
-    if (next === "meals-day") return;
+    if (next === "meals-day" || next === "meals-recipe") return;
     const kind = next === "vestibule" ? "home" : next;
     setStack((s) => goTo(s, screen(kind)));
   }, []);
@@ -392,8 +394,12 @@ export default function PhoneApp({
             // One day of the week is a stack entry like an opened article, so
             // the date rides on it and the back gesture leaves it the same way
             // it leaves anything else.
-            mealsDay={base.kind === "meals-day" ? base.date : null}
+            mealsDay={base.kind === "meals-day" || base.kind === "meals-recipe" ? base.date : null}
             onOpenMealsDay={(date) => setStack((s) => push(s, { kind: "meals-day", date }))}
+            // A meal's recipe is pushed over its day, so the back gesture
+            // lands on the day where the reader left it.
+            mealsRecipe={base.kind === "meals-recipe" ? base.meal : null}
+            onOpenMealsRecipe={(date, meal) => setStack((s) => push(s, { kind: "meals-recipe", date, meal }))}
             // Method & sources and a replayed onboarding are opened from more
             // than one screen, so their back is the stack's own.
             onMealsBack={goBack}

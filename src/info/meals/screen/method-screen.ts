@@ -14,7 +14,8 @@ import {
   USDA_FDC_URL,
   sourceLabel,
 } from "../nutrition/foods";
-import type { Profile, Targets } from "../nutrition/targets";
+import { GAIN_SURPLUS, TRAINING_PAL_BONUS, type Profile, type Targets } from "../nutrition/targets";
+import { PORTION_PROTEIN, STAPLE_KCAL_CAP } from "../nutrition/solve";
 
 /** A run of text, a link when it has a url. */
 export interface TextSegment {
@@ -86,7 +87,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
         : `BMI ${f1(t.bmi)} → ${t.cutRule === "overweight-85" ? "85%" : "80%"} of ${n0(t.tdeeAverage)} = ${n0(t.weeklyKcal)}.`;
     goalYours += ` Floor: ${n0(t.kcalFloor)} kcal.`;
   } else if (p.goal === "gain") {
-    goalYours = `Weekly target = ${n0(t.tdeeAverage)} × 1.10 = ${n0(t.weeklyKcal)}.`;
+    goalYours = `Weekly target = ${n0(t.tdeeAverage)} × ${f2(1 + GAIN_SURPLUS)} = ${n0(t.weeklyKcal)}.`;
   } else {
     goalYours = `Weekly target = maintenance = ${n0(t.tdeeAverage)}.`;
   }
@@ -127,14 +128,14 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
       title: tMsg("meals.section.activity"),
       formula:
         "Work base: mostly sitting 1.40 · on your feet 1.60 · manual work 1.80\n" +
-        "Training day: base + 0.20 (max 2.0) · Rest day: base\n" +
+        `Training day: base + ${f2(TRAINING_PAL_BONUS)} (max 2.0) · Rest day: base\n` +
         "Weekly average = (training days × training PAL + rest days × rest PAL) ÷ 7\nTDEE = BMR × PAL",
       yours:
         `Training day PAL ${f2(t.palTraining)} → ${n0(t.tdeeTraining)} kcal; rest day ${f2(t.palRest)} → ${n0(t.tdeeRest)} kcal; ` +
         `weekly average ${t.palAverage.toFixed(3)} → ${n0(t.tdeeAverage)} kcal.`,
       sources: linkSegments(
         "1.40 / 1.70 / 2.00 are the adult PAL levels in the Chinese DRIs 2023 (WS/T 578.1 revision draft, [PDF](http://file2.foodmate.net/wenku2025/wj202501261003.pdf)). " +
-          "The 1.60 and 1.80 steps and the +0.20 for a training day are our conventions; no authority publishes a table for them.",
+          `The 1.60 and 1.80 steps and the +${f2(TRAINING_PAL_BONUS)} for a training day (everyday training, not a hard block) are our conventions; no authority publishes a table for them.`,
       ),
     },
     {
@@ -143,13 +144,15 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
       formula:
         `Lose fat\n  BMI < ${over}: deficit = 0.5% of weight per week × 7700 kcal/kg ÷ 7\n` +
         `  BMI ${over}–${obese}: 85% of TDEE · BMI ≥ ${obese}: 80% of TDEE\n` +
-        "  Never below max(BMR, 1200 men / 1000 women)\nBuild muscle: weekly average TDEE × 1.10\nSteady energy: TDEE\n" +
+        "  Never below max(BMR, 1200 men / 1000 women)\n" +
+        `Build muscle: weekly average TDEE × ${f2(1 + GAIN_SURPLUS)}\nSteady energy: TDEE\n` +
         "Each day gets the weekly target × its PAL ÷ average PAL, rounded to 50.",
       yours: goalYours,
       sources: linkSegments(
         "0.5–1% of body weight per week: ISSN position stand on diets and body composition, [PMC5470183](https://pmc.ncbi.nlm.nih.gov/articles/PMC5470183/). " +
           `85% / 80% and the BMR floor: ${GUIDE_2024}, [PDF](https://www.gxcdc.org.cn/uploadfile/20240326/1711416964432469.pdf). ` +
-          "+10–20% for muscle gain: Iraki et al. 2019, [PMC6680710](https://pmc.ncbi.nlm.nih.gov/articles/PMC6680710/). " +
+          "Iraki et al. 2019 give +10–20% for muscle gain in trained lifters, [PMC6680710](https://pmc.ncbi.nlm.nih.gov/articles/PMC6680710/); " +
+          `our +${Math.round(GAIN_SURPLUS * 100)}% for everyday training is a convention. ` +
           (t.region === "CN"
             ? "BMI cut-offs 24 / 28: WS/T 428-2013, [standard](https://www.ndls.org.cn/standard/detail/1459733003242ea2662cfdce73427e2b). "
             : "BMI cut-offs 25 / 30: WHO. ") +
@@ -190,8 +193,11 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
         "Calories: breakfast 25% · lunch 35% · dinner 30% · snack 10%\nProtein: snack ≤ 10 g, the rest split evenly over three meals\n" +
         "Training day: the snack moves to right after training; the next\n  main meal takes 5% more of the day's calories, from the other two\n" +
         "Plate: protein food, ≥ 150 g veg, a staple, one spoon of sauce or oil.\n" +
-        "The protein food and the staple are solved so the meal's protein\n  and calories (each food's listed kcal) both land. The oil starts\n" +
-        "  at one spoon and only moves, within its cap, when the staple\n  would leave its usual range; past the cap the staple grows.\n" +
+        `The protein food gets a normal portion: ${PORTION_PROTEIN.lunch} g protein at lunch and dinner,\n` +
+        `  ${PORTION_PROTEIN.breakfast} g at breakfast, ${PORTION_PROTEIN.snack} g at the snack (milk and yogurt on the side\n` +
+        "  do not count). The protein target above is a floor.\n" +
+        `The staple fills the meal's calories, within its usual range and\n  at most ${STAPLE_KCAL_CAP} kcal. If that is still short, the oil moves up\n` +
+        "  within its cap. The snack's nuts close the day's calories.\n" +
         "If the day's fat would land under the section 5 floor, each main\n  meal gets 5 g more oil and the staple shrinks to keep calories.\n" +
         "Grams rounded to 5 (eggs to whole eggs).",
       yours:

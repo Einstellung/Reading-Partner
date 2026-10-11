@@ -21,6 +21,7 @@ export type HomeScreen =
   | "meals"
   | "meals-shopping"
   | "meals-day"
+  | "meals-recipe"
   | "meals-method"
   | "meals-onboarding"
   | "settings";
@@ -84,6 +85,7 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
     case "meals":
     case "meals-shopping":
     case "meals-day":
+    case "meals-recipe":
     case "meals-method":
     case "meals-onboarding":
       return "meals";
@@ -94,4 +96,12 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
     default:
       return null;
   }
+}
+
+// Whether the home area draws the launch card (the vestibule) for this screen.
+// The briefing screen has nothing to draw when today's briefing does not exist
+// (a reader device before sync, a fresh day before collection, no sources), so
+// it falls back to the card that already says why.
+export function showsLaunchCard(screen: HomeScreen, hasBriefing: boolean): boolean {
+  return screen === "vestibule" || (screen === "briefing" && !hasBriefing);
 }
