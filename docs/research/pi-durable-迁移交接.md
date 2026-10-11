@@ -373,3 +373,17 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 流式中返回主题页再进：离开时半句已进线程文件，回来半句在读者那句下面，无 Stop、无新请求。
 - 流式中 SIGKILL：重启进课堂半句只有一份，faux 调用 0 次（不重问），turn-log 补 end aborted；Lumen 盒子 +1（按设计）。
 - 环境：dev server PID 24214 仍在跑；模拟器 app 里的凭据已删，localStorage `__fauxPlan` 已清（`src/dev-faux.ts` 脚手架仍在 `~/rp-flow` 未提交）。发送助手 `~/pdsend.sh TEXT`（按 DOM 取输入框和 Send 的位置再点）。
+
+## iPad 真机验收（分支 `verify/pi-durable-ipad`，从 `dev/pi-durable` 885a54b4 起）
+
+2026-10-11，iPad（iPad15,7，iOS 26.7.1）插 Mac mini。Xcode 26.6 的 CoreDevice 看不到这台 iPad（坑 521），全程走 pymobiledevice3：`apps install` 装 `.dev` 包（装前从 ipa 读回 CFBundleIdentifier），`apps afc` 铺书和取库，`dvt launch/kill/screenshot --userspace`，Homebrew 的 `ios_webkit_debug_proxy` 进 WKWebView 跑 JS。iPad 的 UDID 这次在门户注册了（坑 197，占一个年度名额）。慢速 faux 的启动脚手架提交为 `src/dev-faux.ts`，只有 `VITE_VERIFY_FAUX=1` 的构建带它，另加 `__fauxToolDelayMs` 让本进程组装的回合的工具变慢，好杀在工具里。iPad 竖屏下「Learn this book with AI」是整屏课堂（use-call）。报告页在会话 scratchpad `verify-ipad/report.html`。Haiku 0 次：Linux 上的 access token 已过期 13 小时。
+
+- 正文中间杀：过。半句一次进线程文件，重开不重问；重启时有一次 `subagent` 调用（Lumen 卡片那条路），不是阅读回合。
+- 工具里杀、重启后接上在途回合：过。`read_pages` 慢跑中 SIGKILL，重启后工具重放、faux 接着写，打开线程看得到在流、Stop 在；插话进队（after this step）；停止留半句，排队那句开下一回合。
+- 插话与停止：过。正文流中插话，同一回合第 2 轮回答（turn-log 同一个 turn id）；第 2 轮正文中停止，半句留在线程（332 字符，断在词中间）。
+- IPC（`scripts/durable-probe` 打成 `.dev` 包装到 iPad）：每次提交 p50 18 ms、p95 20、max 26；裸 IPC p50 0、p95 1、max 9；每次宿主调用 p50 2、p95 3。SIGKILL 恢复正确（半句 820 字符、待办 1 条、续写完整）。
+- 库增长：本地 checkpoint 后主库 116 KB 起，10 个提交后 356 KB，约 25 KB/提交（faux 答案每段约 3.6K 字符）；设备上 WAL 涨到 4.0 MB 才 checkpoint，主库文件 316 KB。
+- 没走：第 1 项（Haiku 正常回合）、第 5 项（切后台 30/60 s），等用户在 Linux 桌面 app 里刷新登录后再拷 access token。
+- 注意：课堂第一次打开会对每章跑一次 prep（这本书 63 章），走默认模型。真模型前要让 prep 已完成，否则一开课就是 63 次 Haiku。这次用快速 faux 跑完 prep，23 章失败（faux 队列耗尽，失败章不自动重跑），overview 手工标了 done。
+- 观察：课堂内容滚上去后，左上角关闭/删除按钮压在正文上（截图 s3c）。
+- 环境：Mac `~/rp-ipad`（worktree，detached 在 96caede7），构建 `~/build.sh`、设备助手 `~/d.sh`（launch/kill/shot/js/send/stop/st/open）、`~/rp.py`；ipa 在 `/tmp/rp-dev-ipad.ipa`，探针包 `/tmp/rp-dev-probe.ipa`。iPad 上 `.dev` app PID 7165 留着在跑，ios_webkit_debug_proxy PID 78195 在 Mac 上跑。容器里占位凭据已删，faux 的 localStorage 键已清，`settings.json` 三个模型都是 claude-haiku-5-5。

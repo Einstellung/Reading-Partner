@@ -267,6 +267,7 @@
 - [426-a-no-sign-simulator-build-has-no-entitlements](./ios-build/426-a-no-sign-simulator-build-has-no-entitlements.md) — `tauri ios build --no-sign` 跳过签名，模拟器包里就没有 `__entitlements` 段，App Group 的 `containerURL` 返回 nil（扩展报 no App Group container）；`codesign -d --entitlements` 对模拟器包永远是空 dict，不能拿来判断。验 entitlement 的模拟器包去掉 `--no-sign`（ad hoc 签，不碰钥匙串），核对用 `strings | grep application-groups`
 - [427-a-copied-cargo-target-breaks-swift-rs-module-cache](./ios-build/427-a-copied-cargo-target-breaks-swift-rs-module-cache.md) — 把老检出的 `target/aarch64-apple-ios-sim` 克隆到新检出复用，swift-rs 的 `.pcm` 里写死了老的 module cache 路径，build script 重跑时 panic（`missing required module 'SwiftShims'`）；拷完删掉所有 `*/out/swift-rs` 再构建
 - [433-simulator-webcontent-memory-needs-footprint](./ios-build/433-simulator-webcontent-memory-needs-footprint.md) — 模拟器的 WebContent 不在 `simctl spawn launchctl list` 里，是宿主上 `launchd_sim` 的子进程；它的 RSS 同一页面几分钟内在 73-332 MB 间跳，要按父进程找到后用 `footprint` 读 `phys_footprint`，同一会话先量空页面当基线只比差值
+- [521-coredevice-does-not-see-an-ipad-newer-than-xcode](./ios-build/521-coredevice-does-not-see-an-ipad-newer-than-xcode.md) — iOS 比 Xcode 新（26.7.1 对 Xcode 26.6），devicectl 里设备 `pairingState: unsupported`，装机、启动、拷容器都用不了，lockdown 照样通；改走 pymobiledevice3 的 `apps install`/`apps afc`/`dvt launch|kill|screenshot --userspace`
 
 ## Android 构建与签名
 
