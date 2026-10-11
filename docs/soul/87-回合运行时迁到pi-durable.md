@@ -186,6 +186,14 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 量：大，三到四棒。
 
+已完成（2026-10-11，分支 `dev/pi-durable-2a` 到 `2g`，过程见[交接](../research/pi-durable-迁移交接.md)）。和上面不同的：
+
+- `legion/durable` 多三个文件：`device.ts`（设备运行时，`openDeviceDurable({ places })`，每个 place 给键、地址、桌面解析器、落盘、读历史）、`thread-files.ts`（通用的线程落盘和 steer 写回）、`turn-log.ts`（从 `reading/turn` 搬来）。运行时入口仍叫 `startReadingDurable` / `readingDurable`（`reading/turn/durable-runtime.ts`），各 place 由外壳传进来。
+- 回合控制器是 `reading/turn/place-session.ts`；门口的 place 在 `soul/door-durable.ts`，info 和三餐在 `info/briefer/info-durable.ts`，教练和复述走 `reading/turn/one-thread-place.ts`，info 语音在 `reading/turn/info-voice.ts`。
+- 铃不在 `soul/bell.ts` 里起回合：各 place 的铃在 `reading/turn/*-bell.ts`（通用的 `place-bell.ts`，门口 `door-bell.ts`，简报和三餐 `info-bell.ts`，书 `deliver.ts`），外壳注册；`bell.ts` 只按 place 分派，没注册门口时铃留在队列。`soul/headless.ts` 没改成建 `rp.turn`，删掉了：铃的 headless 回合是 `place-bell.ts` 的 `headlessPlaceTurn`，收尾旧 session 的发送并进 `recover.ts`。
+- `soul/harness.ts` 整个删掉。`startSoulSession` 换成 `recover.ts` 的 `finishOldSoulSession`：soul 的 session 组为空就什么都不开；有就开一次、等收尾跑完、删掉整组，之后启动不再碰。旧 session 里门口的回合没有 opener，收尾时 abort，同旧行为。
+- `runAgentTurn` 不再收 `deliverTo`，app 不再写 `DELIVERY_ENTRY`、`PROMPT_ENTRY`；`runHarnessTurn` 的 `deliverTo` 只剩恢复测试用来造旧 session，第四阶段随 `legion/execute` 删。书、简报、三餐的 opener（`registerDelivery`）留给 `recover.ts` 重建桌面。
+
 ### 第三阶段：子 agent 和后台
 
 范围：`legion/subagent`、legion runner 的 agent worker、后台 pass（`memory/live`、`info/program/live.ts`、`reading/prep/*`）。

@@ -564,3 +564,23 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 开着的对话不知道"听到的部分"的改写，重开才见。
 - 真机/模拟器上要验：① 开场白念完、问一句、回答念出，对话文件里各一次，盒子无卡；② 开场白或回答中插话，念到的那句截断带标记，下一句正常回答；③ 通话中打开 info 文本对话，在说的回合接上流式出现，打字成插话且回答被念出；④ 合 2e 后文本对话开着时开通话，语音句子和回答画进对话，关对话时语音回合停下；⑤ 回答中杀 app，重开后半句一次、不出声、一张卡；⑥ 工具调用时 Lumen 低头；⑦ 挂断后蒸馏照旧。
 - 坑 531 没用。
+
+## 第二阶段第四棒 A（分支 `dev/pi-durable-2g`，从 `origin/dev/pi-durable-2` 1558f8d1 起）
+
+做完的：
+
+- 删 `soul/harness.ts`（`soulHarness`、`startSoulSession`）、`soul/headless.ts`、`soul/door-chat.ts` 的 `sendAtTheDoor`、`ui/components/chat/useStreamingTurn.ts` 和 `streaming-turn.ts`（已无调用方）及两份测试、`tests/support/scripted-runner.ts` 的 `scriptedBellSender`。`door-chat.ts` 只剩 `prepareDoorTurn`。
+- `soul/bell.ts` 删掉旧路：opener 加 held harness 的回合（`openDelivery`、`send`、`landReply`、`hold`）和没注册门口 deliverer 时的门口回合。现在 place 有 turn deliverer 就走它，返回 null 或没有就走门口的 deliverer，门口也没注册就 `onTrouble` 并停这一轮（铃留在队列）。`AnswerBellDeps` 去掉 `harness`、`send`、`newThreadId`，`BellTurn`、`SendBellTurn` 删掉。
+- `runAgentTurn` 不再收 `deliverTo`，app 里没有写 `DELIVERY_ENTRY`、`PROMPT_ENTRY` 的路了。`runHarnessTurn` 的 `deliverTo` 留着：`recover.test.ts`、`recover-settled.test.ts` 靠它造带戳的旧 session。
+- 收尾旧 session：原来靠 `startSoulSession` 每次启动开 soul 的 held harness（开的时候顺带恢复，再新建一个 session 文件）。换成 `recover.ts` 的 `finishOldSoulSession`（`useBackgroundServices` 调）：列 soul 的 session 组，空就返回、不写任何东西；有就 `holdHarness` 开一次，等 `recoverSoulSession` 跑完，关掉，删掉组里所有 session 文件。没配 provider 或开不了就 warn，组留着下次再试。`sendHeadless` 并进 `recover.ts` 的 `appSend`，行为不变（talk 档、surface `recovery`）。
+- 测试：`bell.test.ts` 改成脚本化的 turn deliverer（门口和书），旧 opener/hold 的用例删掉，加「没注册门口时铃留在队列」「书没了改投门口、卡片仍指书」；`tests/info/briefer/deliver.test.ts` 改成直接调 opener（recover 用的那份）；`door-chat.test.ts` 改测 `prepareDoorTurn`；`harness.test.ts` 删掉，`recover.test.ts` 加三个：旧 session 里 info 回合和门口回合各卡在工具里，第一次启动 info 回合被续完落进简报线程、门口回合 abort、模型只调一次、整组删掉，第二次启动什么都不开不写；没有 soul session 时不读设置不写盘；开不了时不抛、组留着。全量 `scripts/t.sh` 7457 过、1 跳过、0 失败，`bun run typecheck` 过。
+- 87「第二阶段」补了已完成和与原计划不同的地方；55「execute」那段、71「对话按归属存」里 session 那段各加一句指向 87。25 的「契约」是第三阶段（子 agent）的事，没动。
+
+留着的（第四阶段删）：`soul/recover.ts`、`soul/landing.ts`（只剩 recover 用）、`legion/execute/held.ts`，`soul/delivery.ts` 的 opener 注册（`registerDelivery`、`deliveryOpener`、`Delivery`、`DeliveryHold`）和书、简报、三餐的 opener，`DELIVERY_ENTRY` / `PROMPT_ENTRY` 常量。子 agent、后台 pass、agent worker 用的 `legion/execute` 没动。
+
+没做的：
+
+- 真 app 验收没跑：这一棒不改界面行为，升级收尾只有单测。要验的话：用旧版 app 在门口或 info 回合正文中杀进程，换本分支启动，看 info 回合落一次、AppData `session/--session-soul--/` 变空，再启动不新建文件。
+- `tests/info/briefer/handoff.test.ts` 单独跑会挂（"collect" 这个 kind 没人注册，`electFor` 返回 null），全量跑过。和本棒无关，是测试顺序依赖，没修。
+- 实测没有踩到意外，531–533 没用。
+
