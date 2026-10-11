@@ -254,14 +254,15 @@ export interface HarnessTurnParams extends AgentCallbacks {
   // same loop under a different name, which is the whole point of the harness
   // owning the loop.
   lane?: TurnLane;
-  // Run on this harness's lane instead of a fresh session: the soul's turns
-  // (src/soul/harness.ts). `lane` and `fileSystem` are then the harness's own
-  // and ignored here.
+  // Run on this harness's lane instead of a fresh session: the recovery of
+  // the old soul session (src/soul/recover.ts). `lane` and `fileSystem` are
+  // then the harness's own and ignored here.
   held?: HeldHarness;
   // Where this turn's reply goes, stamped on the session beside the run before
-  // it starts, so a later process can rebuild the receiver for a run it finds
-  // still open (src/soul/recover.ts). Only a borrowed lane is stamped: a turn
-  // with a session of its own is over when the process is.
+  // it starts. The soul's turns wrote it until docs/soul/87 第二阶段, and
+  // src/soul/recover.ts reads it off the old session; nothing in the app
+  // passes it now, and only the recovery tests write it, to make the session
+  // they recover. Only a borrowed lane is stamped.
   deliverTo?: Record<string, unknown>;
   // Where this turn registers its silence watch (stall.ts). The process's own
   // unless a test hands one in; `null` turns the watch off, which is what every
@@ -926,7 +927,6 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
     about,
     lane,
     harness,
-    deliverTo,
     resume,
     stallMs,
     onDelta,
@@ -985,7 +985,6 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       ...(harness
         ? { held: harness, conversation: telemetry.thread, limitMs: turnLimitFor(telemetry.surface) }
         : {}),
-      ...(deliverTo ? { deliverTo } : {}),
       ...(stallMs === undefined ? {} : { stallMs }),
       ...(resume === undefined ? {} : { resume }),
       log: appTurnLog,

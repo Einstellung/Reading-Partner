@@ -1,17 +1,22 @@
-// Finishing the turn the last process died in the middle of.
+// Finishing the turn the last process died in the middle of, on the soul's
+// old session.
 //
-// A process start opens the newest soul session, and whatever it finds still
-// open there is a turn that was being answered when the app was killed
-// (legion/execute/harness.ts). The reader asked something and got nothing back.
+// Until docs/soul/87 第二阶段 every soul turn ran on one held harness over a
+// session group of its own; now they all run on the durable runtime, which
+// recovers its own. What is left is the first start after the upgrade:
+// finishOldSoulSession opens the newest soul session once, and whatever it
+// finds still open there is a turn that was being answered when the app was
+// killed (legion/execute/harness.ts). The reader asked something and got
+// nothing back. Then the group is deleted, and no later start touches it.
+// This file goes in 第四阶段.
 // So the run is resumed rather than aborted: pi writes the interrupted tool's
 // synthetic result — unless the tool said it is safe to run again — and the
 // model picks the turn up from there. What it says lands where the question was
 // asked, and the reader is told nothing about any of it. A reply that arrives
 // late reads as a reply that arrived late.
 //
-// It runs on the previous session's own harness, so this process's first turn
-// is not waiting behind it (held.ts): the reader talking right now is answered
-// on the fresh session while the old one finishes in the background.
+// It runs on the previous session's own harness, in the background: nobody is
+// waiting on it.
 //
 // What lands is the whole turn and not only its ending. A turn that called
 // tools wrote a sentence or two before each of them, and those rounds are
@@ -40,16 +45,27 @@
 //                resumed for ever, once per start.
 //   not a run    a compaction or a navigation. Neither is anybody's answer.
 
-import { BACKGROUND_CONTEXT, type Context, type Entry } from "@earendil-works/pi-agent-core";
+import {
+  BACKGROUND_CONTEXT,
+  type AgentMessage,
+  type Context,
+  type Entry,
+  type FileSystem,
+} from "@earendil-works/pi-agent-core";
+import type { Message } from "@earendil-works/pi-ai";
 import { joinRoundTexts } from "../ai/turn-view/turn-rows";
-import type { HeldHarness, HeldRecovery } from "../legion/execute/held";
-import { DELIVERY_ENTRY, PROMPT_ENTRY } from "../legion/execute/turn";
+import type { ProviderId } from "../ai";
+import { modelIdFor } from "../ai/model-tier";
+import { resolveCall } from "../ai/providers";
+import type { TurnLane } from "../legion/execute/contract";
+import { createSessionRepo } from "../legion/execute/harness";
+import { holdHarness, type HeldHarness, type HeldRecovery, type HeldTurn } from "../legion/execute/held";
+import { DELIVERY_ENTRY, PROMPT_ENTRY, runAgentTurn } from "../legion/execute/turn";
 import type { BoxOrigin, BoxStore } from "../box";
-import { loadSettings, type Settings } from "../platform/app/settings";
+import { loadSettings, toReasoning, type Settings } from "../platform/app/settings";
 import { coverOf } from "./bell";
 import { deliveryOpener, originOf, type Delivery } from "./delivery";
 import { landReply } from "./landing";
-import { sendHeadless } from "./headless";
 
 /** One try at finishing a turn, written on the branch that holds it. */
 export const RECOVERY_ATTEMPT = "reading-partner.recovery-attempt";
@@ -94,24 +110,118 @@ export interface ResumedTurn {
 
 export type SendResumedTurn = (turn: ResumedTurn) => Promise<string>;
 
-// The app's sender. `messages` is empty because the prompt is already in the
-// session the lane belongs to — the turn resumes a run rather than starting one.
+// The app's sender: the turn on the talk model with no streaming surface
+// listening, settling on its end. `messages` is empty because the prompt is
+// already in the session the lane belongs to — the turn resumes a run rather
+// than starting one.
 const appSend: SendResumedTurn = (turn) =>
-  sendHeadless({
-    settings: turn.settings,
-    systemPrompt: turn.systemPrompt,
-    messages: [],
-    tools: turn.tools,
-    harness: turn.harness,
-    resume: turn.operationId,
-    surface: "recovery",
-    threadId: turn.threadId,
-    ...(turn.signal ? { signal: turn.signal } : {}),
+  new Promise<string>((resolve, reject) => {
+    void runAgentTurn({
+      providerId: turn.settings.defaultProviderId as ProviderId,
+      modelId: modelIdFor(turn.settings, "talk") as string,
+      systemPrompt: turn.systemPrompt,
+      messages: [],
+      tools: turn.tools,
+      harness: turn.harness,
+      resume: turn.operationId,
+      ...(turn.signal ? { signal: turn.signal } : {}),
+      reasoning: toReasoning(turn.settings.chatThinking),
+      telemetry: { surface: "recovery", thread: turn.threadId },
+      onDelta: () => {},
+      onToolStart: () => {},
+      onToolEnd: () => {},
+      onDone: (finalText, _assistant, turnText) => resolve(turnText || finalText),
+      onError: (message: string) => reject(new Error(message)),
+      onRefusal: (message: string) => reject(new Error(message)),
+    });
   });
 
+/** Where the soul's turns ran before docs/soul/87 第二阶段: one lane, one session group. */
+export const SOUL_LANE: TurnLane = { name: "soul", sessions: "soul" };
+
+export interface FinishDeps {
+  settings?: () => Promise<Settings>;
+  /** The session store. AppData's unless a test hands one in. */
+  fileSystem?: FileSystem;
+  context?: Context;
+  /** What the harness is opened with. The configured model unless a test hands one in. */
+  seed?: (settings: Settings) => Promise<HeldTurn>;
+  /** How the open session is finished. recoverSoulSession unless a test hands one in. */
+  recover?: (previous: HeldRecovery, context: Context) => Promise<void>;
+}
+
 /**
- * Finish what the previous session left open, then close it. Called once per
- * process, in the background, by the soul's harness.
+ * What the harness is opened with. It fixes its model registry at creation and
+ * the recovery's own slot is seeded from here, so the previous session opens
+ * with a registry that can answer at all; the turn that resumes brings its own
+ * model, prompt and tools. Nothing streams through this one.
+ */
+async function seedTurn(settings: Settings): Promise<HeldTurn> {
+  const { model } = await resolveCall(
+    settings.defaultProviderId as ProviderId,
+    settings.defaultModelId as string,
+    [],
+  );
+  return {
+    model,
+    streamFn: () => {
+      throw new Error("the soul's session was opened without a turn");
+    },
+    tools: [],
+    systemPrompt: "",
+    toProviderMessages: (messages: AgentMessage[]) => messages as Message[],
+  };
+}
+
+/**
+ * Finish the turn the old soul session left open, once, at start (the shell
+ * calls it), and then delete the session group so no later start opens it.
+ * No soul session on disk is the ordinary case and costs one listing: nothing
+ * is opened and nothing is written.
+ *
+ * Opening it at start rather than on a later turn is docs/pitfall/394: the
+ * reader whose answer was interrupted has the least reason to ask again.
+ * Failures are logged and dropped, and the group stays for the next start: a
+ * device with no provider configured has nothing to resume with yet.
+ */
+export async function finishOldSoulSession(deps: FinishDeps = {}): Promise<void> {
+  const context = deps.context ?? BACKGROUND_CONTEXT;
+  const store = deps.fileSystem ? { fileSystem: deps.fileSystem } : {};
+  try {
+    const repo = createSessionRepo(store);
+    if ((await repo.list({ cwd: SOUL_LANE.sessions }, context)).length === 0) return;
+    const settings = await (deps.settings ?? loadSettings)();
+    const recover =
+      deps.recover ??
+      ((previous: HeldRecovery, ctx: Context) => recoverSoulSession(previous, { lane: SOUL_LANE.name }, ctx));
+    // Set while the harness opens, before the open returns, when the newest
+    // session has something left open (held.ts).
+    let recovering: Promise<void> = Promise.resolve();
+    const held = holdHarness({
+      lane: SOUL_LANE,
+      ...store,
+      recover: (previous, ctx) => {
+        recovering = recover(previous, ctx).catch(async (e) => {
+          console.warn("the old soul session could not be recovered", e);
+          await previous.settle(ctx).catch(() => {});
+        });
+        return recovering;
+      },
+    });
+    await held.open!(await (deps.seed ?? seedTurn)(settings), context);
+    await recovering;
+    await held.close(context);
+    for (const session of await repo.list({ cwd: SOUL_LANE.sessions }, context)) {
+      await repo.delete(session, context);
+    }
+  } catch (e) {
+    console.warn("the old soul session could not be finished", e);
+  }
+}
+
+/**
+ * Finish what the previous session left open, then close it. Called once, in
+ * the background, while finishOldSoulSession opens the harness.
  */
 export async function recoverSoulSession(
   previous: HeldRecovery,

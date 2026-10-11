@@ -3,7 +3,6 @@
 // person and a laid desk together into one call is turn.ts.
 
 export { assembleTurn, configuredModel, type AssembleInput, type AssembledTurn } from "./turn";
-export { SOUL_LANE, soulHarness, startSoulSession } from "./harness";
 export {
   OUTPUT_MAX,
   answerBell,
@@ -11,13 +10,12 @@ export {
   runSubstance,
   startBellWatch,
   type AnswerBellDeps,
-  type BellTurn,
   type BellWatchDeps,
   type ReadAppText,
   type RunSubstance,
-  type SendBellTurn,
 } from "./bell";
 export { coverOf } from "./bell";
+export { SOUL_LANE, finishOldSoulSession, type FinishDeps } from "./recover";
 export { BOX_COVER_CAP, soulMemorySection, openSoul, type LoadedRole, type Soul, type SoulExtras } from "./self";
 export {
   BRIEFS_DIR,
@@ -64,10 +62,8 @@ export {
 } from "./door";
 export {
   prepareDoorTurn,
-  sendAtTheDoor,
   type DoorSendDeps,
   type DoorSendInput,
-  type DoorSendOutcome,
   type DoorTurnPrepared,
 } from "./door-chat";
 export {

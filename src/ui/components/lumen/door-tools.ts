@@ -16,7 +16,7 @@ export interface DoorToolPorts {
   /** The day's conversation and the day it is filed under. */
   threadId: string;
   date: string;
-  /** Put a card in the conversation, on screen and on disk (useStreamingTurn). */
+  /** Put a card in the conversation, on screen and on disk (use-door-chat.ts). */
   raiseCard(prefix: string, payload: CardPayload): void;
   /** The links of this turn, numbered in order (take-link-tool.ts linksToTake). */
   links: readonly string[];

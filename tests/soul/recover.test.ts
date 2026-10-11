@@ -30,6 +30,7 @@ import { registerDelivery, type Delivery } from "../../src/soul";
 import {
   MAX_ATTEMPTS,
   RECOVERY_ATTEMPT,
+  finishOldSoulSession,
   recoverSoulSession,
   type SendResumedTurn,
 } from "../../src/soul/recover";
@@ -601,4 +602,122 @@ test("a run left open on a conversation's lane is resumed there; a lane outside 
   } finally {
     off();
   }
+});
+
+// --- the first start after the upgrade (docs/soul/87 第二阶段) ----------------
+// The soul's turns no longer run on this session group: the shell opens it once
+// to finish what the last old process left open, then deletes it.
+
+test("the first start finishes the old session's info turn, aborts its door turn, and a second start touches nothing", async () => {
+  const disk = memoryAppData();
+  const fileSystem = createSessionFileSystem(disk);
+  const DATE = "2026-09-20";
+  const INFO = `info-${DATE}`;
+  const INFO_THREAD = `briefing-${DATE}`;
+  createBookThread(INFO, INFO_THREAD);
+  const off = registerDelivery("briefing", async (input) => {
+    if (input.origin.place !== "briefing") return null;
+    return {
+      key: INFO,
+      threadId: INFO_THREAD,
+      turn: { systemPrompt: "the briefing is on the desk", tools: [echo], messages: [], refusal: "" },
+      watching: () => false,
+    } satisfies Delivery;
+  });
+  const resumed = resumeSender([{ text: "The tariff was 8%." }, { text: "never sent" }]);
+  let recoveries = 0;
+  const finish = () =>
+    finishOldSoulSession({
+      fileSystem,
+      settings: async () => settings,
+      seed: async () => ({
+        model: MODEL,
+        streamFn: () => {
+          throw new Error("nothing streams through the seed");
+        },
+        tools: [],
+        systemPrompt: "",
+        toProviderMessages: (messages) => messages as Message[],
+      }),
+      recover: (previous, context) => {
+        recoveries += 1;
+        return recoverSoulSession(
+          previous,
+          { lane: SOUL.name, settings: async () => settings, send: resumed.send },
+          context,
+        );
+      },
+    });
+  try {
+    // The old process: an info turn and a door turn, each killed in a tool.
+    const held = holdHarness({ lane: SOUL, fileSystem });
+    const entered: string[] = [];
+    const hang: AgentTool = {
+      ...echo,
+      execute: async (args) => {
+        entered.push(String(args.value));
+        await new Promise<void>(() => {});
+        return "unreachable";
+      },
+    };
+    const killed = (conversation: string, value: string, deliverTo: Record<string, unknown>) =>
+      void turn(held, [user("what was the tariff?")], [{ calls: [{ name: "echo", args: { value }, id: value }] }], {
+        tools: [hang],
+        conversation,
+        deliverTo,
+      });
+    killed(`info:${DATE}`, "info", { place: "briefing", date: DATE });
+    killed(`door:${DATE}`, "door", { place: "door", date: DATE });
+    await Bun.sleep(60);
+    expect(entered.sort()).toEqual(["door", "info"]);
+    await held.close(ctx);
+    expect(sessionFiles(disk).length).toBe(1);
+
+    await finish();
+    // One model call: the info turn, resumed and landed in its thread. The
+    // door has no opener to rebuild its desk, so its run was aborted.
+    expect(recoveries).toBe(1);
+    expect(resumed.rounds.length).toBe(1);
+    expect(getThread(INFO, INFO_THREAD)?.messages.map((m) => m.text)).toEqual(["The tariff was 8%."]);
+    // The group is gone, the session this start opened with it.
+    expect(sessionFiles(disk)).toEqual([]);
+
+    // The next start finds nothing: no session is opened, none is written.
+    await finish();
+    expect(recoveries).toBe(1);
+    expect(resumed.rounds.length).toBe(1);
+    expect(sessionFiles(disk)).toEqual([]);
+    expect(getThread(INFO, INFO_THREAD)?.messages.length).toBe(1);
+  } finally {
+    off();
+  }
+});
+
+test("a start with no soul session on disk opens nothing and writes nothing", async () => {
+  const disk = memoryAppData();
+  let recoveries = 0;
+  await finishOldSoulSession({
+    fileSystem: createSessionFileSystem(disk),
+    settings: async () => {
+      throw new Error("settings are not read when there is nothing to finish");
+    },
+    recover: async () => {
+      recoveries += 1;
+    },
+  });
+  expect(recoveries).toBe(0);
+  expect([...disk.files.keys()]).toEqual([]);
+});
+
+test("a start that cannot open the old session is dropped rather than thrown, and the group stays", async () => {
+  const disk = memoryAppData();
+  const fileSystem = createSessionFileSystem(disk);
+  const held = holdHarness({ lane: SOUL, fileSystem });
+  await turn(held, [user("q")], [{ text: "a" }]);
+  await held.close(ctx);
+  const before = sessionFiles(disk);
+  const settingsOf = async (): Promise<Settings> =>
+    ({ defaultProviderId: "not-a-provider", defaultModelId: "not-a-model" }) as Settings;
+  await expect(finishOldSoulSession({ fileSystem, settings: settingsOf })).resolves.toBeUndefined();
+  expect(sessionFiles(disk)).toEqual(before);
 });

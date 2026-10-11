@@ -12,7 +12,7 @@ import type { Shell } from "../../../platform/app/shell";
 import type { Settings } from "../../../platform/app/settings";
 import { initSync, TICK_MS } from "../../../platform/sync";
 import { registerPullRoute } from "../../../platform/sync/pull-routes";
-import { doorPlace, startBellWatch, startSoulSession } from "../../../soul";
+import { doorPlace, finishOldSoulSession, startBellWatch } from "../../../soul";
 import { startReadingDurable } from "../../../reading/turn/durable-runtime";
 import { COACH_PLACE, coachPlace } from "../../../reading/rehearsal";
 import { RETELL_PLACE, retellPlace } from "../../../reading/retell";
@@ -95,12 +95,13 @@ export function useBackgroundServices({
     [],
   );
 
-  // A turn the last process was killed in the middle of is finished now, on the
-  // session it was killed on (src/soul/recover.ts). It runs at start and not on
-  // the first turn, because the reader who lost an answer has no reason to ask
-  // for another one before they see it (docs/pitfall/394).
+  // A soul turn the last process before the upgrade was killed in the middle of
+  // is finished now, once, on the session it was killed on (src/soul/recover.ts).
+  // It runs at start and not on the first turn, because the reader who lost an
+  // answer has no reason to ask for another one before they see it
+  // (docs/pitfall/394).
   useEffect(() => {
-    void startSoulSession();
+    void finishOldSoulSession();
     // Book, door, info, meals, coach and retell turns run on the durable runtime (docs/soul/87); opening it sorts out what
     // the last process left running before anything resumes.
     startReadingDurable(appToolCatalog, () => ({

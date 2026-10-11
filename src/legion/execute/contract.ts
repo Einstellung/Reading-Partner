@@ -250,15 +250,11 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
   // The lane and session group this turn runs on; the reader's turn when unset.
   lane?: TurnLane;
   // A harness that outlives the turn, whose lane the turn runs on instead of a
-  // session of its own (legion/execute/held.ts). The soul's turns all name the
-  // soul's (src/soul/harness.ts); a worker or a background pass leaves it
-  // unset and gets a harness to itself. `lane` is ignored when this is set.
+  // session of its own (legion/execute/held.ts). Only the recovery of the old
+  // soul session names one (src/soul/recover.ts); a worker or a background
+  // pass leaves it unset and gets a harness to itself. `lane` is ignored when
+  // this is set.
   harness?: HeldHarness;
-  // Where this turn's reply goes, written to the session beside the run it
-  // belongs to. Opaque to legion: it is stored and handed back, never read.
-  // What it is for is a process that finds this run still open after this one
-  // died — it can rebuild the receiver and finish the turn (src/soul/recover.ts).
-  deliverTo?: Record<string, unknown>;
   // Finish this operation instead of starting one: the harness above is the
   // dead process's, standing where its run stopped, and `messages` is not sent
   // because the prompt is already in that session (src/soul/recover.ts).

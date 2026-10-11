@@ -20,9 +20,6 @@ import { createSessionFileSystem } from "../../src/platform/app/session-fs";
 import { createTurnSettler } from "../../src/legion/subagent/turn";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/legion/subagent/types";
 import { memoryAppData } from "./memory-appdata";
-import { holdHarness } from "../../src/legion/execute/held";
-import { toPiMessages } from "../../src/ai/providers";
-import type { SendBellTurn } from "../../src/soul";
 import { turnEvents, type Turn } from "./scripted-turn";
 
 export const FAUX_MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
@@ -111,35 +108,4 @@ export function scriptedSubagentRunner(
     return settler.outcome.finally(() => settler.dispose());
   };
   return { ...scripted, run, requests };
-}
-
-// The bell answered over the real turn machinery with the provider scripted:
-// what is under test at the call sites is the desk the bell is answered over and
-// where the reply goes, never how the stream is decoded.
-export function scriptedBellSender(
-  turns: readonly Turn[],
-  options: ScriptedStreamOptions = {},
-): SendBellTurn {
-  const { stream } = scriptedStream(turns, options);
-  const held = holdHarness({
-    lane: { name: "soul", sessions: "soul" },
-    fileSystem: createSessionFileSystem(memoryAppData()),
-  });
-  return (turn) =>
-    new Promise<string>((resolve, reject) => {
-      void runHarnessTurn({
-        stream,
-        model: FAUX_MODEL,
-        systemPrompt: turn.systemPrompt,
-        messages: toPiMessages(turn.messages),
-        tools: turn.tools,
-        maxRounds: 4,
-        held,
-        onDelta: () => {},
-        onToolStart: () => {},
-        onToolEnd: () => {},
-        onDone: (text) => resolve(text),
-        onError: (message) => reject(new Error(message)),
-      });
-    });
 }

@@ -18,78 +18,29 @@
 // reaches the reader, as one card to decide about; one whose reader is waiting
 // in the conversation it names also gets a turn of one short sentence there.
 //
-// One at a time. The soul's harness serialises turns anyway (legion/execute/
-// held.ts), but a pass that fired every bell at once would queue a stack of
+// One at a time: a pass that fired every bell at once would queue a stack of
 // turns behind a reader who is in the middle of one.
 //
-// A place with a turn runtime of its own (a book, docs/soul/87) answers the
-// bell there with a turn of its own. A conversation that is busy is waited for:
-// the bell starts its turn once that one has landed, and is acked only after.
+// Every place answers the bell with a turn on the durable runtime
+// (docs/soul/87), registered by the shell (registerTurnDelivery). A
+// conversation that is busy is waited for: the bell starts its turn once that
+// one has landed, and is acked only after.
 // Only that bell waits, and any rung after it for the same conversation; the
 // pass goes on with the rest.
 //
-// The door is such a place (reading/turn/door-bell.ts, registered by the shell): a
-// bell with nowhere else to go is answered by a turn in the day's conversation
-// at the door, on the same runtime as the reader's turns there. Where no door
-// deliverer is registered the turn below runs on the soul's harness, as do the
-// places that lay a desk for it (deliveryOpener) until they move over.
+// The door is one of them (reading/turn/door-bell.ts): a bell with nowhere else
+// to go is answered by a turn in the day's conversation at the door, on the
+// same runtime as the reader's turns there. With no door registered the bell
+// stays queued.
 
 import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
 import { appData } from "../platform/app/appdata";
 import { plainBlocks } from "../platform/std/markdown-plain";
-import type { AgentTool } from "../legion/execute/turn";
-import type { SteerPort } from "../legion/execute/contract";
-import type { HeldHarness } from "../legion/execute/held";
-import type { DeskMessage } from "../desk";
-import { createBookThread, getBookThread, loadThreads } from "../platform/app/threads";
 import type { Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
-import { doorDate, doorKey, openDoorTurn } from "./door";
-import {
-  deliveryOpener,
-  parseOrigin,
-  turnDeliverer,
-  type DeliveredTurn,
-  type Delivery,
-  type TurnDeliverer,
-  type TurnDeliveryOutcome,
-} from "./delivery";
-import { landReply } from "./landing";
-import { soulHarness } from "./harness";
-import { sendHeadless } from "./headless";
-
-/** What one bell turn is sent. The default sender is the app's; tests pass one. */
-export interface BellTurn {
-  settings: Settings;
-  systemPrompt: string;
-  messages: DeskMessage[];
-  tools: AgentTool[];
-  harness: HeldHarness;
-  /**
-   * The thread store's key for the conversation this lands in (threads.ts).
-   * Which of the two models the turn runs on is read off it (ai/model-tier.ts):
-   * a bell answered in an everyday conversation is answered on that tier.
-   */
-  bookKey: string;
-  threadId: string;
-  signal?: AbortSignal;
-  /**
-   * The turn has a run to queue into. The place holding the conversation open
-   * takes it, so the reader talking while the bell is being answered steers
-   * that turn instead of starting a second one on the same thread (docs/72).
-   */
-  onSteerable?: (port: SteerPort) => void;
-  /**
-   * Where the reply goes, stamped on the session so a process that finds this
-   * turn still open can finish it there (recover.ts). Only where the bell was
-   * answered in a place with a desk to lay; the door has no receiver to rebuild.
-   */
-  deliverTo?: BoxOrigin;
-}
-
-/** Runs one assembled bell turn and answers with what the soul said. */
-export type SendBellTurn = (turn: BellTurn) => Promise<string>;
+import { doorDate } from "./door";
+import { parseOrigin, turnDeliverer, type TurnDeliverer, type TurnDeliveryOutcome } from "./delivery";
 
 export interface AnswerBellDeps {
   settings: Settings;
@@ -99,9 +50,6 @@ export interface AnswerBellDeps {
   runs?: RunStore;
   /** The Red Box a delivered run leaves an item in. The device's own unless injected. */
   box?: BoxStore;
-  /** The lane every soul turn runs on. */
-  harness?: HeldHarness;
-  send?: SendBellTurn;
   /**
    * Reads a file a run pointed at — its brief, its output. AppData unless a
    * test hands one in: legion keeps references and the soul is the layer that
@@ -109,7 +57,6 @@ export interface AnswerBellDeps {
    */
   readFile?: ReadAppText;
   now?: () => number;
-  newThreadId?: () => string;
   signal?: AbortSignal;
   /** A turn that could not be taken. The bell stays queued either way. */
   onTrouble?: (bell: Bell, reason: string) => void;
@@ -258,21 +205,6 @@ export function renderBell(
   return lines.join("\n");
 }
 
-// The app's sender. A bell is its own message; the turn it starts is new.
-const appSend: SendBellTurn = (turn) =>
-  sendHeadless({
-    settings: turn.settings,
-    systemPrompt: turn.systemPrompt,
-    messages: turn.messages,
-    tools: turn.tools,
-    harness: turn.harness,
-    surface: "bell",
-    threadId: turn.threadId,
-    ...(turn.signal ? { signal: turn.signal } : {}),
-    ...(turn.onSteerable ? { onSteerable: turn.onSteerable } : {}),
-    ...(turn.deliverTo ? { deliverTo: turn.deliverTo } : {}),
-  });
-
 /** How long a cover may be. One line on a card, and it is never rewritten (docs/60). */
 export const COVER_MAX = 120;
 
@@ -322,11 +254,8 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
   const queued = await bells.read();
   if (queued.length === 0) return 0;
 
-  const send = deps.send ?? appSend;
   const readFile = deps.readFile ?? ((path: string) => appData.readText(path));
-  const harness = deps.harness ?? soulHarness();
   const now = deps.now ?? Date.now;
-  const newThreadId = deps.newThreadId ?? (() => crypto.randomUUID());
 
   const box = deps.box ?? appBox();
 
@@ -464,134 +393,25 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
       answered += 1;
       return "next";
     };
-    // A place that answers on its own runtime. Null means there is nothing
-    // there to answer in any more, and the bell goes to the door.
+    // The place the run was asked from. Null means there is nothing there to
+    // answer in any more, and the bell goes to the door.
     const deliver = origin && bell.type !== "wake" ? turnDeliverer(origin.place) : null;
     if (origin && deliver) {
       const step = await byTurn(deliver, origin, origin);
       if (step === "next") continue;
       if (step === "stop") break;
     }
-    const placed = origin ? await openDelivery(origin, rendered, deps) : null;
-    // The door, on its own runtime: a bell about a run that named no place, or
-    // one whose place could not be laid any more, and every wake bell. The
-    // day's one conversation at the door; the card goes where the run was asked.
-    const door = placed ? null : turnDeliverer("door");
-    if (door) {
-      const step = await byTurn(door, { place: "door", date }, origin ?? { place: "door", date });
-      if (step === "next") continue;
+    // The door: a bell about a run that named no place, or one whose place
+    // has nothing to answer in any more, and every wake bell. The day's one
+    // conversation at the door; the card goes where the run was asked.
+    const door = turnDeliverer("door");
+    if (!door) {
+      deps.onTrouble?.(bell, "no place is registered to answer the bell at the door");
       break;
     }
-
-    let key: string;
-    let threadId: string;
-    let turn: DeliveredTurn;
-    if (placed) {
-      ({ key, threadId } = placed);
-      turn = placed.turn;
-    } else {
-      // The door: a bell about a run that named no place, or one whose place
-      // could not be laid any more. It is also where a wake bell always lands.
-      key = doorKey(date);
-      // The day's file, and the one conversation held at the door that day. A bell
-      // that arrives before the reader has said anything opens it.
-      await loadThreads(key).catch(() => ({}));
-      const thread = getBookThread(key) ?? createBookThread(key, newThreadId());
-      threadId = thread.id;
-      const history: DeskMessage[] = thread.messages.map((m) => ({ role: m.role, text: m.text }));
-      const opened = await openDoorTurn({
-        settings: deps.settings,
-        threadId: thread.id,
-        date,
-        messages: [...history, { role: "user", text: rendered }],
-        ...(deps.signal ? { signal: deps.signal } : {}),
-      });
-      // Aborted while the soul was being read: nothing was sent, so nothing is
-      // owed, and the bell is where it was.
-      if (!opened) break;
-      turn = opened;
-    }
-    if (turn.refusal) {
-      deps.onTrouble?.(bell, turn.refusal);
-      break;
-    }
-
-    // The conversation is busy for as long as this turn runs: the reader's Stop
-    // reaches it and their next line steers it rather than opening a second turn
-    // on the same thread (docs/72). Only where the place knows what a running
-    // turn is; the door does not.
-    const hold = placed?.hold?.(deps.signal);
-    let reply: string;
-    try {
-      reply = await send({
-        settings: deps.settings,
-        systemPrompt: turn.systemPrompt,
-        messages: turn.messages,
-        tools: turn.tools,
-        harness,
-        bookKey: key,
-        threadId,
-        ...(hold ? { signal: hold.signal, onSteerable: hold.steerable } : {}),
-        ...(!hold && deps.signal ? { signal: deps.signal } : {}),
-        ...(placed && origin ? { deliverTo: origin } : {}),
-      });
-    } catch (e) {
-      hold?.release();
-      // Whatever went wrong with this turn will go wrong with the next bell too
-      // — the same model, the same key, the same window. The pass stops and the
-      // whole queue waits for the next tick.
-      deps.onTrouble?.(bell, e instanceof Error ? e.message : String(e));
-      break;
-    }
-
-    // A bell the soul decided to say nothing about is answered all the same: the
-    // decision was the turn, and the ledger is waiting on the ack. The reply,
-    // the flush and the card go in that order (landing.ts); the card that points
-    // back at the line just written is program work — the cover is the reply's
-    // first sentence, and the body is what the run produced. The text of it and
-    // not the path to it: an item travels between devices (palace kind
-    // `box-item`) and the output file does not, so a path here is a card that
-    // opens on nothing on the other device. A failure is no exception to the
-    // watching rule: what the reader has to decide about, they are already
-    // reading.
-    await landReply({
-      key,
-      threadId,
-      reply,
-      at: now(),
-      box,
-      ...(bell.type !== "wake" ? { answers: { runId: bell.payload.runId } } : {}),
-      ...(hold ? { release: () => hold.release() } : {}),
-      ...(placed?.watching ? { watching: placed.watching } : {}),
-      ...(bell.type === "wake"
-        ? {}
-        : {
-            card: () => ({
-              boxId: bell.payload.runId,
-              source: "run" as const,
-              cover: coverOf(reply),
-              ...(substance?.output ? { body: substance.output } : {}),
-              origin: origin ?? { place: "door" as const, date },
-              kind: bell.payload.kind,
-              runId: bell.payload.runId,
-              needsDecision: bell.type === "run-failed",
-              at,
-            }),
-          }),
-    });
-    await bells.delivered(bell.id);
-    await bells.ack(bell.id);
-    // The ack is what the fold waits on (docs/55), and the run file is where
-    // the other device reads it: the bell itself is machine-local. Stamped
-    // after the ack, so a stamp can never be ahead of the acknowledgement it
-    // stands for. A wake bell is about a schedule and there is no run to stamp.
-    // A `local` run is in the runner's own store and not on disk, so there is
-    // nothing here to stamp; the stamp is what a second device reads, and a
-    // local run has no second device.
-    if (bell.type !== "wake") {
-      await runs.markDelivered(bell.payload.runId, now()).catch(() => null);
-    }
-    answered += 1;
+    const step = await byTurn(door, { place: "door", date }, origin ?? { place: "door", date });
+    if (step === "next") continue;
+    break;
   }
   return answered;
 }
@@ -650,26 +470,4 @@ function installBellBridge(look: () => void): () => void {
   return () => {
     delete (window as unknown as Record<string, unknown>).__bell;
   };
-}
-
-// The turn for the place a run was delegated from, where a domain has said how
-// that place is laid (delivery.ts). Null when nothing registered the place, or
-// when the material is gone — and then the bell is answered at the door, which
-// is where a conversation with nowhere else to go goes.
-async function openDelivery(
-  origin: BoxOrigin,
-  bell: string,
-  deps: AnswerBellDeps,
-): Promise<Delivery | null> {
-  const open = deliveryOpener(origin.place);
-  if (!open) return null;
-  return await open({
-    origin,
-    settings: deps.settings,
-    bell,
-    ...(deps.signal ? { signal: deps.signal } : {}),
-  }).catch((e) => {
-    console.warn(`a bell could not be answered where it was asked (${origin.place})`, e);
-    return null;
-  });
 }
