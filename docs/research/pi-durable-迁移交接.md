@@ -716,3 +716,11 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 合成长按要点在视口内一段已落盘回答的 `[data-reply-ts] p` 上，流着的回答没有 `data-reply-ts`，按它什么都不出（设计如此）。
 - 没走（工具调用预算用完）：iPad 宽度的书线程关掉（落盘一次、没人看时卡片怎样）；手机上点复述卡片（盒子里唯一的复述卡已是 told，要先在桌面宽度用 `close.py retell <id> bg` 造一张新的；这一棒切回 1280 宽后 `close.py` 没打开复述页，没查）。坑 542、543 没用。
 - 环境：本棒起的 Xvfb `:93`、vite、app 的 PID 记在 `scratchpad/vcl3/pids/history`，收尾已杀。
+
+第三棒（2026-10-12，同分支，驱动 `scratchpad/vcl4/tools/book.py`（书线程）和 `close.py`、`size.sh`（vd.py 指向本棒 worktree），报告页加了「Round 4」一节）。没改代码。
+
+- 桌面 1280 宽书线程（paper.pdf 的课堂线程，「Learn this book with AI」打开）：答到一半点 Hang up 留在阅读器里，回合跑完落盘一次（2700 字），放一张书卡（origin `book`、线程 id，盒子 7→8）；点卡打开那条线程，回答只一次，盒子回到 7。答到一半点「Back to library」（阅读器卸载）结果相同；在主题页点卡，进阅读器开那条线程，问题和回答各一次。书线程和教练、门口、课堂一样放卡，不是 bug。落盘后多出的一次模型调用是课堂预备（坑 538）。
+- 手机点复述卡：先在 1280 宽用 `close.py retell 1791700498974 bg` 造一张新卡（落盘一次、一张卡 origin `retell`），再改成 390x844 加 `?shell=phone`，点卡显示「This one opens on the iPad or the desk.」，卡仍在盒子里（`in-box`）。
+- 第二棒「切回 1280 宽后 `close.py` 没打开复述页」是驱动的毛病：reload 后驱动从 Topics 进，找文字以「Verify talk」开头的元素，主题行的文字前面带头像字母（「PVerify talk1 file」），匹配不到就抛错。直接点那一行能正常进主题和复述。
+- 本轮的复述那一跑覆盖了第一棒的 `retell-bg-1-streaming.png`、`retell-bg-2-landed-home.png`（同一场景）。坑 542、543 没用。
+- 环境：Xvfb `:93`、vite、app 的 PID 记在 `scratchpad/vcl4/pids/history`，收尾已杀。本棒 worktree 跑过 `bun run wasm`（`public/pdfium/` 未跟踪，没提交）。
