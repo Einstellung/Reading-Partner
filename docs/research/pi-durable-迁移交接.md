@@ -696,3 +696,14 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 真 app 验收没跑（本棒不开 app）：手机课堂答到一半点「问这一段」、在 aside 里问一句再回来，看回答接着流、回执在它上面、落盘后只有一次、盒子有一张卡；门口或三餐发问后立刻关掉再开，看到在流的回答。
 - `PhoneLessonScreen` 的 `enter` / `covered` 接线是 tsx，只过了类型检查。
 - 回执行的 ts 比它下面落盘的回答大，文件按追加顺序不按 ts。教练卡片原来就是这样；按 ts 找位置的代码（`withTurnRows` 一类）只用在回合还在跑的那段屏幕上，没发现别处受影响。
+
+## 关对话不停回合：Linux 验收（分支 `verify/pi-durable-2-close-linux`，从 `dev/pi-durable-2-close` 64ce077a 起）
+
+2026-10-11，xvfb `:93`，`verifylinux` debug 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`（20 token/s、每段 30 句 2700 字），没调真模型，没改代码。驱动和截图在会话 scratchpad `verify-close-linux/`（`tools/close.py`、`asm.py`、`doorbg.py`），报告页 `verify-close-linux/report.html`。
+
+- 教练、复述：答到一半关掉，回合跑完落盘一次、一张卡（origin `talk` / `retell`），点卡进教练或复述页、回答只一次；关掉再开，Stop 在、正文接着长、落盘一次、不放卡；停止留半句（476 / 484 字）、不放卡。
+- 手机 PDF 课堂（xdotool 把窗口改成 390x844，`?shell=phone`）：开场回合答到一半点返回，落盘一次、一张卡（paper.pdf），点卡进课堂、回答一次。
+- 装配中重开：页面脚本把 `appData` 的读文件包一层，发送后 1.5 s 内开始的读延迟 3 s，发送到第一次模型调用从 265 ms 拉到 3244 ms。门口、三餐发送后 150 ms 关、2 s 内重开（模型调用仍 0 次），重开的视图出 Stop、接着流、落盘一次、不放卡。
+- 门口答到一半关掉（回归）三次，每次落盘一次、一张卡。手机上点教练卡片显示「This one opens on the iPad or the desk.」。
+- 没走（工具调用预算用完）：手机课堂答到一半再开、停止，以及「问这一段」进 aside 再回来（回执在回答上面、只一次、在 aside 里落盘放卡、重开顺序不变）；iPad 宽度的书线程关掉；手机上点复述卡片。下一棒照本节做法，课堂书已铺好：测试数据目录 `library/b39e958bfae6fe29ccf67974459bb93e.pdf` 挂在 Verify talk 主题下。
+- 环境坑（非产品）：worktree 的 vite 起来后再放进 `public/` 的文件取回的是 index.html（坑 403 同因），铺书要直接拷进数据目录的 `library/`。Tauri 窗口没有 `set_size` 权限，改尺寸用 xdotool。坑 542、543 没用。
