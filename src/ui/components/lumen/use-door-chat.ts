@@ -27,7 +27,7 @@ import { doorTurnNote, extractLinks, linksToTake } from "../../../reading/ingest
 import { chooseIntakeTopic, readIntake } from "../../../reading/ingest/topic-intake";
 import { readingDurable } from "../../../reading/turn/durable-runtime";
 import type { CallRow } from "../../../reading/turn/call-state";
-import { createPlaceSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
+import { createPlaceSession, registerOpenSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
 import {
   appendMessage,
   onThreadMessage,
@@ -205,7 +205,13 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
         streaming: setStreaming,
       });
       sessionRef.current = session;
-      unwatch = setDoorWatching((o) => o.date === date && o.threadId === id);
+      // A bell rung for this conversation while it is open runs in this session (place-bell.ts).
+      const closed = registerOpenSession(doorThreadKey(origin), session);
+      const unwatchDoor = setDoorWatching((o) => o.date === date && o.threadId === id);
+      unwatch = () => {
+        closed();
+        unwatchDoor();
+      };
       lookingRef.current = session.resume().catch((e: unknown) => console.warn("door turn could not be resumed", e));
     });
     return () => {

@@ -76,6 +76,7 @@ export {
   doorPlace,
   doorThreadKey,
   setDoorWatching,
+  doorWatchingNow,
   type DoorOrigin,
   type DoorPlaceDeps,
 } from "./door-durable";
