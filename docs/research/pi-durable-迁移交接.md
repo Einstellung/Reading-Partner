@@ -537,3 +537,30 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 没做的：
 
 - 三餐的真 app 验收（一回合发问、插话、停止、杀进程，以及铃）。要先在测试 AppData 里铺一个带 charter 的 `meals` 状态文件跳过问卷，或走完问卷；然后三餐页的 ask 入口打开对话，`run2.py meals ask kill bell` 可直接用（`open-meals.js` 要改成点那个入口）。
+
+## 第二阶段第三棒 B（分支 `dev/pi-durable-2f`，从 `origin/dev/pi-durable-2` 011b9dd3 起）
+
+做完的：
+
+- `reading/turn/info-voice.ts` 的 `infoVoiceThread` 交出语音通话的两个口（model、transcript），回合走 info place。放在 reading/turn：要用 `place-session.ts`，而 reading/turn 已依赖 info/briefer（2e 的 `info-bell.ts`），反过来成环。`voice-call-live.ts` 改成由调用方传 `thread`（`LiveVoiceCallOptions.thread`），`use-voice-call.ts` 传 `infoVoiceThread`；`threadTranscript`、`askOnThread` 删掉。`companion-live.ts` 只接工具，不跑回合，没动。
+- transcript 只写读者的句子（带 ts，识别补全照旧按 ts 改那条），回答由运行时落盘。状态机记下的"听到的部分"（打断处截断、带 `INTERRUPTED_MARK`）在回合落盘后按 ts 改写落盘的行（`heardRows`：截点所在行截短加标记，截点之后的行清空文字）。下一回合的历史读文件，模型看到的仍是读者听到的，同旧路。
+- 每次 view 的回答行拼成一条流（行之间加换行），增长部分喂合成；工具按（行 ts，序号）跟起止喂 `onActivity`，起止成对。
+- 回合去处：对话有打开登记的 session（`openPlaceSession(key)`）就走新加的 `session.voice()`，同铃的 guest 回合（结局交给发起方，卡死不重问，失败不出失败行），另把语音那句画在回合行前面（坑 530）；session 里读者自己的回合在跑就先等 `idle()`；没人开着就 headless `drivePlaceTurn`，之后打开对话时 `resume()` 接上它。打断就是停这个回合，半句落盘。
+- 一通电话的回合串行：下一回合等上一回合落盘、改写完再读历史（坑 529）。
+- 回合进行中登记 `watchInfoConversation(key)`：读者在听，落盘不放盒子卡片（不登记时每句回答都放一张，测过）。
+- 被杀：旧路是 soulHarness 的 held 运行，重启时 `soul/recover.ts` 续，正文中被杀则读回半句落到原处、放卡、不重问。新路由运行时恢复，同 info 文本：半句落一次、没人开着时放卡、不重问、不出声。
+- 测试：`tests/reading/turn/info-voice.test.ts` 6 个（流喂合成且三条各落一次、历史用文件且不放卡；写进已有线程；打断后落听到的部分且下一回合接着答；开着的对话里打字进语音回合、回答也念出、对话画出整通；流和工具起止的拼法；听到的部分映射到行），`info-voice-kill.test.ts` 1 个真 SIGKILL（半句一次、不重问、放卡）。旧 `tests/info/briefer/voice-transcript-thread.test.ts` 删掉，用例并进新文件。
+
+和旧行为不同的：
+
+- 模型用 `modelIdFor(settings, "talk")`（同文本对话），旧路是 `defaultModelId`。有运行时的停滞看门狗，卡死时这句语音 failed，不重问。
+- 回答是运行时写的：带工具回执的 trace，工具前后的话分成几行；旧路是一整条纯文本。
+- 文本对话开着时，语音回合在对话里流式出现，打字成插话，插话的回答也念出来；关掉对话会停掉在跑的语音回合（同铃）。
+
+没做的：
+
+- 文本对话开着且空闲时语音进它的 session，依赖 2e 在 `use-info-call.ts` 里加的 `registerOpenSession`；本分支没有，单独合入时这种情况语音 headless 跑，对话里打字撞 `TurnBusy` 出失败行。合了 2e 才完整。
+- 语音回合撞上没有 session 的在途回合（铃的 headless 回合、重启后恢复的回合）报 `TurnBusy`，这句 failed、回到听，不等。
+- 开着的对话不知道"听到的部分"的改写，重开才见。
+- 真机/模拟器上要验：① 开场白念完、问一句、回答念出，对话文件里各一次，盒子无卡；② 开场白或回答中插话，念到的那句截断带标记，下一句正常回答；③ 通话中打开 info 文本对话，在说的回合接上流式出现，打字成插话且回答被念出；④ 合 2e 后文本对话开着时开通话，语音句子和回答画进对话，关对话时语音回合停下；⑤ 回答中杀 app，重开后半句一次、不出声、一张卡；⑥ 工具调用时 Lumen 低头；⑦ 挂断后蒸馏照旧。
+- 坑 531 没用。

@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createLiveVoiceCall, NO_VOICE_CALL } from "../../../info/briefer/voice-call-live";
+import { infoVoiceThread } from "../../../reading/turn/info-voice";
 import type { BriefingControl } from "../../../info/briefer/companion-live";
 import type { SessionPhase } from "../../../soul/voice/voice-session";
 import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../soul/voice/voice-call";
@@ -104,7 +105,7 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
     setError(null);
     void (async () => {
       try {
-        const call = await createLiveVoiceCall(optsRef.current);
+        const call = await createLiveVoiceCall({ ...optsRef.current, thread: infoVoiceThread });
         if (!call) {
           setError({ reason: "start-failed", message: NO_VOICE_CALL });
           return;
