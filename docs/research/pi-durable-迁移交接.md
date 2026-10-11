@@ -383,7 +383,9 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 插话与停止：过。正文流中插话，同一回合第 2 轮回答（turn-log 同一个 turn id）；第 2 轮正文中停止，半句留在线程（332 字符，断在词中间）。
 - IPC（`scripts/durable-probe` 打成 `.dev` 包装到 iPad）：每次提交 p50 18 ms、p95 20、max 26；裸 IPC p50 0、p95 1、max 9；每次宿主调用 p50 2、p95 3。SIGKILL 恢复正确（半句 820 字符、待办 1 条、续写完整）。
 - 库增长：本地 checkpoint 后主库 116 KB 起，10 个提交后 356 KB，约 25 KB/提交（faux 答案每段约 3.6K 字符）；设备上 WAL 涨到 4.0 MB 才 checkpoint，主库文件 316 KB。
-- 没走：第 1 项（Haiku 正常回合）、第 5 项（切后台 30/60 s），等用户在 Linux 桌面 app 里刷新登录后再拷 access token。
+- Haiku 正常回合（第二棒，access token 从 Linux app 拷，refresh 填假值，收尾已删）：过。首字节 3.0 s（thinking），正文约 12 s 后开始画，16.9 s 结束，`done`，3826 字符。开课没触发逐章 prep（失败章不自动重跑，overview 已 done）。
+- 切后台（`dvt launch` 设置把 app 压下去，和按 Home 一样有「◀ Reading Partner」返回角标；`dvt launch --no-kill-existing` 叫回，PID 不变）：30 s、60 s 都在 Thinking 刚开始时切，离开期间 JS 冻结、流不前进；连接没死，回前台一秒内整段回答（3813、3652 token）画完，回合 `done`，看门狗没动作也没重问，turn-log 每回合一组 start/first-byte/round/end。线程文件 5 问 5 答，结尾完整、无重复段落。另两次切晚了（正文已出或回答短），回合在进后台后几秒的宽限里就写完了。离开超过 90 s 那种情况没量，见坑 522。
+- 第二棒 Haiku 共 7 次：阅读回合 5 次，另有一次回前台时跑了 `subagent` 回合（2 次，Lumen 那条路）。
 - 注意：课堂第一次打开会对每章跑一次 prep（这本书 63 章），走默认模型。真模型前要让 prep 已完成，否则一开课就是 63 次 Haiku。这次用快速 faux 跑完 prep，23 章失败（faux 队列耗尽，失败章不自动重跑），overview 手工标了 done。
 - 观察：课堂内容滚上去后，左上角关闭/删除按钮压在正文上（截图 s3c）。
-- 环境：Mac `~/rp-ipad`（worktree，detached 在 96caede7），构建 `~/build.sh`、设备助手 `~/d.sh`（launch/kill/shot/js/send/stop/st/open）、`~/rp.py`；ipa 在 `/tmp/rp-dev-ipad.ipa`，探针包 `/tmp/rp-dev-probe.ipa`。iPad 上 `.dev` app PID 7165 留着在跑，ios_webkit_debug_proxy PID 78195 在 Mac 上跑。容器里占位凭据已删，faux 的 localStorage 键已清，`settings.json` 三个模型都是 claude-haiku-5-5。
+- 环境：Mac `~/rp-ipad`（worktree，detached 在 96caede7），构建 `~/build.sh`、设备助手 `~/d.sh`（launch/kill/shot/js/send/stop/st/open）、`~/rp.py`；ipa 在 `/tmp/rp-dev-ipad.ipa`，探针包 `/tmp/rp-dev-probe.ipa`。iPad 上 `.dev` app PID 7204（第二棒重起，去掉进程里残留的 faux）留着在跑，ios_webkit_debug_proxy PID 78195 在 Mac 上跑。容器里占位凭据已删，faux 的 localStorage 键已清，`settings.json` 三个模型都是 claude-haiku-5-5。
