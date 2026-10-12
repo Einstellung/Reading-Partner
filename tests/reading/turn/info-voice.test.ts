@@ -111,7 +111,7 @@ async function until(cond: () => boolean, what: string, ms = 10_000): Promise<vo
 }
 
 /** A call with no plugin under it: the bridge answers every command and keeps what it was told to say. */
-function harness(d: ReadingDurable, cutAt = 0) {
+function harness(d: ReadingDurable, cutAt = 0, now?: () => number) {
   let listener: ((e: ConversationEvent) => void) | null = null;
   const pushed: string[] = [];
   const activity: TurnActivity[] = [];
@@ -136,6 +136,7 @@ function harness(d: ReadingDurable, cutAt = 0) {
     anchor: anchor(),
     tools: async () => [],
     durable: () => Promise.resolve(d),
+    ...(now ? { now } : {}),
   });
   const call: VoiceCall = createVoiceCall({ bridge, model, transcript });
   call.subscribeActivity((e) => activity.push(e));
@@ -211,6 +212,24 @@ test("a thread the chat already made is written into, and its lines are the hist
     { role: "user", text: "Asked this morning" },
     { role: "ai", text: "Answered then." },
   ]);
+});
+
+test("a reply stamped in the same millisecond as the spoken line stays in the history of the line's turn", async () => {
+  // A turn that lands just as the reader speaks can stamp its reply with the line's millisecond.
+  const T = 1_900_000_000_000;
+  const made = createThread(BOOK, "info", THREAD);
+  made.messages.push({ role: "ai", text: "Your run finished.", ts: T });
+  const { durable: d } = await runtime([GREETING, ANSWER]);
+  const h = harness(d, 0, () => T);
+  await h.call.start();
+  await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
+  await h.played(KICKOFF_TURN);
+  await h.emit({ kind: "speech-end", turn: 1, text: "What about rates?", silentMs: 900 });
+  await h.played(1);
+
+  expect(messages().find((m) => m.role === "user")?.ts).toBe(T);
+  expect(infoAssemblies.get(KEY)?.history.map((m) => m.text)).toContain("Your run finished.");
+  expect(messages().filter((m) => m.text === "What about rates?")).toHaveLength(1);
 });
 
 const LONG = `First, the rates moved. ${"Then the chips came up again. ".repeat(60)}`;
@@ -375,7 +394,7 @@ test("what was heard maps onto the landed rows: the cut row shortened and marked
 });
 
 // A turn with nobody's session under it: a bell's headless one, one a closed chat left, one recovery resumed.
-async function otherTurn(d: ReadingDurable, line: { text: string; ts?: number }, bell?: string, onRows: (rows: CallRow[]) => void = () => {}) {
+async function otherTurn(d: ReadingDurable, line: { text: string; ts?: number }, bell?: string) {
   infoAssemblies.set(KEY, { history: [{ role: "ai", text: GREETING }], tools: [] });
   return drivePlaceTurn(
     d,
@@ -391,7 +410,7 @@ async function otherTurn(d: ReadingDurable, line: { text: string; ts?: number },
       model: { provider: "faux", modelId: "faux-1" },
       describe: catalogDescribe([]),
     },
-    onRows,
+    () => {},
   );
 }
 
@@ -414,11 +433,7 @@ test("a line spoken while a bell's turn runs with nobody looking waits for it, t
     await h.call.start();
     await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
     await h.played(KICKOFF_TURN);
-    let streamed = false;
-    const bell = await otherTurn(d, { text: "[bell] A run finished." }, "bell-1", (rows) => {
-      if (rows.some((r) => r.role === "ai" && r.text.length > 20)) streamed = true;
-    });
-    await until(() => streamed, "the bell's turn streaming");
+    const bell = await otherTurn(d, { text: "[bell] A run finished." }, "bell-1");
     await h.emit({ kind: "speech-end", turn: 1, text: "What about rates?", silentMs: 900 });
     // Waiting is not failing: the line is still being asked.
     expect(failures.failed).toEqual([]);
@@ -464,11 +479,7 @@ test("a line spoken while the open chat follows a resumed turn waits for it, the
   await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
   await h.played(KICKOFF_TURN);
   // A turn nothing on screen started, followed by the chat opened on it.
-  let streamed = false;
-  await otherTurn(d, { text: "Go on about the chips." }, undefined, (rows) => {
-    if (rows.some((r) => r.role === "ai" && r.text.length > 20)) streamed = true;
-  });
-  await until(() => streamed, "the resumed turn streaming");
+  await otherTurn(d, { text: "Go on about the chips." });
   const closed = registerOpenSession(KEY, session);
   try {
     expect(await session.resume()).toBe(true);

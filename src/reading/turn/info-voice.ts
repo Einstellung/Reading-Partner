@@ -289,7 +289,8 @@ export function infoVoiceThread(opts: InfoVoiceOptions): { model: VoiceCallModel
       // Another turn on the conversation lands first, and this one is assembled over what it left.
       await quiet(runtime, key, signal);
       if (signal.aborted) return;
-      const others = (store.get(bookId, threadId)?.messages ?? []).filter((m) => m.ts !== lineTs);
+      // The line by role as well as stamp: a reply can land in the same millisecond (docs/pitfall/554).
+      const others = (store.get(bookId, threadId)?.messages ?? []).filter((m) => !(m.role === "user" && m.ts === lineTs));
       const prepared = await prepare({
         anchor: opts.anchor,
         key: bookId,

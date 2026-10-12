@@ -121,7 +121,7 @@ export function doorPlace(deps: DoorPlaceDeps = {}): PlaceFactory {
       const key = doorKey(door.date);
       await shared.threads.load(key);
       const said = (shared.threads.messages(key, door.threadId) ?? [])
-        .filter((m) => m.ts !== options.excludeTs && m.text.trim() !== "")
+        .filter((m) => !(m.role === "user" && m.ts === options.excludeTs) && m.text.trim() !== "")
         .map((m): DeskMessage => ({ role: m.role, text: m.text }));
       return toPiMessages(said);
     },

@@ -137,7 +137,7 @@ export function oneThreadPlace(spec: OneThreadPlaceSpec): PlaceFactory {
       const key = spec.fileKey(o.id);
       await shared.threads.load(key);
       const said = (shared.threads.messages(key, o.id) ?? [])
-        .filter((m) => m.ts !== options.excludeTs && m.text.trim() !== "")
+        .filter((m) => !(m.role === "user" && m.ts === options.excludeTs) && m.text.trim() !== "")
         .map((m): DeskMessage => ({ role: m.role, text: m.text }));
       return toPiMessages(spec.history ? spec.history(said, options.excludeTs !== undefined) : said);
     },
