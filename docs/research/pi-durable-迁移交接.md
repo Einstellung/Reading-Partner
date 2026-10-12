@@ -772,3 +772,27 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 三餐停止那条 `end` 没有 `conversation` 字段，杀进程那条有，没查。
 - 收尾：`credentials.json` 已删并确认不在，`__faux*` 键已清，app 重起（PID 7738）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里三餐线程多了几问几答，购物清单没变。
 - 还没走：真模型一回合（要新的 access token）、语音。
+
+## 第三阶段 B 棒：后台 pass（分支 `dev/pi-durable-3-b`，从 `origin/dev/pi-durable-3` f5aaf7d5 起）
+
+做完的：
+
+- `legion/durable/background.ts`：`runBackgroundTurnOn(host, request)` 和 `runBackgroundTurn(request)`（取 `provideBackgroundHost` 登记的设备运行时，没登记时等）。`reading/turn/durable-runtime.ts` 的 `startReadingDurable` 登记它，`device.ts` 的 `deviceBackgroundHost` 把 turn-log 的 `end` 接上。请求字段同 `SubagentTurnRequest`（`name`、`systemPrompt`、`task`、`tools`、`maxRounds`、`purpose`、`model?`、`signal?`、`onRound`），多 `surface` 和 `onProgress`（答案加思考的字数，prep 流水线的看门狗靠它）；结果同 `SubagentTurnOutcome`。`legion/durable` 不 import `legion/subagent`，是结构上对齐。
+- 一次运行：`newRunId()` 作 run；`defineExtension({ name: "rp.background:<run>", tools })`，工具是 `AgentTool` 直接包成 `ToolRegistration`（执行走 `tools.ts` 新拆出的 `executeTool`，同 catalog 那条：`awaitWithContext` 放手、`normalizeToolResult`）；`runtime.install(ext)`；`harness.createConversation({ ownership: ownerless, agent: { model, thinkingLevel, extensions: [runtime.extension, ext], tools }, init })`，`init` 写 `rp.thread`（`{ place: "background", name, surface, run }`）和 `rp.desk`（系统提示放 `runtime.sectionKeys[0]`，`purpose`、`maxRounds`、`excludeTs: null`、`turn: run`）；`submit({ requestId: "background:<run>" })` 后 `wait()`。不走 `rp.turn`，不进 `rp.conversations`。结果：`runtime.takeRefusal` 有就是 refusal；signal 已 abort 抛 `StoppedError`；submission 没 done 或最后一条 assistant 是 `stopReason: "error"` 就是 error；否则取最后一条 assistant 的文字（同旧 `onDone` 的最后一轮）。`finally` 卸 extension、清 stubs、turn-log `end`、`maybeRotate`。
+- `harness.ts`：`settings.extensions: [extension]`（默认选择只 `rp`；不钉的话 pi-durable 默认选所有已装的 extension，后装的同名工具会盖掉 `rp` 的）；`DurableRuntime` 加 `extension`、`sectionKeys`、`install`、`uninstall`、`takeRefusal`。registry 跨代共用，换代不影响已装的。
+- `recover.ts`：先从 `inspect()` 的全部 submission 和任务里挑出 `rp.thread` 为 background 的对话，结果记 `background`，`abort({ background: true })`；不记尝试、不写 `rp.partial`。`device.ts` 自带 `background` place（只给遥测：surface 和 run；落盘空、历史空、没有线程文件）。
+- 换上的调用：`memory/live/live.ts` 三处 `run: runBackgroundTurn`；`reading/ingest/live.ts` 的 `turn: runBackgroundTurn`；`chapter.ts` 的 `runSpineChapter` 和 `digest.ts` 的工具循环分支改调 `runBackgroundTurn`，空答案和错误经 `reading/prep/model-output.ts` 的 `noteOf` 变成拒绝（被 abort 现在是 `StoppedError` 拒绝，原来是永不结算）。
+- 测试：`tests/legion/durable/background.test.ts`（自带工具与 catalog 同名不互串、空答案、轮数拒绝、模型错误、abort、pass 在跑时书回合结算不换代、跑完换代）、`background-crash.test.ts`（工具里、正文中两种 SIGKILL，重开恢复为 `background`，faux 0 次、空闲）、`tests/memory/distill-durable.test.ts`（空蒸馏 ok、游标前进；`observation_update` 按本次 schema 写进去）、`tests/reading/prep/background-durable.test.ts`（章节笔记读页、空笔记拒绝、长论文 digest 搜索、模型错误拒绝）。`live-retell-trigger.test.ts` 的 spy 改到 `runBackgroundTurn`。没跑 Linux xvfb。
+
+每个 pass 被杀后：蒸馏（对话、划线、复述）对话被 abort，游标没动，下次 sweep 或挂断重跑；已经写进去的观察留着，重跑时模型从索引看得到。章节笔记、digest 对话被 abort，状态文件里这一章停在 running、这篇停在 digesting，下次载入时流水线改回 pending / queued（`chapters/types.ts`、`papers/scheduler.ts` 的 `normalizeOnLoad`）重跑。link take 同样 abort，链接摄入的 run 由 legion runner 照它的规矩处理。
+
+两棒都做完后第四阶段可删（B 棒这边）：`legion/subagent/live.ts`（`runSubagentTurnLive`，B 棒之后只剩 `subagent/worker.ts` 的 agent worker 在用，A 棒换掉后就没人用）；`legion/execute/turn.ts` 的 `runAgentTurn` 只剩 `soul/recover.ts`；`tests/support/scripted-runner.ts` 用 `runHarnessTurn` 和 `subagent/turn.ts` 的 `createTurnSettler`，蒸馏、复述那批测试靠它，要改成 faux + `runBackgroundTurnOn`（照 `distill-durable.test.ts`）或纯脚本的 `SubagentTurnFn`。这些 pass 还 import 的 `legion/execute` 是工具件不是回合运行时：`AgentTool` 类型、`watchdog`（`runWithWatchdog`、`StoppedError`、`AiCallOptions`）、`limiter`、`observable-run`、`runner`、`worker`，第四阶段按 87 搬或留。
+
+给 A 棒和第四阶段：子对话要挂按次建的工具，照搬「装一个 per-run extension，`configure` 里 `extensions: [runtime.extension, ext]`」即可；task-owned 子对话创建时复制父对话的 agent，记得覆盖 `extensions` 和 `tools`。
+
+没解决的：
+
+- 后台运行没有停摆看门狗。prep 有流水线自己的；蒸馏和 link take 没有，连接不报错也不结束时会一直占着 gate，`stream.timeoutMs` 定下来之前同旧行为。
+- 库超过阈值 1.5 倍时强制换代会 abort 在跑的 pass，结果是 error（不是 `StoppedError`），pass 记一次失败，下次重跑。
+- 全量测试有一次 `tests/platform/store-errors.test.ts` 的 App/PhoneApp 两条失败，单跑和重跑都过，和本棒无关，没查。坑 551、552 没用。
+

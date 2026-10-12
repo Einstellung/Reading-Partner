@@ -209,7 +209,15 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 量：中，两棒。
 
-### 第四阶段：升级与清理
+后台 pass 已完成（2026-10-12，B 棒，分支 `dev/pi-durable-3-b`，过程见[交接](../research/pi-durable-迁移交接.md)）：
+
+- `legion/durable/background.ts` 的 `runBackgroundTurn`：每次跑一个新的 ownerless 对话，一条 user 消息，系统提示写进 `rp.desk` 的第一个 section，`purpose`、`maxRounds` 照旧走我们的 `beforeRequest`（budget、轮数拒绝）和 `afterResponse`（`recordModelCall`，surface 由调用方给）。请求形状同 `SubagentTurnFn`，蒸馏和 link take 直接传给 `runSubagent`。跑完没有活任务，之后调一次 `maybeRotate`。
+- pass 的工具按次建，描述和 schema 随这次运行变（观察工具印出可写的行号和关系），进不了进程级 catalog。每次运行装一个只含这些工具的 extension（`rp.background:<run>`），只在自己的对话里和 `rp` 一起选上，跑完卸掉；Harness 的默认选择钉成只有 `rp`，所以不漏到别的对话。
+- 换上的：`memory/live` 的三种蒸馏（对话、划线、复述）、`reading/prep/chapters/chapter.ts` 的章节笔记、`reading/prep/papers/digest.ts` 长论文的 digest、`reading/ingest/live.ts` 的 link take。模型档、budget、结果和写文件不变。
+- 不上 Harness 的：单次 `callModel`（`info/program/live.ts` 的筛选、分析、综合，prep 的规划和短论文 digest）。它们走 `ai/`，本来就不经 `legion/execute` 的回合运行时；`info/program/live.ts` 只还用着 `legion/execute` 的 `realTimers`、`AiCallOptions` 类型和 `appRunner`（legion 的 run runner）。
+- 被杀：恢复时凡是 `rp.thread` 为 `background` 的对话一律 `abort({ background: true })`，不重放、不重问；pass 下次触发时按自己的文件重跑（蒸馏的游标没动，prep 的笔记没写）。
+- 换代：pass 在跑时有未结算 submission，`inspect()` 不空闲，换代等它；跑完空闲，换代照常。
+
 
 动：pi-agent-core 升 1.1.0 后从 dependencies 删掉，删 overrides，`rm -rf node_modules && bun install` 后确认 pi-ai 只有一份；唯一一处 `AgentMessage` 类型 import 换成 pi-ai 的；`stall.ts`、`watchdog.ts` 搬进 `legion/durable`。
 

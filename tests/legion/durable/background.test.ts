@@ -152,7 +152,9 @@ test("a running pass holds off the generation swap; once it settles the swap hap
   const t = await openTestRuntime({
     root: root(),
     rotateAtBytes: 1,
-    responses: [tool("lookup", { row: 1 }), fauxAssistantMessage(fauxText("done"))],
+    // Never forced: the swap waits for idle.
+    forceRotateFactor: 1e12,
+    responses: [tool("lookup", { row: 1 }), fauxAssistantMessage(fauxText("Book answer.")), fauxAssistantMessage(fauxText("done"))],
   });
   const before = t.runtime.path;
   const run = runBackgroundTurnOn(
@@ -168,10 +170,10 @@ test("a running pass holds off the generation swap; once it settles the swap hap
     }),
   );
   await running.promise;
-  // Rotation at 1 byte forces past 1.5x too, which would abort live work: use the
-  // idle check alone by asking inspect, as maybeRotate does first.
-  const inspection = await t.runtime.harness.inspect(ctx);
-  expect(inspection.tasks.length + inspection.submissions.length).toBeGreaterThan(0);
+  // A book turn settling asks for a swap; the pass is live, so there is none.
+  const turn = await startTurn(t.runtime, readerTurn(t, "Look", 1000), ctx);
+  expect((await turn.settled)?.landed).toBe(true);
+  expect(t.runtime.path).toBe(before);
   release.resolve();
   expect(await run).toEqual({ kind: "answer", text: "done" });
   expect(t.runtime.path).not.toBe(before);

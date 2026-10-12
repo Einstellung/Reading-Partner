@@ -114,6 +114,7 @@ export interface TestRuntimeOptions {
   /** Called inside the lander after the file is written, before it returns. */
   afterLand?: () => Promise<void>;
   rotateAtBytes?: number;
+  forceRotateFactor?: number;
   now?: () => number;
 }
 
@@ -189,6 +190,7 @@ export async function openTestRuntime(options: TestRuntimeOptions): Promise<Test
     },
     sectionKeys: ["soul", "desk"],
     ...(options.rotateAtBytes !== undefined ? { rotateAtBytes: options.rotateAtBytes } : {}),
+    ...(options.forceRotateFactor !== undefined ? { forceRotateFactor: options.forceRotateFactor } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
   return result;
