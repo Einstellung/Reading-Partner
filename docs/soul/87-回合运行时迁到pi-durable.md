@@ -139,6 +139,8 @@ spike 实测纯问答一轮约 5.2 KB（回答 4.3 KB），100 MB 约两万轮�
 | `tools.ts` | `AgentTool` 到 `ToolRegistration` 的适配，replay、abort 放手、按对话解析上下文 |
 | `turn.ts` | 发起一个回合、落盘那步（落盘函数由调用方按 place 注入） |
 | `recover.ts` | 进程起来、`resume()` 之前的三分 |
+| `child.ts` | 子 agent 的子对话：`rp.subagent`、每个定义一个 extension、`ChildDesks`、`runTaskChild` |
+| `background.ts` | 后台运行：ownerless 对话、按次装卸的 extension、`runBackgroundTurn` |
 | `stall.ts`、`watchdog.ts` | 第四阶段从 `legion/execute` `git mv` 过来 |
 
 `legion/durable` 只 import platform/app、ai、budget、legion 下的 capability，不 import soul 和任何领域。`platform/app/durable-sqlite.ts` 是宿主接口，一个文件一件宿主能力，不 import 别的目录。不依赖 React 的投影逻辑（view state 到界面行）放 `src/reading/turn/` 的 `.ts` 并配单测。第四阶段删空 `legion/execute` 后从 LAYER 表删掉那一行。
@@ -197,39 +199,35 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 ### 第三阶段：子 agent 和后台
 
-范围：`legion/subagent`、legion runner 的 agent worker、后台 pass（`memory/live`、`info/program/live.ts`、`reading/prep/*`）。
+已完成（2026-10-12，A、B 两棒并行，C 棒合并收尾，分支 `dev/pi-durable-3-c`，过程见[交接](../research/pi-durable-迁移交接.md)）。
 
-动：`subagentTool` 改成 README 那个子对话工具：在 `api.commit()` 里建 `ownership: { kind: "task", taskId: api.taskId }` 的子对话，`configure()` 给它定义里的系统提示、模型、工具集，`requestId: "subagent:" + api.taskId`，`replay: "safe"`；跑完从子对话的条目统计轮数、工具成败，交给 `brief.ts` 照旧出 brief，`quota.ts` 照旧扣池子。隔离由构造保证：父对话看不见子对话的条目，界面不 attach 子对话。程序调用的（蒸馏、prep、agent worker）建 ownerless 对话，跑完不留活任务。
+范围：`legion/subagent`、legion runner 的 agent worker、后台 pass（`memory/live`、`reading/prep/*`、`reading/ingest/live.ts`）。
 
-删：`legion/subagent/turn.ts`、`run.ts` 里自己的 runner、`worker:` lane。
+子 agent 工具（`subagentTool`，`legion/durable/child.ts`）：在 `api.commit()` 里按 `ownerTaskId` 找或建 `ownership: { kind: "task", taskId }` 的子对话，`configure()` 给定义里的系统提示（`instructions`）、模型、思考档、`extensions: [rp, rp-agent-<名字>]`、定义的工具，`requestId: "subagent:" + taskId`，`replay: "safe"`。task-owned 子对话创建时复制父对话的 agent，所以 `extensions` 和 `tools` 必须覆盖。每个定义一个 extension，Harness 打开时就装好且不卸：重启后子对话的工具调用可能先于父调用重跑。执行按子对话 id 在进程内的 `ChildDesks` 里找调用方给的 AgentTool。`rp.subagent` 文档标记子对话，`beforeRequest` 对它不读历史、照样管轮数和 budget。跑完从条目统计轮数和工具成败（aborted 的半句不算一轮），交给 `briefFor` 出 brief、`quota.ts` 扣池子。父对话看不见子对话的条目，界面不 attach 子对话。工具只收 `quota`，只在 durable 上能跑（`runInDurable`）。
+
+后台运行（`legion/durable/background.ts` 的 `runBackgroundTurn`）：每次一个新的 ownerless 对话，一条 user 消息，系统提示写进 `rp.desk` 的第一个 section，`purpose`、`maxRounds` 走同一个 `beforeRequest`。pass 的工具按次建（描述和 schema 随这次运行变），每次装一个只含它们的 extension（`rp.background:<run>`），只在自己的对话里和 `rp` 一起选上，跑完卸掉；Harness 默认选择钉成只有 `rp`，不漏到别的对话。不走 `rp.turn`，不进 `rp.conversations`，跑完不留活任务，之后调一次 `maybeRotate`。轮数在这一轮的回答开始到达时计、每轮只报一次，被 hook 拒掉的请求不算一轮。
+
+程序调用：agent worker（`legion/subagent/worker.ts`）、三种蒸馏（对话、划线、复述）、link take 经 `runSubagent` + `runBackgroundTurn`；`runSubagent` 只剩 brief 层（工具包装计数、诚实失败、配额、brief 上限），没有自己的 runner。章节笔记、长论文 digest 直接调 `runBackgroundTurn`，空答案和错误经 `reading/prep/model-output.ts` 变成拒绝。单次 `callModel`（`info/program/live.ts`、prep 的规划和短论文 digest）不上 Harness。
+
+被杀：`recoverBeforeResume` 跳过子对话，让它跟着父调用 resume（父调用 safe，重跑找回同一个子对话和 submission）；`rp.thread` 为 `background` 的对话一律 `abort({ background: true })`，不重放、不重问，pass 下次触发时按自己的文件重跑（蒸馏游标没动，prep 状态在载入时从 running 改回 pending）。
+
+换代：pass 或子对话在跑时有未结算 submission，换代等它；超过阈值 1.5 倍强制换代时 abort 在跑的，pass 得到 error，下次重跑。
+
+删了：`legion/subagent/live.ts`（`runSubagentTurnLive`）、`legion/subagent/turn.ts`（`createTurnSettler`、`worker:` lane）。`tests/support/scripted-runner.ts` 改成在 faux 的 durable runtime 上跑 background run，蒸馏、复述、subagent 的脚本测试不改写法。`scripts/link-intake-compare.ts` 的真模型路径还走 `runHarnessTurn`，把 settler 内联了，第四阶段一起改。
 
 解决：307（子 agent 有自己的系统提示和工具）。
 
-验收：文献检索子 agent 在阅读回合里跑通，父 abort 连带子；六种诚实失败的测试搬过来仍绿；蒸馏一次空运行算成功；typecheck、t.sh 全绿。
+验收（都在 bun 测试里，faux）：`research_literature` 在阅读回合里跑通，父 `stopTurn` 连带 abort 子对话；六种诚实失败；空蒸馏算成功、游标前进；agent worker 端到端（`tests/legion/subagent/worker-durable.test.ts`）；两棒的杀进程恢复测试；typecheck、t.sh 全绿。
 
-量：中，两棒。
-
-A 棒（子 agent 工具，2026-10-12，分支 `dev/pi-durable-3-a`）已完成，和上面不同的：
-
-- 子对话的工具：每个定义一个 extension（`rp-agent-<名字>`），子对话选 `[rp, 它]`、`tools` 只给定义的那几个。目录里带 `childTools` 的工具（今天只有 `research_literature`）在 Harness 打开时就装好它的 extension，重启后子对话的工具调用先于父调用重跑时也找得到登记；执行按子对话 id 在进程内的 `ChildDesks` 里找调用方给的 AgentTool，父调用重跑前子对话的调用在那里等。实现在 `legion/durable/child.ts`，`rp.subagent` 文档标记子对话并记轮数上限和 budget purpose，`beforeRequest` 对子对话不读历史、照样管轮数和 budget，`afterResponse` 记 surface `subagent` 的用量。
-- 恢复：`recoverBeforeResume` 跳过子对话，让它跟着父调用 resume（父调用 safe，重跑找回同一个子对话和 submission；正文中间死的子对话由 pi-durable 重问，读者看不到它的半句）。
-- 工具不收 `run`、`signal` 了，只收 `quota`；`execute` 只在 durable 上能跑（`runInDurable`）。程序调用（agent worker、蒸馏、摄入）仍走 `runSubagent` + `runSubagentTurnLive`（`legion/execute`），等 B 棒的 `legion/durable/background.ts` 合进来后把 `runSubagentTurnLive` 指过去，那时再删 `turn.ts`、`live.ts` 的旧实现和 `worker:` lane。
-- `research_literature` 没有挂进任何桌面：阅读回合今天经 `delegate` 派 legion run 做文献检索（`RESEARCH_PROMPT`）。要不要在回合里直接挂这个工具是产品决定，没动；验收在 bun 场景测试里用挂了它的 book place 做。
-
-后台 pass 已完成（2026-10-12，B 棒，分支 `dev/pi-durable-3-b`，过程见[交接](../research/pi-durable-迁移交接.md)）：
-
-- `legion/durable/background.ts` 的 `runBackgroundTurn`：每次跑一个新的 ownerless 对话，一条 user 消息，系统提示写进 `rp.desk` 的第一个 section，`purpose`、`maxRounds` 照旧走我们的 `beforeRequest`（budget、轮数拒绝）和 `afterResponse`（`recordModelCall`，surface 由调用方给）。请求形状同 `SubagentTurnFn`，蒸馏和 link take 直接传给 `runSubagent`。跑完没有活任务，之后调一次 `maybeRotate`。
-- pass 的工具按次建，描述和 schema 随这次运行变（观察工具印出可写的行号和关系），进不了进程级 catalog。每次运行装一个只含这些工具的 extension（`rp.background:<run>`），只在自己的对话里和 `rp` 一起选上，跑完卸掉；Harness 的默认选择钉成只有 `rp`，所以不漏到别的对话。
-- 换上的：`memory/live` 的三种蒸馏（对话、划线、复述）、`reading/prep/chapters/chapter.ts` 的章节笔记、`reading/prep/papers/digest.ts` 长论文的 digest、`reading/ingest/live.ts` 的 link take。模型档、budget、结果和写文件不变。
-- 不上 Harness 的：单次 `callModel`（`info/program/live.ts` 的筛选、分析、综合，prep 的规划和短论文 digest）。它们走 `ai/`，本来就不经 `legion/execute` 的回合运行时；`info/program/live.ts` 只还用着 `legion/execute` 的 `realTimers`、`AiCallOptions` 类型和 `appRunner`（legion 的 run runner）。
-- 被杀：恢复时凡是 `rp.thread` 为 `background` 的对话一律 `abort({ background: true })`，不重放、不重问；pass 下次触发时按自己的文件重跑（蒸馏的游标没动，prep 的笔记没写）。
-- 换代：pass 在跑时有未结算 submission，`inspect()` 不空闲，换代等它；跑完空闲，换代照常。
+没做的：`research_literature` 没挂进任何桌面（阅读回合经 `delegate` 派 legion run 做文献检索，要不要直接挂是产品决定）。后台运行没有停摆看门狗，蒸馏和 link take 连接不报错也不结束时一直占着 gate，等 `stream.timeoutMs` 定。provider 抛出的错误经 pi-durable 变成 `stopReason: "error"` 的消息，抛出物的类型丢了，蒸馏的 `distill-failed` 事件的 `errorName` 现在一律是 `Error`。
 
 ### 第四阶段：升级与清理
 
 动：pi-agent-core 升 1.1.0 后从 dependencies 删掉，删 overrides，`rm -rf node_modules && bun install` 后确认 pi-ai 只有一份；唯一一处 `AgentMessage` 类型 import 换成 pi-ai 的；`stall.ts`、`watchdog.ts` 搬进 `legion/durable`。
 
 删：`legion/execute/` 剩下的 harness、held、turn、contract 的 lane 部分、observable-run、limiter 等，`soul/recover.ts`；`platform/app/session-fs.ts`；palace 的 `session` 行和 AppData 下的旧 `session/` 目录（启动时删一次）；LAYER 表的 `legion/execute` 行；`tsconfig.test.json` 里 import pi-agent-core 的八个测试文件改写或删。
+
+第三阶段收尾后 `legion/execute` 的回合运行时只剩：`turn.ts` 的 `runAgentTurn`（`soul/recover.ts`）和 `runHarnessTurn`（十个测试文件、`scripts/link-intake-compare.ts` 的真模型路径）；`harness.ts`、`held.ts` 只剩 `soul/recover.ts`。52 个 src 文件从 `execute/turn` import，多数只拿类型，删之前改指 `contract.ts`。清单见交接「第三阶段 C 棒」。
 
 解决：306、338、367（session JSONL 和旧 harness 的流语法随之消失）；坑 495 关闭。
 

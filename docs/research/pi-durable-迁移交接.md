@@ -812,3 +812,35 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 库超过阈值 1.5 倍时强制换代会 abort 在跑的 pass，结果是 error（不是 `StoppedError`），pass 记一次失败，下次重跑。
 - 全量测试有一次 `tests/platform/store-errors.test.ts` 的 App/PhoneApp 两条失败，单跑和重跑都过，和本棒无关，没查。坑 551、552 没用。
 
+## 第三阶段 C 棒：合并与收尾（分支 `dev/pi-durable-3-c`，从 `origin/dev/pi-durable-3` f5aaf7d5 起）
+
+合并：先 A（a55d96da）后 B（a63fa74f）。
+
+- `harness.ts`：两边都加了 `extension`、`takeRefusal`，各留一份（B 的写法，落盘步骤和接口共用一个 `takeRefusal`）。A 的 `children`、`installChild`（开库时装、不卸）和 B 的 `install`/`uninstall`、`sectionKeys`、默认 `settings.extensions: [rp]` 并存。
+- `tools.ts`：工具有 `runInDurable` 走它，否则走 B 拆出的 `executeTool`；结果整形抽成 `toolContent`。`child.ts` 的子工具执行也改用 `executeTool`。
+- `recover.ts`：先挑出 background 对话 abort，其余里跳过子对话。
+- 87：B 的分支误删了「第四阶段：升级与清理」标题，合并时补回。
+
+收尾：
+
+- agent worker（`legion/subagent/worker.ts`）默认 turn 改成 `runBackgroundTurn`。蒸馏、复述、link take、章节笔记、digest B 棒已换。删 `legion/subagent/live.ts`、`turn.ts`（`createTurnSettler`、`workerLane`）。`runSubagent` 留作 brief 层。`scripts/link-intake-compare.ts` 的真模型路径用 `runHarnessTurn`，把 settler 内联进去，`--dry-run` 跑过 24/24。docs/86 里的 `runSubagentTurnLive` 改成 `runBackgroundTurn`。
+- `background.ts` 的轮数：B 的 `follow` 把正在生成的那次算一轮（被 hook 拒掉的请求也算），结束时又补报一次。out-of-turns 的 `rounds` 比上限多 1，池子多扣一轮，进度里同一轮报两次。改成：非 aborted 的 assistant 条目数，加上正在生成且已收到文字的那一轮；单调递增，每轮报一次；结束时先按条目补报，再判拒绝。
+- `tests/support/scripted-runner.ts` 重写：每次 `run` 开一个 faux 的 durable 测试 runtime（`openTestRuntime`），脚本的每个 `Turn` 转成 faux 的 response factory，走 `runBackgroundTurnOn`，跑完关库删目录。接口不变（`requests`、`contexts`、`streamed`、`exhausted`、`beforeRound`），`model` 选项换成 `contextWindow`。蒸馏、复述、cursor-inserts、retell-trigger 79 条没改就绿。
+- `subagent.test.ts` 改了三条：上下文溢出那条改成窗口 2000、第一轮就放不下。durable 的 `fitRoundToBudget` 按内容估，不走 pi 按上一轮 usage 估的捷径，原来报 197k usage 的写法在 durable 上不触发，结局是 no-evidence。「抛出物类型」那条改成脚本 turn，只测 `runSubagent` 的映射。worker lane 那条去掉 `workerLane` 断言，只留名字。
+- 新测试 `tests/legion/subagent/worker-durable.test.ts`：agent worker 不注入 turn，经 `provideBackgroundHost` 拿 faux runtime，端到端写出 brief、进度报工具、库里空闲；cancel 时 `done` 以 `StoppedError` 拒绝、库里空闲。
+
+测试：每次提交前 typecheck、t.sh 都按退出码绿。合并后全量 7511 pass；收尾后跑两遍全量，都是 7513 pass、0 fail、RC=0。`tests/platform/store-errors.test.ts` 三遍都没失败，没复现 B 棒那次，没查顺序依赖。没跑 Linux xvfb 的 app 内后台 pass（调用次数不够）。坑 557、558 没用。
+
+第四阶段剩下的：
+
+- `legion/execute/turn.ts`：`runAgentTurn` 只剩 `soul/recover.ts`。`runHarnessTurn` 只剩测试（`info/meals/plan-rounds`、`legion/execute/` 的 held、held-lanes、turn-limit、turn-stall、turn-steer、turn，`soul/recover`、`recover-settled`，`ui/components/chat/info-refusal`）和 `scripts/link-intake-compare.ts` 的真模型路径（改到 durable 或删掉 live 模式）。52 个 src 文件从 `execute/turn` import，多数只拿 `AgentTool` 等类型，先改指 `contract.ts`。
+- `harness.ts`、`held.ts`：只剩 `soul/recover.ts`。`soul/recover.ts`、`platform/app/session-fs.ts` 和它们的测试（import pi-agent-core 的八个：`legion/execute/harness`、`turn-limit`、`turn-stall`、`held`、`held-lanes`，`platform/app/session-fs`，`soul/recover`、`recover-settled`）。
+- 留下的工具件，按 87 搬或留：`contract.ts`（23 处）、`limiter.ts`（3）、`observable-run.ts`（5）、`runner.ts`/`worker.ts`（legion runner，10/12）、`stall.ts`/`watchdog.ts`（搬进 `legion/durable`）、`tool-result.ts`、`turn-log.ts`、`outputs.ts`。`provider-config.ts` 目录外没人 import。
+- pi-agent-core 升 1.1.0、删 overrides、`AgentMessage` 换 pi-ai、palace 的 `session` 行和旧 `session/` 目录、LAYER 表的 `legion/execute` 行，照 87。
+
+没解决的：
+
+- 后台运行没有停摆看门狗（B 棒记的）。
+- 强制换代 abort 在跑的 pass，结果是 error 不是 `StoppedError`（B 棒记的）。
+- provider 抛出的错误经 pi-durable 变成 `stopReason: "error"` 的消息，抛出物类型丢了。经 `runSubagent` 的 pass 的 `failure.name` 现在一律是 `Error`，蒸馏的 `distill-failed` 事件的 `errorName` 分不出断网和没登录。
+- `research_literature` 没挂进任何桌面（A 棒记的，产品决定）。
