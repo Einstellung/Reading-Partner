@@ -8,8 +8,6 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { StoppedError } from "../../../src/legion/execute/watchdog";
-import { createSubagentQuota } from "../../../src/legion/subagent/quota";
 import { subagentTool } from "../../../src/legion/subagent/tool";
 import {
   buildResearchAgent,
@@ -19,18 +17,6 @@ import {
   RESEARCH_TURN_ROUNDS,
 } from "../../../src/reading/papers/research-agent";
 import type { PaperCandidate, PaperSearchResult } from "../../../src/reading/papers/paper-search";
-import type { Turn } from "../../support/scripted-turn";
-import { scriptedSubagentRunner } from "../../support/scripted-runner";
-
-// --- a scripted model, one entry per streamed turn ---
-
-
-// A SubagentTurnFn backed by the real loop, recording what it was asked for.
-// A round past the end of the script says so in the reply rather than failing
-// the turn: these tests read what came back, not how it ended.
-function loopRunner(turns: Turn[]) {
-  return scriptedSubagentRunner(turns, { exhausted: { text: "no scripted turn" } });
-}
 
 // --- the literature the fakes return ---
 
@@ -82,7 +68,7 @@ function agent(
 // --- the definition ---
 
 test("the reader-facing tool is one tool, safely named, with one task parameter", () => {
-  const tool = subagentTool(agent(), { run: loopRunner([]).run });
+  const tool = subagentTool(agent());
 
   // docs/24: pi-ai rewrites tool names matching Claude Code's canonical set on the
   // OAuth channel, matched case-insensitively. Underscored lowercase cannot collide.
@@ -147,133 +133,5 @@ test("the companion is told to hand it over rather than answer from memory", () 
   expect(RESEARCH_PROMPT).toContain("find_paper");
 });
 
-// --- what crosses back ---
-
-test("the reader's turn gets the brief and none of the candidate text", async () => {
-  const runner = loopRunner([
-    { calls: [{ name: "search_papers", args: { query: "cortical neuron scaling" }, id: "t1" }] },
-    {
-      text:
-        "Cellular scaling rules for primate brains (Herculano-Houzel et al., 2025, PNAS) — " +
-        "https://doi.org/10.1073/pnas.0611396104\nCounts neurons directly, which is the " +
-        "measurement the chapter's claim rests on.",
-    },
-  ]);
-  const tool = subagentTool(agent(), { run: runner.run });
-
-  const result = (await tool.execute({ task: "what does the recent work say about cortical scaling" })) as string;
-
-  expect(result).toContain("Cellular scaling rules for primate brains");
-  expect(result).toContain("https://doi.org/10.1073/pnas.0611396104");
-  expect(result).not.toContain("Filler.");
-  expect(result).not.toContain("We measured cortical neuron numbers");
-});
-
-// --- an unusable brief cannot arrive as an answer ---
-
-test("a run that spent its turns throws instead of returning an answer", async () => {
-  const runner = loopRunner([
-    { calls: [{ name: "search_papers", args: { query: "a" }, id: "t1" }] },
-    { calls: [{ name: "search_papers", args: { query: "b" }, id: "t2" }] },
-    { text: "The literature broadly agrees that neuron counts scale sublinearly." },
-  ]);
-  const tool = subagentTool({ ...agent(), maxRounds: 2 }, { run: runner.run });
-
-  const attempt = tool.execute({ task: "what does the recent work say" });
-  await expect(attempt).rejects.toThrow("all 2 of its turns");
-  await expect(attempt).rejects.toThrow("not a finding");
-  // The model's fluent paragraph is not in the thrown text either.
-  await expect(attempt).rejects.not.toThrow("broadly agrees");
-});
-
-test("every library down is a failed tool call, never 'nothing was found'", async () => {
-  const runner = loopRunner([
-    { calls: [{ name: "search_papers", args: { query: "a" }, id: "t1" }] },
-    { text: "There is no recent work on cortical scaling." },
-  ]);
-  const tool = subagentTool(
-    agent({
-      search: async () => {
-        throw new Error("No literature database answered: OpenAlex (409 out of credit)");
-      },
-    }),
-    { run: runner.run },
-  );
-
-  const attempt = tool.execute({ task: "what does the recent work say" });
-  await expect(attempt).rejects.toThrow("409 out of credit");
-  await expect(attempt).rejects.toThrow("not a finding");
-  await expect(attempt).rejects.not.toThrow("no recent work");
-});
-
-test("an answer written without consulting a library is not returned", async () => {
-  const runner = loopRunner([{ text: "I know this one: neuron counts scale sublinearly." }]);
-  const tool = subagentTool(agent(), { run: runner.run });
-
-  const attempt = tool.execute({ task: "what does the recent work say" });
-  await expect(attempt).rejects.toThrow("without calling any of its 3 tools");
-  await expect(attempt).rejects.not.toThrow("sublinearly");
-});
-
-// --- the shared pot ---
-
-test("the turn's pot is shared, and a third call is refused before it is sent", async () => {
-  const quota = createSubagentQuota(RESEARCH_TURN_ROUNDS);
-  // Each run answers with no tool ever succeeding, so each spends one turn and is
-  // unusable — which is beside the point here: what is under test is the pot.
-  const runner = loopRunner([{ text: "one" }, { text: "two" }, { text: "three" }]);
-  const tool = subagentTool(agent(), { run: runner.run, quota });
-
-  await expect(tool.execute({ task: "first question" })).rejects.toThrow("without calling any");
-  await expect(tool.execute({ task: "second question" })).rejects.toThrow("without calling any");
-  expect(runner.requests.length).toBe(2);
-  // Six reserved, one spent, five returned: the second run still got its six.
-  expect(runner.requests.map((r) => r.maxRounds)).toEqual([6, 6]);
-});
-
-test("a pot already spent stops the next call at the door", async () => {
-  const quota = createSubagentQuota(1);
-  const runner = loopRunner([{ text: "one" }]);
-  const tool = subagentTool(agent(), { run: runner.run, quota });
-
-  await expect(tool.execute({ task: "first" })).rejects.toThrow();
-  await expect(tool.execute({ task: "second" })).rejects.toThrow("did not run at all");
-  await expect(tool.execute({ task: "second" })).rejects.toThrow("Nothing was looked up");
-  expect(runner.requests.length).toBe(1);
-});
-
-// --- cancellation ---
-
-test("the reader hanging up mid-search kills the run and produces no brief", async () => {
-  const controller = new AbortController();
-  const runner = loopRunner([
-    { calls: [{ name: "search_papers", args: { query: "a" }, id: "t1" }] },
-    { text: "never asked for" },
-  ]);
-  const tool = subagentTool(
-    agent({
-      // The hangup lands while a library request is in flight, which is where a real
-      // search spends its time.
-      search: async () => {
-        controller.abort();
-        return FOUND;
-      },
-    }),
-    { run: runner.run, signal: controller.signal },
-  );
-
-  await expect(tool.execute({ task: "what does the recent work say" })).rejects.toBeInstanceOf(
-    StoppedError,
-  );
-  expect(runner.streamed()).toBe(1);
-});
-
-test("a signal already aborted never reaches the model", async () => {
-  const controller = new AbortController();
-  controller.abort();
-  const runner = loopRunner([{ text: "never" }]);
-  const tool = subagentTool(agent(), { run: runner.run, signal: controller.signal });
-
-  await expect(tool.execute({ task: "anything" })).rejects.toBeInstanceOf(StoppedError);
-  expect(runner.requests.length).toBe(0);
-});
+// What crosses back, the honest failures, the pot and cancellation run on the
+// durable runtime: tests/legion/subagent/subagent-durable.test.ts.

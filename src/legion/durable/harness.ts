@@ -21,6 +21,7 @@ import {
   type Conversation,
   type ConversationId,
   type ConversationStreamOptions,
+  type Extension,
   type HarnessInspection,
   type HarnessSettings,
   type Storage,
@@ -42,8 +43,10 @@ import {
   type TurnCheckpoint,
   type TurnInput,
   type TurnResult,
+  type ChildResponseRecorder,
 } from "./extension";
-import { DeskCache, toolRegistration, type DeskResolver } from "./tools";
+import { DeskCache, toolRegistration, type DeskResolver, type DurableTool } from "./tools";
+import { ChildDesks, childExtension, type ChildExtension } from "./child";
 import { createLandStep, type Lander } from "./turn";
 
 export const DURABLE_DIR = "durable";
@@ -92,6 +95,8 @@ export interface DurableOptions {
   ) => void;
   /** The system prompt's sections in order; `rp.desk` holds each turn's text for them. */
   sectionKeys: readonly string[];
+  /** One provider message a child conversation got back (child.ts), for `recordModelCall`. */
+  recordChildResponse?: ChildResponseRecorder;
   stream?: ConversationStreamOptions;
   dir?: string;
   rotateAtBytes?: number;
@@ -107,6 +112,14 @@ export interface DurableRuntime {
   readonly path: string;
   readonly registrations: ReadonlyMap<string, ToolRegistration>;
   readonly desks: DeskCache;
+  /** The tools of each running child conversation (child.ts). */
+  readonly children: ChildDesks;
+  /** Our extension, which a child conversation selects beside its own. */
+  readonly extension: Extension;
+  /** Install (or replace) the extension a definition's children run with. */
+  installChild(name: string, tools: readonly AgentTool[]): ChildExtension;
+  /** The request a conversation's hook declined to send, once (docs/pitfall/516). */
+  takeRefusal(conversationId: ConversationId): string | undefined;
   readonly turnTask: Task<TurnInput, TurnCheckpoint, TurnResult, object>;
   now(): number;
   forgetStubs(conversationId: ConversationId): void;
@@ -129,8 +142,11 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   const rotateAt = options.rotateAtBytes ?? ROTATE_AT_BYTES;
   const force = rotateAt * (options.forceRotateFactor ?? FORCE_ROTATE_FACTOR);
   const desks = new DeskCache(options.resolvers);
-  const registrations = new Map(options.catalog.map((tool) => [tool.name, toolRegistration(tool, desks)]));
+  const children = new ChildDesks();
+  let self!: DurableRuntime;
+  const registrations = new Map(options.catalog.map((tool) => [tool.name, toolRegistration(tool, desks, () => self)]));
   const refusals = new Map<ConversationId, string>();
+  const childTools = new Map<string, ToolRegistration>();
   const conversations = new Map<string, Promise<Conversation>>();
 
   let harness!: Harness;
@@ -153,6 +169,8 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     ...(options.recordResponse ? { recordResponse: options.recordResponse } : {}),
     ...(options.onRequest ? { requested: options.onRequest } : {}),
     registrations,
+    schemaOf: (name) => registrations.get(name) ?? childTools.get(name),
+    ...(options.recordChildResponse ? { recordChildResponse: options.recordChildResponse } : {}),
     ...(options.onSettled
       ? {
           settled: (conversationId: ConversationId, result: TurnResult, startedAt: number, turn: string | undefined) =>
@@ -178,6 +196,17 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   });
   const registry = createRegistry();
   registry.install(extension);
+  const installChild = (name: string, tools: readonly AgentTool[]): ChildExtension => {
+    const child = childExtension(name, tools, children);
+    for (const tool of child.tools) childTools.set(tool.name, tool);
+    registry.install(child.extension);
+    return child;
+  };
+  // A tool that runs a child declares the child's tools, so a child replayed
+  // after a restart finds its extension installed before anything resumes.
+  for (const tool of options.catalog as readonly DurableTool[]) {
+    if (tool.childTools) installChild(tool.name, tool.childTools);
+  }
   const settings: HarnessSettings = {
     retry: { enabled: false },
     compaction: { enabled: false },
@@ -240,6 +269,7 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     await harness.close(context);
     conversations.clear();
     desks.clear();
+    children.clear();
     refusals.clear();
     await openGeneration(Math.max(now(), code + 1));
     harness.resume();
@@ -249,7 +279,7 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
 
   let rotating: Promise<boolean> = Promise.resolve(false);
 
-  return {
+  self = {
     get harness() {
       return harness;
     },
@@ -261,6 +291,14 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     },
     registrations,
     desks,
+    children,
+    extension,
+    installChild,
+    takeRefusal(conversationId) {
+      const message = refusals.get(conversationId);
+      refusals.delete(conversationId);
+      return message;
+    },
     turnTask,
     now,
     forgetStubs,
@@ -283,4 +321,5 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     },
     close: (context) => harness.close(context),
   };
+  return self;
 }

@@ -195,6 +195,11 @@ export async function openDeviceDurable(options: DeviceDurableOptions): Promise<
       recordCacheTurn(cacheTurn(message, about.round, telemetry));
       turnLog.response(place.key(about.origin), about.round, message.stopReason);
     },
+    recordChildResponse: (message, about) => {
+      const telemetry: PlaceTelemetry = { surface: "subagent", thread: `subagent:${about.conversationId}` };
+      recordModelCall(usageReport(message, telemetry));
+      recordCacheTurn(cacheTurn(message, about.round, telemetry));
+    },
     onSettled: (conversationId, origin, result, startedAt, turn) => {
       const place = placeOf(origin);
       if (place) {

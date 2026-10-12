@@ -28,6 +28,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { fitRoundToBudget, type BudgetPurpose } from "../../budget";
 import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../execute/contract";
+import { childState, SubagentDoc, type SubagentState } from "./child";
 
 /** Where a conversation's turns land: today's BoxOrigin, opaque here except for `place`. */
 export type ThreadOrigin = { place: string } & JsonObject;
@@ -109,6 +110,12 @@ export type ResponseRecorder = (
   about: { conversationId: ConversationId; origin: ThreadOrigin; round: number },
 ) => void;
 
+/** One provider message a child conversation got back (child.ts). */
+export type ChildResponseRecorder = (
+  message: AssistantMessage,
+  about: { conversationId: ConversationId; name: string; round: number },
+) => void;
+
 /** A request about to go out: its round within the turn, and the model the conversation is configured with. */
 export type RequestNotice = (about: {
   conversationId: ConversationId;
@@ -158,8 +165,11 @@ export interface ExtensionDeps {
   /** Each request as it is prepared, for the turn log (legion/execute/turn-log.ts). */
   requested?: RequestNotice;
   land: LandStep;
-  /** Tool registrations by name, for sizing a request's tool schemas. */
+  /** Tool registrations by name: the extension's tools. */
   registrations: ReadonlyMap<string, ToolRegistration>;
+  /** A registration by name, children's included, for sizing a request's tool schemas. */
+  schemaOf?(name: string): ToolRegistration | undefined;
+  recordChildResponse?: ChildResponseRecorder;
   /**
    * A request that must not be sent: remember `message` for the landing step
    * and abort the conversation. The hook then waits for the abort.
@@ -258,10 +268,15 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
     ),
   );
 
+  const schemaOf = (name: string) => deps.schemaOf?.(name) ?? deps.registrations.get(name);
+
   const beforeRequest = async (request: { readonly messages: readonly Message[] }, api: HookApi, context: Context) => {
     const desk = await api.snapshot(DeskDoc, api.conversationId, context);
     const origin = (await api.snapshot(ThreadDoc, api.conversationId, context))?.origin;
-    if (!desk || !origin) return undefined;
+    if (!desk || !origin) {
+      const child = childState(await api.snapshot(SubagentDoc, api.conversationId, context));
+      return child ? childRequest(request, api, child, context) : undefined;
+    }
     const system = request.messages.filter((m) => m.role === "system");
     const stubs = stubsByTurn.get(api.conversationId) ?? new Map<string, Message>();
     stubsByTurn.set(api.conversationId, stubs);
@@ -285,13 +300,29 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
     const messages = [...history, ...run];
     const model = agent?.model ? api.models.getModel(agent.model.provider, agent.model.modelId) : undefined;
     if (!model) return { messages: [...system, ...messages] };
-    const names = Array.isArray(agent?.tools) ? agent.tools : [];
+    return fitted(api, agent, system, messages, stubs, desk.purpose, context);
+  };
+
+  // Size the request against the window; a round that does not fit is refused.
+  const fitted = (
+    api: HookApi,
+    agent: { tools?: unknown } | undefined,
+    system: Message[],
+    messages: Message[],
+    stubs: Map<string, Message>,
+    purpose: BudgetPurpose,
+    context: Context,
+  ) => {
+    const model = (agent as { model?: { provider: string; modelId: string } } | undefined)?.model;
+    const resolved = model ? api.models.getModel(model.provider, model.modelId) : undefined;
+    if (!resolved) return { messages: [...system, ...messages] };
+    const names: string[] = Array.isArray(agent?.tools) ? (agent.tools as string[]) : [];
     const tools: Tool[] = names.flatMap((name) => {
-      const tool = deps.registrations.get(name);
+      const tool = schemaOf(name);
       return tool ? [{ name: tool.name, description: tool.description, parameters: tool.parameters }] : [];
     });
     const systemPrompt = system.map(textOf).join("\n\n");
-    const fit = fitRoundToBudget({ model, systemPrompt, messages, tools, purpose: desk.purpose });
+    const fit = fitRoundToBudget({ model: resolved, systemPrompt, messages, tools, purpose });
     fit.messages.forEach((m, i) => {
       if (m !== messages[i] && m.role === "toolResult") stubs.set(m.toolCallId, m);
     });
@@ -299,15 +330,38 @@ export function durableExtension(deps: ExtensionDeps): DurableExtension {
     return { messages: [...system, ...fit.messages] };
   };
 
+  // A child conversation (child.ts) has no file history and no desk: the
+  // request is its own run, held to the child's round cap and budget.
+  const childRequest = async (
+    request: { readonly messages: readonly Message[] },
+    api: HookApi,
+    child: SubagentState,
+    context: Context,
+  ) => {
+    const system = request.messages.filter((m) => m.role === "system");
+    const stubs = stubsByTurn.get(api.conversationId) ?? new Map<string, Message>();
+    stubsByTurn.set(api.conversationId, stubs);
+    const run = request.messages
+      .filter((m) => m.role !== "system")
+      .map((m) => (m.role === "toolResult" ? (stubs.get(m.toolCallId) ?? m) : m));
+    const round = run.filter((m) => m.role === "assistant").length + 1;
+    rounds.set(api.conversationId, round);
+    if (round > child.maxRounds) return refused(deps, api, REFUSE_ROUNDS, context);
+    const agent = await api.snapshot(AgentDoc, api.conversationId, context);
+    return fitted(api, agent, system, run, stubs, child.purpose, context);
+  };
+
   const afterResponse = async (message: AssistantMessage, api: HookApi, context: Context) => {
-    if (!deps.recordResponse) return;
     const origin = (await api.snapshot(ThreadDoc, api.conversationId, context))?.origin;
-    if (!origin) return;
+    const child = origin ? undefined : childState(await api.snapshot(SubagentDoc, api.conversationId, context));
+    if (origin ? !deps.recordResponse : !child || !deps.recordChildResponse) return;
     // A hook rerun after a crash sees the same message again; a re-ask is a
     // new message with its own timestamp, and is recorded (it was paid for).
     const name = `usage:${message.timestamp}:${message.responseId ?? ""}`;
     if ((await api.memo<boolean>(name, context)) !== undefined) return;
-    deps.recordResponse(message, { conversationId: api.conversationId, origin, round: rounds.get(api.conversationId) ?? 1 });
+    const round = rounds.get(api.conversationId) ?? 1;
+    if (origin) deps.recordResponse?.(message, { conversationId: api.conversationId, origin, round });
+    else if (child) deps.recordChildResponse?.(message, { conversationId: api.conversationId, name: child.name, round });
     await api.memo(name, true, context);
   };
 

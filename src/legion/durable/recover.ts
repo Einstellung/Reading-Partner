@@ -12,6 +12,7 @@
 
 import type { Context } from "@earendil-works/chord";
 import { LiveDoc, type ConversationId, type SubmissionId } from "@earendil-works/pi-durable";
+import { childState, SubagentDoc } from "./child";
 import { PartialDoc, RecoveryDoc } from "./extension";
 import type { DurableRuntime } from "./harness";
 import { stopTurn, textOf, type WithdrawnSteer } from "./turn";
@@ -36,6 +37,9 @@ export async function recoverBeforeResume(runtime: DurableRuntime, context: Cont
 
   const sorted: { conversationId: ConversationId; submission: SubmissionId; outcome: RecoveryOutcome }[] = [];
   for (const conversationId of conversations) {
+    // A tool call's child resumes with its call (child.ts): the replay-safe
+    // call finds it again; an aborted call aborts it.
+    if (childState(await harness.snapshot(SubagentDoc, conversationId, context))) continue;
     const live = await harness.snapshot(LiveDoc, conversationId, context);
     const submission = live?.run?.inputs[0];
     if (submission === undefined) continue;
