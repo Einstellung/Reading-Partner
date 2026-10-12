@@ -761,3 +761,14 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 没走：真模型一回合（要新的 access token）、语音（和用户一起）、复述停止和杀进程、三餐停止和杀进程。
 - 收尾：容器里占位凭据已删，`__faux*` 键已清，app 重起（PID 7599）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里多了 Verify talk 主题（大纲、复述从 iPad 模拟器拷来）、`info-sources.json`、`info-meals.json`、今天的 briefing、`settings.meals`。
 - 接着做：access token 有效（离过期超过 30 分钟）时只拷 `access`、`expires` 进 `.dev` 容器，`refresh` 填假值；`~/v2.py flow door bg60` 跑一个 Haiku 回合（注意回前台可能多一次 `subagent` 请求），完了删凭据。`~/d.sh pull durable` 拉完 afc 不退出，文件到了就杀自己记下的那个 afc PID。
+
+第三棒（2026-10-12，分支 `verify/pi-durable-2-ipad3`，从 `dev/pi-durable-2` cf5cd527 起）：iPad 上的 `.dev` 包还是 7195343e 那次装的（之后只改了文档），没重装。同样的慢速 faux 和占位凭据，驱动沿用 Mac `~/v2.py flow retell|meals stop kill`，工具里杀进程用 `~/v3.py`（副本在会话 scratchpad `verify-ipad2/tools/v3.py`），报告页 `verify-ipad2/report.html` 加了「Round 3」一节。5 项全过，没改代码，坑 546、547 没用。
+
+- 复述停止：半句 768 字，12 s 后不变，不放卡，没有多余模型调用。
+- 复述杀进程：半句 780 字在线程里一次、重开画一次，不重问（重启后那一次 faux 调用是启动时的 `subagent` 回合）；turn-log 的 start、first-byte、`end aborted` 同一个回合号；放一张 retell 卡，同门口和教练。
+- 三餐停止：半句 748 字，不放卡。三餐杀进程：半句 792 字一次，重启 faux 0 次，`end aborted` 与 start 同号，一张 meals 卡。
+- 三餐工具里杀：faux 调 `add_shopping_items`，`__fauxToolDelayMs` 拖 25 s，进工具 7 s 后 SIGKILL，杀前把 `__fauxPlan` 改成只出文字。重启后同一回合号再 start，工具不重跑，模型拿到 `Tool add_shopping_items was interrupted` 错误、第 2 轮接着说完 done；线程 trace 里工具是 error，购物清单没变（坑 534）。
+- 启动时的 `subagent` 回合不固定：一次重启跑了两个（第二个晚 20 s），另两次一个没有。faux 计划按顺序出步，所以要杀在工具里得让前几步都是 tool。
+- 三餐停止那条 `end` 没有 `conversation` 字段，杀进程那条有，没查。
+- 收尾：`credentials.json` 已删并确认不在，`__faux*` 键已清，app 重起（PID 7738）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里三餐线程多了几问几答，购物清单没变。
+- 还没走：真模型一回合（要新的 access token）、语音。
