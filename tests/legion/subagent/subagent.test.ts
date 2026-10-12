@@ -390,47 +390,20 @@ test("a cheap run returns its unspent turns to the caller's pot", async () => {
   expect(quota.remaining()).toBe(6);
 });
 
-// --- the parent-side tool ---
-
-test("mounted as a tool, a usable brief is the tool result", async () => {
-  const runner = loopRunner([
-    { calls: [{ name: "search_papers", args: { query: "a" }, id: "t1" }] },
-    { text: "One paper: Liu 2025." },
-  ]);
-  const tool = subagentTool(definition(), { run: runner.run });
-
-  expect(tool.name).toBe("research_literature");
-  expect(tool.description).toContain("Investigate what the literature says");
-  expect(tool.description).toContain("You will not see what it did");
-  expect(await tool.execute({ task: "find recent work" })).toBe("One paper: Liu 2025.");
-});
-
-// Same discipline as src/reading/papers/search-tool.ts: a result the model reads as
-// an answer is how "stopped early" becomes "the literature is silent".
-test("mounted as a tool, a run that established nothing throws its own words", async () => {
-  const runner = loopRunner([
-    { calls: [{ name: "search_papers", args: { query: "a" }, id: "t1" }] },
-    { calls: [{ name: "search_papers", args: { query: "b" }, id: "t2" }] },
-  ]);
-  const tool = subagentTool(definition({ maxRounds: 2 }), { run: runner.run });
-
-  await expect(tool.execute({ task: "find recent work" })).rejects.toThrow("all 2 of its turns");
-});
-
-test("a tool with no task is rejected before anything is sent", async () => {
-  const runner = loopRunner([{ text: "never" }]);
-  const tool = subagentTool(definition(), { run: runner.run });
-
-  await expect(tool.execute({ task: "  " })).rejects.toThrow("needs a task");
-  expect(runner.requests.length).toBe(0);
-});
+// --- the parent-side tool (its runs: subagent-durable.test.ts) ---
 
 // pi-ai rewrites tool names matching Claude Code's canonical set on the OAuth
 // channel (docs/24), so the shape is refused where the tool is built.
 test("a sub-agent name that could be rewritten by the provider is refused", () => {
-  expect(() => subagentTool(definition({ name: "WebSearch" }), { run: loopRunner([]).run })).toThrow(
-    "not a safe tool name",
-  );
+  expect(() => subagentTool(definition({ name: "WebSearch" }))).toThrow("not a safe tool name");
+});
+
+test("mounted as a tool, it says the parent gets a brief and is safe to replay", () => {
+  const tool = subagentTool(definition());
+  expect(tool.name).toBe("research_literature");
+  expect(tool.description).toContain("You will not see what it did");
+  expect(tool.replay).toBe("safe");
+  expect(tool.childTools?.map((t) => t.name)).toEqual(definition().tools.map((t) => t.name));
 });
 
 // A sub-agent is a worker lane on the harness (docs/55). The name is the one

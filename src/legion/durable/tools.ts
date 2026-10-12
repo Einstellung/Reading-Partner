@@ -7,10 +7,25 @@
 import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import type { ConversationId, JsonObject, ToolRegistration } from "@earendil-works/pi-durable";
+import type { ConversationId, JsonObject, ToolExecutionApi, ToolRegistration } from "@earendil-works/pi-durable";
 import type { AgentTool } from "../execute/contract";
 import { normalizeToolResult } from "../execute/tool-result";
 import { ThreadDoc, type ThreadOrigin } from "./extension";
+import type { DurableRuntime } from "./harness";
+
+/**
+ * A tool whose call needs the Harness itself, such as one that runs a child
+ * conversation (child.ts). `childTools` are the child's, installed when the
+ * Harness opens so a replayed child finds them.
+ */
+export interface DurableTool extends AgentTool {
+  runInDurable?(
+    args: Record<string, unknown>,
+    call: { api: ToolExecutionApi; runtime: DurableRuntime },
+    context: Context,
+  ): ReturnType<AgentTool["execute"]>;
+  childTools?: readonly AgentTool[];
+}
 
 /** The tools of one desk: what today's opener and build*Tools give for this origin. */
 export type DeskResolver = (origin: ThreadOrigin, context: Context) => Promise<readonly AgentTool[]>;
@@ -48,7 +63,7 @@ export class DeskCache {
  * context, so an abort, closing the app or a generation swap lets go of it at
  * once (docs/pitfall/508, 514); what the tool goes on to do is nobody's.
  */
-export function toolRegistration(spec: AgentTool, desks: DeskCache): ToolRegistration {
+export function toolRegistration(spec: AgentTool, desks: DeskCache, runtime: () => DurableRuntime): ToolRegistration {
   return {
     name: spec.name,
     description: spec.description,
@@ -58,9 +73,11 @@ export function toolRegistration(spec: AgentTool, desks: DeskCache): ToolRegistr
       const origin = (await api.snapshot(ThreadDoc, api.conversationId, context))?.origin;
       if (!origin) throw new Error(`${spec.name}: this conversation has no thread`);
       const tools = await awaitWithContext(desks.tools(api.conversationId, origin, context), context);
-      const tool = tools.find((t) => t.name === spec.name);
+      const tool: DurableTool | undefined = tools.find((t) => t.name === spec.name);
       if (!tool) throw new Error(`${spec.name} is not available here`);
-      const raw = await awaitWithContext(tool.execute(args as Record<string, unknown>), context);
+      const raw = tool.runInDurable
+        ? await tool.runInDurable(args as Record<string, unknown>, { api, runtime: runtime() }, context)
+        : await awaitWithContext(tool.execute(args as Record<string, unknown>), context);
       const { text, images, receipt } = normalizeToolResult(tool, raw);
       const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
       for (const image of images) content.push({ type: "image", data: image.data, mimeType: image.mimeType });

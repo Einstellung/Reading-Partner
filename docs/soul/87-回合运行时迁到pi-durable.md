@@ -209,6 +209,13 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 量：中，两棒。
 
+A 棒（子 agent 工具，2026-10-12，分支 `dev/pi-durable-3-a`）已完成，和上面不同的：
+
+- 子对话的工具：每个定义一个 extension（`rp-agent-<名字>`），子对话选 `[rp, 它]`、`tools` 只给定义的那几个。目录里带 `childTools` 的工具（今天只有 `research_literature`）在 Harness 打开时就装好它的 extension，重启后子对话的工具调用先于父调用重跑时也找得到登记；执行按子对话 id 在进程内的 `ChildDesks` 里找调用方给的 AgentTool，父调用重跑前子对话的调用在那里等。实现在 `legion/durable/child.ts`，`rp.subagent` 文档标记子对话并记轮数上限和 budget purpose，`beforeRequest` 对子对话不读历史、照样管轮数和 budget，`afterResponse` 记 surface `subagent` 的用量。
+- 恢复：`recoverBeforeResume` 跳过子对话，让它跟着父调用 resume（父调用 safe，重跑找回同一个子对话和 submission；正文中间死的子对话由 pi-durable 重问，读者看不到它的半句）。
+- 工具不收 `run`、`signal` 了，只收 `quota`；`execute` 只在 durable 上能跑（`runInDurable`）。程序调用（agent worker、蒸馏、摄入）仍走 `runSubagent` + `runSubagentTurnLive`（`legion/execute`），等 B 棒的 `legion/durable/background.ts` 合进来后把 `runSubagentTurnLive` 指过去，那时再删 `turn.ts`、`live.ts` 的旧实现和 `worker:` lane。
+- `research_literature` 没有挂进任何桌面：阅读回合今天经 `delegate` 派 legion run 做文献检索（`RESEARCH_PROMPT`）。要不要在回合里直接挂这个工具是产品决定，没动；验收在 bun 场景测试里用挂了它的 book place 做。
+
 ### 第四阶段：升级与清理
 
 动：pi-agent-core 升 1.1.0 后从 dependencies 删掉，删 overrides，`rm -rf node_modules && bun install` 后确认 pi-ai 只有一份；唯一一处 `AgentMessage` 类型 import 换成 pi-ai 的；`stall.ts`、`watchdog.ts` 搬进 `legion/durable`。

@@ -175,8 +175,7 @@ export interface SubagentProgress {
 // It must settle: a cancelled run rejects with StoppedError (the agent loop
 // stops silently on abort, so something has to turn that into a rejection).
 export interface SubagentTurnRequest {
-  // The definition's name. The turn runs on a lane named after it, so a session
-  // file says which worker wrote it; nothing else reads it.
+  // The definition's name: the lane or the child's extension it runs under.
   name: string;
   systemPrompt: string;
   // The whole message list this run starts from — one user turn. This is the
@@ -192,13 +191,23 @@ export interface SubagentTurnRequest {
   onRound(info: { round: number; rounds: number }): void;
 }
 
-export type SubagentTurnOutcome =
+// What the run did, counted from the child conversation's entries. A turn that
+// reports it is believed over the runner's own count of the tools it wrapped.
+export interface SubagentTurnStats {
+  rounds: number;
+  toolCalls: number;
+  toolSuccesses: number;
+  toolFailures: SubagentToolFailure[];
+}
+
+export type SubagentTurnOutcome = (
   | { kind: "answer"; text: string }
   // The loop gave up for a reason it can state, with nothing having failed.
   | { kind: "refusal"; message: string }
   // The call did not complete. `name` is the constructor name of whatever was
   // thrown, when the turn was ended by a throw; absent when the loop reported a
   // failure it had no error object for.
-  | { kind: "error"; message: string; name?: string };
+  | { kind: "error"; message: string; name?: string }
+) & { stats?: SubagentTurnStats };
 
 export type SubagentTurnFn = (request: SubagentTurnRequest) => Promise<SubagentTurnOutcome>;

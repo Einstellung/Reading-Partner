@@ -14,7 +14,7 @@
 
 签名层面（`src/legion/subagent/types.ts`）：定义是 `SubagentDefinition`（name / description / label / systemPrompt / tools / maxRounds / purpose / model / evidence / briefTokenCap），一次运行是 `runSubagent({definition, task, signal, onProgress}, {run, quota})`，回来的是 `SubagentBrief`（brief / outcome / usable / rounds / roundsAllowed / toolCalls / toolSuccesses / toolFailures / clipped）。工具全部由调用方注入，这个目录不知道文献检索、简报和书的存在。
 
-隔离不是靠约定，是靠没有出口：`turn.ts` 把 loop 的 `onDelta`、`onThinking`、`onToolStart`、`onToolEnd` 全部接到空函数上，只有 `onDone` 的最终文本能出来。
+隔离不是靠约定，是靠没有出口：`turn.ts` 把 loop 的 `onDelta`、`onThinking`、`onToolStart`、`onToolEnd` 全部接到空函数上，只有 `onDone` 的最终文本能出来。挂成工具的子 agent 已改成工具调用拥有的子对话，隔离由构造保证，见 [87](./87-回合运行时迁到pi-durable.md) 第三阶段。
 
 `model` 可以覆盖：跑机械查找的子 agent 用不着读者正在对话的那个模型。不加输出 schema，brief 是自由文本——机器要读的那几句状态由我们自己拼，模型写的那部分本来就是给模型读的散文。
 

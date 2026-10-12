@@ -192,7 +192,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
         any({}),
       ),
     ],
-    names: ["research_literature"],
+    names: ["research_literature"], safe: ["research_literature"],
   },
   {
     where: "reading/ingest/take-link-tool",
