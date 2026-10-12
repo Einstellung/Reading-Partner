@@ -772,3 +772,19 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 三餐停止那条 `end` 没有 `conversation` 字段，杀进程那条有，没查。
 - 收尾：`credentials.json` 已删并确认不在，`__faux*` 键已清，app 重起（PID 7738）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里三餐线程多了几问几答，购物清单没变。
 - 还没走：真模型一回合（要新的 access token）、语音。
+
+## 第三阶段 A 棒：子 agent（分支 `dev/pi-durable-3-a`，从 `origin/dev/pi-durable-3` f5aaf7d5 起）
+
+做完的：
+
+- `legion/durable/child.ts`：`rp.subagent` 文档、`ChildDesks`（子对话 id 到调用方的 AgentTool，调用先到就等）、`childExtension`（每个定义一个 `rp-agent-<名字>` extension，执行走 `ChildDesks`）、`childStats`（从子对话条目数轮数和工具成败，aborted 的半句不算一轮）、`runTaskChild`（README 那个写法：`api.commit` 里按 `ownerTaskId` 找或建子对话、`configure` 模型/思考档/`[rp, 子 extension]`/工具/`instructions`，`requestId: subagent:<taskId>` 提交并等，读条目和 `takeRefusal` 得出结局）。
+- `harness.ts`：`children`、`extension`、`installChild`、`takeRefusal`；目录里带 `childTools` 的工具开库时装好子 extension；工具登记拿得到 runtime（`runInDurable(args, { api, runtime }, context)`）。`extension.ts`：子对话的 `beforeRequest`（不读历史，轮数上限、budget）和 `afterResponse`（`recordChildResponse`）。`recover.ts`：跳过子对话。`device.ts`：子对话用量记 surface `subagent`、thread `subagent:<对话 id>`。
+- `legion/subagent/tool.ts` 改成 durable 工具（`replay: "safe"`，只收 `quota`），brief 交给 `run.ts` 新抽出的 `briefFor`；`legion/subagent/child.ts` 是定义到子对话 spec 的转换。`SubagentTurnOutcome` 可带 `stats`，带了就以它为准。
+- 测试 `tests/legion/subagent/subagent-durable.test.ts`（11 个）：阅读回合里调 `research_literature`，子对话拿自己的系统提示和三件文献工具、父对话只看到 brief；六种诚实失败（out-of-turns、no-evidence 两种、out-of-budget、out-of-context、failed、refused）都以 error 结果进父对话；池子按实际轮数结算；父 `stopTurn` 时子对话在工具里被 abort、库里不留活任务和 submission；子对话工具里关库再开，父调用 in-tool resume、safe 的 `search_papers` 在同一子对话里重跑、回合落盘一次。research-agent 和 subagent 测试里用 scripted runner 测工具的那几条搬进了这里。
+
+没做的：
+
+- agent worker 和其他程序调用没上 durable。协调后定：ownerless 的后台回合由 B 棒的 `legion/durable/background.ts`（`runBackgroundTurn`）统一做，这一棒不另造。合并时把 `legion/subagent/live.ts` 的 `runSubagentTurnLive` 指到 B 的实现（`agentWorker`、`memory/observations` 的蒸馏和复述、`info/links/take.ts` 都经它），之后删 `legion/subagent/turn.ts`、`live.ts` 的旧实现、`workerLane` 和 `tests/support/scripted-runner.ts` 里对 `createTurnSettler` 的依赖。
+- 和 B 棒在 `harness.ts` 上会撞：两边都加了 `takeRefusal`（同名同义，留一份）；B 的每次运行装卸 extension 和这里开库时装、按定义的子 extension 是两件事：子对话要跨重启 replay，所以它的 extension 不能跑完就卸。B 把 `settings.extensions` 钉成 `[rp]`，子对话显式选 `[rp, 子 extension]`，不冲突。
+- `research_literature` 没挂进阅读桌面（见 87 第三阶段 A 棒）。xvfb 下 app 里走一遍没做：没有桌面挂它，app 里的阅读回合调不到。
+- 坑 549、550 没用：这一棒没有实测出意外行为。
