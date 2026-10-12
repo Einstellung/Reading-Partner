@@ -969,9 +969,15 @@ Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 
 
 ## 第四阶段 iPad 真机验收（分支 `verify/pi-durable-4-ipad`，从 `origin/dev/pi-durable-4` c7e0ca62 起）
 
-2026-10-12，没跑成：装包后 iPad 从 Mac 的 USB 上掉了。Mac `~/rp-ipad` 切到 c7e0ca62，`bun install` 后手动删了残留的 `node_modules/@earendil-works/pi-agent-core`，`OUT=/tmp/rp-dev-ipad-p4.ipa bash ~/build.sh`（`VITE_VERIFY_FAUX=1`）出包，读回 CFBundleIdentifier 为 `.dev`，`apps install` 报 Installation succeed。装前 `.dev` 容器里有旧 `session/`（`--session-soul--`、`--session-turn--`、`--session-worker--`），又放了 `session/marker.txt`。装完紧接着的 `dvt launch` 报 `Connection was terminated abruptly`，之后 `usbmux list` 一台设备都没有，等了 3 分多钟没回来，要人看 iPad（线、锁屏、重启）。新包有没有起过一次不知道，所以升级那项要先看 `session/` 还在不在：在，就是还没起过，第一次 `launch` 后看它没了。
+2026-10-12 第二次跑，iPad（iPad15,7，iOS 26.7.1）插回 Mac mini 并解锁。上一次装包后掉线，这次一查，设备上的 `.dev` app 不是 c7e0ca62 那个 ipa：起来后页面只有「Failed to request http://192.168.0.107:1437/」，是一个连 Linux 开发服务器的 dev 构建（不知道哪次会话装的），没跑起前端，`session/` 还在。读回 `/tmp/rp-dev-ipad-p4.ipa` 的 CFBundleIdentifier 为 `.dev` 后重装，页面脚本是 `assets/index-DlgAn32M.js`（与 `~/rp-ipad/dist` 一致）。`~/v2.py` 的 `page()` 加了闸：页面里没有这个脚本就拒绝执行，faux 和凭据只会落到这个包的页面上；ios_webkit_debug_proxy 的 `/json` 里 `appId` 是 `PID:<pid>`，也能对上 dvt 起的进程。旧 iwdp 78195 在 iPad 重插后列表一直空，停掉重起为 35930。慢速 faux 20 token/s（切后台那项 8 token/s）、每答 2700 字，占位 anthropic 凭据加 `device.json` 改 anthropic / claude-haiku-5-5。驱动 Mac `~/v2.py`、`~/v5.py`（会话 scratchpad `verify-phase4-ipad/tools/`，另加 `ax.py`），日志 Mac `/tmp/v2/log-*`，报告页 `verify-phase4-ipad/report.html`。没改代码，坑 568、569 没用。
 
-- 驱动：Mac `~/v5.py`（副本在会话 scratchpad `verify-phase4-ipad/tools/v5.py`），沿用 `~/v2.py` 的 flow。顺序：`v5.py setup`（`device.json` 改 anthropic / claude-haiku-5-5、放占位凭据、faux 20 tok/s，重起）→ `v2.py flow door close`、`flow door kill` → `v5.py faux 8` 后 `v2.py flow door bg60` → `v2.py flow book steerstop`、`v5.py booktk` → `v2.py flow coach close`、`flow retell close`（结果里有 Send 是否被卢明盖住）→ `v2.py bell` → `v5.py prep`（挪开 prep 目录、400 tok/s 跑完 63 章再放回）→ `v5.py clean`（删凭据、清 `__faux*`、`device.json` 改回 openai / gpt-6-luna）。
-- 软键盘：页面 JS 弹不出来。pymobiledevice3 的 `AccessibilityAudit` 有 `iter_elements` 和 `perform_press`（注释说目标进程要 `task_for_pid-allow`，`.dev` 是开发签名，没试过），可能是唯一能在真机上点进 textarea 弹键盘的路。
-- `/tmp/v2/pids` 末行混进了一个 `40`（launch 失败时从错误行里抓到的数字），下次 `kill` 前先删掉这一行。
-- 收尾：没放过凭据（占位和真的都没有），Linux、Mac、设备上没有副本。Mac 上没留我起的进程；ios_webkit_debug_proxy 78195、vite 6596/6598 没动。坑 568、569 没用。
+- 升级：过。重装后第一次启动（还没放凭据）`session/`（`--session-soul--`、`--session-turn--`、`--session-worker--`、`marker.txt`）整个没了。
+- 门口：一问落盘一次；答到一半 Close，25 s 后落盘一次、一张 origin `door` 的卡，点卡开门口、回答一次、卡变 told；正文中 SIGKILL，重启 faux 0 次，半句 764 字一次，`end aborted` 与 start 同一回合号（36b0eb2d），盒子 +1。
+- 门口切后台 60 s（8 token/s）：流到第 8 s 切到设置，后台约 10 s 后 JS 冻结（屏上 FAUX1 计数从 32 只涨到 37），回前台接着流，回合 137 s `end done`，答案 2700 字一次，faux 共 1 次，没有停摆、没有重问、不放卡。
+- 书（iPad 课堂）：插话后 200 ms 停止，前一回合 aborted 留 580 字，插话开下一回合答完 2700 字，各一次。`read_pages` 里（工具延迟 20 s）进工具 5 s 后 SIGKILL，重启后同一回合号再 start，第一次 faux 请求末条是重跑的 `read_pages` 结果（页面正文），第 2 轮答完 `end done`，答案一次。第一次试时启动的 `subagent` 回合先吃掉了 faux 计划里的三步工具，书回合拿到的是文字，没进工具，那次不算；重跑时没有 subagent。
+- 教练、复述：答到一半离开，落盘一次、一张卡（`talk` / `retell`），点卡进页面、回答一次。Send 中心点 `elementFromPoint` 是 Send 自己，没被卢明盖住（第二阶段真 iPad 上是盖住的）。软键盘：用 pymobiledevice3 的 `AccessibilityAudit.perform_press` 按输入框（`ax.py`，`iter_elements` 能列出元素、按下不报错），键盘没弹，`activeElement` 是 BUTTON，所以「键盘弹起时 Send 盖没盖」没验到，要人手点一下输入框看。
+- 课堂预备：把 Pride and Prejudice 的 prep 挪开，点 Learn，13 s 后 `chapters/chapter-01.md` 落盘（2700 字），「Preparing 1/63」；faux 跑到 40 章后撞上 faux 脚本 40 步的上限，之后的 `notes` 回合 `error`（是 faux 的限制）。原 prep 已放回，faux 那份留在容器 `prep-<id>.p4faux`。prep 目录现在是 `prep-<id>/chapters/`，`v5.py prep` 按旧布局数顶层的 `chapter-*.md`，那部分计数不准。
+- 铃：读者 info 回合在流时写一只 run-done 铃，读者回合 `end done` 后 128 ms 铃回合才 start，落在读者回答之后，铃 acked；重启后 turn-log 无新行、faux 0 次、不重投。
+- 真模型：没跑（可选项，工具调用预算留给收尾）。
+- 收尾：占位 `credentials.json` 已删并确认不在，`__faux*` 键已清，`device.json` 改回 openai / gpt-6-luna，app 重起（PID 8886）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 35930 留着跑（替 78195），vite 6596/6598 没动；`/tmp/v2/pids` 的 `40` 行已删。
+- 还没走：键盘弹起时 Send 的遮挡（要人手点输入框）、真模型一回合、语音。
