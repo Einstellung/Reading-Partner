@@ -308,7 +308,7 @@ export const PALACE = [
     ],
     deleteWith: "never",
     retention: NEVER,
-    note: "a model id only means anything under its own provider, so the fields strategy settles the provider and every model id together (pitfall 237). briefingModelId is the name everydayModelId had before docs/75 and is still in older devices' files",
+    note: "a model id only means anything under its own provider, so the fields strategy settles the provider and every model id together (pitfall 237). briefingModelId is the name everydayModelId had before docs/75 and is still in older devices' files. Since docs/36 the current build keeps the provider, models and STT endpoint in device.json and only carries settings.json's copy through for older builds",
   },
   {
     kind: "topics",
@@ -352,7 +352,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     retention: NEVER,
-    note: "per-device settings: one machine starting with the computer says nothing about another",
+    note: "per-device settings: one machine starting with the computer says nothing about another, and a provider choice is only callable next to this machine's own credential (DEVICE_SETTING_KEYS)",
   },
   {
     kind: "events",

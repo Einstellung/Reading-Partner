@@ -27,11 +27,20 @@ import {
   flushSettings,
   loadSettings,
   saveSettings,
+  settingsDeviceOwned,
+  DEVICE_SETTING_KEYS,
   SETTINGS_FILE,
   settingsPullAction,
   type Settings,
 } from "../../../platform/app/settings";
-import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai";
+import {
+  deviceModelFromAccount,
+  enforceKnownModel,
+  listProviders,
+  signedInProvider,
+  type ProviderId,
+  type ProviderInfo,
+} from "../../../ai";
 import { registerInfoDesk } from "../../../info/briefer/desk";
 import { registerMealsDesk } from "../../../info/meals/desk";
 import { registerSecretaryRole } from "../../../info/briefer/role";
@@ -96,12 +105,17 @@ export interface SettingsAccess {
   load: () => Promise<Settings>;
   save: (settings: Settings) => void;
   flush: () => Promise<void>;
+  deviceOwned: () => Promise<boolean>;
+  // The provider this device is signed in to, for the one-time takeover below.
+  signedIn: () => Promise<ProviderId | null>;
 }
 
 const SETTINGS_STORE: SettingsAccess = {
   load: loadSettings,
   save: saveSettings,
   flush: flushSettings,
+  deviceOwned: settingsDeviceOwned,
+  signedIn: signedInProvider,
 };
 
 // Settings off disk, and the sentence to show the user if reading them changed
@@ -115,9 +129,26 @@ export interface SettingsRead {
 // no longer carries is corrected here and written back once, with a sentence for
 // the user: the app keeps working on a model that resolves, and the swap is
 // never silent.
+//
+// The first start after the provider and model became per-device (docs/36)
+// also decides what this device takes over from settings.json
+// (deviceModelFromAccount), and the save writes it to device.json. A device
+// whose credentials cannot be read is left to try again next start.
 export async function loadShellSettings(store: SettingsAccess = SETTINGS_STORE): Promise<SettingsRead> {
-  const { settings, notice } = enforceKnownModel(await store.load());
-  if (notice) store.save(settings);
+  let loaded = await store.load();
+  let adopted = false;
+  if (!(await store.deviceOwned())) {
+    const signedIn = await store.signedIn().then(
+      (id) => ({ id }),
+      () => null,
+    );
+    if (signedIn) {
+      loaded = { ...loaded, ...deviceModelFromAccount(loaded, signedIn.id) };
+      adopted = true;
+    }
+  }
+  const { settings, notice } = enforceKnownModel(loaded);
+  if (notice || adopted) store.save(settings);
   return { settings, notice };
 }
 
@@ -402,7 +433,11 @@ export function useShellBootstrap({
   // since. A whole-object save would carry the startup copy of it back to disk.
   const applyDevice = useCallback((next: DeviceSettings) => {
     setDevice(next);
-    const { chatScale: _scale, ...owned } = next;
+    // The provider/model and STT keys in device.json belong to the settings
+    // store (DEVICE_SETTING_KEYS); this copy of them is the startup read.
+    const owned: Partial<DeviceSettings> = { ...next };
+    delete owned.chatScale;
+    for (const key of DEVICE_SETTING_KEYS) delete owned[key];
     patchDeviceSettings(owned).catch((e) => console.warn("failed to persist device settings", e));
   }, []);
 

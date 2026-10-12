@@ -43,6 +43,8 @@ function fakeStore(stored: Settings): SettingsAccess & { saved: Settings[]; flus
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       store.flushes++;
     },
+    deviceOwned: async () => true,
+    signedIn: async () => null,
   };
   return store;
 }
@@ -100,6 +102,8 @@ test("the deferred read flushes the pending save before it reads", async () => {
       return onDisk;
     },
     save: () => {},
+    deviceOwned: async () => true,
+    signedIn: async () => null,
   });
 
   // The read is taken after the bytes are down, not after the flush was started.

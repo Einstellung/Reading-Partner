@@ -62,9 +62,10 @@ export type MergeFile = (input: MergeInput) => MergeOutput;
 // time. The groups are declared on the rows (palace/kinds.ts); this is where
 // the callers have always reached for the type.
 //
-// sttApiBase and sttModel are the two halves of one endpoint and deliberately
-// not a group: settings.ts says they sync freely, and a base from one device
-// with a model name from the other is a configuration, not a contradiction.
+// sttApiBase and sttModel are not a group: they moved to device.json with the
+// provider and models (DEVICE_SETTING_KEYS, docs/36), and an older build that
+// still writes them into settings.json gets the same per-key merge it always
+// had.
 export type { FieldGroups };
 
 const NO_GROUPS: FieldGroups = [];
@@ -72,7 +73,9 @@ const NO_GROUPS: FieldGroups = [];
 // The one group there is, taken off the settings row rather than written out
 // again here: a model id is only meaningful under its own provider, and a
 // device on DeepSeek merged key by key against one on Cerebras lands on a pair
-// neither device ever held (pitfall 237).
+// neither device ever held (pitfall 237). The current build keeps these keys in
+// device.json and leaves settings.json's copy as it was (docs/36); the group
+// stays for the older builds that still read and write them there.
 
 const SETTINGS_GROUPS: FieldGroups = rowOf("settings").fieldGroups ?? NO_GROUPS;
 
