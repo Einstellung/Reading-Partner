@@ -60,11 +60,16 @@ export function toolRegistration(spec: AgentTool, desks: DeskCache): ToolRegistr
       const tools = await awaitWithContext(desks.tools(api.conversationId, origin, context), context);
       const tool = tools.find((t) => t.name === spec.name);
       if (!tool) throw new Error(`${spec.name} is not available here`);
-      const raw = await awaitWithContext(tool.execute(args as Record<string, unknown>), context);
-      const { text, images, receipt } = normalizeToolResult(tool, raw);
-      const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-      for (const image of images) content.push({ type: "image", data: image.data, mimeType: image.mimeType });
-      return receipt === undefined ? { content } : { content, details: receipt as unknown as JsonObject };
+      return executeTool(tool, args, context);
     },
   };
+}
+
+/** Run one call of `tool`, letting go when `context` is cancelled, and shape its result for pi-durable. */
+export async function executeTool(tool: AgentTool, args: unknown, context: Context) {
+  const raw = await awaitWithContext(tool.execute(args as Record<string, unknown>), context);
+  const { text, images, receipt } = normalizeToolResult(tool, raw);
+  const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
+  for (const image of images) content.push({ type: "image", data: image.data, mimeType: image.mimeType });
+  return receipt === undefined ? { content } : { content, details: receipt as unknown as JsonObject };
 }

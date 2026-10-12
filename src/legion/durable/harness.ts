@@ -21,6 +21,7 @@ import {
   type Conversation,
   type ConversationId,
   type ConversationStreamOptions,
+  type Extension,
   type HarnessInspection,
   type HarnessSettings,
   type Storage,
@@ -108,6 +109,15 @@ export interface DurableRuntime {
   readonly registrations: ReadonlyMap<string, ToolRegistration>;
   readonly desks: DeskCache;
   readonly turnTask: Task<TurnInput, TurnCheckpoint, TurnResult, object>;
+  /** Our extension; the host default selects only it, so an extension installed for one run reaches no other conversation. */
+  readonly extension: Extension;
+  /** The system prompt's section keys, in order. */
+  readonly sectionKeys: readonly string[];
+  /** Install (or replace) an extension on the registry every generation shares. */
+  install(extension: Extension): void;
+  uninstall(extension: Extension): void;
+  /** The refusal `beforeRequest` recorded for a conversation, taken once. */
+  takeRefusal(conversationId: ConversationId): string | undefined;
   now(): number;
   forgetStubs(conversationId: ConversationId): void;
   /** The thread's conversation, created with its `rp.thread` on first use in this generation. */
@@ -138,6 +148,12 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   let path = "";
   let code = 0;
 
+  const takeRefusal = (conversationId: ConversationId) => {
+    const message = refusals.get(conversationId);
+    refusals.delete(conversationId);
+    return message;
+  };
+
   const settledWith = async (conversationId: ConversationId, result: TurnResult, startedAt: number, turn: string | undefined) => {
     try {
       const origin = (await harness.snapshot(ThreadDoc, conversationId, BACKGROUND_CONTEXT))?.origin;
@@ -162,11 +178,7 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     land: createLandStep({
       landers: options.landers,
       storage: () => storage,
-      takeRefusal: (conversationId) => {
-        const message = refusals.get(conversationId);
-        refusals.delete(conversationId);
-        return message;
-      },
+      takeRefusal: (conversationId) => takeRefusal(conversationId),
     }),
     refuse: (conversationId, message) => {
       refusals.set(conversationId, message);
@@ -179,6 +191,7 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   const registry = createRegistry();
   registry.install(extension);
   const settings: HarnessSettings = {
+    extensions: [extension],
     retry: { enabled: false },
     compaction: { enabled: false },
     toolExecution: "sequential",
@@ -262,6 +275,11 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     registrations,
     desks,
     turnTask,
+    extension,
+    sectionKeys: options.sectionKeys,
+    install: (added) => registry.install(added),
+    uninstall: (removed) => registry.uninstall(removed),
+    takeRefusal,
     now,
     forgetStubs,
     conversationFor(key, origin, context) {
