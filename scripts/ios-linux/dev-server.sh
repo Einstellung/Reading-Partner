@@ -16,6 +16,12 @@ ip -4 -o addr show | grep -q " inet $HOST/" || {
   echo "rebuild it with DEV_HOST set to the current address (ios-linux-loop.yml)" >&2
   exit 1
 }
+# The phone connects in from the LAN; ufw's default input policy drops that
+# silently (the app then shows "did you grant local network permissions?").
+if systemctl is-active --quiet ufw; then
+  echo "ufw is active: the device can only reach $HOST:$PORT/$((PORT+1)) if allowed, e.g." >&2
+  echo "  sudo ufw allow proto tcp from <device subnet> to $HOST port $PORT:$((PORT+1))" >&2
+fi
 [ -e node_modules ] || { echo "no node_modules here: bun install (or link the main checkout's)" >&2; exit 1; }
 [ -f public/pdfium.wasm ] || bun run wasm
 

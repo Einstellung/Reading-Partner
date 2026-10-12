@@ -91,12 +91,21 @@ wda-start)
     if curl -sf --max-time 2 "http://127.0.0.1:$LOCAL_PORT/status" > "$STATE/status.json"; then
       echo "WDA up on 127.0.0.1:$LOCAL_PORT after ${i}x2s"; cat "$STATE/status.json"; echo; exit 0
     fi
-    kill -0 "$(cat "$STATE/xcuitest.pid")" 2>/dev/null || { echo "xcuitest exited:"; tail -30 "$STATE/xcuitest.log"; exit 1; }
+    kill -0 "$(cat "$STATE/xcuitest.pid")" 2>/dev/null || { echo "xcuitest exited:"; tail -30 "$STATE/xcuitest.log"; "$0" wda-stop; exit 1; }
     sleep 2
   done
-  echo "WDA did not answer in 120s"; tail -30 "$STATE/xcuitest.log"; exit 1
+  echo "WDA did not answer in 120s"; grep -v 'No channel registered' "$STATE/xcuitest.log" | tail -30
+  # Seen on the first run after install/mount: initializationForUITestingDidFail
+  # after exactly 60s, then a second wda-start works.
+  echo "if the log ends in initializationForUITestingDidFailWithError, keep the device unlocked and run wda-start again"
+  "$0" wda-stop; exit 1
   ;;
 wda-stop)
+  # Stop the runner on the device too; killing the local xcuitest leaves it running.
+  if U=$(udid) && [ -n "$U" ]; then
+    RPID=$("$PMD3" developer dvt process-id-for-bundle-id $TUNNEL_OPT --udid "$U" "$WDA_RUNNER" 2>/dev/null | tail -1 | tr -dc 0-9)
+    [ -n "$RPID" ] && [ "$RPID" != 0 ] && "$PMD3" developer dvt kill $TUNNEL_OPT --udid "$U" "$RPID" >/dev/null 2>&1 && echo "stopped runner pid $RPID on device" || true
+  fi
   for f in forward xcuitest; do
     [ -f "$STATE/$f.pid" ] && kill "$(cat "$STATE/$f.pid")" 2>/dev/null && echo "stopped $f" || true
     rm -f "$STATE/$f.pid"
