@@ -780,6 +780,14 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 库：这回合前后主库 1,658,880、WAL 4,223,032 字节都没变（失败回合只写了 turn-log 和对话里读者那一句）。
 - 收尾：Linux scratch、Mac `/tmp/rp-cred4.json`、设备容器的 `credentials.json` 都删了并逐个确认不在，日志里没有 token 值。`settings.json` 留着 openai / gpt-6-luna。iPad 上 `.dev` app PID 7753 在跑；Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。
 - 接着做：带这个修复重新出 `.dev` 包装到 iPad，再放一次凭据跑 `~/v4.py run`（门口一回合加切后台 60 s）。用户给的 3 次请求已用掉 2 次，启动时的 `subagent` 回合可能再吃 0 到 2 次，要先找用户要新的次数。
+- 重跑（同日，`dev/pi-durable-2` 5abfac2d，含本修复、按设备存模型设置、「Hang up」改「Close」）：Mac `~/rp-ipad` 切到 5abfac2d，`bash ~/build.sh`（`~/build.sh` 没有执行位）出 `/tmp/rp-dev-ipad4.ipa`，读回 CFBundleIdentifier 为 `.dev`，`apps install` 成功（旧的 PID 7753 随安装退出）。之后 `dvt launch` 一直报 `Failed to launch process`，截屏全黑：iPad 锁屏或灭屏了，要人解锁。凭据这次还没放，Linux、Mac、设备上都没有副本。用户给的 6 次请求一次没用。
+- 解锁后跑完（app PID 7967 起、改 `device.json` 后重起为 7975）：新包第一次启动 `device.json` 里没有 provider/model 三个键（不在时回落 `settings.json`，是设计如此），为保险写进 openai / gpt-6-luna 再重起。凭据同样只拷 `type`、`access`、`expires`，`refresh` 填假值。
+- 门口回合一（等正文出现再切后台）：过，但没测到冻结。turn `31d24c69`，start → 第 1 轮首字节 3.4 s（`toolUse`，卢明的「Where this belongs」归档卡）→ 第 2 轮首字节 3.2 s → `end done` 9.0 s，答案 696 字。正文开始画后 1 s 发出切后台，回合在切后台后约 1.6 s 写完，落在进后台的宽限里；回前台没有重问、没有停摆，答案进对话文件一次。
+- 门口回合二（发出后立即切后台，问题要八段）：过。turn `7f9d68a2`，切后台的命令返回时回合刚起，之后第 1 轮首字节、`toolUse`、第 2 轮首字节、`end done`（13.7 s，1975 字）都在后台发生，最后一行在进后台后约 10 s；回前台 60 s 后答案已在，读者那句和答案各一次，没有重问、没有多余回合、看门狗没动作。门口对话开着，没放卡（box 12 个不变）。所以这台 iPad 进后台后 JS 还能跑约 10 s，比第一阶段量到的「几秒」长；gpt-6-luna 这种快模型的回合在宽限里就跑完，测不到冻结 60 s 再接上的那条路（那条第二轮已用慢速 faux 验过）。
+- 请求：共 4 次，两个门口回合各 2 轮（第 1 轮归档工具、第 2 轮回答）；这次启动和回前台都没有 `subagent` 回合。加上第一次失败那轮的 2 次，今天对 OpenAI 一共 6 次。
+- 库：回合一后主库从 1,658,880 涨到 1,687,552 字节（+28 KB），回合二后不变；WAL 文件一直是 4,223,032 字节（复用已分配的页，没 checkpoint）。
+- 观察：凭据放好以后首页简报卡还显示「Configure a provider to begin」（截图 r4-door-bg60-early-landed），没查。
+- 收尾：Linux scratch、Mac `/tmp/rp-cred4.json`、设备容器的 `credentials.json` 都删了并逐个确认不在，Mac 上 7 份 r4 日志里没有 token。`device.json` 和 `settings.json` 留着 openai / gpt-6-luna。iPad 上 `.dev` app PID 7975 在跑；Mac 上 ios_webkit_debug_proxy 78195 在，vite 6861/6863 已不在（不是我杀的，大概随 `~/rp-ipad` 换版本重建时退出）。
 
 ## 被杀后恢复首字慢 13 秒（分支 `fix/recovery-first-byte`，从 `origin/dev/pi-durable-2` f5aaf7d5 起）
 
