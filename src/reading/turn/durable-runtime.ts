@@ -16,7 +16,9 @@ import type { Context } from "@earendil-works/chord";
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { AgentTool } from "../../legion/execute/contract";
 import type { TurnLogSink } from "../../legion/execute/turn-log";
+import { provideBackgroundHost } from "../../legion/durable/background";
 import {
+  deviceBackgroundHost,
   fileWithdrawnSteers,
   openDeviceDurable,
   type DeviceDurable,
@@ -138,6 +140,8 @@ export function startReadingDurable(
   catalog: () => readonly AgentTool[],
   places: () => Readonly<Record<string, PlaceFactory>> = () => ({}),
 ): Promise<ReadingDurable> {
+  // Background passes (distillation, lesson prep, link take) run on this runtime too.
+  provideBackgroundHost(() => started?.then(deviceBackgroundHost));
   started ??= openReadingDurable({
     catalog: catalog(),
     places: places(),

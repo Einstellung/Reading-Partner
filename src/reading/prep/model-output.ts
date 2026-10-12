@@ -4,6 +4,7 @@
 // papers/, chapters/ and translate/.
 
 import type { Fulltext } from "../../fulltext/types";
+import type { BackgroundTurnOutcome } from "../../legion/durable/background";
 import { extractJson as extractJsonOrNull } from "../../platform/std/json";
 
 // A document as page-marked blocks, so a model's answer can be grounded in page
@@ -26,4 +27,12 @@ export function extractJson(
   const json = extractJsonOrNull(text);
   if (json === null) throw fail("no JSON object in the model output");
   return json;
+}
+
+/** A background run's outcome as a note body: the trimmed answer, or a rejection. */
+export function noteOf(outcome: BackgroundTurnOutcome, empty: string): string {
+  if (outcome.kind !== "answer") throw new Error(outcome.message);
+  const text = outcome.text.trim();
+  if (!text) throw new Error(empty);
+  return text;
 }
