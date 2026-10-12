@@ -772,3 +772,11 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 三餐停止那条 `end` 没有 `conversation` 字段，杀进程那条有，没查。
 - 收尾：`credentials.json` 已删并确认不在，`__faux*` 键已清，app 重起（PID 7738）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里三餐线程多了几问几答，购物清单没变。
 - 还没走：真模型一回合（要新的 access token）、语音。
+
+第四棒（真模型）（2026-10-12，分支 `verify/pi-durable-2-ipad4`，从 `dev/pi-durable-2` e595e3c8 起）：iPad 上还是 7195343e 的 `.dev` 包。用户 Linux app 改登 OpenAI，按用户定的用 app 里 openai 最便宜的 `gpt-6-luna`（输入 0.1、输出 0.5 美元/百万 token）。`settings.json` 写 `defaultProviderId: openai`、三个模型 id 都是 gpt-6-luna，重起 app（PID 7753）；凭据只拷 `openai` 的 `type`、`access`、`expires`，`refresh` 填假值，过期前还有约 10 天。驱动 Mac `~/v4.py prep|run|clean`（副本在会话 scratchpad `verify-ipad2/tools/v4.py`），报告页加了「Round 4」一节。
+
+- 没过，找到真 bug：门口回合 `start` 后 59 ms `end error no_model`，没发请求。durable 回合按 app 的 provider id（`openai`）找模型，`createAppModels` 按 pi 的 id（`openai-codex`）登记（坑 546）。修在本分支：app id 和 pi id 不同时按 app id 再登记一份，加了 `tests/ai/durable-models.test.ts`；`scripts/t.sh`、`bun run typecheck` 过。所以切后台 60 s 那半没量到：回合在后台前就已经失败。
+- 模型请求共 2 次，都是回前台时那次启动 `subagent` 回合（老路，provider 记 `openai-codex`，第 1 轮 toolUse、第 2 轮 stop，`done`，8.4 s）。门口 0 次。页面里挂 `__TAURI_INTERNALS__.invoke` 计数没挂上（属性不可写），次数按 turn-log 的轮数算。
+- 库：这回合前后主库 1,658,880、WAL 4,223,032 字节都没变（失败回合只写了 turn-log 和对话里读者那一句）。
+- 收尾：Linux scratch、Mac `/tmp/rp-cred4.json`、设备容器的 `credentials.json` 都删了并逐个确认不在，日志里没有 token 值。`settings.json` 留着 openai / gpt-6-luna。iPad 上 `.dev` app PID 7753 在跑；Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。
+- 接着做：带这个修复重新出 `.dev` 包装到 iPad，再放一次凭据跑 `~/v4.py run`（门口一回合加切后台 60 s）。用户给的 3 次请求已用掉 2 次，启动时的 `subagent` 回合可能再吃 0 到 2 次，要先找用户要新的次数。
