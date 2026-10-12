@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent on the Mac build machine: a permanent SSH tunnel to the Linux dev
+  box, for when the Mac sits behind NAT and Linux cannot reach it directly.
+
+    -R 2222  Linux 127.0.0.1:2222 -> Mac sshd   (`ssh macmini` on Linux)
+    -R 5900  Linux 127.0.0.1:5900 -> Mac screen sharing
+    -L 17890/17891  Mac -> the Linux box's Mihomo proxy (HTTP / SOCKS). 7890/7891
+             stay free for a proxy running on the Mac itself.
+
+  Replace MAC_USER, LINUX_USER and LINUX_IP. The Linux address is fixed here:
+  when Linux changes address the tunnel dies (docs/pitfall/202).
+  The key is the Mac's own ~/.ssh/id_ed25519, whose public half goes into the
+  Linux user's ~/.ssh/authorized_keys.
+
+    cp com.readingpartner.tunnel.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.readingpartner.tunnel.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.readingpartner.tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/ssh</string>
+    <string>-N</string>
+    <string>-o</string><string>BatchMode=yes</string>
+    <string>-o</string><string>ExitOnForwardFailure=yes</string>
+    <string>-o</string><string>ServerAliveInterval=30</string>
+    <string>-o</string><string>ServerAliveCountMax=3</string>
+    <string>-o</string><string>StrictHostKeyChecking=accept-new</string>
+    <string>-i</string><string>/Users/MAC_USER/.ssh/id_ed25519</string>
+    <string>-R</string><string>2222:localhost:22</string>
+    <string>-R</string><string>5900:localhost:5900</string>
+    <string>-L</string><string>17890:127.0.0.1:7890</string>
+    <string>-L</string><string>17891:127.0.0.1:7891</string>
+    <string>LINUX_USER@LINUX_IP</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/tmp/rp-tunnel.log</string>
+  <key>StandardErrorPath</key><string>/tmp/rp-tunnel.log</string>
+</dict>
+</plist>

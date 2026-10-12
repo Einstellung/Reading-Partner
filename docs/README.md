@@ -87,6 +87,7 @@
 - [78 分享](./platform/78-分享.md) — iOS 双向分享：Share Extension 进 Lumen 对话和书库，openin 往外交文字和链接
 - [80 回收](./platform/80-回收：retention、garbage marker 与 housekeeper.md) — palace 行的 retention、领域登记的 garbage marker、每晚执行的 housekeeper
 - [85 workshop与bindery](./platform/85-workshop与bindery.md) — 材料加工能力的 capability 目录；bindery 把任何材料装订成 EPUB
+- [560 iOS开发验收环境](./platform/560-iOS开发验收环境.md) — Mac mini 与 Linux+CI+USB 真机两套 iOS 构建验收环境的搭法、日常循环和能验范围，云 Mac 重建步骤
 
 ## pitfall
 
