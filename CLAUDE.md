@@ -48,6 +48,8 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 
 - 改完 `plugins/*/ios` 的 Swift 要在 CI 上编一遍：分支推上去后跑 `gh workflow run ios-simulator-smoke.yml --ref <分支>`，等它绿。这台机器没有 Swift 工具链，Mac mini 已于 2026-10 归还，`scripts/ios-swiftcheck.sh` 暂时不能用；租到新 Mac 后按 `docs/platform/560` 重建再恢复。
 
+- iOS 界面和交互的验收在真机上做：iPad/iPhone 用 USB 插 Linux 并连 Linux 的热点 `rp-dev-hotspot`，装 .dev 包后前端热更新，`scripts/ios-linux/device.sh` 截图和点按，做法见 `docs/platform/560`。起 WDA 时 iPad 会要 Touch ID，提前跟用户说。
+
 - 样式:Tailwind v4(theme + preflight + utilities,拆开 import,layer 顺序在 `src/styles.css` 顶部显式声明,见坑 75),UI 一律用 Tailwind utility class。`styles.css` 只放全局基线。
 
 - 原语用 shadcn/ui（`components.json`，`bunx shadcn@latest add <component>` 写进 `src/ui/components/ui/`）。设计 token 在 `styles.css` 的 `:root` + `@theme inline`，取值映射到现有配色，见 `docs/30`。`@/` 别名指向 `src/`，只给 shadcn 生成的文件用；应用代码一律相对路径 import。按钮尺寸和 44px 触摸目标写在 `ui/button.tsx` 的变体表里，字段的写在 `ui/input.tsx` 的 `fieldClassName` 里，调用点不要各自补 `coarse:`。`add` 生成的文件会 import `lucide-react`（没装）并覆盖手写过的组件，add 完先看 `git status`；手改过的约定由 `tests/ui/components/*-contract.test.ts` 盯着。迁移已完成；再要引一个原语之前先看 `docs/30` 的「没引的」和「最终还剩的手写控件」。
