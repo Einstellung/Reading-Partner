@@ -41,7 +41,7 @@ def main():
     args = parser.parse_args()
     client = tfd.Client(os.environ["APPLE_API_KEY_ID"], os.environ["APPLE_API_ISSUER"], load_key())
 
-    devices, _ = client.get_all("/devices")
+    devices, _ = client.get_all("/v1/devices")
     print(f"{len(devices)} registered devices:")
     enabled = set()
     for d in devices:
@@ -50,7 +50,7 @@ def main():
         if a.get("status") == "ENABLED":
             enabled.add(a.get("udid"))
 
-    bundles, _ = client.get_all("/bundleIds")
+    bundles, _ = client.get_all("/v1/bundleIds")
     print("bundle ids under com.xinyuan:")
     for b in bundles:
         a = b["attributes"]
