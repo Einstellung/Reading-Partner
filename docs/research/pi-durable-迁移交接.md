@@ -780,3 +780,5 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 库：这回合前后主库 1,658,880、WAL 4,223,032 字节都没变（失败回合只写了 turn-log 和对话里读者那一句）。
 - 收尾：Linux scratch、Mac `/tmp/rp-cred4.json`、设备容器的 `credentials.json` 都删了并逐个确认不在，日志里没有 token 值。`settings.json` 留着 openai / gpt-6-luna。iPad 上 `.dev` app PID 7753 在跑；Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。
 - 接着做：带这个修复重新出 `.dev` 包装到 iPad，再放一次凭据跑 `~/v4.py run`（门口一回合加切后台 60 s）。用户给的 3 次请求已用掉 2 次，启动时的 `subagent` 回合可能再吃 0 到 2 次，要先找用户要新的次数。
+- 重跑（同日，`dev/pi-durable-2` 5abfac2d，含本修复、按设备存模型设置、「Hang up」改「Close」）：Mac `~/rp-ipad` 切到 5abfac2d，`bash ~/build.sh`（`~/build.sh` 没有执行位）出 `/tmp/rp-dev-ipad4.ipa`，读回 CFBundleIdentifier 为 `.dev`，`apps install` 成功（旧的 PID 7753 随安装退出）。之后 `dvt launch` 一直报 `Failed to launch process`，截屏全黑：iPad 锁屏或灭屏了，要人解锁。凭据这次还没放，Linux、Mac、设备上都没有副本。用户给的 6 次请求一次没用。
+- 解锁后接着做：`~/pmd3venv/bin/python3 ~/v4.py installed`（起 app，查 `device.json` 是否从 `settings.json` 接过 openai / gpt-6-luna，没有就写进去重起），再按老规矩放凭据、`~/v4.py run`、`~/v4.py clean`。`v4.py` 的 `launch()` 会把报错里的数字当 PID 记进 `/tmp/v2/pids`，这次记了个 136，已删。
