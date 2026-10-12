@@ -933,3 +933,19 @@ Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 
 没做：Linux xvfb faux 冒烟（工具调用预算用完）。驱动已备好在会话 scratchpad `p4smoke/tools/`（从 `vcl4/tools` 拷来，`vd.py` 已指向本 worktree、`:91`、`p4smoke/pids`），二进制仍是 `agent-a29761742e18fa5a4` 的 verifylinux debug 版（10-10 之后 Rust 没变）。测试数据目录 `~/.local/share/com.xinyuan.readingpartner.verifylinux` 里本来就有旧运行时留下的 `session/`（`--session-soul--`、`--session-worker--`），起 app 前再放一个标记文件进去，起来后看整个目录没了。下一棒：`vd.py up x up vite up app`，先确认 `window.__fauxCalls` 有定义（faux 生效）再发；一个书回合（`book.py` 的 `open_lesson` + `send`，等落盘 2700 字）、一个门口回合（`run.py` 的 `OPEN` + `send`）、书回合流到三百字时 `vd.py kill-app` 再 `up app`，看线程文件半句一次、屏幕一次、`__fauxCalls` 保持 0。收尾按 `p4smoke/pids/history` 杀。
 
 设备上怎么验（主会话排）：iPad / 模拟器装这一版后，确认 app 沙盒里 `session/` 没了；走一遍第一、二阶段的杀进程（书、门口）和 steer；断网时触发一次蒸馏，看 `distill-failed` 的 `errorName` 是 `OfflineError`。用 OpenCode Go 跑一个书回合和一个门口回合，确认不报 400 MissingSessionID（单测已钉出站头，真服务没打过）。
+
+
+## 第四阶段 Linux 冒烟（分支 `verify/pi-durable-4-linux`，从 `origin/dev/pi-durable-4` c31d18c5 起）
+
+2026-10-12，xvfb `:91`，`agent-a29761742e18fa5a4` 的 verifylinux debug 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`，只用 faux（计划全 `text`，20 tok/s，每答 2700 字）。测试数据目录先整份拷到 `com.xinyuan.readingpartner.verifylinux.bak-p4`；Tides 的 `prep-d851…` 挪到 `com.xinyuan.readingpartner.verifylinux.prep-tides-moved-p4` 让它重备。驱动在会话 scratchpad `verify-phase4-linux/tools/`（`p4.py` 管书、杀进程、插话、预备，`door4.py` 管门口），报告页 `verify-phase4-linux/report.html`。没改产品代码。
+
+- 旧 `session/` 过：目录里原有 `--session-soul--`、`--session-worker--`，又放了 `--session-door--/x.jsonl` 和一个标记文件；起 app 后整个 `session/` 没了，SIGKILL 重启后也没再出现，首页正常。
+- 书回合过：课堂线程读者那句、回答各一行，faux 1 次，turn-log 同一 turn id start → end done。
+- 门口过：一问落盘一次；第二问流到第 5 s 点 Close，后台跑完落盘一次，盒子出 origin `door` 的 `turn` 卡片。
+- 书回合流式中 SIGKILL 过：重启后半句 464 字一次进线程文件，屏幕上一次，这条线程没有重问（重启后唯一一次 faux 是 paper.pdf 的备课计划）；turn-log 同一 turn id 补 `end aborted`；盒子 +1（按设计）。
+- 插话后 219 ms 停止过：第一回合留半句 412 字、`end aborted`，插话起新回合（新 turn id）落 2700 字，文件里问、半句、插话、回答各一次。
+- 课堂预备过：Tides 打开点 Learn，「Preparing 0/4」，约 32 s 后 `chapter-01.md` 落盘，再 45 s 四章和 overview 全 done，库里无活的 task、submission。
+- 控制台：重载后捕获 console.error / error / unhandledrejection，只有 WebKit 的 ResizeObserver loop 提示，没有找不到模块的错误；vite 日志无错。
+- 观察：paper.pdf 每次打开都多一次以 "Here is the survey, page by page" 开头的备课调用，faux 回的是正文不是计划，书一直挂着「Preparing…」；真模型下会不会反复没查。
+- 没有产品 bug。坑 564、565 没用。
+- 环境：Xvfb、vite、app 的 PID 记在 `verify-phase4-linux/pids/history`，收尾已停。
