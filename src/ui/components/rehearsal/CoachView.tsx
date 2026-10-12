@@ -12,6 +12,7 @@
 
 import ChatScaleScope from "../base/ChatScaleScope";
 import { Composer } from "../chat/Composer";
+import { useComposerSlot } from "../chat/call/composer-slot";
 import { MessageList } from "../chat/MessageList";
 import { CitationContext } from "../markdown/Markdown";
 import { IconClose } from "../base/icons";
@@ -37,6 +38,8 @@ export default function CoachView(props: {
   const coach = useCoach(props.outlineId, props.topicName, props.passKey ?? 0);
   // The composer is docked at the bottom, so the keyboard would cover it.
   const keyboard = useKeyboardRoom();
+  // Lumen's corner stands above this composer rather than on its Send button.
+  const composerSlot = useComposerSlot();
 
   return (
     <CitationContext.Provider value={null}>
@@ -85,7 +88,7 @@ export default function CoachView(props: {
               />
             </div>
           )}
-          <div className="px-4 pb-6">
+          <div className="px-4 pb-6" ref={composerSlot}>
             <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
               <Composer
                 onSend={coach.send}

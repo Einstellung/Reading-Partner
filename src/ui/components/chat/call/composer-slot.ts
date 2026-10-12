@@ -7,7 +7,9 @@
 // reached through three different screens. The shell hangs one slot over all of
 // them and a conversation fills it by being mounted; a screen added later needs
 // nothing. The desktop passes CallView the callback directly instead — there it
-// is one call site, and the corner only stands down for the full-window view.
+// is one call site, and the corner only stands down for the full-window view —
+// and hangs a slot over the library, where a talk's coaching and a retell are
+// whole-window conversations too.
 
 import { createContext, useContext } from "react";
 
