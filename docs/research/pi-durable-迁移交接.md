@@ -790,3 +790,12 @@ Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 
 修法：`resumedPlaceTurn` 的跟随者带 `joining`，第一张视图里已有回答就调 `DurableTurnLog.joined`，这一轮不写首字节；之后的轮次照常。单测两条在 `tests/reading/turn/durable-turn-log.test.ts`（去掉修复时集成那条失败）。全量 `scripts/t.sh` 7498 过、0 失败，`bun run typecheck` 过。
 
 驱动在会话 scratchpad `rfb/tools/rk.py`（`rk.py <重开前等几秒> <tag>`）。它要一份带计时的脚手架（`rfb/dev-faux.instrumented.ts`，没提交）：faux 只在读者那句以 `RFB` 开头时出工具调用，其余一律文字，否则启动时的 `subagent` 回合和课堂预备会先吃掉计划里的 tool 步。坑 556 没用。
+## 语音回合撞上在途回合（分支 `fix/voice-turn-queue`，从 `origin/dev/pi-durable-2` f5aaf7d5 起）
+
+- 现象：通话中说一句，对话上已有别的回合（铃的 headless 回合、重启恢复的回合、关掉对话后还在跑的文字回合）没有 session，语音回合 `startTurn` 报 `TurnBusy`，这句 failed 回到听。
+- 改法：`info-voice.ts` 的 `answer` 先 `quiet()` 等对话上没有回合（打开的 session 在跑就等 `idle()`；再等 `turnsStarting`，再 `turnInFlight` 的 `settled`），等完才读线程文件、装配、起回合；起的时候仍撞 `TurnBusy`（session 的 guest 或 headless）就回到等，重新装配。语音那句只落一次、只答一次，等的时候不抛错，通话界面停在思考态。对自己语音回合的打断（坑 529）不变。
+- 定的：说的话不插进在跑的读者回合，排在它后面。`say()` 插话是因为打字的人在对话里看着那个回合；通话只念自己的回合，插进别的回合答案就不会被念出来，打断也会停掉别人的回合。
+- `withPlaceTurnRows`：回合自己画的行（语音那句）不在 `after` 之上再画一次。语音那句落盘早于被等的回合，等完 `after` 取线程里最后一行，那句画在被等回合的答案下面。
+- 测试：`info-voice.test.ts` 加 4 个（无人看的铃、对话开着跟着恢复的回合、关掉对话后的文字回合、同一毫秒），原打断用例不动。
+- 没做：Linux xvfb 走查（只跑单测）。线程文件里语音那句排在被等回合的答案前面（落盘按说出的时间），重开对话时也这样显示，同打字插话没被接走时的落盘。
+- 新测试初版偶发失败（铃的回答不在语音回合历史里、屏幕上也没了），插桩复现 40 次 19 次：时间线是先后的（铃落盘后语音才装配、起跑，没有并发，faux 顺序没乱），是铃的回答和语音那句同一毫秒，`answer()` 按 `ts` 排除那句把回答一起排掉，见坑 554。改成角色加时间戳，四处 `excludeTs` 回退一并改；加一个固定时钟的用例（修前必挂），三个撞车用例恢复成别的回合一起跑就说话，连跑 25 遍全过。

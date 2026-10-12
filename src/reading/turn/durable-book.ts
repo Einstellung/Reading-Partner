@@ -81,7 +81,7 @@ export const storeBookThreads = storeThreadFiles;
 /** The file's history, `HISTORY_KEEP` long, without the reader's line of this turn. */
 export function bookHistoryFromFile(messages: readonly ThreadMessage[], excludeTs?: number): ReadingTurnMessage[] {
   const prior = messages
-    .filter((m) => m.ts !== excludeTs && m.text.trim() !== "")
+    .filter((m) => !(m.role === "user" && m.ts === excludeTs) && m.text.trim() !== "")
     .map((m): ReadingTurnMessage => ({ role: m.role, text: m.text }));
   return composeMessages({ parentTail: [], prior, keep: HISTORY_KEEP, aside: false, pageWindow: null });
 }

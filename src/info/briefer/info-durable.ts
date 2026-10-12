@@ -161,7 +161,7 @@ function conversationPlace<O extends InfoOrigin | MealsOrigin>(
       const { key, threadId } = infoAddress(o);
       await shared.threads.load(key);
       const said = (shared.threads.messages(key, threadId) ?? [])
-        .filter((m) => m.ts !== options.excludeTs && m.text.trim() !== "")
+        .filter((m) => !(m.role === "user" && m.ts === options.excludeTs) && m.text.trim() !== "")
         .map((m): DeskMessage => ({ role: m.role, text: m.text }));
       return toPiMessages(said);
     },
