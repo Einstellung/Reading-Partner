@@ -25,6 +25,6 @@ if systemctl is-active --quiet ufw; then
   echo "  sudo ufw allow in on $dev && sudo ufw route allow in on $dev" >&2
 fi
 [ -e node_modules ] || { echo "no node_modules here: bun install (or link the main checkout's)" >&2; exit 1; }
-[ -f public/pdfium.wasm ] || bun run wasm
+[ -f public/pdfium/pdfium.wasm ] || bun run wasm
 
 exec ./node_modules/.bin/vite --config scripts/ios-linux/vite.lan.config.ts
