@@ -147,8 +147,8 @@ export interface StreamChatOptions {
 	// (src/ai/call-setup.ts) — so it has to be the same value on every call of
 	// one conversation and a different one for a call that is not part of any — which is what every caller of this
 	// function is today, and each of them says so at its call site. A caller with
-	// a real conversation passes that conversation's id; the tool-loop path takes
-	// it from its telemetry thread (src/legion/durable).
+	// a real conversation passes that conversation's id. Durable turns do not come
+	// through here: pi-durable hands every request its conversation's own id.
 	sessionId: string;
 	// Extended-thinking effort. undefined = off. Passed to pi-ai's streamSimple,
 	// which maps it per provider and ignores it on models without reasoning. We

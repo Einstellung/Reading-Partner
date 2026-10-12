@@ -66,4 +66,4 @@ soul 的回合已迁到 pi-durable（[87](./87-回合运行时迁到pi-durable.m
 2. 存储标识符从 thread 改名 conversation：还没做，代码里仍是 `threadId`（`src/platform/app/threads.ts`）。
 3. 记忆与检索重做。
 
-已落地：Red Box 和 cable 作为第一个生在 palace 里的新东西——盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方（2026-09-15，见 [68](../companion/68-Lumen与盒子的交互.md)）；soul 搬上 pi harness——soul 一条常驻 lane（`legion/execute/held.ts`），本地 worker 各一条，见 [55](./55-legion.md)。
+已落地：Red Box 和 cable 作为第一个生在 palace 里的新东西——盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方（2026-09-15，见 [68](../companion/68-Lumen与盒子的交互.md)）；soul 的回合、铃、子 agent 和后台 pass 跑在每设备一个的 pi-durable 库上，见 [87](./87-回合运行时迁到pi-durable.md)。

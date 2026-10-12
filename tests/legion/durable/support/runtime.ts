@@ -5,7 +5,7 @@
 // a history reader over that file.
 
 import { Type, type Message } from "@earendil-works/pi-ai";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
 import { fauxProvider, type FauxResponseStep } from "@earendil-works/pi-ai/providers/faux";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -116,6 +116,8 @@ export interface TestRuntimeOptions {
   rotateAtBytes?: number;
   forceRotateFactor?: number;
   now?: () => number;
+  /** The models the runtime calls; the faux provider when unset. */
+  models?: MutableModels;
 }
 
 export interface TestRuntime {
@@ -166,8 +168,8 @@ export async function openTestRuntime(options: TestRuntimeOptions): Promise<Test
           },
     ),
   );
-  const models = createModels();
-  models.setProvider(faux.provider);
+  const models = options.models ?? createModels();
+  if (!options.models) models.setProvider(faux.provider);
   const tools = catalog(options.desk ?? {});
   result.runtime = await openDurable({
     host: testHost(options.root),

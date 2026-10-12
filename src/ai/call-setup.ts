@@ -45,6 +45,13 @@
 //
 // One entry per provider: a second provider with its own requirement is a line
 // in this table, not a second branch on the send path.
+//
+// The table is for streamChat's single calls only. Durable turns (every agent
+// turn, background run and sub-agent) never consult it: pi-durable passes each
+// request its conversation's persisted id as sessionId on every provider, and
+// pi-ai's own providers turn that into OpenCode's x-opencode-session, the
+// affinity headers and OpenAI's prompt_cache_key
+// (tests/legion/durable/session-id.test.ts).
 
 import type { ProviderHeaders } from "@earendil-works/pi-ai";
 import type { ProviderId } from "./auth/provider-ids";

@@ -3,16 +3,11 @@
 // What it has to get right is the iPad case: the app is switched away
 // mid-answer, iOS freezes the process, and the stream that was being read is
 // dead by the time it thaws — no bytes, no error, no end. Nothing in the turn
-// notices, so the run stays open and the lane stays held.
+// notices, so the run stays open and the thread stays busy.
 // Run: scripts/t.sh tests/legion/durable/stall.test.ts
 
 import { expect, test } from "bun:test";
-import {
-  createStallWatches,
-  isStall,
-  StallError,
-  type StallTimers,
-} from "../../../src/legion/durable/stall";
+import { createStallWatches, type StallTimers } from "../../../src/legion/durable/stall";
 
 // A clock the test moves by hand. Every tick registered on it is called once
 // per `advance`, which is enough: the watch reads the wall clock rather than
@@ -167,12 +162,6 @@ test("a way back with no absence behind it decides nothing", () => {
   watches.watch({ stallMs: 90_000, awayMs: 20_000, onStall: () => (stalls += 1) });
   watches.back(timers.now() + 600_000);
   expect(stalls).toBe(0);
-});
-
-test("a stall is told apart from every other failure", () => {
-  expect(isStall(new StallError())).toBe(true);
-  expect(isStall(new Error("Couldn't reach the model"))).toBe(false);
-  expect(isStall(undefined)).toBe(false);
 });
 
 // How TURN_STALL_MS is re-checked: the worst gap a real turn produces has to

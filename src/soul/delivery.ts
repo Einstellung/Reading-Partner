@@ -151,7 +151,7 @@ export function parseOrigin(deliverTo: string | undefined): BoxOrigin | null {
 }
 
 /** The same shapes, read off a value that is already parsed. Null for anything else. */
-export function originOf(value: unknown): BoxOrigin | null {
+function originOf(value: unknown): BoxOrigin | null {
   if (typeof value !== "object" || value === null) return null;
   const o = value as Record<string, unknown>;
   if (o.place === "book") {

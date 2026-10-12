@@ -35,13 +35,13 @@ agent 之间不说话，只通过 palace 里的文件协作：post 到黑板自�
 
 worker 是执行一个 run 的那段代码，领域登记 `kind` 时交的就是它，签名 `run(brief, ctx) → { cancel, done }`。
 
-两种。agent worker 里有模型：runner 在 harness 上开一条 lane，给它任务书、模型和这个 kind 的最小工具集。程序 worker 没有模型调用，是普通代码——翻译管线、采集经理、蒸馏 pass。两种对 legion 长得一样。
+两种。agent worker 里有模型：runner 起一次后台运行（durable 库里一个新对话），给它任务书、模型和这个 kind 的最小工具集。程序 worker 没有模型调用，是普通代码——翻译管线、采集经理、蒸馏 pass。两种对 legion 长得一样。
 
 worker 不是设备也不是进程。soul 不是 worker，它是唯一的派活方，自己不接 run。
 
 worker 之间没有通道。分析员之间要共享东西走态势文件（[63](../info/63-情报局：研究室、专项组与态势.md)），不走信。run 之间不记依赖，先后顺序在程序 worker 的代码里。
 
-子 run 只从 soul 和程序 worker 派。agent worker 里的模型没有 delegate 工具，它想分工只能在进程内开 lane（今天的 subagent），结果回到同一个 run，不产生新文件。子 run 不能再派孙 run：runner 看 `delegator` 是一个 run、且那个 run 的 `delegator` 也是 run 就拒绝。run 图最深两层——soul、采集经理、分析员。派几个由代码定，不由模型定。
+子 run 只从 soul 和程序 worker 派。agent worker 里的模型没有 delegate 工具，它想分工只能在进程内开子对话（subagent），结果回到同一个 run，不产生新文件。子 run 不能再派孙 run：runner 看 `delegator` 是一个 run、且那个 run 的 `delegator` 也是 run 就拒绝。run 图最深两层——soul、采集经理、分析员。派几个由代码定，不由模型定。
 
 ## run
 
@@ -102,7 +102,7 @@ run 分两档，`kind` 声明自己是哪档，delegate 的接口一样：本地
 
 delegate 是 soul 的一个工具：写一个 `pending` run 就返回句柄，回合不等。
 
-回来的路是 bell。一条 `run-done` 到了，soul 的代码把 brief 追加进它的 lane，起一个没有用户输入的回合，soul 决定说不说、什么时候说。
+回来的路是 bell。一条 `run-done` 到了，soul 的代码带着 brief 起一个没有用户输入的回合（铃回合），soul 决定说不说、什么时候说。
 
 soul 随时能读 run 文件的 `progress` 回答「跑到哪了」，不必等它跑完。
 
@@ -156,7 +156,7 @@ ledger 目录自己也进 `NEVER_INFER_DELETE`：丢一行就等于把它删掉�
 
 一条铃有 `type`，闭集三种：
 
-- `run-done`：runId、kind、有上限的 brief、output 引用。soul 的代码把 brief 追加进它的 lane，起一个没有用户输入的回合；brief 超长就截断，附一句完整产出在 output 引用里。
+- `run-done`：runId、kind、有上限的 brief、output 引用。soul 的代码带着 brief 起一个没有用户输入的回合；brief 超长就截断，附一句完整产出在 output 引用里。
 - `run-failed`：runId、kind、失败原因（哪条前提不成立、`attempts` 用尽）。soul 决定要不要说。
 - `wake`：schedule 到点，带 schedule id 和它登记的任务书。夜里没有用户时 soul 被叫醒的唯一入口。
 
@@ -194,31 +194,17 @@ schedule 的产物是一条 `wake` 铃，不是直接起 run；派什么由 soul
 
 ## execute
 
-`legion/execute`，worker 的签名是 `run(brief, ctx) → { cancel, done }`。
+worker 的签名是 `run(brief, ctx) → { cancel, done }`，runner 在 `legion/runner`（`runner.ts`、`worker.ts`、`outputs.ts`）。
 
 runner 是 `kind` → worker 的注册表加一圈外壳：取走 → 写 `running` → 跑 → 写终态 → 投一条铃。注册一个 worker 的同一次调用里声明这个 kind 要哪些能力标签——有 worker 的设备才可能跑它，能不能跑由标签选举答，两件事从不分开成立。`ctx` 里有 `report(text)`，和给 agent worker 的 `reportTool(工具名, 轮数)`：回合是 worker 自己跑的，措辞是 runner 的。子 run 只从 `ctx.delegate` 出，agent worker 调它直接被拒。runner 还管三件闸：`delegator` 深度超两层的创建请求拒绝，带 `batchId` + `step` 的创建先查已有的那一份，取消按 `batchId` 级联一层。
 
 轮询挂在 sync 的 15 秒 tick 上，每拍问 `dueRuns` 要本机该动的 run。同一 kind 本机同时只跑一个：贵的都是重活，一台设备同时跑两个就是别的 kind 排不上队；不同 kind 并排跑不拦。`local` 档不落同步文件夹——runner 内部给它一份 Map 上的 run store，delegate 当场起、当场把 `done` 交回去，别处不再分档。
 
-已经在的：
-
-- `turn.ts` 的 `runAgentTurn`：一次工具循环回合，跑在 harness 的一条 lane 上，契约在 `contract.ts`；轮数上限走 `before_request`，预算裁剪走 `toProviderMessages` 每轮重算不写回，遥测挂 `message_end`。
-- `watchdog.ts`：流式调用静默超时就 abort 重试，provider 说是确定性失败的不重试，用户 Stop 抛 `StoppedError`。
-- `observable-run.ts`：长管线共用的 subscribe/snapshot 外壳和活跃度计数。
-- `limiter.ts`：整组的并发与起跑间隔，429 是让整组慢下来，不是这一次调用倒霉。
-- `subagent/`：隔离上下文的子 agent 运行器。
-
-进程内那半搬到 pi-agent-core（现 0.87.1）的 `AgentHarness`：soul 一条 lane，本地快车道的 worker 各一条（`lane(name, { createAt: tip })` 继承上下文，可换模型和工具集）；一条铃进 soul 的 lane 是 `appendCustomEntry` 加 `nextRun`；跨进程重启靠 `create` 返回的 open 列表和 `resume()`，默认不重跑工具，写一条合成 toolResult 说中断了，要重执行的工具自己声明 `replay: "safe"`；worker lane 的分支摘要不会自己回来，由 app 调 `generateBranchSummary` 再写进 soul 的 lane。跨设备那半仍是 run 文件。两边的接缝只有一处：run 完成后由谁把 brief 追加进 soul 的 lane。
-
-落位：`legion/execute/harness.ts` 是工厂，建 `AgentHarness` 和 `JsonlSessionRepo`；`legion/execute/turn.ts` 用它提供今天 `runAgentTurn` 的同一份契约。`src/ai/agent.ts` 里手写的 `runAgentLoop` / `runAgentTurn` 退役，调用方改从 `legion/execute` import，`src/ai` 只剩 provider、鉴权、streamFn、消息转换这类接线。`legion/subagent` 是 lane 上的薄壳：子 agent 起自己的 harness 和 session，lane 名 `worker:<定义名>`、session 组 `worker`，工具集是调用方给的最小集；不挂在调用方的 harness 上，因为 pi 的 lane 只能换模型、思考档和工具名，系统提示和工具注册表是 harness 级的（坑 307）。brief 仍由 `subagent/brief.ts` 出，pi 的分支摘要是压缩摘要，说不出「没证据」「轮数用尽」这些区别。手写循环 `agent-turn.ts` 已删。
-
-soul 的回合已全部迁到 pi-durable（[87](./87-回合运行时迁到pi-durable.md) 第二阶段），下面这条 lane 只在升级后第一次启动时打开一次，收尾旧 session 后整组删掉。soul 的那条 lane 原先常驻：`legion/execute/held.ts` 把一个 harness 跨回合持有（session 组 `soul`、lane 名 `soul`，`src/soul/harness.ts` 进程内懒建一份），`runAgentTurn` 的 `harness` 参数让 soul 的五个回合面（阅读聊天、info 聊天与语音、排练教练、复述）跑在它上面，subagent 和后台 pass 仍各自开 harness。每回合先把 lane 导航回 session 根再 accept，模型收到的只有本回合装配的消息加自己的工具轮次，session 文件按回合各存一条根分支、不回灌上下文（[71](./71-soul.md)）。工具、系统提示和模型注册表是 harness 级的（坑 307），所以 harness 建一次，按回合换入。进程启动时把该组最新 session 打开，随即另起一个新 session 给本进程用——session 里的内容从不回读，留着只会让一个文件无限长。上个进程留下的 open operation 不再 abort，而是在那份旧 session 自己的 harness 上后台 resume 跑完（坑 308）：答案落到当初提问的地方，读者不被告知任何异常。收件方是 accept 之前写在 lane 上的一条 custom entry（`reading-partner.delivery`，装的是 BoxOrigin），恢复时按它重建那个地方的 delivery。没有这条、那个地方没人注册 opener、同一条 run 已经试过两次（`reading-partner.recovery-attempt`）、或者根本不是 run 的，照旧 abort，不发请求。该组只留最新五个文件，多的删掉；被恢复的那份是第二新的，扫不到它。
-
-两个未定点跟着第一个真调用方定：看门狗重试从原始消息重建 Agent，但轮次跨重试累加；`transformContext` 的截断不写回 Agent 的消息记录，每轮重算。
+回合运行时在 `legion/durable`（[87](./87-回合运行时迁到pi-durable.md)）：每台设备一个 pi-durable 库，soul 的回合、铃、后台 pass、子 agent 都是库里的对话。工具契约在 `contract.ts`；轮数上限和预算裁剪在 extension 的 `beforeRequest` 里每轮重算、不写回。同目录还有几件不跑回合的：`stall.ts`（回合流静默的看门狗）、`watchdog.ts`（长管线的流式调用静默超时就 abort 重试，provider 说是确定性失败的不重试，用户 Stop 抛 `StoppedError`）、`observable-run.ts`（长管线共用的 subscribe/snapshot 外壳和活跃度计数）、`limiter.ts`（整组的并发与起跑间隔，429 让整组慢下来）。`legion/subagent` 只剩 brief 层：子 agent 工具是工具调用拥有的子对话，agent worker 和蒸馏走后台运行（[25](./25-子agent与上下文隔离.md)）。
 
 ## session
 
-session 是 agent 派活过程的运行时数据，对用户不重要，不同步。palace 登记一行 `session`，sync 为 `local`，目录 `session/`。
+agent 派活过程的运行时数据在 durable 库里（AppData 的 `durable/turns-<代号>.sqlite`，每设备一份，不同步，整库换代），见 [87](./87-回合运行时迁到pi-durable.md)。
 
 对话文件是数据，照旧按归属存、照旧同步（[71](./71-soul.md)）。两者之间是单向投影：soul 说的每一句落地时写进归属文件；反向不投影——另一台设备写的对话到了本机，soul 下回合装配上下文时从数据层读。
 
@@ -226,7 +212,7 @@ session 是 agent 派活过程的运行时数据，对用户不重要，不同�
 
 两台设备各跑一个 soul 进程，共享 memory 和对话即同一个人，各自一份「此刻在想什么」。PC 不在线时 iPad 照样有 soul。
 
-session 仓用 pi 的 `JsonlSessionRepo`，文件系统是注入的：`platform/app/session-fs.ts` 在 appData 上实现那 12 个方法就够，`StorageBackedSession` 和 `SessionRepo` 不用自己写。
+pi-agent-core 时代的 session 仓（AppData 的 `session/`、palace 的 `session` 行）已删，升级后第一次启动时整个目录删掉，里面没跑完的回合不续。
 
 ## 目录与依赖
 
@@ -236,11 +222,13 @@ legion/
   bell/       ring / read / ack，三种铃
   claim/      每设备声明与选举
   schedule/   时点窗口、FIFO、每资源串行
-  execute/    worker 契约与 runner、harness 工厂与 turn、watchdog、observable-run、limiter
-  subagent/   harness lane 上的薄壳
+  ledger/     终态 run 的折叠行
+  runner/     worker 契约与 runner、产出落盘
+  durable/    回合运行时（pi-durable）、stall、watchdog、observable-run、limiter
+  subagent/   子 agent 的 brief、配额和诚实失败
 ```
 
-session 不在 legion 目录里：FileSystem 适配是 `platform/app/session-fs.ts`，`session` 那一行登记在 palace，harness 的装配在 `legion/execute`。soul 只装配回合（prompt、工具、角色），后一步持有自己的 lane。
+durable 库的宿主接口是 `platform/app/durable-sqlite.ts`。soul 只装配回合（prompt、工具、角色），回合由 `legion/durable` 跑。
 
 legion → ai、budget、platform；ai 不 import legion。info、reading、memory、soul → legion。legion 永不 import memory——memory 把蒸馏 pass 登记成 run kind，方向只有这一个。
 
@@ -249,6 +237,8 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 第一个调用方是 reading 的文献研究（kind `research-literature`，`local` 档，见 [68](../companion/68-Lumen与盒子的交互.md)）。第一个跨设备调用方是 translate（翻整本书）：iPad 上 soul 派一个 `pending` run，PC 按能力当选执行，产出回领域目录，brief 经 bell 回 PC 的 soul。info 的 kind 清单在 [63](../info/63-情报局：研究室、专项组与态势.md) 已列好，等 Red Boxes 落地时登记。
 
 ## 现状与顺序
+
+下面按步记的是当时的落地，路径以当时为准。`legion/execute` 和 pi-agent-core 已在 [87](./87-回合运行时迁到pi-durable.md) 第四阶段删除：runner、worker、outputs 搬进 `legion/runner`，其余活着的件搬进 `legion/durable`。
 
 已落地（2026-09-15）：第 1 到 9 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
 
@@ -306,4 +296,4 @@ DeepSeek Harness 的 jobs / workflow / schedule / agent-team 全部以「一机�
 
 Claude Code 的 agent teams 是单机单会话：lead 就是主会话，teammate 跑在同一台机器上，任务认领靠同一文件系统上的文件锁，跨机器那条路是 cross-session messaging 经 Anthropic 服务器中继，不是文件同步。pi 上游 README 明写不做 sub-agents、不做内置待办、不做 workflow，多 agent 编排这层没人替我们做。
 
-pi harness 借的是持久 session、lane、resume 和分支摘要；没借的是跨设备——它以一台设备一个进程为前提，run 的文件格式、指派与合并仍是自己的。
+pi-durable 借的是持久对话、重启续跑、steer 和子对话；没借的是跨设备——它以一台设备一个进程为前提，run 的文件格式、指派与合并仍是自己的。

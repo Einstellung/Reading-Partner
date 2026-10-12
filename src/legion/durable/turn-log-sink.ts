@@ -23,7 +23,7 @@ export type TurnEnd =
   | "aborted"
   // The stream went silent (stall.ts).
   | "stalled"
-  // The turn's whole allowance ran out (stall.ts, TURN_LIMIT_MS).
+  // Old lines only: the whole-turn allowance the agent loop had ran out.
   | "timed-out"
   // A refusal: the window or the round cap (contract.ts).
   | "refused"
