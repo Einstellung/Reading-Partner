@@ -27,6 +27,7 @@ import ChatScaleScope from "../base/ChatScaleScope";
 import { CitationContext } from "../markdown/Markdown";
 import { IconClose } from "../base/icons";
 import { Composer } from "../chat/Composer";
+import { useComposerSlot } from "../chat/call/composer-slot";
 import { MessageList } from "../chat/MessageList";
 import MaterialFigureScope from "../common/MaterialFigureScope";
 import NameDialog from "../common/NameDialog";
@@ -110,6 +111,11 @@ export default function RetellView(props: {
 
   // The composer is docked at the bottom, so the keyboard would cover it.
   const keyboard = useKeyboardRoom();
+  // Lumen's corner stands above this composer rather than on its Send button.
+  // The slot measures the box when it mounts and again only when it resizes,
+  // so the loading line below fills the column and the composer never moves off
+  // the bottom edge (docs/pitfall/386).
+  const composerSlot = useComposerSlot();
 
   return (
     <MaterialFigureScope retellId={props.retellId}>
@@ -167,7 +173,7 @@ export default function RetellView(props: {
               </p>
             )}
             {retell.loading ? (
-              <p className="m-0 px-4 py-3 text-sm text-muted-foreground">{t("study.retell.loading")}</p>
+              <p className="m-0 flex-1 px-4 py-3 text-sm text-muted-foreground">{t("study.retell.loading")}</p>
             ) : (
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
                 <MessageList
@@ -177,7 +183,7 @@ export default function RetellView(props: {
                 />
               </div>
             )}
-            <div className="px-4 pb-6">
+            <div className="px-4 pb-6" ref={composerSlot}>
               <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
                 <Composer
                   onSend={retell.send}
