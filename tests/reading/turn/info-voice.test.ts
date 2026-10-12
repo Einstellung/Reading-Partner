@@ -30,6 +30,8 @@ import type { CallRow } from "../../../src/reading/turn/call-state";
 import { openReadingDurable, type ReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { heardRows, infoVoiceThread, voiceFeed, voiceStream } from "../../../src/reading/turn/info-voice";
 import { createPlaceSession, registerOpenSession, withPlaceTurnRows } from "../../../src/reading/turn/place-session";
+import { drivePlaceTurn } from "../../../src/reading/turn/book-turn-rows";
+import { catalogDescribe } from "../../../src/legion/durable/device";
 import type { TurnActivity } from "../../../src/ai/turn-view/activity";
 import type { ConversationEvent, ConversationSource } from "../../../src/soul/voice/conversation";
 import { createVoiceCall, KICKOFF_TURN, type VoiceCall } from "../../../src/soul/voice/voice-call";
@@ -371,3 +373,196 @@ test("what was heard maps onto the landed rows: the cut row shortened and marked
   ]);
   expect(heardRows(text, spans, { role: "ai", turn: 1, text: "Something else", interrupted: false })).toEqual([]);
 });
+
+// A turn with nobody's session under it: a bell's headless one, one a closed chat left, one recovery resumed.
+async function otherTurn(d: ReadingDurable, line: { text: string; ts?: number }, bell?: string, onRows: (rows: CallRow[]) => void = () => {}) {
+  infoAssemblies.set(KEY, { history: [{ role: "ai", text: GREETING }], tools: [] });
+  return drivePlaceTurn(
+    d,
+    {
+      key: KEY,
+      origin: { place: "info", date: DATE, threadId: THREAD },
+      conversation: THREAD,
+      surface: "info",
+      line,
+      ...(bell ? { bell: { id: bell } } : {}),
+      systemPrompt: "You are the secretary.",
+      tools: [],
+      model: { provider: "faux", modelId: "faux-1" },
+      describe: catalogDescribe([]),
+    },
+    onRows,
+  );
+}
+
+/** Every time the call gave up on a line it was asked. */
+function callFailures() {
+  const failed: unknown[] = [];
+  const spy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    if (args[0] === "voice call model turn failed") failed.push(args[1]);
+  });
+  return { failed, restore: () => spy.mockRestore() };
+}
+
+const BELL_REPLY = `Your run finished. ${"The digest is in the box. ".repeat(20)}`;
+
+test("a line spoken while a bell's turn runs with nobody looking waits for it, then is answered once over what it landed", async () => {
+  const { faux, durable: d } = await runtime([GREETING, BELL_REPLY, ANSWER], 200);
+  const failures = callFailures();
+  try {
+    const h = harness(d);
+    await h.call.start();
+    await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
+    await h.played(KICKOFF_TURN);
+    let streamed = false;
+    const bell = await otherTurn(d, { text: "[bell] A run finished." }, "bell-1", (rows) => {
+      if (rows.some((r) => r.role === "ai" && r.text.length > 20)) streamed = true;
+    });
+    await until(() => streamed, "the bell's turn streaming");
+    await h.emit({ kind: "speech-end", turn: 1, text: "What about rates?", silentMs: 900 });
+    // Waiting is not failing: the line is still being asked.
+    expect(failures.failed).toEqual([]);
+    expect(h.call.snapshot().session.asked).not.toBeNull();
+    expect((await bell.ended).kind).toBe("answered");
+    await h.played(1);
+
+    expect(failures.failed).toEqual([]);
+    const said = messages().map((m) => [m.role, m.text.trim()]);
+    expect(said.filter(([, t]) => t === "What about rates?")).toHaveLength(1);
+    expect(said.filter(([, t]) => t === ANSWER)).toHaveLength(1);
+    expect(said[said.length - 1]).toEqual(["ai", ANSWER]);
+    expect(said.some(([r, t]) => r === "ai" && t === BELL_REPLY.trim())).toBe(true);
+    // Assembled after the bell's reply landed, with it in the history.
+    expect(infoAssemblies.get(KEY)?.history.some((m) => m.text.trim() === BELL_REPLY.trim())).toBe(true);
+    expect(h.pushed.join(" ")).toContain("Markets had priced that in");
+    expect(h.pushed.join(" ")).not.toContain("The digest is in the box");
+    expect(faux.state.callCount).toBe(3);
+  } finally {
+    failures.restore();
+  }
+}, 30_000);
+
+test("a line spoken while the open chat follows a resumed turn waits for it, then runs in the chat", async () => {
+  const RESUMED = `Picking up where I was. ${"The chips story again. ".repeat(20)}`;
+  const { faux, durable: d } = await runtime([GREETING, RESUMED, ANSWER], 200);
+  const failures = callFailures();
+  let screen: CallRow[] = [];
+  const session = createPlaceSession({
+    durable: () => Promise.resolve(d),
+    key: KEY,
+    surface: "info",
+    assemble: async () => ({ kind: "failed", message: "the chat was not asked" }),
+    lastLine: () => 0,
+    draw: (after, rows) => {
+      screen = withPlaceTurnRows(screen, after, rows);
+    },
+    file: () => {},
+    streaming: () => {},
+  });
+  const h = harness(d);
+  await h.call.start();
+  await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
+  await h.played(KICKOFF_TURN);
+  // A turn nothing on screen started, followed by the chat opened on it.
+  let streamed = false;
+  await otherTurn(d, { text: "Go on about the chips." }, undefined, (rows) => {
+    if (rows.some((r) => r.role === "ai" && r.text.length > 20)) streamed = true;
+  });
+  await until(() => streamed, "the resumed turn streaming");
+  const closed = registerOpenSession(KEY, session);
+  try {
+    expect(await session.resume()).toBe(true);
+    await h.emit({ kind: "speech-end", turn: 1, text: "What about rates?", silentMs: 900 });
+    expect(failures.failed).toEqual([]);
+    await h.played(1);
+    await session.idle();
+
+    expect(failures.failed).toEqual([]);
+    const said = messages().map((m) => [m.role, m.text.trim()]);
+    expect(said.filter(([, t]) => t === ANSWER)).toHaveLength(1);
+    expect(said[said.length - 1]).toEqual(["ai", ANSWER]);
+    expect(faux.state.callCount).toBe(3);
+    // The chat drew both turns, the spoken line above the reply to it, each once.
+    const drawn = screen.map((r) => [r.role, r.text.trim()]);
+    expect(drawn.filter(([, t]) => t === "What about rates?")).toHaveLength(1);
+    expect(drawn.slice(-2)).toEqual([
+      ["user", "What about rates?"],
+      ["ai", ANSWER],
+    ]);
+    expect(drawn.some(([r, t]) => r === "ai" && t === RESUMED.trim())).toBe(true);
+  } finally {
+    closed();
+    failures.restore();
+  }
+}, 30_000);
+
+test("a line spoken during a text turn the reader closed the chat on waits for it, then is answered once", async () => {
+  const TYPED = `The rates held. ${"Markets shrugged. ".repeat(20)}`;
+  const B = "The chips rules start next month.";
+  const { faux, durable: d } = await runtime([GREETING, TYPED, B], 200);
+  const failures = callFailures();
+  let screen: CallRow[] = [];
+  const typed = { role: "user" as const, text: "Did the rates move?", ts: 0 };
+  const session = createPlaceSession({
+    durable: () => Promise.resolve(d),
+    key: KEY,
+    surface: "info",
+    assemble: async () => {
+      infoAssemblies.set(KEY, { history: [{ role: "ai", text: GREETING }], tools: [] });
+      return {
+        kind: "turn",
+        request: {
+          key: KEY,
+          origin: { place: "info", date: DATE, threadId: THREAD },
+          conversation: THREAD,
+          surface: "info",
+          line: { text: typed.text, ts: typed.ts },
+          systemPrompt: "You are the secretary.",
+          tools: [],
+          model: { provider: "faux", modelId: "faux-1" },
+        },
+      };
+    },
+    lastLine: () => typed.ts,
+    draw: (after, rows) => {
+      screen = withPlaceTurnRows(screen, after, rows);
+    },
+    file: () => {},
+    streaming: () => {},
+  });
+  const closed = registerOpenSession(KEY, session);
+  const h = harness(d);
+  await h.call.start();
+  await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
+  await h.played(KICKOFF_TURN);
+  try {
+    // The reader types into the chat, and closes it while the answer is written.
+    typed.ts = Date.now();
+    appendMessage(BOOK, THREAD, typed);
+    session.ask();
+    await until(() => screen.some((r) => r.role === "ai" && r.streaming && r.text.length > 20), "the typed turn streaming");
+    session.detach();
+    closed();
+    await h.emit({ kind: "speech-end", turn: 1, text: "And the chips?", silentMs: 900 });
+    expect(failures.failed).toEqual([]);
+    await h.played(1);
+
+    expect(failures.failed).toEqual([]);
+    // The spoken line went into the file when it was said, before the typed turn landed.
+    expect(messages().map((m) => [m.role, m.text.trim()])).toEqual([
+      ["ai", GREETING],
+      ["user", typed.text],
+      ["user", "And the chips?"],
+      ["ai", TYPED.trim()],
+      ["ai", B],
+    ]);
+    expect(infoAssemblies.get(KEY)?.history.map((m) => m.text.trim())).toEqual([GREETING, typed.text, TYPED.trim()]);
+    // The call spoke its own turn only.
+    expect(h.pushed.join(" ")).toContain(B);
+    expect(h.pushed.join(" ")).not.toContain("Markets shrugged");
+    expect(faux.state.callCount).toBe(3);
+  } finally {
+    closed();
+    failures.restore();
+  }
+}, 30_000);

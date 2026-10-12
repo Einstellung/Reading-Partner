@@ -772,3 +772,13 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 三餐停止那条 `end` 没有 `conversation` 字段，杀进程那条有，没查。
 - 收尾：`credentials.json` 已删并确认不在，`__faux*` 键已清，app 重起（PID 7738）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里三餐线程多了几问几答，购物清单没变。
 - 还没走：真模型一回合（要新的 access token）、语音。
+
+## 语音回合撞上在途回合（分支 `fix/voice-turn-queue`，从 `origin/dev/pi-durable-2` f5aaf7d5 起）
+
+- 现象：通话中说一句，对话上已有别的回合（铃的 headless 回合、重启恢复的回合、关掉对话后还在跑的文字回合）没有 session，语音回合 `startTurn` 报 `TurnBusy`，这句 failed 回到听。
+- 改法：`info-voice.ts` 的 `answer` 先 `quiet()` 等对话上没有回合（打开的 session 在跑就等 `idle()`；再等 `turnsStarting`，再 `turnInFlight` 的 `settled`），等完才读线程文件、装配、起回合；起的时候仍撞 `TurnBusy`（session 的 guest 或 headless）就回到等，重新装配。语音那句只落一次、只答一次，等的时候不抛错，通话界面停在思考态。对自己语音回合的打断（坑 529）不变。
+- 定的：说的话不插进在跑的读者回合，排在它后面。`say()` 插话是因为打字的人在对话里看着那个回合；通话只念自己的回合，插进别的回合答案就不会被念出来，打断也会停掉别人的回合。
+- `withPlaceTurnRows`：回合自己画的行（语音那句）不在 `after` 之上再画一次。语音那句落盘早于被等的回合，等完 `after` 取线程里最后一行，那句画在被等回合的答案下面。
+- 测试：`info-voice.test.ts` 加 3 个（无人看的铃、对话开着跟着恢复的回合、关掉对话后的文字回合），原打断用例不动。
+- 没做：Linux xvfb 走查（只跑单测）。线程文件里语音那句排在被等回合的答案前面（落盘按说出的时间），重开对话时也这样显示，同打字插话没被接走时的落盘。
+- 待查：新测试初版里别的回合 `drivePlaceTurn` 一返回就说话，偶发 faux 回复顺序对调（语音回合拿到了别的回合的那段），等别的回合先出字后稳定。没查到根因，没写坑。

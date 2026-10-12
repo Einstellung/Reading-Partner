@@ -157,7 +157,9 @@ export function withPlaceTurnRows<M extends CallRow>(
   rows: readonly M[],
   keep: (m: M) => boolean = () => false,
 ): M[] {
-  const before = messages.filter((m) => m.ts <= after);
+  // A row the turn draws is drawn there, not also above it: a voice call's line under a turn that landed after it.
+  const drawn = (m: M) => m.ts <= after && rows.some((r) => r.role === m.role && r.ts === m.ts);
+  const before = messages.filter((m) => m.ts <= after && !drawn(m));
   const turn = messages.filter((m) => m.ts > after);
   const kept = turn.filter((m) => keep(m) && !rows.some((r) => r.role === m.role && r.ts === m.ts));
   return [...before, ...kept, ...mergeTurnRows(turn, rows)];
