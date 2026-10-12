@@ -91,6 +91,7 @@ export default {
   "call.pageBadge": "p. {page}",
   "call.clearFocus": "Remover foco do capítulo",
   "call.backToReading": "Voltar à leitura",
+  "call.close": "Fechar",
   "call.deleteConversation": "Apagar conversa",
   "call.deleteTitle": "Apagar esta conversa?",
   "call.deleteDescription": "A conversa será apagada, junto com a marcação a partir da qual foi aberta. Essa ação não pode ser desfeita.",

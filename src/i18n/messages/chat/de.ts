@@ -91,6 +91,7 @@ export default {
   "call.pageBadge": "S. {page}",
   "call.clearFocus": "Kapitelfokus aufheben",
   "call.backToReading": "Zurück zum Lesen",
+  "call.close": "Schließen",
   "call.deleteConversation": "Unterhaltung löschen",
   "call.deleteTitle": "Diese Unterhaltung löschen?",
   "call.deleteDescription": "Die Unterhaltung wird gelöscht, zusammen mit der Markierung, von der aus sie geöffnet wurde. Das kann nicht rückgängig gemacht werden.",
