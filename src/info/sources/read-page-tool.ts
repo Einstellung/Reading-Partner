@@ -10,7 +10,7 @@
 // not instruction (the system-prompt red line covers it).
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { FetchFn } from "../../workshop/extract/http";
 import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "../../workshop/extract/read-page";
 import { errMsg } from "../../platform/std/errors";

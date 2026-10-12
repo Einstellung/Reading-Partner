@@ -389,3 +389,595 @@ use-call.ts 和 use-lesson-call.ts 都没动，旧逻辑一行没删。原因是
 - 注意：课堂第一次打开会对每章跑一次 prep（这本书 63 章），走默认模型。真模型前要让 prep 已完成，否则一开课就是 63 次 Haiku。这次用快速 faux 跑完 prep，23 章失败（faux 队列耗尽，失败章不自动重跑），overview 手工标了 done。
 - 观察：课堂内容滚上去后，左上角关闭/删除按钮压在正文上（截图 s3c）。
 - 环境：Mac `~/rp-ipad`（worktree，detached 在 96caede7），构建 `~/build.sh`、设备助手 `~/d.sh`（launch/kill/shot/js/send/stop/st/open）、`~/rp.py`；ipa 在 `/tmp/rp-dev-ipad.ipa`，探针包 `/tmp/rp-dev-probe.ipa`。iPad 上 `.dev` app PID 7204（第二棒重起，去掉进程里残留的 faux）留着在跑，ios_webkit_debug_proxy PID 78195 在 Mac 上跑。容器里占位凭据已删，faux 的 localStorage 键已清，`settings.json` 三个模型都是 claude-haiku-5-5。
+
+## 第二阶段第一棒（分支 `dev/pi-durable-2a`，从 `origin/main` 40a8c6a0 起）
+
+做完的：
+
+- 按 place 推广：`legion/durable/device.ts` 是设备运行时，`openDeviceDurable({ places })`，每个 place 给 `key`（`rp.conversations` 的键）、`address`（落进哪个线程文件的哪条线程）、`resolve`（桌面解析器）、`land`、`readHistory`、`telemetry`（surface、thread、bookId、inline）。共用的在这里：打开、`recoverBeforeResume`、撤回的 steer 按 place 写回文件（`fileWithdrawnSteers`）、`recordModelCall` / `recordCacheTurn`、turn-log、`onTurnSettled`。`legion/durable/thread-files.ts` 是通用的 `ThreadFiles`、`threadMessageOf`、`threadLander`（按 role+ts 跳过、flush 后放卡片、在看或拒绝或铃时不放、铃的 runId 盖章）、`fileSteers`。turn-log 从 `reading/turn/durable-turn-log.ts` `git mv` 到 `legion/durable/turn-log.ts`，类名 `DurableTurnLog`。
+- 书那条路：`durable-book.ts` 的 `bookLander`、`storeBookThreads`、`threadMessageOf`、`bookUsageReport`、`bookCacheTurn` 改成通用件的薄包装，加 `bookPlace()`；`openReadingDurable` 组装 book place 后调 `openDeviceDurable`，`ReadingDurable` = `DeviceDurable` + `assembled`。`durable-turn.ts` 提出 `runPlaceTurn` / `resumedPlaceTurn`，`runBookTurn` / `resumedTurn` 委托给它；`book-turn-rows.ts` 加 `drivePlaceTurn` / `resumedPlaceRows`。书的测试一个没改断言。
+- 门口：`soul/door-durable.ts` 是门口的 place。origin `{ place: "door", date, threadId }`，键 `door:<date>:<threadId>`，落进 `doorKey(date)` 那个文件（对话按归属存）。本进程装配的历史和工具放 `doorAssemblies`（模块级），重启后历史读文件（排除 `excludeTs`，丢空文字行），工具走 `openDoorTurn` 重新摆桌（没有界面那几个出卡片的工具）。没人开着门口对话时落盘放卡片，同 `soul/recover.ts` 的那张（`coverOf`，origin 是 door）；门口对话开着时用 `setDoorWatching` 登记。`soul/door-chat.ts` 加 `prepareDoorTurn`：同 `sendAtTheDoor` 的装配，交回 system prompt、读者那句（带链接的 app note）、工具、notice、talk 档模型和 `chatThinking`。
+- `reading/turn/place-session.ts`：一条对话的回合控制器，不依赖 React，照第四、五棒 use-call / 课堂的做法：读者那句先进文件，占位行，装配，`drivePlaceTurn`，每次 view 替换那句之后的行；插话进 `unsent` 画 queued，`steer` 收下才去掉；结局 answered（最后一个 AI 行带 notice）、stopped（去空行）、refused / failed（另起失败行）、stalled（清行，`afterStall` 重问一次）；没被收下的话和撤回的 steer 按 ts 写文件，answered、stopped 后开下一回合；装配中停止删占位行、写 `unsent` 再开回合；`leave()` 停回合不再画（2026-10-11 起门口、info、三餐关对话改用 `detach()`，不停回合，见末节）；`resume()` 接上在途回合。`withPlaceTurnRows` 替换回合行时把回合中出的卡片行留在回合行上面。
+- `use-door-chat.ts` 切到新运行时：不再用 `useStreamingTurn`，自己管行；打开时建 session、登记 watching、`resume()`，查完之前发的话等它；`send` 在回合进行中走 `say`（插话），否则写文件再 `ask()`；`raiseCard` 自己做（插在流式行前面，写文件）；卸载 `leave()`。`useBackgroundServices` 以 `startReadingDurable(appToolCatalog, () => ({ door: doorPlace() }))` 打开运行时。
+- `take_link` 加进 `appToolCatalog` 和 tool-contract 的 ROSTER（unsafe、quiet）：不在目录里的工具会被 `runPlaceTurn` 静默滤掉。
+- 测试：`tests/soul/door-durable.test.ts` 7 个（faux：落盘一次且历史用装配、停止留半句、插话进同一回合且回答另起一行、关着时放卡片、接上在途回合且历史读文件、空闲不接、卡片留在回合行上面），`tests/soul/door-kill.test.ts` 1 个（真 SIGKILL：半句进当天文件一次、不重问、放卡片、turn-log 补 end）。全量 `scripts/t.sh` 7452 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+拍板的（和 87 不一致或 87 没写的）：
+
+- 87「分层」的表没有 `device.ts`、`thread-files.ts`、`turn-log.ts`，现在 `legion/durable` 多这三个文件。运行时的入口仍叫 `startReadingDurable` / `readingDurable`（在 `reading/turn/durable-runtime.ts`），别的 place 由外壳传进来；改名牵动几十个测试，没改。
+- 门口接了插话：旧的门口在回合进行中发话直接 return。
+- 关掉门口对话不停回合：回合在后台跑完落盘，落盘时没人开着对话就放卡片；只有按停止才停（2026-10-11 用户改定，原为「关掉 = 停止」，见末节）。
+- 门口回合落盘时没人开着对话就放卡片（旧路只有恢复时放）。
+- 门口的工具标签用本回合工具的 `toolLabel`（`catalogDescribe(request.tools)`），恢复的回合用目录的。
+
+没做的：
+
+- 真 app 验收（xvfb 下门口发问、停止、杀进程恢复）没跑，预算不够。Haiku 0 次。
+- 第 3 项：`soul/headless.ts` 建 `rp.turn`、`soul/bell.ts` 非书分支改 `startTurn`。门口的铃仍走旧路（`openDoorTurn` + `sendHeadless` + held harness），和新运行时上的门口回合并存：两者不互相判忙，读者在门口对话里有回合时铃的回合会同时跑（旧路也是这样，门口没有 hold）。
+- `use-door-chat` 没有 hook 层测试（只有控制器和 place 的）。`sendAtTheDoor` 和 `tests` 里它的测试留着，app 里已经不调。
+- 已知边角：装配完、`drivePlaceTurn` 还没交回句柄的那几毫秒里按停止，下一回合会撞 `TurnBusy` 出失败行（书那条路同样）。
+
+下一棒：
+
+- 先做第 3 项：仿 `reading/turn/deliver.ts` 的 `deliverBookBell` 写门口（和之后每个 place）的 `TurnDeliverer`，`bell.ts` 的门口分支改走它（目标对话忙则等 `onTurnSettled`，重启按 `bellTurn` 不重投）；`headless.ts` 改成建 `rp.turn` 不等界面（铃和恢复是它仅有的调用方）。同时跑门口的 xvfb 验收（`VITE_VERIFY_FAUX=1` 的 `src/dev-faux.ts`）。
+- info（`use-info-call.ts`、`voice-call-live.ts`、`info/briefer/deliver.ts`）、三餐、排练教练（`useCoach.ts`）、复述（`useRetell.ts`）各写一个 place（照 `door-durable.ts`）加用 `place-session.ts` 换调用，互相不碰文件，可以并行；冲突只在 `useBackgroundServices` 的 places 那一行和 catalog / ROSTER（没登记的工具会被滤掉，每棒先核一遍自己面上的工具名都在目录里）。铃的 `TurnDeliverer` 每个 place 一个，最好等第 3 项把门口那份写成样板后再并行。
+
+## 第二阶段第二棒 C（分支 `dev/pi-durable-2d`，从 `origin/dev/pi-durable-2` 87ef3abf 起）
+
+做完的：
+
+- `reading/turn/one-thread-place.ts`：「一样东西一条线程」的 place 通用件（`oneThreadPlace`、`oneThreadTurn`），照 `door-durable.ts`：本进程装配的历史和工具放 assemblies，重启后历史读文件（排除 `excludeTs`、丢空文字行），桌面由 place 自己重摆；落盘用 `threadLander`，从不放卡片（旧路这两面也不放）。
+- 排练教练 `reading/rehearsal/coach-durable.ts`：place 名 `talk`，origin `{ place: "talk", id: outlineId }`，键 `talk:<outlineId>`，落进 `talkThreadKey(outlineId)` 那个文件、线程 id 即 outlineId（存储格式不变）。重启的桌面从盘上的大纲重摆（`buildCoachTurn`，大纲工具照写，卡片不画）。`prepareCoachTurn` 交给 place session。
+- 复述 `reading/retell/retell-durable.ts`：place 名 `retell`，键 `retell:<retellId>`，落进 `retellThreadKey(retellId)`。复述的每个回合都排在 kickoff 后面，kickoff 不是文件里的行：开场回合以 kickoff 为那句、不带 ts（不落盘）；重启后读文件的历史在前面补 kickoff（那句不在文件里时不补）。重启的桌面从盘上的复述、材料重摆，决定和讲稿工具照写。
+- `ui/components/chat/use-place-chat.ts`：两面共用的薄包装（行、镜像 ref、卡片插在流式行前并写文件、`send` 回合中走 `say` 否则写文件再 `ask`、`resume`、离开时 `leave()`，或由面决定让回合在看不见处跑完并在落盘后回调）。`useCoach.ts`、`useRetell.ts` 换成它，不再用 `useStreamingTurn` / `runAgentTurn` / `soulHarness`。打开时先 `resume()`，接上了就不再问；教练没接上才按 `awaitingReply` 自动回答，复述没接上且对话为空才自动开场。
+- `useBackgroundServices` 的 places 加 `[COACH_PLACE]: coachPlace()`、`[RETELL_PLACE]: retellPlace()`。两面的工具全在 `appToolCatalog` 里（读、图、课堂、复述、讲稿、soul 那几组都已登记）；`tests/reading/rehearsal/coach.test.ts`、`tests/reading/retell/turn.test.ts` 加了「本回合工具都在目录里」的断言。
+- 测试：`tests/reading/turn/one-thread-place.test.ts` 8 个（两面各：落盘一次且历史用装配、停止留半句不重问、接上在途回合且历史读文件；复述开场以 kickoff 发出且文件只进回答；prepare 的拒绝和错形状），`tests/reading/turn/one-thread-kill.test.ts` 2 个真 SIGKILL（教练带 ts 的那句、复述开场无 ts：半句进文件一次、不重问、turn-log 补 end）。全量 `scripts/t.sh` 7462 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+和旧行为不同的：
+
+- 回合进行中发话：旧路 `begin` 另起一个回合（旧的那个看不见地接着跑）；现在插进正在跑的回合（docs/72）。Composer 本来就允许回合中发送，没加新交互。
+- 离开教练、或离开没开过口的复述 = 停止，半句落进文件（旧路 abort 丢半句），同课堂的决定（门口 2026-10-11 改成关掉不停，教练和复述不变）。开过口的复述离开时回合照旧在看不见处跑完，落盘后再蒸馏。
+- 模型失败、卡死的样子跟 place session（失败行、卡死重问一次），不再是 `useStreamingTurn` 的。没配模型仍是原来的错误条，拒绝仍是拒绝行。
+- 重启接上的回合里，工具出的卡片不画（行上的工具回执照记），桌面装配时 topicName 为空（只影响工具，不影响已在对话里的系统提示）。
+- 模型仍用 `defaultModelId`（旧路如此），没改成门口那样的 `modelIdFor(settings, "talk")`。
+
+没做的：
+
+- 真 app 验收（xvfb 或模拟器上教练回答一遍、复述开场、停止、杀进程恢复）没跑；两面语音依赖重，留给统一验收。hook 层没有测试（只有 place 和控制器的）。
+- 这两面没有铃（桌面不是 place，`assembled.origin` 恒空，旧路也从不传 `deliverTo`），铃投递不涉及。
+- 实测没有踩到意外，531–533 没用。
+
+## 第二阶段第二棒 B（分支 `dev/pi-durable-2c`，从 `origin/dev/pi-durable-2` 87ef3abf 起）
+
+做完的：
+
+- 三餐确实走 `use-info-call.ts`（`use-info-home.ts` 的 `setInfoCall(mealsAnchor(...))` 开 `InfoCall`），和 info 一起换。
+- `info/briefer/info-durable.ts` 是两个 place。info：origin `{ place: "info", date, threadId }`，键 `info:<date>:<threadId>`（日期把每天文件里都重复的 `onboarding` 分开），落进 `infoBookId(date)` 文件的那条线程；meals：origin `{ place: "meals" }`，键 `meals:meals`，落进 `info-meals` 的 `meals` 线程。本进程装配的历史和工具放 `infoAssemblies`；重启后历史读文件（排除 `excludeTs`、丢空文字行），工具走桌面解析器：`deliver.ts` 拆出 `layBriefingTurn` / `layMealsTurn`，铃的 opener 和解析器共用（不挂出卡片的工具，`generate_briefing` 抛错），解析器把 BoxOrigin 传给 `assembleTurn`，恢复的回合里 `delegate` 照样回铃到原处。没人看时落盘放的卡片和 `soul/recover.ts` 同一张（boxId `<threadId>:<ts>`，origin `{ briefing, date }` 或 `{ meals }`）。`watchInfoConversation(key)` 登记在看。`prepareInfoTurn` 装配一个回合并把历史和工具放进 `infoAssemblies`，文本和以后的语音共用。
+- `use-info-call.ts` 换成 `place-session.ts`：读者那句先写文件再 `ask()`，回合中发话走 `say()`（插话），Stop 留半句和回执，打开时 `resume()` 接上在途回合（查完之前发的话等它），看门狗和被杀恢复由运行时和控制器给。卡片照旧：`raiseCard` 插在流式行前并写文件，`withPlaceTurnRows` 的 keep 留住卡片行和本视图在回合中写的 note 行（briefing 进度卡、应用三餐计划后的说明卡、card gesture 的 note）。setup 开场照旧只在空线程、只开一次，`OPENING_KICKOFF` 作 prompt 发出，运行时不落 prompt 行，所以不进文件；kickoff 只进空线程。
+- `appToolCatalog` 原来没有三餐的 8 个工具，换过来后会被 `runPlaceTurn` 全部滤掉。加了 `info/meals/tools.ts` 的 `buildMealsCatalogTools`，`live.ts` 和目录共用这一份清单；ROSTER 加 `info/meals` 行；「目录登记了 roster 每个名字」那条测试也查 companion 的工具名。info 面上其余工具（companion、source、soul 的）原来就在目录里，article 不带工具。
+- `useBackgroundServices` 的 places 加 `info: infoPlace(), meals: mealsPlace()`。
+- `place-session.ts`：停止和离开先等在途的 steer 提交完再调运行时的停止（坑 528），门口一起受益。
+- 测试：`tests/info/briefer/info-durable.test.ts` 12 个（两个 place 各五个：落盘一次且历史用装配、停止留半句、插话进同一回合、接上在途回合且历史读文件、关着放卡片；另有键和地址、setup 开场只落 AI 的话），`tests/info/briefer/info-kill.test.ts` 2 个真 SIGKILL（两个 place 各一：半句进文件一次、不重问、放卡片、turn-log 补 end），`tests/ui/components/info/info-call-turn.test.ts` 改写成 hook 跑真运行时（faux）5 个（停止留半句且落盘一次、装配中停止不发、三餐落进 `info-meals`、插话进同一回合、和停止同一刻的插话写文件并开下一回合），`info-refusal.test.ts` 的源码守卫改查新路径。全量 `scripts/t.sh` 7466 过、1 跳过、0 失败，`bun run typecheck` 过。
+
+拍板的（和旧行为不同）：
+
+- 关掉 info / 三餐对话不停回合，同门口：回合在后台跑完落盘，cleanup 立刻撤 watching，落盘时没人开着就放卡片（2026-10-11 用户改定，原为「关掉 = 停止、停下的回合不放卡片」，见末节）。
+- 没人看时落盘放卡片：被杀后恢复的回合于打开对话前落盘，和关掉对话后才落盘的回合。
+- 恢复的 article 回合用当天 briefing 的桌，工具不缺（article 本来不带工具），只是不挂出卡片的工具。
+- 三餐回合的 telemetry surface 仍是 `info`（旧路也是），thread 是 `meals`。
+- info 对话仍不订阅 `onThreadMessage`（旧路也没有）：开着对话时铃落进来不即时显示，重开才见。
+
+没做的：
+
+- 真 app xvfb 验收（info 和三餐各一回合发问、停止、杀进程恢复）没跑，预算不够。Haiku 0 次。下一棒照第一阶段的做法跑：`VITE_VERIFY_FAUX=1` 慢速 faux，换代码后重起 dev server（坑 403）。
+- 铃：`openBriefingDelivery` / `openMealsDelivery` 仍走旧 held harness，等 2b 的 `TurnDeliverer` 样板。新运行时上的 info 回合和铃回合不互相判忙。
+- 书的两个界面（`use-call.ts`、`use-lesson-call.ts`）没走 `place-session.ts`，坑 528 的竞争还在。
+- `useStreamingTurn` 现在只剩 `useCoach.ts`、`useRetell.ts`（2d 在换）和 `door-tools.ts` 的类型引用。
+
+语音接这个 place 要做的（`info/briefer/voice-call-live.ts`）：
+
+- 每句转写照旧 `appendMessage` 进线程，记下它的 ts；用 `prepareInfoTurn({ anchor, key: bookId, dateKey, signal, messages, companionTools: opts.tools })` 装配（不给 mealsTools，通话只锚在某一天），`line` 带那句的 ts，`excludeTs` 才对得上。
+- 用 `drivePlaceTurn` 或 `runPlaceTurn` 的 `onView` 跟回合：从 TurnView 的流式文字取增量喂合成（今天的 `onDelta`），工具起止喂 `onActivity`；`ended` 是 answered / refused 时 resolve，failed reject。打断（barge-in）调 `stop()`，半句落盘。
+- 语音和文本是同一个对话键：语音回合进行中，文本那边发话会成插话；两边各自 `startTurn` 会撞 `TurnBusy`，语音那边要先问 `turnInFlight` 或干脆复用一个 `PlaceSession`。
+
+## 第二阶段第二棒 A（分支 `dev/pi-durable-2b`，从 `origin/dev/pi-durable-2` 87ef3abf 起）
+
+做完的：
+
+- 通用的铃投递 `reading/turn/place-bell.ts`：`deliverPlaceBell(input, place, deps)`。先 `bellTurn` 按铃 id 找已起的回合，有就等它、从线程文件按 runId 取回复，不重投；然后循环：该对话有打开的 place session 且在跑（读者回合在装配、在跑或在落盘）就 `onWait` 并等 `session.idle()`；装配；开着对话就 `session.bell(after, request)` 在那个 session 里跑（流式、能停、能插话，插话由 session 照常落文件、开下一回合），没人开着就 `headlessPlaceTurn`（`drivePlaceTurn` 不画行，带停滞看门狗）；撞 `TurnBusy`（重启后恢复的回合、别的铃的回合）就等该对话的 `onTurnSettled` 再来。结局同 `deliverBookBell`：answered、停下且有 AI 行算 answered、停滞和失败算 failed（铃留着下次投）。
+- `place-session.ts` 加 `bell()`、`idle()` 和打开登记 `registerOpenSession(key, session)` / `openPlaceSession(key)`。铃的回合在 session 里停滞不重问、失败不出失败行。登记是显式的，界面开对话时登记、关时撤（隐式登记会让没 `leave()` 的测试 session 串到下一个测试文件）。
+- 门口：`reading/turn/door-bell.ts` 的 `deliverDoorBell` + `registerDoorDelivery()`（外壳 `useShellBootstrap` 里和书的一起注册）。当天门口那条对话（`openDoorThread`），`prepareDoorTurn` 以文件里的历史加铃为输入装配（不带界面那几个出卡片的工具），surface `bell`。`use-door-chat` 打开时 `registerOpenSession`。`soul/door-durable.ts` 导出 `doorWatchingNow`。
+- `soul/bell.ts`：投递那段抽成 `byTurn(deliver, place, cardOrigin)`，place 分支和门口分支共用（忙则这只铃单独等、同对话后来的铃排在它后面、落盘后才 delivered、ack、markDelivered）。门口分支：没有 place 接住（无 origin、wake、opener 返回 null）且注册了门口 deliverer 就走它，place 是 `{ place: "door", date: 今天 }`，卡片的 origin 仍是 run 原来的地方。wake 铃也走它（`TurnDelivery.runId` 改成可选，wake 不放卡片、不 markDelivered）。
+- 测试：`tests/reading/turn/door-bell.test.ts` 4 个（faux：没人开着时 headless 落盘一次带 runId、同一只铃再投不起新回合；读者回合在跑时铃等落盘后在 session 里流式出现；session 里停下留半句；插话进铃的回合）；`tests/soul/bell.test.ts` 加 1 个（门口 deliverer 接住无处可去的铃和 wake 铃，卡片只给 run）。`bell.test.ts` 的 `beforeEach` 撤掉别的测试文件留下的门口 deliverer。全量 7457 过、1 跳过、0 失败，typecheck 过。
+
+真 app 验收（Linux，`xvfb-run` 同款的 Xvfb :96，复用 `verifylinux` identifier 的 debug 二进制加载本 worktree 的 vite 1437，`VITE_VERIFY_FAUX=1` 慢速 faux，测试 AppData 先挪成 `.bak-2b-*` 再新建，凭据是占位值、用完删）：
+
+- 发问流式、插话进同一回合（第二次模型调用接着答）、停止留半句：过（截图 01–03）。
+- 正文中 SIGKILL 重开：线程文件里读者那句下面半句一次（312 字），重启后模型调用 0 次：过（04）。
+- 门口开着且空闲时铃：回合在打开的对话里流式出现，落盘带 runId，铃清空：过（05、06）。
+- 读者回合在跑时铃：铃保持 queued、模型调用只多读者那一次；读者回答落盘后铃的回合才起，文件顺序是 读者那句、读者回答、铃的回答：过（07、08）。
+- 重启不重投：重启后模型调用 0 次，两只铃各只有一条回复：过（09）。
+- 没走：工具里杀进程后重启接上在途回合（门口工具没有慢速包装，`__fauxToolDelayMs` 只包书的 `AssembledTurns`）。单测有（第一棒 door-durable「接上在途回合」）。
+- 截图和驱动在会话 scratchpad `verify-door/`（`tools/vd.py`、`tools/run.py`、`log-*.json`）。Haiku 0 次。
+
+拍板的：
+
+- `soul/headless.ts` 没有改成建 `rp.turn`：它的两个调用方是 `recover.ts`（续旧 soul session 的 held 运行，第四阶段删）和 `bell.ts` 里还走 `deliveryOpener` 的 place（简报、三餐，等 2c 搬走），都不是新回合。铃的 headless `rp.turn` 是 `place-bell.ts` 的 `headlessPlaceTurn`；放 `reading/turn` 是因为 `reading/turn` 已经 import `soul`，反过来就成环，且停滞看门狗在 `reading/turn/durable-turn.ts`。
+- 门口铃的回合在读者开着的对话里跑时，关掉对话不停它，回合跑完落盘后铃照常 delivered（同读者回合，2026-10-11 用户改定，原为「关掉 = 停止」）；按停止时有半句就算 answered。
+- 门口的旧路（`openDoorTurn` + `sendHeadless` + held harness）只在没注册门口 deliverer 时走，app 里注册了就不会走；`bell.test.ts` 里门口那批旧测试靠它。删它和删 `soul/harness.ts` 回合入口一起做。
+
+别的 place 接铃投递：
+
+1. 写 place 的 `PlaceBell`：`key`（`rp.conversations` 的键）、`origin`、`address`（回复落进的线程文件 key 和 threadId）、`assemble(bell, signal)`（把历史和桌面工具放到 place 的 `readHistory` / `resolve` 找得到的地方，返回 `PlaceBellAssembly` 或 `{ failed }`，没东西可答返回 null）、`watching()`。照 `door-bell.ts`，deps 用 `appPlaceBellDeps(readingDurable)`。
+2. `registerTurnDelivery("<place>", …)` 在外壳 `useShellBootstrap` 注册；`bell.ts` 不用改（有 turn deliverer 的 place 自动走 `byTurn`）；该 place 的 `registerDelivery` opener 留着，`recover.ts` 收尾旧 session 还要用。
+3. 界面开对话时 `registerOpenSession(key, session)`，关时撤销，铃的回合才会在打开的对话里流式出现。
+4. 测试照 `tests/reading/turn/door-bell.test.ts`；`bell.test.ts` 的 `beforeEach` 里同样撤掉该 place 遗留的 deliverer。
+
+## 第二阶段第三棒 A（分支 `dev/pi-durable-2e`，从 `origin/dev/pi-durable-2` 011b9dd3 起）
+
+做完的：
+
+- `reading/turn/info-bell.ts`：`deliverInfoBell` 把 `{ briefing, date }` 的铃投进当天文件的 `briefingThreadId(date)` 线程（info place，键 `info:<date>:<threadId>`），`{ meals }` 的铃投进 `info-meals` 的 `meals` 线程；线程不在就建（launch card 委派的 run 可能先于任何对话回来）。装配用 `layBriefingTurn` / `layMealsTurn`（不带出卡片的工具），历史取线程文件经 `replayableHistory`，铃作最后一条 user，装配结果放进 `infoAssemblies` 供 place 的 `readHistory` / `resolve` 用；模型对话档、surface `bell`。`registerInfoDelivery()` 在 `useShellBootstrap` 里注册 briefing 和 meals 两个 turn deliverer，旧 opener 照旧注册给 `recover.ts`。`info-durable.ts` 导出 `infoWatchingNow`。
+- `use-info-call.ts` 只改了打开登记那几行：建 session 后 `registerOpenSession(key, session)`，和 `watchInfoConversation` 合进同一个 `unwatch`，关掉时随它撤（2026-10-11 起关掉即撤，不等在途回合落盘，见末节）。
+- 测试：`tests/reading/turn/info-bell.test.ts` 7 个（简报铃没人看 headless 落盘一次带 runId、铃不进文件、重开数据库后同一只铃不重投；三餐铃落进三餐线程；简报对话忙时铃等落盘后在 session 里流式出现；简报忙时三餐的铃不等；开着的三餐对话里铃的回合能停、留半句；插话进铃的回合；别处的铃返回 null）。`bell.test.ts` 的 `beforeEach` 撤掉 briefing、meals 遗留的 deliverer。全量 7488 过、1 跳过、0 失败，typecheck 过。
+
+真 app 验收（Linux，Xvfb :96，复用 `verifylinux` identifier 的 debug 二进制加载本 worktree 的 vite 1437，`VITE_VERIFY_FAUX=1` 慢速 faux，测试 AppData 先挪成 `.bak-2e-*` 再新建，凭据占位值、用完删；写一个 disabled 的 `info-sources.json` 让 Today 出 launch card，「Tell the companion」打开当天简报对话）。Haiku 0 次。
+
+- info：发问流式、插话进同一回合（第二次模型调用）、停止留半句 140 字；正文中 SIGKILL 重开，半句 176 字一次、重启后模型调用 0 次：过。
+- info 的铃：对话开着且空闲时铃的回合在对话里流式出现（停止键在），落盘带 runId，铃清空；读者回合在跑时铃保持 queued，读者回答落盘后才起，文件顺序 读者那句、读者回答、铃的回答；重启后模型调用 0 次，两只铃各一条：过。
+- 三餐没走成：桌面上三餐对话的入口在 onboarding 问卷之后，Lumen 菜单的 Text 打开的是门口；预算不够走完问卷。三餐的投递和 info 同一条 `deliverPlaceBell`，单测覆盖了空闲、开着时停止、和简报互不等。
+- 截图和驱动在会话 scratchpad `verify-info/`（`tools/vd.py`、`tools/run2.py info|meals ask kill bell`、`log-info-*.json`）。
+
+拍板的：
+
+- `info-bell.ts` 放 `reading/turn`，不放 `info/briefer`：info 目前不 import reading，`place-bell.ts` 在 `reading/turn`，反过来要加 info → reading 的边。
+- 铃的回合用对话档模型（同门口铃和旧 headless 路）。
+- `layBriefingTurn` / `layMealsTurn` 带上铃的 BoxOrigin，铃的回答里再委派的 run 回到同一处（旧 opener 没传）。
+
+没做的：
+
+- 三餐的真 app 验收（一回合发问、插话、停止、杀进程，以及铃）。要先在测试 AppData 里铺一个带 charter 的 `meals` 状态文件跳过问卷，或走完问卷；然后三餐页的 ask 入口打开对话，`run2.py meals ask kill bell` 可直接用（`open-meals.js` 要改成点那个入口）。
+
+## 第二阶段第三棒 B（分支 `dev/pi-durable-2f`，从 `origin/dev/pi-durable-2` 011b9dd3 起）
+
+做完的：
+
+- `reading/turn/info-voice.ts` 的 `infoVoiceThread` 交出语音通话的两个口（model、transcript），回合走 info place。放在 reading/turn：要用 `place-session.ts`，而 reading/turn 已依赖 info/briefer（2e 的 `info-bell.ts`），反过来成环。`voice-call-live.ts` 改成由调用方传 `thread`（`LiveVoiceCallOptions.thread`），`use-voice-call.ts` 传 `infoVoiceThread`；`threadTranscript`、`askOnThread` 删掉。`companion-live.ts` 只接工具，不跑回合，没动。
+- transcript 只写读者的句子（带 ts，识别补全照旧按 ts 改那条），回答由运行时落盘。状态机记下的"听到的部分"（打断处截断、带 `INTERRUPTED_MARK`）在回合落盘后按 ts 改写落盘的行（`heardRows`：截点所在行截短加标记，截点之后的行清空文字）。下一回合的历史读文件，模型看到的仍是读者听到的，同旧路。
+- 每次 view 的回答行拼成一条流（行之间加换行），增长部分喂合成；工具按（行 ts，序号）跟起止喂 `onActivity`，起止成对。
+- 回合去处：对话有打开登记的 session（`openPlaceSession(key)`）就走新加的 `session.voice()`，同铃的 guest 回合（结局交给发起方，卡死不重问，失败不出失败行），另把语音那句画在回合行前面（坑 530）；session 里读者自己的回合在跑就先等 `idle()`；没人开着就 headless `drivePlaceTurn`，之后打开对话时 `resume()` 接上它。打断就是停这个回合，半句落盘。
+- 一通电话的回合串行：下一回合等上一回合落盘、改写完再读历史（坑 529）。
+- 回合进行中登记 `watchInfoConversation(key)`：读者在听，落盘不放盒子卡片（不登记时每句回答都放一张，测过）。
+- 被杀：旧路是 soulHarness 的 held 运行，重启时 `soul/recover.ts` 续，正文中被杀则读回半句落到原处、放卡、不重问。新路由运行时恢复，同 info 文本：半句落一次、没人开着时放卡、不重问、不出声。
+- 测试：`tests/reading/turn/info-voice.test.ts` 6 个（流喂合成且三条各落一次、历史用文件且不放卡；写进已有线程；打断后落听到的部分且下一回合接着答；开着的对话里打字进语音回合、回答也念出、对话画出整通；流和工具起止的拼法；听到的部分映射到行），`info-voice-kill.test.ts` 1 个真 SIGKILL（半句一次、不重问、放卡）。旧 `tests/info/briefer/voice-transcript-thread.test.ts` 删掉，用例并进新文件。
+
+和旧行为不同的：
+
+- 模型用 `modelIdFor(settings, "talk")`（同文本对话），旧路是 `defaultModelId`。有运行时的停滞看门狗，卡死时这句语音 failed，不重问。
+- 回答是运行时写的：带工具回执的 trace，工具前后的话分成几行；旧路是一整条纯文本。
+- 文本对话开着时，语音回合在对话里流式出现，打字成插话，插话的回答也念出来；关掉文本对话不停语音回合，回合归通话管，挂断才停（2026-10-11 用户改定，原为「关掉对话会停掉在跑的语音回合」）。
+
+没做的：
+
+- 文本对话开着且空闲时语音进它的 session，依赖 2e 在 `use-info-call.ts` 里加的 `registerOpenSession`；本分支没有，单独合入时这种情况语音 headless 跑，对话里打字撞 `TurnBusy` 出失败行。合了 2e 才完整。
+- 语音回合撞上没有 session 的在途回合（铃的 headless 回合、重启后恢复的回合）报 `TurnBusy`，这句 failed、回到听，不等。
+- 开着的对话不知道"听到的部分"的改写，重开才见。
+- 真机/模拟器上要验：① 开场白念完、问一句、回答念出，对话文件里各一次，盒子无卡；② 开场白或回答中插话，念到的那句截断带标记，下一句正常回答；③ 通话中打开 info 文本对话，在说的回合接上流式出现，打字成插话且回答被念出；④ 合 2e 后文本对话开着时开通话，语音句子和回答画进对话，关对话时语音回合停下；⑤ 回答中杀 app，重开后半句一次、不出声、一张卡；⑥ 工具调用时 Lumen 低头；⑦ 挂断后蒸馏照旧。
+- 坑 531 没用。
+
+## 第二阶段第四棒 A（分支 `dev/pi-durable-2g`，从 `origin/dev/pi-durable-2` 1558f8d1 起）
+
+做完的：
+
+- 删 `soul/harness.ts`（`soulHarness`、`startSoulSession`）、`soul/headless.ts`、`soul/door-chat.ts` 的 `sendAtTheDoor`、`ui/components/chat/useStreamingTurn.ts` 和 `streaming-turn.ts`（已无调用方）及两份测试、`tests/support/scripted-runner.ts` 的 `scriptedBellSender`。`door-chat.ts` 只剩 `prepareDoorTurn`。
+- `soul/bell.ts` 删掉旧路：opener 加 held harness 的回合（`openDelivery`、`send`、`landReply`、`hold`）和没注册门口 deliverer 时的门口回合。现在 place 有 turn deliverer 就走它，返回 null 或没有就走门口的 deliverer，门口也没注册就 `onTrouble` 并停这一轮（铃留在队列）。`AnswerBellDeps` 去掉 `harness`、`send`、`newThreadId`，`BellTurn`、`SendBellTurn` 删掉。
+- `runAgentTurn` 不再收 `deliverTo`，app 里没有写 `DELIVERY_ENTRY`、`PROMPT_ENTRY` 的路了。`runHarnessTurn` 的 `deliverTo` 留着：`recover.test.ts`、`recover-settled.test.ts` 靠它造带戳的旧 session。
+- 收尾旧 session：原来靠 `startSoulSession` 每次启动开 soul 的 held harness（开的时候顺带恢复，再新建一个 session 文件）。换成 `recover.ts` 的 `finishOldSoulSession`（`useBackgroundServices` 调）：列 soul 的 session 组，空就返回、不写任何东西；有就 `holdHarness` 开一次，等 `recoverSoulSession` 跑完，关掉，删掉组里所有 session 文件。没配 provider 或开不了就 warn，组留着下次再试。`sendHeadless` 并进 `recover.ts` 的 `appSend`，行为不变（talk 档、surface `recovery`）。
+- 测试：`bell.test.ts` 改成脚本化的 turn deliverer（门口和书），旧 opener/hold 的用例删掉，加「没注册门口时铃留在队列」「书没了改投门口、卡片仍指书」；`tests/info/briefer/deliver.test.ts` 改成直接调 opener（recover 用的那份）；`door-chat.test.ts` 改测 `prepareDoorTurn`；`harness.test.ts` 删掉，`recover.test.ts` 加三个：旧 session 里 info 回合和门口回合各卡在工具里，第一次启动 info 回合被续完落进简报线程、门口回合 abort、模型只调一次、整组删掉，第二次启动什么都不开不写；没有 soul session 时不读设置不写盘；开不了时不抛、组留着。全量 `scripts/t.sh` 7457 过、1 跳过、0 失败，`bun run typecheck` 过。
+- 87「第二阶段」补了已完成和与原计划不同的地方；55「execute」那段、71「对话按归属存」里 session 那段各加一句指向 87。25 的「契约」是第三阶段（子 agent）的事，没动。
+
+留着的（第四阶段删）：`soul/recover.ts`、`soul/landing.ts`（只剩 recover 用）、`legion/execute/held.ts`，`soul/delivery.ts` 的 opener 注册（`registerDelivery`、`deliveryOpener`、`Delivery`、`DeliveryHold`）和书、简报、三餐的 opener，`DELIVERY_ENTRY` / `PROMPT_ENTRY` 常量。子 agent、后台 pass、agent worker 用的 `legion/execute` 没动。
+
+没做的：
+
+- 真 app 验收没跑：这一棒不改界面行为，升级收尾只有单测。要验的话：用旧版 app 在门口或 info 回合正文中杀进程，换本分支启动，看 info 回合落一次、AppData `session/--session-soul--/` 变空，再启动不新建文件。
+- `tests/info/briefer/handoff.test.ts` 单独跑会挂（"collect" 这个 kind 没人注册，`electFor` 返回 null），全量跑过。和本棒无关，是测试顺序依赖，没修。
+- 实测没有踩到意外，531–533 没用。
+
+
+## 第二阶段第四棒 B（分支 `dev/pi-durable-2h`，从 `origin/dev/pi-durable-2` 1558f8d1 起）
+
+Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` identifier 的 debug 二进制加载本 worktree 的 vite 1437，`VITE_VERIFY_FAUX=1` 慢速 faux，测试 AppData 先挪成 `.bak-2h-*` 再新建，凭据占位值、用完删）。没调真模型，没发现产品 bug。截图、报告页和驱动在会话 scratchpad `verify-phase2/`（`report.html`、`tools/`、`log-*.json`）。
+
+- 三餐：测试 AppData 铺一个 version 2、带 charter、没有周计划的 `info-meals.json` 就跳过问卷，三餐页点「Ask about this week」开对话（`tools/open-meals.js`）。发问流式、插话进同一回合、停止留半句、正文中杀进程重开半句一次且重启后模型调用 0 次、铃空闲时在对话里流式且落盘带 runId、读者回合在跑时铃等落盘、重启不重投：都过。工具里杀进程：读类 `search_conversations` 重启后重跑、接着写完；写类 `add_shopping_items` 不重跑，回执 interrupted 错误、模型接着答，这是 pi-durable 的 `replay` 策略（坑 534），三餐八个工具都是写类。
+- 复述：页内 `createTopic` / `createRetell(topicId, [])` / `talkOutlineForRetell` 建记录（`tools/seed-talk.js`），主题页 Retell 点那一行。开场回合自动起、停止留半句（kickoff 不进文件）、正文中杀进程半句一次不重问、工具里杀进程（`read_retell_outline`）重跑接着写、恢复的回合读文件历史时 kickoff 在最前（`window.__fauxContexts` 核对）、开过口后离开回合在看不见处跑完，回来接上在途回合继续流式、落盘一次：都过。重启后 `__fauxCalls` 多一次是启动蒸馏，不是复述回合（坑 536）。
+- 教练：主题页 Rehearsal 那一行点「How it went」进教练，不经过说一遍。回答一遍、停止留半句、正文中杀进程半句一次且重启后 0 次、工具里杀进程（`read_talk_outline`）重跑接着写：都过。离开 = 停止（2d 的决定），半句落盘，再进不重问；教练没有离开后的在途回合可接。
+- `src/dev-faux.ts`：`__fauxToolDelayMs` 也拖慢 `infoAssemblies`、`retellAssemblies`、`coachAssemblies` 里的工具；新增 `window.__fauxContexts`（每次调用发出去的消息的角色和开头）。工具里杀进程前要把 `__fauxPlan` 改成 `["text"]`，否则新进程的 faux 从第一步重来（坑 535）。
+- 没走：排练的说一遍（要麦克风和转写）。教练、复述的铃（这两面没有铃）。
+- 全量 `scripts/t.sh` 7493 过、0 失败，`bun run typecheck` 过。坑 534–536 用了。
+
+
+## 书界面的插话竞争（分支 `dev/pi-durable-2j`，从 `origin/dev/pi-durable-2` e631ea00 起）
+
+坑 528 在书的两个界面上的修法。`reading/turn/steer-gate.ts` 的 `gateSteers` 包住 runtime 的句柄：记下还在提交中的 steer，停止等它们都返回再调 runtime 的 stop；没有在途 steer 时停止立刻发出。`session/use-call.ts`（手机 EPUB 课堂经 `use-book-lesson.ts` 也走它）和 `phone/lesson/use-lesson-call.ts` 拿到句柄时各包一层，停止、离开、删线程都经过它。`place-session.ts` 没动。测试的假 book turn（`tests/support/use-call.ts`）照 runtime 建模：steer 晚一个 microtask 进 inbox，第一次停止时记下 inbox 快照（`withdrawn`）。`use-call-steer.test.tsx`、`use-lesson-call.test.tsx` 各加一个「插话后同一刻停止」的用例（不修时红），`steer-gate.test.ts` 三个单测。
+
+## 第二阶段：关对话不停回合（分支 `dev/pi-durable-2i`，从 `origin/dev/pi-durable-2` e631ea00 起）
+
+2026-10-11 用户改定：关掉门口、info、三餐对话不等于停止，只有按停止才停。回合在后台跑完、照常落盘；落盘时没人开着这个对话，就放 Lumen 的盒子卡片（`doorPlace` / `infoPlace` 的 `card`，原来只有恢复的回合走到）。排练教练、手机课堂关掉仍是停止；复述开过口后本来就继续跑，不动。（同日后来统一：教练、复述、手机课堂关掉也不停，见文末「关对话不停回合（统一）」。）
+
+做了什么：
+
+- `place-session.ts` 加 `detach()`：给在途回合打 `gone`，之后不画（`draw` 见 `gone` 就返回）、不报 streaming、结算时只把没被收下的话写文件，不开下一回合。不停运行时，装配中的回合照样装配完、起跑。`leave()` 留给 `use-place-chat`（教练、没开口的复述）。
+- `use-door-chat.ts`：cleanup 由 `leave()` 改成 `detach()`，撤 `registerOpenSession` 和 `setDoorWatching`（原来就是立刻撤）。
+- `use-info-call.ts`：cleanup 改成 `detach()` 加立刻 `unwatch()`（撤 `registerOpenSession` 和 `watchInfoConversation`），删掉「等 `onTurnSettled` 再撤 watching」那段。
+- 再打开对话时新 session 的 `resume()` 用 `turnInFlight` 接上同进程里还在跑的回合（原来只碰到重启后恢复的），老 session 也还跟着它到结算，两边都不重复写文件：撤回的 steer 只回给调 `stop()` 的那个。
+- 铃的回合、通话中的语音回合跑在打开的 session 里时，关文本对话同样只 detach：铃落盘后照常 delivered，语音照常念完，挂断（`GuestTurn.stop`）照旧停。
+- 87「第二阶段」加一条；本文第一棒、第二棒 A/B、第三棒 A/B 的相反拍板句改成新规矩并注明日期。
+
+测试：`door-durable.test.ts`、`info-durable.test.ts`（info、三餐各一）加「关掉后回合不停：再开接上、再关后落盘一次、放卡片、老屏不再画、不重问」；`info-call-turn.test.ts` 加 hook 层同一条（卸载、重开接上、再卸载，落盘一次带卡片）；`info-voice.test.ts` 加「通话中关文本对话，语音回合念完、落盘一次」。原来没有「关掉 = 停止」的单测可改，都是新加的。全量 `scripts/t.sh` 7462 过、1 跳过、0 失败，`bun run typecheck` 过。坑 540、541 没用到。
+
+没做、已知边角：
+
+- 关掉后回合答完时还有没被收下的话（来不及 steer 进去的），写进文件但不开下一回合：开回合要装配，装配读的是已卸载 hook 的 `messagesRef`，是旧的。在后台停摆同理，不重问，读者那句留在文件里没有回答。
+- 关掉后、回合还在装配时（`drivePlaceTurn` 没交回句柄前）重开，新 session 的 `resume()` 查不到，回合在后台跑完落盘，重开的屏幕要靠 store 的追加通知才看到回答（没测）。
+- 重开接上时同一回合有两个停摆看门狗（老 session 和新 session 各一个），都会在停摆时 supersede；没实测重复 supersede 会怎样。
+- 真 app 验收（xvfb 或模拟器上门口、info、三餐各关一次对话看卡片、重开接上）没跑。
+
+## 第二阶段 iOS 模拟器验收（分支 `verify/pi-durable-2-sim`，从 `origin/dev/pi-durable-2` f425983f 起）
+
+2026-10-11，iPhone 17 Pro 模拟器，idb 真触摸，`~/rp-flow` detached 在 f425983f，dev server 带 `VITE_VERIFY_FAUX=1`（仓库里的 `src/dev-faux.ts`，12 token/s、每段 20 句）。没改代码。驱动在 Mac `/tmp/pdv2/`（`p2.sh`、`flow.sh`、`surface.sh`、`bell.sh`、`seed.py`），源和报告页在会话 scratchpad `verify-phase2-sim/`。真 Haiku 2 次。
+
+- 门口：发问流式；插话标「after this step」钉在上方，进同一回合第 2 轮；停止留半句（244 字）；流式中关掉，回合跑完落盘一次，盒子 5→6，卡片 origin `door`；关掉再开，在流的行接着长、Stop 在、落盘一次、不出卡片；正文中 SIGKILL，重启后 faux 0 次，半句一次进文件，盒子 +1。
+- info（主页「Tell the companion」进简报线程；要铺一个 `feed` 源，否则卡片只说没源）、三餐（铺带 charter 的 `info-meals.json`、`settings.meals`）：同门口六项都过。两处关闭键都是「Hang up」。三餐的插话进了同一回合第 2 轮，停止另测一次（324 字半句）。
+- 铃（info）：空闲时投，铃回合在打开的对话里流式，落盘带 runId；读者回合在流时投，读者回合落盘后铃回合才起；重启后 turn-log 无新 start、faux 0 次、runId 不重复。`__bell.ring` 的 `deliverTo` 要 JSON 字符串，传对象会当作没写、投到门口（第一次这样投了两只，落门口带卡片，行为正确）。
+- 书（手机 EPUB 课堂）：插话后停止，被撤回的那句开下一回合；回合中插话又停止，最后那句留在线程文件末尾。「插话后几百毫秒内停止」那次 idb 的停止点没打中（键盘弹着时按钮位置变了），回合照常把插话当第 2 轮答了，没测到真正同一刻的竞争，那条仍只有单测。
+- 卡死检测重复（「关对话不停回合」第 3 条）：没写复现单测，预算不够。读代码：`place-session.ts` 的 `settle` 对 `gone` 的老 session 在 `start` 之前返回，重问只会由新 session 发一次；但 `deps.file(owed)` 在 `gone` 判断之前，两边都拿到撤回的插话时可能写两遍，没验证。
+- 升级收尾：容器里有第一阶段留下的 5 个 soul session。没配凭据的第一次启动不动它（组留着，符合设计）；放进凭据后的第一次启动把组删空（目录还在、0 个文件），faux 0 次，说明没有在途回合要续；之后十几次重启目录一直是空的，worker session 没被碰。切代码那一刻踩了坑 537，旧 dev server 的那次重启用新源码跑过一次，组当时还在。
+- 真模型 claude-haiku-5-5：门口首字节 1.62 s、全程 5.3 s；info 首字节 1.81 s、全程 5.3 s。
+- 观察：杀进程恢复后 turn-log 的 `end aborted` 行和同回合 `start` 行的 turn id 不同（门口、info、三餐都这样），没查。重开对话时视图停在旧位置、出「Jump to latest」，与「对话不自动跟随」一致。
+- 没走：排练、复述、语音、iPad 模拟器（下一棒）；工具里杀进程（本轮 faux 计划只有 text）。坑 538、539 没用。
+- 环境：dev server PID 12428（`/tmp/pdv2/devpid`）留着在跑，旧的 24214、24327 已杀；模拟器 app 里的凭据已删、`__fauxPlan` 已清；`~/rp-flow` 工作区干净（只有原来就有的 `plugins/openin/openin-untracked-backup/`），第一阶段的旧 `src/dev-faux.ts` 存在 `/tmp/pdv2/dev-faux.old.ts`。容器里多了今天的 briefing、`info-sources.json`（一个关着的 feed 源）、`info-meals.json` 和 settings 里的 Haiku 设置。
+
+## 重开双看门狗与 turn-log 回合号（分支 `dev/pi-durable-2k`，从 `origin/dev/pi-durable-2` 6357b583 起）
+
+2026-10-11，两处上一节留的疑问，都先写测试，都是真的，都修了。
+
+- 关对话再开接上：老 session（detach）和新 session 各挂一个停摆看门狗。停摆时重问只一次、没有失败行，但撤回的插话两边都写进文件（`tests/soul/door-reopen.test.ts` 红）。改成新 session 的 `resume()` 叫被 detach 的老 session 放手：`DrivenBookTurn.unwatch()` 撤它的看门狗，结算时它什么都不写；没人再打开时老 session 照旧看门、写文件。按停止本来就只有调 `stop()` 的那个拿到撤回的插话，同一测试文件里有一条，修前修后都绿。坑 540。
+- 杀进程恢复后 `end aborted` 行另起回合号（`door-kill.test.ts` 让子进程把 turn-log 写进文件后比对，红）。回合号改由 `startTurn` 生成，存进 `rp.desk.turn` 和 `rp.turn` 输入的 `turn`，`begin`、请求钩子、`onSettled` 都用它。升级前起的回合没有这个字段，仍现生成。坑 541。
+
+全量 `scripts/t.sh` 7469 过、1 跳过、0 失败，`bun run typecheck` 过。没上模拟器。
+
+
+## 第二阶段 iPad 模拟器验收（分支 `verify/pi-durable-2-sim2`，从 `origin/dev/pi-durable-2` 6357b583 起）
+
+2026-10-11，iPad Pro 11-inch (M5) 模拟器（C1F7689F），平板外壳，idb 真触摸，`.dev` 包，慢速 faux（12 token/s、每段 20 句）。没改产品代码。驱动在 Mac `/tmp/pdv3/`（`pdv.sh`、`p3.sh`、`talk3.py`、`book3.py`、`voice.js`、`voiceflow.sh`、`startdev.sh`），源、截图和报告页在会话 scratchpad `verify-phase2-sim2/`。真 Haiku 1 个回合（2 次请求）。
+
+- 排练教练：回答一遍落盘一次；停止留半句（428 字，aborted）；正文中 SIGKILL，重启后 faux 0 次，半句一次进文件，不重问。
+- 复述：开场回合自动起，停止留半句（kickoff 不进文件）；正文中杀进程半句一次、不重问；离开后回合在看不见处跑，回来 Stop 在、正文在长，落盘一次，之后才是蒸馏。
+- 书（平板课堂「Learn this book with AI」）：插话后约 0.2 s 停止（发送用 idb，停止用页面 JS 点按钮），前一回合 aborted、半句留下，被撤回的插话开下一回合答完；隔 1.5 s 用 idb 点停止结果相同。idb 在发送后 0.1–0.3 s 点停止会落空（坑 539）。工具里杀进程：`read_pages` 重跑、接着写完、回合 done；恢复回合第 2 轮首字节 12.8 s，正好落在重新打开书之后，没查是不是在等书载入。
+- info 语音：模拟器起不了音频栈，代码里没有不经麦克风注入转写的入口（`__orbStub` 只驱动球的样子）。用页面脚本 `voice.js` 照 `voice-call-live.ts` 装 `infoVoiceThread` 的两个口直接驱动：问答一轮落盘、不放卡；打断后落「听到的部分」带标记，下一句正常答；通话中打开文本对话接上在流的语音回合，打字成插话（同回合第 2 轮）、插话的回答也进语音流；通话中关文本对话，语音回合跑完、落盘一次、不放卡。通话状态机、识别、合成没走。
+- 真模型 claude-haiku-5-5：教练一回合先调大纲工具再答，11.5 s done。
+- 观察：iPad 教练页 Lumen 在右下角盖住发送键，没隐藏时两次 idb 点发送没发出去，点「Hide Lumen」后正常，原因没查；恢复后 turn-log 的 end 行 turn id 与 start 不同（同上一棒，2k 在改）；课堂逐章预备吃光 faux 的 40 步（坑 538）。
+- 语音要真机做的：① 主页点 Lumen 开通话，开场白念完后说「今天有什么值得看的」，听回答念完，再看 info 对话里这句和回答各一次、Lumen 盒子没有新卡；② 回答念到一半时插话说「停一下，换个话题」，念到的那句截断，打开对话看回答末尾有 interrupted 标记，下一句正常答；③ 回答在念时点主页「Tell the companion」打开文本对话，看这条回答在对话里接着流、Stop 在，打一句字发出，听这句的回答也被念出；④ 文本对话开着时说一句，回答在念时点 Hang up 关掉对话，语音继续念完，再开对话这条只有一次；⑤ 回答念到一半时上划杀 app，重开后对话里半句一次、不出声、盒子一张卡；⑥ 问需要查资料的问题，工具调用时 Lumen 低头；⑦ 挂断后过一会看记忆里有这通电话的蒸馏。
+- 环境：dev server PID 29859（`/tmp/pdv3/pids.txt`）留着在跑，旧的 12428 一组已杀；`~/rp-flow` detached 在 6357b583，工作区干净；iPad `.dev` 容器里的凭据已删、`__fauxPlan` 等已清；容器里有 Verify talk 主题（复述、大纲）、Pride and Prejudice（EPUB 从 iPhone 容器拷来）、`info-sources.json` 和今天的 briefing。
+
+## 关对话不停回合（统一）（分支 `dev/pi-durable-2-close`，从 `origin/dev/pi-durable-2` 0fb61d95 起）
+
+2026-10-11 用户定：所有对话面只有停止键停回合，关掉（点叉、离开页面、返回）一律不停，回合在后台跑完落盘，没人开着就放盒子卡片，再开接上。
+
+扫了一遍哪里关掉会停：
+
+- 已经是这样、没动：门口、info、三餐（上一节）；书的线程（`reading/session/use-call.ts`，iPad、桌面、手机 EPUB 课堂、划线提问）从 docs/03 起就只有停止和删线程才停，卸载不停，`setBookWatching` 按屏幕上开着的 call 判断，落盘没人看就放书的卡片。
+- 排练教练、复述（`ui/components/chat/use-place-chat.ts`）：cleanup 原来 `leave()`（停），复述只有开过口才 `keepOnLeave`。改成一律 `detach()`；`keepOnLeave` 改名 `onLeave`，只表示要不要听「落盘了」（复述延后的蒸馏用，靠 `session.idle()`）。开着时 `registerOpenSession` 加 `watchOneThread`。`reading/turn/one-thread-place.ts` 的 lander 原来 `watching: () => true`、不放卡；现在按 `watchOneThread` 判断，没人开着就调 place 的 `card`。教练、复述的卡片在 `coach-durable.ts` / `retell-durable.ts` 的 `putCoachCard` / `putRetellCard`（`putOneThreadCard`，boxId `<id>:<ts>`）。
+- 手机 PDF 课堂（`ui/components/phone/lesson/use-lesson-call.ts`）：卸载原来 `abort()`（停）。改成 `detach()`：在途回合打 `gone`，不画、不停，装配中的照样起跑，结算时只把没被收下的话写文件，不开下一回合、停摆不重问（同门口）。`setBookWatching` 原来按回合挂（关掉时停下的半句不放卡），改成按屏幕挂：课堂开着就算看着。再开课堂时 `resumedBookTurn` 接上同进程的在途回合，并叫老 hook 放手（`unwatch` 看门狗、结算什么都不写），坑 540 同款。放手的登记抽成 `reading/turn/detached-turns.ts`，`place-session.ts` 也改用它。
+- 盒子卡片：`BoxOrigin` 加 `talk`、`retell` 两种（不存主题 id，跟随时 `App.tsx` 读大纲或复述的 `topicId`，`LibraryScreen` 收 `open` 请求打开教练或复述）；`box-jump.ts` 加 `open-coach`、`open-retell`、手机的 `open-book-conversation`。手机原来书的卡片一律「请在 iPad 或桌面打开」，现在开那本书的对话：PDF 进课堂（`shelf-list.ts` 的 `conversationDoor`），EPUB 开阅读器并在书载入后 `reopenThread` 那条线程（`PhoneReader` / `use-book-lesson.ts` 的 `openThreadId`）。教练、复述的卡片在手机上说「这一条请在 iPad 或桌面端打开」（`shell.box.notOnPhone`，9 种语言），旧的 `box.notReadable` 删了。
+
+保留的例外（同日后来改掉，见下一节）：手机课堂里点「问这一段」进 aside 时仍先停课堂的回合（`PhoneLessonScreen.tsx` 的 `enter`）。这不是关对话，是在课堂里开另一条对话；不停的话回来时 aside 的回执行会写在还没落盘的回答前面（文件顺序乱）。要统一得先把回执改成按时间插，没做，等主会话定。课堂开着、在 aside 里时课堂线程仍算「看着」，落盘不放卡，回来 `reload()` 读文件看到。
+
+测试：`one-thread-place.test.ts` 教练、复述各加两条（faux：关掉后回合不停、落盘一次、放一张卡、老视图不再画；关掉再开接上、落盘一次、不放卡）；`use-lesson-call.test.tsx` 原「离开停回合」换成三条（关掉不停、落盘后写没收下的话、不开新回合、不再算看着；装配中关掉照样起跑；再开接上、老 hook `unwatch` 一次、老回合停摆什么都不写）；`box-jump`、`box-cards`、`phone-shelf-list` 各加一条；`tests/palace/derived.test.ts` 登记 `LibraryScreen.tsx`（内存里带主题 id）。全量 `scripts/t.sh` 7478 过、1 跳过、0 失败，`bun run typecheck` 过。坑 542、543 没用。
+
+没做：
+
+- Linux xvfb 真 app 验收（教练、手机课堂窄屏：答到一半关掉看卡片、点卡片看到全文一次；答到一半再开接上；停止留半句）没跑，工具调用预算用完。下一棒照第二棒 B 的做法（Xvfb、`verifylinux` identifier 的 debug 二进制、本 worktree 的 vite、`VITE_VERIFY_FAUX=1`，换代码后重起 vite，坑 403）。
+- hook 层：`use-place-chat` 没有 hook 测试（同上一节），关掉不停只在 place 层测了；`LibraryScreen` 的 `open` 请求和两个外壳的跟随卡片是 tsx，只过了类型检查。
+- 关掉后、回合还在装配时重开（`drivePlaceTurn` / `driveBookTurn` 还没交回句柄），新视图查不到在途回合，要等落盘后靠追加通知或重开才看到（同上一节，没测）。
+
+## 关对话不停回合：aside 与装配中重开（分支 `dev/pi-durable-2-close`，从 b390f36e 起）
+
+2026-10-11，补上一节留的两处。
+
+- 手机课堂进 aside 不再停课堂的回合（`PhoneLessonScreen.tsx` 的 `enter` 去掉 `stop()`）。回合在 aside 底下照常跑、照常画进课堂的行。顺序照教练卡片的做法：回执行回来时就写进文件（追加在末尾），回合落盘的行追加在它后面，所以文件里是「问题、回执、回答」；屏幕上 `use-lesson-call.ts` 的 `draw` 改用 `withPlaceTurnRows` 带 `isCardRow`，卡片行留在回合的行上面；`reload()` 碰到还在跑的回合，把文件读回来再接上回合最后画的行和没收下的话，不清掉正在流的回答。回来只看到一次，落盘后再 `reload` 和屏幕一致。看着：在 aside 里课堂不算看着（`LessonBook.covered`，屏幕传 `() => aside 开着`），落盘放卡片，同桌面 aside 打开时父对话不算看着。
+- 装配中重开：`detached-turns.ts` 加 `holdStarting(key)` / `turnsStarting(key)`。每个回合从开始装配到运行时接手（`drivePlaceTurn` / `driveBookTurn` 交回句柄）登记在这里，装配失败、停止、拒绝也放开。查在途回合的唯一入口 `durable-turn.ts` 的 `resumedPlaceTurn` 先等调用那一刻登记着的回合，再 `turnInFlight`，所以门口、info、三餐、教练、复述（`place-session.ts` 的 `start` 和铃/语音的 `guest`）和手机课堂（`use-lesson-call.ts`）重开都在起跑后接上。只等调用那一刻已登记的，新屏幕自己后来起的回合不会让它等自己。书的线程（`use-call.ts`）不受影响：在途回合登记在模块级的 `readingTurns()`，装配时就在，重开的 `joinInFlight` 看到它就不去查运行时，没改。
+
+测试：`tests/soul/door-reopen.test.ts` 加两条（faux：装配中关掉再开，新 session 的 `resume()` 等到起跑、接上、落盘一次、老 session 不画不写；装配中再开、原 session 停止，`resume()` 返回 false，不调模型），第一条去掉等待就红。`use-lesson-call.test.tsx` 加三条（回合在跑时文件多了回执，`reload` 后回执在流的回答上面、回合不停，落盘后屏幕和读回的文件一致；`covered` 为真时不算看着；装配中关掉，`turnsStarting` 等到 `driveBookTurn` 交回，停止也放开）。全量 `scripts/t.sh` 7483 过、1 跳过、0 失败，`bun run typecheck` 过。坑 542、543 没用。
+
+没做：
+
+- 真 app 验收没跑（本棒不开 app）：手机课堂答到一半点「问这一段」、在 aside 里问一句再回来，看回答接着流、回执在它上面、落盘后只有一次、盒子有一张卡；门口或三餐发问后立刻关掉再开，看到在流的回答。
+- `PhoneLessonScreen` 的 `enter` / `covered` 接线是 tsx，只过了类型检查。
+- 回执行的 ts 比它下面落盘的回答大，文件按追加顺序不按 ts。教练卡片原来就是这样；按 ts 找位置的代码（`withTurnRows` 一类）只用在回合还在跑的那段屏幕上，没发现别处受影响。
+
+## 关对话不停回合：Linux 验收（分支 `verify/pi-durable-2-close-linux`，从 `dev/pi-durable-2-close` 64ce077a 起）
+
+2026-10-11，xvfb `:93`，`verifylinux` debug 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`（20 token/s、每段 30 句 2700 字），没调真模型，没改代码。驱动和截图在会话 scratchpad `verify-close-linux/`（`tools/close.py`、`asm.py`、`doorbg.py`），报告页 `verify-close-linux/report.html`。
+
+- 教练、复述：答到一半关掉，回合跑完落盘一次、一张卡（origin `talk` / `retell`），点卡进教练或复述页、回答只一次；关掉再开，Stop 在、正文接着长、落盘一次、不放卡；停止留半句（476 / 484 字）、不放卡。
+- 手机 PDF 课堂（xdotool 把窗口改成 390x844，`?shell=phone`）：开场回合答到一半点返回，落盘一次、一张卡（paper.pdf），点卡进课堂、回答一次。
+- 装配中重开：页面脚本把 `appData` 的读文件包一层，发送后 1.5 s 内开始的读延迟 3 s，发送到第一次模型调用从 265 ms 拉到 3244 ms。门口、三餐发送后 150 ms 关、2 s 内重开（模型调用仍 0 次），重开的视图出 Stop、接着流、落盘一次、不放卡。
+- 门口答到一半关掉（回归）三次，每次落盘一次、一张卡。手机上点教练卡片显示「This one opens on the iPad or the desk.」。
+- 没走（工具调用预算用完）：手机课堂答到一半再开、停止，以及「问这一段」进 aside 再回来（回执在回答上面、只一次、在 aside 里落盘放卡、重开顺序不变）；iPad 宽度的书线程关掉；手机上点复述卡片。下一棒照本节做法，课堂书已铺好：测试数据目录 `library/b39e958bfae6fe29ccf67974459bb93e.pdf` 挂在 Verify talk 主题下。
+- 环境坑（非产品）：worktree 的 vite 起来后再放进 `public/` 的文件取回的是 index.html（坑 403 同因），铺书要直接拷进数据目录的 `library/`。Tauri 窗口没有 `set_size` 权限，改尺寸用 xdotool。坑 542、543 没用。
+
+第二棒（2026-10-12，同分支，驱动 `scratchpad/vcl3/tools/phone.py`，截图和报告页仍在 `verify-close-linux/`，报告页加了「Round 3」一节）：
+
+- 手机课堂答到一半再开：Stop 在、正文接着长、落盘一次（2700 字）、不放卡、模型调用一次。停止：半句 556 字留在文件，不放卡。
+- 「问这一段」答到一半点不出来，是真 bug，修在 b4419e0e：`PhoneLesson.tsx` 在 `messages` 每次变化时清掉长按选中的段落，回答在流时每个 token 都是新数组，菜单出来约 150 ms 就关。改成只在那段所在的回答不在课堂里时才清（`lesson-aside.ts` 的 `heldSpanStands`，单测在 `lesson-aside.test.ts`）。全量 `scripts/t.sh` 7485 过、0 失败，`bun run typecheck` 过。
+- 修后 aside：在 aside 里待到课堂回答落盘，落盘一次、放一张书的卡片（盒子 5→6），回来时回执写在回答后面（按时间）。回答还在流时回来，回执在流的回答上面，屏幕和文件一致（回执 ts 1791734713772 在回答 ts 1791734696699 上面），回答一次、不放卡。aside 自己的回合在回来时还没答完，在后台跑完落进 aside 线程，放一张指向 aside 线程的书卡（盒子 6→7），符合关掉不停的规矩。再开课堂，屏幕顺序和文件顺序都不变，没有按 ts 重排。
+- 合成长按要点在视口内一段已落盘回答的 `[data-reply-ts] p` 上，流着的回答没有 `data-reply-ts`，按它什么都不出（设计如此）。
+- 没走（工具调用预算用完）：iPad 宽度的书线程关掉（落盘一次、没人看时卡片怎样）；手机上点复述卡片（盒子里唯一的复述卡已是 told，要先在桌面宽度用 `close.py retell <id> bg` 造一张新的；这一棒切回 1280 宽后 `close.py` 没打开复述页，没查）。坑 542、543 没用。
+- 环境：本棒起的 Xvfb `:93`、vite、app 的 PID 记在 `scratchpad/vcl3/pids/history`，收尾已杀。
+
+第三棒（2026-10-12，同分支，驱动 `scratchpad/vcl4/tools/book.py`（书线程）和 `close.py`、`size.sh`（vd.py 指向本棒 worktree），报告页加了「Round 4」一节）。没改代码。
+
+- 桌面 1280 宽书线程（paper.pdf 的课堂线程，「Learn this book with AI」打开）：答到一半点 Hang up 留在阅读器里，回合跑完落盘一次（2700 字），放一张书卡（origin `book`、线程 id，盒子 7→8）；点卡打开那条线程，回答只一次，盒子回到 7。答到一半点「Back to library」（阅读器卸载）结果相同；在主题页点卡，进阅读器开那条线程，问题和回答各一次。书线程和教练、门口、课堂一样放卡，不是 bug。落盘后多出的一次模型调用是课堂预备（坑 538）。
+- 手机点复述卡：先在 1280 宽用 `close.py retell 1791700498974 bg` 造一张新卡（落盘一次、一张卡 origin `retell`），再改成 390x844 加 `?shell=phone`，点卡显示「This one opens on the iPad or the desk.」，卡仍在盒子里（`in-box`）。
+- 第二棒「切回 1280 宽后 `close.py` 没打开复述页」是驱动的毛病：reload 后驱动从 Topics 进，找文字以「Verify talk」开头的元素，主题行的文字前面带头像字母（「PVerify talk1 file」），匹配不到就抛错。直接点那一行能正常进主题和复述。
+- 本轮的复述那一跑覆盖了第一棒的 `retell-bg-1-streaming.png`、`retell-bg-2-landed-home.png`（同一场景）。坑 542、543 没用。
+- 环境：Xvfb `:93`、vite、app 的 PID 记在 `scratchpad/vcl4/pids/history`，收尾已杀。本棒 worktree 跑过 `bun run wasm`（`public/pdfium/` 未跟踪，没提交）。
+
+## 关对话不停回合：模拟器验收（分支 `verify/pi-durable-2-close-sim`，从 `dev/pi-durable-2-close` 64ce077a 起）
+
+2026-10-12，iPad Pro 11-inch (M5)（C1F7689F）和 iPhone 17 Pro（18CF1932）模拟器，`.dev` 包，idb 真触摸，Mac `~/rp-flow` detached 在 64ce077a，只起 vite（`VITE_VERIFY_FAUX=1`，20 token/s、每段 30 句 2700 字），原生部分自 f425983f 没变所以没重装 app。容器里放占位凭据（跑完已删）。没调真模型，没改代码。驱动 Mac `/tmp/pdv4/d.py`，截图、日志和报告页在会话 scratchpad `verify-close-sim/`。11 项全过。
+
+- iPad 教练、复述：答到一半点叉再点 Today，落盘一次、一张卡（origin `talk` / `retell`），点卡进教练或复述页、回答一次；关掉再开，Stop 在、正文接着长、落盘一次、不放卡；停止留半句（588 / 596 字）、不放卡。复述落盘后多一次模型调用是延后的蒸馏。
+- iPad 书（平板课堂）：答到一半点 Hang up，落盘一次，对话关着所以放一张书的卡；再开课堂回答一次。
+- iPhone 门口：答到一半关掉，落盘一次、一张卡。装配中重开：页面脚本让发送后 2.5 s 内开始的 `appData` 读延迟 6 s，回车发送、0.52 s 后点 Close（模型调用 0 次），长按卢明点 Text 在 4.6 s 重开（仍 0 次），重开的视图出 Stop、接着流、落盘一次、不放卡。前一次重开没点中菜单，回合落盘一次、放一张卡。
+- iPhone 教练卡片（页面脚本 `putOneThreadCard` 铺的，手机上没有教练）：点了显示「This one opens on the iPad or the desk.」。
+- iPhone PDF 课堂（attention.pdf）：答到一半点返回，落盘一次、一张书的卡；点卡进课堂、回答一次，盒子少一张。
+- 观察：iPad 教练页卢明盖住发送键，idb 点 Send 发不出去（上一棒也见过），回车能发。盒子列表可滚动，卡片多时下面的卡在屏幕外，idb 要点列表顶上那张。
+- 没走：手机课堂答到一半再开、停止、「问这一段」进 aside；手机上点复述卡片。坑 544、545 没用。
+- 环境：vite PID 93151（子进程 93153，`/tmp/pdv4/vitepid`）留着在跑；旧 dev server 29859 一组已停；ios_webkit_debug_proxy 78195 没动；iPhone 的 `__fauxPlan` 已清，iPad 的还在（app 没开着）。
+
+第二棒（2026-10-12，分支 `verify/pi-durable-2-close-sim2`，从 `dev/pi-durable-2` 8d6a7d8b 起，含 aside 修复和 b4419e0e）：Mac `~/rp-flow` 切到 8d6a7d8b、重起 vite（坑 403），只用 iPhone 17 Pro，同样的 faux 和占位凭据（跑完已删、`__fauxPlan` 已清）。驱动 Mac `/tmp/pdv5/d.py`（`round2 reopen-stop|aside-live|aside-stay`），副本、截图、日志在会话 scratchpad `verify-close-sim2/`，报告页 `verify-close-sim/report.html` 加了「Round 2」一节。6 项全过，没改代码。
+
+- 手机课堂答到一半返回再开：Stop 在、正文接着长（4 s 13808→14143 字）、落盘一次、屏幕上一次（两个问题之间 30 句）、不放卡、模型调用一次。停止：半句 600 字留在文件，15 s 后不变，不放卡，没有多的调用。
+- 「问这一段」：回答在流时真长按一段已落盘的回答，菜单 0.6 s、3.1 s 都还开着（b4419e0e 修好了）。在 aside 里问一句、4 s 后回来：Stop 在、回答接着流，回执在流的回答上面（屏幕和文件都是问题、回执、回答），回答一次，课堂不放卡；aside 自己的回答在后台跑完，放一张指向 aside 线程的书卡（同 Linux）。在 aside 里待到课堂落盘：放一张课堂线程的书卡，aside 的回答在开着时落盘不放卡，回来回执在回答后面。两种情况再开课堂顺序都不变。
+- 手机点复述卡（页面脚本 `putOneThreadCard` 铺的，origin `retell`）：显示「This one opens on the iPad or the desk.」，卡留在盒子里。
+- 观察：从 aside 回来不滚动（不自动跟随），回执要按 DOM 顺序查或滚过去看。在 aside 里放的课堂卡片，回来读过回答后仍留在盒子里，只有点卡才收走。驱动找段落时要按「和视口相交」取：faux 的回答是一个 1560 px 高的 `<p>`，整段落在视口内的条件永远不成立。坑 544、545 没用。
+- 环境：vite PID 6861（子进程 6863，`/tmp/pdv4/vitepid`，`/tmp/pdv4/pids-history`）在 `~/rp-flow` 8d6a7d8b 上留着跑；旧的 93151/93153 已停。iPhone 盒子里多了 seed 复述卡和本轮的几张书卡。
+
+## 第二阶段 iPad 真机验收（第二轮）（分支 `verify/pi-durable-2-ipad2`，从 `dev/pi-durable-2` 7195343e 起）
+
+2026-10-12，iPad（iPad15,7，iOS 26.7.1）插 Mac mini，pymobiledevice3 装包、`dvt launch/kill/screenshot --userspace`，ios_webkit_debug_proxy 进 WKWebView。Mac `~/rp-ipad` 切到 7195343e，`~/build.sh`（`VITE_VERIFY_FAUX=1`）出 `/tmp/rp-dev-ipad2.ipa`，装前读回 CFBundleIdentifier 为 `.dev`。慢速 faux 20 token/s、每段 30 句 2700 字。真机没有程序化触摸，全部输入走页面 JS（点按钮、设 textarea、Lumen 用 `contextmenu` 事件开菜单），读文件直接调 `plugin:fs` 和 `write_text_file_atomic`（ipa 是生产构建，没有 `/src` 模块和 `__bell`）。驱动 Mac `~/v2.py`（页面助手 `~/v2h.js`，`~/rp_lib.py` 是去掉 `main()` 的 `rp.py`），日志和截图在 Mac `/tmp/v2/`，副本和报告页在会话 scratchpad `verify-ipad2/report.html`。没改代码，坑 546、547 没用。
+
+- 升级收尾：过。旧包（第一阶段）的 `session/--session-soul--` 里 5 个只有表头的 session。新包没凭据第一次启动不动；放占位凭据后第一次启动把组删空（目录留着），没有 soul 回合。启动时跑了一次 `subagent` 回合，拿占位凭据打到 Anthropic 得 401。
+- 门口：关掉落盘一次、一张卡（origin door），点卡开门口对话、回答一次；关掉 3 s 后重开，Stop 在、正文接着长、落盘一次、不放卡；停止留半句 732 字、12 s 后不变；切后台 30 s、60 s（`dvt launch` 设置），离开时 JS 冻结，回前台 1.5 s 内接着流，回合 done，没有停摆和重问；正文中 SIGKILL，重启 faux 0 次，半句 780 字一次、一张卡，`end aborted` 与 `start` 同一个回合号（2k 修复在真机上成立）。
+- info、三餐：关掉、重开同门口都过，info 杀进程同门口。info 卡（origin briefing）点了进简报页，三餐卡进三餐页，都不打开对话，要再点「Tell the companion」/「Ask about this week」才看到回答（box-jump 的设计，记一笔）。
+- 教练、复述：关掉一张卡（talk / retell）、点卡进页面回答一次；重开接着流；教练停止留 740 字、杀进程半句 768 字一次加一张卡。真 iPad 上卢明盖住教练和复述页的 Send 键（Send 中心点的 `elementFromPoint` 是卢明的按钮）。
+- 书（iPad 课堂）：Hang up 关掉落盘一次、一张书卡带线程 id，点卡开回线程、回答一次；插话后 200 ms 停止，前一回合 aborted 留 596 字，插话开下一回合答完；`read_pages` 拉到 15 s 时 SIGKILL，重启同一回合号重跑工具、接着跑完 done。恢复后第 4 轮首字节在第 3 轮工具之后 13.3 s，早于重开书，和 iPad 模拟器的 12.8 s 同样，没查。
+- 铃：读者 info 回合在流时往 `legion/bell/` 写一只 run-done 铃（deliverTo 简报），读者回合落盘后 93 ms 铃回合才起，落在读者回答之后，铃 acked，对话开着不放卡；重启后 turn-log 无新行、faux 0 次、不重投。
+- 真模型：没跑。Linux 上的 access token 跑之前已过期 13.9 小时，Haiku 0 次。
+- 库：本轮 31 个回合（门口 6、info 6、教练/复述 6、书 5、铃 1、subagent 7）后主库 1,359,872 字节、WAL 4.2 MB 未 checkpoint；第一阶段结束时主库 316 KB，约 33 KB/回合。拷出来 checkpoint 后 1.38 MB，`entries` 占 1.0 MB。
+- 没走：真模型一回合（要新的 access token）、语音（和用户一起）、复述停止和杀进程、三餐停止和杀进程。
+- 收尾：容器里占位凭据已删，`__faux*` 键已清，app 重起（PID 7599）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里多了 Verify talk 主题（大纲、复述从 iPad 模拟器拷来）、`info-sources.json`、`info-meals.json`、今天的 briefing、`settings.meals`。
+- 接着做：access token 有效（离过期超过 30 分钟）时只拷 `access`、`expires` 进 `.dev` 容器，`refresh` 填假值；`~/v2.py flow door bg60` 跑一个 Haiku 回合（注意回前台可能多一次 `subagent` 请求），完了删凭据。`~/d.sh pull durable` 拉完 afc 不退出，文件到了就杀自己记下的那个 afc PID。
+
+第三棒（2026-10-12，分支 `verify/pi-durable-2-ipad3`，从 `dev/pi-durable-2` cf5cd527 起）：iPad 上的 `.dev` 包还是 7195343e 那次装的（之后只改了文档），没重装。同样的慢速 faux 和占位凭据，驱动沿用 Mac `~/v2.py flow retell|meals stop kill`，工具里杀进程用 `~/v3.py`（副本在会话 scratchpad `verify-ipad2/tools/v3.py`），报告页 `verify-ipad2/report.html` 加了「Round 3」一节。5 项全过，没改代码，坑 546、547 没用。
+
+- 复述停止：半句 768 字，12 s 后不变，不放卡，没有多余模型调用。
+- 复述杀进程：半句 780 字在线程里一次、重开画一次，不重问（重启后那一次 faux 调用是启动时的 `subagent` 回合）；turn-log 的 start、first-byte、`end aborted` 同一个回合号；放一张 retell 卡，同门口和教练。
+- 三餐停止：半句 748 字，不放卡。三餐杀进程：半句 792 字一次，重启 faux 0 次，`end aborted` 与 start 同号，一张 meals 卡。
+- 三餐工具里杀：faux 调 `add_shopping_items`，`__fauxToolDelayMs` 拖 25 s，进工具 7 s 后 SIGKILL，杀前把 `__fauxPlan` 改成只出文字。重启后同一回合号再 start，工具不重跑，模型拿到 `Tool add_shopping_items was interrupted` 错误、第 2 轮接着说完 done；线程 trace 里工具是 error，购物清单没变（坑 534）。
+- 启动时的 `subagent` 回合不固定：一次重启跑了两个（第二个晚 20 s），另两次一个没有。faux 计划按顺序出步，所以要杀在工具里得让前几步都是 tool。
+- 三餐停止那条 `end` 没有 `conversation` 字段，杀进程那条有，没查。
+- 收尾：`credentials.json` 已删并确认不在，`__faux*` 键已清，app 重起（PID 7738）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里三餐线程多了几问几答，购物清单没变。
+- 还没走：真模型一回合（要新的 access token）、语音。
+
+第四棒（真模型）（2026-10-12，分支 `verify/pi-durable-2-ipad4`，从 `dev/pi-durable-2` e595e3c8 起）：iPad 上还是 7195343e 的 `.dev` 包。用户 Linux app 改登 OpenAI，按用户定的用 app 里 openai 最便宜的 `gpt-6-luna`（输入 0.1、输出 0.5 美元/百万 token）。`settings.json` 写 `defaultProviderId: openai`、三个模型 id 都是 gpt-6-luna，重起 app（PID 7753）；凭据只拷 `openai` 的 `type`、`access`、`expires`，`refresh` 填假值，过期前还有约 10 天。驱动 Mac `~/v4.py prep|run|clean`（副本在会话 scratchpad `verify-ipad2/tools/v4.py`），报告页加了「Round 4」一节。
+
+- 没过，找到真 bug：门口回合 `start` 后 59 ms `end error no_model`，没发请求。durable 回合按 app 的 provider id（`openai`）找模型，`createAppModels` 按 pi 的 id（`openai-codex`）登记（坑 546）。修在本分支：app id 和 pi id 不同时按 app id 再登记一份，加了 `tests/ai/durable-models.test.ts`；`scripts/t.sh`、`bun run typecheck` 过。所以切后台 60 s 那半没量到：回合在后台前就已经失败。
+- 模型请求共 2 次，都是回前台时那次启动 `subagent` 回合（老路，provider 记 `openai-codex`，第 1 轮 toolUse、第 2 轮 stop，`done`，8.4 s）。门口 0 次。页面里挂 `__TAURI_INTERNALS__.invoke` 计数没挂上（属性不可写），次数按 turn-log 的轮数算。
+- 库：这回合前后主库 1,658,880、WAL 4,223,032 字节都没变（失败回合只写了 turn-log 和对话里读者那一句）。
+- 收尾：Linux scratch、Mac `/tmp/rp-cred4.json`、设备容器的 `credentials.json` 都删了并逐个确认不在，日志里没有 token 值。`settings.json` 留着 openai / gpt-6-luna。iPad 上 `.dev` app PID 7753 在跑；Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。
+- 接着做：带这个修复重新出 `.dev` 包装到 iPad，再放一次凭据跑 `~/v4.py run`（门口一回合加切后台 60 s）。用户给的 3 次请求已用掉 2 次，启动时的 `subagent` 回合可能再吃 0 到 2 次，要先找用户要新的次数。
+- 重跑（同日，`dev/pi-durable-2` 5abfac2d，含本修复、按设备存模型设置、「Hang up」改「Close」）：Mac `~/rp-ipad` 切到 5abfac2d，`bash ~/build.sh`（`~/build.sh` 没有执行位）出 `/tmp/rp-dev-ipad4.ipa`，读回 CFBundleIdentifier 为 `.dev`，`apps install` 成功（旧的 PID 7753 随安装退出）。之后 `dvt launch` 一直报 `Failed to launch process`，截屏全黑：iPad 锁屏或灭屏了，要人解锁。凭据这次还没放，Linux、Mac、设备上都没有副本。用户给的 6 次请求一次没用。
+- 解锁后跑完（app PID 7967 起、改 `device.json` 后重起为 7975）：新包第一次启动 `device.json` 里没有 provider/model 三个键（不在时回落 `settings.json`，是设计如此），为保险写进 openai / gpt-6-luna 再重起。凭据同样只拷 `type`、`access`、`expires`，`refresh` 填假值。
+- 门口回合一（等正文出现再切后台）：过，但没测到冻结。turn `31d24c69`，start → 第 1 轮首字节 3.4 s（`toolUse`，卢明的「Where this belongs」归档卡）→ 第 2 轮首字节 3.2 s → `end done` 9.0 s，答案 696 字。正文开始画后 1 s 发出切后台，回合在切后台后约 1.6 s 写完，落在进后台的宽限里；回前台没有重问、没有停摆，答案进对话文件一次。
+- 门口回合二（发出后立即切后台，问题要八段）：过。turn `7f9d68a2`，切后台的命令返回时回合刚起，之后第 1 轮首字节、`toolUse`、第 2 轮首字节、`end done`（13.7 s，1975 字）都在后台发生，最后一行在进后台后约 10 s；回前台 60 s 后答案已在，读者那句和答案各一次，没有重问、没有多余回合、看门狗没动作。门口对话开着，没放卡（box 12 个不变）。所以这台 iPad 进后台后 JS 还能跑约 10 s，比第一阶段量到的「几秒」长；gpt-6-luna 这种快模型的回合在宽限里就跑完，测不到冻结 60 s 再接上的那条路（那条第二轮已用慢速 faux 验过）。
+- 请求：共 4 次，两个门口回合各 2 轮（第 1 轮归档工具、第 2 轮回答）；这次启动和回前台都没有 `subagent` 回合。加上第一次失败那轮的 2 次，今天对 OpenAI 一共 6 次。
+- 库：回合一后主库从 1,658,880 涨到 1,687,552 字节（+28 KB），回合二后不变；WAL 文件一直是 4,223,032 字节（复用已分配的页，没 checkpoint）。
+- 观察：凭据放好以后首页简报卡还显示「Configure a provider to begin」（截图 r4-door-bg60-early-landed），没查。
+- 收尾：Linux scratch、Mac `/tmp/rp-cred4.json`、设备容器的 `credentials.json` 都删了并逐个确认不在，Mac 上 7 份 r4 日志里没有 token。`device.json` 和 `settings.json` 留着 openai / gpt-6-luna。iPad 上 `.dev` app PID 7975 在跑；Mac 上 ios_webkit_debug_proxy 78195 在，vite 6861/6863 已不在（不是我杀的，大概随 `~/rp-ipad` 换版本重建时退出）。
+
+## 被杀后恢复首字慢 13 秒（分支 `fix/recovery-first-byte`，从 `origin/dev/pi-durable-2` f5aaf7d5 起）
+
+不是产品延迟，是 turn-log 记错（坑 555）。首字节只由跟随者写，恢复的回合没人跟随，读者点开课堂线程时第一张视图里已是流了一半的回答，被当成第一片，记下的是「请求到打开线程」的时长。iPad 上的 13 s 就是驱动重开线程花的时间；那一轮 `round` 的总时长（34.4 s / 37.9 s）等于 faux 正常流完的时间，工具重跑也是全速（脚手架的延时只包本进程装配的 desk，恢复的回合不经 `put`）。
+
+Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`，没调真模型）：`read_pages` 拖 20 s 时 SIGKILL，重启后等 20 s 再开课堂。恢复请求在重启后 +12.49 s 发出，faux 第一个 delta 在 +12.74 s，`follow` 在 +36.64 s，turn-log 的 `first-byte` 在 +36.84 s、`ms=24311`。修后同样跑一遍，那一轮只有 `round` 和 `end`，没有假首字节。
+
+修法：`resumedPlaceTurn` 的跟随者带 `joining`，第一张视图里已有回答就调 `DurableTurnLog.joined`，这一轮不写首字节；之后的轮次照常。单测两条在 `tests/reading/turn/durable-turn-log.test.ts`（去掉修复时集成那条失败）。全量 `scripts/t.sh` 7498 过、0 失败，`bun run typecheck` 过。
+
+驱动在会话 scratchpad `rfb/tools/rk.py`（`rk.py <重开前等几秒> <tag>`）。它要一份带计时的脚手架（`rfb/dev-faux.instrumented.ts`，没提交）：faux 只在读者那句以 `RFB` 开头时出工具调用，其余一律文字，否则启动时的 `subagent` 回合和课堂预备会先吃掉计划里的 tool 步。坑 556 没用。
+## 语音回合撞上在途回合（分支 `fix/voice-turn-queue`，从 `origin/dev/pi-durable-2` f5aaf7d5 起）
+
+- 现象：通话中说一句，对话上已有别的回合（铃的 headless 回合、重启恢复的回合、关掉对话后还在跑的文字回合）没有 session，语音回合 `startTurn` 报 `TurnBusy`，这句 failed 回到听。
+- 改法：`info-voice.ts` 的 `answer` 先 `quiet()` 等对话上没有回合（打开的 session 在跑就等 `idle()`；再等 `turnsStarting`，再 `turnInFlight` 的 `settled`），等完才读线程文件、装配、起回合；起的时候仍撞 `TurnBusy`（session 的 guest 或 headless）就回到等，重新装配。语音那句只落一次、只答一次，等的时候不抛错，通话界面停在思考态。对自己语音回合的打断（坑 529）不变。
+- 定的：说的话不插进在跑的读者回合，排在它后面。`say()` 插话是因为打字的人在对话里看着那个回合；通话只念自己的回合，插进别的回合答案就不会被念出来，打断也会停掉别人的回合。
+- `withPlaceTurnRows`：回合自己画的行（语音那句）不在 `after` 之上再画一次。语音那句落盘早于被等的回合，等完 `after` 取线程里最后一行，那句画在被等回合的答案下面。
+- 测试：`info-voice.test.ts` 加 4 个（无人看的铃、对话开着跟着恢复的回合、关掉对话后的文字回合、同一毫秒），原打断用例不动。
+- 没做：Linux xvfb 走查（只跑单测）。线程文件里语音那句排在被等回合的答案前面（落盘按说出的时间），重开对话时也这样显示，同打字插话没被接走时的落盘。
+- 新测试初版偶发失败（铃的回答不在语音回合历史里、屏幕上也没了），插桩复现 40 次 19 次：时间线是先后的（铃落盘后语音才装配、起跑，没有并发，faux 顺序没乱），是铃的回答和语音那句同一毫秒，`answer()` 按 `ts` 排除那句把回答一起排掉，见坑 554。改成角色加时间戳，四处 `excludeTs` 回退一并改；加一个固定时钟的用例（修前必挂），三个撞车用例恢复成别的回合一起跑就说话，连跑 25 遍全过。
+
+## 第三阶段 A 棒：子 agent（分支 `dev/pi-durable-3-a`，从 `origin/dev/pi-durable-3` f5aaf7d5 起）
+
+做完的：
+
+- `legion/durable/child.ts`：`rp.subagent` 文档、`ChildDesks`（子对话 id 到调用方的 AgentTool，调用先到就等）、`childExtension`（每个定义一个 `rp-agent-<名字>` extension，执行走 `ChildDesks`）、`childStats`（从子对话条目数轮数和工具成败，aborted 的半句不算一轮）、`runTaskChild`（README 那个写法：`api.commit` 里按 `ownerTaskId` 找或建子对话、`configure` 模型/思考档/`[rp, 子 extension]`/工具/`instructions`，`requestId: subagent:<taskId>` 提交并等，读条目和 `takeRefusal` 得出结局）。
+- `harness.ts`：`children`、`extension`、`installChild`、`takeRefusal`；目录里带 `childTools` 的工具开库时装好子 extension；工具登记拿得到 runtime（`runInDurable(args, { api, runtime }, context)`）。`extension.ts`：子对话的 `beforeRequest`（不读历史，轮数上限、budget）和 `afterResponse`（`recordChildResponse`）。`recover.ts`：跳过子对话。`device.ts`：子对话用量记 surface `subagent`、thread `subagent:<对话 id>`。
+- `legion/subagent/tool.ts` 改成 durable 工具（`replay: "safe"`，只收 `quota`），brief 交给 `run.ts` 新抽出的 `briefFor`；`legion/subagent/child.ts` 是定义到子对话 spec 的转换。`SubagentTurnOutcome` 可带 `stats`，带了就以它为准。
+- 测试 `tests/legion/subagent/subagent-durable.test.ts`（11 个）：阅读回合里调 `research_literature`，子对话拿自己的系统提示和三件文献工具、父对话只看到 brief；六种诚实失败（out-of-turns、no-evidence 两种、out-of-budget、out-of-context、failed、refused）都以 error 结果进父对话；池子按实际轮数结算；父 `stopTurn` 时子对话在工具里被 abort、库里不留活任务和 submission；子对话工具里关库再开，父调用 in-tool resume、safe 的 `search_papers` 在同一子对话里重跑、回合落盘一次。research-agent 和 subagent 测试里用 scripted runner 测工具的那几条搬进了这里。
+
+没做的：
+
+- agent worker 和其他程序调用没上 durable。协调后定：ownerless 的后台回合由 B 棒的 `legion/durable/background.ts`（`runBackgroundTurn`）统一做，这一棒不另造。合并时把 `legion/subagent/live.ts` 的 `runSubagentTurnLive` 指到 B 的实现（`agentWorker`、`memory/observations` 的蒸馏和复述、`info/links/take.ts` 都经它），之后删 `legion/subagent/turn.ts`、`live.ts` 的旧实现、`workerLane` 和 `tests/support/scripted-runner.ts` 里对 `createTurnSettler` 的依赖。
+- 和 B 棒在 `harness.ts` 上会撞：两边都加了 `takeRefusal`（同名同义，留一份）；B 的每次运行装卸 extension 和这里开库时装、按定义的子 extension 是两件事：子对话要跨重启 replay，所以它的 extension 不能跑完就卸。B 把 `settings.extensions` 钉成 `[rp]`，子对话显式选 `[rp, 子 extension]`，不冲突。
+- `research_literature` 没挂进阅读桌面（见 87 第三阶段 A 棒）。xvfb 下 app 里走一遍没做：没有桌面挂它，app 里的阅读回合调不到。
+- 坑 549、550 没用：这一棒没有实测出意外行为。
+
+## 第三阶段 B 棒：后台 pass（分支 `dev/pi-durable-3-b`，从 `origin/dev/pi-durable-3` f5aaf7d5 起）
+
+做完的：
+
+- `legion/durable/background.ts`：`runBackgroundTurnOn(host, request)` 和 `runBackgroundTurn(request)`（取 `provideBackgroundHost` 登记的设备运行时，没登记时等）。`reading/turn/durable-runtime.ts` 的 `startReadingDurable` 登记它，`device.ts` 的 `deviceBackgroundHost` 把 turn-log 的 `end` 接上。请求字段同 `SubagentTurnRequest`（`name`、`systemPrompt`、`task`、`tools`、`maxRounds`、`purpose`、`model?`、`signal?`、`onRound`），多 `surface` 和 `onProgress`（答案加思考的字数，prep 流水线的看门狗靠它）；结果同 `SubagentTurnOutcome`。`legion/durable` 不 import `legion/subagent`，是结构上对齐。
+- 一次运行：`newRunId()` 作 run；`defineExtension({ name: "rp.background:<run>", tools })`，工具是 `AgentTool` 直接包成 `ToolRegistration`（执行走 `tools.ts` 新拆出的 `executeTool`，同 catalog 那条：`awaitWithContext` 放手、`normalizeToolResult`）；`runtime.install(ext)`；`harness.createConversation({ ownership: ownerless, agent: { model, thinkingLevel, extensions: [runtime.extension, ext], tools }, init })`，`init` 写 `rp.thread`（`{ place: "background", name, surface, run }`）和 `rp.desk`（系统提示放 `runtime.sectionKeys[0]`，`purpose`、`maxRounds`、`excludeTs: null`、`turn: run`）；`submit({ requestId: "background:<run>" })` 后 `wait()`。不走 `rp.turn`，不进 `rp.conversations`。结果：`runtime.takeRefusal` 有就是 refusal；signal 已 abort 抛 `StoppedError`；submission 没 done 或最后一条 assistant 是 `stopReason: "error"` 就是 error；否则取最后一条 assistant 的文字（同旧 `onDone` 的最后一轮）。`finally` 卸 extension、清 stubs、turn-log `end`、`maybeRotate`。
+- `harness.ts`：`settings.extensions: [extension]`（默认选择只 `rp`；不钉的话 pi-durable 默认选所有已装的 extension，后装的同名工具会盖掉 `rp` 的）；`DurableRuntime` 加 `extension`、`sectionKeys`、`install`、`uninstall`、`takeRefusal`。registry 跨代共用，换代不影响已装的。
+- `recover.ts`：先从 `inspect()` 的全部 submission 和任务里挑出 `rp.thread` 为 background 的对话，结果记 `background`，`abort({ background: true })`；不记尝试、不写 `rp.partial`。`device.ts` 自带 `background` place（只给遥测：surface 和 run；落盘空、历史空、没有线程文件）。
+- 换上的调用：`memory/live/live.ts` 三处 `run: runBackgroundTurn`；`reading/ingest/live.ts` 的 `turn: runBackgroundTurn`；`chapter.ts` 的 `runSpineChapter` 和 `digest.ts` 的工具循环分支改调 `runBackgroundTurn`，空答案和错误经 `reading/prep/model-output.ts` 的 `noteOf` 变成拒绝（被 abort 现在是 `StoppedError` 拒绝，原来是永不结算）。
+- 测试：`tests/legion/durable/background.test.ts`（自带工具与 catalog 同名不互串、空答案、轮数拒绝、模型错误、abort、pass 在跑时书回合结算不换代、跑完换代）、`background-crash.test.ts`（工具里、正文中两种 SIGKILL，重开恢复为 `background`，faux 0 次、空闲）、`tests/memory/distill-durable.test.ts`（空蒸馏 ok、游标前进；`observation_update` 按本次 schema 写进去）、`tests/reading/prep/background-durable.test.ts`（章节笔记读页、空笔记拒绝、长论文 digest 搜索、模型错误拒绝）。`live-retell-trigger.test.ts` 的 spy 改到 `runBackgroundTurn`。没跑 Linux xvfb。
+
+每个 pass 被杀后：蒸馏（对话、划线、复述）对话被 abort，游标没动，下次 sweep 或挂断重跑；已经写进去的观察留着，重跑时模型从索引看得到。章节笔记、digest 对话被 abort，状态文件里这一章停在 running、这篇停在 digesting，下次载入时流水线改回 pending / queued（`chapters/types.ts`、`papers/scheduler.ts` 的 `normalizeOnLoad`）重跑。link take 同样 abort，链接摄入的 run 由 legion runner 照它的规矩处理。
+
+两棒都做完后第四阶段可删（B 棒这边）：`legion/subagent/live.ts`（`runSubagentTurnLive`，B 棒之后只剩 `subagent/worker.ts` 的 agent worker 在用，A 棒换掉后就没人用）；`legion/execute/turn.ts` 的 `runAgentTurn` 只剩 `soul/recover.ts`；`tests/support/scripted-runner.ts` 用 `runHarnessTurn` 和 `subagent/turn.ts` 的 `createTurnSettler`，蒸馏、复述那批测试靠它，要改成 faux + `runBackgroundTurnOn`（照 `distill-durable.test.ts`）或纯脚本的 `SubagentTurnFn`。这些 pass 还 import 的 `legion/execute` 是工具件不是回合运行时：`AgentTool` 类型、`watchdog`（`runWithWatchdog`、`StoppedError`、`AiCallOptions`）、`limiter`、`observable-run`、`runner`、`worker`，第四阶段按 87 搬或留。
+
+给 A 棒和第四阶段：子对话要挂按次建的工具，照搬「装一个 per-run extension，`configure` 里 `extensions: [runtime.extension, ext]`」即可；task-owned 子对话创建时复制父对话的 agent，记得覆盖 `extensions` 和 `tools`。
+
+没解决的：
+
+- 后台运行没有停摆看门狗。prep 有流水线自己的；蒸馏和 link take 没有，连接不报错也不结束时会一直占着 gate，`stream.timeoutMs` 定下来之前同旧行为。
+- 库超过阈值 1.5 倍时强制换代会 abort 在跑的 pass，结果是 error（不是 `StoppedError`），pass 记一次失败，下次重跑。
+- 全量测试有一次 `tests/platform/store-errors.test.ts` 的 App/PhoneApp 两条失败，单跑和重跑都过，和本棒无关，没查。坑 551、552 没用。
+
+## 第三阶段 C 棒：合并与收尾（分支 `dev/pi-durable-3-c`，从 `origin/dev/pi-durable-3` f5aaf7d5 起）
+
+合并：先 A（a55d96da）后 B（a63fa74f）。
+
+- `harness.ts`：两边都加了 `extension`、`takeRefusal`，各留一份（B 的写法，落盘步骤和接口共用一个 `takeRefusal`）。A 的 `children`、`installChild`（开库时装、不卸）和 B 的 `install`/`uninstall`、`sectionKeys`、默认 `settings.extensions: [rp]` 并存。
+- `tools.ts`：工具有 `runInDurable` 走它，否则走 B 拆出的 `executeTool`；结果整形抽成 `toolContent`。`child.ts` 的子工具执行也改用 `executeTool`。
+- `recover.ts`：先挑出 background 对话 abort，其余里跳过子对话。
+- 87：B 的分支误删了「第四阶段：升级与清理」标题，合并时补回。
+
+收尾：
+
+- agent worker（`legion/subagent/worker.ts`）默认 turn 改成 `runBackgroundTurn`。蒸馏、复述、link take、章节笔记、digest B 棒已换。删 `legion/subagent/live.ts`、`turn.ts`（`createTurnSettler`、`workerLane`）。`runSubagent` 留作 brief 层。`scripts/link-intake-compare.ts` 的真模型路径用 `runHarnessTurn`，把 settler 内联进去，`--dry-run` 跑过 24/24。docs/86 里的 `runSubagentTurnLive` 改成 `runBackgroundTurn`。
+- `background.ts` 的轮数：B 的 `follow` 把正在生成的那次算一轮（被 hook 拒掉的请求也算），结束时又补报一次。out-of-turns 的 `rounds` 比上限多 1，池子多扣一轮，进度里同一轮报两次。改成：非 aborted 的 assistant 条目数，加上正在生成且已收到文字的那一轮；单调递增，每轮报一次；结束时先按条目补报，再判拒绝。
+- `tests/support/scripted-runner.ts` 重写：每次 `run` 开一个 faux 的 durable 测试 runtime（`openTestRuntime`），脚本的每个 `Turn` 转成 faux 的 response factory，走 `runBackgroundTurnOn`，跑完关库删目录。接口不变（`requests`、`contexts`、`streamed`、`exhausted`、`beforeRound`），`model` 选项换成 `contextWindow`。蒸馏、复述、cursor-inserts、retell-trigger 79 条没改就绿。
+- `subagent.test.ts` 改了三条：上下文溢出那条改成窗口 2000、第一轮就放不下。durable 的 `fitRoundToBudget` 按内容估，不走 pi 按上一轮 usage 估的捷径，原来报 197k usage 的写法在 durable 上不触发，结局是 no-evidence。「抛出物类型」那条改成脚本 turn，只测 `runSubagent` 的映射。worker lane 那条去掉 `workerLane` 断言，只留名字。
+- 新测试 `tests/legion/subagent/worker-durable.test.ts`：agent worker 不注入 turn，经 `provideBackgroundHost` 拿 faux runtime，端到端写出 brief、进度报工具、库里空闲；cancel 时 `done` 以 `StoppedError` 拒绝、库里空闲。
+
+测试：每次提交前 typecheck、t.sh 都按退出码绿。合并后全量 7511 pass；收尾后跑两遍全量，都是 7513 pass、0 fail、RC=0。`tests/platform/store-errors.test.ts` 三遍都没失败，没复现 B 棒那次，没查顺序依赖。没跑 Linux xvfb 的 app 内后台 pass（调用次数不够）。坑 557、558 没用。
+
+第四阶段剩下的：
+
+- `legion/execute/turn.ts`：`runAgentTurn` 只剩 `soul/recover.ts`。`runHarnessTurn` 只剩测试（`info/meals/plan-rounds`、`legion/execute/` 的 held、held-lanes、turn-limit、turn-stall、turn-steer、turn，`soul/recover`、`recover-settled`，`ui/components/chat/info-refusal`）和 `scripts/link-intake-compare.ts` 的真模型路径（改到 durable 或删掉 live 模式）。52 个 src 文件从 `execute/turn` import，多数只拿 `AgentTool` 等类型，先改指 `contract.ts`。
+- `harness.ts`、`held.ts`：只剩 `soul/recover.ts`。`soul/recover.ts`、`platform/app/session-fs.ts` 和它们的测试（import pi-agent-core 的八个：`legion/execute/harness`、`turn-limit`、`turn-stall`、`held`、`held-lanes`，`platform/app/session-fs`，`soul/recover`、`recover-settled`）。
+- 留下的工具件，按 87 搬或留：`contract.ts`（23 处）、`limiter.ts`（3）、`observable-run.ts`（5）、`runner.ts`/`worker.ts`（legion runner，10/12）、`stall.ts`/`watchdog.ts`（搬进 `legion/durable`）、`tool-result.ts`、`turn-log.ts`、`outputs.ts`。`provider-config.ts` 目录外没人 import。
+- pi-agent-core 升 1.1.0、删 overrides、`AgentMessage` 换 pi-ai、palace 的 `session` 行和旧 `session/` 目录、LAYER 表的 `legion/execute` 行，照 87。
+
+没解决的：
+
+- 后台运行没有停摆看门狗（B 棒记的）。
+- 强制换代 abort 在跑的 pass，结果是 error 不是 `StoppedError`（B 棒记的）。
+- provider 抛出的错误经 pi-durable 变成 `stopReason: "error"` 的消息，抛出物类型丢了。经 `runSubagent` 的 pass 的 `failure.name` 现在一律是 `Error`，蒸馏的 `distill-failed` 事件的 `errorName` 分不出断网和没登录。
+- `research_literature` 没挂进任何桌面（A 棒记的，产品决定）。
+
+## 第三阶段 Linux 验收（分支 `verify/pi-durable-3-linux`，从 `origin/dev/pi-durable-3` c18da622 起）
+
+2026-10-12，xvfb `:91`，`verifylinux` debug 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`，只用 faux。测试数据目录先整份备份到 `com.xinyuan.readingpartner.verifylinux.bak-p3`。驱动在会话 scratchpad `verify-phase3-linux/tools/`（`vd.py`、`door.py`、`openbook.js`、`prepstate.py`），报告页 `verify-phase3-linux/report.html`。没改产品代码；`dev-faux.ts` 的计划可以写 `[name, args]`，让委托的回合和 worker 各调各的工具。
+
+- 课堂预备过：用 ghostscript 造了 12 页、四条 outline 的 PDF，计划直接取 outline。四章各是一个 ownerless 后台对话，相隔约 3 s 起、并发跑，笔记落在 `prep-<id>/chapters/chapter-0N.md`，界面显示「Preparing 0/4」「2/4」。四章都在流时 SIGKILL：库里四个活的 `pi.generation`、四个 `placed` 的 `background:` submission；重启时 faux 0 次，四个对话各剩读者那句加一条 `aborted`，submission `unanswered`，库里空闲；打开书后四章回 pending，在四个新对话里各重做一次，然后出 overview，共 5 次调用，同一对话里没有重问。overview 和无 outline 时的计划是单次 `callModel`，不是后台回合；overview 中被杀，重开书后重做一次。
+- 蒸馏过：app 启动时 sweep 自己触发（Verify talk 的书线程），后台对话跑完，turn-log surface `subagent` 有 start/round/end，`observations/meta.json` 的 `lastDistilledAt` 前移，dream state `no-change`（空跑算成功）。第一次载入页面时在跑的那次被 reload 打断，reload 后从头重跑完，库里不留活任务。
+- link take 过：只有 X 帖子走 link agent（`xPostOfUrl` → `takeLinkInLive` → `runBackgroundTurn`），别的链接仍是单页文章。门口 faux 调 `take_link`，盒子出选主题卡，link agent 作为后台对话从 `placed` 到 `done`。faux 不调工具，run 结局 `run-failed`，铃回到门口。
+- 子 agent：`research_literature` 没挂桌面，UI 走不到。`delegate` 的 `tasking` 走 agent worker：后台对话里 `search_cables`、工具结果、正文，`run-done` 铃带回 brief 和 output，门口回答这条铃。faux 只给正文时 worker 诚实失败（没调工具不交），runner 重试。
+- 换代没在 app 里测到：库一直在 `turns-1791699996920`（远低于 100 MB）。页面里改 `durable_sqlite_size` 的返回做不到，`window.__TAURI_INTERNALS__.invoke` 不可写、不可配置，赋值静默失败；要测得在代码里开 `rotateAtBytes` 的口子。逻辑由 `background.test.ts` 盖着。
+- 库增长：一章笔记对话主库约 18 KB；门口回合加 worker 约 135 KB，门口回合加 link agent 约 90 KB；WAL 跑着时停在约 4.1 MB，重启后 618 KB。
+- 观察：被杀的后台 run 在 turn-log 里只有 start 没有 end（书回合恢复后有 `endUnbegun`，后台恢复不补）。收尾停 app 时门口正在回答 link run 的失败铃（会话 501 的 `rp.turn`），留给下次启动恢复，和后台 pass 无关。
+- 没有产品 bug。坑 561、562 没用（`__TAURI_INTERNALS__` 不可写算验证环境的意外，可补成坑）。
+- 环境：Xvfb、vite、app 的 PID 记在 `verify-phase3-linux/pids/history`，收尾已停。
+
+## 第四阶段：升级与清理（第一棒，分支 `dev/pi-durable-4`，从 `origin/dev/pi-durable-3` c18da622 起）
+
+依赖：`@earendil-works/pi-agent-core` 和 `overrides` 从 `package.json` 删掉（删完代码后没人用，没先升 1.1.0）。worktree 原本没有 `node_modules`，`bun install` 是全新装，`node_modules` 下只有一份 `@earendil-works/pi-ai`，1.1.0；`bun.lock` 里没有 pi-agent-core。
+
+删了：`legion/execute/` 的 `harness.ts`、`held.ts`、`turn.ts`（`runAgentTurn`、`runHarnessTurn`、`DELIVERY_ENTRY`、`PROMPT_ENTRY`）、`provider-config.ts`；`soul/recover.ts`（`finishOldSoulSession`、`SOUL_LANE`）；`platform/app/session-fs.ts`；palace 的 `session` 行；LAYER 表的 `legion/execute` 行；`contract.ts` 里的 `TurnLane`、`RunAgentTurnOptions`、`StreamFn`。测试删了 `tests/legion/execute/` 的 harness、held、held-lanes、turn、turn-limit、turn-stall、turn-steer，`tests/platform/app/session-fs`，`tests/soul/recover`、`recover-settled`，`tests/ai/session-header` 里五条走 `runAgentTurn` 的。
+
+搬了（`git mv`，只改 import）：`stall`、`watchdog`、`limiter`、`observable-run`、`contract`、`tool-result` 进 `legion/durable/`，`execute/turn-log.ts` 改名 `legion/durable/turn-log-sink.ts`；`runner`、`worker`、`outputs` 进新目录 `legion/runner/`（LAYER 表登记为 capability）。对应测试搬到 `tests/legion/durable/`（`turn-log.test.ts` 改名 `turn-log-sink.test.ts`）。从 `execute/turn` 拿类型的文件全改指 `durable/contract`。
+
+改写：`tests/info/meals/plan-rounds` 用 `scriptedSubagentRunner`（faux durable runtime，purpose 要用合法的 `BudgetPurpose`，否则装配估不出预算直接 out-of-context）；`tests/ui/components/chat/info-refusal` 的 `rowAfterRefusal` 直接套 `refusalRow`；`info-extractor-chunk` 去掉对 `runAgentTurn` 的 spy；`scripts/link-intake-compare.ts` 的真模型路径改成临时目录里开 `openDurable` + `runBackgroundTurnOn`（auth 从 app 的 Anthropic 登录取，用量走 `recordResponse`），`--dry-run` 24/24，真模型没跑。
+
+旧 session：第二、三阶段没发版，0.23.3 及以前的用户从没跑过 `finishOldSoulSession`，收尾又要 pi-agent-core，所以不留收尾。`useBackgroundServices` 启动时调 `removeOldSessions()`（`legion/durable/harness.ts`），AppData 有 `session/` 就整个删掉。升级前被杀在半路的门口、info、三餐回合不再续完。
+
+错误类型：`src/ai/provider-failure.ts` 的 `providerFailureName` 把 pi-ai 的错误文字映射成 `NotSignedInError`、`OfflineError`、`ModelCallError`，`runBackgroundTurnOn` 的 error 结局带上 `name`，经 `runSubagent` 进蒸馏的 `errorName`（坑 559）。`subagent.test.ts`「a failed call is reported…」的期望从 `Error` 改成 `NotSignedInError`。坑 495 已标关闭。坑 560 没用。
+
+测试：提交 eba6c54a 前 `bun run typecheck` 两段 TC=0，`scripts/t.sh` 全量 7414 pass、0 fail、RC=0（只跑了一遍）。
+
+第二棒要做的：
+
+- 全量再跑两遍（按退出码），`bun run build` 跑一遍。
+- Linux `xvfb-run` faux 冒烟真 app：一个书的回合、一个门口回合、回合中杀进程重开，半句只落一次。AppData 里预放一个 `session/` 目录，确认启动后被删。
+- `legion/durable/stall.ts` 里的整回合时限（`TurnLimitError`、`turnLimitFor`、`TURN_LIMIT_MS`、`INFO_TURN_LIMIT_MS`、`TURN_LIMIT_MESSAGE`、`isTurnLimit`）和 `StallError`、`isStall` 在 src 里已没人用（只剩 `stall.test.ts`），连同测试删掉；`turn-log-sink.ts` 的 `TurnEnd` 里 `limit` 那条注释跟着改。`soul/delivery.ts` 的 `originOf` 只剩文件内调用，可去掉 export。`cache-telemetry.ts` 的 `"recovery"` surface 已没人写，留着是为了旧日志行。
+- 还提到被删代码的文档：`docs/soul/25`、`55`、`71`、`75`，`docs/info/86`，`docs/north-star/legion-rest.md`，`docs/platform/78`，`docs/reading/67`，`docs/feedback/做饭计划一直Thinking.md`（feedback 是历史记录，可不改）。`docs/README.md` 里如有 `legion/execute` 也一起改。
+- `tests/ai/session-header` 删掉的五条测的是旧回合按线程带 `x-opencode-session` / pi 的 `sessionId`；durable 回合有没有带（OpenCode、Fireworks 的缓存路由）没查，`legion/durable` 和 `ai/durable-models.ts` 里没有 `sessionId`。
+
+设备上怎么验（主会话排）：iPad / 模拟器装这一版后，确认 app 沙盒里 `session/` 没了；走一遍第一、二阶段的杀进程（书、门口）和 steer；断网时触发一次蒸馏，看 `distill-failed` 的 `errorName` 是 `OfflineError`。
+
+## 第四阶段（第二棒，分支 `dev/pi-durable-4`，从 d52c82dd 起）
+
+会话标识：durable 回合带了，没丢。pi-durable 的 `GenerationTask`（压缩也一样）每次请求都把对话 `pi.provider` 文档里的 uuidv7 当 `sessionId` 交给 `models.streamSimple`，`durable-models.ts` 的 `appProvider` 原样透传，pi-ai 1.1.0 按供应商出头：OpenCode 两家由 pi-ai 自己的 `withOpenCodeSessionHeader` 补 `x-opencode-session`，Fireworks 出亲和头，Codex 出 `session-id` 和 `prompt_cache_key`，DeepSeek 什么都不出。书、门口、info、三餐、教练、复述、铃、语音按线程 key 各一个对话，id 跨轮、跨回合、跨重启不变；后台运行和子对话各是新对话，每次一个新 id（同旧运行时「没有自己对话的回合每次新 id」）。和旧运行时不同的两处：id 是 uuid 不是线程 id，整库换代后换新（缓存早过期，无所谓）；Codex 和 openai-responses 的模型现在也带会话头（坑 560）。`origin/main`（0.23.3）的 `durable-models.ts` 只差一行注释，pi-durable、pi-ai 同为 1.1.0，书的回合同样带，不受影响，不用补丁。`tests/legion/durable/session-id.test.ts` 八条，用真 provider 对象（`createAppModels`）加假 fetch，在出站请求上断言：OpenCode 一回合两轮加下一回合同一个头、两线程两个、Anthropic 格式模型也带、关库重开仍是同一个；Fireworks 两轮同一个 `x-session-affinity`；Codex 两回合同一个 `session-id` 且等于 `prompt_cache_key`；DeepSeek 无会话头无缓存键；两次后台运行两个头。`tests/legion/durable/support/runtime.ts` 加了 `models` 选项。`call-setup.ts`、`providers.ts` 的注释改成说清那张表只管 `streamChat`。
+
+删了：`stall.ts` 的整回合时限（`TurnLimitError`、`isTurnLimit`、`turnLimitFor`、`TURN_LIMIT_MS`、`INFO_TURN_LIMIT_MS`、`TURN_LIMIT_MESSAGE`，连同 watch 的 `limit()` 和 `onLimit`）、`StallError`、`isStall` 和那条测试；`turn-log-sink.ts` 的 `"timed-out"` 留给旧日志行。`soul/delivery.ts` 的 `originOf` 去掉 export。
+
+文档：25、55（execute 改写成 runner 加 durable，session 改写成 durable 库，目录树换成现状，「现状与顺序」开头注明路径以当时为准）、67、71、75、78、86、`north-star/legion-rest.md`（删了只属于 pi-agent-core 的看门狗两个未定点）。
+
+测试：`bun run typecheck` 两段 TC=0；`scripts/t.sh` 全量两遍都是 7420 pass、1 skip、0 fail、RC=0；`bun run wasm` 后 `bun run build` RC=0。提交 bf80cdc9。坑 560、563 用了。
+
+没做：Linux xvfb faux 冒烟（工具调用预算用完）。驱动已备好在会话 scratchpad `p4smoke/tools/`（从 `vcl4/tools` 拷来，`vd.py` 已指向本 worktree、`:91`、`p4smoke/pids`），二进制仍是 `agent-a29761742e18fa5a4` 的 verifylinux debug 版（10-10 之后 Rust 没变）。测试数据目录 `~/.local/share/com.xinyuan.readingpartner.verifylinux` 里本来就有旧运行时留下的 `session/`（`--session-soul--`、`--session-worker--`），起 app 前再放一个标记文件进去，起来后看整个目录没了。下一棒：`vd.py up x up vite up app`，先确认 `window.__fauxCalls` 有定义（faux 生效）再发；一个书回合（`book.py` 的 `open_lesson` + `send`，等落盘 2700 字）、一个门口回合（`run.py` 的 `OPEN` + `send`）、书回合流到三百字时 `vd.py kill-app` 再 `up app`，看线程文件半句一次、屏幕一次、`__fauxCalls` 保持 0。收尾按 `p4smoke/pids/history` 杀。
+
+设备上怎么验（主会话排）：iPad / 模拟器装这一版后，确认 app 沙盒里 `session/` 没了；走一遍第一、二阶段的杀进程（书、门口）和 steer；断网时触发一次蒸馏，看 `distill-failed` 的 `errorName` 是 `OfflineError`。用 OpenCode Go 跑一个书回合和一个门口回合，确认不报 400 MissingSessionID（单测已钉出站头，真服务没打过）。
+
+
+## 第四阶段 Linux 冒烟（分支 `verify/pi-durable-4-linux`，从 `origin/dev/pi-durable-4` c31d18c5 起）
+
+2026-10-12，xvfb `:91`，`agent-a29761742e18fa5a4` 的 verifylinux debug 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`，只用 faux（计划全 `text`，20 tok/s，每答 2700 字）。测试数据目录先整份拷到 `com.xinyuan.readingpartner.verifylinux.bak-p4`；Tides 的 `prep-d851…` 挪到 `com.xinyuan.readingpartner.verifylinux.prep-tides-moved-p4` 让它重备。驱动在会话 scratchpad `verify-phase4-linux/tools/`（`p4.py` 管书、杀进程、插话、预备，`door4.py` 管门口），报告页 `verify-phase4-linux/report.html`。没改产品代码。
+
+- 旧 `session/` 过：目录里原有 `--session-soul--`、`--session-worker--`，又放了 `--session-door--/x.jsonl` 和一个标记文件；起 app 后整个 `session/` 没了，SIGKILL 重启后也没再出现，首页正常。
+- 书回合过：课堂线程读者那句、回答各一行，faux 1 次，turn-log 同一 turn id start → end done。
+- 门口过：一问落盘一次；第二问流到第 5 s 点 Close，后台跑完落盘一次，盒子出 origin `door` 的 `turn` 卡片。
+- 书回合流式中 SIGKILL 过：重启后半句 464 字一次进线程文件，屏幕上一次，这条线程没有重问（重启后唯一一次 faux 是 paper.pdf 的备课计划）；turn-log 同一 turn id 补 `end aborted`；盒子 +1（按设计）。
+- 插话后 219 ms 停止过：第一回合留半句 412 字、`end aborted`，插话起新回合（新 turn id）落 2700 字，文件里问、半句、插话、回答各一次。
+- 课堂预备过：Tides 打开点 Learn，「Preparing 0/4」，约 32 s 后 `chapter-01.md` 落盘，再 45 s 四章和 overview 全 done，库里无活的 task、submission。
+- 控制台：重载后捕获 console.error / error / unhandledrejection，只有 WebKit 的 ResizeObserver loop 提示，没有找不到模块的错误；vite 日志无错。
+- 观察：paper.pdf 每次打开都多一次以 "Here is the survey, page by page" 开头的备课调用，faux 回的是正文不是计划，书一直挂着「Preparing…」；真模型下会不会反复没查。
+- 没有产品 bug。坑 564、565 没用。
+- 环境：Xvfb、vite、app 的 PID 记在 `verify-phase4-linux/pids/history`，收尾已停。
+
+## 第四阶段模拟器验收（分支 `verify/pi-durable-4-sim`，从 `origin/dev/pi-durable-4` bb6864c0 起）
+
+2026-10-12，iPhone 17 Pro（18CF1932）和 iPad Pro 11-inch (M5)（C1F7689F）模拟器，`.dev` 包，idb 真触摸。Mac `~/rp-flow` detached 在 bb6864c0，`bun install` 后手动删了残留的 `node_modules/@earendil-works/pi-agent-core`（bun 不清多余包），重起 vite（`VITE_VERIFY_FAUX=1`，20 token/s、每答 2700 字）。原生部分自 f425983f 没变，没重装 app。占位凭据跑完已删。驱动在 Mac `/tmp/pdv7/`（`s.py` 场景、`up.py` 升级加凭据、`fin.py` 汇总加清理，`d.py`、`l.py` 从 pdv5、pdv6 拷来），截图、日志和报告页在会话 scratchpad `verify-phase4-sim/`。15 项全过，没改代码。
+
+- 升级：两台容器里原有旧 `session/`（iPhone `--session-soul--`、`--session-worker--`，iPad `--session-turn--`、`--session-worker--`），再放 `--session-door--/x.jsonl` 和标记文件；bb6864c0 第一次启动整个删掉，之后每次重启都没再出现。
+- iPhone 门口：一问落盘一次；答到一半关掉，落盘一次、一张 origin `door` 的卡，点卡开门口、回答一次、卡收走；正文中 SIGKILL，重启后半句 636 字一次、屏幕一次、faux 0 次，同一 turn id 补 `end aborted`，盒子 +1。
+- iPhone PDF 课堂：回答一次；杀进程半句 616 字一次、faux 0 次、一张书卡；「问这一段」菜单 0.6 s、3.1 s 都开着，aside 里问一句再回来，课堂回答接着流、落一次，aside 自己的回答后来落盘放一张 aside 线程的书卡。
+- iPhone info 文本对话答到一半关掉：落盘一次、一张 origin `briefing` 的卡。三餐（「Ask about this week」）回答一次。
+- iPad 书：插话后 328 ms 页面 JS 点停止，前一回合 aborted 留半句 816 字，插话开下一回合答完，文件里各一次。`read_pages` 里（工具延迟 8 s）杀进程，重启后第一次 faux 请求的末条就是重跑的工具结果，回合落盘一次、同一 turn id `end done`。
+- iPad 教练、复述：答到一半离开，落盘一次、一张卡（`talk` / `retell`），点卡进页面、回答一次；Send 中心点 `elementFromPoint` 是 Send 自己，没被卢明盖住。
+- iPad 课堂预备：把 Pride and Prejudice 的 prep 挪开，点 Learn 出「Preparing 0/63」，48 s 后 `chapter-44.md` 落盘（1/63）；跑完原 prep 放回，faux 的那份在 Mac `/tmp/pdv7/prep-faux-ipad`。
+- iPad 后台 30 s：回答流到第 6 s 按 HOME，30.4 s 后回来 app PID 没变，Stop 在、回答接着流，约 20 s 后落盘一次，faux 1 次。
+- turn-log：iPhone 10 个回合每个一行 start 一行 end（8 done、2 aborted）。iPad 26 个回合，16 done、1 aborted、2 error（见下）；工具里杀进程那回合同号两行 start、续跑那轮没有 first-byte，`legion/durable/turn-log.ts` 头注释写明如此；7 个没有 end 的是场景之间 `simctl terminate` 掐掉的 6 个预备章节和 1 次复述蒸馏。库主文件 iPhone 3.25 MB → 3.90 MB，iPad 1.83 MB → 2.95 MB（含预备），WAL 两台都稳在约 4.1 MB。
+- 观察：手机上点 `briefing` 卡只收卡、回到 Today，不打开 info 对话（`planJump` 对 briefing 在所有外壳都走 `go-to-briefing`），早于 pi-durable，没动。
+- 失误：放凭据时 iPhone app 还连着 bridge，iPad 那次 eval 落到了 iPhone（坑 432），iPad 没开 faux 就带占位凭据起了一次，两次后台 subagent 请求打到 Anthropic、以占位 token 失败（`ok:false`、0 token），没有模型跑起来。之后两台各自单独驱动。坑 566、567 没用。
+- 环境：vite PID 6596（子进程 6598，`/tmp/pdv7/vitepid`，`/tmp/pdv4/pids-history`）在 `~/rp-flow` bb6864c0 上留着跑，旧的 93907/93909 已停；ios_webkit_debug_proxy 78195 没动。两台 `.dev` app 已退出、凭据已删、`__fauxPlan` 已清，iPhone `device.json` 的 provider 改回 null。
+
+## 第四阶段 iPad 真机验收（分支 `verify/pi-durable-4-ipad`，从 `origin/dev/pi-durable-4` c7e0ca62 起）
+
+2026-10-12 第二次跑，iPad（iPad15,7，iOS 26.7.1）插回 Mac mini 并解锁。上一次装包后掉线，这次一查，设备上的 `.dev` app 不是 c7e0ca62 那个 ipa：起来后页面只有「Failed to request http://192.168.0.107:1437/」，是一个连 Linux 开发服务器的 dev 构建（不知道哪次会话装的），没跑起前端，`session/` 还在。读回 `/tmp/rp-dev-ipad-p4.ipa` 的 CFBundleIdentifier 为 `.dev` 后重装，页面脚本是 `assets/index-DlgAn32M.js`（与 `~/rp-ipad/dist` 一致）。`~/v2.py` 的 `page()` 加了闸：页面里没有这个脚本就拒绝执行，faux 和凭据只会落到这个包的页面上；ios_webkit_debug_proxy 的 `/json` 里 `appId` 是 `PID:<pid>`，也能对上 dvt 起的进程。旧 iwdp 78195 在 iPad 重插后列表一直空，停掉重起为 35930。慢速 faux 20 token/s（切后台那项 8 token/s）、每答 2700 字，占位 anthropic 凭据加 `device.json` 改 anthropic / claude-haiku-5-5。驱动 Mac `~/v2.py`、`~/v5.py`（会话 scratchpad `verify-phase4-ipad/tools/`，另加 `ax.py`），日志 Mac `/tmp/v2/log-*`，报告页 `verify-phase4-ipad/report.html`。没改代码，坑 568、569 没用。
+
+- 升级：过。重装后第一次启动（还没放凭据）`session/`（`--session-soul--`、`--session-turn--`、`--session-worker--`、`marker.txt`）整个没了。
+- 门口：一问落盘一次；答到一半 Close，25 s 后落盘一次、一张 origin `door` 的卡，点卡开门口、回答一次、卡变 told；正文中 SIGKILL，重启 faux 0 次，半句 764 字一次，`end aborted` 与 start 同一回合号（36b0eb2d），盒子 +1。
+- 门口切后台 60 s（8 token/s）：流到第 8 s 切到设置，后台约 10 s 后 JS 冻结（屏上 FAUX1 计数从 32 只涨到 37），回前台接着流，回合 137 s `end done`，答案 2700 字一次，faux 共 1 次，没有停摆、没有重问、不放卡。
+- 书（iPad 课堂）：插话后 200 ms 停止，前一回合 aborted 留 580 字，插话开下一回合答完 2700 字，各一次。`read_pages` 里（工具延迟 20 s）进工具 5 s 后 SIGKILL，重启后同一回合号再 start，第一次 faux 请求末条是重跑的 `read_pages` 结果（页面正文），第 2 轮答完 `end done`，答案一次。第一次试时启动的 `subagent` 回合先吃掉了 faux 计划里的三步工具，书回合拿到的是文字，没进工具，那次不算；重跑时没有 subagent。
+- 教练、复述：答到一半离开，落盘一次、一张卡（`talk` / `retell`），点卡进页面、回答一次。Send 中心点 `elementFromPoint` 是 Send 自己，没被卢明盖住（第二阶段真 iPad 上是盖住的）。软键盘：用 pymobiledevice3 的 `AccessibilityAudit.perform_press` 按输入框（`ax.py`，`iter_elements` 能列出元素、按下不报错），键盘没弹，`activeElement` 是 BUTTON，所以「键盘弹起时 Send 盖没盖」没验到，要人手点一下输入框看。
+- 课堂预备：把 Pride and Prejudice 的 prep 挪开，点 Learn，13 s 后 `chapters/chapter-01.md` 落盘（2700 字），「Preparing 1/63」；faux 跑到 40 章后撞上 faux 脚本 40 步的上限，之后的 `notes` 回合 `error`（是 faux 的限制）。原 prep 已放回，faux 那份留在容器 `prep-<id>.p4faux`。prep 目录现在是 `prep-<id>/chapters/`，`v5.py prep` 按旧布局数顶层的 `chapter-*.md`，那部分计数不准。
+- 铃：读者 info 回合在流时写一只 run-done 铃，读者回合 `end done` 后 128 ms 铃回合才 start，落在读者回答之后，铃 acked；重启后 turn-log 无新行、faux 0 次、不重投。
+- 真模型：没跑（可选项，工具调用预算留给收尾）。
+- 收尾：占位 `credentials.json` 已删并确认不在，`__faux*` 键已清，`device.json` 改回 openai / gpt-6-luna，app 重起（PID 8886）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 35930 留着跑（替 78195），vite 6596/6598 没动；`/tmp/v2/pids` 的 `40` 行已删。
+- 还没走：键盘弹起时 Send 的遮挡（要人手点输入框）、真模型一回合、语音。

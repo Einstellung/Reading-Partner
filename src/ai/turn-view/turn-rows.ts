@@ -39,7 +39,7 @@ import {
 export type TurnPhase = "thinking" | "tool" | "writing";
 
 // The phase a row moves to when a tool starts. A quiet tool (docs/72,
-// legion/execute/contract.ts) is not named on screen and draws no trace line of
+// legion/durable/contract.ts) is not named on screen and draws no trace line of
 // its own, so naming it here would leave the status line blank for as long as it
 // runs: the row keeps the phase it had — still "Thinking…" where it was
 // thinking, still writing where the reply had started.
@@ -149,7 +149,7 @@ export function holdsNoAnswer(m: {
 // and writes the rest in the next round. The words already on screen stay where
 // they are and the next round's continue under them (docs/pitfall/291), so both
 // the streaming row and the text that is persisted are every round's words in
-// order, separated by a blank line. The turn (legion/execute/turn.ts) and the surfaces use
+// order, separated by a blank line. The durable turn (legion/durable/turn.ts) and the surfaces use
 // the same two functions, or what the reader watched and what is saved would
 // differ by a newline.
 

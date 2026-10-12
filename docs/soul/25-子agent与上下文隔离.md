@@ -14,7 +14,7 @@
 
 签名层面（`src/legion/subagent/types.ts`）：定义是 `SubagentDefinition`（name / description / label / systemPrompt / tools / maxRounds / purpose / model / evidence / briefTokenCap），一次运行是 `runSubagent({definition, task, signal, onProgress}, {run, quota})`，回来的是 `SubagentBrief`（brief / outcome / usable / rounds / roundsAllowed / toolCalls / toolSuccesses / toolFailures / clipped）。工具全部由调用方注入，这个目录不知道文献检索、简报和书的存在。
 
-隔离不是靠约定，是靠没有出口：`turn.ts` 把 loop 的 `onDelta`、`onThinking`、`onToolStart`、`onToolEnd` 全部接到空函数上，只有 `onDone` 的最终文本能出来。
+隔离不是靠约定，是靠没有出口：挂成工具的子 agent 是工具调用拥有的子对话（`legion/durable/child.ts`），程序调用的是一次后台运行（`legion/durable/background.ts`），两者都是自己的 conversation，父对话和界面都看不见它的条目，只有最终文本经 brief 出来，见 [87](./87-回合运行时迁到pi-durable.md) 第三阶段。
 
 `model` 可以覆盖：跑机械查找的子 agent 用不着读者正在对话的那个模型。不加输出 schema，brief 是自由文本——机器要读的那几句状态由我们自己拼，模型写的那部分本来就是给模型读的散文。
 
@@ -30,11 +30,11 @@
 
 ## 预算与取消
 
-每一轮的尺寸照常走 `src/budget`：轮次通过 `runAgentTurn` 的 `purpose` 交给 agent loop，loop 逐轮量、量不下就拒绝，和一次普通对话轮完全一样。回程也用它算：brief 按 `estimateTextTokens` 定价，超过 `briefTokenCap`（默认 1200 token，远低于 `OUTPUT_FLOOR.chat`）就截断并说明截断了——嵌套运行唯一能推爆调用方上下文的东西就是这段文本。
+每一轮的尺寸照常走 `src/budget`：子对话和后台运行带着 `purpose`，durable 的 `beforeRequest` 逐轮量、量不下就拒绝，和一次普通对话轮完全一样（[87](./87-回合运行时迁到pi-durable.md)）。回程也用它算：brief 按 `estimateTextTokens` 定价，超过 `briefTokenCap`（默认 1200 token，远低于 `OUTPUT_FLOOR.chat`）就截断并说明截断了——嵌套运行唯一能推爆调用方上下文的东西就是这段文本。
 
 `src/budget` 表达不了的是"一次嵌套运行"。那个模块给一次组装好的调用定价，没有跨调用累计花费的概念，所以"这一整轮最多花 N 个模型轮次，嵌套运行从同一个池子里取"只能另记：`quota.ts`（2026-09-15 前叫 `ledger.ts`）里一个计数器，`grant` 预留、`settle` 退还没花掉的。它拦住的是父模型连叫同一个子 agent 九次，每次单看都合法，加起来把读者这一轮全花在没人要求的查找上。
 
-取消复用现有那条路：调用方自己的 `AbortController`，加 watchdog 的 `StoppedError`。agent loop 在 abort 时静默返回（不 `onDone` 不 `onError`），所以 `turn.ts` 的 abort 监听负责把它变成 reject。取消是唯一一种 reject 而不产出 brief 的结局——读者挂断之后的 brief 没有人要。
+取消复用现有那条路：调用方自己的 `AbortController`，或父回合的停止连带 abort 子对话；后台运行被取消时 `runBackgroundTurn` 抛 `StoppedError`。取消是唯一一种 reject 而不产出 brief 的结局——读者挂断之后的 brief 没有人要。
 
 ## 进度
 

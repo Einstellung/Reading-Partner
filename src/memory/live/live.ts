@@ -2,15 +2,13 @@
 // the one store and the one adapter per topic over it for the app's lifetime,
 // the distillation entry points — a reading conversation on hangup or a trim, a
 // stretch of silent marking picked up by the arrears sweep, a retell when the
-// reader leaves the retell — all on the real model through runAgentTurn with the
-// same provider config as chat, and a tiny change feed so the observations panel
-// refreshes after background writes.
+// reader leaves the retell — all on the real model as background runs on the
+// device's durable Harness (legion/durable/background.ts), and a tiny change
+// feed so the observations panel refreshes after background writes.
 
 import { resolveModel } from "../../ai/model-call";
-import {
-  runSubagentTurnLive,
-} from "../../legion/subagent";
-import { StoppedError } from "../../legion/execute/watchdog";
+import { runBackgroundTurn } from "../../legion/durable/background";
+import { StoppedError } from "../../legion/durable/watchdog";
 import { logEvent } from "../../platform/app/events";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
 import { listTopics } from "../../platform/app/topics";
@@ -297,7 +295,7 @@ export function distillThread(
           adapter: getObservationAdapter(opts.topicId),
           otherTopics: () => listOtherTopicObservations(opts.topicId),
           statementEdges,
-          run: runSubagentTurnLive,
+          run: runBackgroundTurn,
           model: {
             providerId: model.providerId,
             modelId: model.modelId,
@@ -364,7 +362,7 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
           adapter: getObservationAdapter(opts.topicId),
           otherTopics: () => listOtherTopicObservations(opts.topicId),
           statementEdges,
-          run: runSubagentTurnLive,
+          run: runBackgroundTurn,
           model: {
             providerId: model.providerId,
             modelId: model.modelId,
@@ -637,7 +635,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
           store: topicPassStore(store, topicId),
           adapter: getObservationAdapter(topicId),
           otherTopics: () => listOtherTopicObservations(topicId),
-          run: runSubagentTurnLive,
+          run: runBackgroundTurn,
           model: {
             providerId: model.providerId,
             modelId: model.modelId,

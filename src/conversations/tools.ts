@@ -13,7 +13,7 @@
 // a model.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import { t } from "../i18n";
 import type { ConversationIo } from "./io";
 import {
@@ -76,7 +76,7 @@ export function buildConversationTools(
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
-      // handed pi's interrupted result (src/soul/recover.ts).
+      // handed pi's interrupted result (legion/durable/recover.ts).
       replay: "safe",
       description:
         "Keyword-search everything you and this reader have already said to each other — " +
@@ -122,7 +122,7 @@ export function buildConversationTools(
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
-      // handed pi's interrupted result (src/soul/recover.ts).
+      // handed pi's interrupted result (legion/durable/recover.ts).
       replay: "safe",
       description:
         "Read a stretch of one past conversation in full, by the fileKey and threadId a " +

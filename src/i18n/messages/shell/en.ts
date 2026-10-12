@@ -67,10 +67,12 @@ export default {
   "box.originDoor": "At the door · {date}",
   "box.originBriefing": "Briefing · {date}",
   "box.originMeals": "Meals",
+  "box.originTalk": "Talk coach",
+  "box.originRetell": "Retell",
+  "box.notOnPhone": "This one opens on the iPad or the desk.",
   "box.label": "The box",
   "box.waiting": { one: "The box, {count} waiting", other: "The box, {count} waiting" },
   "box.empty": "Nothing in the box.",
-  "box.notReadable": "This one is in a book. Open it on the iPad or the desk.",
 
   // A figure cited in a reply: the card, its chip fallback and its dialog.
   "figure.label": "Fig. {id} · p.{page}",

@@ -10,7 +10,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStallWatches } from "../../../src/legion/execute/stall";
+import { createStallWatches } from "../../../src/legion/durable/stall";
 import type { BookOrigin } from "../../../src/reading/turn/durable-book";
 import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { runBookTurn } from "../../../src/reading/turn/durable-turn";

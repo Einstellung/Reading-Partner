@@ -18,7 +18,7 @@
 // 524); a call with the set that does not fit this book is told which one does.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { BOOK_PAGE_LABEL, formatPages } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
 import { MAX_CHAPTER_PAGES } from "./inline";

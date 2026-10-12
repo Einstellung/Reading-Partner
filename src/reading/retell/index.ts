@@ -80,5 +80,13 @@ export {
   type RetellContext,
   type RetellNote,
 } from "./prompt";
+export {
+  prepareRetellTurn,
+  retellAssemblies,
+  retellConversationKey,
+  retellOrigin,
+  retellPlace,
+  RETELL_PLACE,
+} from "./retell-durable";
 export { buildSkeleton, chapterOfPage, formatSkeleton, type SkeletonInput } from "./skeleton";
 export { buildRetellTools, type RetellToolDeps } from "./tools";

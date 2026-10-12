@@ -12,7 +12,7 @@ import {
   startUrlIngest,
   type IngestAsk,
 } from "../../../src/reading/ingest/url-run";
-import type { DelegateInput } from "../../../src/legion/execute/worker";
+import type { DelegateInput } from "../../../src/legion/runner/worker";
 import type { Run } from "../../../src/legion/run";
 
 function runRecord(id: string): Run {

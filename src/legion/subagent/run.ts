@@ -4,11 +4,8 @@
 // The turn itself is injected (SubagentTurnFn), so everything here — isolation,
 // the honest-failure mapping, tool-failure accounting, the round quota, the cap
 // on what crosses back — runs in a test with no provider, no credentials and no
-// network. live.ts supplies the real turn. This is the same dependency-injection
-// shape src/memory/observations/distill.ts uses, for the same reason.
-//
-// The turn underneath is the harness one (src/legion/execute/turn.ts), on a
-// worker lane of the run's own (turn.ts). The brief is composed here rather
+// network. Programmatic callers hand it legion/durable's runBackgroundTurn; the
+// tool (tool.ts) runs a child conversation instead and shares only briefFor. The brief is composed here rather
 // than taken from pi's generateBranchSummary: that one is a compaction summary
 // of a branch, written by an extra model call with its own prompt, and it says
 // nothing about the distinctions a caller has to state — a run that answered
@@ -16,7 +13,7 @@
 // never completed all summarize alike, and none of them are held to
 // briefTokenCap.
 
-import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../execute/contract";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../durable/contract";
 import { StoppedError } from "../stop";
 import { composeBrief, subagentSystemPrompt, EMPTY_ANSWER, type BriefFacts } from "./brief";
 import type { SubagentQuota } from "./quota";
@@ -30,6 +27,8 @@ import {
   type SubagentProgress,
   type SubagentToolFailure,
   type SubagentTurnFn,
+  type SubagentTurnOutcome,
+  type SubagentTurnStats,
 } from "./types";
 import { errMsg } from "../../platform/std/errors";
 
@@ -107,6 +106,72 @@ function instrument(
   }));
 }
 
+export interface BriefInput {
+  definition: SubagentDefinition;
+  reserved: number;
+  stats: SubagentTurnStats;
+  onProgress?(progress: SubagentProgress): void;
+}
+
+// The brief for a run that ended with `outcome`: the six honest failures and the
+// answer, each in its own sentence. Shared by the runner below and the tool
+// (tool.ts), which counts from the child's entries.
+export function briefFor(input: BriefInput, outcome: SubagentTurnOutcome | { kind: "out-of-budget" }): SubagentBrief {
+  const { definition, reserved, stats, onProgress } = input;
+  const tokenCap = definition.briefTokenCap ?? DEFAULT_BRIEF_TOKEN_CAP;
+  const finish = (
+    partial: Partial<BriefFacts> & { outcome: SubagentOutcome },
+    failure?: SubagentFailure,
+  ): SubagentBrief => {
+    const f: BriefFacts = {
+      name: definition.name,
+      answer: "",
+      rounds: stats.rounds,
+      roundsAllowed: reserved,
+      toolsMounted: definition.tools.length,
+      toolCalls: stats.toolCalls,
+      toolSuccesses: stats.toolSuccesses,
+      toolFailures: stats.toolFailures,
+      tokenCap,
+      ...partial,
+    };
+    const composed = composeBrief(f);
+    onProgress?.({ phase: "done", label: definition.label, round: stats.rounds, roundsAllowed: reserved, outcome: f.outcome });
+    return {
+      brief: composed.brief,
+      outcome: f.outcome,
+      usable: composed.usable,
+      rounds: stats.rounds,
+      roundsAllowed: reserved,
+      toolCalls: f.toolCalls,
+      toolSuccesses: f.toolSuccesses,
+      toolFailures: f.toolFailures,
+      clipped: composed.clipped,
+      ...(failure ? { failure } : {}),
+    };
+  };
+  // The shared budget was already spent: nothing was looked up, rather than nothing found.
+  if (outcome.kind === "out-of-budget") return finish({ outcome: "out-of-budget" });
+  if (outcome.kind === "error") {
+    return finish(
+      { outcome: "failed", message: outcome.message },
+      { name: outcome.name ?? "Error", message: outcome.message },
+    );
+  }
+  if (outcome.kind === "refusal") {
+    // The loop's two stated give-ups keep their own sentences: a spent turn cap
+    // and a call that outgrew the window are not the same thing to a caller.
+    if (outcome.message === REFUSE_ROUNDS) return finish({ outcome: "out-of-turns" });
+    if (outcome.message === REFUSE_MIDTURN) return finish({ outcome: "out-of-context" });
+    return finish({ outcome: "refused", message: outcome.message });
+  }
+  const answer = outcome.text.trim();
+  if (!answer) return finish({ outcome: "refused", message: EMPTY_ANSWER });
+  // A brief with nothing behind it is the failure this module is built to stop.
+  if (evidenceRequired(definition) && stats.toolSuccesses === 0) return finish({ outcome: "no-evidence" });
+  return finish({ outcome: "answered", answer });
+}
+
 // Run one sub-agent to completion and return its brief.
 //
 // Rejects only for cancellation (StoppedError). Everything else — no turns left,
@@ -127,53 +192,13 @@ export async function runSubagent(
   const reserved = deps.quota ? deps.quota.grant(want) : want;
   const tally = new ToolTally();
   let rounds = 0;
+  let counted: SubagentTurnStats | undefined;
+  const stats = (): SubagentTurnStats =>
+    counted ?? { rounds, toolCalls: tally.calls, toolSuccesses: tally.successes, toolFailures: tally.list() };
+  const brief = (outcome: Parameters<typeof briefFor>[1]) =>
+    briefFor({ definition, reserved, stats: stats(), ...(onProgress ? { onProgress } : {}) }, outcome);
 
-  const facts = (): BriefFacts => ({
-    name: definition.name,
-    answer: "",
-    outcome: "failed",
-    rounds,
-    roundsAllowed: reserved,
-    toolsMounted: definition.tools.length,
-    toolCalls: tally.calls,
-    toolSuccesses: tally.successes,
-    toolFailures: tally.list(),
-    tokenCap,
-  });
-
-  // Carried beside the brief rather than dug back out of it: the brief is a
-  // sentence written for a reader, and a caller recording why a run did not
-  // complete needs the two fields it was composed from.
-  const finish = (
-    partial: Partial<BriefFacts> & { outcome: SubagentOutcome },
-    failure?: SubagentFailure,
-  ): SubagentBrief => {
-    const f = { ...facts(), ...partial };
-    const composed = composeBrief(f);
-    onProgress?.({
-      phase: "done",
-      label,
-      round: rounds,
-      roundsAllowed: reserved,
-      outcome: f.outcome,
-    });
-    return {
-      brief: composed.brief,
-      outcome: f.outcome,
-      usable: composed.usable,
-      rounds,
-      roundsAllowed: reserved,
-      toolCalls: f.toolCalls,
-      toolSuccesses: f.toolSuccesses,
-      toolFailures: f.toolFailures,
-      clipped: composed.clipped,
-      ...(failure ? { failure } : {}),
-    };
-  };
-
-  // The shared budget was already spent. Nothing is sent, and the brief says
-  // nothing was looked up rather than that nothing was found.
-  if (reserved <= 0) return finish({ outcome: "out-of-budget" });
+  if (reserved <= 0) return brief({ kind: "out-of-budget" });
 
   onProgress?.({ phase: "started", label, round: 0, roundsAllowed: reserved });
 
@@ -182,8 +207,7 @@ export async function runSubagent(
       name: definition.name,
       systemPrompt: subagentSystemPrompt(definition, tokenCap),
       // The whole message list: one user turn. Nothing of the caller's
-      // conversation is replayed, and nothing of this run's rounds can leak back
-      // — they live in an array the caller never sees.
+      // conversation is replayed, and nothing of this run's rounds can leak back.
       task,
       tools: instrument(definition.tools, tally, (tool) =>
         onProgress?.({ phase: "tool", label, round: rounds, roundsAllowed: reserved, tool }),
@@ -197,39 +221,16 @@ export async function runSubagent(
         onProgress?.({ phase: "round", label, round, roundsAllowed: reserved });
       },
     });
-
-    if (outcome.kind === "error") {
-      return finish(
-        { outcome: "failed", message: outcome.message },
-        { name: outcome.name ?? "Error", message: outcome.message },
-      );
+    if (outcome.stats) {
+      counted = outcome.stats;
+      rounds = outcome.stats.rounds;
     }
-    if (outcome.kind === "refusal") {
-      // The loop's two stated give-ups, matched against its own exported
-      // constants so the two reasons keep their own sentences: a spent turn cap
-      // and a call that outgrew the window are not the same thing to a caller.
-      if (outcome.message === REFUSE_ROUNDS) return finish({ outcome: "out-of-turns" });
-      if (outcome.message === REFUSE_MIDTURN) return finish({ outcome: "out-of-context" });
-      return finish({ outcome: "refused", message: outcome.message });
-    }
-
-    const answer = outcome.text.trim();
-    if (!answer) return finish({ outcome: "refused", message: EMPTY_ANSWER });
-    // A brief with nothing behind it is the failure this module is built to
-    // stop, so it is caught here rather than left to the caller to notice.
-    if (evidenceRequired(definition) && tally.successes === 0) {
-      return finish({ outcome: "no-evidence" });
-    }
-    return finish({ outcome: "answered", answer });
+    return brief(outcome);
   } catch (e) {
-    // Cancellation is not a failure and must never become a brief: a brief for a
-    // run the reader hung up on is a brief nobody asked for.
+    // Cancellation is not a failure and must never become a brief.
     if (e instanceof StoppedError || signal?.aborted) throw new StoppedError();
     const message = errMsg(e);
-    return finish(
-      { outcome: "failed", message },
-      { name: e instanceof Error ? e.constructor.name : typeof e, message },
-    );
+    return brief({ kind: "error", message, name: e instanceof Error ? e.constructor.name : typeof e });
   } finally {
     deps.quota?.settle(reserved, rounds);
   }

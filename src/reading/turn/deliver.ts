@@ -22,7 +22,7 @@ import { listTopics } from "../../platform/app/topics";
 import { toReasoning } from "../../platform/app/settings";
 import { modelIdFor } from "../../ai/model-tier";
 import { getFulltext } from "../../fulltext/store";
-import { toolLabel } from "../../legion/execute/tool-result";
+import { toolLabel } from "../../legion/durable/tool-result";
 import { bellTurn, TurnBusy, type WithdrawnSteer } from "../../legion/durable/turn";
 import {
   registerDelivery,
@@ -183,7 +183,7 @@ export async function deliverBookBell(
     input.onWait?.();
     const result = await earlier;
     if (result?.status === "done" || (result?.reason === "aborted" && result.landed)) {
-      return answered(replyTo(deps.threads, book, input.runId));
+      return answered(input.runId === undefined ? "" : replyTo(deps.threads, book, input.runId));
     }
   }
 
@@ -251,7 +251,7 @@ export async function deliverBookBell(
         {
           origin: book,
           line: { text: input.bell },
-          bell: { id: input.bellId, runId: input.runId },
+          bell: { id: input.bellId, ...(input.runId !== undefined ? { runId: input.runId } : {}) },
           systemPrompt: placed.turn.systemPrompt,
           history,
           tools: placed.turn.tools,

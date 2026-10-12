@@ -1,22 +1,35 @@
 // The conversation typed to Lumen: the day's conversation at the door (docs/61,
 // soul/door.ts), as the chat surface holds it. Loaded and replayed when it
 // opens, every line written to the day's thread file as it is said, and the
-// turn itself handed to soul/door-chat.ts, which needs no React.
+// turns run on the device's durable runtime (docs/soul/87): assembled by
+// soul/door-chat.ts prepareDoorTurn, driven by reading/turn/place-session.ts,
+// landed into the day's file by the door's place (soul/door-durable.ts).
+//
+// The reader can talk into a running turn (docs/72); Stop keeps the half
+// sentence and the receipts; a turn in flight when the conversation opens —
+// one a killed process left, resumed at start — is drawn, stoppable and
+// steerable like one started here. Closing the conversation does not stop its
+// turn: it runs on and lands, with a box card if nobody has the conversation
+// open by then, and the conversation opened again follows it.
 //
 // What lands in the conversation while it is open without this view writing it
-// — a bell answering a delegated run at the door (soul/bell.ts) — is appended
-// as it arrives, so the next turn is sent over the conversation as it stands.
+// — a bell answering a delegated run at the door (soul/bell.ts), a turn's rows
+// as the runtime lands them — is appended as it arrives unless a row with that
+// role and timestamp is on screen already.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { applyTopicProposal } from "../../../memory";
-import { doorDate, doorKey, openDoorThread, sendAtTheDoor } from "../../../soul";
+import { doorDate, doorKey, doorOrigin, doorThreadKey, openDoorThread, prepareDoorTurn, setDoorWatching } from "../../../soul";
 import { t } from "../../../i18n";
 import { topicFiledNote } from "../../../info/briefer/call";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import { createTopic, listTopics } from "../../../platform/app/topics";
 import { doorTurnNote, extractLinks, linksToTake } from "../../../reading/ingest/take-link-tool";
 import { chooseIntakeTopic, readIntake } from "../../../reading/ingest/topic-intake";
+import { readingDurable } from "../../../reading/turn/durable-runtime";
+import type { CallRow } from "../../../reading/turn/call-state";
+import { createPlaceSession, registerOpenSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
 import {
   appendMessage,
   onThreadMessage,
@@ -24,13 +37,15 @@ import {
   setThreadTopic,
 } from "../../../platform/app/threads";
 import {
+  cardRow,
   findCardPart,
+  nextCardId,
   patchCardPayload,
   rehydrateMessage,
   toPersistedCardPart,
   type CardAction,
+  type CardPayload,
 } from "../chat/chatParts";
-import { useStreamingTurn, type StreamingTurnRun } from "../chat/useStreamingTurn";
 import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools } from "./door-tools";
@@ -64,6 +79,8 @@ export interface DoorChatOptions {
   onOpenDocument?: (doc: IntakeOpenDocument) => void;
 }
 
+const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
+
 export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   // The day the chat was opened on. A conversation left open over midnight
   // stays in the day it began, the way a call does.
@@ -73,56 +90,60 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   const key = doorKey(date);
   const stickKey = `door:${date}`;
   const [threadId, setThreadId] = useState<string | null>(null);
-  const { messages, setMessages, streaming, begin, raiseCard, running, stop, abort } = useStreamingTurn(
-    key,
-    threadId ?? "",
+  const [messages, setRendered] = useState<UiMessage[]>([]);
+  const [streaming, setStreaming] = useState(false);
+  const sessionRef = useRef<PlaceSession | null>(null);
+  // The conversation was just opened and the runtime has not yet said whether
+  // a turn is in flight on it; a line said meanwhile waits for the answer.
+  const lookingRef = useRef<Promise<unknown> | null>(null);
+
+  // Every change lands on the mirror at once, so a turn started in the same
+  // tick reads the conversation it is answering.
+  const messagesRef = useRef<UiMessage[]>([]);
+  const setMessages = useCallback<React.Dispatch<React.SetStateAction<UiMessage[]>>>((action) => {
+    messagesRef.current = typeof action === "function" ? action(messagesRef.current) : action;
+    setRendered(messagesRef.current);
+  }, []);
+
+  // Rows the reader's lines and the cards open are keyed by when they were
+  // made; kept strictly increasing so two in one millisecond stay two rows.
+  const lastTsRef = useRef(0);
+  const stamp = useCallback(() => {
+    const at = Math.max(Date.now(), lastTsRef.current + 1);
+    lastTsRef.current = at;
+    return at;
+  }, []);
+
+  // A receipt for something the AI just wrote, shown above the turn's rows and
+  // persisted, so a reopened conversation still shows what landed.
+  const raiseCard = useCallback(
+    (prefix: string, payload: CardPayload) => {
+      if (!threadId) return;
+      const cardId = nextCardId(prefix);
+      const cardTs = stamp();
+      setMessages((prev) => {
+        const card = cardRow(cardId, payload, cardTs);
+        const at = prev.findIndex((m) => m.ts > cardTs || m.streaming === true);
+        return at === -1 ? [...prev, card] : [...prev.slice(0, at), card, ...prev.slice(at)];
+      });
+      appendMessage(key, threadId, { role: "ai", text: "", ts: cardTs, parts: [toPersistedCardPart(cardId, payload)] });
+    },
+    [key, threadId, setMessages, stamp],
   );
-  const messagesRef = useRef<UiMessage[]>(messages);
-  messagesRef.current = messages;
+  const raiseCardRef = useRef(raiseCard);
+  raiseCardRef.current = raiseCard;
 
   useEffect(() => {
     let live = true;
+    let unwatch: (() => void) | undefined;
     void openDoorThread(date).then((thread) => {
       if (!live) return;
-      setThreadId(thread.id);
+      const id = thread.id;
+      const origin = doorOrigin(date, id);
+      setThreadId(id);
       setMessages(thread.messages.map(rehydrateMessage));
-    });
-    return () => {
-      live = false;
-      abort();
-      forgetScroll(stickKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
-
-  // Every append through the store is announced, this view's own included; a
-  // row already on screen under that timestamp is this view's and is skipped.
-  // The functional update runs after the one that put it there.
-  useEffect(() => {
-    if (!threadId) return;
-    return onThreadMessage((append) => {
-      if (append.key !== key || append.threadId !== threadId) return;
-      const row = rehydrateMessage(append.message);
-      setMessages((prev) =>
-        prev.some((m) => m.ts === row.ts && m.role === row.role) ? prev : [...prev, row],
-      );
-    });
-  }, [key, threadId, setMessages]);
-
-  const note = useCallback(
-    (text: string, role: "user" | "ai" = "user") => {
-      if (!threadId) return;
-      const ts = Date.now();
-      setMessages((prev) => [...prev, { role, text, ts }]);
-      appendMessage(key, threadId, { role, text, ts });
-    },
-    [key, threadId, setMessages],
-  );
-
-  const run = useCallback(
-    async (history: UiMessage[], turn: StreamingTurnRun, id: string) => {
-      let outcome;
-      try {
+      const assemble = async (signal: AbortSignal): Promise<PlaceAssembled> => {
+        const history = messagesRef.current.filter((m) => !m.streaming && !m.queued);
         // A message carrying links goes to the model with an app note that
         // numbers them and the topics, which is what take_link is called with.
         // One without links, in a conversation that holds an intake card, goes
@@ -134,44 +155,116 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
         );
         const topics = latestLinks.length > 0 ? await listTopics().catch(() => []) : [];
         const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) : "";
-        const sent = note ? [...history.slice(0, -1), { ...latest, text: latest.text + note }] : history;
-        outcome = await sendAtTheDoor({
+        const sent = note && latest ? [...history.slice(0, -1), { ...latest, text: latest.text + note }] : history;
+        const prepared = await prepareDoorTurn({
           threadId: id,
           date,
           history: replayableHistory(sent),
-          signal: turn.signal,
-          handlers: turn.handlers(),
+          signal,
           // The door's own tools, beside the soul's (door-tools.ts).
-          tools: doorTools({ threadId: id, date, raiseCard, links: linksToTake(history) }),
-          topic: { onCard: (payload) => raiseCard("topic", payload) },
+          tools: doorTools({
+            threadId: id,
+            date,
+            raiseCard: (prefix, payload) => raiseCardRef.current(prefix, payload),
+            links: linksToTake(history),
+          }),
+          topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
         });
-      } catch (e) {
-        console.error("door turn failed to start", e);
-        turn.fail(t("shell.door.failed"));
-        return;
-      }
-      if (outcome.kind === "no-provider") turn.fail(t("info.errors.noProvider"));
-      else if (outcome.kind === "refused") turn.fail(outcome.text);
+        if (prepared.kind === "no-provider") return { kind: "failed", message: t("info.errors.noProvider") };
+        if (prepared.kind === "refused") return { kind: "refused", message: prepared.text };
+        if (prepared.kind === "aborted") return { kind: "aborted" };
+        return {
+          kind: "turn",
+          request: {
+            key: prepared.key,
+            origin: prepared.origin,
+            conversation: id,
+            surface: "door",
+            line: { text: prepared.line, ...(latest ? { ts: latest.ts } : {}) },
+            systemPrompt: prepared.systemPrompt,
+            tools: prepared.tools,
+            model: prepared.model,
+            ...(prepared.thinkingLevel ? { thinkingLevel: prepared.thinkingLevel } : {}),
+          },
+          ...(prepared.notice ? { notice: prepared.notice } : {}),
+        };
+      };
+      const session = createPlaceSession({
+        durable: readingDurable,
+        key: doorThreadKey(origin),
+        surface: "door",
+        assemble,
+        lastLine: () => {
+          let ts = 0;
+          for (const m of messagesRef.current) if (m.role === "user" && !m.queued) ts = m.ts;
+          return ts;
+        },
+        draw: (after, rows) =>
+          setMessages((prev) => withPlaceTurnRows<CallRow & UiMessage>(prev, after, rows as (CallRow & UiMessage)[], isCardRow)),
+        file: (lines) => {
+          for (const line of lines) appendMessage(key, id, { role: "user", text: line.text, ts: line.ts });
+        },
+        streaming: setStreaming,
+      });
+      sessionRef.current = session;
+      // A bell rung for this conversation while it is open runs in this session (place-bell.ts).
+      const closed = registerOpenSession(doorThreadKey(origin), session);
+      const unwatchDoor = setDoorWatching((o) => o.date === date && o.threadId === id);
+      unwatch = () => {
+        closed();
+        unwatchDoor();
+      };
+      lookingRef.current = session.resume().catch((e: unknown) => console.warn("door turn could not be resumed", e));
+    });
+    return () => {
+      live = false;
+      sessionRef.current?.detach();
+      sessionRef.current = null;
+      unwatch?.();
+      forgetScroll(stickKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
+  // Every append through the store is announced, this view's own and the
+  // runtime's landing included; a row already on screen under that role and
+  // timestamp is skipped.
+  useEffect(() => {
+    if (!threadId) return;
+    return onThreadMessage((append) => {
+      if (append.key !== key || append.threadId !== threadId) return;
+      const row = rehydrateMessage(append.message);
+      setMessages((prev) => (prev.some((m) => m.ts === row.ts && m.role === row.role) ? prev : [...prev, row]));
+    });
+  }, [key, threadId, setMessages]);
+
+  const note = useCallback(
+    (text: string, role: "user" | "ai" = "user") => {
+      if (!threadId) return;
+      const ts = stamp();
+      setMessages((prev) => [...prev, { role, text, ts }]);
+      appendMessage(key, threadId, { role, text, ts });
     },
-    [date, raiseCard],
+    [key, threadId, setMessages, stamp],
   );
 
   const send = useCallback(
     async (text: string) => {
-      if (!text.trim() || !threadId || running()) return;
-      const ts = Date.now();
-      const line: UiMessage = { role: "user", text, ts };
-      const history = [...messagesRef.current, line];
-      setMessages((prev) => [...prev, line]);
+      if (!text.trim() || !threadId) return;
+      await lookingRef.current;
+      const session = sessionRef.current;
+      if (!session) return;
+      const ts = stamp();
+      // Into the turn that is running (docs/72); otherwise a turn of its own.
+      if (session.say(text, ts)) return;
+      setMessages((prev) => [...prev, { role: "user", text, ts }]);
       appendMessage(key, threadId, { role: "user", text, ts });
-      let sent: Promise<void> | undefined;
-      begin((turn) => {
-        sent = run(history, turn, threadId);
-      });
-      await sent;
+      session.ask();
     },
-    [key, threadId, running, begin, run, setMessages],
+    [key, threadId, setMessages, stamp],
   );
+
+  const stop = useCallback(() => sessionRef.current?.stop(), []);
 
   // Filing the conversation under a topic is what lets it be distilled at all:
   // a day at the door has no material to say what it is about (soul/door.ts).

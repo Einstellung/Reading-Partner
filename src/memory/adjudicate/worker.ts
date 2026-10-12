@@ -6,7 +6,7 @@
 // says what digest went into it and under which run, which is the provenance a
 // file without frontmatter has.
 
-import type { WorkerContext, WorkerHandle, WorkerOutcome } from "../../legion/execute/worker";
+import type { WorkerContext, WorkerHandle, WorkerOutcome } from "../../legion/runner/worker";
 import { GiveUpError } from "../../legion/stop";
 import { adjudicate, resolvedByFor, type AdjudicateDeps } from "./adjudicate";
 import { parseConflictPath } from "./conflicts";

@@ -77,6 +77,13 @@ import { DEFAULT_SECTION, type TopicSection } from "../base/topic-nav";
 
 const GRID = `${LIBRARY_GRID} ${TOPIC_GRID_COLUMNS_CLASS}`;
 
+/** A coaching conversation or a retell to open in its topic: a box card followed (lumen/box-jump.ts). */
+export interface StudyOpen {
+  kind: "coach" | "retell";
+  topicId: string;
+  id: string;
+}
+
 export default function LibraryScreen(props: {
   topics: Topic[];
   activeTopic: Topic | null;
@@ -92,6 +99,10 @@ export default function LibraryScreen(props: {
   onSay: (line: string) => void;
   // A line that is not a failure, such as where a moved file went.
   onTell: (line: string) => void;
+  // Open this once its topic is the active one; a new object is a new request.
+  open?: StudyOpen | null;
+  // The request has been opened: it is not opened again when the screen comes back.
+  onOpened?: () => void;
 }) {
   const t = useT();
   // Articles kept out of a briefing (docs/21), and which one is being read.
@@ -160,6 +171,22 @@ export default function LibraryScreen(props: {
     setOpenRehearsal(null);
     setCoachOutlineId(null);
   }, [activeTopic?.id]);
+  // After the reset above, which runs first in the same commit when the request
+  // also changed the topic.
+  const { open, onOpened } = props;
+  useEffect(() => {
+    if (!open || activeTopic?.id !== open.topicId) return;
+    onOpened?.();
+    setOpenSavedArticle(null);
+    setOpenRehearsal(null);
+    if (open.kind === "coach") {
+      setOpenRetellId(null);
+      setCoachOutlineId(open.id);
+    } else {
+      setCoachOutlineId(null);
+      setOpenRetellId(open.id);
+    }
+  }, [open, onOpened, activeTopic?.id]);
 
   // Retell one book: a retell of its own, entered straight away (docs/31 — the
   // entry is in the topic, on the material). A file with no book id has nothing

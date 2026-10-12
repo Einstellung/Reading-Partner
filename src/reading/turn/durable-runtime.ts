@@ -1,53 +1,41 @@
-// The reading side of the device's durable runtime (docs/soul/87, 第一阶段):
-// what `openDurable` is handed for book threads, and what the app does with it
-// at start — open, sort out what the last process left running, put the steers
-// that sorting withdrew into their thread files, then resume.
-//
-// A book turn that the previous process left on the old soul session is still
-// finished by soul/recover.ts; the two runtimes run side by side until the
-// other turn surfaces move.
+// The device's durable runtime as the app opens it (docs/soul/87): the
+// place-generic runtime (legion/durable/device.ts) with the book's place, and
+// whatever other places the shell hands in (the door, …). At start it opens,
+// sorts out what the last process left running, puts the steers that sorting
+// withdrew into their thread files, then resumes.
 //
 // `onTurnSettled` says when a conversation's `rp.turn` has landed and the
 // conversation is free again. Input meant for a busy conversation waits for it
 // rather than being queued in pi-durable as a follow-up.
 
 import type { Context } from "@earendil-works/chord";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Models } from "@earendil-works/pi-ai/models";
-import type { ConversationId } from "@earendil-works/pi-durable";
-import { recordModelCall } from "../../ai/model-usage";
-import { recordCacheTurn } from "../../platform/app/cache-telemetry";
-import { createAppModels } from "../../ai/durable-models";
-import { toolLabel } from "../../legion/execute/tool-result";
-import { appTurnLog, type TurnLogSink } from "../../legion/execute/turn-log";
-import type { AgentTool } from "../../legion/execute/contract";
-import { ThreadDoc, type ThreadOrigin, type TurnResult } from "../../legion/durable/extension";
-import { appDurableHost, openDurable, type DurableHost, type DurableRuntime } from "../../legion/durable/harness";
-import { recoverBeforeResume, type Recovered } from "../../legion/durable/recover";
+import type { AgentTool } from "../../legion/durable/contract";
+import type { TurnLogSink } from "../../legion/durable/turn-log-sink";
+import { provideBackgroundHost } from "../../legion/durable/background";
+import {
+  deviceBackgroundHost,
+  fileWithdrawnSteers,
+  openDeviceDurable,
+  type DeviceDurable,
+  type PlaceFactory,
+} from "../../legion/durable/device";
+import type { DurableHost, DurableRuntime } from "../../legion/durable/harness";
+import type { Recovered } from "../../legion/durable/recover";
 import { appendMessage, flushThreads, getThread, loadThreads } from "../../platform/app/threads";
 import { loadSettings } from "../../platform/app/settings";
 import { deliveryOpener } from "../../soul/delivery";
 import {
   AssembledTurns,
-  asBookOrigin,
-  bookDeskResolver,
-  bookHistoryReader,
-  bookCacheTurn,
-  bookLander,
-  bookThreadKey,
-  bookUsageReport,
+  bookPlace,
   storeBookThreads,
   type BookLandingDeps,
   type BookOrigin,
   type BookThreads,
 } from "./durable-book";
-import { BookTurnLog } from "./durable-turn-log";
 import { boxUnseenTurn } from "./turn-box";
 
-/** The system prompt is one section: every turn starts from a reset, which writes every section anyway (docs/pitfall/517). */
-export const TURN_SECTION = "turn";
-
-export type SettledEvent = { conversationId: ConversationId; origin: ThreadOrigin; result: TurnResult };
+export { TURN_SECTION, type SettledEvent } from "../../legion/durable/device";
 
 export interface ReadingDurableOptions {
   catalog: readonly AgentTool[];
@@ -58,27 +46,22 @@ export interface ReadingDurableOptions {
   watching?: (origin: BookOrigin) => boolean;
   card?: BookLandingDeps["card"];
   openDesk?: (origin: BookOrigin, context: Context) => Promise<readonly AgentTool[]>;
+  /** The places beside the book's, by place name. */
+  places?: Readonly<Record<string, PlaceFactory>>;
   dir?: string;
   rotateAtBytes?: number;
   now?: () => number;
   onReport?: (error: unknown) => void;
-  /** Where the turn log's lines go (legion/execute/turn-log.ts); the app's file unless said. */
+  /** Where the turn log's lines go (legion/durable/turn-log-sink.ts); the app's file unless said. */
   log?: TurnLogSink;
 }
 
-export interface ReadingDurable {
-  runtime: DurableRuntime;
+export interface ReadingDurable extends DeviceDurable {
+  /** The book turns assembled in this process (durable-book.ts). */
   assembled: AssembledTurns;
-  /** What recovery did with the runs the last process left, for logging and tests. */
-  recovered: Recovered[];
-  /** The book turns' diagnostic lines (durable-turn-log.ts). */
-  turnLog: BookTurnLog;
-  /** A tool call's label from the catalog, for a turn this process did not assemble. */
-  describe(name: string, args: unknown): { label: string; quiet?: true };
-  onTurnSettled(listener: (event: SettledEvent) => void): () => void;
 }
 
-const appThreads = storeBookThreads({ load: loadThreads, get: getThread, append: appendMessage, flush: flushThreads });
+export const appThreads = storeBookThreads({ load: loadThreads, get: getThread, append: appendMessage, flush: flushThreads });
 
 async function openBookDesk(origin: BookOrigin): Promise<readonly AgentTool[]> {
   const open = deliveryOpener("book");
@@ -87,7 +70,7 @@ async function openBookDesk(origin: BookOrigin): Promise<readonly AgentTool[]> {
   return delivery?.turn.tools ?? [];
 }
 
-/** The steers a recovery withdrew go into their thread files at the moment they were said. */
+/** The steers a recovery withdrew from book threads go into their thread files at the moment they were said. */
 export async function landWithdrawnSteers(
   runtime: DurableRuntime,
   recovered: readonly Recovered[],
@@ -95,38 +78,14 @@ export async function landWithdrawnSteers(
   now: () => number,
   context: Context,
 ): Promise<void> {
-  let wrote = false;
-  for (const run of recovered) {
-    if (run.steers.length === 0) continue;
-    const origin = (await runtime.harness.snapshot(ThreadDoc, run.conversationId, context))?.origin;
-    if (origin?.place !== "book") continue;
-    const book = asBookOrigin(origin);
-    await threads.load(book.home);
-    const have = new Set((threads.messages(book.home, book.threadId) ?? []).map((m) => `${m.role}:${m.ts}`));
-    for (const steer of run.steers) {
-      const ts = steer.ts ?? now();
-      if (have.has(`user:${ts}`)) continue;
-      threads.append(book.home, book.threadId, { role: "user", text: steer.text, ts });
-      wrote = true;
-    }
-  }
-  if (wrote) await threads.flush();
+  const book = bookPlace(new AssembledTurns(), { watching: () => false, card: async () => {}, openDesk: async () => [] });
+  const place = book({ threads, describe: (name) => ({ label: name }), now });
+  await fileWithdrawnSteers(runtime, recovered, new Map([["book", place]]), threads, now, context);
 }
 
 export async function openReadingDurable(options: ReadingDurableOptions): Promise<ReadingDurable> {
-  const threads = options.threads ?? appThreads;
   const assembled = new AssembledTurns();
-  const listeners = new Set<(event: SettledEvent) => void>();
-  const byName = new Map(options.catalog.map((tool) => [tool.name, tool]));
-  const describe = (name: string, args: unknown) => {
-    const tool = byName.get(name);
-    if (!tool) return { label: name };
-    return { label: toolLabel(tool, args as Record<string, unknown>), ...(tool.quiet ? { quiet: true as const } : {}) };
-  };
-  const now = options.now ?? Date.now;
-  const landing: BookLandingDeps = {
-    threads,
-    describe,
+  const book = bookPlace(assembled, {
     watching: (origin) => options.watching?.(origin) ?? false,
     card:
       options.card ??
@@ -139,63 +98,21 @@ export async function openReadingDurable(options: ReadingDurableOptions): Promis
           ...(origin.page !== undefined ? { page: origin.page } : {}),
           outcome: { kind: "answer", text },
         })),
-  };
-  const readBook = bookHistoryReader(threads, assembled);
-  const turnLog = new BookTurnLog(options.log ?? appTurnLog, now);
-  const runtime = await openDurable({
-    host: options.host ?? appDurableHost(),
-    models: options.models ?? createAppModels(),
+    openDesk: options.openDesk ?? openBookDesk,
+  });
+  const device = await openDeviceDurable({
     catalog: options.catalog,
-    resolvers: { book: bookDeskResolver(assembled, options.openDesk ?? openBookDesk) },
-    landers: { book: bookLander(landing) },
-    readHistory: async (origin, read, context) => (origin.place === "book" ? readBook(origin, read, context) : []),
-    onRequest: (about) => {
-      if (about.origin.place !== "book") return;
-      const book = asBookOrigin(about.origin);
-      const key = bookThreadKey(book);
-      turnLog.request(key, about.round, {
-        surface: assembled.get(key)?.telemetry?.surface ?? "reading",
-        conversation: book.threadId,
-        provider: about.model?.provider ?? "",
-        model: about.model?.modelId ?? "",
-      });
-    },
-    recordResponse: (message, about) => {
-      if (about.origin.place !== "book") return;
-      const key = bookThreadKey(asBookOrigin(about.origin));
-      // A turn resumed after a restart was not assembled here: it is logged as reading, inline unknown.
-      const telemetry = assembled.get(key)?.telemetry;
-      recordModelCall(bookUsageReport(message, about.origin, telemetry));
-      recordCacheTurn(bookCacheTurn(message, about.origin, about.round, telemetry));
-      turnLog.response(key, about.round, message.stopReason);
-    },
-    onSettled: (conversationId, origin, result, startedAt) => {
-      if (origin.place === "book") {
-        const key = bookThreadKey(asBookOrigin(origin));
-        turnLog.end(key, result);
-        turnLog.endUnbegun(key, result, asBookOrigin(origin).threadId, startedAt);
-      }
-      for (const listener of listeners) listener({ conversationId, origin, result });
-    },
-    sectionKeys: [TURN_SECTION],
+    places: { ...options.places, book },
+    threads: options.threads ?? appThreads,
+    ...(options.host ? { host: options.host } : {}),
+    ...(options.models ? { models: options.models } : {}),
     ...(options.dir ? { dir: options.dir } : {}),
     ...(options.rotateAtBytes ? { rotateAtBytes: options.rotateAtBytes } : {}),
-    now,
+    ...(options.now ? { now: options.now } : {}),
     ...(options.onReport ? { onReport: options.onReport } : {}),
+    ...(options.log ? { log: options.log } : {}),
   });
-  const recovered = await recoverBeforeResume(runtime, BACKGROUND_CONTEXT);
-  await landWithdrawnSteers(runtime, recovered, threads, now, BACKGROUND_CONTEXT);
-  return {
-    runtime,
-    assembled,
-    recovered,
-    turnLog,
-    describe,
-    onTurnSettled(listener) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
+  return { ...device, assembled };
 }
 
 let started: Promise<ReadingDurable> | undefined;
@@ -211,10 +128,19 @@ export function setBookWatching(probe: (origin: BookOrigin) => boolean): () => v
   return () => watchingProbes.delete(probe);
 }
 
-/** Open the device's durable runtime once, at app start. Failures are logged; the next call tries again. */
-export function startReadingDurable(catalog: () => readonly AgentTool[]): Promise<ReadingDurable> {
+/**
+ * Open the device's durable runtime once, at app start, with the places the
+ * shell hands in beside the book's. Failures are logged; the next call tries again.
+ */
+export function startReadingDurable(
+  catalog: () => readonly AgentTool[],
+  places: () => Readonly<Record<string, PlaceFactory>> = () => ({}),
+): Promise<ReadingDurable> {
+  // Background passes (distillation, lesson prep, link take) run on this runtime too.
+  provideBackgroundHost(() => started?.then(deviceBackgroundHost));
   started ??= openReadingDurable({
     catalog: catalog(),
+    places: places(),
     watching: (origin) => [...watchingProbes].some((probe) => probe(origin)),
     onReport: (error) => console.warn("durable runtime", error),
   }).catch((error: unknown) => {

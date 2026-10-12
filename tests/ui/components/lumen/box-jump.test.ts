@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import {
   doorFocusKey,
   doorFocusSelector,
-  noReaderHereLine,
+  notOnThisShellLine,
   planItemJump,
   planJump,
   type Place,
@@ -56,10 +56,26 @@ test("no page on the item means no page step", () => {
   expect(jump.steps.some((step) => step.step === "go-to-page")).toBe(false);
 });
 
-test("the phone has no reader to jump into, and says so", () => {
-  const jump = planJump({ place: "book", bookId: "b1", threadId: "t1", page: 3 }, PHONE);
-  expect(jump.steps).toEqual([]);
-  expect(jump.unreachable).toBe(noReaderHereLine());
+test("the phone opens the book's conversation in one step", () => {
+  const jump = planJump({ place: "book", bookId: "b1", threadId: "t1", annotationId: "a1", page: 3 }, PHONE);
+  expect(jump).toEqual({ steps: [{ step: "open-book-conversation", bookId: "b1", threadId: "t1" }], unreachable: null });
+});
+
+test("a coaching or retell card opens its view in its topic on the desk, and says why not on the phone", () => {
+  expect(planJump({ place: "talk", outlineId: "o1" }, DESK)).toEqual({
+    steps: [{ step: "open-coach", outlineId: "o1" }],
+    unreachable: null,
+  });
+  expect(planJump({ place: "retell", retellId: "r1" }, DESK)).toEqual({
+    steps: [{ step: "open-retell", retellId: "r1" }],
+    unreachable: null,
+  });
+  for (const origin of [
+    { place: "talk", outlineId: "o1" },
+    { place: "retell", retellId: "r1" },
+  ] as const) {
+    expect(planJump(origin, PHONE)).toEqual({ steps: [], unreachable: notOnThisShellLine() });
+  }
 });
 
 test("the door opens its conversation and the briefing goes to its page, in either shell", () => {

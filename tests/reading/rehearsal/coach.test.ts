@@ -5,6 +5,7 @@
 // possible over the talk as it stands.
 // Run: bun test.
 
+import { appToolCatalog } from "../../../src/ui/components/common/durable-catalog";
 import { expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import { buildCoachSystemPrompt, COACH_INSTRUCTIONS } from "../../../src/reading/rehearsal/coach";
@@ -118,6 +119,9 @@ test("the turn mounts the five tools that write a talk, over the live outline", 
     "write_talk_segment",
   ]);
   expect(turn.messages).toHaveLength(1);
+  // The durable runtime registers only the catalog's tools; one missing from it is dropped without a word (docs/pitfall/524).
+  const catalogued = new Set(appToolCatalog().map((tool) => tool.name));
+  expect(turn.tools.map((t) => t.name).filter((name) => !catalogued.has(name))).toEqual([]);
   expect(turn.refusal).toBe("");
 
   // Editing the note is the coach's one silent write: it heard the segment

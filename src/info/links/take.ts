@@ -24,7 +24,7 @@ export interface LinkIntakeDeps<T, D> {
   file(built: Bound | PassedThrough, slugBase: string, target: T): Promise<Filed<D>>;
   /** Keep the source record (store.ts in the app). */
   saveRecord(key: string, entry: LinkRecordEntry): Promise<void>;
-  /** One model turn of the loop: runSubagentTurnLive in the app, a script in a test. */
+  /** One model turn of the loop: runBackgroundTurn in the app, a script in a test. */
   turn: SubagentTurnFn;
   /** What the reader said when sharing the link. */
   note?: string;

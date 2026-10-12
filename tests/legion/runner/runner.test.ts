@@ -1,4 +1,4 @@
-// The runner (src/legion/execute/runner.ts, docs/55): take the run, write
+// The runner (src/legion/runner/runner.ts, docs/55): take the run, write
 // `running`, run it, write the terminal state, ring a bell — and the three
 // gates around that line.
 //
@@ -7,13 +7,13 @@
 // it wants the run to finish. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { createRunner } from "../../../src/legion/execute/runner";
+import { createRunner } from "../../../src/legion/runner/runner";
 import {
   delegableWorkerKinds,
   registerWorker,
   registeredWorkerKinds,
   type WorkerHandle,
-} from "../../../src/legion/execute/worker";
+} from "../../../src/legion/runner/worker";
 import { createBellStore, type Bell } from "../../../src/legion/bell";
 import { createRunStore, mergeRun, type Run } from "../../../src/legion/run";
 import type { DeviceClaim } from "../../../src/legion/claim";

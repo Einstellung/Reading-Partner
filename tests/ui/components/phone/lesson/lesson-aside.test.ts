@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 import { useDom } from "../../../../support/dom";
 
 const { cleanup } = await useDom();
-const { replySpanAt } = await import("../../../../../src/ui/components/phone/lesson/lesson-aside");
+const { heldSpanStands, replySpanAt } = await import("../../../../../src/ui/components/phone/lesson/lesson-aside");
 
 afterEach(cleanup);
 
@@ -59,4 +59,13 @@ test("the span is clipped to what the record holds", () => {
   const span = replySpanAt(host.querySelector("p"));
   expect(span).not.toBeNull();
   expect((span as { text: string }).text.length).toBeLessThanOrEqual(400);
+});
+
+test("a held paragraph stands while a later reply streams and falls when its reply is gone", () => {
+  const span = { messageTs: 1700, text: "The first stop." };
+  const landed = [{ ts: 1600 }, { ts: 1700 }];
+  expect(heldSpanStands([...landed, { ts: 1800 }], span)).toBe(true);
+  expect(heldSpanStands([...landed, { ts: 1800 }, { ts: 1801 }], span)).toBe(true);
+  expect(heldSpanStands([{ ts: 1600 }], span)).toBe(false);
+  expect(heldSpanStands([], span)).toBe(false);
 });

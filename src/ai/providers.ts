@@ -147,8 +147,8 @@ export interface StreamChatOptions {
 	// (src/ai/call-setup.ts) — so it has to be the same value on every call of
 	// one conversation and a different one for a call that is not part of any — which is what every caller of this
 	// function is today, and each of them says so at its call site. A caller with
-	// a real conversation passes that conversation's id; the tool-loop path takes
-	// it from its telemetry thread (src/legion/execute/turn.ts).
+	// a real conversation passes that conversation's id. Durable turns do not come
+	// through here: pi-durable hands every request its conversation's own id.
 	sessionId: string;
 	// Extended-thinking effort. undefined = off. Passed to pi-ai's streamSimple,
 	// which maps it per provider and ignores it on models without reasoning. We
@@ -169,7 +169,7 @@ export interface StreamChatOptions {
 // Codex backend, so the settings label stays what it was.
 const openaiCodex: Provider = { ...openaiCodexProvider(), name: "OpenAI Codex" };
 
-// Exported so the agent turn (src/legion/execute/turn.ts) reuses the exact same provider
+// Exported so the agent turn (src/legion/durable) reuses the exact same provider
 // instances, model lookup, and OAuth/api-key resolution as streamChat. The keys
 // are this app's ids, not pi's: our "openai" is pi's openai-codex.
 export const providers: Record<ProviderId, Provider> = {
@@ -311,6 +311,32 @@ export function nextDefaultsForActive(
 	return { defaultProviderId: id, defaultModelId: keep ? defaultModelId : defaultModelFor(id) };
 }
 
+// What a device takes as its own provider and models the first time it keeps
+// them in device.json rather than the synced settings.json (docs/36). The
+// account's choice stands when it names the provider this device is signed in
+// to; otherwise it was another device's, and this one starts on its own
+// provider's defaults, everyday work following chat. Signed in to nothing, it
+// has nothing to call and keeps nothing.
+export function deviceModelFromAccount(
+	account: Pick<Settings, "defaultProviderId" | "defaultModelId" | "everydayModelId">,
+	signedIn: ProviderId | null,
+): Pick<Settings, "defaultProviderId" | "defaultModelId" | "everydayModelId"> {
+	if (!signedIn) return { defaultProviderId: null, defaultModelId: null, everydayModelId: null };
+	if (account.defaultProviderId === signedIn) {
+		return {
+			defaultProviderId: signedIn,
+			defaultModelId: account.defaultModelId ?? defaultModelFor(signedIn),
+			everydayModelId: account.everydayModelId,
+		};
+	}
+	return { ...nextDefaultsForActive(null, null, signedIn), everydayModelId: null };
+}
+
+// The provider this device holds a live credential for, or null.
+export async function signedInProvider(): Promise<ProviderId | null> {
+	return activeProviderId(await loadCredentials());
+}
+
 export async function resolveApiKey(id: ProviderId): Promise<string> {
 	if (id === "anthropic") {
 		const token = await getValidAnthropicAuth();
@@ -429,7 +455,7 @@ export type SimpleStreamFn = (
 // same 503 into a reply about two seconds later.
 //
 // This only wraps establishing the request. A stream that opens and then goes
-// quiet is the stall watchdog's business (src/legion/execute/watchdog.ts); the two do not
+// quiet is the stall watchdog's business (src/legion/durable/watchdog.ts); the two do not
 // overlap. maxRetryDelayMs stays at pi's default, so a server asking for a wait
 // longer than a minute still fails fast and lands in the watchdog's hands with
 // the requested delay in the message.

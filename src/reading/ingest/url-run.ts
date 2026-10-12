@@ -17,8 +17,8 @@
 // halves are testable without the network.
 
 import { appData } from "../../platform/app/appdata";
-import { appRunner } from "../../legion/execute/runner";
-import type { Delegated, DelegateInput } from "../../legion/execute/worker";
+import { appRunner } from "../../legion/runner/runner";
+import type { Delegated, DelegateInput } from "../../legion/runner/worker";
 import type { Run } from "../../legion/run/types";
 import type { BoxOrigin } from "../../box";
 

@@ -5,12 +5,12 @@
 // a history reader over that file.
 
 import { Type, type Message } from "@earendil-works/pi-ai";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
 import { fauxProvider, type FauxResponseStep } from "@earendil-works/pi-ai/providers/faux";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { durableSqliteSize, openDurableSqlite, removeDurableSqlite } from "../../../../src/platform/app/durable-sqlite";
-import type { AgentTool } from "../../../../src/legion/execute/contract";
+import type { AgentTool } from "../../../../src/legion/durable/contract";
 import { openDurable, type DurableHost, type DurableRuntime } from "../../../../src/legion/durable/harness";
 import type { LandedRow, LandedTurn } from "../../../../src/legion/durable/turn";
 import type { ThreadOrigin } from "../../../../src/legion/durable/extension";
@@ -114,7 +114,10 @@ export interface TestRuntimeOptions {
   /** Called inside the lander after the file is written, before it returns. */
   afterLand?: () => Promise<void>;
   rotateAtBytes?: number;
+  forceRotateFactor?: number;
   now?: () => number;
+  /** The models the runtime calls; the faux provider when unset. */
+  models?: MutableModels;
 }
 
 export interface TestRuntime {
@@ -165,8 +168,8 @@ export async function openTestRuntime(options: TestRuntimeOptions): Promise<Test
           },
     ),
   );
-  const models = createModels();
-  models.setProvider(faux.provider);
+  const models = options.models ?? createModels();
+  if (!options.models) models.setProvider(faux.provider);
   const tools = catalog(options.desk ?? {});
   result.runtime = await openDurable({
     host: testHost(options.root),
@@ -189,6 +192,7 @@ export async function openTestRuntime(options: TestRuntimeOptions): Promise<Test
     },
     sectionKeys: ["soul", "desk"],
     ...(options.rotateAtBytes !== undefined ? { rotateAtBytes: options.rotateAtBytes } : {}),
+    ...(options.forceRotateFactor !== undefined ? { forceRotateFactor: options.forceRotateFactor } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
   return result;

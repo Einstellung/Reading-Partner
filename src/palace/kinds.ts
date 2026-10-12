@@ -308,7 +308,7 @@ export const PALACE = [
     ],
     deleteWith: "never",
     retention: NEVER,
-    note: "a model id only means anything under its own provider, so the fields strategy settles the provider and every model id together (pitfall 237). briefingModelId is the name everydayModelId had before docs/75 and is still in older devices' files",
+    note: "a model id only means anything under its own provider, so the fields strategy settles the provider and every model id together (pitfall 237). briefingModelId is the name everydayModelId had before docs/75 and is still in older devices' files. Since docs/36 the current build keeps the provider, models and STT endpoint in device.json and only carries settings.json's copy through for older builds",
   },
   {
     kind: "topics",
@@ -352,7 +352,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     retention: NEVER,
-    note: "per-device settings: one machine starting with the computer says nothing about another",
+    note: "per-device settings: one machine starting with the computer says nothing about another, and a provider choice is only callable next to this machine's own credential (DEVICE_SETTING_KEYS)",
   },
   {
     kind: "events",
@@ -389,7 +389,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     retention: { rule: "tail", lines: 5000 },
-    note: "one line per moment of each AI turn on this device: start, lane, each round's first byte and end, how it ended (src/legion/execute/turn-log.ts). Diagnostics for a person to export; nothing in the app reads it back",
+    note: "one line per moment of each AI turn on this device: start, lane, each round's first byte and end, how it ended (src/legion/durable/turn-log-sink.ts). Diagnostics for a person to export; nothing in the app reads it back",
   },
 
   // -- marks and conversations ---------------------------------------------
@@ -1484,19 +1484,6 @@ export const PALACE = [
     retention: NEVER,
     note: "which anchor this device last rang a wake bell for (src/legion/schedule, docs/55). Machine-local: two devices agreeing on who fires is the election's job, and this is only how one device does not fire twice for the same hour",
   },
-  {
-    kind: "session",
-    domain: "memory",
-    match: subtree("session/"),
-    samples: ["session/--session--/2026-09-14T03-13-13-451Z_01a09de7.jsonl"],
-    id: "fixed",
-    refs: [],
-    sync: "local",
-    deleteWith: "never",
-    retention: inline(flow("src/legion/execute/harness.ts", "sweepSessionGroup")),
-    note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). A process start settles the previous session and begins a fresh one; the group keeps its newest five files (legion/execute/harness.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/71)",
-  },
-
   {
     kind: "durable",
     domain: "memory",

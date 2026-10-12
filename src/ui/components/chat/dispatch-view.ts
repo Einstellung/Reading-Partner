@@ -13,7 +13,7 @@
 // device rather than about the work.
 
 import { appData } from "../../../platform/app/appdata";
-import { appRunner } from "../../../legion/execute/runner";
+import { appRunner } from "../../../legion/runner/runner";
 import { isTerminal, type Run } from "../../../legion/run";
 import type { Receipt } from "../../../ai/turn-view/tool-status";
 import { clipLine } from "../../../platform/std/text";

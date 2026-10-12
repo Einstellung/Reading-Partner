@@ -45,3 +45,13 @@ export function replySpanAt(node: Node | null | undefined): LessonAskSpan | null
   const text = asideSpan(source.textContent ?? "");
   return text === null ? null : { messageTs: ts, text };
 }
+
+/**
+ * Whether a held paragraph is still worth offering: its reply is still in the
+ * lesson. A reply further down growing is no reason to drop it. The lesson
+ * keeps answering under an aside (docs/74), so a reader holding a landed
+ * paragraph while the next answer streams keeps the control.
+ */
+export function heldSpanStands(messages: readonly { ts: number }[], span: LessonAskSpan): boolean {
+  return messages.some((m) => m.ts === span.messageTs);
+}

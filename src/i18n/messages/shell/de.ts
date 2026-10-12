@@ -51,10 +51,12 @@ export default {
   "box.originDoor": "An der Tür · {date}",
   "box.originBriefing": "Briefing · {date}",
   "box.originMeals": "Mahlzeiten",
+  "box.originTalk": "Vortragscoach",
+  "box.originRetell": "Nacherzählung",
+  "box.notOnPhone": "Das hier öffnet sich auf dem iPad oder am Schreibtisch.",
   "box.label": "Die Box",
   "box.waiting": { one: "Die Box, {count} wartend", other: "Die Box, {count} wartend" },
   "box.empty": "Nichts in der Box.",
-  "box.notReadable": "Das steckt in einem Buch. Öffne es auf dem iPad oder am Schreibtisch.",
 
   "figure.label": "Abb. {id} · S.{page}",
   "figure.number": "Abb. {id}",

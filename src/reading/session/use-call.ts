@@ -14,7 +14,7 @@
 // so it is handed the constructors rather than the types.
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { toolLabel } from "../../legion/execute/tool-result";
+import { toolLabel } from "../../legion/durable/tool-result";
 import type { CompressedImage } from "../../ai/image-utils";
 import { logEvent } from "../../platform/app/events";
 import type { Annotation } from "../../platform/app/reader-contract";
@@ -59,6 +59,7 @@ import { arrivedMessage, createOwnAppends } from "../turn/thread-arrivals";
 import { deferHangup } from "./hangup";
 import { threadHome, type ThreadOwner } from "./documents";
 import { createPendingImages, type StagedImage } from "../turn/pending-images";
+import { gateSteers } from "../turn/steer-gate";
 import type { PrepPipeline } from "../prep/papers/pipeline";
 import {
   backgroundFailureToast,
@@ -658,7 +659,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         list.map((line) => shapes.current.newRow({ role: "user", text: line.text, ts: line.ts }));
 
       if (end.kind === "stalled") {
-        // The stream went silent and the watch cut it (legion/execute/stall.ts):
+        // The stream went silent and the watch cut it (legion/durable/stall.ts):
         // the app was switched away mid-answer and the connection did not
         // survive being frozen. The run was superseded, so nothing landed; the
         // half-written rows go, what the reader said goes into the file, and the
@@ -723,7 +724,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         // Stopped, or the thread deleted, while the turn was starting.
         driven.stop();
       } else {
-        live.durable = { steer: driven.steer, stop: driven.stop };
+        live.durable = gateSteers({ steer: driven.steer, stop: driven.stop });
         // Lines said while the turn was being assembled go in now.
         for (const row of live.unsent ?? []) steerIn(live, row);
       }

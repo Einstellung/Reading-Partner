@@ -1,4 +1,4 @@
-// Every tool the app mounts, against the contract in legion/execute/contract.ts:
+// Every tool the app mounts, against the contract in legion/durable/contract.ts:
 // a label the reader can read, an effect, and a gate that is one of the declared
 // ones. The list below is the roster — like tests/layering.test.ts's LAYER table,
 // it is written out by hand, and a factory that grows or loses a tool fails here
@@ -37,8 +37,10 @@ import { buildCompanionTools } from "../../src/info/briefer/companion-tools";
 import { buildReadPageTool } from "../../src/info/sources/read-page-tool";
 import { buildTaskingTools } from "../../src/info/tasking/tools";
 import { subagentTool } from "../../src/legion/subagent/tool";
-import { normalizeToolResult, toolLabel } from "../../src/legion/execute/tool-result";
-import type { AgentTool } from "../../src/legion/execute/contract";
+import { buildTakeLinkTool } from "../../src/reading/ingest/take-link-tool";
+import { buildMealsCatalogTools } from "../../src/info/meals/tools";
+import { normalizeToolResult, toolLabel } from "../../src/legion/durable/tool-result";
+import type { AgentTool } from "../../src/legion/durable/contract";
 
 const any = (v: unknown): any => v as any;
 
@@ -190,7 +192,26 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
         any({}),
       ),
     ],
-    names: ["research_literature"],
+    names: ["research_literature"], safe: ["research_literature"],
+  },
+  {
+    where: "reading/ingest/take-link-tool",
+    tools: [buildTakeLinkTool(any({ links: () => [], origin: { place: "door", date: "" } }))],
+    names: ["take_link"],
+  },
+  {
+    where: "info/meals",
+    tools: buildMealsCatalogTools(any({ threadId: "meals", ports: {} })),
+    names: [
+      "propose_meals_plan",
+      "update_meals_profile",
+      "record_meals_deviation",
+      "add_shopping_items",
+      "remove_shopping_item",
+      "replace_shopping_item",
+      "write_meals_method",
+      "refresh_meals_photos",
+    ],
   },
 ];
 
@@ -228,7 +249,9 @@ test("every factory mounts the tools the roster names", () => {
 // there fails every call with "Tool … is not available".
 test("the durable catalog registers every tool in the roster", () => {
   const registered = new Set(catalog.map((t) => t.name));
-  const missing = ROSTER.flatMap(({ names }) => names).filter((name) => !registered.has(name));
+  const missing = [...ROSTER.flatMap(({ names }) => names), ...companion.map((t) => t.name)].filter(
+    (name) => !registered.has(name),
+  );
   expect(missing).toEqual([]);
 });
 
@@ -307,7 +330,7 @@ const GATES = new Set(["card", "trial", "instruction"]);
 // The tools the reader is shown nothing about (docs/72). Written out here for
 // the same reason the roster is: a tool that starts or stops being quiet is a
 // change to what the reader sees, and it fails this line until it is meant.
-const QUIET = ["observation_update", "statement_write"];
+const QUIET = ["observation_update", "statement_write", "take_link"];
 
 test("every tool declares a label, an effect and — where it has one — a known gate", () => {
   const all = [...ROSTER.flatMap((r) => r.tools), ...companion];

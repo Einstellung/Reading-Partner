@@ -4,7 +4,7 @@
 
 import { expect, test } from "bun:test";
 import { createSteering, type PendingSteer } from "../../../src/reading/turn/steering";
-import type { SteerPort } from "../../../src/legion/execute/contract";
+import type { SteerPort } from "../../../src/legion/durable/contract";
 
 // A port that hands back an id per call, and records what it was asked to say.
 function fakePort(): { port: SteerPort; said: string[]; ids: string[] } {

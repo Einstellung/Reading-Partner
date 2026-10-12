@@ -10,7 +10,7 @@
 // kind is registered on the desk: reading hands over an opener at startup and
 // this file only knows that some place answers to "book".
 
-import type { SteerPort } from "../legion/execute/contract";
+import type { SteerPort } from "../legion/durable/contract";
 import type { Settings } from "../platform/app/settings";
 import type { BoxOrigin } from "../box";
 import type { AssembledTurn } from "./turn";
@@ -82,8 +82,8 @@ export interface TurnDelivery {
   /** The bell rendered as prose: the turn's input, never written to the conversation. */
   bell: string;
   bellId: string;
-  /** The run the bell is about; the reply is stamped with it. */
-  runId: string;
+  /** The run the bell is about; the reply is stamped with it. None for a wake bell. */
+  runId?: string;
   signal?: AbortSignal;
   /** Called when the conversation is busy and the delivery starts waiting for it to land. */
   onWait?: () => void;
@@ -150,11 +150,8 @@ export function parseOrigin(deliverTo: string | undefined): BoxOrigin | null {
   }
 }
 
-/**
- * The same shapes, read off a value that is already parsed: what a
- * session entry holds (src/soul/recover.ts). Null for anything else.
- */
-export function originOf(value: unknown): BoxOrigin | null {
+/** The same shapes, read off a value that is already parsed. Null for anything else. */
+function originOf(value: unknown): BoxOrigin | null {
   if (typeof value !== "object" || value === null) return null;
   const o = value as Record<string, unknown>;
   if (o.place === "book") {
@@ -190,5 +187,7 @@ export function originLabel(origin: BoxOrigin): string {
   }
   if (origin.place === "briefing") return `the briefing of ${origin.date}`;
   if (origin.place === "meals") return "the meals conversation";
+  if (origin.place === "talk") return "coaching a talk";
+  if (origin.place === "retell") return "a retell";
   return `at the door, ${origin.date}`;
 }

@@ -82,7 +82,6 @@ function rig() {
       bells,
       runs: createRunStore(mapDisk()),
       box: createBoxStore(mapDisk()),
-      send: async () => "never sent",
       readFile: () => Promise.reject(new Error("not on this device")),
       now: () => 2000,
       onTrouble: (_bell, reason) => void troubles.push(reason),

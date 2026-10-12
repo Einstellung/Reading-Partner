@@ -139,9 +139,12 @@ spike 实测纯问答一轮约 5.2 KB（回答 4.3 KB），100 MB 约两万轮�
 | `tools.ts` | `AgentTool` 到 `ToolRegistration` 的适配，replay、abort 放手、按对话解析上下文 |
 | `turn.ts` | 发起一个回合、落盘那步（落盘函数由调用方按 place 注入） |
 | `recover.ts` | 进程起来、`resume()` 之前的三分 |
-| `stall.ts`、`watchdog.ts` | 第四阶段从 `legion/execute` `git mv` 过来 |
+| `child.ts` | 子 agent 的子对话：`rp.subagent`、每个定义一个 extension、`ChildDesks`、`runTaskChild` |
+| `background.ts` | 后台运行：ownerless 对话、按次装卸的 extension、`runBackgroundTurn` |
+| `stall.ts`、`watchdog.ts`、`limiter.ts`、`observable-run.ts` | 停摆看门狗、模型调用重试、限流、进程内长任务的状态；第四阶段从 `legion/execute` 搬来 |
+| `contract.ts`、`tool-result.ts`、`turn-log-sink.ts` | `AgentTool` 等工具类型和两句拒绝、工具结果整形、`turn-log.jsonl` 的写入；同上 |
 
-`legion/durable` 只 import platform/app、ai、budget、legion 下的 capability，不 import soul 和任何领域。`platform/app/durable-sqlite.ts` 是宿主接口，一个文件一件宿主能力，不 import 别的目录。不依赖 React 的投影逻辑（view state 到界面行）放 `src/reading/turn/` 的 `.ts` 并配单测。第四阶段删空 `legion/execute` 后从 LAYER 表删掉那一行。
+`legion/durable` 只 import platform/app、ai、budget、legion 下的 capability，不 import soul 和任何领域。`platform/app/durable-sqlite.ts` 是宿主接口，一个文件一件宿主能力，不 import 别的目录。不依赖 React 的投影逻辑（view state 到界面行）放 `src/reading/turn/` 的 `.ts` 并配单测。legion runner（`runner.ts`、`worker.ts`、`outputs.ts`）第四阶段搬进新的 `legion/runner`（capability）。`legion/execute` 已删空，LAYER 表里那一行已删。
 
 spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`、`probe.ts`、`sqlite-probe-main.ts`）第一阶段删掉，`sqlite-scenes.ts` 的场景搬进测试。
 
@@ -186,19 +189,38 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 量：大，三到四棒。
 
+已完成（2026-10-11，分支 `dev/pi-durable-2a` 到 `2g`，过程见[交接](../research/pi-durable-迁移交接.md)）。和上面不同的：
+
+- `legion/durable` 多三个文件：`device.ts`（设备运行时，`openDeviceDurable({ places })`，每个 place 给键、地址、桌面解析器、落盘、读历史）、`thread-files.ts`（通用的线程落盘和 steer 写回）、`turn-log.ts`（从 `reading/turn` 搬来）。运行时入口仍叫 `startReadingDurable` / `readingDurable`（`reading/turn/durable-runtime.ts`），各 place 由外壳传进来。
+- 回合控制器是 `reading/turn/place-session.ts`；门口的 place 在 `soul/door-durable.ts`，info 和三餐在 `info/briefer/info-durable.ts`，教练和复述走 `reading/turn/one-thread-place.ts`，info 语音在 `reading/turn/info-voice.ts`。
+- 铃不在 `soul/bell.ts` 里起回合：各 place 的铃在 `reading/turn/*-bell.ts`（通用的 `place-bell.ts`，门口 `door-bell.ts`，简报和三餐 `info-bell.ts`，书 `deliver.ts`），外壳注册；`bell.ts` 只按 place 分派，没注册门口时铃留在队列。`soul/headless.ts` 没改成建 `rp.turn`，删掉了：铃的 headless 回合是 `place-bell.ts` 的 `headlessPlaceTurn`，收尾旧 session 的发送并进 `recover.ts`。
+- `soul/harness.ts` 整个删掉。`startSoulSession` 换成 `recover.ts` 的 `finishOldSoulSession`：soul 的 session 组为空就什么都不开；有就开一次、等收尾跑完、删掉整组，之后启动不再碰。旧 session 里门口的回合没有 opener，收尾时 abort，同旧行为。
+- 关掉对话不停回合，所有对话面统一（2026-10-11 用户改定，原为「关掉 = 停止」）：只有按停止才停。点叉、离开页面、返回都不停，回合在后台跑完落盘；落盘时没人开着这个对话就放 Lumen 的盒子卡片，点卡片打开那个对话；再打开对话接上在途回合，正文接着长。关掉后打的、没被回合收下的话写进文件，不开新回合。门口、info、三餐、排练教练、复述、手机 PDF 课堂、书的线程（iPad、桌面、手机 EPUB 课堂、划线提问）都是这样；读者的回合、铃的回合、通话中的语音回合都一样，挂断电话照旧停。教练和复述的卡片 origin 是 `{ place: "talk", outlineId }` / `{ place: "retell", retellId }`，桌面打开时按大纲或复述查主题再进去，手机没有这两个页面，卡片说明去 iPad 或桌面打开。书的卡片在手机上开论文的课堂或 EPUB 的那条线程。手机课堂里点「问这一段」进 aside 也不停课堂的回合；在 aside 里课堂不算看着（同桌面的父对话），落盘放卡片；回来时 aside 的回执行在还没落盘的回答上面，文件里也是这个顺序。关掉时回合还在装配，再打开等它起跑后接上。
+- `runAgentTurn` 不再收 `deliverTo`，app 不再写 `DELIVERY_ENTRY`、`PROMPT_ENTRY`；`runHarnessTurn` 的 `deliverTo` 只剩恢复测试用来造旧 session，第四阶段随 `legion/execute` 删。书、简报、三餐的 opener（`registerDelivery`）留给 `recover.ts` 重建桌面。
+
 ### 第三阶段：子 agent 和后台
 
-范围：`legion/subagent`、legion runner 的 agent worker、后台 pass（`memory/live`、`info/program/live.ts`、`reading/prep/*`）。
+已完成（2026-10-12，A、B 两棒并行，C 棒合并收尾，分支 `dev/pi-durable-3-c`，过程见[交接](../research/pi-durable-迁移交接.md)）。
 
-动：`subagentTool` 改成 README 那个子对话工具：在 `api.commit()` 里建 `ownership: { kind: "task", taskId: api.taskId }` 的子对话，`configure()` 给它定义里的系统提示、模型、工具集，`requestId: "subagent:" + api.taskId`，`replay: "safe"`；跑完从子对话的条目统计轮数、工具成败，交给 `brief.ts` 照旧出 brief，`quota.ts` 照旧扣池子。隔离由构造保证：父对话看不见子对话的条目，界面不 attach 子对话。程序调用的（蒸馏、prep、agent worker）建 ownerless 对话，跑完不留活任务。
+范围：`legion/subagent`、legion runner 的 agent worker、后台 pass（`memory/live`、`reading/prep/*`、`reading/ingest/live.ts`）。
 
-删：`legion/subagent/turn.ts`、`run.ts` 里自己的 runner、`worker:` lane。
+子 agent 工具（`subagentTool`，`legion/durable/child.ts`）：在 `api.commit()` 里按 `ownerTaskId` 找或建 `ownership: { kind: "task", taskId }` 的子对话，`configure()` 给定义里的系统提示（`instructions`）、模型、思考档、`extensions: [rp, rp-agent-<名字>]`、定义的工具，`requestId: "subagent:" + taskId`，`replay: "safe"`。task-owned 子对话创建时复制父对话的 agent，所以 `extensions` 和 `tools` 必须覆盖。每个定义一个 extension，Harness 打开时就装好且不卸：重启后子对话的工具调用可能先于父调用重跑。执行按子对话 id 在进程内的 `ChildDesks` 里找调用方给的 AgentTool。`rp.subagent` 文档标记子对话，`beforeRequest` 对它不读历史、照样管轮数和 budget。跑完从条目统计轮数和工具成败（aborted 的半句不算一轮），交给 `briefFor` 出 brief、`quota.ts` 扣池子。父对话看不见子对话的条目，界面不 attach 子对话。工具只收 `quota`，只在 durable 上能跑（`runInDurable`）。
+
+后台运行（`legion/durable/background.ts` 的 `runBackgroundTurn`）：每次一个新的 ownerless 对话，一条 user 消息，系统提示写进 `rp.desk` 的第一个 section，`purpose`、`maxRounds` 走同一个 `beforeRequest`。pass 的工具按次建（描述和 schema 随这次运行变），每次装一个只含它们的 extension（`rp.background:<run>`），只在自己的对话里和 `rp` 一起选上，跑完卸掉；Harness 默认选择钉成只有 `rp`，不漏到别的对话。不走 `rp.turn`，不进 `rp.conversations`，跑完不留活任务，之后调一次 `maybeRotate`。轮数在这一轮的回答开始到达时计、每轮只报一次，被 hook 拒掉的请求不算一轮。
+
+程序调用：agent worker（`legion/subagent/worker.ts`）、三种蒸馏（对话、划线、复述）、link take 经 `runSubagent` + `runBackgroundTurn`；`runSubagent` 只剩 brief 层（工具包装计数、诚实失败、配额、brief 上限），没有自己的 runner。章节笔记、长论文 digest 直接调 `runBackgroundTurn`，空答案和错误经 `reading/prep/model-output.ts` 变成拒绝。单次 `callModel`（`info/program/live.ts`、prep 的规划和短论文 digest）不上 Harness。
+
+被杀：`recoverBeforeResume` 跳过子对话，让它跟着父调用 resume（父调用 safe，重跑找回同一个子对话和 submission）；`rp.thread` 为 `background` 的对话一律 `abort({ background: true })`，不重放、不重问，pass 下次触发时按自己的文件重跑（蒸馏游标没动，prep 状态在载入时从 running 改回 pending）。
+
+换代：pass 或子对话在跑时有未结算 submission，换代等它；超过阈值 1.5 倍强制换代时 abort 在跑的，pass 得到 error，下次重跑。
+
+删了：`legion/subagent/live.ts`（`runSubagentTurnLive`）、`legion/subagent/turn.ts`（`createTurnSettler`、`worker:` lane）。`tests/support/scripted-runner.ts` 改成在 faux 的 durable runtime 上跑 background run，蒸馏、复述、subagent 的脚本测试不改写法。`scripts/link-intake-compare.ts` 的真模型路径还走 `runHarnessTurn`，把 settler 内联了，第四阶段一起改。
 
 解决：307（子 agent 有自己的系统提示和工具）。
 
-验收：文献检索子 agent 在阅读回合里跑通，父 abort 连带子；六种诚实失败的测试搬过来仍绿；蒸馏一次空运行算成功；typecheck、t.sh 全绿。
+验收（都在 bun 测试里，faux）：`research_literature` 在阅读回合里跑通，父 `stopTurn` 连带 abort 子对话；六种诚实失败；空蒸馏算成功、游标前进；agent worker 端到端（`tests/legion/subagent/worker-durable.test.ts`）；两棒的杀进程恢复测试；typecheck、t.sh 全绿。
 
-量：中，两棒。
+没做的：`research_literature` 没挂进任何桌面（阅读回合经 `delegate` 派 legion run 做文献检索，要不要直接挂是产品决定）。后台运行没有停摆看门狗，蒸馏和 link take 连接不报错也不结束时一直占着 gate，等 `stream.timeoutMs` 定。provider 抛出的错误经 pi-durable 变成 `stopReason: "error"` 的消息，抛出物的类型丢了，蒸馏的 `distill-failed` 事件的 `errorName` 现在一律是 `Error`。
 
 ### 第四阶段：升级与清理
 
@@ -206,8 +228,17 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 
 删：`legion/execute/` 剩下的 harness、held、turn、contract 的 lane 部分、observable-run、limiter 等，`soul/recover.ts`；`platform/app/session-fs.ts`；palace 的 `session` 行和 AppData 下的旧 `session/` 目录（启动时删一次）；LAYER 表的 `legion/execute` 行；`tsconfig.test.json` 里 import pi-agent-core 的八个测试文件改写或删。
 
+第三阶段收尾后 `legion/execute` 的回合运行时只剩：`turn.ts` 的 `runAgentTurn`（`soul/recover.ts`）和 `runHarnessTurn`（十个测试文件、`scripts/link-intake-compare.ts` 的真模型路径）；`harness.ts`、`held.ts` 只剩 `soul/recover.ts`。52 个 src 文件从 `execute/turn` import，多数只拿类型，删之前改指 `contract.ts`。清单见交接「第三阶段 C 棒」。
+
 解决：306、338、367（session JSONL 和旧 harness 的流语法随之消失）；坑 495 关闭。
 
 验收：`bun run typecheck` 两段都过、`scripts/t.sh` 全绿；全端打包；iPad 上走一遍第一、二阶段的杀进程和 steer。
 
 量：中，一到两棒。
+
+第一棒已完成（2026-10-12，分支 `dev/pi-durable-4`，过程见[交接](../research/pi-durable-迁移交接.md)）。和上面不同的：
+
+- pi-agent-core 没有先升 1.1.0：删完代码后没有任何地方用它，直接从 dependencies 删掉；`AgentMessage` 的那处 import 在被删的文件里，随之消失。
+- `legion/execute` 里活着的件不全进 `legion/durable`：runner、worker、outputs 进新目录 `legion/runner`（LAYER 表已登记），其余进 `legion/durable`，`turn-log.ts` 改名 `turn-log-sink.ts`（`durable/turn-log.ts` 已占名）。
+- `finishOldSoulSession` 没有留：第二、三阶段没发过版，0.23.3 及以前的用户升上来时旧 session 从没被收尾过，而收尾要 pi-agent-core。改成启动时删一次 AppData 的 `session/`（`legion/durable/harness.ts` 的 `removeOldSessions`）。升级前最后一次被杀在半路的 soul 回合（门口、info、三餐）不再续完。
+- 后台运行的 error 结局带 `name`：按 pi-ai 的错误文字映射成 `NotSignedInError`、`OfflineError`、`ModelCallError`（坑 559），蒸馏失败事件的 `errorName` 又分得出断网和没登录。

@@ -238,7 +238,7 @@ export function stubEarlyToolResults(messages: Message[], keep = TOOL_RESULTS_KE
 // prices the prefix at the provider's own count (docs/pitfall/66).
 //
 // Pure and shared: every tool-calling round in the app is sized here
-// (src/legion/execute/turn.ts), so no caller can drift on what "does not fit"
+// (src/legion/durable/extension.ts), so no caller can drift on what "does not fit"
 // means.
 export interface RoundFitInput {
   model: Model<Api>;

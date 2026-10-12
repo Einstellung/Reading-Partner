@@ -46,7 +46,7 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 
 - 跑测试用 `scripts/t.sh`（参数原样转给 `bun test`）：`bun test` 把结论打在最后，绿跑会被截断在结论之前。
 
-- 改完 `plugins/voice/ios` 的 Swift 跑 `scripts/ios-swiftcheck.sh --dirty`：在 Mac 上按 iOS SDK 编一遍，四秒出错误行号。这台机器没有 Swift 工具链，不跑它就是在赌。它只管类型，不管运行时、链接和签名。
+- 改完 `plugins/*/ios` 的 Swift 要在 CI 上编一遍：分支推上去后跑 `gh workflow run ios-simulator-smoke.yml --ref <分支>`，等它绿。这台机器没有 Swift 工具链，Mac mini 已于 2026-10 归还，`scripts/ios-swiftcheck.sh` 暂时不能用；租到新 Mac 后按 `docs/platform/560` 重建再恢复。
 
 - 样式:Tailwind v4(theme + preflight + utilities,拆开 import,layer 顺序在 `src/styles.css` 顶部显式声明,见坑 75),UI 一律用 Tailwind utility class。`styles.css` 只放全局基线。
 

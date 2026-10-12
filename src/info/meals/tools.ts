@@ -14,7 +14,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import { t } from "../../i18n";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { asStrings } from "../../platform/std/json";
 import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
 import type { MealsCard, MealsPlanCardData } from "./cards";
@@ -1228,4 +1228,18 @@ export function toDayDrafts(raw: unknown): DayDraft[] {
     out.push(day);
   }
   return out;
+}
+
+/** Every meals tool over `deps`: the desk mounts them through live.ts, the durable catalog registers them. */
+export function buildMealsCatalogTools(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool[] {
+  return [
+    buildProposeMealsPlanTool(deps),
+    buildUpdateProfileTool(deps),
+    buildRecordDeviationTool(deps),
+    buildAddShoppingItemsTool(deps),
+    buildRemoveShoppingItemTool(deps),
+    buildReplaceShoppingItemTool(deps),
+    buildWriteMethodTool(deps),
+    buildRefreshMealsPhotosTool(deps),
+  ];
 }

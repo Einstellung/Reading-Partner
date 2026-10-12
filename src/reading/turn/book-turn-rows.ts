@@ -12,11 +12,22 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Receipt, ToolStatus } from "../../ai/turn-view/tool-status";
 import type { TurnResult } from "../../legion/durable/extension";
 import type { WithdrawnSteer } from "../../legion/durable/turn";
-import { STALL_MESSAGE } from "../../legion/execute/stall";
+import { STALL_MESSAGE } from "../../legion/durable/stall";
 import type { CallRow } from "./call-state";
 import type { ReadingDurable } from "./durable-runtime";
+import type { DeviceDurable } from "../../legion/durable/device";
+import type { AiSurface } from "../../platform/app/cache-telemetry";
 import type { BookOrigin } from "./durable-book";
-import { resumedTurn, runBookTurn, type BookTurn, type BookTurnRequest, type StallOptions } from "./durable-turn";
+import {
+  resumedPlaceTurn,
+  resumedTurn,
+  runBookTurn,
+  runPlaceTurn,
+  type BookTurn,
+  type BookTurnRequest,
+  type PlaceTurnRequest,
+  type StallOptions,
+} from "./durable-turn";
 import type { TurnView } from "./durable-view";
 
 export type BookTurnEnd =
@@ -33,6 +44,8 @@ export interface DrivenBookTurn {
   steer(text: string, ts: number): Promise<boolean>;
   stop(): void;
   ended: Promise<BookTurnEnd>;
+  /** Stop watching for a stall: another follower of the turn has taken it over. */
+  unwatch(): void;
 }
 
 /** A stalled turn is asked again once (docs/pitfall/390); a second stall is shown as a failure. */
@@ -113,6 +126,29 @@ export async function resumedBookTurn(
   return { after: found.startedAt, follow: (onRows) => asRows((onView) => found.follow(onView), onRows) };
 }
 
+/** Start a turn on any place's conversation and follow it as rows (durable-turn.ts runPlaceTurn). */
+export function drivePlaceTurn(
+  durable: DeviceDurable,
+  request: Omit<PlaceTurnRequest, "onView">,
+  onRows: (rows: CallRow[]) => void,
+  context: Context = BACKGROUND_CONTEXT,
+): Promise<DrivenBookTurn> {
+  return asRows((onView) => runPlaceTurn(durable, { ...request, onView }, context), onRows);
+}
+
+/** The turn in flight on a place's conversation, before it is followed; undefined when idle. */
+export async function resumedPlaceRows(
+  durable: DeviceDurable,
+  key: string,
+  surface: AiSurface,
+  context: Context = BACKGROUND_CONTEXT,
+  stall: StallOptions = {},
+): Promise<ResumedBookTurn | undefined> {
+  const found = await resumedPlaceTurn(durable, key, () => surface, context, stall);
+  if (!found) return undefined;
+  return { after: found.startedAt, follow: (onRows) => asRows((onView) => found.follow(onView), onRows) };
+}
+
 async function asRows(
   begin: (onView: (view: TurnView) => void) => Promise<BookTurn>,
   onRows: (rows: CallRow[]) => void,
@@ -135,5 +171,6 @@ async function asRows(
       stopping ??= turn.stop();
     },
     ended,
+    unwatch: () => turn.unwatch(),
   };
 }

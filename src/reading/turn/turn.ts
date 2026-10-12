@@ -10,10 +10,10 @@
 // back in the shape the session has always taken it.
 //
 // Pure assembly plus reads — it never touches React state and never starts the
-// stream; the caller owns runAgentTurn.
+// stream; the caller owns the durable turn.
 
 import type { BoxOrigin } from "../../box";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { assembleTurn } from "../../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../../desk";
 import { EXPLAIN_KICKOFF } from "../intents";

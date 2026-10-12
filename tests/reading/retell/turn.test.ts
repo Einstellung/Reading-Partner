@@ -30,6 +30,7 @@ import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/type
 import { putSegment, setSpine } from "../../../src/reading/talk/edit";
 import type { TalkArrangementCardData } from "../../../src/reading/retell/cards";
 import { toolText } from "../../support/tool-text";
+import { appToolCatalog } from "../../../src/ui/components/common/durable-catalog";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
@@ -126,6 +127,10 @@ function retell(over: Partial<Retell> = {}): Retell {
 
 const names = (t: { name: string }[]) => t.map((x) => x.name).sort();
 
+// The durable runtime registers only the catalog's tools; one missing from it is dropped from the turn without a word (docs/pitfall/524).
+const catalogued = new Set(appToolCatalog().map((tool) => tool.name));
+const uncatalogued = (t: { name: string }[]) => names(t).filter((name) => !catalogued.has(name));
+
 // The talk outline in memory. `read` answers null until the first write, the way
 // the store does: the file is made by the first write and not by reaching the
 // arrangement.
@@ -185,6 +190,7 @@ test("the retell prompt and its own tools, with no book open", async () => {
     "write_talk_segment",
   ]);
   expect(turn.messages[0].text).toContain("retell");
+  expect(uncatalogued(turn.tools)).toEqual([]);
 });
 
 // read_pages says "the book the user is currently in"; with two materials there
@@ -381,6 +387,7 @@ test("view_figure is mounted and crops from the library copy of the book", async
     }),
   );
   expect(names(turn.tools)).toContain("view_figure");
+  expect(uncatalogued(turn.tools)).toEqual([]);
   expect(turn.systemPrompt).toContain("[fig:N]");
   // Nothing was read to assemble the prompt.
   expect(readFor).toBe("");

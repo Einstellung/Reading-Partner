@@ -1,8 +1,8 @@
 // The model-facing text of a tool result, for tests that assert on what a tool
-// says. A write returns { text, receipt } now (legion/execute/contract.ts), so a
+// says. A write returns { text, receipt } now (legion/durable/contract.ts), so a
 // test that treated the result as a string would be asserting on an object.
 
-import type { ToolResult } from "../../src/legion/execute/contract";
+import type { ToolResult } from "../../src/legion/durable/contract";
 
 export function toolText(raw: string | ToolResult): string {
   return typeof raw === "string" ? raw : raw.text;

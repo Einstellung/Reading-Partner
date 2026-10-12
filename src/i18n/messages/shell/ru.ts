@@ -51,6 +51,9 @@ export default {
   "box.originDoor": "У двери · {date}",
   "box.originBriefing": "Сводка · {date}",
   "box.originMeals": "Питание",
+  "box.originTalk": "Тренер выступления",
+  "box.originRetell": "Пересказ",
+  "box.notOnPhone": "Это открывается на iPad или компьютере.",
   "box.label": "Ящик",
   "box.waiting": {
     one: "Ящик, {count} в ожидании",
@@ -59,7 +62,6 @@ export default {
     other: "Ящик, {count} в ожидании",
   },
   "box.empty": "В ящике пусто.",
-  "box.notReadable": "Это внутри книги. Откройте её на iPad или на столе.",
 
   "figure.label": "Рис. {id} · с.{page}",
   "figure.number": "Рис. {id}",

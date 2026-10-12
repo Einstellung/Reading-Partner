@@ -1,145 +1,86 @@
-// The scripted model and the sub-agent runner over it: the real agent loop, the
-// real settling and the real tool execution, with the provider replaced by a
-// list of turns. No credentials and no network.
+// The scripted model and the sub-agent runner over it: each run is a
+// background run (legion/durable/background.ts) on a durable runtime of its
+// own whose faux provider answers from a list of turns. The real Harness, the
+// real hooks (round cap, budget) and the real tool execution; no credentials
+// and no network.
 //
-// The events each turn streams come from scripted-turn.ts, which holds them to
-// the provider grammar the harness's encoder expects (pitfall 306).
-//
-// Everything is per call — the round counter, the recorded contexts and the
+// Everything is per runner — the round counter, the recorded contexts and the
 // recorded requests all live in the closure — so two files that each script a
 // run cannot see each other's rounds.
 
-import {
-  createAssistantMessageEventStream,
-  type Api,
-  type Context,
-  type Model,
-} from "@earendil-works/pi-ai";
-import { runHarnessTurn, type StreamFn } from "../../src/legion/execute/turn";
-import { createSessionFileSystem } from "../../src/platform/app/session-fs";
-import { createTurnSettler } from "../../src/legion/subagent/turn";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
+import type { FauxResponseFactory } from "@earendil-works/pi-ai/providers/faux";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runBackgroundTurnOn } from "../../src/legion/durable/background";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/legion/subagent/types";
-import { memoryAppData } from "./memory-appdata";
-import { holdHarness } from "../../src/legion/execute/held";
-import { toPiMessages } from "../../src/ai/providers";
-import type { SendBellTurn } from "../../src/soul";
+import { openTestRuntime } from "../legion/durable/support/runtime";
 import { turnEvents, type Turn } from "./scripted-turn";
 
-export const FAUX_MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
+export const FAUX_MODEL = { providerId: "faux" as never, modelId: "faux-1" };
 
-type Lane = Parameters<typeof runHarnessTurn>[0]["lane"];
+// More rounds than any script asks for; a round past the end streams `exhausted`.
+const STEPS = 256;
 
-export interface ScriptedStreamOptions {
+export interface ScriptedRunnerOptions {
   // What a round past the end of the script streams. A file that never runs off
   // the end can leave it alone; one that does says which it means.
   exhausted?: Turn;
   // Fires as each round is asked for (0-based), which is where a test that
   // cancels an in-flight pass raises its signal.
   beforeRound?: (round: number) => void;
-  // Fires with each round's context, for the files that record what was asked
-  // rather than reading it back off `contexts` afterwards.
+  // Fires with each round's context.
   onContext?: (context: Context) => void;
+  // The faux model's context window.
+  contextWindow?: number;
 }
 
-export interface ScriptedStream {
-  stream: StreamFn;
+export interface ScriptedRunner {
+  run: SubagentTurnFn;
+  // What each run was asked for, in order.
+  requests: SubagentTurnRequest[];
   // What each round was asked with, in order.
   contexts: Context[];
   streamed: () => number;
 }
 
-export function scriptedStream(
-  turns: readonly Turn[],
-  options: ScriptedStreamOptions = {},
-): ScriptedStream {
+/** The message a scripted turn finishes with. */
+export function turnMessage(turn: Turn): AssistantMessage {
+  const events = turnEvents(turn);
+  const last = events[events.length - 1];
+  if (last?.type === "done") return last.message;
+  if (last?.type === "error") return last.error;
+  throw new Error("a scripted turn ends in done or error");
+}
+
+export function scriptedSubagentRunner(turns: readonly Turn[], options: ScriptedRunnerOptions = {}): ScriptedRunner {
   const exhausted = options.exhausted ?? { error: "no scripted turn" };
+  const requests: SubagentTurnRequest[] = [];
   const contexts: Context[] = [];
   let round = 0;
-  const stream: StreamFn = (_model, context) => {
+  const step: FauxResponseFactory = (context) => {
     const i = round++;
     options.beforeRound?.(i);
-    contexts.push(context);
-    options.onContext?.(context);
-    const s = createAssistantMessageEventStream();
-    const events = turnEvents(turns[i] ?? exhausted);
-    void (async () => {
-      for (const ev of events) {
-        await Promise.resolve();
-        s.push(ev);
-      }
-      s.end();
-    })();
-    return s;
+    contexts.push(context as Context);
+    options.onContext?.(context as Context);
+    return turnMessage(turns[i] ?? exhausted);
   };
-  return { stream, contexts, streamed: () => round };
-}
-
-export interface ScriptedRunnerOptions extends ScriptedStreamOptions {
-  model?: Model<Api>;
-  // The lane the harness runs the turn in, when the caller has one.
-  lane?: (request: SubagentTurnRequest) => Lane;
-}
-
-export interface ScriptedRunner extends ScriptedStream {
-  run: SubagentTurnFn;
-  // What each run was asked for, in order.
-  requests: SubagentTurnRequest[];
-}
-
-export function scriptedSubagentRunner(
-  turns: readonly Turn[],
-  options: ScriptedRunnerOptions = {},
-): ScriptedRunner {
-  const scripted = scriptedStream(turns, options);
-  const requests: SubagentTurnRequest[] = [];
-  const run: SubagentTurnFn = (request) => {
+  const run: SubagentTurnFn = async (request) => {
     requests.push(request);
-    const settler = createTurnSettler(request.signal, request.onRound);
-    void runHarnessTurn({
-      stream: scripted.stream,
-      fileSystem: createSessionFileSystem(memoryAppData()),
-      model: options.model ?? FAUX_MODEL,
-      systemPrompt: request.systemPrompt,
-      messages: [{ role: "user", content: request.task, timestamp: 0 }],
-      tools: request.tools,
-      signal: request.signal,
-      maxRounds: request.maxRounds,
-      purpose: request.purpose,
-      ...(options.lane ? { lane: options.lane(request) } : {}),
-      ...settler.callbacks,
+    const root = mkdtempSync(join(tmpdir(), "scripted-runner-"));
+    const t = await openTestRuntime({
+      root,
+      responses: Array.from({ length: STEPS }, () => step),
+      ...(options.contextWindow !== undefined ? { contextWindow: options.contextWindow } : {}),
     });
-    return settler.outcome.finally(() => settler.dispose());
+    try {
+      return await runBackgroundTurnOn({ runtime: t.runtime }, { ...request, model: FAUX_MODEL });
+    } finally {
+      await t.runtime.close(BACKGROUND_CONTEXT);
+      rmSync(root, { recursive: true, force: true });
+    }
   };
-  return { ...scripted, run, requests };
-}
-
-// The bell answered over the real turn machinery with the provider scripted:
-// what is under test at the call sites is the desk the bell is answered over and
-// where the reply goes, never how the stream is decoded.
-export function scriptedBellSender(
-  turns: readonly Turn[],
-  options: ScriptedStreamOptions = {},
-): SendBellTurn {
-  const { stream } = scriptedStream(turns, options);
-  const held = holdHarness({
-    lane: { name: "soul", sessions: "soul" },
-    fileSystem: createSessionFileSystem(memoryAppData()),
-  });
-  return (turn) =>
-    new Promise<string>((resolve, reject) => {
-      void runHarnessTurn({
-        stream,
-        model: FAUX_MODEL,
-        systemPrompt: turn.systemPrompt,
-        messages: toPiMessages(turn.messages),
-        tools: turn.tools,
-        maxRounds: 4,
-        held,
-        onDelta: () => {},
-        onToolStart: () => {},
-        onToolEnd: () => {},
-        onDone: (text) => resolve(text),
-        onError: (message) => reject(new Error(message)),
-      });
-    });
+  return { run, requests, contexts, streamed: () => round };
 }

@@ -1,12 +1,13 @@
 // Stage d: digest one fetched paper into a prep note. The unattended version of
-// the M6 tool loop — same runAgentTurn machinery, but nobody is watching the
+// the M6 tool loop, as a background run on the durable Harness: nobody watches the
 // stream; the final text is the note body. Short papers (≤ SHORT_PAPER_MAX
 // pages) skip the loop and get their full text inline in one call. Pure parts
 // (prompts, tool building, thin-note body) are exported for tests.
 
 import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../legion/execute/turn";
-import { runAgentTurn } from "../../../legion/execute/turn";
+import type { AgentTool } from "../../../legion/durable/contract";
+import { runBackgroundTurn } from "../../../legion/durable/background";
+import { noteOf } from "../model-output";
 import { streamChat, type ProviderId } from "../../../ai/providers";
 import { newRunId } from "../../../platform/app/cache-telemetry";
 import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings";
@@ -189,7 +190,7 @@ export function runDigest(params: {
         // One digest is one exchange about one paper, with no turn before or
         // after it, so a fresh id per call is the whole truth. The tool-loop
         // branch below is the same run and gets the same thing, from
-        // runAgentTurn standing an id in for a telemetry thread it was not given.
+        // the background run's own id.
         sessionId: newRunId(),
         reasoning: model.reasoning,
         spend: { caller: "digest" },
@@ -199,24 +200,21 @@ export function runDigest(params: {
         onError,
       });
     } else {
-      void runAgentTurn({
-        providerId: model.providerId,
-        modelId: model.modelId,
+      // A background run on the device's durable Harness.
+      runBackgroundTurn({
+        name: "digest",
         systemPrompt,
-        messages: [{ role: "user", text: loopDigestMessage(fulltext) }],
+        task: loopDigestMessage(fulltext),
         tools: buildDigestTools(fulltext),
-        signal,
-        reasoning: model.reasoning,
         maxRounds: DIGEST_MAX_ROUNDS,
         purpose: "digest",
-        telemetry: { surface: "digest" },
-        onDelta,
-        onThinking,
-        onToolStart: () => {},
-        onToolEnd: () => {},
-        onDone,
-        onError,
-      });
+        model,
+        surface: "digest",
+        ...(signal ? { signal } : {}),
+        ...(onProgress ? { onProgress } : {}),
+      })
+        .then((outcome) => noteOf(outcome, "digest produced an empty note"))
+        .then(resolve, reject);
     }
   });
 }

@@ -29,8 +29,8 @@ import {
   type WorkerContext,
   type WorkerHandle,
   type WorkerOutcome,
-} from "../../legion/execute/worker";
-import { writeRunOutput } from "../../legion/execute/outputs";
+} from "../../legion/runner/worker";
+import { writeRunOutput } from "../../legion/runner/outputs";
 import { GiveUpError, StoppedError } from "../../legion/stop";
 import { MAX_ATTEMPTS } from "../../legion/run/types";
 import { appData } from "../../platform/app/appdata";

@@ -78,6 +78,9 @@ const io: SettingsIo = {
   cancel: (id: number) => {
     tasks = tasks.filter((t) => t.id !== id);
   },
+  // device.json, for the keys that are this device's (DEVICE_SETTING_KEYS).
+  readDevice: async () => ({}),
+  writeDevice: async () => {},
   bindExit: (flush: () => void) => {
     exitFlush = flush;
   },
@@ -154,10 +157,10 @@ test("a pull that is read back keeps the merged field through the next save", as
   const backfilled = await store.load();
   expect(backfilled.aiLanguage).toBe("ja");
 
-  store.save({ ...backfilled, sttModel: "sense" });
+  store.save({ ...backfilled, chatThinking: "high" });
   await advance(500);
   expect(onDisk().aiLanguage).toBe("ja");
-  expect(onDisk().sttModel).toBe("sense");
+  expect(onDisk().chatThinking).toBe("high");
 });
 
 test("a pull with the panel open is deferred, not dropped", () => {

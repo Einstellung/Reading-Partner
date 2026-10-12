@@ -6,7 +6,7 @@ import { afterEach, expect, test } from "bun:test";
 import { registerPlaces, type Place } from "../../src/desk";
 import { buildPlaceTools, GO_TO_TOOL, placesDescription } from "../../src/soul";
 import { toolText } from "../support/tool-text";
-import type { AgentTool } from "../../src/legion/execute/contract";
+import type { AgentTool } from "../../src/legion/durable/contract";
 
 function place(id: string, about: string, go: () => void | Promise<void>): Place {
   return { id, about, go };

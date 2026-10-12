@@ -21,6 +21,7 @@ import {
   type Conversation,
   type ConversationId,
   type ConversationStreamOptions,
+  type Extension,
   type HarnessInspection,
   type HarnessSettings,
   type Storage,
@@ -28,9 +29,9 @@ import {
   type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import { SqliteStorage, type SqliteDatabase } from "@earendil-works/pi-durable/storage/sqlite";
-import { appData } from "../../platform/app/appdata";
+import { appData, type AppDataFs } from "../../platform/app/appdata";
 import { durableSqliteSize, openDurableSqlite, removeDurableSqlite } from "../../platform/app/durable-sqlite";
-import type { AgentTool } from "../execute/contract";
+import type { AgentTool } from "./contract";
 import {
   ConversationsDoc,
   durableExtension,
@@ -42,11 +43,22 @@ import {
   type TurnCheckpoint,
   type TurnInput,
   type TurnResult,
+  type ChildResponseRecorder,
 } from "./extension";
-import { DeskCache, toolRegistration, type DeskResolver } from "./tools";
+import { DeskCache, toolRegistration, type DeskResolver, type DurableTool } from "./tools";
+import { ChildDesks, childExtension, type ChildExtension } from "./child";
 import { createLandStep, type Lander } from "./turn";
 
 export const DURABLE_DIR = "durable";
+
+// Where the pi-agent-core runtime kept its session JSONL (0.23.3 and before).
+// Nothing reads it any more: the first start without that runtime deletes the
+// directory, and a turn that build left unfinished in it is not resumed.
+export const OLD_SESSIONS_DIR = "session";
+
+export async function removeOldSessions(fs: Pick<AppDataFs, "exists" | "removeDir"> = appData): Promise<void> {
+  if (await fs.exists(OLD_SESSIONS_DIR)) await fs.removeDir(OLD_SESSIONS_DIR);
+}
 export const ROTATE_AT_BYTES = 100 * 1024 * 1024;
 export const FORCE_ROTATE_FACTOR = 1.5;
 
@@ -83,9 +95,17 @@ export interface DurableOptions {
   /** Each request as it is prepared (extension.ts `requested`). */
   onRequest?: RequestNotice;
   /** A conversation's `rp.turn` landed and the conversation is free again; `startedAt` is the turn's. */
-  onSettled?: (conversationId: ConversationId, origin: ThreadOrigin, result: TurnResult, startedAt: number) => void;
+  onSettled?: (
+    conversationId: ConversationId,
+    origin: ThreadOrigin,
+    result: TurnResult,
+    startedAt: number,
+    turn: string | undefined,
+  ) => void;
   /** The system prompt's sections in order; `rp.desk` holds each turn's text for them. */
   sectionKeys: readonly string[];
+  /** One provider message a child conversation got back (child.ts), for `recordModelCall`. */
+  recordChildResponse?: ChildResponseRecorder;
   stream?: ConversationStreamOptions;
   dir?: string;
   rotateAtBytes?: number;
@@ -101,7 +121,24 @@ export interface DurableRuntime {
   readonly path: string;
   readonly registrations: ReadonlyMap<string, ToolRegistration>;
   readonly desks: DeskCache;
+  /** The tools of each running child conversation (child.ts). */
+  readonly children: ChildDesks;
+  /** Install (or replace) the extension a definition's children run with; it stays, since children replay. */
+  installChild(name: string, tools: readonly AgentTool[]): ChildExtension;
   readonly turnTask: Task<TurnInput, TurnCheckpoint, TurnResult, object>;
+  /**
+   * Our extension; the host default selects only it, so an extension installed
+   * for one run reaches no other conversation. A child or background
+   * conversation selects it beside its own.
+   */
+  readonly extension: Extension;
+  /** The system prompt's section keys, in order. */
+  readonly sectionKeys: readonly string[];
+  /** Install (or replace) an extension on the registry every generation shares. */
+  install(extension: Extension): void;
+  uninstall(extension: Extension): void;
+  /** The refusal `beforeRequest` recorded for a conversation, taken once (docs/pitfall/516). */
+  takeRefusal(conversationId: ConversationId): string | undefined;
   now(): number;
   forgetStubs(conversationId: ConversationId): void;
   /** The thread's conversation, created with its `rp.thread` on first use in this generation. */
@@ -123,8 +160,11 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   const rotateAt = options.rotateAtBytes ?? ROTATE_AT_BYTES;
   const force = rotateAt * (options.forceRotateFactor ?? FORCE_ROTATE_FACTOR);
   const desks = new DeskCache(options.resolvers);
-  const registrations = new Map(options.catalog.map((tool) => [tool.name, toolRegistration(tool, desks)]));
+  const children = new ChildDesks();
+  let self!: DurableRuntime;
+  const registrations = new Map(options.catalog.map((tool) => [tool.name, toolRegistration(tool, desks, () => self)]));
   const refusals = new Map<ConversationId, string>();
+  const childTools = new Map<string, ToolRegistration>();
   const conversations = new Map<string, Promise<Conversation>>();
 
   let harness!: Harness;
@@ -132,10 +172,16 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   let path = "";
   let code = 0;
 
-  const settledWith = async (conversationId: ConversationId, result: TurnResult, startedAt: number) => {
+  const takeRefusal = (conversationId: ConversationId) => {
+    const message = refusals.get(conversationId);
+    refusals.delete(conversationId);
+    return message;
+  };
+
+  const settledWith = async (conversationId: ConversationId, result: TurnResult, startedAt: number, turn: string | undefined) => {
     try {
       const origin = (await harness.snapshot(ThreadDoc, conversationId, BACKGROUND_CONTEXT))?.origin;
-      if (origin) options.onSettled?.(conversationId, origin, result, startedAt);
+      if (origin) options.onSettled?.(conversationId, origin, result, startedAt, turn);
     } catch (error) {
       options.onReport?.(error);
     }
@@ -147,15 +193,18 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     ...(options.recordResponse ? { recordResponse: options.recordResponse } : {}),
     ...(options.onRequest ? { requested: options.onRequest } : {}),
     registrations,
-    ...(options.onSettled ? { settled: (conversationId: ConversationId, result: TurnResult, startedAt: number) => void settledWith(conversationId, result, startedAt) } : {}),
+    schemaOf: (name) => registrations.get(name) ?? childTools.get(name),
+    ...(options.recordChildResponse ? { recordChildResponse: options.recordChildResponse } : {}),
+    ...(options.onSettled
+      ? {
+          settled: (conversationId: ConversationId, result: TurnResult, startedAt: number, turn: string | undefined) =>
+            void settledWith(conversationId, result, startedAt, turn),
+        }
+      : {}),
     land: createLandStep({
       landers: options.landers,
       storage: () => storage,
-      takeRefusal: (conversationId) => {
-        const message = refusals.get(conversationId);
-        refusals.delete(conversationId);
-        return message;
-      },
+      takeRefusal: (conversationId) => takeRefusal(conversationId),
     }),
     refuse: (conversationId, message) => {
       refusals.set(conversationId, message);
@@ -167,7 +216,19 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   });
   const registry = createRegistry();
   registry.install(extension);
+  const installChild = (name: string, tools: readonly AgentTool[]): ChildExtension => {
+    const child = childExtension(name, tools, children);
+    for (const tool of child.tools) childTools.set(tool.name, tool);
+    registry.install(child.extension);
+    return child;
+  };
+  // A tool that runs a child declares the child's tools, so a child replayed
+  // after a restart finds its extension installed before anything resumes.
+  for (const tool of options.catalog as readonly DurableTool[]) {
+    if (tool.childTools) installChild(tool.name, tool.childTools);
+  }
   const settings: HarnessSettings = {
+    extensions: [extension],
     retry: { enabled: false },
     compaction: { enabled: false },
     toolExecution: "sequential",
@@ -229,6 +290,7 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     await harness.close(context);
     conversations.clear();
     desks.clear();
+    children.clear();
     refusals.clear();
     await openGeneration(Math.max(now(), code + 1));
     harness.resume();
@@ -238,7 +300,7 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
 
   let rotating: Promise<boolean> = Promise.resolve(false);
 
-  return {
+  self = {
     get harness() {
       return harness;
     },
@@ -250,7 +312,14 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     },
     registrations,
     desks,
+    children,
+    installChild,
     turnTask,
+    extension,
+    sectionKeys: options.sectionKeys,
+    install: (added) => registry.install(added),
+    uninstall: (removed) => registry.uninstall(removed),
+    takeRefusal,
     now,
     forgetStubs,
     conversationFor(key, origin, context) {
@@ -272,4 +341,5 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     },
     close: (context) => harness.close(context),
   };
+  return self;
 }

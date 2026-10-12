@@ -24,8 +24,8 @@ import {
   type Replacement,
 } from "../../../src/reading/translate/book-run";
 import { createTranslateWatch } from "../../../src/reading/translate/watch";
-import { createRunner, REPORT_THROTTLE_MS } from "../../../src/legion/execute/runner";
-import type { WorkerContext, WorkerHandle, WorkerRegistration } from "../../../src/legion/execute/worker";
+import { createRunner, REPORT_THROTTLE_MS } from "../../../src/legion/runner/runner";
+import type { WorkerContext, WorkerHandle, WorkerRegistration } from "../../../src/legion/runner/worker";
 import { createBellStore } from "../../../src/legion/bell";
 import { createRunStore, type Run } from "../../../src/legion/run";
 import { mapDisk as disk } from "../../support/map-disk";

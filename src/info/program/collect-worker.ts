@@ -31,7 +31,7 @@
 // briefs cross devices when translate needs them to (docs/55 step 11).
 
 import { appData } from "../../platform/app/appdata";
-import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/execute/worker";
+import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/runner/worker";
 import { briefingFile } from "../collect/store";
 import { COLLECT_KIND } from "../briefer/handoff";
 import type { InfoSnapshot, RunHandle } from "../boxes/pipeline";

@@ -52,7 +52,7 @@ thread 是旧名字，概念是 conversation，存储里的标识符还没改名
 
 没归 topic 的对话不蒸馏；读者点头之后整段都算。攒够数据再决定这堆没 topic 的对话要不要别的处置。
 
-session 不同步。它是本机的运行时——soul 和它派出的 worker 这一轮在想什么——palace 登记一行 `session`，sync 为 local。进程启动先另起一个新 session 给本进程用；上个进程没答完的那个回合在旧 session 上后台接着跑完（resume），答案写回当初提问的那段对话，跑完才关掉它（docs/55、坑 308）。该组只留最新五个文件。对话文件是 session 的单向投影：soul 说的每一句落地时写进归属文件；反向不投影，另一台设备写的对话到了本机，下回合装配上下文时从数据层读。压缩摘要不跨设备。本地 worker 的过程不进对话文件，对话里只有 soul 对用户说的话。两台设备各跑一个 soul 进程，共享 memory 和对话即同一个人，各自一份「此刻在想什么」；PC 不在线时 iPad 照样有 soul。
+soul 的回合已迁到 pi-durable（[87](./87-回合运行时迁到pi-durable.md) 第二阶段），这一段说的旧 session 只在升级后第一次启动时收尾一次。session 不同步。它是本机的运行时——soul 和它派出的 worker 这一轮在想什么——palace 登记一行 `session`，sync 为 local。进程启动先另起一个新 session 给本进程用；上个进程没答完的那个回合在旧 session 上后台接着跑完（resume），答案写回当初提问的那段对话，跑完才关掉它（docs/55、坑 308）。该组只留最新五个文件。对话文件是 session 的单向投影：soul 说的每一句落地时写进归属文件；反向不投影，另一台设备写的对话到了本机，下回合装配上下文时从数据层读。压缩摘要不跨设备。本地 worker 的过程不进对话文件，对话里只有 soul 对用户说的话。两台设备各跑一个 soul 进程，共享 memory 和对话即同一个人，各自一份「此刻在想什么」；PC 不在线时 iPad 照样有 soul。
 
 ## 顺序
 
@@ -66,4 +66,4 @@ session 不同步。它是本机的运行时——soul 和它派出的 worker �
 2. 存储标识符从 thread 改名 conversation：还没做，代码里仍是 `threadId`（`src/platform/app/threads.ts`）。
 3. 记忆与检索重做。
 
-已落地：Red Box 和 cable 作为第一个生在 palace 里的新东西——盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方（2026-09-15，见 [68](../companion/68-Lumen与盒子的交互.md)）；soul 搬上 pi harness——soul 一条常驻 lane（`legion/execute/held.ts`），本地 worker 各一条，见 [55](./55-legion.md)。
+已落地：Red Box 和 cable 作为第一个生在 palace 里的新东西——盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方（2026-09-15，见 [68](../companion/68-Lumen与盒子的交互.md)）；soul 的回合、铃、子 agent 和后台 pass 跑在每设备一个的 pi-durable 库上，见 [87](./87-回合运行时迁到pi-durable.md)。

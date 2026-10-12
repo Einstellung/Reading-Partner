@@ -27,7 +27,7 @@ import {
   setThreadTopic,
 } from "../../../src/platform/app/threads";
 import { installAppData } from "../../support/appdata-fake";
-import type { AgentTool } from "../../../src/legion/execute/turn";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 import type { CompanionContext } from "../../../src/info/briefer/chat";
 import type { Briefing } from "../../../src/info/boxes/types";
 

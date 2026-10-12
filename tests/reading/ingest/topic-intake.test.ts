@@ -11,7 +11,7 @@ import { INGEST_URL_KIND, type IngestAsk } from "../../../src/reading/ingest/url
 import { chooseIntakeTopic, readIntake, startTopicIntake } from "../../../src/reading/ingest/topic-intake";
 import type { IngestedDocument, IngestTarget } from "../../../src/reading/ingest/article";
 import type { IngestBatch } from "../../../src/reading/ingest/link-intake";
-import type { WorkerContext } from "../../../src/legion/execute/worker";
+import type { WorkerContext } from "../../../src/legion/runner/worker";
 import type { Fulltext } from "../../../src/fulltext/types";
 import type { Run } from "../../../src/legion/run";
 import { GiveUpError } from "../../../src/legion/stop";

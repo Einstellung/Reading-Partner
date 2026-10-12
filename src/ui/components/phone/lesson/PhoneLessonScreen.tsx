@@ -1,22 +1,24 @@
 // The lesson screen with a lesson running in it: the hook that holds the turn
 // (use-lesson-call.ts) bound to the screen that draws it (PhoneLesson.tsx).
 //
-// Two files and not one so the turn starts when the screen appears and stops
-// when it goes: the shell renders this only while the lesson is the screen, so
-// mounting is opening the paper and unmounting is leaving it. PhoneApp would
-// have to hold a hook for a screen that is not there.
+// Two files and not one so the lesson opens when the screen appears and lets
+// go when it goes: the shell renders this only while the lesson is the screen,
+// so mounting is opening the paper and unmounting is leaving it. Leaving does
+// not stop a turn: it lands out of sight and puts a box card (use-lesson-call.ts).
+// PhoneApp would have to hold a hook for a screen that is not there.
 //
 // An aside is the same arrangement one level in (docs/74). It replaces the
 // lesson's view rather than sitting beside it, and runs its own turn on its own
 // conversation. The lesson's hook stays mounted underneath — the paper it read
-// and the chapters it found are the same ones on the way back — so what the
-// switch has to do by hand is the two things unmounting would have done for it:
-// stop the lesson's turn on the way in, and re-read its rows on the way out.
+// and the chapters it found are the same ones on the way back. Stepping out
+// does not stop the lesson's turn (only Stop stops): it runs on under the
+// aside, unwatched, and the receipt the way back writes sits above its rows,
+// on screen and in the file, as a card raised during a turn does
+// (use-lesson-call.ts reload). Coming back re-reads the lesson.
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import PhoneLesson from "./PhoneLesson";
-import type { LessonAskSpan } from "./lesson-aside";
 import { useLessonCall, type LessonBook } from "./use-lesson-call";
 import { useLessonAside } from "./use-lesson-aside";
 import { takeMeTo } from "../../../../reading/lesson/opening";
@@ -36,28 +38,21 @@ export default function PhoneLessonScreen(props: {
   // The line after an aside was deleted, or the one saying it was not.
   onNotice?: (kind: "info" | "error", line: string) => void;
 }) {
+  // Read when a lesson reply lands: under the aside it is not on screen.
+  const coveredRef = useRef(false);
   const call = useLessonCall({
     bookId: props.bookId,
     title: props.title,
     topicId: props.topicId,
     topicName: props.topicName,
+    covered: () => coveredRef.current,
   });
   const aside = useLessonAside(props.bookId, call.threadId);
+  coveredRef.current = aside.open !== null;
 
-  // Stepping out stops the lesson's turn first. The half sentence is kept, on
-  // screen and on disk (use-lesson-call.ts: stop), because a reply left
-  // streaming into a conversation nobody is looking at would land in the middle
-  // of the receipt the way back is about to write.
-  const { ask } = aside;
-  const { stop, reload } = call;
-  const enter = useCallback(
-    (span: LessonAskSpan) => {
-      stop();
-      ask(span);
-    },
-    [ask, stop],
-  );
-  // And coming back re-reads the lesson, which now carries that line.
+  const { ask: enter } = aside;
+  const { reload } = call;
+  // Coming back re-reads the lesson, which now carries that line.
   const { back } = aside;
   const leave = useCallback(() => {
     back();

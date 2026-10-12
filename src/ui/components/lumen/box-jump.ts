@@ -27,6 +27,12 @@ export type JumpStep =
   | { step: "open-thread"; bookId: string; threadId: string }
   | { step: "go-to-briefing"; date: string }
   | { step: "go-to-meals" }
+  // The phone: the book's conversation, in the lesson for a paper and over the
+  // page for an EPUB (PhoneApp.tsx decides which).
+  | { step: "open-book-conversation"; bookId: string; threadId: string }
+  // The desk's topic views (library/LibraryScreen.tsx); the phone has neither.
+  | { step: "open-coach"; outlineId: string }
+  | { step: "open-retell"; retellId: string }
   // The door conversation of that day, opened over whatever is on screen
   // (lumen/DoorChat.tsx), at the row the card is about when there is one.
   | { step: "open-door-chat"; date: string; focus?: DoorFocus };
@@ -61,17 +67,23 @@ export interface Jump {
   unreachable: string | null;
 }
 
-// The phone has no reader (PhoneApp.tsx), so a card born over a book has
-// nowhere to land on it. The card still shows and can still be pressed away —
-// what it must not do is fail silently.
-export function noReaderHereLine(): string {
-  return t("shell.box.notReadable");
+// The phone has no coach and no retell, so a card born in one has nowhere to
+// land there. The card still shows and can still be pressed away — what it must
+// not do is fail silently.
+export function notOnThisShellLine(): string {
+  return t("shell.box.notOnPhone");
 }
 
 export function planJump(origin: BoxOrigin, place: Place): Jump {
   switch (origin.place) {
     case "book": {
-      if (place.shell === "phone") return { steps: [], unreachable: noReaderHereLine() };
+      // The phone opens the conversation itself: there is no page under a mark to land on first.
+      if (place.shell === "phone") {
+        return {
+          steps: [{ step: "open-book-conversation", bookId: origin.bookId, threadId: origin.threadId }],
+          unreachable: null,
+        };
+      }
       const steps: JumpStep[] = [];
       // Across books, the book first: the page and the thread are both inside
       // the one being opened.
@@ -96,6 +108,12 @@ export function planJump(origin: BoxOrigin, place: Place): Jump {
       return { steps: [{ step: "go-to-briefing", date: origin.date }], unreachable: null };
     case "meals":
       return { steps: [{ step: "go-to-meals" }], unreachable: null };
+    case "talk":
+      if (place.shell === "phone") return { steps: [], unreachable: notOnThisShellLine() };
+      return { steps: [{ step: "open-coach", outlineId: origin.outlineId }], unreachable: null };
+    case "retell":
+      if (place.shell === "phone") return { steps: [], unreachable: notOnThisShellLine() };
+      return { steps: [{ step: "open-retell", retellId: origin.retellId }], unreachable: null };
   }
 }
 

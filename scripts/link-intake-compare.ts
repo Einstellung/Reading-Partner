@@ -11,9 +11,9 @@
 // way the app reads it (src/ai/auth): credentials.json in the app's data
 // directory and nothing else of it. A token that has expired is refreshed and
 // written back, as the app does, because the refresh token rotates on use. The
-// token never leaves this process. Model calls go through the app's own turn
-// (runHarnessTurn) on an in-memory session store, and the cost is pi's price
-// table, not a bill.
+// token never leaves this process. Model calls go through the app's own
+// background run (runBackgroundTurnOn) on a durable runtime in a temporary
+// directory, and the cost is pi's price table, not a bill.
 //
 // X permalink pages are read by WebKitGTK under xvfb-run (webkit-page.py):
 // signed out, an ephemeral context, never the app's profile. Everything filed
@@ -27,31 +27,31 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { Api, Model, Provider, ThinkingLevel, Usage } from "@earendil-works/pi-ai";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { getValidAnthropicAuth } from "../src/ai/auth/anthropic-oauth";
-import { providerCallSetup } from "../src/ai/call-setup";
 import { registerSourceSiteAdapters } from "../src/info/sources/plugins/all";
 import { scriptedTurn, type ScriptedRound } from "../src/info/links/scripted-turn";
 import { tcoTarget } from "../src/info/x/outbound";
 import { PERMALINK_SCRIPT } from "../src/info/x/permalink";
 import type { PageAttempt, XReadDeps } from "../src/info/x/read-post";
 import { xLinkReader } from "../src/info/x/reader";
-import { runHarnessTurn } from "../src/legion/execute/turn";
-import { createTurnSettler, workerLane } from "../src/legion/subagent/turn";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { runBackgroundTurnOn } from "../src/legion/durable/background";
+import { openDurable } from "../src/legion/durable/harness";
 import type { SubagentTurnFn } from "../src/legion/subagent/types";
 import { appData, type AppDataFs } from "../src/platform/app/appdata";
 import type { ImportMeta, LibraryEntry } from "../src/platform/app/library";
-import { createSessionFileSystem } from "../src/platform/app/session-fs";
 import type { ArticleIngestDeps, IngestTarget } from "../src/reading/ingest/article";
 import { takeLinkInFiled } from "../src/reading/ingest/link-intake";
 import type { FetchedBytes } from "../src/workshop/bindery";
 import { loadExtractReadable } from "../src/workshop/extract/readable-lazy";
-import { memoryAppData } from "../tests/support/memory-appdata";
+import { testHost } from "../tests/legion/durable/support/runtime";
 import { DRY_RUN_PAGES, dryRunX, registerDryRunAdapters } from "./link-intake-compare/fixtures";
 
 // bun has no DOMParser; the extractor and the sanitizer need one. jsdom, as the
@@ -359,50 +359,57 @@ interface RunUsage {
 
 const noUsage = (): RunUsage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, calls: 0, task: "", transcript: [], answer: "" });
 
-/** A sub-agent turn on the app's harness loop, Anthropic direct, usage counted per round. */
+/** A sub-agent turn as the app's background run, Anthropic direct, usage counted per round. */
 function liveTurn(model: Model<Api>, reasoning: ThinkingLevel | undefined, usage: RunUsage): SubagentTurnFn {
-  const provider: Provider = anthropicProvider();
-  return async (request) => {
-    const apiKey = await getValidAnthropicAuth();
-    if (!apiKey) throw new Error("Anthropic is not connected in the app");
-    const settler = createTurnSettler(request.signal, request.onRound);
-    try {
-      void runHarnessTurn({
-        stream: (m, ctx, opts) => {
-          const s = provider.streamSimple(m, ctx, opts);
-          s.result()
-            .then((r) => add(usage, r.usage))
-            .catch(() => {});
-          return s;
+  const base: Provider = anthropicProvider();
+  const provider = Object.assign(Object.create(base) as Provider, {
+    auth: {
+      apiKey: {
+        name: "Anthropic (the app's sign-in)",
+        resolve: async () => {
+          const apiKey = await getValidAnthropicAuth();
+          if (!apiKey) throw new Error("Anthropic is not connected in the app");
+          return { auth: { apiKey }, source: "app" };
         },
-        model,
-        apiKey,
-        systemPrompt: request.systemPrompt,
-        messages: [{ role: "user", content: request.task, timestamp: Date.now() }],
-        tools: request.tools.map((tool) => ({
-          ...tool,
-          execute: async (args: Record<string, unknown>) => {
-            const out = await tool.execute(args);
-            usage.transcript.push({ name: tool.name, args, text: typeof out === "string" ? out : out.text });
-            return out;
-          },
-        })),
-        signal: request.signal,
-        reasoning: reasoning && model.reasoning ? reasoning : undefined,
-        ...providerCallSetup("anthropic", `compare-${Date.now()}`),
-        maxRounds: request.maxRounds,
-        purpose: request.purpose,
-        lane: workerLane(request.name),
-        fileSystem: createSessionFileSystem(memoryAppData()),
-        stall: null,
-        ...settler.callbacks,
-      });
-      usage.task = request.task;
-      const outcome = await settler.outcome;
-      if (outcome.kind === "answer") usage.answer = outcome.text;
-      return outcome;
+      },
+    },
+  });
+  return async (request) => {
+    const root = await mkdtemp(join(tmpdir(), "link-intake-durable-"));
+    const models = createModels();
+    models.setProvider(provider);
+    const runtime = await openDurable({
+      host: testHost(root),
+      models,
+      catalog: [],
+      resolvers: {},
+      landers: {},
+      readHistory: async () => [],
+      recordResponse: (message) => add(usage, message.usage),
+      sectionKeys: ["soul", "desk"],
+    });
+    usage.task = request.task;
+    try {
+      const settled = await runBackgroundTurnOn(
+        { runtime },
+        {
+          ...request,
+          model: { providerId: "anthropic", modelId: model.id, ...(reasoning && model.reasoning ? { reasoning } : {}) },
+          tools: request.tools.map((tool) => ({
+            ...tool,
+            execute: async (args: Record<string, unknown>) => {
+              const out = await tool.execute(args);
+              usage.transcript.push({ name: tool.name, args, text: typeof out === "string" ? out : out.text });
+              return out;
+            },
+          })),
+        },
+      );
+      if (settled.kind === "answer") usage.answer = settled.text;
+      return settled;
     } finally {
-      settler.dispose();
+      await runtime.close(BACKGROUND_CONTEXT);
+      await rm(root, { recursive: true, force: true });
     }
   };
 }

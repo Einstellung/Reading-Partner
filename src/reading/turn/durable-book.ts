@@ -10,14 +10,20 @@ import type { Context } from "@earendil-works/chord";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { BoxOrigin } from "../../box";
 import { toPiMessages } from "../../ai/providers";
-import { persistedTrace, type ToolStatus } from "../../ai/turn-view/tool-status";
-import type { AgentTool } from "../../legion/execute/contract";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { HistoryReader, ThreadOrigin } from "../../legion/durable/extension";
 import type { DeskResolver } from "../../legion/durable/tools";
-import type { LandedRow, LandedTurn, Lander } from "../../legion/durable/turn";
+import type { LandedRow, Lander } from "../../legion/durable/turn";
+import { cacheTurn, usageReport, type Place, type PlaceShared } from "../../legion/durable/device";
+import {
+  storeThreadFiles,
+  threadLander,
+  threadMessageOf as placeMessageOf,
+  type ThreadFiles,
+} from "../../legion/durable/thread-files";
 import type { ModelCallReport } from "../../ai/model-usage";
-import { resolveRetention, type CacheTurnInput, type TurnTelemetry } from "../../platform/app/cache-telemetry";
-import type { ThreadMessage, ThreadStore } from "../../platform/app/threads";
+import type { CacheTurnInput, TurnTelemetry } from "../../platform/app/cache-telemetry";
+import type { ThreadMessage } from "../../platform/app/threads";
 import { composeMessages, HISTORY_KEEP, type ReadingTurnMessage } from "../desk-history";
 
 export type BookOrigin = Extract<BoxOrigin, { place: "book" }> & { home: string };
@@ -66,36 +72,16 @@ export class AssembledTurns {
   }
 }
 
-export interface BookThreads {
-  /**
-   * Read the thread file into memory. The app's store drops appends to a file it
-   * has not loaded, and a turn recovered at startup lands before any surface
-   * has opened the book (docs/pitfall/523).
-   */
-  load(home: string): Promise<void>;
-  messages(home: string, threadId: string): readonly ThreadMessage[] | undefined;
-  append(home: string, threadId: string, message: ThreadMessage): void;
-  flush(): Promise<void>;
-}
+/** A book's thread files: the runtime's ThreadFiles, keyed by the document (`home`). */
+export type BookThreads = ThreadFiles;
 
 /** A thread store's calls as the book runtime uses them: the app's store, or a test's over a directory. */
-export function storeBookThreads(store: Pick<ThreadStore, "load" | "get" | "append" | "flush">): BookThreads {
-  return {
-    load: async (home) => {
-      await store.load(home);
-    },
-    messages: (home, threadId) => store.get(home, threadId)?.messages,
-    append: (home, threadId, message) => {
-      store.append(home, threadId, message);
-    },
-    flush: () => store.flush(),
-  };
-}
+export const storeBookThreads = storeThreadFiles;
 
 /** The file's history, `HISTORY_KEEP` long, without the reader's line of this turn. */
 export function bookHistoryFromFile(messages: readonly ThreadMessage[], excludeTs?: number): ReadingTurnMessage[] {
   const prior = messages
-    .filter((m) => m.ts !== excludeTs && m.text.trim() !== "")
+    .filter((m) => !(m.role === "user" && m.ts === excludeTs) && m.text.trim() !== "")
     .map((m): ReadingTurnMessage => ({ role: m.role, text: m.text }));
   return composeMessages({ parentTail: [], prior, keep: HISTORY_KEEP, aside: false, pageWindow: null });
 }
@@ -133,61 +119,48 @@ export interface BookLandingDeps {
 
 /** One landed row as the thread file stores it. */
 export function threadMessageOf(row: LandedRow, deps: Pick<BookLandingDeps, "describe">): ThreadMessage {
-  if (row.role === "user") return { role: "user", text: row.text, ts: row.ts };
-  const statuses = row.tools.map((tool): ToolStatus => {
-    const { label, quiet } = deps.describe(tool.name, tool.args);
-    const receipt = tool.details as ToolStatus["receipt"] | undefined;
-    return {
-      name: tool.name,
-      label,
-      state: tool.isError ? "error" : "done",
-      ...(receipt ? { receipt } : {}),
-      ...(quiet ? { quiet } : {}),
-    };
-  });
-  const trace = persistedTrace(statuses);
-  return {
-    role: "ai",
-    text: row.text,
-    ts: row.ts,
-    ...(trace && trace.length > 0 ? { parts: [{ type: "trace" as const, tools: trace }] } : {}),
-  };
+  return placeMessageOf(row, deps);
 }
 
 /**
- * The book's lander. Rows go into the thread file, a row whose role and
- * timestamp are already there skipped (a landing rerun after a kill), then the
- * file is flushed, and only then is a card put — and none when the reader is
- * looking at the thread (soul/landing.ts's order). A refusal is not written: it
- * is the app talking, shown on the row and never replayed as the model's words.
- *
- * A bell's turn puts no card here: the bell puts the run's own (soul/bell.ts).
- * Its replies before the reader said anything are stamped with the run they
- * answer, as soul/landing.ts stamps a bell's reply.
+ * The book's lander (legion/durable/thread-files.ts threadLander): the thread
+ * file is the document's (`home`), and the card is the book's.
  */
 export function bookLander(deps: BookLandingDeps): Lander {
-  return async (origin, turn: LandedTurn) => {
-    const book = asBookOrigin(origin);
-    await deps.threads.load(book.home);
-    const have = new Set((deps.threads.messages(book.home, book.threadId) ?? []).map((m) => `${m.role}:${m.ts}`));
-    let wrote = false;
-    let readerSpoke = false;
-    for (const row of turn.rows) {
-      if (row.role === "user") readerSpoke = true;
-      const runId = turn.bell?.runId;
-      const message = {
-        ...threadMessageOf(row, deps),
-        ...(runId && row.role === "assistant" && !readerSpoke ? { origin: { runId } } : {}),
-      };
-      if (have.has(`${message.role}:${message.ts}`)) continue;
-      deps.threads.append(book.home, book.threadId, message);
-      wrote = true;
-    }
-    if (wrote) await deps.threads.flush();
-    if (turn.refusal !== undefined || turn.bell || deps.watching(book)) return;
-    const reply = [...turn.rows].reverse().find((row) => row.role === "assistant");
-    if (!reply) return;
-    await deps.card(book, reply.ts, reply.text);
+  return threadLander({
+    threads: deps.threads,
+    describe: deps.describe,
+    origin: asBookOrigin,
+    address: (book) => ({ key: book.home, threadId: book.threadId }),
+    watching: deps.watching,
+    card: deps.card,
+  });
+}
+
+/** The book's place on the device runtime (legion/durable/device.ts). */
+export function bookPlace(
+  assembled: AssembledTurns,
+  deps: Pick<BookLandingDeps, "watching" | "card"> & {
+    openDesk(origin: BookOrigin, context: Context): Promise<readonly AgentTool[]>;
+  },
+): (shared: PlaceShared) => Place {
+  return (shared) => {
+    const telemetry = (book: BookOrigin): BookTelemetry =>
+      assembled.get(bookThreadKey(book))?.telemetry ?? { surface: "reading" };
+    return {
+      key: (origin) => bookThreadKey(asBookOrigin(origin)),
+      address: (origin) => {
+        const book = asBookOrigin(origin);
+        return { key: book.home, threadId: book.threadId };
+      },
+      resolve: bookDeskResolver(assembled, deps.openDesk),
+      land: bookLander({ threads: shared.threads, describe: shared.describe, watching: deps.watching, card: deps.card }),
+      readHistory: bookHistoryReader(shared.threads, assembled),
+      telemetry: (origin) => {
+        const book = asBookOrigin(origin);
+        return { ...telemetry(book), thread: book.threadId, bookId: book.bookId };
+      },
+    };
   };
 }
 
@@ -198,14 +171,7 @@ export function bookUsageReport(
   telemetry: BookTelemetry = { surface: "reading" },
 ): ModelCallReport {
   const book = asBookOrigin(origin);
-  return {
-    caller: telemetry.surface,
-    bookId: book.bookId,
-    provider: message.provider,
-    model: message.model,
-    usage: message.usage,
-    ok: message.stopReason !== "error",
-  };
+  return usageReport(message, { ...telemetry, thread: book.threadId, bookId: book.bookId });
 }
 
 /** One provider response, for the cache log: the round and its start are the request's. */
@@ -215,17 +181,7 @@ export function bookCacheTurn(
   round: number,
   telemetry: BookTelemetry = { surface: "reading" },
 ): CacheTurnInput {
-  const book = asBookOrigin(origin);
-  return {
-    telemetry: { ...telemetry, thread: book.threadId },
-    providerId: message.provider,
-    modelId: message.model,
-    round,
-    startedAt: message.timestamp,
-    usage: message.usage,
-    ok: message.stopReason !== "error",
-    retention: resolveRetention(),
-  };
+  return cacheTurn(message, round, { ...telemetry, thread: asBookOrigin(origin).threadId });
 }
 
 /** The reader's line of a turn, split off the assembled messages it ends. */

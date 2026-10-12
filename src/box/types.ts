@@ -73,7 +73,12 @@ export type BoxOrigin =
   | { place: "door"; date: string }
   | { place: "briefing"; date: string }
   // The standing meals conversation: one thread, in a file of its own.
-  | { place: "meals" };
+  | { place: "meals" }
+  // A talk's coaching conversation (docs/44) and a retell (docs/31), each the one
+  // thread of its thing. The topic they are drawn in is read off the thing when
+  // the card is followed, so no topic id is stored here.
+  | { place: "talk"; outlineId: string }
+  | { place: "retell"; retellId: string };
 
 export interface BoxItem {
   id: string;

@@ -3,7 +3,7 @@
 // the comparison script's dry run (docs/86 「第一期」), where the loop, the caps
 // and the receipt have to be exercised with no provider and no network.
 
-import { REFUSE_ROUNDS } from "../../legion/execute/contract";
+import { REFUSE_ROUNDS } from "../../legion/durable/contract";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../legion/subagent/types";
 
 export type ScriptedRound =

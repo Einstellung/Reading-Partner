@@ -10,7 +10,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentTool } from "../../../src/legion/execute/contract";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 import { startTurn } from "../../../src/legion/durable/turn";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin } from "../../../src/reading/turn/durable-book";
 import { landWithdrawnSteers, openReadingDurable, type SettledEvent } from "../../../src/reading/turn/durable-runtime";

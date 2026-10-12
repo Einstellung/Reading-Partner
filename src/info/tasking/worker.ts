@@ -10,7 +10,7 @@
 // run that established nothing throws, so the runner counts the attempt instead
 // of delivering an empty answer into the reader's briefing.
 
-import { registerWorker } from "../../legion/execute/worker";
+import { registerWorker } from "../../legion/runner/worker";
 import { agentWorker, type AgentWorkerDeps } from "../../legion/subagent";
 import { buildTaskingAgent, TASKING_KIND, TASKING_TURN_ROUNDS } from "./tasking-agent";
 

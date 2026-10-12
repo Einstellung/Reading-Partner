@@ -3,7 +3,7 @@
 // reading one, translating the document on screen, and looking up one paper. A tool that is
 // only sometimes there is one the model stops reaching for.
 
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import type { ProviderId } from "../ai";
 import type { BoxOrigin } from "../box";
 import type { Settings } from "../platform/app/settings";

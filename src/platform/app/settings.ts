@@ -1,10 +1,13 @@
-// App settings (the default conversation provider/model). Provider credentials
-// live in the AI layer; this only stores which provider/model a new call uses.
-// Persisted to AppData/settings.json, debounced, with failures surfaced.
+// App settings. Most of them are the account's and live in AppData/settings.json,
+// which syncs; the few that only mean something next to a credential that does
+// not sync are this device's and live in device.json (DEVICE_SETTING_KEYS
+// below). Callers see one Settings object either way; the store splits it on
+// the way to disk and joins it on the way back. Debounced, failures surfaced.
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
 import { createDebouncedWriter, WINDOW_TIMER } from "./debounced-writer";
+import { loadDeviceSettings, patchDeviceSettings } from "./device";
 import { observeAppExit } from "./lifecycle";
 import { reportStoreError } from "./store-errors";
 
@@ -104,6 +107,10 @@ export function aiLanguageName(aiLanguage: AiLanguage): string | null {
 }
 
 export interface Settings {
+  // The provider and model a call goes to. Per device (DEVICE_SETTING_KEYS):
+  // the credential that makes them callable is in credentials.json, which does
+  // not sync, so one device's choice carried to another names a provider that
+  // device may not be signed in to.
   defaultProviderId: string | null;
   defaultModelId: string | null;
   // What the app's everyday work runs on: the routine turns nobody is waiting
@@ -139,9 +146,10 @@ export interface Settings {
   // briefing does the same work it did before anyone opens this setting.
   briefingScreenThinking: ThinkingSetting;
   briefingThinking: ThinkingSetting;
-  // Voice-input STT endpoint (docs/15). base/model sync freely; the key lives in
-  // credentials.json (not synced). null falls back to the built-in SiliconFlow
-  // SenseVoice defaults (see src/ai/voice/config.ts).
+  // Voice-input STT endpoint (docs/15). Per device, like the provider above: the
+  // key lives in credentials.json, which does not sync, and a host from one
+  // device is the wrong host for another device's key. null falls back to the
+  // built-in SiliconFlow SenseVoice defaults (see src/ai/voice/config.ts).
   sttApiBase: string | null;
   sttModel: string | null;
   // Which language the phone's on-device dictation listens for (docs/15). A
@@ -205,6 +213,40 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const DEFAULTS = DEFAULT_SETTINGS;
 
+// The settings that live in device.json rather than settings.json (docs/36).
+// The rule: a setting that only works together with a credential that does not
+// sync is the device's. The provider and its models go with the provider
+// credential; the STT host and model go with the STT key.
+export const DEVICE_SETTING_KEYS = [
+  "defaultProviderId",
+  "defaultModelId",
+  "everydayModelId",
+  "sttApiBase",
+  "sttModel",
+] as const;
+export type DeviceSettingKey = (typeof DEVICE_SETTING_KEYS)[number];
+export type DeviceBoundSettings = Pick<Settings, DeviceSettingKey>;
+
+export function deviceBoundOf(settings: Settings): DeviceBoundSettings {
+  const out = {} as Record<DeviceSettingKey, string | null>;
+  for (const key of DEVICE_SETTING_KEYS) out[key] = settings[key];
+  return out as DeviceBoundSettings;
+}
+
+// settings.json as a save writes it: everything the account owns from the
+// shell's copy, and the device keys exactly as the file already had them.
+// Those are not updated any more but not dropped either: a device still on an
+// older build reads its provider from here, and a fields merge that saw one
+// side drop a key would carry the deletion to it.
+export function accountFileOf(settings: Settings, onDisk: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...settings };
+  for (const key of DEVICE_SETTING_KEYS) {
+    if (key in onDisk) out[key] = onDisk[key];
+    else delete out[key];
+  }
+  return out;
+}
+
 // The key everydayModelId was called before the everyday tier had more than the
 // briefing in it (docs/75).
 const LEGACY_BRIEFING_MODEL = "briefingModelId";
@@ -238,6 +280,11 @@ export interface SettingsIo {
   // write over; it is read on both paths, not remembered between them.
   read: () => Promise<GuardedRead<Partial<Settings>>>;
   write: (contents: string) => Promise<void>;
+  // This device's values for DEVICE_SETTING_KEYS: only the keys device.json
+  // actually has, so a device that has not taken them over yet still reads the
+  // ones in settings.json.
+  readDevice: () => Promise<Partial<DeviceBoundSettings>>;
+  writeDevice: (values: DeviceBoundSettings) => Promise<void>;
   schedule: (fn: () => void, ms: number) => number;
   cancel: (id: number) => void;
   // Bound once, on the first save: the last 500ms of a session are settings the
@@ -259,6 +306,10 @@ export interface SettingsStore {
   // it was before the last 500ms of edits (see pulledSettings in the shell
   // bootstrap).
   flush: () => Promise<void>;
+  // Whether device.json already holds this device's provider/model. False on
+  // the first start after the update; the shell then decides what this device
+  // takes over (loadShellSettings).
+  deviceOwned: () => Promise<boolean>;
 }
 
 export function createSettingsStore(io: SettingsIo): SettingsStore {
@@ -288,7 +339,14 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
       if (read.status === "corrupt" && read.savedAs === null) {
         throw new Error(`${SETTINGS_FILE} could not be read; refusing to overwrite it`);
       }
-      await io.write(JSON.stringify(pending, null, 2));
+      const settings = pending;
+      await io.writeDevice(deviceBoundOf(settings));
+      const onDisk = read.status === "ok" ? (read.value as Record<string, unknown>) : {};
+      const next = accountFileOf(settings, onDisk);
+      // A change that was only the device's leaves the account file as it was,
+      // so a model switch on one device is not an upload for all of them.
+      if (read.status === "ok" && JSON.stringify(next) === JSON.stringify(onDisk)) return;
+      await io.write(JSON.stringify(next, null, 2));
     },
     debounceMs: SAVE_DEBOUNCE,
     onError: io.onError,
@@ -302,11 +360,11 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
   // provider and a language they have not got.
   async function load(): Promise<Settings> {
     const read = await io.read();
-    if (read.status === "ok") return migrateSettings(read.value);
     if (read.status === "corrupt" && read.savedAs === null) {
       throw new Error(`${SETTINGS_FILE} could not be read`);
     }
-    return { ...DEFAULTS };
+    const account = read.status === "ok" ? migrateSettings(read.value) : { ...DEFAULTS };
+    return { ...account, ...(await io.readDevice()) };
   }
 
   // Debounced write; a failure is reported (never silently lost, pitfall 09).
@@ -315,7 +373,12 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
     writer.schedule(SETTINGS_FILE);
   }
 
-  return { load, save, flush: writer.flush };
+  return {
+    load,
+    save,
+    flush: writer.flush,
+    deviceOwned: async () => "defaultProviderId" in (await io.readDevice()),
+  };
 }
 
 function liveStore(): SettingsStore {
@@ -325,6 +388,21 @@ function liveStore(): SettingsStore {
         raw && typeof raw === "object" ? (raw as Partial<Settings>) : null,
       ),
     write: (contents) => writeTextAtomic(SETTINGS_FILE, contents),
+    readDevice: async () => {
+      const device = (await loadDeviceSettings()) as Partial<Record<DeviceSettingKey, unknown>>;
+      const out: Partial<Record<DeviceSettingKey, string | null>> = {};
+      for (const key of DEVICE_SETTING_KEYS) {
+        const value = device[key];
+        if (value === null || typeof value === "string") out[key] = value;
+      }
+      return out;
+    },
+    // Read first so the patch lands on device.json as it is on disk, not on
+    // whatever copy the device store last cached.
+    writeDevice: async (values) => {
+      await loadDeviceSettings();
+      await patchDeviceSettings(values);
+    },
     // The shared writer's timer, which looks the window up per call. Reaching
     // for window.setTimeout here instead is a ReferenceError out of saveSettings
     // in any run that has no window, thrown before the debounce it was meant to
@@ -351,6 +429,7 @@ export function rebuildSettingsStoreForTests(): void {
 export const loadSettings = (): Promise<Settings> => store.load();
 export const saveSettings = (settings: Settings): void => store.save(settings);
 export const flushSettings = (): Promise<void> => store.flush();
+export const settingsDeviceOwned = (): Promise<boolean> => store.deviceOwned();
 
 // What a sync pull does to the settings a shell is holding. A shell keeps
 // settings.json whole in memory and every save serialises that whole copy, so a

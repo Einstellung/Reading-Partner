@@ -17,7 +17,7 @@
 // naming them.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import { appConversationIo, type ConversationIo } from "../conversations";
 import { PALACE, resolvePalace } from "../palace";
 import { appData } from "../platform/app/appdata";
@@ -460,7 +460,7 @@ export function buildCatalogueTools(io: CatalogueIo = appCatalogueIo): AgentTool
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
-      // handed pi's interrupted result (src/soul/recover.ts).
+      // handed pi's interrupted result (legion/durable/recover.ts).
       replay: "safe",
       description:
         "What this reader keeps in the app: every kind of thing — books, topics, " +
@@ -476,7 +476,7 @@ export function buildCatalogueTools(io: CatalogueIo = appCatalogueIo): AgentTool
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
-      // handed pi's interrupted result (src/soul/recover.ts).
+      // handed pi's interrupted result (legion/durable/recover.ts).
       replay: "safe",
       description:
         "The entries of one kind from list_palace — ids and names, newest first — so you " +

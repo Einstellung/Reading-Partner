@@ -16,7 +16,7 @@ import { mealsPhotosWorker } from "../../../../src/info/meals/photos/photo-worke
 import type { WebviewPage } from "../../../../src/workshop/extract/webview-page";
 import type { DishPhotoEntry, Meal, WeekPlan } from "../../../../src/info/meals/plan/types";
 import type { Run } from "../../../../src/legion/run/types";
-import type { WorkerContext } from "../../../../src/legion/execute/worker";
+import type { WorkerContext } from "../../../../src/legion/runner/worker";
 
 // Tofu (en "firm tofu", protein aisle) and bok choy (en "bok choy", produce).
 function meal(over: Partial<Meal> = {}): Meal {

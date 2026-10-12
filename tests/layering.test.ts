@@ -109,7 +109,6 @@ const LAYER: Record<string, Layer> = {
   // When something is owed and which machine owes it (docs/55). Pure rules over
   // the runs and the claims, and one side effect: the wake bell.
   "legion/schedule": "capability",
-  "legion/execute": "capability",
   // The cold layer a finished run folds into, and the tombstone that lets the
   // hot file be deleted on both devices (docs/55). Pure rules plus a store, the
   // same shape as legion/run beside it.
@@ -119,6 +118,8 @@ const LAYER: Record<string, Layer> = {
   // about what any run does, and the merge it registers with sync goes that way
   // round because platform may not import legion.
   "legion/run": "capability",
+  // The legion runner: claims due runs and hands each to its kind's worker.
+  "legion/runner": "capability",
   "legion/subagent": "capability",
   // The turn runtime on pi-durable (docs/soul/87): the device's Harness, our
   // extension, the tool adapter, turns and recovery. Imports platform/app, ai,

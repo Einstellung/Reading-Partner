@@ -16,19 +16,15 @@ import { expect, spyOn, test } from "bun:test";
 import {
 	createAssistantMessageEventStream,
 	fauxAssistantMessage,
-	fauxToolCall,
 	type AssistantMessage,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { runAgentTurn } from "../../src/legion/execute/turn";
 import { callModel } from "../../src/ai/model-call";
 import { getModels, providers, streamChat, PROVIDER_IDS, type ProviderId } from "../../src/ai/providers";
 import { providerCallSetup } from "../../src/ai/call-setup";
 import * as credentials from "../../src/ai/auth/credentials";
 import { chatCleanupRunner } from "../../src/ai/voice";
 import * as cacheTelemetry from "../../src/platform/app/cache-telemetry";
-import * as sessionFs from "../../src/platform/app/session-fs";
-import { memoryAppData } from "../support/memory-appdata";
 import { messageEvents } from "../support/scripted-turn";
 import * as settings from "../../src/platform/app/settings";
 import { runDigest } from "../../src/reading/prep/papers/digest";
@@ -50,10 +46,6 @@ function firstModel(id: ProviderId): string {
 function harness(id: ProviderId, rounds: AssistantMessage[]): { seen: () => SimpleStreamOptions[] } {
 	spyOn(credentials, "loadCredentials").mockResolvedValue({ [id]: { type: "apiKey", key: "k" } } as any);
 	spyOn(cacheTelemetry, "recordCacheTurn").mockImplementation(() => {});
-	// The turn writes its session through the real session filesystem, onto a
-	// disk that is a Map.
-	const sessionFileSystem = sessionFs.createSessionFileSystem;
-	spyOn(sessionFs, "createSessionFileSystem").mockImplementation(() => sessionFileSystem(memoryAppData()));
 	const seen: SimpleStreamOptions[] = [];
 	let round = 0;
 	spyOn(providers[id], "streamSimple").mockImplementation(((_m: unknown, _c: unknown, opts: SimpleStreamOptions) => {
@@ -76,33 +68,17 @@ function answer(text: string): AssistantMessage {
 	return fauxAssistantMessage(text, { stopReason: "stop" });
 }
 
-function wantsTool(name: string): AssistantMessage {
-	return fauxAssistantMessage([fauxToolCall(name, {}, { id: "call-1" })] as any, { stopReason: "toolUse" });
-}
-
-const NOOP_TOOL = {
-	name: "look",
-	label: () => "Looking something up",
-	effect: "read" as const,
-	description: "look something up",
-	parameters: { type: "object", properties: {} } as any,
-	execute: async () => "found",
-};
-
-function turn(id: ProviderId, thread: string | undefined, tools: typeof NOOP_TOOL[]): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		void runAgentTurn({
+function chat(id: ProviderId, sessionId: string): Promise<string> {
+	return new Promise<string>((resolve, reject) => {
+		void streamChat({
 			providerId: id,
 			modelId: firstModel(id),
 			messages: [{ role: "user", text: "hello" }],
-			tools,
-			telemetry: { surface: "reading", ...(thread ? { thread } : {}) },
+			sessionId,
+			spend: { caller: "prep" },
 			onDelta: () => {},
-			onToolStart: () => {},
-			onToolEnd: () => {},
-			onDone: () => resolve(),
+			onDone: (text) => resolve(text),
 			onError: (m) => reject(new Error(m)),
-			onRefusal: (m) => reject(new Error(m)),
 		});
 	});
 }
@@ -149,64 +125,7 @@ test("whenever both halves are present they are the same id", () => {
 	}
 });
 
-// --- the agent loop ----------------------------------------------------------
-
-test("every round of one agent turn carries the same session, and it is the thread", async () => {
-	const h = harness("opencode-go", [wantsTool("look"), wantsTool("look"), answer("done")]);
-	await turn("opencode-go", "thread-a", [NOOP_TOOL]);
-	const sessions = h.seen().map((o) => o.headers?.[SESSION]);
-	expect(sessions.length).toBe(3);
-	expect(sessions).toEqual(["thread-a", "thread-a", "thread-a"]);
-});
-
-test("two turns on the same thread carry the same session", async () => {
-	const h = harness("opencode-go", [answer("one"), answer("two")]);
-	await turn("opencode-go", "thread-b", []);
-	await turn("opencode-go", "thread-b", []);
-	expect(h.seen().map((o) => o.headers?.[SESSION])).toEqual(["thread-b", "thread-b"]);
-});
-
-test("a turn with no conversation of its own gets a fresh session each run", async () => {
-	const h = harness("opencode-go", [answer("one"), answer("two")]);
-	await turn("opencode-go", undefined, []);
-	await turn("opencode-go", undefined, []);
-	const [first, second] = h.seen().map((o) => o.headers?.[SESSION]);
-	expect(first).toBeTruthy();
-	expect(second).toBeTruthy();
-	expect(first).not.toBe(second);
-});
-
-test("a turn on a provider that needs nothing carries neither header nor sessionId", async () => {
-	const h = harness("deepseek", [answer("hi")]);
-	await turn("deepseek", "thread-c", []);
-	expect(h.seen().length).toBe(1);
-	expect(h.seen()[0].headers).toBeUndefined();
-	expect(h.seen()[0].sessionId).toBeUndefined();
-});
-
-test("every round of a Fireworks turn carries the thread as pi's sessionId, no header", async () => {
-	const h = harness("fireworks", [wantsTool("look"), answer("done")]);
-	await turn("fireworks", "thread-f", [NOOP_TOOL]);
-	expect(h.seen().map((o) => o.sessionId)).toEqual(["thread-f", "thread-f"]);
-	expect(h.seen().every((o) => o.headers === undefined)).toBe(true);
-});
-
-// --- plain streaming ---------------------------------------------------------
-
-function chat(id: ProviderId, sessionId: string): Promise<string> {
-	return new Promise<string>((resolve, reject) => {
-		void streamChat({
-			providerId: id,
-			modelId: firstModel(id),
-			messages: [{ role: "user", text: "hello" }],
-			sessionId,
-			spend: { caller: "prep" },
-			onDelta: () => {},
-			onDone: (text) => resolve(text),
-			onError: (m) => reject(new Error(m)),
-		});
-	});
-}
+// --- the send path -----------------------------------------------------------
 
 test("streamChat sends the session it was given, and nothing on other providers", async () => {
 	const go = harness("opencode-go", [answer("hi")]);

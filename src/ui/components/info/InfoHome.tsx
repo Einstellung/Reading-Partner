@@ -135,7 +135,7 @@ export default function InfoHome(props: {
   // swipe and the Android button, neither of which can aim at a close button) —
   // back has to close the call before it navigates, or hanging up leaves the
   // reader on a screen they never chose. Omitted by the desktop shell, where
-  // back is the call's own Hang up.
+  // back is the call's own Close.
   onOverlayChange?: (dismiss: (() => void) | null) => void;
   // A shell's own wrapper around the two screens that have something to talk about
   // about, the briefing and an article. The phone (docs/22) returns them inside

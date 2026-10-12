@@ -16,7 +16,7 @@
 
 import { registerRole, roleRegistered, type Role } from "../../soul";
 import type { DeskEnv } from "../../desk";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { TASKING_KIND } from "../tasking/tasking-agent";
 
 export const SECRETARY_ROLE_ID = "secretary";

@@ -86,13 +86,13 @@ test("cramped, the call drops the host's bar for the composer and the conversati
 
 test("cramped, a call without a bar drops its corner controls, its chapter line and the room kept under them", () => {
   const roomy = draw({ covered: 0, cramped: false }, { chapterFocus: focus });
-  expect(roomy.querySelector('[aria-label="Hang up"]')).not.toBeNull();
+  expect(roomy.querySelector('[aria-label="Close"]')).not.toBeNull();
   expect(roomy.textContent).toContain("Chapter 3");
   expect(list(roomy).className).toContain("pt-36");
   cleanup();
 
   const root = draw({ covered: 272, cramped: true }, { chapterFocus: focus });
-  expect(root.querySelector('[aria-label="Hang up"]')).toBeNull();
+  expect(root.querySelector('[aria-label="Close"]')).toBeNull();
   expect(root.textContent).not.toContain("Chapter 3");
   expect(list(root).className).toContain("pt-4");
   expect(root.querySelector("textarea")).not.toBeNull();

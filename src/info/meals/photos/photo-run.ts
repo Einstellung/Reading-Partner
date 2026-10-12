@@ -15,8 +15,8 @@
 // it, and both halves are testable without a network.
 
 import { appData } from "../../../platform/app/appdata";
-import { appRunner } from "../../../legion/execute/runner";
-import type { Delegated, DelegateInput } from "../../../legion/execute/worker";
+import { appRunner } from "../../../legion/runner/runner";
+import type { Delegated, DelegateInput } from "../../../legion/runner/worker";
 import { dishPhotoKey, ingredientPhotoKey, needsPhotoLookup, type PhotoCache } from "./dish-photos";
 import { ingredientQuery } from "./photo-search";
 import { foodById } from "../nutrition/foods";

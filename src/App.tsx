@@ -32,6 +32,8 @@ import { getThread, type ThreadMessage } from "./platform/app/threads";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { defaultModelTakesImages } from "./ai";
+import { loadTalkOutline } from "./reading/talk";
+import { loadRetell } from "./reading/retell";
 import { prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
@@ -102,12 +104,13 @@ import type { ReaderShell } from "./reading/session/shell";
 import { keepReadingPosition } from "./reading/reading-position";
 import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
-import LibraryScreen from "./ui/components/library/LibraryScreen";
+import LibraryScreen, { type StudyOpen } from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
 import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
+import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
 import { toggleLumenShown, useLumenShown } from "./ui/components/lumen/use-lumen-shown";
 import {
   readSidebarCollapsed,
@@ -226,6 +229,9 @@ export default function App() {
   // has twenty books, a moment before their most recent one appears in its place.
   const [topics, setTopics] = useState<Topic[] | null>(null);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
+  // A coaching conversation or a retell a box card asked for (LibraryScreen opens it).
+  const [studyOpen, setStudyOpen] = useState<StudyOpen | null>(null);
+  const clearStudyOpen = useCallback(() => setStudyOpen(null), []);
 
   // The launch layer in front of the library, only meaningful when not in the
   // reader. InfoHome renders every screen but the library.
@@ -1069,12 +1075,23 @@ export default function App() {
     closeBook(readerShell, bookIdRef.current, docIdRef.current);
   }, [readerShell]);
 
-  // Where Lumen stands, and whether at all. Everywhere but the full-window chat
-  // the bottom-right corner is hers; there the composer is on that edge and she
-  // stands above it, off the composer's measured box (lumen/corner-placement.ts).
+  // Where Lumen stands, and whether at all. Everywhere but a conversation that
+  // has the whole window the bottom-right corner is hers; there the composer is
+  // on that edge and she stands above it, off the composer's measured box
+  // (lumen/corner-placement.ts). Two such conversations here: the full-window
+  // chat over the reader, and a talk's coaching or a retell in the library,
+  // which says it is up by filling the composer slot.
+  const [studyComposer, setStudyComposer] = useState(false);
   const { composerRef: lumenComposerRef, placement: lumenPlacement } = useCornerLift(
     lumenShown,
-    call?.view === "chat-main",
+    call?.view === "chat-main" || studyComposer,
+  );
+  const studyComposerSlot = useCallback(
+    (el: HTMLElement | null) => {
+      setStudyComposer(el !== null);
+      lumenComposerRef(el);
+    },
+    [lumenComposerRef],
   );
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
@@ -1203,6 +1220,24 @@ export default function App() {
       goToMeals: () => {
         if (inReader) closeReader();
         setHomeScreen("meals");
+      },
+      // A talk's coaching and a retell are drawn in their topic, read off the
+      // thing itself; one that has gone since opens nothing.
+      openCoach: async (outlineId: string) => {
+        const topicId = (await loadTalkOutline(outlineId).catch(() => null))?.topicId;
+        if (!topicId) return;
+        if (inReader) closeReader();
+        setActiveTopicId(topicId);
+        setHomeScreen("library");
+        setStudyOpen({ kind: "coach", topicId, id: outlineId });
+      },
+      openRetell: async (retellId: string) => {
+        const topicId = (await loadRetell(retellId).catch(() => null))?.topicId;
+        if (!topicId) return;
+        if (inReader) closeReader();
+        setActiveTopicId(topicId);
+        setHomeScreen("library");
+        setStudyOpen({ kind: "retell", topicId, id: retellId });
       },
       // An intake card's 「打开阅读」: the document was attached a moment ago,
       // so the shelf is read fresh rather than out of the state above.
@@ -1552,17 +1587,21 @@ export default function App() {
           )}
 
           {!inReader && homeScreen === "library" && (
-            <LibraryScreen
-              topics={topics ?? []}
-              activeTopic={activeTopic}
-              onOpenTopic={(t) => setActiveTopicId(t.id)}
-              onCloseTopic={() => setActiveTopicId(null)}
-              onAddFile={addFile}
-              onOpenFile={openFile}
-              onTopicsChanged={refreshTopics}
-              onSay={(line) => pushToast("error", line)}
-              onTell={(line) => pushToast("info", line)}
-            />
+            <ComposerSlotContext.Provider value={studyComposerSlot}>
+              <LibraryScreen
+                topics={topics ?? []}
+                activeTopic={activeTopic}
+                onOpenTopic={(t) => setActiveTopicId(t.id)}
+                onCloseTopic={() => setActiveTopicId(null)}
+                onAddFile={addFile}
+                onOpenFile={openFile}
+                onTopicsChanged={refreshTopics}
+                onSay={(line) => pushToast("error", line)}
+                onTell={(line) => pushToast("info", line)}
+                open={studyOpen}
+                onOpened={clearStudyOpen}
+              />
+            </ComposerSlotContext.Provider>
           )}
         </div>
 

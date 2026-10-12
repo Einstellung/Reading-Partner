@@ -14,8 +14,9 @@
 // for tests; the AI call is wired in live.ts.
 
 import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../legion/execute/turn";
-import { runAgentTurn } from "../../../legion/execute/turn";
+import type { AgentTool } from "../../../legion/durable/contract";
+import { runBackgroundTurn } from "../../../legion/durable/background";
+import { noteOf } from "../model-output";
 import { formatPages, formatSearch } from "../../../fulltext/format";
 import { buildFigureTools, type FigureImage } from "../../figures/tools";
 import type { Figure } from "../../figures/types";
@@ -293,33 +294,18 @@ export function runSpineChapter(params: {
     aiLanguage,
   });
 
-  return new Promise<string>((resolve, reject) => {
-    let chars = 0;
-    const bump = (t: string) => {
-      chars += t.length;
-      onProgress?.(chars);
-    };
-    void runAgentTurn({
-      providerId: model.providerId as any,
-      modelId: model.modelId,
-      systemPrompt,
-      messages: [{ role: "user", text: chapterKickoff(chapter) }],
-      tools,
-      signal,
-      reasoning: model.reasoning,
-      maxRounds: CHAPTER_MAX_ROUNDS,
-      purpose: "chapter-note",
-      telemetry: { surface: "notes" },
-      onDelta: bump,
-      onThinking: bump,
-      onToolStart: () => {},
-      onToolEnd: () => {},
-      onDone: (text) => {
-        const t = text.trim();
-        if (t) resolve(t);
-        else reject(new Error("chapter note came back empty"));
-      },
-      onError: (message) => reject(new Error(message)),
-    });
-  });
+  // A background run on the device's durable Harness: answer and thinking
+  // characters both count as liveness for the pipeline's stall watchdog.
+  return runBackgroundTurn({
+    name: "chapter-note",
+    systemPrompt,
+    task: chapterKickoff(chapter),
+    tools,
+    maxRounds: CHAPTER_MAX_ROUNDS,
+    purpose: "chapter-note",
+    model,
+    surface: "notes",
+    ...(signal ? { signal } : {}),
+    ...(onProgress ? { onProgress } : {}),
+  }).then((outcome) => noteOf(outcome, "chapter note came back empty"));
 }

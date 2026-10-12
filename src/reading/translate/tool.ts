@@ -16,7 +16,7 @@
 // five cases is pinned by a test with no library, no topic and no provider.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { t } from "../../i18n";
 import type { TranslationHome } from "./replace";
 

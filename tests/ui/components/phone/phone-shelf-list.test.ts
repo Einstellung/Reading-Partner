@@ -10,6 +10,7 @@ import type { TableChapter } from "../../../../src/reading/chapters/table";
 import type { Thread } from "../../../../src/platform/app/threads";
 import {
   continueReading,
+  conversationDoor,
   lessonNote,
   materialNote,
   materialTap,
@@ -223,4 +224,10 @@ test("Continue reading is nothing until an EPUB has actually been opened", () =>
   ];
   expect(continueReading(topics, { h1: entry("h1") })).toBeNull();
   expect(continueReading([], {})).toBeNull();
+});
+
+test("a box card opens a paper's conversation in its lesson and an EPUB's over its page", () => {
+  expect(conversationDoor("pdf")).toBe("lesson");
+  expect(conversationDoor(undefined)).toBe("lesson");
+  expect(conversationDoor("epub")).toBe("open");
 });

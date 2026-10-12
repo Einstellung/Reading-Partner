@@ -12,13 +12,17 @@ import type { Shell } from "../../../platform/app/shell";
 import type { Settings } from "../../../platform/app/settings";
 import { initSync, TICK_MS } from "../../../platform/sync";
 import { registerPullRoute } from "../../../platform/sync/pull-routes";
-import { startBellWatch, startSoulSession } from "../../../soul";
+import { doorPlace, startBellWatch } from "../../../soul";
+import { removeOldSessions } from "../../../legion/durable/harness";
 import { startReadingDurable } from "../../../reading/turn/durable-runtime";
+import { COACH_PLACE, coachPlace } from "../../../reading/rehearsal";
+import { RETELL_PLACE, retellPlace } from "../../../reading/retell";
 import { appToolCatalog } from "./durable-catalog";
-import { startRunner } from "../../../legion/execute/runner";
+import { infoPlace, mealsPlace } from "../../../info/briefer/info-durable";
+import { startRunner } from "../../../legion/runner/runner";
 import { SCHEDULE_TICK_MS, startScheduleClock } from "../../../legion/schedule";
 import { currentDeviceId } from "../../../platform/app/device";
-import { watchAppAwayForStalls } from "../../../legion/execute/stall";
+import { watchAppAwayForStalls } from "../../../legion/durable/stall";
 import { purgeLegacyChapterNotes } from "../../../reading/prep/chapters/purge";
 import { settleDeletions } from "../../../reading/delete/settle";
 import { SHELF_PULL_ROUTE } from "../../../reading/pull-routes";
@@ -92,18 +96,22 @@ export function useBackgroundServices({
     [],
   );
 
-  // A turn the last process was killed in the middle of is finished now, on the
-  // session it was killed on (src/soul/recover.ts). It runs at start and not on
-  // the first turn, because the reader who lost an answer has no reason to ask
-  // for another one before they see it (docs/pitfall/394).
+  // The old runtime's session directory goes on the first start after the
+  // upgrade (docs/soul/87, phase 4).
   useEffect(() => {
-    void startSoulSession();
-    // Book turns run on the durable runtime (docs/soul/87); opening it sorts out what
+    removeOldSessions().catch((e: unknown) => console.warn("the old session directory could not be removed", e));
+    // Book, door, info, meals, coach and retell turns run on the durable runtime (docs/soul/87); opening it sorts out what
     // the last process left running before anything resumes.
-    startReadingDurable(appToolCatalog).catch((e: unknown) => console.warn("the durable runtime could not be opened", e));
+    startReadingDurable(appToolCatalog, () => ({
+      door: doorPlace(),
+      info: infoPlace(),
+      meals: mealsPlace(),
+      [COACH_PLACE]: coachPlace(),
+      [RETELL_PLACE]: retellPlace(),
+    })).catch((e: unknown) => console.warn("the durable runtime could not be opened", e));
   }, []);
 
-  // Where the app is, for the turns that are streaming (legion/execute/stall.ts).
+  // Where the app is, for the turns that are streaming (legion/durable/stall.ts).
   // iOS freezes the process moments after it is switched away and the stream
   // that was being read does not survive it; coming back is when a turn still
   // holding the lane has to be cut loose.

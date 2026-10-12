@@ -13,8 +13,8 @@ import {
   parseCollectBrief,
   type CollectPipeline,
 } from "../../../src/info/program/collect-worker";
-import { createRunner } from "../../../src/legion/execute/runner";
-import { registerWorker } from "../../../src/legion/execute/worker";
+import { createRunner } from "../../../src/legion/runner/runner";
+import { registerWorker } from "../../../src/legion/runner/worker";
 import { createBellStore, type Bell } from "../../../src/legion/bell";
 import { createRunStore } from "../../../src/legion/run";
 import { mapDisk as disk } from "../../support/map-disk";

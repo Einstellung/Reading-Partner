@@ -1,21 +1,27 @@
-// The parent-side half: a sub-agent definition mounted as one AgentTool, so from
-// the calling model's point of view delegating a whole investigation looks like
+// The parent-side half: a sub-agent definition mounted as one tool, so from the
+// calling model's point of view delegating a whole investigation looks like
 // calling a tool that returns a summary.
 //
-// What the parent's context gains from this is one tool result of at most
-// briefTokenCap tokens, whatever the run cost internally — which is the entire
-// reason the capability exists.
+// The run is a child conversation the call owns (legion/durable/child.ts):
+// its own system prompt, model and tools; aborting the call aborts it; the
+// parent never sees its entries and the UI never attaches to it. The brief is
+// counted from the child's entries, so a call replayed after a restart finds
+// the same child and reports every round of it (`replay: "safe"`).
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../execute/contract";
-import { runSubagent, type SubagentDeps, type SubagentRequest } from "./run";
-import type { SubagentDefinition } from "./types";
+import { runTaskChild } from "../durable/child";
+import type { DurableTool } from "../durable/tools";
+import { StoppedError } from "../stop";
+import { subagentSystemPrompt } from "./brief";
+import { childSpec, subagentModel, turnOutcome } from "./child";
+import type { SubagentQuota } from "./quota";
+import { briefFor } from "./run";
+import { DEFAULT_BRIEF_TOKEN_CAP, DEFAULT_SUBAGENT_ROUNDS, type SubagentBrief, type SubagentDefinition } from "./types";
 
 // pi-ai rewrites tool names that match Claude Code's canonical set (Read, Bash,
 // WebFetch, WebSearch …) on the OAuth channel, so a sub-agent called `WebSearch`
 // would go out impersonating a different tool with different semantics
-// (docs/24). Lowercase-with-underscores cannot collide, so the shape is enforced
-// where the tool is built rather than left as a comment for the next caller.
+// (docs/24). Lowercase-with-underscores cannot collide.
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
 // Appended to the definition's description. The parent model has to know it is
@@ -32,45 +38,69 @@ const DEFAULT_TASK_DESCRIPTION =
   "The complete task, written for someone who cannot see this conversation: what to " +
   "find out, and what would count as an answer.";
 
-export interface SubagentToolDeps extends SubagentDeps {
-  // The caller's own abort signal — the same one its turn runs under, so a
-  // hangup kills the sub-agent with the turn.
-  signal?: AbortSignal;
-  onProgress?: SubagentRequest["onProgress"];
+export interface SubagentToolDeps {
+  // A shared round budget for the caller's whole turn.
+  quota?: SubagentQuota;
 }
 
-export function subagentTool(definition: SubagentDefinition, deps: SubagentToolDeps): AgentTool {
+const NO_STATS = { rounds: 0, toolCalls: 0, toolSuccesses: 0, toolFailures: [] };
+
+export function subagentTool(definition: SubagentDefinition, deps: SubagentToolDeps = {}): DurableTool {
   if (!TOOL_NAME.test(definition.name)) {
     throw new Error(
       `sub-agent name '${definition.name}' is not a safe tool name: use lowercase letters, digits and underscores`,
     );
   }
+  const tokenCap = definition.briefTokenCap ?? DEFAULT_BRIEF_TOKEN_CAP;
   return {
     name: definition.name,
-    // The definition's own line, the same one a progress update keeps alive in
-    // the trace (reading/papers/research-agent.ts). A run reads nothing of the
-    // app's and writes nothing of it either: what it comes back with is a brief.
     label: () => definition.label,
     effect: "read",
+    replay: "safe",
     description: `${definition.description.trim()}\n\n${DELEGATION_NOTE}`,
     parameters: Type.Object({
       task: Type.String({
         description: definition.taskDescription ?? DEFAULT_TASK_DESCRIPTION,
       }),
     }),
-    execute: async (args) => {
+    childTools: definition.tools,
+    execute: async () => {
+      throw new Error(`${definition.name} runs on the durable runtime only`);
+    },
+    runInDurable: async (args, { api, runtime }, context) => {
       const task = String(args.task ?? "").trim();
       if (!task) throw new Error(`${definition.name} needs a task.`);
-      const result = await runSubagent(
-        { definition, task, signal: deps.signal, onProgress: deps.onProgress },
-        deps,
-      );
-      // A run that established nothing is thrown, not returned. Same discipline
-      // as src/reading/papers/search-tool.ts: a tool result the model reads as an
-      // answer is how "the search stopped early" becomes "the literature is
-      // silent". The text is identical either way — only a thrown result is
-      // marked as an error the model has to account for, and shows up red in the
-      // caller's tool trace instead of vanishing on success.
+      const want = definition.maxRounds ?? DEFAULT_SUBAGENT_ROUNDS;
+      const reserved = deps.quota ? deps.quota.grant(want) : want;
+      let used = 0;
+      let result: SubagentBrief;
+      try {
+        if (reserved <= 0) {
+          result = briefFor({ definition, reserved, stats: NO_STATS }, { kind: "out-of-budget" });
+        } else {
+          const model = await subagentModel(definition.model);
+          const spec = childSpec(
+            {
+              name: definition.name,
+              systemPrompt: subagentSystemPrompt(definition, tokenCap),
+              tools: definition.tools,
+              maxRounds: reserved,
+              purpose: definition.purpose ?? "chat",
+              task,
+            },
+            model,
+          );
+          const child = await runTaskChild(runtime, api, spec, context);
+          used = child.stats.rounds;
+          if (child.end.kind === "aborted") throw new StoppedError();
+          result = briefFor({ definition, reserved, stats: child.stats }, turnOutcome(child));
+        }
+      } finally {
+        deps.quota?.settle(reserved, used);
+      }
+      // A run that established nothing is thrown, not returned: only a thrown
+      // result is marked as an error the model has to account for (same
+      // discipline as src/reading/papers/search-tool.ts).
       if (!result.usable) throw new Error(result.brief);
       return result.brief;
     },

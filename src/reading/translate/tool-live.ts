@@ -11,10 +11,10 @@
 // of both are in book-run.ts, where they can be read back under bun.
 
 import { appData } from "../../platform/app/appdata";
-import { appRunner } from "../../legion/execute/runner";
+import { appRunner } from "../../legion/runner/runner";
 import { t } from "../../i18n";
-import { OUTPUTS_DIR } from "../../legion/execute/outputs";
-import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/execute/worker";
+import { OUTPUTS_DIR } from "../../legion/runner/outputs";
+import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/runner/worker";
 import type { BoxOrigin } from "../../box";
 import {
   formatOfBytes,

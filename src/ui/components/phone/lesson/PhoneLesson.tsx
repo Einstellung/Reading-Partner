@@ -20,7 +20,7 @@ import { CitationModeContext } from "../../markdown/Markdown";
 import { Button } from "../../ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "../../ui/popover";
 import { longPressFeedback } from "../../../../platform/app/haptics";
-import { replySpanAt, type LessonAskSpan } from "./lesson-aside";
+import { heldSpanStands, replySpanAt, type LessonAskSpan } from "./lesson-aside";
 import { bindLongPress } from "../gesture/long-press";
 import ConfirmDestructiveDialog from "../../common/ConfirmDestructiveDialog";
 import HoldMenu from "../HoldMenu";
@@ -106,8 +106,9 @@ export default function PhoneLesson(props: LessonViewProps) {
     onChanged: () => asideDelete?.onChanged(),
   });
 
-  // A lesson that moved on is a lesson the held paragraph may no longer be in.
-  useEffect(() => setHeld(null), [props.messages]);
+  // A lesson that lost the held paragraph's reply drops the control. A reply
+  // streaming below it does not: every token is a new messages array.
+  useEffect(() => setHeld((h) => (h && !heldSpanStands(props.messages, h.span) ? null : h)), [props.messages]);
 
   const header = props.aside ? (
     <>

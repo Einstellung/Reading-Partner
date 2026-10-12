@@ -14,7 +14,9 @@ import * as bookThread from "../../../../../src/reading/session/book-thread";
 import * as openPdf from "../../../../../src/reading/lesson/open-pdf";
 import * as turn from "../../../../../src/reading/turn/turn";
 import * as durableRuntime from "../../../../../src/reading/turn/durable-runtime";
-import { STALL_MESSAGE } from "../../../../../src/legion/execute/stall";
+import { STALL_MESSAGE } from "../../../../../src/legion/durable/stall";
+import { turnsStarting } from "../../../../../src/reading/turn/detached-turns";
+import { bookThreadKey } from "../../../../../src/reading/turn/durable-book";
 import type { BookOrigin } from "../../../../../src/reading/turn/durable-book";
 import type { CallRow } from "../../../../../src/reading/turn/call-state";
 import type { Thread, ThreadMessage } from "../../../../../src/platform/app/threads";
@@ -68,8 +70,10 @@ function rig() {
 }
 type Rig = ReturnType<typeof rig>;
 
-async function mounted() {
-  const view = renderHook(() => useLessonCall({ bookId: BOOK, title: "Paper", topicId: "t1", topicName: "Topic" }));
+async function mounted(covered?: () => boolean) {
+  const view = renderHook(() =>
+    useLessonCall({ bookId: BOOK, title: "Paper", topicId: "t1", topicName: "Topic", ...(covered ? { covered } : {}) }),
+  );
   await act(async () => {
     await tick();
     await tick();
@@ -238,6 +242,30 @@ test("stop keeps the half sentence and the receipt; a withdrawn line opens the n
   }
 });
 
+test("a stop in the same tick as a line waits for the line to reach the run, so it opens the next turn", async () => {
+  const r = rig();
+  try {
+    const view = await mounted();
+    const { turn, at } = await ask(view, r, "What is attention?");
+    act(() => turn.view([{ role: "ai", text: "Attention is", ts: at + 1, streaming: true }]));
+    // The steer is still being submitted when the stop goes (docs/pitfall/528).
+    await act(async () => {
+      view.result.current.send("Wait, heads?");
+      view.result.current.stop();
+      await tick();
+    });
+    expect(turn.stops).toBe(1);
+    expect(turn.withdrawn?.map((s) => s.text)).toEqual(["Wait, heads?"]);
+
+    await settle(turn, { kind: "stopped", rows: [{ role: "ai", text: "Attention is", ts: at + 1 }], steers: turn.withdrawn! });
+    expect(tail(r.stored)).toMatchObject({ role: "user", text: "Wait, heads?" });
+    expect(r.book.turns).toHaveLength(2);
+    expect(r.book.last().request.line.text).toBe("Wait, heads?");
+  } finally {
+    r.restore();
+  }
+});
+
 test("a stop before any word leaves no row behind", async () => {
   const r = rig();
   try {
@@ -338,24 +366,89 @@ test("read_chapter ticks its chapter as it starts and moves the focus once it ha
   }
 });
 
-test("leaving stops the turn, files what the runtime handed back, and opens nothing", async () => {
+// Closing the lesson is not Stop (docs/soul/87, 第二阶段「关对话不停回合」).
+const ON_THREAD: BookOrigin = { place: "book", bookId: BOOK, threadId: THREAD, home: BOOK };
+const watched = (r: Rig) => [...r.probes].some((probe) => probe(ON_THREAD));
+
+test("leaving does not stop the turn: it lands out of sight, files what no run took, and opens nothing", async () => {
   const r = rig();
   try {
     const view = await mounted();
     const { turn, at } = await ask(view, r, "What is attention?");
-    // The lesson's turn is watched while it runs: its reply gets no box card.
-    expect([...r.probes].some((probe) => probe({ place: "book", bookId: BOOK, threadId: THREAD, home: BOOK }))).toBe(true);
-    view.unmount();
-    expect(turn.stops).toBe(1);
-    // Still watched while the runtime lands what the stop kept.
-    expect(r.probes.size).toBe(1);
+    // Open: its reply gets no box card.
+    expect(watched(r)).toBe(true);
+    turn.taking = false;
     await act(async () => {
-      turn.end({ kind: "stopped", rows: [{ role: "ai", text: "Half", ts: at + 1 }], steers: [{ text: "And heads?", ts: at + 4 }] });
+      view.result.current.send("And heads?");
       await tick();
     });
-    expect(tail(r.stored)).toMatchObject({ role: "user", text: "And heads?", ts: at + 4 });
+    view.unmount();
+    expect(turn.stops).toBe(0);
+    // Closed: nobody is watching, so the runtime's lander puts the card.
+    expect(watched(r)).toBe(false);
+    await act(async () => {
+      turn.end({ kind: "answered", rows: [{ role: "ai", text: "Attention weighs tokens.", ts: at + 1 }] });
+      await tick();
+    });
+    expect(tail(r.stored)).toMatchObject({ role: "user", text: "And heads?" });
     expect(r.book.turns).toHaveLength(1);
-    expect(r.probes.size).toBe(0);
+  } finally {
+    r.restore();
+  }
+});
+
+test("a lesson closed while its turn is being assembled still sends it", async () => {
+  const r = rig();
+  let release!: (value: unknown) => void;
+  r.assemble(new Promise((resolve) => (release = resolve)));
+  try {
+    const view = await mounted();
+    await act(async () => {
+      view.result.current.send("What is attention?");
+      await tick();
+    });
+    view.unmount();
+    await act(async () => {
+      release(emptyReadingTurn());
+      await tick();
+      await tick();
+    });
+    expect(r.book.turns).toHaveLength(1);
+    expect(r.book.last().stops).toBe(0);
+  } finally {
+    r.restore();
+  }
+});
+
+test("opened again mid-answer, the lesson follows the turn and the closed one lets go of it", async () => {
+  const r = rig();
+  try {
+    const first = await mounted();
+    const { turn, at } = await ask(first, r, "What is attention?");
+    first.unmount();
+    r.book.inFlight(at);
+    const again = await mounted();
+    expect(r.book.turns).toHaveLength(2);
+    const joined = r.book.last();
+    expect(joined.resumed).toEqual({ home: BOOK, threadId: THREAD });
+    // The closed lesson gave up its stall watch and files nothing (docs/pitfall/540).
+    expect(turn.unwatches).toBe(1);
+    expect(again.result.current.streaming).toBe(true);
+    await act(async () => {
+      joined.view([{ role: "ai", text: "Attention is", ts: at + 1, streaming: true } as CallRow]);
+      await tick();
+    });
+    expect(texts(again)).toEqual([OPENING, "What is attention?", "Attention is"]);
+    const filed = r.stored.length;
+    await act(async () => {
+      turn.end({ kind: "stalled", steers: [{ text: "And heads?", ts: at + 4 }] });
+      await tick();
+    });
+    expect(r.stored.length).toBe(filed);
+    await settle(joined, { kind: "answered", rows: [{ role: "ai", text: "Attention weighs tokens.", ts: at + 1 }] });
+    expect(again.result.current.streaming).toBe(false);
+    expect(texts(again)).toEqual([OPENING, "What is attention?", "Attention weighs tokens."]);
+    expect(r.book.turns).toHaveLength(2);
   } finally {
     r.restore();
   }
@@ -385,7 +478,8 @@ test("a lesson opened with a turn in flight streams it, and Stop reaches it", as
     await settle(turn, { kind: "stopped", rows: [{ role: "ai", text: "Attention is", ts: 201 }], steers: [] });
     expect(view.result.current.streaming).toBe(false);
     expect(texts(view)).toEqual([OPENING, "Attention is"]);
-    expect(r.probes.size).toBe(0);
+    // Watched for as long as the lesson is open, not for the turn.
+    expect(watched(r)).toBe(true);
     expect(r.book.turns).toHaveLength(1);
   } finally {
     r.restore();
@@ -412,6 +506,115 @@ test("a line said while the turn in flight lands waits for it and then opens the
     expect(r.book.turns).toHaveLength(2);
     expect(r.book.last().request.line).toEqual({ text: "And heads?", ts: tail(r.stored)!.ts });
     expect(view.result.current.streaming).toBe(true);
+  } finally {
+    r.restore();
+  }
+});
+
+// The phone lesson's aside (PhoneLessonScreen.tsx): stepping out does not stop
+// the lesson's turn, and the receipt the way back writes into the lesson's file
+// while the turn still runs sits above the turn's rows — on screen, and in the
+// file, where the turn's rows land after it.
+test("a receipt written while the turn runs stays above its rows, and the landed turn shows once under it", async () => {
+  const r = rig();
+  try {
+    const view = await mounted();
+    const { turn, at } = await ask(view, r, "What is attention?");
+    await act(async () => {
+      turn.view([{ role: "ai", text: "Atten", ts: at + 1, streaming: true } as CallRow]);
+      await tick();
+    });
+    const receipt = {
+      role: "ai",
+      text: "Stepped aside to ask about heads.",
+      ts: at + 50,
+      parts: [{ type: "card", id: "aside-1", card: { kind: "aside", threadId: "a1", span: "heads", question: "Why?" } }],
+    } as unknown as ThreadMessage;
+    r.stored.push(receipt);
+    act(() => view.result.current.reload());
+    expect(texts(view)).toEqual([OPENING, "What is attention?", receipt.text, "Atten"]);
+    expect(view.result.current.streaming).toBe(true);
+    expect(turn.stops).toBe(0);
+    await act(async () => {
+      turn.view([{ role: "ai", text: "Attention is", ts: at + 1, streaming: true } as CallRow]);
+      await tick();
+    });
+    expect(texts(view)).toEqual([OPENING, "What is attention?", receipt.text, "Attention is"]);
+    const answer: CallRow = { role: "ai", text: "Attention is weighing.", ts: at + 1 };
+    await settle(turn, { kind: "answered", rows: [answer] });
+    const shown = [OPENING, "What is attention?", receipt.text, answer.text];
+    expect(texts(view)).toEqual(shown);
+    // The lander appends the turn's rows after the receipt; read back, the file is the screen.
+    r.stored.push({ role: "ai", text: answer.text, ts: answer.ts });
+    act(() => view.result.current.reload());
+    expect(texts(view)).toEqual(shown);
+    expect(r.book.turns).toHaveLength(1);
+  } finally {
+    r.restore();
+  }
+});
+
+test("under an aside the lesson is not watched: a reply landing then puts a box card", async () => {
+  const r = rig();
+  let covered = false;
+  try {
+    await mounted(() => covered);
+    expect(watched(r)).toBe(true);
+    covered = true;
+    expect(watched(r)).toBe(false);
+    covered = false;
+    expect(watched(r)).toBe(true);
+  } finally {
+    r.restore();
+  }
+});
+
+// A lesson opened again while the closed one's turn is still being assembled
+// waits for the runtime to hold it before looking (detached-turns.ts).
+test("a turn being assembled holds the lesson's key until the runtime has it; a stop lets go of it", async () => {
+  const r = rig();
+  const key = bookThreadKey({ home: BOOK, threadId: THREAD });
+  let release!: (value: unknown) => void;
+  r.assemble(new Promise((resolve) => (release = resolve)));
+  try {
+    const view = await mounted();
+    await act(async () => {
+      view.result.current.send("What is attention?");
+      await tick();
+    });
+    view.unmount();
+    let started = false;
+    void turnsStarting(key).then(() => (started = true));
+    await act(async () => {
+      await tick();
+    });
+    expect(started).toBe(false);
+    await act(async () => {
+      release(emptyReadingTurn());
+      await tick();
+      await tick();
+    });
+    expect(r.book.turns).toHaveLength(1);
+    expect(started).toBe(true);
+
+    r.assemble(new Promise(() => {}));
+    const again = await mounted();
+    await settle(r.book.last(), { kind: "answered", rows: [] });
+    await act(async () => {
+      again.result.current.send("And heads?");
+      await tick();
+    });
+    let looked = false;
+    void turnsStarting(key).then(() => (looked = true));
+    await act(async () => {
+      await tick();
+    });
+    expect(looked).toBe(false);
+    act(() => again.result.current.stop());
+    await act(async () => {
+      await tick();
+    });
+    expect(looked).toBe(true);
   } finally {
     r.restore();
   }

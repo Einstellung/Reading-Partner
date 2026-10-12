@@ -5,7 +5,7 @@
 
 import { expect, test } from "bun:test";
 import { validateToolCall } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../src/legion/execute/contract";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 import {
   MAX_METHOD_CHARS,
   buildAddShoppingItemsTool,
@@ -557,7 +557,7 @@ test("what the model sent is read defensively", () => {
 
 /**
  * The arguments the tool is actually handed: pi validates and coerces a call
- * against the tool's schema before execute sees it (src/legion/execute/turn.ts),
+ * against the tool's schema before execute sees it (pi-durable),
  * and a tool whose schema says a field is required that the model has nothing
  * to put in never gets that far (docs/pitfall/379).
  */

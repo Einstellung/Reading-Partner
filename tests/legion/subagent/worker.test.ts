@@ -8,7 +8,7 @@
 
 import { expect, test } from "bun:test";
 import { agentWorker } from "../../../src/legion/subagent/worker";
-import type { WorkerContext } from "../../../src/legion/execute/worker";
+import type { WorkerContext } from "../../../src/legion/runner/worker";
 import type { SubagentDefinition, SubagentTurnFn } from "../../../src/legion/subagent";
 import type { Run } from "../../../src/legion/run";
 

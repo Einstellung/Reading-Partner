@@ -41,7 +41,8 @@ export type AiSurface =
   | "digest"
   // A turn no reader opened: the soul answering a bell (src/soul/bell.ts).
   | "bell"
-  // A turn a dead process started, finished by the next one (src/soul/recover.ts).
+  // A turn a dead process started, finished by the next one on the old runtime
+  // (before docs/soul/87). Nothing writes it now; old log lines still carry it.
   | "recovery"
   // A conversation typed to Lumen at the door (soul/door.ts).
   | "door";

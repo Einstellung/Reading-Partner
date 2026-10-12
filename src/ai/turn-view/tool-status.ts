@@ -19,7 +19,7 @@ export type ReceiptLink =
   | { kind: "run"; id: string };
 
 // What a write did, for the reader. A tool that changes anything comes back with
-// one (legion/execute/contract.ts): the write is otherwise invisible, since the
+// one (legion/durable/contract.ts): the write is otherwise invisible, since the
 // tool's text goes to the model and nowhere else. Declared here rather than in
 // the tool contract because a receipt outlives the call — it is persisted with
 // the row — and because ai may not import legion.
@@ -45,7 +45,7 @@ export interface ToolStatus {
   receipt?: Receipt;
   // Why it failed, on an 'error' row: the message the tool threw.
   error?: string;
-  // The tool declared itself quiet (legion/execute/contract.ts): the reader is
+  // The tool declared itself quiet (legion/durable/contract.ts): the reader is
   // shown nothing while it runs and no line once it is done, and no receipt is
   // derived from it. It is still stored, so what the turn did is on disk in
   // full. A quiet call that failed is shown: the red line is the one thing

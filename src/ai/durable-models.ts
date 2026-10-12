@@ -2,7 +2,7 @@
 // (docs/soul/87, "存储与 Harness"): the same provider objects, keys and
 // transport the agent loop uses (providers.ts). Auth is resolved per request
 // from the app's key store; the transport and pi-ai's own retry count are
-// written into every request the way runAgentTurn writes them.
+// written into every request.
 
 import { createModels, type MutableModels, type Provider } from "@earendil-works/pi-ai/models";
 import type { ProviderId } from ".";
@@ -26,8 +26,17 @@ function appProvider(id: ProviderId, provider: Provider): Provider {
   return Object.assign(Object.create(provider) as Provider, { auth, stream, streamSimple });
 }
 
+// Each provider is registered under pi's id, which is what a model's `provider`
+// field names and what stream dispatch looks up. Durable turns name their model
+// by this app's id (settings.defaultProviderId), so where the two differ (our
+// "openai" is pi's "openai-codex") the same provider is registered under the
+// app's id as well; without it every durable turn on OpenAI ends in no_model.
 export function createAppModels(): MutableModels {
   const models = createModels();
-  for (const id of Object.keys(providers) as ProviderId[]) models.setProvider(appProvider(id, providers[id]));
+  for (const id of Object.keys(providers) as ProviderId[]) {
+    const provider = appProvider(id, providers[id]);
+    models.setProvider(provider);
+    if (provider.id !== id) models.setProvider(Object.assign(Object.create(provider) as Provider, { id }));
+  }
   return models;
 }

@@ -182,10 +182,11 @@ test("aiLanguage defaults to auto and an old file without it loads as auto", asy
 // window.setTimeout, because in a headless run there is no window to capture.
 test("saveSettings schedules a write with no window in the process", async () => {
   expect(typeof globalThis.window).toBe("undefined");
-  saveSettings({ ...DEFAULT_SETTINGS, defaultProviderId: "openai" });
+  saveSettings({ ...DEFAULT_SETTINGS, defaultProviderId: "openai", aiLanguage: "ja" });
   await flushSettings();
-  expect(disk.writes).toEqual([SETTINGS_FILE]);
-  expect(JSON.parse(disk.files.get(SETTINGS_FILE) ?? "null")).toMatchObject({
+  expect(disk.writes).toEqual(["device.json", SETTINGS_FILE]);
+  expect(JSON.parse(disk.files.get(SETTINGS_FILE) ?? "null")).toMatchObject({ aiLanguage: "ja" });
+  expect(JSON.parse(disk.files.get("device.json") ?? "null")).toMatchObject({
     defaultProviderId: "openai",
   });
 });
@@ -213,7 +214,9 @@ test("an unreadable file raises out of the load and is not written over", async 
     disk.unreadable.delete(SETTINGS_FILE);
     saveSettings({ ...DEFAULT_SETTINGS, defaultProviderId: "anthropic" });
     await flushSettings();
-    expect(disk.writes).toEqual([SETTINGS_FILE]);
+    expect(disk.writes).toEqual(["device.json", SETTINGS_FILE]);
+    // The provider is the device's; settings.json keeps the value it had.
+    expect(JSON.parse(disk.files.get(SETTINGS_FILE) ?? "null")).toMatchObject({ defaultProviderId: "openai" });
   } finally {
     off();
   }

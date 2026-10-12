@@ -2,7 +2,7 @@
 
 ## 愿景
 
-派活的地基已经立住：`src/legion/` 下 run、claim、schedule、execute、bell、ledger、subagent 齐了，palace 登记七行，七个 worker（`research-literature`、`tasking`、`collect`、`translate-book`、`adjudicate-prose`、`ingest-url`、`meals-photos`）在跑，都经 `registerWorker` 登记。逐步的落地记录在 [55](../soul/55-legion.md) 的「现状与顺序」，本文只列还没做的。
+派活的地基已经立住：`src/legion/` 下 run、claim、schedule、runner、durable、bell、ledger、subagent 齐了，palace 登记七行，七个 worker（`research-literature`、`tasking`、`collect`、`translate-book`、`adjudicate-prose`、`ingest-url`、`meals-photos`）在跑，都经 `registerWorker` 登记。逐步的落地记录在 [55](../soul/55-legion.md) 的「现状与顺序」，本文只列还没做的。
 
 ## 为什么现在不做
 
@@ -10,7 +10,7 @@
 
 ## 将来做时已知的事实
 
-- session 到对话文件的单向投影没开始（[55](../soul/55-legion.md)「session」）。今天 `platform/app/session-fs.ts` 存的是运行时日志，soul 说的话另写进归属文件。
+- 回合运行时的数据在每设备一个的 durable 库里（[87](../soul/87-回合运行时迁到pi-durable.md)），不同步、整库换代；soul 说的话落地时另写进归属文件，库里的内容不回投到对话文件。
 - effort 还不是一等维度（[25](../soul/25-子agent与上下文隔离.md)「分层思考」）。`SubagentDefinition.reasoning` 和 `providerId`/`modelId` 同在一个对象里，抬 effort 就得钉死一个具体模型；`runSubagent` 的入参里没有 effort。
 - 25 的「留给以后」三条都没做：轮数用光时补一次收尾 turn、蒸馏 pass 的 `signal` 接上删除对话、简报生成挂子 agent。
 - tasking 的三态判定（答上了 / 没答上 / 未判定时不释放 `idempotencyKey`）和同一问题当天去重没做（[63](../info/63-情报局：研究室、专项组与态势.md)）。
@@ -22,9 +22,8 @@
 - collect 没有拆成分析员和综合两个子 run，batch 续跑目前认的是第一个调用方。见 55 第 12 步、[71](../soul/71-soul.md)。
 - ledger 没有重放：`housekeeping.ts` 和 `fold.ts` 只写 `briefHash`，没有校验哈希、也没有建一个回指原 run 的新 run。折叠只写行；run 文件的回收归 housekeeper 的 `legion-run-files` marker（[80](../platform/80-回收：retention、garbage marker 与 housekeeper.md)）。
 - 死信没有界面：`deadLetters(day)`（`src/legion/ledger/store.ts`）在 src 里没有第二个调用点。
-- bug：`run.brief` 随 `local` 档存放（session 不同步），选举中途换到另一台机器时，新机器读不到这份任务书，run 会失败。
+- bug：`run.brief` 随 `local` 档存放（不同步），选举中途换到另一台机器时，新机器读不到这份任务书，run 会失败。
 - `BriefingView` 仍订阅 `info/boxes/pipeline`（`src/ui/components/info/use-info-home.ts`），没改成订阅 run 文件。
-- 看门狗（`legion/execute/watchdog.ts`）有两个没定的点，写在 55「execute」：重试从原始消息重建 Agent，但轮次跨重试累加；`transformContext` 的截断不写回 Agent 的消息记录，每轮重算。
 
 ## 待定
 

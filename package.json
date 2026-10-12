@@ -1,7 +1,7 @@
 {
   "name": "reading-partner",
   "private": true,
-  "version": "0.23.2",
+  "version": "0.24.0",
   "license": "PolyForm-Strict-1.0.0",
   "author": "Xinyuan (https://github.com/Einstellung)",
   "type": "module",
@@ -14,12 +14,8 @@
     "preview": "vite preview",
     "tauri": "tauri"
   },
-  "overrides": {
-    "@earendil-works/pi-ai": "1.1.0"
-  },
   "dependencies": {
     "@earendil-works/chord": "1.1.0",
-    "@earendil-works/pi-agent-core": "0.87.1",
     "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-durable": "1.1.0",
     "@embedpdf/core": "2.14.4",

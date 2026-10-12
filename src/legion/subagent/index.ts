@@ -6,14 +6,12 @@
 // (tests/layering.test.ts checks exactly this). Callers import
 // "../legion/subagent" directly, the way they already do for "../ai/voice".
 
-// Only the surface a caller wires. The brief composition and the turn settler
-// are internals with their own tests, reachable by path when a caller genuinely
-// needs to supply its own turn.
+// Only the surface a caller wires. The brief composition is internal, with its
+// own tests. A programmatic caller's turn is legion/durable's runBackgroundTurn.
 export { runSubagent, type SubagentDeps, type SubagentRequest } from "./run";
 export { agentWorker, type AgentWorkerDeps, type AgentWorkerSpec } from "./worker";
 export { subagentTool, type SubagentToolDeps } from "./tool";
 export { createSubagentQuota, type SubagentQuota } from "./quota";
-export { runSubagentTurnLive } from "./live";
 export {
   DEFAULT_BRIEF_TOKEN_CAP,
   DEFAULT_SUBAGENT_ROUNDS,

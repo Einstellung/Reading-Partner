@@ -51,10 +51,12 @@ export default {
   "box.originDoor": "À la porte · {date}",
   "box.originBriefing": "Synthèse · {date}",
   "box.originMeals": "Repas",
+  "box.originTalk": "Coach de présentation",
+  "box.originRetell": "Restitution",
+  "box.notOnPhone": "Celui-ci s’ouvre sur l’iPad ou l’ordinateur.",
   "box.label": "La boîte",
   "box.waiting": { one: "La boîte, {count} en attente", other: "La boîte, {count} en attente" },
   "box.empty": "Rien dans la boîte.",
-  "box.notReadable": "Ceci se trouve dans un livre. Ouvrez-le sur l'iPad ou sur le bureau.",
 
   "figure.label": "Fig. {id} · p.{page}",
   "figure.number": "Fig. {id}",

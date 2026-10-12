@@ -51,10 +51,12 @@ export default {
   "box.originDoor": "扉にて · {date}",
   "box.originBriefing": "ブリーフィング · {date}",
   "box.originMeals": "食事",
+  "box.originTalk": "発表コーチ",
+  "box.originRetell": "リテル",
+  "box.notOnPhone": "これは iPad かデスクトップで開きます。",
   "box.label": "ボックス",
   "box.waiting": { other: "ボックス、{count} 件待ち" },
   "box.empty": "ボックスには何もありません。",
-  "box.notReadable": "これは本の中にあります。iPad かデスクで開いてください。",
 
   "figure.label": "図 {id} · {page}ページ",
   "figure.number": "図 {id}",

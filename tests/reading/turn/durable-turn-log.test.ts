@@ -1,5 +1,5 @@
 // The turn log for book turns on the durable runtime (reading/turn/durable-turn-log.ts):
-// the lines and fields legion/execute/turn-log.ts defines, as the old turn loop
+// the lines and fields legion/durable/turn-log-sink.ts defines, as the old turn loop
 // wrote them — start, each round's first byte and answer, one end — for a turn
 // started here and for one this process only saw from its first request.
 
@@ -11,12 +11,14 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startTurn } from "../../../src/legion/durable/turn";
-import type { AgentTool } from "../../../src/legion/execute/contract";
-import type { TurnLogLine } from "../../../src/legion/execute/turn-log";
+import type { AgentTool } from "../../../src/legion/durable/contract";
+import type { TurnLogLine } from "../../../src/legion/durable/turn-log-sink";
 import { driveBookTurn } from "../../../src/reading/turn/book-turn-rows";
+import { resumedTurn } from "../../../src/reading/turn/durable-turn";
+import { LiveDoc } from "@earendil-works/pi-durable";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin } from "../../../src/reading/turn/durable-book";
 import { openReadingDurable, TURN_SECTION } from "../../../src/reading/turn/durable-runtime";
-import { BookTurnLog, turnLogEnd } from "../../../src/reading/turn/durable-turn-log";
+import { DurableTurnLog, turnLogEnd } from "../../../src/legion/durable/turn-log";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fakeThreads } from "./support/durable-threads";
 
@@ -31,7 +33,7 @@ const shape = (lines: TurnLogLine[]) =>
 test("one turn's lines: start, first byte and answer per round, one end, all under one id", () => {
   const lines: TurnLogLine[] = [];
   let now = 0;
-  const log = new BookTurnLog((line) => lines.push(line), () => now);
+  const log = new DurableTurnLog((line) => lines.push(line), () => now);
   log.begin("k", START);
   log.begin("k", { ...START, model: "other" });
   now = 10;
@@ -60,6 +62,33 @@ test("one turn's lines: start, first byte and answer per round, one end, all und
     { event: "end", reason: "done", ms: 2000 },
   ]);
   expect(new Set(lines.map((line) => line.turn)).size).toBe(1);
+});
+
+test("a follower joining a round already streaming writes no first byte for it; the next round's is heard", () => {
+  const lines: TurnLogLine[] = [];
+  let now = 0;
+  const log = new DurableTurnLog((line) => lines.push(line), () => now);
+  now = 10;
+  log.request("k", 2, START);
+  // Recovery's request went out at 10; the reader opens the thread at 13000,
+  // the answer long since streaming.
+  now = 13_000;
+  log.joined("k", 11);
+  log.heard("k", 11);
+  now = 30_000;
+  log.response("k", 2, "toolUse");
+  now = 30_100;
+  log.request("k", 3, START);
+  // The leftover partial on the view is not taken for the new round.
+  log.joined("k", 11);
+  now = 30_400;
+  log.heard("k", 30_101);
+  expect(shape(lines)).toEqual([
+    { event: "start", ...START, held: false },
+    { event: "round", round: 2, stop: "toolUse", ms: "number" },
+    { event: "first-byte", round: 3, ms: "number" },
+  ]);
+  expect(lines.find((line) => line.event === "first-byte")).toMatchObject({ ms: 300 });
 });
 
 test("how a settled turn reads: stalled over anything, refusal, abort, error with its detail", () => {
@@ -159,6 +188,38 @@ test("a turn this process did not start is logged from its first request, as rea
     ctx,
   );
   await started.settled;
+  expect(shape(lines)).toEqual([
+    { event: "start", ...START, held: false },
+    { event: "round", round: 1, stop: "stop", ms: "number" },
+    { event: "end", reason: "done", ms: "number" },
+  ]);
+  await durable.runtime.close(ctx);
+});
+
+test("opening the thread of a turn already answering writes no first byte for that round", async () => {
+  const { durable, lines } = await rig([fauxAssistantMessage(fauxText(LONG.repeat(3)))]);
+  const started = await startTurn(
+    durable.runtime,
+    {
+      key: bookThreadKey(BOOK),
+      origin: bookThreadOrigin(BOOK),
+      content: "Why tides?",
+      sections: { [TURN_SECTION]: "You are a reading partner." },
+      tools: [],
+      model: { provider: "faux", modelId: "faux-1" },
+      excludeTs: 1000,
+    },
+    ctx,
+  );
+  // Nobody follows until the answer is streaming, as after a restart.
+  for (let i = 0; i < 200; i++) {
+    const live = await durable.runtime.harness.snapshot(LiveDoc, started.conversation.id, ctx);
+    if ((live as { generation?: { message?: unknown } } | undefined)?.generation?.message) break;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  const found = await resumedTurn(durable, BOOK, ctx);
+  const turn = await found!.follow(() => {});
+  expect((await turn.settled).result?.status).toBe("done");
   expect(shape(lines)).toEqual([
     { event: "start", ...START, held: false },
     { event: "round", round: 1, stop: "stop", ms: "number" },

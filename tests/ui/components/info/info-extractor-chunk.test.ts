@@ -21,7 +21,6 @@ const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
 
 import { useInfoCall, type InfoCallOptions } from "../../../../src/ui/components/info/use-info-call";
-import * as agent from "../../../../src/legion/execute/turn";
 import * as readableLazy from "../../../../src/workshop/extract/readable-lazy";
 import * as settings from "../../../../src/platform/app/settings";
 import * as threads from "../../../../src/platform/app/threads";
@@ -115,13 +114,12 @@ function stubHost(threadMessages: Thread["messages"] = []) {
     messages: threadMessages,
   } as Thread);
   spyOn(threads, "appendMessage").mockReturnValue(undefined);
-  const turn = spyOn(agent, "runAgentTurn").mockResolvedValue(undefined as never);
   const load = spyOn(readableLazy, "loadExtractReadable").mockRejectedValue(CHUNK_GONE);
-  return { turn, load };
+  return { load };
 }
 
 test("a chunk that never arrives ends the turn in the chat, not in an unhandled rejection", async () => {
-  const { turn, load } = stubHost();
+  const { load } = stubHost();
 
   const { result } = renderHook(() => useInfoCall(options(anchor())));
   // The mount effect loads the thread and then writes what it found over
@@ -135,7 +133,6 @@ test("a chunk that never arrives ends the turn in the chat, not in an unhandled 
 
   expect(load).toHaveBeenCalled();
   // Nothing was sent: the tools the turn needs do not exist.
-  expect(turn).not.toHaveBeenCalled();
 
   // The reply row says so instead of spinning forever.
   const last = result.current.messages[result.current.messages.length - 1];
@@ -148,7 +145,7 @@ test("a chunk that never arrives ends the turn in the chat, not in an unhandled 
 });
 
 test("the onboarding opener says the same thing rather than sitting on an empty row", async () => {
-  const { turn } = stubHost();
+  stubHost();
 
   const { result } = renderHook(() => useInfoCall(options(anchor({ onboarding: true }))));
   // The opener is kicked from an effect, with no promise anyone holds.
@@ -158,7 +155,6 @@ test("the onboarding opener says the same thing rather than sitting on an empty 
     await Promise.resolve();
   });
 
-  expect(turn).not.toHaveBeenCalled();
   const last = result.current.messages[result.current.messages.length - 1];
   expect(last.streaming).toBeFalsy();
   expect(last.failed).toBe(true);

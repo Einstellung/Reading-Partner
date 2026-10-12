@@ -113,13 +113,18 @@ const HOLD_TO_END = "Hold to end the conversation";
 
 /** What the shell can do about a card, in the shell's own terms. */
 export interface LumenJumpTargets {
-	/** Desktop only: the phone has no reader, so these are absent there. */
+	/** Desktop only: the phone opens a book's conversation in one step (openBookConversation). */
 	openBook?: (bookId: string) => void | Promise<void>;
 	goToPage?: (page: number) => void;
 	openThread?: (bookId: string, threadId: string) => void;
 	openAnnotation?: (annotationId: string) => void;
 	goToBriefing: (date: string) => void;
 	goToMeals: () => void;
+	/** Phone only: a book's conversation, in the lesson or over the page. */
+	openBookConversation?: (bookId: string, threadId: string) => void | Promise<void>;
+	/** Desktop only: a talk's coaching and a retell, in their topic. */
+	openCoach?: (outlineId: string) => void | Promise<void>;
+	openRetell?: (retellId: string) => void | Promise<void>;
 	/** A document an intake card filed (its 「打开阅读」), opened in this shell's reader. */
 	openDocument?: (doc: IntakeOpenDocument) => void | Promise<void>;
 }
@@ -388,6 +393,15 @@ export function LumenCorner({
 						break;
 					case "go-to-meals":
 						targets.goToMeals();
+						break;
+					case "open-book-conversation":
+						await targets.openBookConversation?.(step.bookId, step.threadId);
+						break;
+					case "open-coach":
+						await targets.openCoach?.(step.outlineId);
+						break;
+					case "open-retell":
+						await targets.openRetell?.(step.retellId);
 						break;
 					case "open-door-chat":
 						setDoor({ date: step.date, ...(step.focus ? { focus: step.focus } : {}) });
