@@ -34,7 +34,7 @@ import {
 } from "../../../../src/platform/app/settings";
 import { mergeFile } from "../../../../src/platform/sync/merge";
 import { dispatchPull } from "../../../../src/platform/sync/pull-routes";
-import { defaultModelFor, isSelectableModel } from "../../../../src/ai/providers";
+import { defaultModelFor } from "../../../../src/ai/providers";
 import type { ToastKind } from "../../../../src/ui/components/common/toast-list";
 import {
   useShellBootstrap,
@@ -142,9 +142,23 @@ function landRemote(next: Partial<Settings>): void {
   files.set(SETTINGS_FILE, dec(merged.merged));
 }
 
+// This device's own provider/model (docs/36), already taken over from
+// settings.json, so the start-up has no one-time takeover to save.
+const ownDevice = (model: Partial<Settings> = {}): string =>
+  JSON.stringify({
+    deviceId: "this-device",
+    defaultProviderId: null,
+    defaultModelId: null,
+    everydayModelId: null,
+    sttApiBase: null,
+    sttModel: null,
+    ...model,
+  });
+
 beforeEach(() => {
   files.clear();
   files.set(SETTINGS_FILE, settingsFile(DEFAULT_SETTINGS));
+  files.set("device.json", ownDevice());
   settingsReads = 0;
   spyOn(atomicFs, "readGuardedJson").mockImplementation(fakeRead);
   spyOn(atomicFs, "writeTextAtomic").mockImplementation(fakeWrite);
@@ -243,42 +257,46 @@ test("a pulled field survives this shell's next save", async () => {
   // The Settings panel changing one field: it hands back the whole object it was
   // given, with that one field replaced.
   await act(async () => {
-    shell.current().applySettings({ ...shell.current().settings, sttModel: "sense" });
+    shell.current().applySettings({ ...shell.current().settings, chatThinking: "high" });
     await settle();
   });
 
   // The real 500ms debounce, waited out rather than flushed: the write under
   // test is the one the app makes on its own.
   await act(async () => {
-    await waitFor(() => onDisk().sttModel === "sense");
+    await waitFor(() => onDisk().chatThinking === "high");
   });
   expect(onDisk().aiLanguage).toBe("ja");
 });
 
-// A pair settings.json can arrive holding that no call can resolve. The merge
-// does not make one any more — it settles defaultProviderId and defaultModelId
-// as one group (pitfall 237) — so what is left is the other device having held
-// the bad pair already: a model its provider has since retired, or a file from a
-// build older than the group. Every call then throws "unknown model", and the
-// unattended ones read the file rather than this shell's copy, so the repair has
-// to reach disk.
-test("a pull that lands a foreign model under the provider is repaired on disk and told", async () => {
+// The provider and model are this device's (docs/36): the credential behind
+// them does not sync. Another device signed in elsewhere still writes its own
+// choice into settings.json if it runs an older build, and a pull lands it here;
+// this device keeps calling the provider it is signed in to, and its next save
+// leaves the old build's value in settings.json alone.
+test("a pull carrying another device's provider leaves this device's own", async () => {
+  const mine = defaultModelFor("anthropic");
+  files.set("device.json", ownDevice({ defaultProviderId: "anthropic", defaultModelId: mine }));
   const shell = await mountShell(false);
+  expect(shell.current().settings.defaultProviderId).toBe("anthropic");
 
-  landRemote({ defaultProviderId: "deepseek", defaultModelId: defaultModelFor("cerebras") });
+  landRemote({ defaultProviderId: "deepseek", defaultModelId: defaultModelFor("deepseek") });
   await pull([SETTINGS_FILE]);
+  expect(shell.current().settings.defaultProviderId).toBe("anthropic");
+  expect(shell.current().settings.defaultModelId).toBe(mine);
+  expect(shell.toasts).toHaveLength(0);
 
-  const shown = shell.current().settings.defaultModelId;
-  expect(isSelectableModel("deepseek", shown)).toBe(true);
-  expect(shell.toasts).toHaveLength(1);
-  expect(shell.toasts[0]).toContain(defaultModelFor("cerebras") as string);
-
-  // The real 500ms debounce: what lesson prep, the briefing and distillation
-  // will read is the file, not this shell.
   await act(async () => {
-    await waitFor(() => onDisk().defaultModelId === shown);
+    shell.current().applySettings({ ...shell.current().settings, chatThinking: "high" });
+    await settle();
+  });
+  await act(async () => {
+    await waitFor(() => onDisk().chatThinking === "high");
   });
   expect(onDisk().defaultProviderId).toBe("deepseek");
+  const device = JSON.parse(files.get("device.json") ?? "{}") as Record<string, unknown>;
+  expect(device.defaultProviderId).toBe("anthropic");
+  expect(device.defaultModelId).toBe(mine);
 });
 
 // Up to two seconds, checked on the same real timer the store's debounce runs

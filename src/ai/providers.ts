@@ -311,6 +311,32 @@ export function nextDefaultsForActive(
 	return { defaultProviderId: id, defaultModelId: keep ? defaultModelId : defaultModelFor(id) };
 }
 
+// What a device takes as its own provider and models the first time it keeps
+// them in device.json rather than the synced settings.json (docs/36). The
+// account's choice stands when it names the provider this device is signed in
+// to; otherwise it was another device's, and this one starts on its own
+// provider's defaults, everyday work following chat. Signed in to nothing, it
+// has nothing to call and keeps nothing.
+export function deviceModelFromAccount(
+	account: Pick<Settings, "defaultProviderId" | "defaultModelId" | "everydayModelId">,
+	signedIn: ProviderId | null,
+): Pick<Settings, "defaultProviderId" | "defaultModelId" | "everydayModelId"> {
+	if (!signedIn) return { defaultProviderId: null, defaultModelId: null, everydayModelId: null };
+	if (account.defaultProviderId === signedIn) {
+		return {
+			defaultProviderId: signedIn,
+			defaultModelId: account.defaultModelId ?? defaultModelFor(signedIn),
+			everydayModelId: account.everydayModelId,
+		};
+	}
+	return { ...nextDefaultsForActive(null, null, signedIn), everydayModelId: null };
+}
+
+// The provider this device holds a live credential for, or null.
+export async function signedInProvider(): Promise<ProviderId | null> {
+	return activeProviderId(await loadCredentials());
+}
+
 export async function resolveApiKey(id: ProviderId): Promise<string> {
 	if (id === "anthropic") {
 		const token = await getValidAnthropicAuth();

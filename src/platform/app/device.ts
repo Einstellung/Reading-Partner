@@ -12,7 +12,6 @@
 
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
 import { isMobilePlatform } from "./platform";
-import { loadSettings } from "./settings";
 
 const DEVICE_FILE = "device.json";
 
@@ -50,6 +49,17 @@ export interface DeviceSettings {
   // nothing to learn from it, and a synced "seen" would swallow the one
   // explanation the phone owes a reader.
   lessonIntroSeen: boolean;
+  // The settings that only work with a credential that does not sync
+  // (DEVICE_SETTING_KEYS in settings.ts): the provider and models a call goes
+  // to, and the STT host and model. Owned by the settings store, which joins
+  // them into the Settings object callers see; nothing here reads them.
+  // Absent until this device has taken them over from settings.json — absence
+  // is what tells the first start after the update to do that.
+  defaultProviderId?: string | null;
+  defaultModelId?: string | null;
+  everydayModelId?: string | null;
+  sttApiBase?: string | null;
+  sttModel?: string | null;
 }
 
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
@@ -208,7 +218,14 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
 const store = createDeviceStore({
   read: () => readGuardedJson<Partial<DeviceSettings>>(DEVICE_FILE, parseStored),
   write: (contents) => writeTextAtomic(DEVICE_FILE, contents),
-  legacy: () => loadSettings(),
+  // Raw, not loadSettings: that joins this file's own values in, and importing
+  // it would make the two stores import each other.
+  legacy: async () => {
+    const read = await readGuardedJson<Record<string, unknown>>("settings.json", (raw) =>
+      raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null,
+    );
+    return read.status === "ok" ? read.value : {};
+  },
   newId: () => crypto.randomUUID(),
   isMobile: isMobilePlatform,
 });

@@ -23,6 +23,8 @@ export {
 	getModels,
 	defaultModelFor,
 	nextDefaultsForActive,
+	deviceModelFromAccount,
+	signedInProvider,
 	isSelectableModel,
 	modelSupportsImages,
 	defaultModelTakesImages,
