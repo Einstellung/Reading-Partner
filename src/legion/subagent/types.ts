@@ -170,12 +170,12 @@ export interface SubagentProgress {
 
 // One sub-agent turn, run to completion. Injected so the core is testable with
 // no provider, no credentials and no network — the same shape src/memory's
-// distillation uses for the same reason. live.ts backs it with runAgentTurn.
+// distillation uses for the same reason. legion/durable's runBackgroundTurn
+// backs it.
 //
-// It must settle: a cancelled run rejects with StoppedError (the agent loop
-// stops silently on abort, so something has to turn that into a rejection).
+// It must settle: a cancelled run rejects with StoppedError.
 export interface SubagentTurnRequest {
-  // The definition's name: the lane or the child's extension it runs under.
+  // The definition's name: the background run's `rp.thread` or the child's extension.
   name: string;
   systemPrompt: string;
   // The whole message list this run starts from — one user turn. This is the

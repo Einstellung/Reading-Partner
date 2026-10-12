@@ -42,7 +42,9 @@ import { PERMALINK_SCRIPT } from "../src/info/x/permalink";
 import type { PageAttempt, XReadDeps } from "../src/info/x/read-post";
 import { xLinkReader } from "../src/info/x/reader";
 import { runHarnessTurn } from "../src/legion/execute/turn";
-import { createTurnSettler, workerLane } from "../src/legion/subagent/turn";
+import type { AgentCallbacks } from "../src/legion/execute/contract";
+import { StoppedError } from "../src/legion/stop";
+import type { SubagentTurnOutcome } from "../src/legion/subagent/types";
 import type { SubagentTurnFn } from "../src/legion/subagent/types";
 import { appData, type AppDataFs } from "../src/platform/app/appdata";
 import type { ImportMeta, LibraryEntry } from "../src/platform/app/library";
@@ -365,7 +367,24 @@ function liveTurn(model: Model<Api>, reasoning: ThinkingLevel | undefined, usage
   return async (request) => {
     const apiKey = await getValidAnthropicAuth();
     if (!apiKey) throw new Error("Anthropic is not connected in the app");
-    const settler = createTurnSettler(request.signal, request.onRound);
+    let callbacks!: AgentCallbacks;
+    let stop = () => {};
+    const outcome = new Promise<SubagentTurnOutcome>((resolve, reject) => {
+      stop = () => reject(new StoppedError());
+      callbacks = {
+        onDelta: () => {},
+        onThinking: () => {},
+        onToolStart: () => {},
+        onToolEnd: () => {},
+        onRound: request.onRound,
+        onDone: (text) => resolve({ kind: "answer", text }),
+        onError: (message, _assistant, thrown) =>
+          resolve({ kind: "error", message, ...(thrown instanceof Error ? { name: thrown.constructor.name } : {}) }),
+        onRefusal: (message) => resolve({ kind: "refusal", message }),
+      };
+    });
+    if (request.signal?.aborted) stop();
+    else request.signal?.addEventListener("abort", stop, { once: true });
     try {
       void runHarnessTurn({
         stream: (m, ctx, opts) => {
@@ -392,17 +411,16 @@ function liveTurn(model: Model<Api>, reasoning: ThinkingLevel | undefined, usage
         ...providerCallSetup("anthropic", `compare-${Date.now()}`),
         maxRounds: request.maxRounds,
         purpose: request.purpose,
-        lane: workerLane(request.name),
         fileSystem: createSessionFileSystem(memoryAppData()),
         stall: null,
-        ...settler.callbacks,
+        ...callbacks,
       });
       usage.task = request.task;
-      const outcome = await settler.outcome;
-      if (outcome.kind === "answer") usage.answer = outcome.text;
-      return outcome;
+      const settled = await outcome;
+      if (settled.kind === "answer") usage.answer = settled.text;
+      return settled;
     } finally {
-      settler.dispose();
+      request.signal?.removeEventListener("abort", stop);
     }
   };
 }

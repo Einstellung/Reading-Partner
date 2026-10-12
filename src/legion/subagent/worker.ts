@@ -14,7 +14,7 @@ import type { WorkerContext, WorkerHandle } from "../execute/worker";
 import { writeRunOutput } from "../execute/outputs";
 import { createSubagentQuota } from "./quota";
 import { runSubagent } from "./run";
-import { runSubagentTurnLive } from "./live";
+import { runBackgroundTurn } from "../durable/background";
 import type { SubagentDefinition, SubagentTurnFn } from "./types";
 import { StoppedError } from "../stop";
 import { appData } from "../../platform/app/appdata";
@@ -29,7 +29,7 @@ export interface AgentWorkerSpec {
 
 /** The seams a test reaches for. Every one of them has a live default. */
 export interface AgentWorkerDeps {
-  /** The sub-agent turn. The live one unless a test hands one in. */
+  /** The sub-agent turn: a background run on the device's Harness unless a test hands one in. */
   turn?: SubagentTurnFn;
   /** The sub-agent itself, overriding the spec's. */
   agent?: () => Promise<SubagentDefinition>;
@@ -44,7 +44,7 @@ export function agentWorker(spec: AgentWorkerSpec, deps: AgentWorkerDeps = {}) {
   const readBrief = deps.readBrief ?? ((path: string) => appData.readText(path));
   const writeOutput = deps.writeOutput ?? writeRunOutput;
   const buildAgent = deps.agent ?? spec.agent;
-  const turn = deps.turn ?? runSubagentTurnLive;
+  const turn = deps.turn ?? runBackgroundTurn;
   return (brief: string, ctx: WorkerContext): WorkerHandle => {
     const stop = new AbortController();
     const done = (async () => {

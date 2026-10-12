@@ -6,15 +6,12 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { Type, withoutInitialSystemMessage, type Api, type Model } from "@earendil-works/pi-ai";
-import { runHarnessTurn, type AgentTool, type StreamFn } from "../../../src/legion/execute/turn";
-import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
-import { memoryAppData } from "../../support/memory-appdata";
+import { Type, withoutInitialSystemMessage } from "@earendil-works/pi-ai";
+import type { AgentTool } from "../../../src/legion/execute/contract";
 import { StoppedError } from "../../../src/legion/execute/watchdog";
 import { runSubagent } from "../../../src/legion/subagent/run";
 import { subagentTool } from "../../../src/legion/subagent/tool";
 import { createSubagentQuota } from "../../../src/legion/subagent/quota";
-import { createTurnSettler, workerLane } from "../../../src/legion/subagent/turn";
 import type {
   SubagentDefinition,
   SubagentProgress,
@@ -25,16 +22,9 @@ import { scriptedSubagentRunner } from "../../support/scripted-runner";
 
 // --- a scripted model, one entry per streamed turn ---
 
-
-const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
-
-function sizedModel(contextWindow: number): Model<Api> {
-  return { id: "m", name: "m", provider: "faux", contextWindow, maxTokens: 64_000 } as unknown as Model<Api>;
-}
-
-// A SubagentTurnFn backed by the real loop, in the worker's own lane.
-function loopRunner(turns: Turn[], model: Model<Api> = MODEL) {
-  return scriptedSubagentRunner(turns, { model, lane: (request) => workerLane(request.name) });
+// A SubagentTurnFn backed by a background run on the durable runtime.
+function loopRunner(turns: Turn[], contextWindow?: number) {
+  return scriptedSubagentRunner(turns, contextWindow === undefined ? {} : { contextWindow });
 }
 
 // The tool result a real lookup would produce: the pile of text that must never
@@ -138,17 +128,10 @@ test("a run that spends its turn cap returns the cap, not an empty result", asyn
   expect(runner.streamed()).toBe(2);
 });
 
-// The loop's other stated give-up: a round that outgrew the model's window. Set
-// up exactly as tests/ai/agent.test.ts does — pi prices the first turn from its
-// reported usage, so round two would go out with an output allowance of 1.
+// The loop's other stated give-up: a round that does not fit the model's
+// window. The durable hook sizes each request from its content before sending.
 test("a run whose context outgrows the window says that, not that it found nothing", async () => {
-  const runner = loopRunner(
-    [
-      { calls: [{ name: "search_papers", args: { query: "a" }, id: "t1" }], usage: 197_000 },
-      { text: "never asked for" },
-    ],
-    sizedModel(200_000),
-  );
+  const runner = loopRunner([{ text: "never asked for" }], 2_000);
 
   const result = await runSubagent(
     { definition: definition({ systemPrompt: "张".repeat(60_000) }), task: "find everything" },
@@ -158,7 +141,7 @@ test("a run whose context outgrows the window says that, not that it found nothi
   expect(result.outcome).toBe("out-of-context");
   expect(result.usable).toBe(false);
   expect(result.brief).toContain("no longer left the model room to answer");
-  expect(runner.streamed()).toBe(1);
+  expect(runner.streamed()).toBe(0);
 });
 
 test("a fluent answer with every tool broken is not returned", async () => {
@@ -221,28 +204,12 @@ test("a failed call is reported as a failure the caller can name", async () => {
   expect(result.failure).toEqual({ name: "Error", message: "401 invalid x-api-key" });
 });
 
-test("a call that never reached the provider keeps the thrown error's own type", async () => {
+test("a failed call keeps the thrown error's own type", async () => {
   // What the owner's store recorded for twelve hours: outcome "failed", and the
   // only category left after that is "unknown". The type of what was thrown is
   // the difference between a signed-out provider and a broken network, and it
   // does not survive being turned into a sentence.
-  const stream: StreamFn = () => {
-    throw new TypeError("Load failed");
-  };
-  const run: SubagentTurnFn = (request) => {
-    const settler = createTurnSettler(request.signal, request.onRound);
-    void runHarnessTurn({
-      stream,
-      fileSystem: createSessionFileSystem(memoryAppData()),
-      model: MODEL,
-      systemPrompt: request.systemPrompt,
-      messages: [{ role: "user", content: request.task, timestamp: 0 }],
-      tools: request.tools,
-      maxRounds: request.maxRounds,
-      ...settler.callbacks,
-    });
-    return settler.outcome.finally(() => settler.dispose());
-  };
+  const run: SubagentTurnFn = async () => ({ kind: "error", message: "Load failed", name: "TypeError" });
 
   const result = await runSubagent({ definition: definition(), task: "find work" }, { run });
 
@@ -406,10 +373,8 @@ test("mounted as a tool, it says the parent gets a brief and is safe to replay",
   expect(tool.childTools?.map((t) => t.name)).toEqual(definition().tools.map((t) => t.name));
 });
 
-// A sub-agent is a worker lane on the harness (docs/55). The name is the one
-// thing the runner has to hand the turn for that: everything else about the
-// lane follows from it.
-test("the run is a worker lane named after its definition", async () => {
+// The definition's name is what the turn records the run under (`rp.thread`).
+test("the run is named after its definition", async () => {
   const runner = loopRunner([
     { calls: [{ name: "search_papers", args: { query: "q" }, id: "t1" }] },
     { text: "One paper." },
@@ -419,8 +384,4 @@ test("the run is a worker lane named after its definition", async () => {
 
   expect(result.outcome).toBe("answered");
   expect(runner.requests[0]?.name).toBe("research_literature");
-  expect(workerLane("research_literature")).toEqual({
-    name: "worker:research_literature",
-    sessions: "worker",
-  });
 });

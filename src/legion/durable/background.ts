@@ -113,20 +113,29 @@ function assistants(entries: readonly EntryRecord[]): EntryRecord[] {
   return entries.filter((entry) => entry.kind === "pi.assistant");
 }
 
-/** Feed onRound and onProgress from the conversation's view until the returned function is called. */
-async function follow(conversation: Conversation, request: BackgroundTurnRequest, context: Context): Promise<() => void> {
+/** Rounds answered: a request the hook refused or a stop cut off leaves an aborted message, which is not one. */
+function answered(said: readonly EntryRecord[]): number {
+  return said.filter((entry) => (entry.model?.[0] as { stopReason?: string } | undefined)?.stopReason !== "aborted").length;
+}
+
+/**
+ * Feed onRound and onProgress from the conversation's view until the returned
+ * function is called. A round counts once its answer starts arriving, so a
+ * request the hook refused is never one.
+ */
+async function follow(
+  conversation: Conversation,
+  request: BackgroundTurnRequest,
+  report: (round: number) => void,
+  context: Context,
+): Promise<() => void> {
   if (!request.onRound && !request.onProgress) return () => {};
   const view = await conversation.viewState(context);
-  let round = 0;
   let chars = 0;
   const seen = (value: { entries: readonly EntryRecord[]; docs: Record<string, unknown> }) => {
     const done = assistants(value.entries);
     const live = (value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined)?.generation;
-    const next = done.length + (live ? 1 : 0);
-    if (next > round) {
-      round = next;
-      request.onRound?.({ round, rounds: request.maxRounds });
-    }
+    report(answered(done) + (live && received(live.message) > 0 ? 1 : 0));
     const total = done.reduce((n, entry) => n + received(entry.model?.[0]), 0) + received(live?.message);
     if (total > chars) {
       chars = total;
@@ -159,6 +168,12 @@ export async function runBackgroundTurnOn(host: BackgroundHost, request: Backgro
   const stop = () => void conversation?.abort(context).catch(() => {});
   signal?.addEventListener("abort", stop, { once: true });
   let result: TurnResult = { status: "unanswered", landed: false };
+  let reported = 0;
+  const report = (round: number) => {
+    if (round <= reported) return;
+    reported = round;
+    request.onRound?.({ round, rounds: request.maxRounds });
+  };
   try {
     conversation = await runtime.harness.createConversation(
       {
@@ -181,7 +196,7 @@ export async function runBackgroundTurnOn(host: BackgroundHost, request: Backgro
       },
       context,
     );
-    stopFollowing = await follow(conversation, request, context);
+    stopFollowing = await follow(conversation, request, report, context);
     if (signal?.aborted) stop();
     const submission = await conversation.submit(
       { type: "input", content: request.task, requestId: `${BACKGROUND_REQUEST_PREFIX}${run}` },
@@ -195,15 +210,15 @@ export async function runBackgroundTurnOn(host: BackgroundHost, request: Backgro
       ...(ended.reason ? { reason: ended.reason } : {}),
       ...(typeof ended.detail === "string" ? { detail: ended.detail } : {}),
     };
+    const said = assistants((await conversation.context(context)).entries);
+    report(answered(said));
     const refusal = runtime.takeRefusal(conversation.id);
     if (refusal !== undefined) {
       result.refusal = refusal;
       return { kind: "refusal", message: refusal };
     }
     if (signal?.aborted) throw new StoppedError();
-    const said = assistants((await conversation.context(context)).entries);
     const last = said[said.length - 1]?.model?.[0] as { stopReason?: string; errorMessage?: string } | undefined;
-    request.onRound?.({ round: said.length, rounds: request.maxRounds });
     if (record.status !== "done") {
       return { kind: "error", message: result.detail ?? last?.errorMessage ?? result.reason ?? "the run ended without an answer" };
     }

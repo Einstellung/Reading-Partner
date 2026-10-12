@@ -4,11 +4,8 @@
 // The turn itself is injected (SubagentTurnFn), so everything here — isolation,
 // the honest-failure mapping, tool-failure accounting, the round quota, the cap
 // on what crosses back — runs in a test with no provider, no credentials and no
-// network. live.ts supplies the real turn. This is the same dependency-injection
-// shape src/memory/observations/distill.ts uses, for the same reason.
-//
-// live.ts supplies the turn for programmatic callers; the tool (tool.ts) runs
-// a child conversation instead and shares only briefFor. The brief is composed here rather
+// network. Programmatic callers hand it legion/durable's runBackgroundTurn; the
+// tool (tool.ts) runs a child conversation instead and shares only briefFor. The brief is composed here rather
 // than taken from pi's generateBranchSummary: that one is a compaction summary
 // of a branch, written by an extra model call with its own prompt, and it says
 // nothing about the distinctions a caller has to state — a run that answered
