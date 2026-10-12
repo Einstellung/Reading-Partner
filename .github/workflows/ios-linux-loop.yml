@@ -225,10 +225,12 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$APP/Info.plist"
           EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
           ls -la "$APP/$EXE"
-          echo "devUrl in binary:"; strings "$APP/$EXE" | grep -oE "http://${DEV_HOST}:${DEV_PORT}[^\"]*" | sort -u | head -3
-          strings "$APP/$EXE" | grep -q "${DEV_HOST}:${DEV_PORT}" || { echo "::error::devUrl ${DEV_HOST}:${DEV_PORT} not in the binary"; exit 1; }
+          # To a file first: `strings | grep -q` dies of SIGPIPE under pipefail.
+          strings "$APP/$EXE" > "$RUNNER_TEMP/strings.txt"
+          grep -q "http://${DEV_HOST}:${DEV_PORT}" "$RUNNER_TEMP/strings.txt" || { echo "::error::devUrl ${DEV_HOST}:${DEV_PORT} not in the binary"; exit 1; }
+          echo "devUrl http://${DEV_HOST}:${DEV_PORT} is in the binary"
           # A production (custom-protocol) build embeds dist/; a dev build embeds no assets.
-          N=$(strings "$APP/$EXE" | grep -c '/assets/index-' || true)
+          N=$(grep -c '/assets/index-' "$RUNNER_TEMP/strings.txt" || true)
           echo "embedded /assets/index-* references: $N"
           [ "$N" = "0" ] || { echo "::error::frontend assets are embedded: this is not a dev-mode build"; exit 1; }
           security cms -D -i "$APP/embedded.mobileprovision" > "$RUNNER_TEMP/dev.mobileprovision.plist"
