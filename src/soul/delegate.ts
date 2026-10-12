@@ -11,10 +11,10 @@
 // machine-local, like the `local` runs it belongs to.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../legion/execute/turn";
-import { appRunner } from "../legion/execute/runner";
-import { delegableWorkerKinds } from "../legion/execute/worker";
-import type { DelegateInput, Delegated } from "../legion/execute/worker";
+import type { AgentTool } from "../legion/durable/contract";
+import { appRunner } from "../legion/runner/runner";
+import { delegableWorkerKinds } from "../legion/runner/worker";
+import type { DelegateInput, Delegated } from "../legion/runner/worker";
 import { appData } from "../platform/app/appdata";
 import { firstSentence } from "../platform/std/text";
 import { t } from "../i18n";

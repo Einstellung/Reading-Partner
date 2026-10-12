@@ -16,7 +16,7 @@ import type { Settings } from "../platform/app/settings";
 import type { ProviderId } from "../ai/auth/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
 import { modelIdFor, type ModelTier } from "../ai/model-tier";
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
 import type { BoxOrigin, BoxStore } from "../box";
 import type { CatalogueIo } from "./catalogue";
@@ -69,9 +69,7 @@ export interface AssembledTurn {
   report: Record<string, unknown>;
   // Where this turn is being held, as the assembly resolved it: what the caller
   // said, or the first item on the desk that is a place. What fills the
-  // deliverTo of a run delegated this turn (soul/delegate.ts), and what the
-  // turn is stamped with so a later process can find its receiver
-  // (legion/execute/turn.ts, src/soul/recover.ts).
+  // deliverTo of a run delegated this turn (soul/delegate.ts).
   origin?: BoxOrigin;
 }
 

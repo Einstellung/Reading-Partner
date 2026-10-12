@@ -8,17 +8,7 @@
 
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import {
-  createAssistantMessageEventStream,
-  Type,
-  type Context,
-  type Model,
-  type Api,
-} from "@earendil-works/pi-ai";
-import { runHarnessTurn, REFUSE_ROUNDS, type AgentTool, type StreamFn } from "../../../../src/legion/execute/turn";
-import { createSessionFileSystem } from "../../../../src/platform/app/session-fs";
-import { memoryAppData } from "../../../support/memory-appdata";
-import { turnEvents } from "../../../support/scripted-turn";
+import { REFUSE_ROUNDS } from "../../../../src/legion/durable/contract";
 import {
   holdsNoAnswer,
   refusalRow,
@@ -26,64 +16,12 @@ import {
 } from "../../../../src/ai/turn-view/turn-rows";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
-const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
-
-const echoTool: AgentTool = {
-  name: "echo",
-  label: () => "Running the fake tool",
-  effect: "read" as const,
-  description: "Echo the value back",
-  parameters: Type.Object({ value: Type.String() }),
-  execute: async (args) => `echo:${args.value as string}`,
-};
-
-// A model that only ever asks for the tool again, so the loop runs out of rounds
-// — the refusal the companion is most likely to meet.
-const alwaysCallsTool: StreamFn = (_model: Model<Api>, _context: Context) => {
-  const stream = createAssistantMessageEventStream();
-  const events = turnEvents({ calls: [{ name: "echo", args: { value: "again" } }] });
-  void (async () => {
-    for (const ev of events) {
-      await Promise.resolve();
-      stream.push(ev);
-    }
-    stream.end();
-  })();
-  return stream;
-};
-
-// The companion's row, patched the way use-info-call patches it — including blanking
-// the row when a tool starts, which is why a refusal never has anything written
-// under it.
+// The companion's row as a refused turn leaves it: the row blanked when the
+// tool started (which is why a refusal never has anything written under it),
+// then the refusal applied.
 async function rowAfterRefusal(start: ThreadMessage): Promise<ThreadMessage> {
-  let row = start;
-  await runHarnessTurn({
-    stream: alwaysCallsTool,
-    fileSystem: createSessionFileSystem(memoryAppData()),
-    model: MODEL,
-    messages: [{ role: "user", content: "go", timestamp: 0 }],
-    tools: [echoTool],
-    maxRounds: 1,
-    onDelta: (chunk) => {
-      row = { ...row, text: row.text + chunk };
-    },
-    onToolStart: () => {
-      row = { ...row, text: "" };
-    },
-    onToolEnd: () => {},
-    onDone: (text) => {
-      row = { ...row, text, streaming: false };
-    },
-    onError: (message) => {
-      // What the companion does with a genuine transport failure, and what a
-      // refusal must not be dressed as.
-      row = { ...row, text: message || "The reply failed.", failed: true, streaming: false };
-    },
-    onRefusal: (message) => {
-      row = { ...row, ...refusalRow(row, message) };
-    },
-  });
-  return row;
+  const row = { ...start, text: "" };
+  return { ...row, ...refusalRow(row, REFUSE_ROUNDS) };
 }
 
 test("a refusal under a written answer is a quiet notice, not a failure", () => {

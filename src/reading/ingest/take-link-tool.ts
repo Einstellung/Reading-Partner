@@ -8,7 +8,7 @@
 // (linkTurnNote), which leaves the tool's own definition the same every turn.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { BoxOrigin } from "../../box";
 import { getLocale, t } from "../../i18n";
 import { aiLanguageName } from "../../platform/app/settings";

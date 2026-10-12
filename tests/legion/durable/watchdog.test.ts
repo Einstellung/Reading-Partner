@@ -1,4 +1,4 @@
-// Unit tests for the shared stall watchdog (src/legion/execute/watchdog.ts), driven on a
+// Unit tests for the shared stall watchdog (src/legion/durable/watchdog.ts), driven on a
 // virtual clock so no real time passes. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -10,7 +10,7 @@ import {
   StoppedError,
   resolveWatchdogConfig,
   type WatchdogHooks,
-} from "../../../src/legion/execute/watchdog";
+} from "../../../src/legion/durable/watchdog";
 import { makeClock } from "../../support/clock";
 
 // A failure as it reaches the watchdog: pi's AssistantMessage for the failed

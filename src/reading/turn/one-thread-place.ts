@@ -19,7 +19,7 @@ import type { DeskMessage } from "../../desk";
 import type { Place, PlaceFactory, PlaceShared } from "../../legion/durable/device";
 import type { ThreadOrigin } from "../../legion/durable/extension";
 import { threadLander } from "../../legion/durable/thread-files";
-import type { AgentTool } from "../../legion/execute/contract";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { AiSurface } from "../../platform/app/cache-telemetry";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { ModelRef } from "@earendil-works/pi-durable";

@@ -27,7 +27,7 @@ import {
   type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import { fitRoundToBudget, type BudgetPurpose } from "../../budget";
-import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../execute/contract";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "./contract";
 import { childState, SubagentDoc, type SubagentState } from "./child";
 
 /** Where a conversation's turns land: today's BoxOrigin, opaque here except for `place`. */
@@ -162,7 +162,7 @@ export interface ExtensionDeps {
   sectionKeys: readonly string[];
   readHistory: HistoryReader;
   recordResponse?: ResponseRecorder;
-  /** Each request as it is prepared, for the turn log (legion/execute/turn-log.ts). */
+  /** Each request as it is prepared, for the turn log (legion/durable/turn-log-sink.ts). */
   requested?: RequestNotice;
   land: LandStep;
   /** Tool registrations by name: the extension's tools. */

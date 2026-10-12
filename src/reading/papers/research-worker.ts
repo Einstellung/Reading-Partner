@@ -11,7 +11,7 @@
 // device that can talk to the model at all can do this. The skeleton around the
 // sub-agent is legion's (legion/subagent/worker.ts).
 
-import { registerWorker } from "../../legion/execute/worker";
+import { registerWorker } from "../../legion/runner/worker";
 import { agentWorker, type AgentWorkerDeps, type SubagentDefinition } from "../../legion/subagent";
 import { loadSettings } from "../../platform/app/settings";
 import { buildResearchAgent, RESEARCH_KIND, RESEARCH_TURN_ROUNDS } from "./research-agent";

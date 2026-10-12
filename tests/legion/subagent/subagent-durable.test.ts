@@ -17,7 +17,7 @@ import { SubagentDoc } from "../../../src/legion/durable/child";
 import { openDurable, type DurableRuntime } from "../../../src/legion/durable/harness";
 import { recoverBeforeResume } from "../../../src/legion/durable/recover";
 import { startTurn, stopTurn } from "../../../src/legion/durable/turn";
-import type { AgentTool } from "../../../src/legion/execute/contract";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 import { createSubagentQuota, type SubagentQuota } from "../../../src/legion/subagent/quota";
 import { subagentTool } from "../../../src/legion/subagent/tool";
 import type { SubagentDefinition } from "../../../src/legion/subagent/types";

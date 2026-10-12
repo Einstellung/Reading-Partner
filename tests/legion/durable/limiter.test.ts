@@ -1,4 +1,4 @@
-// Unit tests for the shared pacing limiter (src/legion/execute/limiter.ts), driven on a
+// Unit tests for the shared pacing limiter (src/legion/durable/limiter.ts), driven on a
 // virtual clock so no real time passes. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -8,8 +8,8 @@ import {
   COOLDOWN_LADDER_MS,
   isRateLimited,
   namedRetryAfterMs,
-} from "../../../src/legion/execute/limiter";
-import { StoppedError } from "../../../src/legion/execute/watchdog";
+} from "../../../src/legion/durable/limiter";
+import { StoppedError } from "../../../src/legion/durable/watchdog";
 
 // The same virtual clock the watchdog and prep tests use: events fire in
 // due-time order, one macrotask tick per step.

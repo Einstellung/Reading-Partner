@@ -74,7 +74,7 @@ export const OUTPUT_MAX = 24000;
 
 /**
  * A run's references, read into the text the turn is answered from. A run
- * record holds paths and nothing else (legion/execute/outputs.ts), and a turn
+ * record holds paths and nothing else (legion/runner/outputs.ts), and a turn
  * has no tool that opens them — so the substance is resolved here, before the
  * turn, and the paths never reach the model.
  */

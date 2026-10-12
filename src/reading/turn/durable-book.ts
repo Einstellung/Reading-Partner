@@ -10,7 +10,7 @@ import type { Context } from "@earendil-works/chord";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { BoxOrigin } from "../../box";
 import { toPiMessages } from "../../ai/providers";
-import type { AgentTool } from "../../legion/execute/contract";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { HistoryReader, ThreadOrigin } from "../../legion/durable/extension";
 import type { DeskResolver } from "../../legion/durable/tools";
 import type { LandedRow, Lander } from "../../legion/durable/turn";

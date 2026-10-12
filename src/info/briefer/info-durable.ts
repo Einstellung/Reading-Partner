@@ -21,7 +21,7 @@ import type { DeskItem, DeskMessage } from "../../desk";
 import type { Place, PlaceFactory, PlaceShared } from "../../legion/durable/device";
 import type { ThreadOrigin } from "../../legion/durable/extension";
 import { threadLander, type ThreadAddress } from "../../legion/durable/thread-files";
-import type { AgentTool } from "../../legion/execute/contract";
+import type { AgentTool } from "../../legion/durable/contract";
 import { loadSettings, toReasoning } from "../../platform/app/settings";
 import { coverOf } from "../../soul";
 import { t } from "../../i18n";
@@ -117,7 +117,7 @@ async function openRestartDesk(origin: InfoOrigin | MealsOrigin): Promise<readon
   return turn?.tools ?? [];
 }
 
-/** The same card an answer that landed unseen always gets (soul/recover.ts): named by the thread and the moment. */
+/** The same card an answer that landed unseen always gets: named by the thread and the moment. */
 async function putInfoCard(origin: InfoOrigin | MealsOrigin, ts: number, text: string): Promise<void> {
   await appBox()
     .put({

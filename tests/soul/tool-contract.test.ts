@@ -1,4 +1,4 @@
-// Every tool the app mounts, against the contract in legion/execute/contract.ts:
+// Every tool the app mounts, against the contract in legion/durable/contract.ts:
 // a label the reader can read, an effect, and a gate that is one of the declared
 // ones. The list below is the roster — like tests/layering.test.ts's LAYER table,
 // it is written out by hand, and a factory that grows or loses a tool fails here
@@ -39,8 +39,8 @@ import { buildTaskingTools } from "../../src/info/tasking/tools";
 import { subagentTool } from "../../src/legion/subagent/tool";
 import { buildTakeLinkTool } from "../../src/reading/ingest/take-link-tool";
 import { buildMealsCatalogTools } from "../../src/info/meals/tools";
-import { normalizeToolResult, toolLabel } from "../../src/legion/execute/tool-result";
-import type { AgentTool } from "../../src/legion/execute/contract";
+import { normalizeToolResult, toolLabel } from "../../src/legion/durable/tool-result";
+import type { AgentTool } from "../../src/legion/durable/contract";
 
 const any = (v: unknown): any => v as any;
 

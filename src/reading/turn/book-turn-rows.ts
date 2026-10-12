@@ -12,7 +12,7 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Receipt, ToolStatus } from "../../ai/turn-view/tool-status";
 import type { TurnResult } from "../../legion/durable/extension";
 import type { WithdrawnSteer } from "../../legion/durable/turn";
-import { STALL_MESSAGE } from "../../legion/execute/stall";
+import { STALL_MESSAGE } from "../../legion/durable/stall";
 import type { CallRow } from "./call-state";
 import type { ReadingDurable } from "./durable-runtime";
 import type { DeviceDurable } from "../../legion/durable/device";

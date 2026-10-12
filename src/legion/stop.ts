@@ -6,7 +6,7 @@
 //
 // At the root of src/legion rather than in the watchdog that raises it most,
 // because both halves of the directory need it: legion/subagent imports the
-// turn out of legion/execute, so anything legion/execute would have to import
+// runtime out of legion/durable, so anything legion/durable would have to import
 // back closes a cycle.
 export class StoppedError extends Error {
   constructor() {

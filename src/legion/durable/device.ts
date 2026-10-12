@@ -26,9 +26,9 @@ import {
   type CacheTurnInput,
   type TurnTelemetry,
 } from "../../platform/app/cache-telemetry";
-import type { AgentTool } from "../execute/contract";
-import { toolLabel } from "../execute/tool-result";
-import { appTurnLog, type TurnLogSink } from "../execute/turn-log";
+import type { AgentTool } from "./contract";
+import { toolLabel } from "./tool-result";
+import { appTurnLog, type TurnLogSink } from "./turn-log-sink";
 import { BACKGROUND_PLACE, backgroundPlace, type BackgroundHost } from "./background";
 import { ThreadDoc, type HistoryReader, type ThreadOrigin, type TurnResult } from "./extension";
 import { appDurableHost, openDurable, type DurableHost, type DurableRuntime } from "./harness";
@@ -83,7 +83,7 @@ export interface DeviceDurableOptions {
   rotateAtBytes?: number;
   now?: () => number;
   onReport?: (error: unknown) => void;
-  /** Where the turn log's lines go (legion/execute/turn-log.ts); the app's file unless said. */
+  /** Where the turn log's lines go (legion/durable/turn-log-sink.ts); the app's file unless said. */
   log?: TurnLogSink;
 }
 

@@ -7,7 +7,7 @@
 
 import { modelSupportsImages } from "../../../ai/providers";
 import { callModel, resolveModel } from "../../../ai/model-call";
-import { realTimers } from "../../../legion/execute/observable-run";
+import { realTimers } from "../../../legion/durable/observable-run";
 import { recordParse } from "../../../platform/app/structured-output";
 import { buildFigureCatalog } from "../../figures/catalog";
 import { renderFigure } from "../../figures/render";

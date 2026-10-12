@@ -30,7 +30,7 @@ import {
   type Tx,
 } from "@earendil-works/pi-durable";
 import type { BudgetPurpose } from "../../budget";
-import type { AgentTool } from "../execute/contract";
+import type { AgentTool } from "./contract";
 import type { DurableRuntime } from "./harness";
 import { executeTool } from "./tools";
 

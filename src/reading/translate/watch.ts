@@ -12,7 +12,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { watchSource } from "../../platform/std/watch";
-import { appRunner } from "../../legion/execute/runner";
+import { appRunner } from "../../legion/runner/runner";
 import type { Run } from "../../legion/run";
 import {
   TRANSLATE_KIND,

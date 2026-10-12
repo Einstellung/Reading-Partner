@@ -3,7 +3,7 @@
 // deltas arrive.
 //
 // Declared here rather than beside the watchdog that supplies it
-// (src/legion/execute/watchdog.ts). callModel takes these options and lives in
+// (src/legion/durable/watchdog.ts). callModel takes these options and lives in
 // src/ai, and src/ai may not import src/legion — legion runs agents on top of
 // ai, never the other way round (tests/layering.test.ts). So the contract sits
 // under both halves, and the watchdog re-exports it under the name every

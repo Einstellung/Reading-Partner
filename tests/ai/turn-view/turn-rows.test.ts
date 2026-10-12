@@ -6,7 +6,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/legion/execute/turn";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/legion/durable/contract";
 import {
   appendRoundBreak,
   holdsNoAnswer,

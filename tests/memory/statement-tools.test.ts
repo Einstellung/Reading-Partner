@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { localDate } from "../../src/memory/observations/files";
 import { createStatementStore, STATEMENTS_FILE } from "../../src/memory/statements/store";
 import { buildStatementTools, latestReaderMessage } from "../../src/memory/statements/tools";
-import type { AgentTool } from "../../src/legion/execute/turn";
+import type { AgentTool } from "../../src/legion/durable/contract";
 import { toolText } from "../support/tool-text";
 
 const THREAD = "11111111-2222-3333-4444-555555555555";

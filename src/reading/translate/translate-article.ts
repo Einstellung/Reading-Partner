@@ -16,7 +16,7 @@
 // sum of them, while the terms still match across the page.
 //
 // At the same time, not all at once. The calls go through the shared limiter
-// (src/legion/execute/limiter), which owns the ceiling, the stagger between
+// (src/legion/durable/limiter), which owns the ceiling, the stagger between
 // starts and what the whole group does when a provider answers 429 — the same
 // device the chapter pipeline paces itself with, for the same reason: a rate
 // limit is the group being told to slow down, not one unlucky call.
@@ -30,7 +30,7 @@
 // translated article is a book whose second half silently stops being bilingual,
 // and nobody would know which half.
 
-import { CallLimiter, isRateLimited, type LimiterConfig, type LimiterTimers } from "../../legion/execute/limiter";
+import { CallLimiter, isRateLimited, type LimiterConfig, type LimiterTimers } from "../../legion/durable/limiter";
 import { StoppedError } from "../../legion/stop";
 import { escapeXml } from "../../platform/std/text";
 import {

@@ -16,8 +16,8 @@
 // would all get the same nothing, and remembering "no photograph" for twenty
 // names would take them off the screen for a month. They wait for the next run.
 
-import { registerWorker, type WorkerContext, type WorkerHandle } from "../../../legion/execute/worker";
-import { writeRunOutput } from "../../../legion/execute/outputs";
+import { registerWorker, type WorkerContext, type WorkerHandle } from "../../../legion/runner/worker";
+import { writeRunOutput } from "../../../legion/runner/outputs";
 import { WEBVIEW_FETCH } from "../../../legion/claim";
 import { StoppedError } from "../../../legion/stop";
 import { appData } from "../../../platform/app/appdata";

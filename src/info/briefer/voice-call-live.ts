@@ -28,7 +28,7 @@ import {
   type VoiceCallModel,
   type VoiceCallTranscript,
 } from "../../soul/voice/voice-call";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { Briefing } from "../boxes/types";
 import type { InfoCallAnchor } from "./anchors";
 

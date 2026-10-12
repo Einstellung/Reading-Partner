@@ -6,7 +6,7 @@
 // and the card's kind is registered in ui/components/cardRegistry.ts like every
 // other chat card; its gestures are answered in use-door-chat.ts onCardAction.
 
-import type { AgentTool } from "../../../legion/execute/turn";
+import type { AgentTool } from "../../../legion/durable/contract";
 import { listTopics } from "../../../platform/app/topics";
 import { buildTakeLinkTool } from "../../../reading/ingest/take-link-tool";
 import { startTopicIntake } from "../../../reading/ingest/topic-intake";

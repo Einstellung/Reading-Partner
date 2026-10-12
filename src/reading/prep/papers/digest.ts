@@ -5,7 +5,7 @@
 // (prompts, tool building, thin-note body) are exported for tests.
 
 import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../legion/execute/turn";
+import type { AgentTool } from "../../../legion/durable/contract";
 import { runBackgroundTurn } from "../../../legion/durable/background";
 import { noteOf } from "../model-output";
 import { streamChat, type ProviderId } from "../../../ai/providers";

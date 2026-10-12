@@ -1,25 +1,12 @@
 // The tool-calling turn as its callers see it: the tool shape they mount, the
 // callbacks they are answered through, and the two sentences the turn says when
-// it gives up. turn.ts runs it on the durable harness; nothing here knows how.
-//
-// Kept apart from turn.ts so a module that only mounts a tool (a domain's tool
-// file, the soul's catalogue) imports a file with no runtime in it.
+// it gives up. tools.ts and extension.ts run it on pi-durable; nothing here
+// knows how, so a module that only mounts a tool (a domain's tool file, the
+// soul's catalogue) imports a file with no runtime in it.
 
-import type {
-  Api,
-  AssistantMessageEventStream,
-  Model,
-  SimpleStreamOptions,
-  ThinkingLevel,
-  TranscriptContext,
-  TSchema,
-} from "@earendil-works/pi-ai";
-import type { BudgetPurpose } from "../../budget";
-import type { AiSurface, TurnTelemetry } from "../../platform/app/cache-telemetry";
-import type { ModelCallAbout } from "../../ai/model-usage";
-import type { ChatMessage, ProviderId, ResponseHead, StreamOutcome } from "../../ai/providers";
+import type { TSchema } from "@earendil-works/pi-ai";
+import type { ResponseHead, StreamOutcome } from "../../ai/providers";
 import type { Receipt } from "../../ai/turn-view/tool-status";
-import type { HeldHarness } from "./held";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
 // the model a cropped figure). `data` is bare base64, `mimeType` the MIME type;
@@ -77,7 +64,7 @@ export interface AgentTool {
   // The gate a write goes through. Reads leave it unset.
   gate?: ToolGate;
   // Safe to run a second time when a process died with this call in flight. A
-  // turn finished by a later process (src/soul/recover.ts) runs such a call
+  // turn finished by a later process (legion/durable/recover.ts) runs such a call
   // again; every other tool is handed pi's synthetic "execution was
   // interrupted" result instead, whatever it had already done. Only for tools
   // that read: running one twice must cost nothing but the read.
@@ -207,64 +194,6 @@ export interface AgentCallbacks {
   onRefusal?(message: string): void;
 }
 
-// Which lane of which session group a turn runs on.
-//
-// Unset is the reader's turn: lane "turn" in the "turn" group, one fresh
-// session per turn. A sub-agent names both (legion/subagent), because a worker
-// is not a turn of the conversation: its lane says which worker it is, and its
-// session belongs beside the other workers' rather than among the reader's.
-export interface TurnLane {
-  // The lane inside the session. Non-empty; anything but a NUL is allowed.
-  name: string;
-  // The session group the session file is filed under (the repo's `cwd`).
-  sessions: string;
-}
-
-export interface RunAgentTurnOptions extends AgentCallbacks {
-  providerId: ProviderId;
-  modelId: string;
-  systemPrompt?: string;
-  messages: ChatMessage[];
-  tools: AgentTool[];
-  signal?: AbortSignal;
-  // Extended-thinking effort. undefined = off. Omitted silently on models whose
-  // metadata says reasoning:false.
-  reasoning?: ThinkingLevel;
-  // Max streamed model turns that request tools before the turn gives up.
-  // Default 8. Exceeding it is a refusal, not an error.
-  maxRounds?: number;
-  // What the answer is for, which sets how much output room each round must
-  // leave (src/budget). "chat" when unset.
-  purpose?: BudgetPurpose;
-  // What the turn is about, for the model-call log (src/memory/usage): the book
-  // being read, the topic being discussed. Absent on a turn that is about
-  // neither; the surface below says who spent it either way.
-  about?: ModelCallAbout;
-  // Which face of the app this turn is, and the conversation it continues, so
-  // each round's cache accounting can be attributed and dated
-  // (platform/app/cache-telemetry.ts). Required: an unlabelled turn is missing
-  // from the measurement without saying so. `thread` may be left out by a run
-  // that has no conversation of its own — a fresh id stands in, which is what a
-  // one-off run is.
-  telemetry: { surface: AiSurface; thread?: string; inline?: TurnTelemetry["inline"] };
-  // The lane and session group this turn runs on; the reader's turn when unset.
-  lane?: TurnLane;
-  // A harness that outlives the turn, whose lane the turn runs on instead of a
-  // session of its own (legion/execute/held.ts). Only the recovery of the old
-  // soul session names one (src/soul/recover.ts); a worker or a background
-  // pass leaves it unset and gets a harness to itself. `lane` is ignored when
-  // this is set.
-  harness?: HeldHarness;
-  // Finish this operation instead of starting one: the harness above is the
-  // dead process's, standing where its run stopped, and `messages` is not sent
-  // because the prompt is already in that session (src/soul/recover.ts).
-  resume?: string;
-  // The silence this turn is allowed before its stream is taken as dead
-  // (execute/stall.ts). The watch's own window unless a caller says otherwise;
-  // `stall: null` turns the watch off, which is what a scripted stream wants.
-  stallMs?: number;
-}
-
 // The two things the turn says when it gives up. Both are refusals rather than
 // errors, and both are written for someone who does not know what a token is:
 // they say what happened to the reading, not what happened to the arithmetic.
@@ -282,16 +211,3 @@ export const REFUSE_MIDTURN =
 // The model spent the whole round cap calling tools and never wrote an answer.
 export const REFUSE_ROUNDS =
   "I kept looking things up without getting to an answer, so I've stopped rather than go around again. Ask something more specific and I can.";
-
-// The provider-agnostic stream contract, matched by Provider.streamSimple and by
-// a scripted fake in tests. The harness is handed one of these, so a turn can be
-// driven without any real provider, auth, or network.
-//
-// `options` is optional because pi-agent-core declares its own StreamFn that
-// way, and under strictFunctionTypes a required parameter is not assignable to
-// an optional one. The harness always passes an object.
-export type StreamFn = (
-  model: Model<Api>,
-  context: TranscriptContext,
-  options?: SimpleStreamOptions,
-) => AssistantMessageEventStream;

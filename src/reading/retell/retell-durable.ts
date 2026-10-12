@@ -10,7 +10,7 @@
 
 import type { Context } from "@earendil-works/chord";
 import type { PlaceFactory } from "../../legion/durable/device";
-import type { AgentTool } from "../../legion/execute/contract";
+import type { AgentTool } from "../../legion/durable/contract";
 import { loadSettings, toReasoning, type Settings } from "../../platform/app/settings";
 import { editTalkOutline, talkOutlineForRetell, talkOutlineOfRetell } from "../talk";
 import {

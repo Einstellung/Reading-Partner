@@ -13,7 +13,7 @@
 
 import { bindItemTools, openDesk } from "../../desk";
 import type { DeskMessage } from "../../desk";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { loadDeviceSettings } from "../../platform/app/device";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { loadSettings, type Settings } from "../../platform/app/settings";

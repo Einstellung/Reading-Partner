@@ -2,7 +2,7 @@
 // (docs/soul/87, "存储与 Harness"): the same provider objects, keys and
 // transport the agent loop uses (providers.ts). Auth is resolved per request
 // from the app's key store; the transport and pi-ai's own retry count are
-// written into every request the way runAgentTurn writes them.
+// written into every request.
 
 import { createModels, type MutableModels, type Provider } from "@earendil-works/pi-ai/models";
 import type { ProviderId } from ".";

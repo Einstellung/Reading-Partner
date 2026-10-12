@@ -16,7 +16,7 @@
 // impersonating a different tool with different semantics (docs/24).
 
 import { DEFAULT_SUBAGENT_ROUNDS, type SubagentDefinition } from "../../legion/subagent";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { buildCitationTools } from "./citation-tool";
 import type { CitationDeps } from "./citations";
 import type { PaperSearchFn } from "./paper-search";

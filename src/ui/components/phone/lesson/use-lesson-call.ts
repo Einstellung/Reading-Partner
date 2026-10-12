@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { t } from "../../../../i18n";
 import { applyRowChange } from "../../../../ai/turn-view/turn-rows";
-import { toolLabel } from "../../../../legion/execute/tool-result";
+import { toolLabel } from "../../../../legion/durable/tool-result";
 import {
   appendMessage,
   getBookThread,
@@ -343,7 +343,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
         const lines = owed.map((line): ThreadMessage => ({ role: "user", text: line.text, ts: line.ts }));
 
         if (end.kind === "stalled") {
-          // The stream went silent and the watch cut it (legion/execute/stall.ts):
+          // The stream went silent and the watch cut it (legion/durable/stall.ts):
           // the app was switched away mid-answer and the connection did not
           // survive being frozen. Nothing landed; the half-written rows go and
           // the question is asked again — once (docs/pitfall/390). A second

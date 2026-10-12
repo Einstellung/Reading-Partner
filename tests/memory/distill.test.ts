@@ -1,11 +1,11 @@
 // Distillation flow tests (src/memory/observations/distill.ts) with a mocked AI turn: the
-// sub-agent turn is backed by runHarnessTurn over a scripted fake stream (same
+// sub-agent turn is a background run on a faux durable runtime (same
 // pattern as tests/legion/subagent/subagent.test.ts), so the real observation tools, the real
 // honest-failure mapping and the real abort path run against the fake store with
 // no provider, network, or token spend. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { StoppedError } from "../../src/legion/execute/watchdog";
+import { StoppedError } from "../../src/legion/durable/watchdog";
 import { FileObservationAdapter } from "../../src/memory/observations/adapter";
 import {
   buildDistillAgent,

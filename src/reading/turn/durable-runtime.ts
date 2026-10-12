@@ -4,18 +4,14 @@
 // sorts out what the last process left running, puts the steers that sorting
 // withdrew into their thread files, then resumes.
 //
-// A turn that the previous process left on the old soul session is still
-// finished by soul/recover.ts; the two runtimes run side by side until every
-// turn surface has moved.
-//
 // `onTurnSettled` says when a conversation's `rp.turn` has landed and the
 // conversation is free again. Input meant for a busy conversation waits for it
 // rather than being queued in pi-durable as a follow-up.
 
 import type { Context } from "@earendil-works/chord";
 import type { Models } from "@earendil-works/pi-ai/models";
-import type { AgentTool } from "../../legion/execute/contract";
-import type { TurnLogSink } from "../../legion/execute/turn-log";
+import type { AgentTool } from "../../legion/durable/contract";
+import type { TurnLogSink } from "../../legion/durable/turn-log-sink";
 import { provideBackgroundHost } from "../../legion/durable/background";
 import {
   deviceBackgroundHost,
@@ -56,7 +52,7 @@ export interface ReadingDurableOptions {
   rotateAtBytes?: number;
   now?: () => number;
   onReport?: (error: unknown) => void;
-  /** Where the turn log's lines go (legion/execute/turn-log.ts); the app's file unless said. */
+  /** Where the turn log's lines go (legion/durable/turn-log-sink.ts); the app's file unless said. */
   log?: TurnLogSink;
 }
 

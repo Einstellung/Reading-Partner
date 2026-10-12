@@ -20,7 +20,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import { listTopics, type Topic } from "../../platform/app/topics";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { TopicProposalCardData } from "./card";
 import { t } from "../../i18n";
 

@@ -389,7 +389,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     retention: { rule: "tail", lines: 5000 },
-    note: "one line per moment of each AI turn on this device: start, lane, each round's first byte and end, how it ended (src/legion/execute/turn-log.ts). Diagnostics for a person to export; nothing in the app reads it back",
+    note: "one line per moment of each AI turn on this device: start, lane, each round's first byte and end, how it ended (src/legion/durable/turn-log-sink.ts). Diagnostics for a person to export; nothing in the app reads it back",
   },
 
   // -- marks and conversations ---------------------------------------------
@@ -1484,19 +1484,6 @@ export const PALACE = [
     retention: NEVER,
     note: "which anchor this device last rang a wake bell for (src/legion/schedule, docs/55). Machine-local: two devices agreeing on who fires is the election's job, and this is only how one device does not fire twice for the same hour",
   },
-  {
-    kind: "session",
-    domain: "memory",
-    match: subtree("session/"),
-    samples: ["session/--session--/2026-09-14T03-13-13-451Z_01a09de7.jsonl"],
-    id: "fixed",
-    refs: [],
-    sync: "local",
-    deleteWith: "never",
-    retention: inline(flow("src/legion/execute/harness.ts", "sweepSessionGroup")),
-    note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). A process start settles the previous session and begins a fresh one; the group keeps its newest five files (legion/execute/harness.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/71)",
-  },
-
   {
     kind: "durable",
     domain: "memory",

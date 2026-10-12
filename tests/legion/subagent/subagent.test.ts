@@ -7,8 +7,8 @@
 
 import { expect, test } from "bun:test";
 import { Type, withoutInitialSystemMessage } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../src/legion/execute/contract";
-import { StoppedError } from "../../../src/legion/execute/watchdog";
+import type { AgentTool } from "../../../src/legion/durable/contract";
+import { StoppedError } from "../../../src/legion/durable/watchdog";
 import { runSubagent } from "../../../src/legion/subagent/run";
 import { subagentTool } from "../../../src/legion/subagent/tool";
 import { createSubagentQuota } from "../../../src/legion/subagent/quota";
@@ -201,7 +201,8 @@ test("a failed call is reported as a failure the caller can name", async () => {
   expect(result.brief).toContain("failed call, not an empty result");
   // Beside the sentence, the two fields a caller can log: the brief is written
   // for a reader and a caller recording the failure must not have to parse it.
-  expect(result.failure).toEqual({ name: "Error", message: "401 invalid x-api-key" });
+  // pi-ai keeps only the text; the name is read back from it (ai/provider-failure.ts).
+  expect(result.failure).toEqual({ name: "NotSignedInError", message: "401 invalid x-api-key" });
 });
 
 test("a failed call keeps the thrown error's own type", async () => {

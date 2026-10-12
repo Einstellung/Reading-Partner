@@ -15,7 +15,7 @@ import {
   delegableWorkerKinds,
   registeredWorkerKinds,
   type WorkerContext,
-} from "../../../src/legion/execute/worker";
+} from "../../../src/legion/runner/worker";
 import type { IngestedDocument } from "../../../src/reading/ingest/article";
 import type { Fulltext } from "../../../src/fulltext/types";
 import type { PrepPaper } from "../../../src/reading/prep/papers/types";

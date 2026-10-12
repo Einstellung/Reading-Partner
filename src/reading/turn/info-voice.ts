@@ -30,8 +30,8 @@ import { replayableHistory } from "../../ai/turn-view/turn-rows";
 import type { TurnActivity } from "../../ai/turn-view/activity";
 import { catalogDescribe, type DeviceDurable } from "../../legion/durable/device";
 import { turnInFlight, TurnBusy } from "../../legion/durable/turn";
-import { STALL_MESSAGE } from "../../legion/execute/stall";
-import type { AgentTool } from "../../legion/execute/contract";
+import { STALL_MESSAGE } from "../../legion/durable/stall";
+import type { AgentTool } from "../../legion/durable/contract";
 import {
   appendMessage,
   createThread,

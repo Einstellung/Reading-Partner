@@ -4,7 +4,7 @@
 // this module stays headless and unit-testable. Full-text helpers are 1-based.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import { clipToTokens } from "../legion/subagent/brief";
 import { estimateTextTokens } from "../budget";
 import { clipWords } from "../platform/std/text";

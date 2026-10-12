@@ -10,7 +10,7 @@ import { fauxProvider, type FauxResponseStep } from "@earendil-works/pi-ai/provi
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { durableSqliteSize, openDurableSqlite, removeDurableSqlite } from "../../../../src/platform/app/durable-sqlite";
-import type { AgentTool } from "../../../../src/legion/execute/contract";
+import type { AgentTool } from "../../../../src/legion/durable/contract";
 import { openDurable, type DurableHost, type DurableRuntime } from "../../../../src/legion/durable/harness";
 import type { LandedRow, LandedTurn } from "../../../../src/legion/durable/turn";
 import type { ThreadOrigin } from "../../../../src/legion/durable/extension";

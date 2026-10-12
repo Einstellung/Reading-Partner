@@ -10,7 +10,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { provideBackgroundHost } from "../../../src/legion/durable/background";
-import type { WorkerContext } from "../../../src/legion/execute/worker";
+import type { WorkerContext } from "../../../src/legion/runner/worker";
 import type { Run } from "../../../src/legion/run";
 import { StoppedError } from "../../../src/legion/stop";
 import type { SubagentDefinition } from "../../../src/legion/subagent";

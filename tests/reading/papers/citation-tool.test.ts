@@ -8,7 +8,7 @@ import {
   buildCitationTools,
   FIND_PAPER_PROMPT,
 } from "../../../src/reading/papers/citation-tool";
-import type { AgentTool } from "../../../src/legion/execute/turn";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 import { jsonResponse } from "../../support/fetch";
 
 const S2_SEED = {

@@ -1,5 +1,5 @@
 // The turn log for book turns on the durable runtime (reading/turn/durable-turn-log.ts):
-// the lines and fields legion/execute/turn-log.ts defines, as the old turn loop
+// the lines and fields legion/durable/turn-log-sink.ts defines, as the old turn loop
 // wrote them — start, each round's first byte and answer, one end — for a turn
 // started here and for one this process only saw from its first request.
 
@@ -11,8 +11,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startTurn } from "../../../src/legion/durable/turn";
-import type { AgentTool } from "../../../src/legion/execute/contract";
-import type { TurnLogLine } from "../../../src/legion/execute/turn-log";
+import type { AgentTool } from "../../../src/legion/durable/contract";
+import type { TurnLogLine } from "../../../src/legion/durable/turn-log-sink";
 import { driveBookTurn } from "../../../src/reading/turn/book-turn-rows";
 import { resumedTurn } from "../../../src/reading/turn/durable-turn";
 import { LiveDoc } from "@earendil-works/pi-durable";

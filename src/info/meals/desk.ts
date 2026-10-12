@@ -13,7 +13,7 @@ import {
   type DeskItem,
   type DeskItemKind,
 } from "../../desk";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { mealsGuidance, type MealsFocus } from "./tools";
 import { hostRegion } from "./region";
 import type { MealsState } from "./plan/types";

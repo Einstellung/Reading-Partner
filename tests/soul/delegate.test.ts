@@ -5,7 +5,7 @@
 
 import { expect, test } from "bun:test";
 import { buildDelegateTools, DELEGATE_TOOL } from "../../src/soul";
-import type { DelegateInput, Delegated } from "../../src/legion/execute/worker";
+import type { DelegateInput, Delegated } from "../../src/legion/runner/worker";
 import type { Run } from "../../src/legion/run";
 import type { BoxOrigin } from "../../src/box";
 import { toolText } from "../support/tool-text";

@@ -9,8 +9,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentTool } from "../../../src/legion/execute/contract";
-import { REFUSE_ROUNDS } from "../../../src/legion/execute/contract";
+import type { AgentTool } from "../../../src/legion/durable/contract";
+import { REFUSE_ROUNDS } from "../../../src/legion/durable/contract";
 import { runBackgroundTurnOn, type BackgroundTurnRequest } from "../../../src/legion/durable/background";
 import { startTurn } from "../../../src/legion/durable/turn";
 import { StoppedError } from "../../../src/legion/stop";
@@ -126,6 +126,19 @@ test("a model error comes back as an error", async () => {
   expect((outcome as { message: string }).message).toContain("overloaded");
   expect(await idle(t)).toBe(true);
   await t.runtime.close(ctx);
+});
+
+test("a failed call keeps a name that tells offline from not signed in", async () => {
+  for (const [errorMessage, name] of [
+    ["Connection error.", "OfflineError"],
+    ["API key auth failed for provider anthropic: Anthropic is not connected. Open Settings to sign in.", "NotSignedInError"],
+    ["overloaded", "ModelCallError"],
+  ] as const) {
+    const t = await openTestRuntime({ root: root(), responses: [fauxAssistantMessage([], { stopReason: "error", errorMessage })] });
+    const outcome = await runBackgroundTurnOn({ runtime: t.runtime }, request());
+    expect(outcome).toEqual({ kind: "error", message: errorMessage, name });
+    await t.runtime.close(ctx);
+  }
 });
 
 test("aborting the signal mid-tool rejects with StoppedError and leaves nothing live", async () => {

@@ -10,8 +10,8 @@
 // The kind, the sub-agent and the cap are the domain's; this is only the
 // skeleton around them, so it names no kind of its own.
 
-import type { WorkerContext, WorkerHandle } from "../execute/worker";
-import { writeRunOutput } from "../execute/outputs";
+import type { WorkerContext, WorkerHandle } from "../runner/worker";
+import { writeRunOutput } from "../runner/outputs";
 import { createSubagentQuota } from "./quota";
 import { runSubagent } from "./run";
 import { runBackgroundTurn } from "../durable/background";

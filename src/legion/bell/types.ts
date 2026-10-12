@@ -46,7 +46,7 @@ export interface RunDonePayload {
   truncated?: boolean;
   /**
    * The path what the run produced was written to, if it produced anything
-   * (legion/execute/outputs.ts). A reference, like everything else on a run
+   * (legion/runner/outputs.ts). A reference, like everything else on a run
    * record; whoever answers the bell reads it.
    */
   output?: string;

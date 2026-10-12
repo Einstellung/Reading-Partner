@@ -42,7 +42,7 @@ export interface WatchdogTimers {
 // beforeRetry fires after a failed attempt that will be repeated, before the flat
 // retry delay, and is awaited: it is where a caller running several calls at once
 // makes the group sit out a rate limit rather than letting this one call retry
-// straight into the same minute (src/legion/execute/limiter).
+// straight into the same minute (src/legion/durable/limiter).
 export interface WatchdogHooks {
   onAttempt(info: { attempt: number; attempts: number; startedAt: number }): void;
   onProgress(chars: number): void;

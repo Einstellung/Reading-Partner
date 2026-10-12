@@ -1,9 +1,9 @@
-// The turn log's file (src/legion/execute/turn-log.ts): lines from turns that
+// The turn log's file (src/legion/durable/turn-log-sink.ts): lines from turns that
 // write at the same moment all land, and an export reads them back.
-// Run: scripts/t.sh tests/legion/execute/turn-log.test.ts
+// Run: scripts/t.sh tests/legion/durable/turn-log-sink.test.ts
 
 import { beforeEach, expect, test } from "bun:test";
-import { appTurnLog, readTurnLog, TURN_LOG } from "../../../src/legion/execute/turn-log";
+import { appTurnLog, readTurnLog, TURN_LOG } from "../../../src/legion/durable/turn-log-sink";
 import { PALACE } from "../../../src/palace";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 

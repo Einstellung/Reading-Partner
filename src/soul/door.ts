@@ -26,7 +26,7 @@ import {
   peekThreads,
   type Thread,
 } from "../platform/app/threads";
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import type { TopicProposalSurface } from "../memory";
 import type { Settings } from "../platform/app/settings";
 import type { BudgetPurpose } from "../budget";

@@ -9,7 +9,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/legion/execute/contract";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/legion/durable/contract";
 import { recoverBeforeResume } from "../../../src/legion/durable/recover";
 import { startTurn, steerTurn, stopTurn, textOf } from "../../../src/legion/durable/turn";
 import { deferred, ORIGIN, openTestRuntime, readerTurn } from "./support/runtime";

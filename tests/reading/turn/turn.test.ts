@@ -4,7 +4,7 @@
 // trim. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/legion/execute/turn";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/legion/durable/contract";
 import { estimateTextTokens } from "../../../src/budget";
 import { getFulltext } from "../../../src/fulltext/store";
 import type { Fulltext } from "../../../src/fulltext/types";
@@ -32,8 +32,8 @@ import {
   turnFailureView,
 } from "../../../src/reading/turn/turn";
 import { installAppData } from "../../support/appdata-fake";
-import { appRunner } from "../../../src/legion/execute/runner";
-import { registerWorker } from "../../../src/legion/execute/worker";
+import { appRunner } from "../../../src/legion/runner/runner";
+import { registerWorker } from "../../../src/legion/runner/worker";
 import type { Run } from "../../../src/legion/run";
 import { toolText } from "../../support/tool-text";
 

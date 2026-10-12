@@ -22,9 +22,10 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { ModelThinkingLevel, ThinkingLevel } from "@earendil-works/pi-ai";
 import { defineExtension, type Conversation, type EntryRecord, type ToolRegistration } from "@earendil-works/pi-durable";
 import { resolveModel } from "../../ai/model-call";
+import { providerFailureName } from "../../ai/provider-failure";
 import type { BudgetPurpose } from "../../budget";
 import { newRunId, type AiSurface } from "../../platform/app/cache-telemetry";
-import type { AgentTool } from "../execute/contract";
+import type { AgentTool } from "./contract";
 import { StoppedError } from "../stop";
 import type { PlaceFactory } from "./device";
 import { DeskDoc, ThreadDoc, type ThreadOrigin, type TurnResult } from "./extension";
@@ -220,9 +221,9 @@ export async function runBackgroundTurnOn(host: BackgroundHost, request: Backgro
     if (signal?.aborted) throw new StoppedError();
     const last = said[said.length - 1]?.model?.[0] as { stopReason?: string; errorMessage?: string } | undefined;
     if (record.status !== "done") {
-      return { kind: "error", message: result.detail ?? last?.errorMessage ?? result.reason ?? "the run ended without an answer" };
+      return failed(result.detail ?? last?.errorMessage ?? result.reason ?? "the run ended without an answer");
     }
-    if (last?.stopReason === "error") return { kind: "error", message: last.errorMessage ?? "the model call failed" };
+    if (last?.stopReason === "error") return failed(last.errorMessage ?? "the model call failed");
     return { kind: "answer", text: textOf(last) };
   } finally {
     signal?.removeEventListener("abort", stop);
@@ -235,6 +236,11 @@ export async function runBackgroundTurnOn(host: BackgroundHost, request: Backgro
     host.ended?.(backgroundKey(origin), result);
     await runtime.maybeRotate(context).catch(() => false);
   }
+}
+
+// The thrown value's class does not survive pi-ai; the name is recovered from the text.
+function failed(message: string): BackgroundTurnOutcome {
+  return { kind: "error", message, name: providerFailureName(message) };
 }
 
 // The device runtime as the shell opened it. A pass that starts before the

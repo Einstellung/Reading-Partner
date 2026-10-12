@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TurnLogLine } from "../../../src/legion/execute/turn-log";
+import type { TurnLogLine } from "../../../src/legion/durable/turn-log-sink";
 import { storeBookThreads } from "../../../src/reading/turn/durable-book";
 import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { testHost } from "../../legion/durable/support/runtime";

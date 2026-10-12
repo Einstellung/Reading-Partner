@@ -12,7 +12,7 @@
 // labs file.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { asStrings } from "../../platform/std/json";
 import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";

@@ -1,8 +1,7 @@
 // The desk a briefing's or the meals conversation's turn is rebuilt over
 // (src/info/briefer/deliver.ts, docs/68). Bells are answered on the durable
-// runtime (reading/turn/info-bell.ts); these openers stay for the first start
-// after the upgrade, which finishes an old soul session's turn where it was
-// asked (src/soul/recover.ts).
+// runtime (reading/turn/info-bell.ts); the openers rebuild the desk a place's
+// durable turn is resolved over.
 // Run: scripts/t.sh tests/info/briefer/deliver.test.ts
 
 import { beforeEach, expect, test } from "bun:test";
@@ -14,7 +13,7 @@ import { registerSecretaryRole } from "../../../src/info/briefer/role";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../src/info/briefer/deliver";
 import { registerMealsDesk } from "../../../src/info/meals/desk";
 import { EMPTY_MEALS } from "../../../src/info/meals/plan/types";
-import type { AgentTool } from "../../../src/legion/execute/turn";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 import { installAppData } from "../../support/appdata-fake";
 
 const DATE = "2026-09-16";

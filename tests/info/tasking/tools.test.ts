@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { buildTaskingTools } from "../../../src/info/tasking/tools";
 import type { CableDay } from "../../../src/info/cable/types";
 import type { PublishedBodies } from "../../../src/info/boxes/publish";
-import type { AgentTool } from "../../../src/legion/execute/turn";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 
 const DAYS: Record<string, CableDay> = {
   "2026-09-16": {

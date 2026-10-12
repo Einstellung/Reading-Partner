@@ -1,4 +1,4 @@
-// The turn log (legion/execute/turn-log.ts) for book turns on the durable
+// The turn log (legion/durable/turn-log-sink.ts) for book turns on the durable
 // runtime: the lines the old turn loop wrote, with the same meanings, keyed by
 // the thread's conversation key.
 //
@@ -16,7 +16,7 @@
 // not queued), so `queued` and `lane` are never written and `held` is false.
 
 import type { TurnResult } from "./extension";
-import type { TurnEnd, TurnLogEvent, TurnLogSink } from "../execute/turn-log";
+import type { TurnEnd, TurnLogEvent, TurnLogSink } from "./turn-log-sink";
 import { newRunId, type AiSurface } from "../../platform/app/cache-telemetry";
 
 export interface TurnLogStart {

@@ -22,7 +22,7 @@ import { listTopics } from "../../platform/app/topics";
 import { toReasoning } from "../../platform/app/settings";
 import { modelIdFor } from "../../ai/model-tier";
 import { getFulltext } from "../../fulltext/store";
-import { toolLabel } from "../../legion/execute/tool-result";
+import { toolLabel } from "../../legion/durable/tool-result";
 import { bellTurn, TurnBusy, type WithdrawnSteer } from "../../legion/durable/turn";
 import {
   registerDelivery,

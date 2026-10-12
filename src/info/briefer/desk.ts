@@ -40,7 +40,7 @@ import {
   noBriefingChatSystemPrompt,
   type CompanionContext,
 } from "./chat";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { getThread } from "../../platform/app/threads";
 import type { AiLanguage } from "../../platform/app/settings";
 import type { Briefing } from "../boxes/types";

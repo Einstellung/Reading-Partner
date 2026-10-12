@@ -14,7 +14,7 @@ import * as bookThread from "../../../../../src/reading/session/book-thread";
 import * as openPdf from "../../../../../src/reading/lesson/open-pdf";
 import * as turn from "../../../../../src/reading/turn/turn";
 import * as durableRuntime from "../../../../../src/reading/turn/durable-runtime";
-import { STALL_MESSAGE } from "../../../../../src/legion/execute/stall";
+import { STALL_MESSAGE } from "../../../../../src/legion/durable/stall";
 import { turnsStarting } from "../../../../../src/reading/turn/detached-turns";
 import { bookThreadKey } from "../../../../../src/reading/turn/durable-book";
 import type { BookOrigin } from "../../../../../src/reading/turn/durable-book";

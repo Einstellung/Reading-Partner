@@ -16,7 +16,7 @@ import type { DeskMessage } from "../desk";
 import type { ThreadOrigin } from "../legion/durable/extension";
 import type { Place, PlaceFactory, PlaceShared } from "../legion/durable/device";
 import { threadLander } from "../legion/durable/thread-files";
-import type { AgentTool } from "../legion/execute/contract";
+import type { AgentTool } from "../legion/durable/contract";
 import { loadSettings } from "../platform/app/settings";
 import { coverOf } from "./bell";
 import { doorKey, openDoorTurn } from "./door";
@@ -77,7 +77,7 @@ async function openDoorDesk(origin: DoorOrigin): Promise<readonly AgentTool[]> {
   return turn?.tools ?? [];
 }
 
-/** The same card an answer that landed unseen always gets (soul/recover.ts): named by the thread and the moment. */
+/** The same card an answer that landed unseen always gets: named by the thread and the moment. */
 async function putDoorCard(origin: DoorOrigin, ts: number, text: string): Promise<void> {
   await appBox()
     .put({

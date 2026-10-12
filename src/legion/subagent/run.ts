@@ -13,7 +13,7 @@
 // never completed all summarize alike, and none of them are held to
 // briefTokenCap.
 
-import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../execute/contract";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../durable/contract";
 import { StoppedError } from "../stop";
 import { composeBrief, subagentSystemPrompt, EMPTY_ANSWER, type BriefFacts } from "./brief";
 import type { SubagentQuota } from "./quota";

@@ -18,7 +18,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import { t } from "../../i18n";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { moveSegment, putSegment, removeSegment, setSpine, type SegmentEdit } from "./edit";
 import type { TalkArrangementCardData } from "./cards";
 import { segmentLabel, type TalkOutline, type TalkSegment, type TalkSpine } from "./types";

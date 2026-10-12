@@ -1,7 +1,7 @@
 // One book turn on the durable runtime as the reading session drives it
 // (docs/soul/87, "一个回合"; docs/72): start it, follow the conversation's view
 // state as the turn's rows, steer it, stop it, and cut it when the stream goes
-// silent (legion/execute/stall.ts's watch, 90 seconds, judged again when the
+// silent (legion/durable/stall.ts's watch, 90 seconds, judged again when the
 // app comes back). A cut turn is superseded, so it lands nothing; the caller
 // asks again once, as today.
 //
@@ -31,8 +31,8 @@ import {
   turnInFlight,
   type WithdrawnSteer,
 } from "../../legion/durable/turn";
-import type { AgentTool } from "../../legion/execute/contract";
-import { recordLongestSilence, stallWatches, type StallWatches } from "../../legion/execute/stall";
+import type { AgentTool } from "../../legion/durable/contract";
+import { recordLongestSilence, stallWatches, type StallWatches } from "../../legion/durable/stall";
 import type { ReadingTurnMessage } from "../desk-history";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin, type BookTelemetry } from "./durable-book";
 import { projectView, runStart, type TurnView, type ViewSource } from "./durable-view";
@@ -199,7 +199,7 @@ function watchTurn(
     unwatch: () => watch.stop(),
     stop() {
       // What the stall window has to clear, measured on a real turn; read back
-      // off a development build only (legion/execute/turn.ts did the same).
+      // off a development build only (the old turn loop did the same).
       if (import.meta.env?.DEV) {
         const ms = watch.longestSilence();
         recordLongestSilence({ surface, ms, at: Date.now() });

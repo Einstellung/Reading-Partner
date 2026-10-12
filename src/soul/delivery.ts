@@ -10,7 +10,7 @@
 // kind is registered on the desk: reading hands over an opener at startup and
 // this file only knows that some place answers to "book".
 
-import type { SteerPort } from "../legion/execute/contract";
+import type { SteerPort } from "../legion/durable/contract";
 import type { Settings } from "../platform/app/settings";
 import type { BoxOrigin } from "../box";
 import type { AssembledTurn } from "./turn";
@@ -150,10 +150,7 @@ export function parseOrigin(deliverTo: string | undefined): BoxOrigin | null {
   }
 }
 
-/**
- * The same shapes, read off a value that is already parsed: what a
- * session entry holds (src/soul/recover.ts). Null for anything else.
- */
+/** The same shapes, read off a value that is already parsed. Null for anything else. */
 export function originOf(value: unknown): BoxOrigin | null {
   if (typeof value !== "object" || value === null) return null;
   const o = value as Record<string, unknown>;

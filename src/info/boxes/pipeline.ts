@@ -39,7 +39,7 @@ import {
   StoppedError,
   type AiCallOptions,
   type WatchdogConfig,
-} from "../../legion/execute/watchdog";
+} from "../../legion/durable/watchdog";
 import { mapSettled } from "../sources/pool";
 import { ANALYST_TEXT_CHARS } from "../analysis/analyst";
 import type { AnalystCable, AnalystInput, LabRunResult } from "../analysis/types";

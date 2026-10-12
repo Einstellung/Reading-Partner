@@ -11,7 +11,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import { t } from "../../i18n";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { RetellDecisionCardData } from "./cards";
 import { formatOutline } from "./plan";
 import type { RetellChapter, PlanDecision, RetellPlan } from "./types";

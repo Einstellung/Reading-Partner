@@ -14,7 +14,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import { t } from "../../i18n";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { asStrings } from "../../platform/std/json";
 import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
 import type { MealsCard, MealsPlanCardData } from "./cards";

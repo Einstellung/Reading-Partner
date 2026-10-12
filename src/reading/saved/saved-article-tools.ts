@@ -22,7 +22,7 @@
 // run in bun tests with no network, no AI and no AppData.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import { FULLTEXT_VERSION, type Fulltext } from "../../fulltext/types";
 import { clipLineTight } from "../../platform/std/text";
 import type { FetchOutcome } from "../prep/papers/pipeline";

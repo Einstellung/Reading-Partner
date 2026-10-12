@@ -29,9 +29,9 @@ import {
   type ToolRegistration,
 } from "@earendil-works/pi-durable";
 import { SqliteStorage, type SqliteDatabase } from "@earendil-works/pi-durable/storage/sqlite";
-import { appData } from "../../platform/app/appdata";
+import { appData, type AppDataFs } from "../../platform/app/appdata";
 import { durableSqliteSize, openDurableSqlite, removeDurableSqlite } from "../../platform/app/durable-sqlite";
-import type { AgentTool } from "../execute/contract";
+import type { AgentTool } from "./contract";
 import {
   ConversationsDoc,
   durableExtension,
@@ -50,6 +50,15 @@ import { ChildDesks, childExtension, type ChildExtension } from "./child";
 import { createLandStep, type Lander } from "./turn";
 
 export const DURABLE_DIR = "durable";
+
+// Where the pi-agent-core runtime kept its session JSONL (0.23.3 and before).
+// Nothing reads it any more: the first start without that runtime deletes the
+// directory, and a turn that build left unfinished in it is not resumed.
+export const OLD_SESSIONS_DIR = "session";
+
+export async function removeOldSessions(fs: Pick<AppDataFs, "exists" | "removeDir"> = appData): Promise<void> {
+  if (await fs.exists(OLD_SESSIONS_DIR)) await fs.removeDir(OLD_SESSIONS_DIR);
+}
 export const ROTATE_AT_BYTES = 100 * 1024 * 1024;
 export const FORCE_ROTATE_FACTOR = 1.5;
 

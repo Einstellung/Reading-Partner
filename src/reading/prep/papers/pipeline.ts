@@ -11,14 +11,14 @@ import {
   DEFAULT_WATCHDOG_MS,
   type AiCallOptions,
   type WatchdogConfig,
-} from "../../../legion/execute/watchdog";
+} from "../../../legion/durable/watchdog";
 import {
   ObservableRun,
   type RunActivity,
   type RunSnapshot,
   type RunTimers,
-} from "../../../legion/execute/observable-run";
-import { cooldownAfter } from "../../../legion/execute/limiter";
+} from "../../../legion/durable/observable-run";
+import { cooldownAfter } from "../../../legion/durable/limiter";
 import { isRateLimitError } from "../../../platform/http/throttled-fetch";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
@@ -487,7 +487,7 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
   }
 
   // A terminal 429: cool the paper down for a growing interval instead of
-  // failing it. The ladder is the shared one (src/legion/execute/limiter); after its rounds
+  // failing it. The ladder is the shared one (src/legion/durable/limiter); after its rounds
   // are spent, give up with the 429 message so the paper reads as failed for a
   // real reason.
   private cooldown(paper: PrepPaper, message: string): void {

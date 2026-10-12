@@ -1,10 +1,10 @@
-// The silence watch (src/legion/execute/stall.ts), on a virtual clock.
+// The silence watch (src/legion/durable/stall.ts), on a virtual clock.
 //
 // What it has to get right is the iPad case: the app is switched away
 // mid-answer, iOS freezes the process, and the stream that was being read is
 // dead by the time it thaws — no bytes, no error, no end. Nothing in the turn
 // notices, so the run stays open and the lane stays held.
-// Run: scripts/t.sh tests/legion/execute/stall.test.ts
+// Run: scripts/t.sh tests/legion/durable/stall.test.ts
 
 import { expect, test } from "bun:test";
 import {
@@ -12,7 +12,7 @@ import {
   isStall,
   StallError,
   type StallTimers,
-} from "../../../src/legion/execute/stall";
+} from "../../../src/legion/durable/stall";
 
 // A clock the test moves by hand. Every tick registered on it is called once
 // per `advance`, which is enough: the watch reads the wall clock rather than

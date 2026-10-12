@@ -9,7 +9,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TurnLogLine } from "../../../src/legion/execute/turn-log";
+import type { TurnLogLine } from "../../../src/legion/durable/turn-log-sink";
 import { storeThreadFiles } from "../../../src/legion/durable/thread-files";
 import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { testHost } from "../../legion/durable/support/runtime";

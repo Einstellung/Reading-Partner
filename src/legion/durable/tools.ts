@@ -8,8 +8,8 @@ import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import type { ConversationId, JsonObject, ToolExecutionApi, ToolRegistration } from "@earendil-works/pi-durable";
-import type { AgentTool } from "../execute/contract";
-import { normalizeToolResult } from "../execute/tool-result";
+import type { AgentTool } from "./contract";
+import { normalizeToolResult } from "./tool-result";
 import { ThreadDoc, type ThreadOrigin } from "./extension";
 import type { DurableRuntime } from "./harness";
 

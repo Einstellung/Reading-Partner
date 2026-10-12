@@ -10,7 +10,7 @@
 // takes a site identifier and never a URL — the reason is at buildSignInTool.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { RequestOutcome } from "./reader";
 import { buildSourceTools, type SourceToolDeps } from "../sources/source-tools";
 import {

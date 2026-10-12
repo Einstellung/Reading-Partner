@@ -7,7 +7,7 @@
 // draw them, and the row's receipts say what was written.
 
 import type { Context } from "@earendil-works/chord";
-import type { AgentTool } from "../../legion/execute/contract";
+import type { AgentTool } from "../../legion/durable/contract";
 import { loadSettings, toReasoning, type Settings } from "../../platform/app/settings";
 import { editTalkOutline, loadTalkOutline, talkThreadKey } from "../talk";
 import {

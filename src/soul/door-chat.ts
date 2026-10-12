@@ -6,7 +6,7 @@
 // What it cannot do it says, rather than writing into a row itself: the words
 // for "no model is set up" and the refusal belong to the surface showing them.
 
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import type { DeskMessage } from "../desk";
 import type { TopicProposalSurface } from "../memory";
 import { loadSettings, toReasoning, type Settings } from "../platform/app/settings";

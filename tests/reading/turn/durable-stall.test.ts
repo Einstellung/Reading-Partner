@@ -15,15 +15,15 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startTurn } from "../../../src/legion/durable/turn";
-import type { AgentTool } from "../../../src/legion/execute/contract";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 import {
   createStallWatches,
   STALL_MESSAGE,
   TURN_STALL_MS,
   type SilenceRecord,
   type StallTimers,
-} from "../../../src/legion/execute/stall";
-import type { TurnLogLine } from "../../../src/legion/execute/turn-log";
+} from "../../../src/legion/durable/stall";
+import type { TurnLogLine } from "../../../src/legion/durable/turn-log-sink";
 import {
   afterStall,
   driveBookTurn,

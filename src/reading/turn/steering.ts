@@ -19,7 +19,7 @@
 // Order is preserved: the enqueues are chained rather than raced, so two lines
 // typed in a hurry reach the model in the order they were typed.
 
-import type { SteerPort } from "../../legion/execute/contract";
+import type { SteerPort } from "../../legion/durable/contract";
 
 /** One line the reader said mid-turn, keyed by the row it is drawn as. */
 export interface PendingSteer {

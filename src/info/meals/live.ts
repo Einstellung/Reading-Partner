@@ -22,7 +22,7 @@ import {
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { buildMealsCatalogTools } from "./tools";
 import { hostRegion } from "./region";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 
 export interface LiveMealsOptions {
   // The conversation the cards belong to.

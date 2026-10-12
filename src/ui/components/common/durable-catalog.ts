@@ -37,7 +37,7 @@ import { buildResearchAgent } from "../../../reading/papers/research-agent";
 import { subagentTool } from "../../../legion/subagent/tool";
 import { buildTakeLinkTool } from "../../../reading/ingest/take-link-tool";
 import { buildMealsCatalogTools } from "../../../info/meals/tools";
-import type { AgentTool } from "../../../legion/execute/contract";
+import type { AgentTool } from "../../../legion/durable/contract";
 
 const inert = (value: unknown): never => value as never;
 const noFetch = async () => new Response("");

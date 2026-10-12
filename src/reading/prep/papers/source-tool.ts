@@ -10,7 +10,7 @@
 // fetching any more: it starts the run and words the sentence the model reads.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../legion/execute/turn";
+import type { AgentTool } from "../../../legion/durable/contract";
 import { looksLikeHttpUrl } from "../../sources";
 import { hostOf } from "../../../platform/std/url";
 import { t } from "../../../i18n";

@@ -10,7 +10,7 @@
 // Types only. The registry is in registry.ts, and every domain that has
 // something to put on the desk registers an opener for it at startup.
 
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import type { BoxOrigin } from "../box";
 import type { Rung } from "../budget";
 import type { Observation } from "../memory";

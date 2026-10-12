@@ -17,15 +17,15 @@
 // bought nothing but an hour of waiting. What running them together does cost is
 // paced by the shared limiter rather than by a fixed worker count: starts are
 // staggered, and a provider pushing back slows the whole group instead of sending
-// one call straight back into the same minute (src/legion/execute/limiter).
+// one call straight back into the same minute (src/legion/durable/limiter).
 //
 // (The prep pipeline stays serial on purpose: it re-picks the next paper after
 // each one finishes so the queue follows the reader's chapter. Whole-book spines
 // have no such order to follow.)
 
-import { runWithWatchdog, StoppedError, type AiCallOptions, type WatchdogConfig } from "../../../legion/execute/watchdog";
-import { CallLimiter, type LimiterConfig } from "../../../legion/execute/limiter";
-import { ObservableRun, type RunActivity, type RunSnapshot, type RunTimers } from "../../../legion/execute/observable-run";
+import { runWithWatchdog, StoppedError, type AiCallOptions, type WatchdogConfig } from "../../../legion/durable/watchdog";
+import { CallLimiter, type LimiterConfig } from "../../../legion/durable/limiter";
+import { ObservableRun, type RunActivity, type RunSnapshot, type RunTimers } from "../../../legion/durable/observable-run";
 import type { BookChapter } from "../../chapters";
 import { createChapterSpineState, normalizeChapterSpineOnLoad, type SpineChapter, type ChapterSpineState } from "./types";
 import { errMsg } from "../../../platform/std/errors";

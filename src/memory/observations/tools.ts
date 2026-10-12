@@ -4,7 +4,7 @@
 // refresh the observations panel.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { ObservationAdapter } from "./adapter";
 import { anchorSiblings, buildAnchorIndex, mentionedIds, resolveReferences } from "./links";
 import {
@@ -365,7 +365,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
-      // handed pi's interrupted result (src/soul/recover.ts).
+      // handed pi's interrupted result (legion/durable/recover.ts).
       replay: "safe",
       description:
         "Keyword-search your observations of this reader. " +
@@ -404,7 +404,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
-      // handed pi's interrupted result (src/soul/recover.ts).
+      // handed pi's interrupted result (legion/durable/recover.ts).
       replay: "safe",
       description: "Read one observation in full by its id (as returned by observation_search or the index).",
       parameters: Type.Object({

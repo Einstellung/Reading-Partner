@@ -5,8 +5,8 @@
 // everyday tier ("prep") and is accounted as the nightly pass's is — the plan
 // budget, spent as "distill" — the same class as dream.
 
-import { registerWorker } from "../../legion/execute/worker";
-import { appRunner } from "../../legion/execute/runner";
+import { registerWorker } from "../../legion/runner/worker";
+import { appRunner } from "../../legion/runner/runner";
 import { appRuns } from "../../legion/run";
 import { appData } from "../../platform/app/appdata";
 import { callModel } from "../../ai/model-call";

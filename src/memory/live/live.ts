@@ -8,7 +8,7 @@
 
 import { resolveModel } from "../../ai/model-call";
 import { runBackgroundTurn } from "../../legion/durable/background";
-import { StoppedError } from "../../legion/execute/watchdog";
+import { StoppedError } from "../../legion/durable/watchdog";
 import { logEvent } from "../../platform/app/events";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
 import { listTopics } from "../../platform/app/topics";

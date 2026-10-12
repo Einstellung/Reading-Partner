@@ -29,11 +29,11 @@ import { buildPlaceTools } from "./places";
 import { roleOf } from "./roles";
 import type { DeskEnv, DeskMemory } from "../desk";
 import { getThread } from "../platform/app/threads";
-import type { AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/durable/contract";
 import { UNSEEN, appBox, type BoxOrigin, type BoxStore } from "../box";
 import { buildDelegateTools } from "./delegate";
 import { originLabel, parseOrigin } from "./delivery";
-import { appRunner } from "../legion/execute/runner";
+import { appRunner } from "../legion/runner/runner";
 import type { Run } from "../legion/run";
 import { appData } from "../platform/app/appdata";
 

@@ -15,7 +15,6 @@ export {
   type RunSubstance,
 } from "./bell";
 export { coverOf } from "./bell";
-export { SOUL_LANE, finishOldSoulSession, type FinishDeps } from "./recover";
 export { BOX_COVER_CAP, soulMemorySection, openSoul, type LoadedRole, type Soul, type SoulExtras } from "./self";
 export {
   BRIEFS_DIR,

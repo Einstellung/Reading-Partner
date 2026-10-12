@@ -12,7 +12,7 @@
 // anchor, so a second ask reaches the run that is already there.
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
-import { realTimers } from "../../legion/execute/observable-run";
+import { realTimers } from "../../legion/durable/observable-run";
 import { loadSettings } from "../../platform/app/settings";
 import {
   currentDeviceId,
@@ -26,7 +26,7 @@ import {
   type ArticleState,
   type BriefingView,
 } from "../briefer/reader";
-import type { AiCallOptions } from "../../legion/execute/watchdog";
+import type { AiCallOptions } from "../../legion/durable/watchdog";
 import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
 import { observeAppExit, observeAppLifecycle } from "../../platform/app/lifecycle";
@@ -80,7 +80,7 @@ import { runDreamIfDue } from "../../memory/dream/live";
 import { sweepProseConflictsNow } from "../../memory/adjudicate/live";
 import { DAILY_ANCHOR_HOUR, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { registerCollectWorker, writeCollectBrief, type CollectScope } from "./collect-worker";
-import { appRunner } from "../../legion/execute/runner";
+import { appRunner } from "../../legion/runner/runner";
 import { collectorStatusLine, InfoCollector } from "../collect/collector";
 import { createCollectorSession, type CollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "../boxes/publish";

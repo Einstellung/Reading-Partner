@@ -6,7 +6,7 @@
 
 import type { BoxOrigin } from "../../box";
 import { bindItemTools, openDesk, type DeskItem } from "../../desk";
-import type { AgentTool } from "../../legion/execute/turn";
+import type { AgentTool } from "../../legion/durable/contract";
 import type { Settings } from "../../platform/app/settings";
 import { assembleTurn, type AssembleInput, type AssembledTurn } from "../../soul";
 import { INFO_MEALS_KIND, type MealsTools } from "../meals/desk";
