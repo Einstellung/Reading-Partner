@@ -18,7 +18,7 @@ import base from "../../vite.config";
 import os from "node:os";
 import path from "node:path";
 
-const host = process.env.RP_LAN_HOST || "192.168.0.107";
+const host = process.env.RP_LAN_HOST || "10.42.0.1";
 const port = Number(process.env.RP_DEV_PORT || 1437);
 const cfg = base as UserConfig;
 

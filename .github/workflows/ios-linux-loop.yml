@@ -40,8 +40,9 @@ env:
   WDA_REF: v16.14.2
   WDA_BUNDLE_ID: com.xinyuan.wda
   DEV_ID: com.xinyuan.readingpartner.dev
-  # The Linux box's LAN address and a port that is not the user's own 1420.
-  DEV_HOST: 192.168.0.107
+  # The Linux box's address on its own hotspot (nmcli connection up
+  # rp-dev-hotspot) and a port that is not the user's own 1420.
+  DEV_HOST: 10.42.0.1
   DEV_PORT: "1437"
 
 jobs:
