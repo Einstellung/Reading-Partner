@@ -5,7 +5,10 @@
 // - start: when a turn is started here, or at the first request this process
 //   sees of a turn it did not start (one recovery resumed after a restart).
 // - first-byte: the first partial of a round's answer on the conversation's
-//   view, so only while someone follows the turn (durable-turn.ts).
+//   view, so only while someone follows the turn (durable-turn.ts). A follower
+//   that joins a turn in flight with a round already streaming — the reader
+//   opening the thread of a turn recovery resumed, or a closed view reopened —
+//   writes none for that round: the partial it sees first is not the first.
 // - round: each answer that came back (the runtime's response recorder).
 // - end: when `rp.turn` settles, or when the follower sees it end; once.
 //
@@ -85,6 +88,17 @@ export class DurableTurnLog {
     entry.awaiting = false;
     entry.heardStamp = stamp;
     this.note(entry, { event: "first-byte", round: entry.round, ms: this.now() - entry.requestAt });
+  }
+
+  /**
+   * A follower joins with `stamp`'s partial already on the view: that round's
+   * first byte came while nobody watched, so none is written for it.
+   */
+  joined(key: string, stamp: number): void {
+    const entry = this.open.get(key);
+    if (!entry?.awaiting || stamp === entry.heardStamp) return;
+    entry.awaiting = false;
+    entry.heardStamp = stamp;
   }
 
   /** An answer came back. */
