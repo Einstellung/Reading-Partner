@@ -431,6 +431,8 @@
 - [554-reply-stamped-in-the-lines-millisecond-drops-from-history](./ai/554-reply-stamped-in-the-lines-millisecond-drops-from-history.md) — 别的回合的回答和读者那句同一毫秒，按 `ts` 排除那句连回答一起排掉，历史和屏幕上都少了它。排除时角色和时间戳一起比
 - [555-joined-turn-logs-first-byte-at-the-follow](./ai/555-joined-turn-logs-first-byte-at-the-follow.md) — 杀进程恢复或关掉重开后接上在途回合，turn-log 把打开线程那一刻记成那一轮的首字节（实测 13 s、24 s 都是等重开的时间）。接上时已在流的那一轮不写首字节
 - [559-pi-ai-error-message-keeps-only-the-text](./ai/559-pi-ai-error-message-keeps-only-the-text.md) — pi-ai 把凭据和网络抛出的错都变成 `stopReason: "error"` 的消息，只留 `errorMessage` 文字，类丢了；`providerFailureName` 按文字映射回 `NotSignedInError` / `OfflineError` / `ModelCallError`
+- [560-durable-turns-send-session-id-to-every-provider](./ai/560-durable-turns-send-session-id-to-every-provider.md) — durable 回合不走 `streamChat`，call-setup 的表管不到；pi-durable 每次请求都带对话的 `sessionId`，pi-ai 按它出 OpenCode 头、亲和头、Codex 的 `session-id` 和 `prompt_cache_key`；要改得在 `durable-models.ts` 的 `appProvider` 里改
+- [563-codex-sse-body-is-zstd](./ai/563-codex-sse-body-is-zstd.md) — Codex 走 SSE 时请求体 zstd 压缩（`content-encoding: zstd`），假 fetch 直接 `JSON.parse` 会抛，被当成 provider 错误；先 `Bun.zstdDecompressSync`
 
 ## 开发环境
 

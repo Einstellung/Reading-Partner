@@ -905,3 +905,17 @@ Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 
 - `tests/ai/session-header` 删掉的五条测的是旧回合按线程带 `x-opencode-session` / pi 的 `sessionId`；durable 回合有没有带（OpenCode、Fireworks 的缓存路由）没查，`legion/durable` 和 `ai/durable-models.ts` 里没有 `sessionId`。
 
 设备上怎么验（主会话排）：iPad / 模拟器装这一版后，确认 app 沙盒里 `session/` 没了；走一遍第一、二阶段的杀进程（书、门口）和 steer；断网时触发一次蒸馏，看 `distill-failed` 的 `errorName` 是 `OfflineError`。
+
+## 第四阶段（第二棒，分支 `dev/pi-durable-4`，从 d52c82dd 起）
+
+会话标识：durable 回合带了，没丢。pi-durable 的 `GenerationTask`（压缩也一样）每次请求都把对话 `pi.provider` 文档里的 uuidv7 当 `sessionId` 交给 `models.streamSimple`，`durable-models.ts` 的 `appProvider` 原样透传，pi-ai 1.1.0 按供应商出头：OpenCode 两家由 pi-ai 自己的 `withOpenCodeSessionHeader` 补 `x-opencode-session`，Fireworks 出亲和头，Codex 出 `session-id` 和 `prompt_cache_key`，DeepSeek 什么都不出。书、门口、info、三餐、教练、复述、铃、语音按线程 key 各一个对话，id 跨轮、跨回合、跨重启不变；后台运行和子对话各是新对话，每次一个新 id（同旧运行时「没有自己对话的回合每次新 id」）。和旧运行时不同的两处：id 是 uuid 不是线程 id，整库换代后换新（缓存早过期，无所谓）；Codex 和 openai-responses 的模型现在也带会话头（坑 560）。`origin/main`（0.23.3）的 `durable-models.ts` 只差一行注释，pi-durable、pi-ai 同为 1.1.0，书的回合同样带，不受影响，不用补丁。`tests/legion/durable/session-id.test.ts` 八条，用真 provider 对象（`createAppModels`）加假 fetch，在出站请求上断言：OpenCode 一回合两轮加下一回合同一个头、两线程两个、Anthropic 格式模型也带、关库重开仍是同一个；Fireworks 两轮同一个 `x-session-affinity`；Codex 两回合同一个 `session-id` 且等于 `prompt_cache_key`；DeepSeek 无会话头无缓存键；两次后台运行两个头。`tests/legion/durable/support/runtime.ts` 加了 `models` 选项。`call-setup.ts`、`providers.ts` 的注释改成说清那张表只管 `streamChat`。
+
+删了：`stall.ts` 的整回合时限（`TurnLimitError`、`isTurnLimit`、`turnLimitFor`、`TURN_LIMIT_MS`、`INFO_TURN_LIMIT_MS`、`TURN_LIMIT_MESSAGE`，连同 watch 的 `limit()` 和 `onLimit`）、`StallError`、`isStall` 和那条测试；`turn-log-sink.ts` 的 `"timed-out"` 留给旧日志行。`soul/delivery.ts` 的 `originOf` 去掉 export。
+
+文档：25、55（execute 改写成 runner 加 durable，session 改写成 durable 库，目录树换成现状，「现状与顺序」开头注明路径以当时为准）、67、71、75、78、86、`north-star/legion-rest.md`（删了只属于 pi-agent-core 的看门狗两个未定点）。
+
+测试：`bun run typecheck` 两段 TC=0；`scripts/t.sh` 全量两遍都是 7420 pass、1 skip、0 fail、RC=0；`bun run wasm` 后 `bun run build` RC=0。提交 bf80cdc9。坑 560、563 用了。
+
+没做：Linux xvfb faux 冒烟（工具调用预算用完）。驱动已备好在会话 scratchpad `p4smoke/tools/`（从 `vcl4/tools` 拷来，`vd.py` 已指向本 worktree、`:91`、`p4smoke/pids`），二进制仍是 `agent-a29761742e18fa5a4` 的 verifylinux debug 版（10-10 之后 Rust 没变）。测试数据目录 `~/.local/share/com.xinyuan.readingpartner.verifylinux` 里本来就有旧运行时留下的 `session/`（`--session-soul--`、`--session-worker--`），起 app 前再放一个标记文件进去，起来后看整个目录没了。下一棒：`vd.py up x up vite up app`，先确认 `window.__fauxCalls` 有定义（faux 生效）再发；一个书回合（`book.py` 的 `open_lesson` + `send`，等落盘 2700 字）、一个门口回合（`run.py` 的 `OPEN` + `send`）、书回合流到三百字时 `vd.py kill-app` 再 `up app`，看线程文件半句一次、屏幕一次、`__fauxCalls` 保持 0。收尾按 `p4smoke/pids/history` 杀。
+
+设备上怎么验（主会话排）：iPad / 模拟器装这一版后，确认 app 沙盒里 `session/` 没了；走一遍第一、二阶段的杀进程（书、门口）和 steer；断网时触发一次蒸馏，看 `distill-failed` 的 `errorName` 是 `OfflineError`。用 OpenCode Go 跑一个书回合和一个门口回合，确认不报 400 MissingSessionID（单测已钉出站头，真服务没打过）。
