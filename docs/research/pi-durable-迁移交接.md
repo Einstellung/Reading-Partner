@@ -966,3 +966,12 @@ Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 
 - 观察：手机上点 `briefing` 卡只收卡、回到 Today，不打开 info 对话（`planJump` 对 briefing 在所有外壳都走 `go-to-briefing`），早于 pi-durable，没动。
 - 失误：放凭据时 iPhone app 还连着 bridge，iPad 那次 eval 落到了 iPhone（坑 432），iPad 没开 faux 就带占位凭据起了一次，两次后台 subagent 请求打到 Anthropic、以占位 token 失败（`ok:false`、0 token），没有模型跑起来。之后两台各自单独驱动。坑 566、567 没用。
 - 环境：vite PID 6596（子进程 6598，`/tmp/pdv7/vitepid`，`/tmp/pdv4/pids-history`）在 `~/rp-flow` bb6864c0 上留着跑，旧的 93907/93909 已停；ios_webkit_debug_proxy 78195 没动。两台 `.dev` app 已退出、凭据已删、`__fauxPlan` 已清，iPhone `device.json` 的 provider 改回 null。
+
+## 第四阶段 iPad 真机验收（分支 `verify/pi-durable-4-ipad`，从 `origin/dev/pi-durable-4` c7e0ca62 起）
+
+2026-10-12，没跑成：装包后 iPad 从 Mac 的 USB 上掉了。Mac `~/rp-ipad` 切到 c7e0ca62，`bun install` 后手动删了残留的 `node_modules/@earendil-works/pi-agent-core`，`OUT=/tmp/rp-dev-ipad-p4.ipa bash ~/build.sh`（`VITE_VERIFY_FAUX=1`）出包，读回 CFBundleIdentifier 为 `.dev`，`apps install` 报 Installation succeed。装前 `.dev` 容器里有旧 `session/`（`--session-soul--`、`--session-turn--`、`--session-worker--`），又放了 `session/marker.txt`。装完紧接着的 `dvt launch` 报 `Connection was terminated abruptly`，之后 `usbmux list` 一台设备都没有，等了 3 分多钟没回来，要人看 iPad（线、锁屏、重启）。新包有没有起过一次不知道，所以升级那项要先看 `session/` 还在不在：在，就是还没起过，第一次 `launch` 后看它没了。
+
+- 驱动：Mac `~/v5.py`（副本在会话 scratchpad `verify-phase4-ipad/tools/v5.py`），沿用 `~/v2.py` 的 flow。顺序：`v5.py setup`（`device.json` 改 anthropic / claude-haiku-5-5、放占位凭据、faux 20 tok/s，重起）→ `v2.py flow door close`、`flow door kill` → `v5.py faux 8` 后 `v2.py flow door bg60` → `v2.py flow book steerstop`、`v5.py booktk` → `v2.py flow coach close`、`flow retell close`（结果里有 Send 是否被卢明盖住）→ `v2.py bell` → `v5.py prep`（挪开 prep 目录、400 tok/s 跑完 63 章再放回）→ `v5.py clean`（删凭据、清 `__faux*`、`device.json` 改回 openai / gpt-6-luna）。
+- 软键盘：页面 JS 弹不出来。pymobiledevice3 的 `AccessibilityAudit` 有 `iter_elements` 和 `perform_press`（注释说目标进程要 `task_for_pid-allow`，`.dev` 是开发签名，没试过），可能是唯一能在真机上点进 textarea 弹键盘的路。
+- `/tmp/v2/pids` 末行混进了一个 `40`（launch 失败时从错误行里抓到的数字），下次 `kill` 前先删掉这一行。
+- 收尾：没放过凭据（占位和真的都没有），Linux、Mac、设备上没有副本。Mac 上没留我起的进程；ios_webkit_debug_proxy 78195、vite 6596/6598 没动。坑 568、569 没用。
