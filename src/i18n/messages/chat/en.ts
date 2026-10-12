@@ -95,6 +95,7 @@ export default {
   "call.pageBadge": "p. {page}",
   "call.clearFocus": "Clear chapter focus",
   "call.backToReading": "Back to reading",
+  "call.close": "Close",
   "call.deleteConversation": "Delete conversation",
   "call.deleteTitle": "Delete this conversation?",
   "call.deleteDescription": "The conversation goes, and with it the mark it was opened from. This cannot be undone.",

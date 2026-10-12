@@ -133,14 +133,16 @@ export default function CallView({
 	// the composer to the bottom edge and Lumen went on standing on it.
 	const composerKey = empty ? "composer-centred" : "composer-edge";
 	const Scope = scalable ? ChatScaleScope : PlainScope;
-	// Held in a variable because two of the three headers below use it.
+	const t = useT();
+	// Held in a variable because two of the three headers below use it. It only
+	// closes the view: a turn still running carries on, and only Stop ends it.
 	const hangUp = (
 		<Button
 			type="button"
 			variant="ghost"
 			size="icon"
-			title="Hang up"
-			aria-label="Hang up"
+			title={t("chat.call.close")}
+			aria-label={t("chat.call.close")}
 			onClick={onHangUp}
 			className="h-9 w-9 rounded-full text-neutral-500"
 		>
@@ -155,7 +157,6 @@ export default function CallView({
 	// the call drops everything above its list, the host's bar, the corner
 	// controls and the chapter line, for the composer and a line or two of the
 	// conversation. They come back with the keyboard's going.
-	const t = useT();
 	const keyboard = useKeyboardRoom();
 	const cramped = keyboard.cramped;
 

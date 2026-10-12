@@ -16,14 +16,20 @@
 // One conversation, one turn at a time: with the text chat open on it the
 // turn runs in the chat's session (place-session.ts voice()), so the chat
 // shows it and a line typed meanwhile goes into it; with nothing open it runs
-// on its own, and a chat opened during it follows it (resume()).
+// on its own, and a chat opened during it follows it (resume()). A line spoken
+// while another turn runs on the conversation — the reader's, a bell's, one a
+// closed chat left running, one recovery resumed — waits for it to land and is
+// then assembled over what it left, as a bell does (place-bell.ts). It is not
+// steered into that turn: the call speaks only its own turns.
 //
 // Lives here and not in info/briefer: it drives place-session.ts, and
 // reading/turn already depends on info/briefer (info-bell.ts).
 
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { replayableHistory } from "../../ai/turn-view/turn-rows";
 import type { TurnActivity } from "../../ai/turn-view/activity";
 import { catalogDescribe, type DeviceDurable } from "../../legion/durable/device";
+import { turnInFlight, TurnBusy } from "../../legion/durable/turn";
 import { STALL_MESSAGE } from "../../legion/execute/stall";
 import type { AgentTool } from "../../legion/execute/contract";
 import {
@@ -33,11 +39,18 @@ import {
   patchThreadMessage,
   type ThreadStore,
 } from "../../platform/app/threads";
-import { prepareInfoTurn, watchInfoConversation, type InfoTurnPrepared } from "../../info/briefer/info-durable";
+import {
+  infoThreadKey,
+  infoThreadOrigin,
+  prepareInfoTurn,
+  watchInfoConversation,
+  type InfoTurnPrepared,
+} from "../../info/briefer/info-durable";
 import type { InfoCallAnchor } from "../../info/briefer/anchors";
 import type { VoiceCallModel, VoiceCallTranscript } from "../../soul/voice/voice-call";
 import { INTERRUPTED_MARK, type VoiceTurn } from "../../soul/voice/voice-session";
 import { drivePlaceTurn, type BookTurnEnd } from "./book-turn-rows";
+import { turnsStarting } from "./detached-turns";
 import type { CallRow } from "./call-state";
 import { readingDurable } from "./durable-runtime";
 import type { StallOptions } from "./durable-turn";
@@ -152,6 +165,8 @@ interface Reply {
 }
 
 /** The two ports a voice call takes (soul/voice/voice-call.ts), on the day's info conversation. */
+const BUSY = Symbol("busy");
+
 export function infoVoiceThread(opts: InfoVoiceOptions): { model: VoiceCallModel; transcript: VoiceCallTranscript } {
   const store = opts.store ?? appStore;
   const now = opts.now ?? Date.now;
@@ -210,28 +225,42 @@ export function infoVoiceThread(opts: InfoVoiceOptions): { model: VoiceCallModel
     },
   };
 
-  // The turn in the open conversation's session, or on its own; null when the signal went first.
+  // Resolves once no turn runs on the conversation, or the signal has gone.
+  async function quiet(runtime: DeviceDurable, key: string, signal: AbortSignal): Promise<void> {
+    const gone = new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+    for (;;) {
+      if (signal.aborted) return;
+      const session = sessionOf(key);
+      if (session?.running()) {
+        await Promise.race([session.idle(), gone]);
+        continue;
+      }
+      // One being assembled, then one with no session of its own (a bell's, a closed chat's, a resumed one).
+      await Promise.race([turnsStarting(key), gone]);
+      if (signal.aborted) return;
+      const found = await turnInFlight(runtime.runtime, key, BACKGROUND_CONTEXT);
+      if (!found) return;
+      await Promise.race([found.settled, gone]);
+    }
+  }
+
+  // The turn in the open conversation's session, or on its own; null when the
+  // signal went first, BUSY when another turn got the conversation first.
   async function run(
+    runtime: DeviceDurable,
     request: PlaceBellRequest,
     after: number,
     onRows: (rows: CallRow[]) => void,
     signal: AbortSignal,
-  ): Promise<BookTurnEnd | null> {
-    const started = durable();
-    if (!started) throw new Error("the turn runtime has not started");
-    const runtime = await started;
-    for (;;) {
-      if (signal.aborted) return null;
-      const session = sessionOf(request.key);
-      // The reader's own turn in the chat: this one goes after it.
-      if (session?.running()) {
-        await session.idle();
-        continue;
-      }
+  ): Promise<BookTurnEnd | null | typeof BUSY> {
+    if (signal.aborted) return null;
+    const session = sessionOf(request.key);
+    if (session?.running()) return BUSY;
+    try {
       const turn = session
         ? session.voice(after, request, onRows)
         : await drivePlaceTurn(runtime, { ...request, ...opts.stall }, onRows);
-      if (!turn) continue;
+      if (!turn) return BUSY;
       const stop = () => turn.stop();
       signal.addEventListener("abort", stop, { once: true });
       if (signal.aborted) stop();
@@ -240,6 +269,9 @@ export function infoVoiceThread(opts: InfoVoiceOptions): { model: VoiceCallModel
       } finally {
         signal.removeEventListener("abort", stop);
       }
+    } catch (e) {
+      if (e instanceof TurnBusy) return BUSY;
+      throw e;
     }
   }
 
@@ -247,43 +279,56 @@ export function infoVoiceThread(opts: InfoVoiceOptions): { model: VoiceCallModel
     // The reader's line is in the thread already (the machine records before
     // it asks); the opening turn's kickoff is the driver's and has no line.
     const lineTs = lines.get(turn);
-    const before = (store.get(bookId, threadId)?.messages ?? []).filter((m) => m.ts !== lineTs);
-    const prepared = await prepare({
-      anchor: opts.anchor,
-      key: bookId,
-      dateKey: opts.dateKey,
-      signal,
-      messages: [...replayableHistory(before), { role: "user", text }],
-      // No meals tools: a call is only ever anchored to a day.
-      companionTools: opts.tools,
-    });
-    if (signal.aborted) return;
-    if (prepared.kind === "failed") throw new Error(prepared.message);
-    // Abandoned, or too big to leave the model room to answer: the floor goes back to the reader.
-    if (prepared.kind !== "turn") return;
-    const request: PlaceBellRequest = {
-      key: prepared.key,
-      origin: prepared.origin,
-      conversation: threadId,
-      surface: "info",
-      line: { text: prepared.line, ...(lineTs !== undefined ? { ts: lineTs } : {}) },
-      systemPrompt: prepared.systemPrompt,
-      tools: prepared.tools,
-      model: prepared.model,
-      ...(prepared.thinkingLevel ? { thinkingLevel: prepared.thinkingLevel } : {}),
-      describe: catalogDescribe(prepared.tools),
-    };
-    const reply: Reply = {};
-    replies.set(turn, reply);
-    const feed = voiceFeed({ onDelta, onActivity });
-    const after = lineTs !== undefined ? lineTs - 1 : Math.max(now(), ...(store.get(bookId, threadId)?.messages ?? []).map((m) => m.ts));
-    // The reader hears the reply as it is written: it lands as one they saw, without a box card.
-    const unwatch = watch(prepared.key);
-    let end: BookTurnEnd | null;
-    try {
-      end = await run(request, after, (rows) => feed.push(rows), signal);
-    } finally {
-      unwatch();
+    const started = durable();
+    if (!started) throw new Error("the turn runtime has not started");
+    const runtime = await started;
+    const key = infoThreadKey(infoThreadOrigin(opts.anchor, opts.dateKey));
+    let end: BookTurnEnd | null | typeof BUSY = BUSY;
+    let reply: Reply = {};
+    while (end === BUSY) {
+      // Another turn on the conversation lands first, and this one is assembled over what it left.
+      await quiet(runtime, key, signal);
+      if (signal.aborted) return;
+      // The line by role as well as stamp: a reply can land in the same millisecond (docs/pitfall/554).
+      const others = (store.get(bookId, threadId)?.messages ?? []).filter((m) => !(m.role === "user" && m.ts === lineTs));
+      const prepared = await prepare({
+        anchor: opts.anchor,
+        key: bookId,
+        dateKey: opts.dateKey,
+        signal,
+        messages: [...replayableHistory(others), { role: "user", text }],
+        // No meals tools: a call is only ever anchored to a day.
+        companionTools: opts.tools,
+      });
+      if (signal.aborted) return;
+      if (prepared.kind === "failed") throw new Error(prepared.message);
+      // Abandoned, or too big to leave the model room to answer: the floor goes back to the reader.
+      if (prepared.kind !== "turn") return;
+      const request: PlaceBellRequest = {
+        key: prepared.key,
+        origin: prepared.origin,
+        conversation: threadId,
+        surface: "info",
+        line: { text: prepared.line, ...(lineTs !== undefined ? { ts: lineTs } : {}) },
+        systemPrompt: prepared.systemPrompt,
+        tools: prepared.tools,
+        model: prepared.model,
+        ...(prepared.thinkingLevel ? { thinkingLevel: prepared.thinkingLevel } : {}),
+        describe: catalogDescribe(prepared.tools),
+      };
+      reply = {};
+      replies.set(turn, reply);
+      const feed = voiceFeed({ onDelta, onActivity });
+      // The turn's rows go under the line, and under what a turn that landed after the line left.
+      const stamps = others.map((m) => m.ts);
+      const after = lineTs !== undefined ? Math.max(lineTs - 1, ...stamps) : Math.max(now(), ...stamps);
+      // The reader hears the reply as it is written: it lands as one they saw, without a box card.
+      const unwatch = watch(prepared.key);
+      try {
+        end = await run(runtime, request, after, (rows) => feed.push(rows), signal);
+      } finally {
+        unwatch();
+      }
     }
     if (!end) return;
     // Cut by the stall watch: nothing landed.

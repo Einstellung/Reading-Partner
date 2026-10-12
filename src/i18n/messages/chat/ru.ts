@@ -91,6 +91,7 @@ export default {
   "call.pageBadge": "с. {page}",
   "call.clearFocus": "Снять фокус с главы",
   "call.backToReading": "Вернуться к чтению",
+  "call.close": "Закрыть",
   "call.deleteConversation": "Удалить разговор",
   "call.deleteTitle": "Удалить этот разговор?",
   "call.deleteDescription": "Разговор будет удалён вместе с пометкой, из которой он был открыт. Это действие нельзя отменить.",

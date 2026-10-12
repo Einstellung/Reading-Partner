@@ -267,7 +267,7 @@ test("Learn puts the book's lesson over the reader, and the reader stays mounted
   );
   expect(lesson?.textContent).toContain("Still reading through this book");
   // No dictation, no hang-up: the bar's back is the way out.
-  expect(lesson?.querySelector('[aria-label="Hang up"]')).toBeNull();
+  expect(lesson?.querySelector('[aria-label="Close"]')).toBeNull();
   expect(lesson?.querySelector('[aria-label="Back to the page"]')).not.toBeNull();
   // The column was not unmounted to make room.
   expect(getByTestId("pane")).not.toBeNull();

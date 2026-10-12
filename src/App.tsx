@@ -110,6 +110,7 @@ import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
 import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
+import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
 import { toggleLumenShown, useLumenShown } from "./ui/components/lumen/use-lumen-shown";
 import {
   readSidebarCollapsed,
@@ -1074,12 +1075,23 @@ export default function App() {
     closeBook(readerShell, bookIdRef.current, docIdRef.current);
   }, [readerShell]);
 
-  // Where Lumen stands, and whether at all. Everywhere but the full-window chat
-  // the bottom-right corner is hers; there the composer is on that edge and she
-  // stands above it, off the composer's measured box (lumen/corner-placement.ts).
+  // Where Lumen stands, and whether at all. Everywhere but a conversation that
+  // has the whole window the bottom-right corner is hers; there the composer is
+  // on that edge and she stands above it, off the composer's measured box
+  // (lumen/corner-placement.ts). Two such conversations here: the full-window
+  // chat over the reader, and a talk's coaching or a retell in the library,
+  // which says it is up by filling the composer slot.
+  const [studyComposer, setStudyComposer] = useState(false);
   const { composerRef: lumenComposerRef, placement: lumenPlacement } = useCornerLift(
     lumenShown,
-    call?.view === "chat-main",
+    call?.view === "chat-main" || studyComposer,
+  );
+  const studyComposerSlot = useCallback(
+    (el: HTMLElement | null) => {
+      setStudyComposer(el !== null);
+      lumenComposerRef(el);
+    },
+    [lumenComposerRef],
   );
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
@@ -1575,19 +1587,21 @@ export default function App() {
           )}
 
           {!inReader && homeScreen === "library" && (
-            <LibraryScreen
-              topics={topics ?? []}
-              activeTopic={activeTopic}
-              onOpenTopic={(t) => setActiveTopicId(t.id)}
-              onCloseTopic={() => setActiveTopicId(null)}
-              onAddFile={addFile}
-              onOpenFile={openFile}
-              onTopicsChanged={refreshTopics}
-              onSay={(line) => pushToast("error", line)}
-              onTell={(line) => pushToast("info", line)}
-              open={studyOpen}
-              onOpened={clearStudyOpen}
-            />
+            <ComposerSlotContext.Provider value={studyComposerSlot}>
+              <LibraryScreen
+                topics={topics ?? []}
+                activeTopic={activeTopic}
+                onOpenTopic={(t) => setActiveTopicId(t.id)}
+                onCloseTopic={() => setActiveTopicId(null)}
+                onAddFile={addFile}
+                onOpenFile={openFile}
+                onTopicsChanged={refreshTopics}
+                onSay={(line) => pushToast("error", line)}
+                onTell={(line) => pushToast("info", line)}
+                open={studyOpen}
+                onOpened={clearStudyOpen}
+              />
+            </ComposerSlotContext.Provider>
           )}
         </div>
 

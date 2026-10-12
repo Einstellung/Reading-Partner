@@ -33,7 +33,7 @@ function backButton(root: HTMLElement): HTMLButtonElement | null {
 
 // Booleans rather than the elements: a failed `toBeNull` on a node prints the
 // whole rendered tree, which is a conversation window.
-const hangUp = (root: HTMLElement) => root.querySelector('[aria-label="Hang up"]') !== null;
+const closeBtn = (root: HTMLElement) => root.querySelector('[aria-label="Close"]') !== null;
 const trash = (root: HTMLElement) => root.querySelector('[aria-label="Delete conversation"]') !== null;
 const back = (root: HTMLElement) => backButton(root) !== null;
 
@@ -52,7 +52,7 @@ test("an aside offers the way back and nothing else", () => {
   fireEvent.click(button!);
   expect(returned).toEqual([true]);
 
-  expect(hangUp(root)).toBe(false);
+  expect(closeBtn(root)).toBe(false);
   expect(trash(root)).toBe(false);
   // An aside reads the chapter its parent is parked on and states none of its own.
   expect(root.textContent).not.toContain("Chapter 3");
@@ -64,7 +64,7 @@ test("an aside offers the way back and nothing else", () => {
 test("an aside whose parent is gone keeps the hang-up instead", () => {
   const root = draw({ aside: {}, onDelete: () => {} });
 
-  expect(hangUp(root)).toBe(true);
+  expect(closeBtn(root)).toBe(true);
   expect(back(root)).toBe(false);
   expect(trash(root)).toBe(false);
 });
@@ -75,7 +75,7 @@ test("a call that is not an aside keeps the hang-up, the delete and the focus li
     chapterFocus: { chapter: "Chapter 3", firstPage: 64, lastPage: 107 },
   });
 
-  expect(hangUp(root)).toBe(true);
+  expect(closeBtn(root)).toBe(true);
   expect(trash(root)).toBe(true);
   expect(root.textContent).toContain("Chapter 3 · p.64-107");
   expect(back(root)).toBe(false);

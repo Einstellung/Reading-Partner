@@ -773,6 +773,41 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 收尾：`credentials.json` 已删并确认不在，`__faux*` 键已清，app 重起（PID 7738）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里三餐线程多了几问几答，购物清单没变。
 - 还没走：真模型一回合（要新的 access token）、语音。
 
+第四棒（真模型）（2026-10-12，分支 `verify/pi-durable-2-ipad4`，从 `dev/pi-durable-2` e595e3c8 起）：iPad 上还是 7195343e 的 `.dev` 包。用户 Linux app 改登 OpenAI，按用户定的用 app 里 openai 最便宜的 `gpt-6-luna`（输入 0.1、输出 0.5 美元/百万 token）。`settings.json` 写 `defaultProviderId: openai`、三个模型 id 都是 gpt-6-luna，重起 app（PID 7753）；凭据只拷 `openai` 的 `type`、`access`、`expires`，`refresh` 填假值，过期前还有约 10 天。驱动 Mac `~/v4.py prep|run|clean`（副本在会话 scratchpad `verify-ipad2/tools/v4.py`），报告页加了「Round 4」一节。
+
+- 没过，找到真 bug：门口回合 `start` 后 59 ms `end error no_model`，没发请求。durable 回合按 app 的 provider id（`openai`）找模型，`createAppModels` 按 pi 的 id（`openai-codex`）登记（坑 546）。修在本分支：app id 和 pi id 不同时按 app id 再登记一份，加了 `tests/ai/durable-models.test.ts`；`scripts/t.sh`、`bun run typecheck` 过。所以切后台 60 s 那半没量到：回合在后台前就已经失败。
+- 模型请求共 2 次，都是回前台时那次启动 `subagent` 回合（老路，provider 记 `openai-codex`，第 1 轮 toolUse、第 2 轮 stop，`done`，8.4 s）。门口 0 次。页面里挂 `__TAURI_INTERNALS__.invoke` 计数没挂上（属性不可写），次数按 turn-log 的轮数算。
+- 库：这回合前后主库 1,658,880、WAL 4,223,032 字节都没变（失败回合只写了 turn-log 和对话里读者那一句）。
+- 收尾：Linux scratch、Mac `/tmp/rp-cred4.json`、设备容器的 `credentials.json` 都删了并逐个确认不在，日志里没有 token 值。`settings.json` 留着 openai / gpt-6-luna。iPad 上 `.dev` app PID 7753 在跑；Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。
+- 接着做：带这个修复重新出 `.dev` 包装到 iPad，再放一次凭据跑 `~/v4.py run`（门口一回合加切后台 60 s）。用户给的 3 次请求已用掉 2 次，启动时的 `subagent` 回合可能再吃 0 到 2 次，要先找用户要新的次数。
+- 重跑（同日，`dev/pi-durable-2` 5abfac2d，含本修复、按设备存模型设置、「Hang up」改「Close」）：Mac `~/rp-ipad` 切到 5abfac2d，`bash ~/build.sh`（`~/build.sh` 没有执行位）出 `/tmp/rp-dev-ipad4.ipa`，读回 CFBundleIdentifier 为 `.dev`，`apps install` 成功（旧的 PID 7753 随安装退出）。之后 `dvt launch` 一直报 `Failed to launch process`，截屏全黑：iPad 锁屏或灭屏了，要人解锁。凭据这次还没放，Linux、Mac、设备上都没有副本。用户给的 6 次请求一次没用。
+- 解锁后跑完（app PID 7967 起、改 `device.json` 后重起为 7975）：新包第一次启动 `device.json` 里没有 provider/model 三个键（不在时回落 `settings.json`，是设计如此），为保险写进 openai / gpt-6-luna 再重起。凭据同样只拷 `type`、`access`、`expires`，`refresh` 填假值。
+- 门口回合一（等正文出现再切后台）：过，但没测到冻结。turn `31d24c69`，start → 第 1 轮首字节 3.4 s（`toolUse`，卢明的「Where this belongs」归档卡）→ 第 2 轮首字节 3.2 s → `end done` 9.0 s，答案 696 字。正文开始画后 1 s 发出切后台，回合在切后台后约 1.6 s 写完，落在进后台的宽限里；回前台没有重问、没有停摆，答案进对话文件一次。
+- 门口回合二（发出后立即切后台，问题要八段）：过。turn `7f9d68a2`，切后台的命令返回时回合刚起，之后第 1 轮首字节、`toolUse`、第 2 轮首字节、`end done`（13.7 s，1975 字）都在后台发生，最后一行在进后台后约 10 s；回前台 60 s 后答案已在，读者那句和答案各一次，没有重问、没有多余回合、看门狗没动作。门口对话开着，没放卡（box 12 个不变）。所以这台 iPad 进后台后 JS 还能跑约 10 s，比第一阶段量到的「几秒」长；gpt-6-luna 这种快模型的回合在宽限里就跑完，测不到冻结 60 s 再接上的那条路（那条第二轮已用慢速 faux 验过）。
+- 请求：共 4 次，两个门口回合各 2 轮（第 1 轮归档工具、第 2 轮回答）；这次启动和回前台都没有 `subagent` 回合。加上第一次失败那轮的 2 次，今天对 OpenAI 一共 6 次。
+- 库：回合一后主库从 1,658,880 涨到 1,687,552 字节（+28 KB），回合二后不变；WAL 文件一直是 4,223,032 字节（复用已分配的页，没 checkpoint）。
+- 观察：凭据放好以后首页简报卡还显示「Configure a provider to begin」（截图 r4-door-bg60-early-landed），没查。
+- 收尾：Linux scratch、Mac `/tmp/rp-cred4.json`、设备容器的 `credentials.json` 都删了并逐个确认不在，Mac 上 7 份 r4 日志里没有 token。`device.json` 和 `settings.json` 留着 openai / gpt-6-luna。iPad 上 `.dev` app PID 7975 在跑；Mac 上 ios_webkit_debug_proxy 78195 在，vite 6861/6863 已不在（不是我杀的，大概随 `~/rp-ipad` 换版本重建时退出）。
+
+## 被杀后恢复首字慢 13 秒（分支 `fix/recovery-first-byte`，从 `origin/dev/pi-durable-2` f5aaf7d5 起）
+
+不是产品延迟，是 turn-log 记错（坑 555）。首字节只由跟随者写，恢复的回合没人跟随，读者点开课堂线程时第一张视图里已是流了一半的回答，被当成第一片，记下的是「请求到打开线程」的时长。iPad 上的 13 s 就是驱动重开线程花的时间；那一轮 `round` 的总时长（34.4 s / 37.9 s）等于 faux 正常流完的时间，工具重跑也是全速（脚手架的延时只包本进程装配的 desk，恢复的回合不经 `put`）。
+
+Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`，没调真模型）：`read_pages` 拖 20 s 时 SIGKILL，重启后等 20 s 再开课堂。恢复请求在重启后 +12.49 s 发出，faux 第一个 delta 在 +12.74 s，`follow` 在 +36.64 s，turn-log 的 `first-byte` 在 +36.84 s、`ms=24311`。修后同样跑一遍，那一轮只有 `round` 和 `end`，没有假首字节。
+
+修法：`resumedPlaceTurn` 的跟随者带 `joining`，第一张视图里已有回答就调 `DurableTurnLog.joined`，这一轮不写首字节；之后的轮次照常。单测两条在 `tests/reading/turn/durable-turn-log.test.ts`（去掉修复时集成那条失败）。全量 `scripts/t.sh` 7498 过、0 失败，`bun run typecheck` 过。
+
+驱动在会话 scratchpad `rfb/tools/rk.py`（`rk.py <重开前等几秒> <tag>`）。它要一份带计时的脚手架（`rfb/dev-faux.instrumented.ts`，没提交）：faux 只在读者那句以 `RFB` 开头时出工具调用，其余一律文字，否则启动时的 `subagent` 回合和课堂预备会先吃掉计划里的 tool 步。坑 556 没用。
+## 语音回合撞上在途回合（分支 `fix/voice-turn-queue`，从 `origin/dev/pi-durable-2` f5aaf7d5 起）
+
+- 现象：通话中说一句，对话上已有别的回合（铃的 headless 回合、重启恢复的回合、关掉对话后还在跑的文字回合）没有 session，语音回合 `startTurn` 报 `TurnBusy`，这句 failed 回到听。
+- 改法：`info-voice.ts` 的 `answer` 先 `quiet()` 等对话上没有回合（打开的 session 在跑就等 `idle()`；再等 `turnsStarting`，再 `turnInFlight` 的 `settled`），等完才读线程文件、装配、起回合；起的时候仍撞 `TurnBusy`（session 的 guest 或 headless）就回到等，重新装配。语音那句只落一次、只答一次，等的时候不抛错，通话界面停在思考态。对自己语音回合的打断（坑 529）不变。
+- 定的：说的话不插进在跑的读者回合，排在它后面。`say()` 插话是因为打字的人在对话里看着那个回合；通话只念自己的回合，插进别的回合答案就不会被念出来，打断也会停掉别人的回合。
+- `withPlaceTurnRows`：回合自己画的行（语音那句）不在 `after` 之上再画一次。语音那句落盘早于被等的回合，等完 `after` 取线程里最后一行，那句画在被等回合的答案下面。
+- 测试：`info-voice.test.ts` 加 4 个（无人看的铃、对话开着跟着恢复的回合、关掉对话后的文字回合、同一毫秒），原打断用例不动。
+- 没做：Linux xvfb 走查（只跑单测）。线程文件里语音那句排在被等回合的答案前面（落盘按说出的时间），重开对话时也这样显示，同打字插话没被接走时的落盘。
+- 新测试初版偶发失败（铃的回答不在语音回合历史里、屏幕上也没了），插桩复现 40 次 19 次：时间线是先后的（铃落盘后语音才装配、起跑，没有并发，faux 顺序没乱），是铃的回答和语音那句同一毫秒，`answer()` 按 `ts` 排除那句把回答一起排掉，见坑 554。改成角色加时间戳，四处 `excludeTs` 回退一并改；加一个固定时钟的用例（修前必挂），三个撞车用例恢复成别的回合一起跑就说话，连跑 25 遍全过。
+
 ## 第三阶段 A 棒：子 agent（分支 `dev/pi-durable-3-a`，从 `origin/dev/pi-durable-3` f5aaf7d5 起）
 
 做完的：
