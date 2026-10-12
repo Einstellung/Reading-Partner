@@ -25,6 +25,7 @@
 | 改合并策略、往 settings.json 加字段 | 存储与数据目录 |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 + 开发环境 |
+| 不用 Mac：CI 出 dev 包、Linux 经 USB 驱动真机（pymobiledevice3、WDA、MCP） | iOS 构建与签名 |
 | 不出整包，只验原生插件的 Swift / Rust 编得过 | iOS 构建与签名 |
 | 动 CI 的构建缓存、靠 build script 生成的东西 | iOS 构建与签名 |
 | SSH 远程到 Mac 上签名、构建 | iOS 构建与签名 |
@@ -269,6 +270,12 @@
 - [427-a-copied-cargo-target-breaks-swift-rs-module-cache](./ios-build/427-a-copied-cargo-target-breaks-swift-rs-module-cache.md) — 把老检出的 `target/aarch64-apple-ios-sim` 克隆到新检出复用，swift-rs 的 `.pcm` 里写死了老的 module cache 路径，build script 重跑时 panic（`missing required module 'SwiftShims'`）；拷完删掉所有 `*/out/swift-rs` 再构建
 - [433-simulator-webcontent-memory-needs-footprint](./ios-build/433-simulator-webcontent-memory-needs-footprint.md) — 模拟器的 WebContent 不在 `simctl spawn launchctl list` 里，是宿主上 `launchd_sim` 的子进程；它的 RSS 同一页面几分钟内在 73-332 MB 间跳，要按父进程找到后用 `footprint` 读 `phys_footprint`，同一会话先量空页面当基线只比差值
 - [521-coredevice-does-not-see-an-ipad-newer-than-xcode](./ios-build/521-coredevice-does-not-see-an-ipad-newer-than-xcode.md) — iOS 比 Xcode 新（26.7.1 对 Xcode 26.6），devicectl 里设备 `pairingState: unsupported`，装机、启动、拷容器都用不了，lockdown 照样通；改走 pymobiledevice3 的 `apps install`/`apps afc`/`dvt launch|kill|screenshot --userspace`
+- [561-tauri-ios-build-debug-still-bundles-the-frontend](./ios-build/561-tauri-ios-build-debug-still-bundles-the-frontend.md) — `tauri ios build --debug` 照样带 `tauri/custom-protocol`，用内嵌前端、不读 devUrl；dev 模式包要在 `tauri ios dev --open --host <ip>` 挂着时自己跑 `xcodebuild archive`，再断言二进制里有 devUrl、没有 `/assets/index-`
+- [562-first-xcuitest-after-mount-times-out-at-60s](./ios-build/562-first-xcuitest-after-mount-times-out-at-60s.md) — 装包或挂盘后第一次用 pymobiledevice3 起 WDA 正好 60 秒报 `initializationForUITestingDidFailWithError`，NSError 内容被吞；设备保持解锁再起一次就好，别去查签名
+- [563-killing-the-local-xcuitest-leaves-wda-running](./ios-build/563-killing-the-local-xcuitest-leaves-wda-running.md) — kill 本地 xcuitest 和 forward 不会停设备上的 WDA runner；先 `dvt process-id-for-bundle-id` + `dvt kill` 停设备上的
+- [564-grep-q-after-strings-fails-under-pipefail](./ios-build/564-grep-q-after-strings-fails-under-pipefail.md) — `strings | grep -q` 在 pipefail 下匹配到也失败：grep 先退，strings 吃 SIGPIPE（141）；先落文件再 grep
+- [565-iphone-use-reports-to-posthog-by-default](./ios-build/565-iphone-use-reports-to-posthog-by-default.md) — iPhone-use MCP 默认往 PostHog 上报每次工具调用；起 server 时带 `IPHONE_USE_ANALYTICS=0 DO_NOT_TRACK=1`
+- [566-simctl-bootstatus-never-returns-over-ssh](./ios-build/566-simctl-bootstatus-never-returns-over-ssh.md) — SSH 里 `simctl bootstatus -b` 永不返回，无头 boot 的模拟器截图报 `no default display port`；boot 后经 `launchctl asuser` 在图形会话里 `open -a Simulator`
 
 ## Android 构建与签名
 
