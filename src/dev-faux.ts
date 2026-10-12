@@ -1,7 +1,8 @@
 // Verification scaffold for on-device runs. Only a build made with
 // VITE_VERIFY_FAUX=1 carries it; every other build folds the guard to false and
 // drops the body. While localStorage.__fauxPlan holds a JSON array of
-// "text" | "tool" steps, the anthropic provider is a slow faux from startup on,
+// steps — "text", "tool" (the __fauxTool call) or a [name, args] call of
+// its own — the anthropic provider is a slow faux from startup on,
 // so a turn the runtime resumes after a restart streams from it too.
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { providers } from "./ai/providers";
@@ -13,7 +14,7 @@ import { coachAssemblies } from "./reading/rehearsal/coach-durable";
 if (import.meta.env.VITE_VERIFY_FAUX === "1") {
   const raw = localStorage.getItem("__fauxPlan");
   if (raw) {
-    const plan: string[] = JSON.parse(raw);
+    const plan: (string | [string, Record<string, unknown>])[] = JSON.parse(raw);
     const repeat = Number(localStorage.getItem("__fauxRepeat") || 30);
     const tps = Number(localStorage.getItem("__fauxTps") || 20);
     const tool = JSON.parse(localStorage.getItem("__fauxTool") || '["read_pages",{"from":1,"to":2}]');
@@ -27,9 +28,10 @@ if (import.meta.env.VITE_VERIFY_FAUX === "1") {
     const steps = [];
     for (let i = 0; i < 40; i++) {
       const kind = plan[i] || "text";
+      const call = Array.isArray(kind) ? kind : kind === "tool" ? tool : null;
       steps.push(() =>
-        kind === "tool"
-          ? fauxAssistantMessage(fauxToolCall(tool[0], tool[1]), { stopReason: "toolUse" })
+        call
+          ? fauxAssistantMessage(fauxToolCall(call[0], call[1]), { stopReason: "toolUse" })
           : fauxAssistantMessage(fauxText(answer(i + 1))),
       );
     }
