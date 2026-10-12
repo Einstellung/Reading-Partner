@@ -14,7 +14,7 @@
 
 import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
-import type { AssistantMessage, ImageContent, ModelThinkingLevel, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ModelThinkingLevel, ToolResultMessage } from "@earendil-works/pi-ai";
 import {
   configure,
   defineDoc,
@@ -24,7 +24,6 @@ import {
   type EntryId,
   type EntryRecord,
   type Extension,
-  type JsonObject,
   type SettledSubmissionRecord,
   type ToolExecutionApi,
   type ToolRegistration,
@@ -32,8 +31,8 @@ import {
 } from "@earendil-works/pi-durable";
 import type { BudgetPurpose } from "../../budget";
 import type { AgentTool } from "../execute/contract";
-import { normalizeToolResult } from "../execute/tool-result";
 import type { DurableRuntime } from "./harness";
+import { executeTool } from "./tools";
 
 /** `rp.subagent`: marks a conversation as a sub-agent's child; the round cap and budget purpose its requests keep. */
 export type SubagentState = { name: string; maxRounds: number; purpose: BudgetPurpose };
@@ -100,11 +99,7 @@ function childRegistration(spec: AgentTool, children: ChildDesks): ToolRegistrat
       const tools = await children.tools(api.conversationId, context);
       const tool = tools.find((t) => t.name === spec.name);
       if (!tool) throw new Error(`${spec.name} is not available here`);
-      const raw = await awaitWithContext(tool.execute(args as Record<string, unknown>), context);
-      const { text, images, receipt } = normalizeToolResult(tool, raw);
-      const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-      for (const image of images) content.push({ type: "image", data: image.data, mimeType: image.mimeType });
-      return receipt === undefined ? { content } : { content, details: receipt as unknown as JsonObject };
+      return executeTool(tool, args, context);
     },
   };
 }

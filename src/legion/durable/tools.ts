@@ -75,13 +75,20 @@ export function toolRegistration(spec: AgentTool, desks: DeskCache, runtime: () 
       const tools = await awaitWithContext(desks.tools(api.conversationId, origin, context), context);
       const tool: DurableTool | undefined = tools.find((t) => t.name === spec.name);
       if (!tool) throw new Error(`${spec.name} is not available here`);
-      const raw = tool.runInDurable
-        ? await tool.runInDurable(args as Record<string, unknown>, { api, runtime: runtime() }, context)
-        : await awaitWithContext(tool.execute(args as Record<string, unknown>), context);
-      const { text, images, receipt } = normalizeToolResult(tool, raw);
-      const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-      for (const image of images) content.push({ type: "image", data: image.data, mimeType: image.mimeType });
-      return receipt === undefined ? { content } : { content, details: receipt as unknown as JsonObject };
+      if (!tool.runInDurable) return executeTool(tool, args, context);
+      return toolContent(tool, await tool.runInDurable(args as Record<string, unknown>, { api, runtime: runtime() }, context));
     },
   };
+}
+
+/** Run one call of `tool`, letting go when `context` is cancelled, and shape its result for pi-durable. */
+export async function executeTool(tool: AgentTool, args: unknown, context: Context) {
+  return toolContent(tool, await awaitWithContext(tool.execute(args as Record<string, unknown>), context));
+}
+
+function toolContent(tool: AgentTool, raw: Awaited<ReturnType<AgentTool["execute"]>>) {
+  const { text, images, receipt } = normalizeToolResult(tool, raw);
+  const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
+  for (const image of images) content.push({ type: "image", data: image.data, mimeType: image.mimeType });
+  return receipt === undefined ? { content } : { content, details: receipt as unknown as JsonObject };
 }

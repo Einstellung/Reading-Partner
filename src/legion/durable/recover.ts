@@ -12,14 +12,16 @@
 
 import type { Context } from "@earendil-works/chord";
 import { LiveDoc, type ConversationId, type SubmissionId } from "@earendil-works/pi-durable";
+import { isBackground } from "./background";
 import { childState, SubagentDoc } from "./child";
-import { PartialDoc, RecoveryDoc } from "./extension";
+import { PartialDoc, RecoveryDoc, ThreadDoc } from "./extension";
 import type { DurableRuntime } from "./harness";
 import { stopTurn, textOf, type WithdrawnSteer } from "./turn";
 
 export const MAX_ATTEMPTS = 2;
 
-export type RecoveryOutcome = "mid-text" | "in-tool" | "nothing" | "gave-up";
+/** `background`: a background pass's conversation, aborted whatever it was doing (background.ts). */
+export type RecoveryOutcome = "mid-text" | "in-tool" | "nothing" | "gave-up" | "background";
 
 export interface Recovered {
   conversationId: ConversationId;
@@ -35,8 +37,20 @@ export async function recoverBeforeResume(runtime: DurableRuntime, context: Cont
   const conversations = new Set<ConversationId>();
   for (const record of inspection.submissions) if (record.status === "placed") conversations.add(record.conversationId);
 
+  // A background pass's conversation is aborted whatever it was doing, queued
+  // input and its tool tasks included: its run's tools died with the process.
+  const background = new Map<ConversationId, SubmissionId>();
+  for (const record of [...inspection.submissions, ...inspection.tasks.map((task) => task.record)]) {
+    if (background.has(record.conversationId)) continue;
+    if (!isBackground((await harness.snapshot(ThreadDoc, record.conversationId, context))?.origin)) continue;
+    const live = await harness.snapshot(LiveDoc, record.conversationId, context);
+    background.set(record.conversationId, (live?.run?.inputs[0] ?? record.id) as SubmissionId);
+  }
+
   const sorted: { conversationId: ConversationId; submission: SubmissionId; outcome: RecoveryOutcome }[] = [];
+  for (const [conversationId, submission] of background) sorted.push({ conversationId, submission, outcome: "background" });
   for (const conversationId of conversations) {
+    if (background.has(conversationId)) continue;
     // A tool call's child resumes with its call (child.ts): the replay-safe
     // call finds it again; an aborted call aborts it.
     if (childState(await harness.snapshot(SubagentDoc, conversationId, context))) continue;
@@ -68,6 +82,10 @@ export async function recoverBeforeResume(runtime: DurableRuntime, context: Cont
     sorted.map(async (run): Promise<Recovered> => {
       if (run.outcome === "in-tool") return { ...run, steers: [] };
       const conversation = (await harness.conversation(run.conversationId, context))!;
+      if (run.outcome === "background") {
+        await conversation.abort(context, { background: true });
+        return { ...run, steers: [] };
+      }
       return { ...run, steers: await stopTurn(runtime, conversation, context) };
     }),
   );

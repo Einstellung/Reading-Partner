@@ -17,7 +17,7 @@ import {
 import { keepArticle, type KeepDeps } from "./keep";
 import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { fetchWithRetry } from "../../platform/http/throttled-fetch";
-import { runSubagentTurnLive } from "../../legion/subagent/live";
+import { runBackgroundTurn } from "../../legion/durable/background";
 import { xPostOfUrl } from "../../info/x/post";
 import { saveLinkRecord } from "../../info/links/store";
 import { takeLinkInFiled, type IngestBatch } from "./link-intake";
@@ -104,7 +104,7 @@ export async function takeLinkInLive(url: string, target: IngestTarget, context:
   const deps = await liveIngestDeps();
   return takeLinkInFiled(url, target, {
     ...deps,
-    turn: runSubagentTurnLive,
+    turn: runBackgroundTurn,
     saveRecord: (k, e) => saveLinkRecord(k, e),
     ...(context.note ? { note: context.note } : {}),
     ...(context.report ? { report: context.report } : {}),

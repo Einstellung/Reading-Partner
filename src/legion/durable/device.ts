@@ -29,6 +29,7 @@ import {
 import type { AgentTool } from "../execute/contract";
 import { toolLabel } from "../execute/tool-result";
 import { appTurnLog, type TurnLogSink } from "../execute/turn-log";
+import { BACKGROUND_PLACE, backgroundPlace, type BackgroundHost } from "./background";
 import { ThreadDoc, type HistoryReader, type ThreadOrigin, type TurnResult } from "./extension";
 import { appDurableHost, openDurable, type DurableHost, type DurableRuntime } from "./harness";
 import { recoverBeforeResume, type Recovered } from "./recover";
@@ -158,12 +159,17 @@ export async function fileWithdrawnSteers(
   if (wrote) await threads.flush();
 }
 
+/** What a background run needs from the device runtime (background.ts). */
+export function deviceBackgroundHost(device: DeviceDurable): BackgroundHost {
+  return { runtime: device.runtime, ended: (key, result) => device.turnLog.end(key, result) };
+}
+
 export async function openDeviceDurable(options: DeviceDurableOptions): Promise<DeviceDurable> {
   const { threads } = options;
   const now = options.now ?? Date.now;
   const describe = catalogDescribe(options.catalog);
   const places = new Map(
-    Object.entries(options.places).map(([name, make]) => [name, make({ threads, describe, now })] as const),
+    Object.entries({ ...options.places, [BACKGROUND_PLACE]: backgroundPlace }).map(([name, make]) => [name, make({ threads, describe, now })] as const),
   );
   const placeOf = (origin: ThreadOrigin) => places.get(origin.place);
   const listeners = new Set<(event: SettledEvent) => void>();

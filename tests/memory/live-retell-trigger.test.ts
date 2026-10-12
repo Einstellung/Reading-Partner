@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as modelCall from "../../src/ai/model-call";
-import * as subagent from "../../src/legion/subagent";
+import * as background from "../../src/legion/durable/background";
 import * as events from "../../src/platform/app/events";
 import * as topics from "../../src/platform/app/topics";
 import type { Topic } from "../../src/platform/app/topics";
@@ -34,8 +34,8 @@ beforeEach(() => {
     reasoning: undefined,
     aiLanguage: "en",
   } as modelCall.ResolvedModel);
-  spyOn(subagent, "runSubagentTurnLive").mockImplementation(
-    scriptedSubagentRunner([{ text: "done" }]).run,
+  spyOn(background, "runBackgroundTurn").mockImplementation(
+    scriptedSubagentRunner([{ text: "done" }]).run as typeof background.runBackgroundTurn,
   );
   undoSource = registerDistillSource({
     kind: "retell-thread",
