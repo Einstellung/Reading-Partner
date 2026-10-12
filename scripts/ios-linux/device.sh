@@ -95,9 +95,10 @@ wda-start)
     sleep 2
   done
   echo "WDA did not answer in 120s"; grep -v 'No channel registered' "$STATE/xcuitest.log" | tail -30
-  # Seen on the first run after install/mount: initializationForUITestingDidFail
-  # after exactly 60s, then a second wda-start works.
-  echo "if the log ends in initializationForUITestingDidFailWithError, keep the device unlocked and run wda-start again"
+  # iOS 26 asks for Touch ID ("Enable UI Automation") before XCTest may drive
+  # the device; unanswered, it fails after exactly 60s with
+  # initializationForUITestingDidFailWithError (pitfall 562).
+  echo "if the log ends in initializationForUITestingDidFailWithError: someone has to press Touch ID on the device's \"Enable UI Automation\" prompt (check with: $0 shot), then run wda-start again"
   "$0" wda-stop; exit 1
   ;;
 wda-stop)
