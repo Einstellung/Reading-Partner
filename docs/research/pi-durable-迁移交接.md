@@ -949,3 +949,20 @@ Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 
 - 观察：paper.pdf 每次打开都多一次以 "Here is the survey, page by page" 开头的备课调用，faux 回的是正文不是计划，书一直挂着「Preparing…」；真模型下会不会反复没查。
 - 没有产品 bug。坑 564、565 没用。
 - 环境：Xvfb、vite、app 的 PID 记在 `verify-phase4-linux/pids/history`，收尾已停。
+
+## 第四阶段模拟器验收（分支 `verify/pi-durable-4-sim`，从 `origin/dev/pi-durable-4` bb6864c0 起）
+
+2026-10-12，iPhone 17 Pro（18CF1932）和 iPad Pro 11-inch (M5)（C1F7689F）模拟器，`.dev` 包，idb 真触摸。Mac `~/rp-flow` detached 在 bb6864c0，`bun install` 后手动删了残留的 `node_modules/@earendil-works/pi-agent-core`（bun 不清多余包），重起 vite（`VITE_VERIFY_FAUX=1`，20 token/s、每答 2700 字）。原生部分自 f425983f 没变，没重装 app。占位凭据跑完已删。驱动在 Mac `/tmp/pdv7/`（`s.py` 场景、`up.py` 升级加凭据、`fin.py` 汇总加清理，`d.py`、`l.py` 从 pdv5、pdv6 拷来），截图、日志和报告页在会话 scratchpad `verify-phase4-sim/`。15 项全过，没改代码。
+
+- 升级：两台容器里原有旧 `session/`（iPhone `--session-soul--`、`--session-worker--`，iPad `--session-turn--`、`--session-worker--`），再放 `--session-door--/x.jsonl` 和标记文件；bb6864c0 第一次启动整个删掉，之后每次重启都没再出现。
+- iPhone 门口：一问落盘一次；答到一半关掉，落盘一次、一张 origin `door` 的卡，点卡开门口、回答一次、卡收走；正文中 SIGKILL，重启后半句 636 字一次、屏幕一次、faux 0 次，同一 turn id 补 `end aborted`，盒子 +1。
+- iPhone PDF 课堂：回答一次；杀进程半句 616 字一次、faux 0 次、一张书卡；「问这一段」菜单 0.6 s、3.1 s 都开着，aside 里问一句再回来，课堂回答接着流、落一次，aside 自己的回答后来落盘放一张 aside 线程的书卡。
+- iPhone info 文本对话答到一半关掉：落盘一次、一张 origin `briefing` 的卡。三餐（「Ask about this week」）回答一次。
+- iPad 书：插话后 328 ms 页面 JS 点停止，前一回合 aborted 留半句 816 字，插话开下一回合答完，文件里各一次。`read_pages` 里（工具延迟 8 s）杀进程，重启后第一次 faux 请求的末条就是重跑的工具结果，回合落盘一次、同一 turn id `end done`。
+- iPad 教练、复述：答到一半离开，落盘一次、一张卡（`talk` / `retell`），点卡进页面、回答一次；Send 中心点 `elementFromPoint` 是 Send 自己，没被卢明盖住。
+- iPad 课堂预备：把 Pride and Prejudice 的 prep 挪开，点 Learn 出「Preparing 0/63」，48 s 后 `chapter-44.md` 落盘（1/63）；跑完原 prep 放回，faux 的那份在 Mac `/tmp/pdv7/prep-faux-ipad`。
+- iPad 后台 30 s：回答流到第 6 s 按 HOME，30.4 s 后回来 app PID 没变，Stop 在、回答接着流，约 20 s 后落盘一次，faux 1 次。
+- turn-log：iPhone 10 个回合每个一行 start 一行 end（8 done、2 aborted）。iPad 26 个回合，16 done、1 aborted、2 error（见下）；工具里杀进程那回合同号两行 start、续跑那轮没有 first-byte，`legion/durable/turn-log.ts` 头注释写明如此；7 个没有 end 的是场景之间 `simctl terminate` 掐掉的 6 个预备章节和 1 次复述蒸馏。库主文件 iPhone 3.25 MB → 3.90 MB，iPad 1.83 MB → 2.95 MB（含预备），WAL 两台都稳在约 4.1 MB。
+- 观察：手机上点 `briefing` 卡只收卡、回到 Today，不打开 info 对话（`planJump` 对 briefing 在所有外壳都走 `go-to-briefing`），早于 pi-durable，没动。
+- 失误：放凭据时 iPhone app 还连着 bridge，iPad 那次 eval 落到了 iPhone（坑 432），iPad 没开 faux 就带占位凭据起了一次，两次后台 subagent 请求打到 Anthropic、以占位 token 失败（`ok:false`、0 token），没有模型跑起来。之后两台各自单独驱动。坑 566、567 没用。
+- 环境：vite PID 6596（子进程 6598，`/tmp/pdv7/vitepid`，`/tmp/pdv4/pids-history`）在 `~/rp-flow` bb6864c0 上留着跑，旧的 93907/93909 已停；ios_webkit_debug_proxy 78195 没动。两台 `.dev` app 已退出、凭据已删、`__fauxPlan` 已清，iPhone `device.json` 的 provider 改回 null。
