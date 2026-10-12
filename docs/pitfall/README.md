@@ -427,6 +427,7 @@
 - [530-turn-view-rows-leave-out-the-readers-line](./ai/530-turn-view-rows-leave-out-the-readers-line.md) — `drivePlaceTurn` 的行只有这次运行产生的，不含作 prompt 的读者那句；语音的句子不在文本界面的镜像里，开着的对话只见回答。`place-session.ts` 的 `voice()` 把那句画在回合行前面
 - [540-reopened-conversation-has-two-followers-filing-a-stall](./ai/540-reopened-conversation-has-two-followers-filing-a-stall.md) — 关掉对话再打开接上同一回合，老 session 和新 session 各挂一个停摆看门狗，停摆时撤回的插话两边都写进文件。新 session `resume()` 时叫被 detach 的老 session 放手：撤看门狗、结算不写
 - [541-recovered-turn-ends-under-a-new-turn-id](./ai/541-recovered-turn-ends-under-a-new-turn-id.md) — turn-log 回合号原来只在内存，杀进程恢复后补的 end 行另起一个号，和被杀进程的 start 行对不上。回合号由 `startTurn` 生成，存进 `rp.desk` 和 `rp.turn` 的输入
+- [555-joined-turn-logs-first-byte-at-the-follow](./ai/555-joined-turn-logs-first-byte-at-the-follow.md) — 杀进程恢复或关掉重开后接上在途回合，turn-log 把打开线程那一刻记成那一轮的首字节（实测 13 s、24 s 都是等重开的时间）。接上时已在流的那一轮不写首字节
 
 ## 开发环境
 

@@ -772,3 +772,13 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 三餐停止那条 `end` 没有 `conversation` 字段，杀进程那条有，没查。
 - 收尾：`credentials.json` 已删并确认不在，`__faux*` 键已清，app 重起（PID 7738）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里三餐线程多了几问几答，购物清单没变。
 - 还没走：真模型一回合（要新的 access token）、语音。
+
+## 被杀后恢复首字慢 13 秒（分支 `fix/recovery-first-byte`，从 `origin/dev/pi-durable-2` f5aaf7d5 起）
+
+不是产品延迟，是 turn-log 记错（坑 555）。首字节只由跟随者写，恢复的回合没人跟随，读者点开课堂线程时第一张视图里已是流了一半的回答，被当成第一片，记下的是「请求到打开线程」的时长。iPad 上的 13 s 就是驱动重开线程花的时间；那一轮 `round` 的总时长（34.4 s / 37.9 s）等于 faux 正常流完的时间，工具重跑也是全速（脚手架的延时只包本进程装配的 desk，恢复的回合不经 `put`）。
+
+Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`，没调真模型）：`read_pages` 拖 20 s 时 SIGKILL，重启后等 20 s 再开课堂。恢复请求在重启后 +12.49 s 发出，faux 第一个 delta 在 +12.74 s，`follow` 在 +36.64 s，turn-log 的 `first-byte` 在 +36.84 s、`ms=24311`。修后同样跑一遍，那一轮只有 `round` 和 `end`，没有假首字节。
+
+修法：`resumedPlaceTurn` 的跟随者带 `joining`，第一张视图里已有回答就调 `DurableTurnLog.joined`，这一轮不写首字节；之后的轮次照常。单测两条在 `tests/reading/turn/durable-turn-log.test.ts`（去掉修复时集成那条失败）。全量 `scripts/t.sh` 7498 过、0 失败，`bun run typecheck` 过。
+
+驱动在会话 scratchpad `rfb/tools/rk.py`（`rk.py <重开前等几秒> <tag>`）。它要一份带计时的脚手架（`rfb/dev-faux.instrumented.ts`，没提交）：faux 只在读者那句以 `RFB` 开头时出工具调用，其余一律文字，否则启动时的 `subagent` 回合和课堂预备会先吃掉计划里的 tool 步。坑 556 没用。

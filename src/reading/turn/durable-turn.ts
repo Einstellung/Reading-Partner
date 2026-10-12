@@ -146,7 +146,9 @@ interface TurnWatch {
 /**
  * The stall watch on one turn (docs/soul/87 "停摆"): silent past the window,
  * the run in flight is superseded, so it lands nothing. The view's first
- * partial of each round is the turn log's first byte.
+ * partial of each round is the turn log's first byte; a follower `joining` a
+ * turn already in flight writes none for a round whose answer was already
+ * streaming when it came (durable-turn-log.ts `joined`).
  */
 function watchTurn(
   durable: DeviceDurable,
@@ -155,6 +157,7 @@ function watchTurn(
   surface: string,
   stall: StallOptions,
   context: Context,
+  joining = false,
 ): TurnWatch {
   const { runtime } = durable;
   let stalled: WithdrawnSteer[] | undefined;
@@ -175,7 +178,11 @@ function watchTurn(
   return {
     pulse(live) {
       const message = live?.generation?.message;
-      if (message?.timestamp !== undefined) durable.turnLog.heard(key, message.timestamp);
+      if (message?.timestamp !== undefined) {
+        if (joining) durable.turnLog.joined(key, message.timestamp);
+        else durable.turnLog.heard(key, message.timestamp);
+      }
+      joining = false;
       const half = JSON.stringify(message ?? null);
       if (half !== lastHalf) {
         lastHalf = half;
@@ -348,7 +355,7 @@ export async function resumedPlaceTurn(
   return {
     startedAt,
     async follow(onView) {
-      const watch = watchTurn(durable, conversation, key, surface(), stall, context);
+      const watch = watchTurn(durable, conversation, key, surface(), stall, context, true);
       const unfollow = await followTurn(
         durable,
         conversation,
