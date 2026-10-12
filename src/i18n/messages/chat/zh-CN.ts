@@ -91,6 +91,7 @@ export default {
   "call.pageBadge": "第 {page} 页",
   "call.clearFocus": "取消章节聚焦",
   "call.backToReading": "回到阅读",
+  "call.close": "关闭",
   "call.deleteConversation": "删除对话",
   "call.deleteTitle": "删除这段对话？",
   "call.deleteDescription": "对话会被删除，打开它的那处标记也一起删除。此操作无法撤销。",

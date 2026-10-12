@@ -1,7 +1,9 @@
 // ChatPipCard: the picture-in-picture chat card shown in the top-right while
 // reading is full-screen and a call is still live (docs/03). Click swaps the
-// conversation back to full screen; the small ✕ hangs up. Tailwind-only.
+// conversation back to full screen; the small ✕ closes it (a turn still running
+// carries on). Tailwind-only.
 
+import { useT } from '../../../../i18n';
 import { IconClose, IconSparkle } from '../../base/icons';
 import { Button } from '../../ui/button';
 
@@ -12,6 +14,7 @@ interface ChatPipCardProps {
 }
 
 export default function ChatPipCard({ lastMessage, onClick, onHangUp }: ChatPipCardProps) {
+	const t = useT();
 	return (
 		<div
 			role="button"
@@ -30,8 +33,8 @@ export default function ChatPipCard({ lastMessage, onClick, onHangUp }: ChatPipC
 				type="button"
 				variant="ghost"
 				size={null}
-				aria-label="Hang up"
-				title="Hang up"
+				aria-label={t('chat.call.close')}
+				title={t('chat.call.close')}
 				onClick={(e) => {
 					e.stopPropagation();
 					onHangUp();
