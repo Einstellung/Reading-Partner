@@ -879,3 +879,29 @@ Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 
 - 强制换代 abort 在跑的 pass，结果是 error 不是 `StoppedError`（B 棒记的）。
 - provider 抛出的错误经 pi-durable 变成 `stopReason: "error"` 的消息，抛出物类型丢了。经 `runSubagent` 的 pass 的 `failure.name` 现在一律是 `Error`，蒸馏的 `distill-failed` 事件的 `errorName` 分不出断网和没登录。
 - `research_literature` 没挂进任何桌面（A 棒记的，产品决定）。
+
+## 第四阶段：升级与清理（第一棒，分支 `dev/pi-durable-4`，从 `origin/dev/pi-durable-3` c18da622 起）
+
+依赖：`@earendil-works/pi-agent-core` 和 `overrides` 从 `package.json` 删掉（删完代码后没人用，没先升 1.1.0）。worktree 原本没有 `node_modules`，`bun install` 是全新装，`node_modules` 下只有一份 `@earendil-works/pi-ai`，1.1.0；`bun.lock` 里没有 pi-agent-core。
+
+删了：`legion/execute/` 的 `harness.ts`、`held.ts`、`turn.ts`（`runAgentTurn`、`runHarnessTurn`、`DELIVERY_ENTRY`、`PROMPT_ENTRY`）、`provider-config.ts`；`soul/recover.ts`（`finishOldSoulSession`、`SOUL_LANE`）；`platform/app/session-fs.ts`；palace 的 `session` 行；LAYER 表的 `legion/execute` 行；`contract.ts` 里的 `TurnLane`、`RunAgentTurnOptions`、`StreamFn`。测试删了 `tests/legion/execute/` 的 harness、held、held-lanes、turn、turn-limit、turn-stall、turn-steer，`tests/platform/app/session-fs`，`tests/soul/recover`、`recover-settled`，`tests/ai/session-header` 里五条走 `runAgentTurn` 的。
+
+搬了（`git mv`，只改 import）：`stall`、`watchdog`、`limiter`、`observable-run`、`contract`、`tool-result` 进 `legion/durable/`，`execute/turn-log.ts` 改名 `legion/durable/turn-log-sink.ts`；`runner`、`worker`、`outputs` 进新目录 `legion/runner/`（LAYER 表登记为 capability）。对应测试搬到 `tests/legion/durable/`（`turn-log.test.ts` 改名 `turn-log-sink.test.ts`）。从 `execute/turn` 拿类型的文件全改指 `durable/contract`。
+
+改写：`tests/info/meals/plan-rounds` 用 `scriptedSubagentRunner`（faux durable runtime，purpose 要用合法的 `BudgetPurpose`，否则装配估不出预算直接 out-of-context）；`tests/ui/components/chat/info-refusal` 的 `rowAfterRefusal` 直接套 `refusalRow`；`info-extractor-chunk` 去掉对 `runAgentTurn` 的 spy；`scripts/link-intake-compare.ts` 的真模型路径改成临时目录里开 `openDurable` + `runBackgroundTurnOn`（auth 从 app 的 Anthropic 登录取，用量走 `recordResponse`），`--dry-run` 24/24，真模型没跑。
+
+旧 session：第二、三阶段没发版，0.23.3 及以前的用户从没跑过 `finishOldSoulSession`，收尾又要 pi-agent-core，所以不留收尾。`useBackgroundServices` 启动时调 `removeOldSessions()`（`legion/durable/harness.ts`），AppData 有 `session/` 就整个删掉。升级前被杀在半路的门口、info、三餐回合不再续完。
+
+错误类型：`src/ai/provider-failure.ts` 的 `providerFailureName` 把 pi-ai 的错误文字映射成 `NotSignedInError`、`OfflineError`、`ModelCallError`，`runBackgroundTurnOn` 的 error 结局带上 `name`，经 `runSubagent` 进蒸馏的 `errorName`（坑 559）。`subagent.test.ts`「a failed call is reported…」的期望从 `Error` 改成 `NotSignedInError`。坑 495 已标关闭。坑 560 没用。
+
+测试：提交 eba6c54a 前 `bun run typecheck` 两段 TC=0，`scripts/t.sh` 全量 7414 pass、0 fail、RC=0（只跑了一遍）。
+
+第二棒要做的：
+
+- 全量再跑两遍（按退出码），`bun run build` 跑一遍。
+- Linux `xvfb-run` faux 冒烟真 app：一个书的回合、一个门口回合、回合中杀进程重开，半句只落一次。AppData 里预放一个 `session/` 目录，确认启动后被删。
+- `legion/durable/stall.ts` 里的整回合时限（`TurnLimitError`、`turnLimitFor`、`TURN_LIMIT_MS`、`INFO_TURN_LIMIT_MS`、`TURN_LIMIT_MESSAGE`、`isTurnLimit`）和 `StallError`、`isStall` 在 src 里已没人用（只剩 `stall.test.ts`），连同测试删掉；`turn-log-sink.ts` 的 `TurnEnd` 里 `limit` 那条注释跟着改。`soul/delivery.ts` 的 `originOf` 只剩文件内调用，可去掉 export。`cache-telemetry.ts` 的 `"recovery"` surface 已没人写，留着是为了旧日志行。
+- 还提到被删代码的文档：`docs/soul/25`、`55`、`71`、`75`，`docs/info/86`，`docs/north-star/legion-rest.md`，`docs/platform/78`，`docs/reading/67`，`docs/feedback/做饭计划一直Thinking.md`（feedback 是历史记录，可不改）。`docs/README.md` 里如有 `legion/execute` 也一起改。
+- `tests/ai/session-header` 删掉的五条测的是旧回合按线程带 `x-opencode-session` / pi 的 `sessionId`；durable 回合有没有带（OpenCode、Fireworks 的缓存路由）没查，`legion/durable` 和 `ai/durable-models.ts` 里没有 `sessionId`。
+
+设备上怎么验（主会话排）：iPad / 模拟器装这一版后，确认 app 沙盒里 `session/` 没了；走一遍第一、二阶段的杀进程（书、门口）和 steer；断网时触发一次蒸馏，看 `distill-failed` 的 `errorName` 是 `OfflineError`。

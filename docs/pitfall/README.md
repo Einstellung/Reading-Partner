@@ -430,6 +430,7 @@
 - [541-recovered-turn-ends-under-a-new-turn-id](./ai/541-recovered-turn-ends-under-a-new-turn-id.md) — turn-log 回合号原来只在内存，杀进程恢复后补的 end 行另起一个号，和被杀进程的 start 行对不上。回合号由 `startTurn` 生成，存进 `rp.desk` 和 `rp.turn` 的输入
 - [554-reply-stamped-in-the-lines-millisecond-drops-from-history](./ai/554-reply-stamped-in-the-lines-millisecond-drops-from-history.md) — 别的回合的回答和读者那句同一毫秒，按 `ts` 排除那句连回答一起排掉，历史和屏幕上都少了它。排除时角色和时间戳一起比
 - [555-joined-turn-logs-first-byte-at-the-follow](./ai/555-joined-turn-logs-first-byte-at-the-follow.md) — 杀进程恢复或关掉重开后接上在途回合，turn-log 把打开线程那一刻记成那一轮的首字节（实测 13 s、24 s 都是等重开的时间）。接上时已在流的那一轮不写首字节
+- [559-pi-ai-error-message-keeps-only-the-text](./ai/559-pi-ai-error-message-keeps-only-the-text.md) — pi-ai 把凭据和网络抛出的错都变成 `stopReason: "error"` 的消息，只留 `errorMessage` 文字，类丢了；`providerFailureName` 按文字映射回 `NotSignedInError` / `OfflineError` / `ModelCallError`
 
 ## 开发环境
 
@@ -445,7 +446,7 @@
 - [403-vite-in-an-agent-worktree-never-sees-edits](./dev-env/403-vite-in-an-agent-worktree-never-sees-edits.md) — 在 `.claude/worktrees/` 里起的 vite 改了源码也不重新转换：配置里的 `watch.ignored: **/.claude/**` 把 worktree 自己整棵树排除了。每轮改动按 PID 重起，curl 刚改的模块确认是新代码再截图
 - [520-tauri-invoke-cannot-be-patched-from-the-page](./dev-env/520-tauri-invoke-cannot-be-patched-from-the-page.md) — `__TAURI_INTERNALS__.invoke` 只读不可配置，页面里赋值静默失败、拦不住 IPC。要杀在工具中，从宿主侧轮询 durable 库见到 `toolCall` 未见结果即 SIGKILL
 - [239-vite-prebundle-freezes-a-dependency](./dev-env/239-vite-prebundle-freezes-a-dependency.md) — `node_modules/.vite/deps` 把 pi-ai 的模型表整份内联冻在几周前，pull 后没 `bun install` 也没重建缓存，app 看到的表比磁盘旧，`enforceKnownModel` 如实把「不在目录里」的模型换掉并写回盘；升级依赖后缺新导出则整页白屏；vite 5.4 只认 `bun.lockb` 不认 `bun.lock`，缓存永不自动失效；`bun install && rm -rf node_modules/.vite` 再重启，判据是拿 `bun -e` 直读 `node_modules` 和 app 里看到的对比
-- [495-pi-agent-core-cannot-follow-pi-ai-past-0-87](./dev-env/495-pi-agent-core-cannot-follow-pi-ai-past-0-87.md) — pi-agent-core 1.0 删了 `AgentHarness` 和 session（挪去的 pi-durable 是另一套 API），只能留在 0.87.1；它的 `^0.87.1` 让 bun 再装一份旧 pi-ai，类型在 `TranscriptContext` 的 brand 上撞、运行期两套估算器。`overrides` 压成一份，然后必须 `rm -rf node_modules` 重装，单跑 `bun install` 回 no changes
+- [495-pi-agent-core-cannot-follow-pi-ai-past-0-87](./dev-env/495-pi-agent-core-cannot-follow-pi-ai-past-0-87.md) — （已关闭：第四阶段删了 pi-agent-core）pi-agent-core 1.0 删了 `AgentHarness` 和 session（挪去的 pi-durable 是另一套 API），只能留在 0.87.1；它的 `^0.87.1` 让 bun 再装一份旧 pi-ai，类型在 `TranscriptContext` 的 brand 上撞、运行期两套估算器。`overrides` 压成一份，然后必须 `rm -rf node_modules` 重装，单跑 `bun install` 回 no changes
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./dev-env/118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
 - [352-loadsettings-throws-before-it-returns-a-promise](./dev-env/352-loadsettings-throws-before-it-returns-a-promise.md) — `loadSettings` 不是 `async`，宿主之外 `readGuardedJson` 同步抛在返回 promise 之前，调用点的 `.catch(() => null)` 接不住；测试里要跑它就先 `installAppData()`
 - [303-a-boot-at-module-scope-registers-for-every-test-file](./dev-env/303-a-boot-at-module-scope-registers-for-every-test-file.md) — 测试文件在模块顶层 boot 领域（注册蒸馏源、desk kind），`afterAll` 要等本文件跑完才 undo，中间每个文件问注册表都看得见那几个源；两个文件单跑都绿。boot 放进用例体 try/finally，断言按 kind 数不按总数

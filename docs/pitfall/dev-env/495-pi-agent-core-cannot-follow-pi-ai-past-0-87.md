@@ -1,5 +1,7 @@
 # pi-agent-core 跟不上 pi-ai：1.0 删了 harness，留在 0.87.1 又会装出第二份 pi-ai
 
+已关闭（2026-10-12）：pi-durable 迁移第四阶段删掉了 pi-agent-core 和 `overrides`，只装一份 pi-ai 1.1.0（docs/soul/87）。
+
 ## 现象
 
 2026-10-08 为了让设置里出现新模型，把 pi-ai 和 pi-agent-core 从 0.87.1 一起升到 1.1.0：

@@ -141,9 +141,10 @@ spike 实测纯问答一轮约 5.2 KB（回答 4.3 KB），100 MB 约两万轮�
 | `recover.ts` | 进程起来、`resume()` 之前的三分 |
 | `child.ts` | 子 agent 的子对话：`rp.subagent`、每个定义一个 extension、`ChildDesks`、`runTaskChild` |
 | `background.ts` | 后台运行：ownerless 对话、按次装卸的 extension、`runBackgroundTurn` |
-| `stall.ts`、`watchdog.ts` | 第四阶段从 `legion/execute` `git mv` 过来 |
+| `stall.ts`、`watchdog.ts`、`limiter.ts`、`observable-run.ts` | 停摆看门狗、模型调用重试、限流、进程内长任务的状态；第四阶段从 `legion/execute` 搬来 |
+| `contract.ts`、`tool-result.ts`、`turn-log-sink.ts` | `AgentTool` 等工具类型和两句拒绝、工具结果整形、`turn-log.jsonl` 的写入；同上 |
 
-`legion/durable` 只 import platform/app、ai、budget、legion 下的 capability，不 import soul 和任何领域。`platform/app/durable-sqlite.ts` 是宿主接口，一个文件一件宿主能力，不 import 别的目录。不依赖 React 的投影逻辑（view state 到界面行）放 `src/reading/turn/` 的 `.ts` 并配单测。第四阶段删空 `legion/execute` 后从 LAYER 表删掉那一行。
+`legion/durable` 只 import platform/app、ai、budget、legion 下的 capability，不 import soul 和任何领域。`platform/app/durable-sqlite.ts` 是宿主接口，一个文件一件宿主能力，不 import 别的目录。不依赖 React 的投影逻辑（view state 到界面行）放 `src/reading/turn/` 的 `.ts` 并配单测。legion runner（`runner.ts`、`worker.ts`、`outputs.ts`）第四阶段搬进新的 `legion/runner`（capability）。`legion/execute` 已删空，LAYER 表里那一行已删。
 
 spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`、`probe.ts`、`sqlite-probe-main.ts`）第一阶段删掉，`sqlite-scenes.ts` 的场景搬进测试。
 
@@ -234,3 +235,10 @@ spike 只为测量写的文件（`durable-fs.ts`、`write-meter.ts`、`spike.ts`
 验收：`bun run typecheck` 两段都过、`scripts/t.sh` 全绿；全端打包；iPad 上走一遍第一、二阶段的杀进程和 steer。
 
 量：中，一到两棒。
+
+第一棒已完成（2026-10-12，分支 `dev/pi-durable-4`，过程见[交接](../research/pi-durable-迁移交接.md)）。和上面不同的：
+
+- pi-agent-core 没有先升 1.1.0：删完代码后没有任何地方用它，直接从 dependencies 删掉；`AgentMessage` 的那处 import 在被删的文件里，随之消失。
+- `legion/execute` 里活着的件不全进 `legion/durable`：runner、worker、outputs 进新目录 `legion/runner`（LAYER 表已登记），其余进 `legion/durable`，`turn-log.ts` 改名 `turn-log-sink.ts`（`durable/turn-log.ts` 已占名）。
+- `finishOldSoulSession` 没有留：第二、三阶段没发过版，0.23.3 及以前的用户升上来时旧 session 从没被收尾过，而收尾要 pi-agent-core。改成启动时删一次 AppData 的 `session/`（`legion/durable/harness.ts` 的 `removeOldSessions`）。升级前最后一次被杀在半路的 soul 回合（门口、info、三餐）不再续完。
+- 后台运行的 error 结局带 `name`：按 pi-ai 的错误文字映射成 `NotSignedInError`、`OfflineError`、`ModelCallError`（坑 559），蒸馏失败事件的 `errorName` 又分得出断网和没登录。
