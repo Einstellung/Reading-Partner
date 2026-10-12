@@ -745,3 +745,19 @@ Linux 真 app 验收三餐、复述、排练教练（Xvfb :96，`verifylinux` id
 - 手机点复述卡（页面脚本 `putOneThreadCard` 铺的，origin `retell`）：显示「This one opens on the iPad or the desk.」，卡留在盒子里。
 - 观察：从 aside 回来不滚动（不自动跟随），回执要按 DOM 顺序查或滚过去看。在 aside 里放的课堂卡片，回来读过回答后仍留在盒子里，只有点卡才收走。驱动找段落时要按「和视口相交」取：faux 的回答是一个 1560 px 高的 `<p>`，整段落在视口内的条件永远不成立。坑 544、545 没用。
 - 环境：vite PID 6861（子进程 6863，`/tmp/pdv4/vitepid`，`/tmp/pdv4/pids-history`）在 `~/rp-flow` 8d6a7d8b 上留着跑；旧的 93151/93153 已停。iPhone 盒子里多了 seed 复述卡和本轮的几张书卡。
+
+## 第二阶段 iPad 真机验收（第二轮）（分支 `verify/pi-durable-2-ipad2`，从 `dev/pi-durable-2` 7195343e 起）
+
+2026-10-12，iPad（iPad15,7，iOS 26.7.1）插 Mac mini，pymobiledevice3 装包、`dvt launch/kill/screenshot --userspace`，ios_webkit_debug_proxy 进 WKWebView。Mac `~/rp-ipad` 切到 7195343e，`~/build.sh`（`VITE_VERIFY_FAUX=1`）出 `/tmp/rp-dev-ipad2.ipa`，装前读回 CFBundleIdentifier 为 `.dev`。慢速 faux 20 token/s、每段 30 句 2700 字。真机没有程序化触摸，全部输入走页面 JS（点按钮、设 textarea、Lumen 用 `contextmenu` 事件开菜单），读文件直接调 `plugin:fs` 和 `write_text_file_atomic`（ipa 是生产构建，没有 `/src` 模块和 `__bell`）。驱动 Mac `~/v2.py`（页面助手 `~/v2h.js`，`~/rp_lib.py` 是去掉 `main()` 的 `rp.py`），日志和截图在 Mac `/tmp/v2/`，副本和报告页在会话 scratchpad `verify-ipad2/report.html`。没改代码，坑 546、547 没用。
+
+- 升级收尾：过。旧包（第一阶段）的 `session/--session-soul--` 里 5 个只有表头的 session。新包没凭据第一次启动不动；放占位凭据后第一次启动把组删空（目录留着），没有 soul 回合。启动时跑了一次 `subagent` 回合，拿占位凭据打到 Anthropic 得 401。
+- 门口：关掉落盘一次、一张卡（origin door），点卡开门口对话、回答一次；关掉 3 s 后重开，Stop 在、正文接着长、落盘一次、不放卡；停止留半句 732 字、12 s 后不变；切后台 30 s、60 s（`dvt launch` 设置），离开时 JS 冻结，回前台 1.5 s 内接着流，回合 done，没有停摆和重问；正文中 SIGKILL，重启 faux 0 次，半句 780 字一次、一张卡，`end aborted` 与 `start` 同一个回合号（2k 修复在真机上成立）。
+- info、三餐：关掉、重开同门口都过，info 杀进程同门口。info 卡（origin briefing）点了进简报页，三餐卡进三餐页，都不打开对话，要再点「Tell the companion」/「Ask about this week」才看到回答（box-jump 的设计，记一笔）。
+- 教练、复述：关掉一张卡（talk / retell）、点卡进页面回答一次；重开接着流；教练停止留 740 字、杀进程半句 768 字一次加一张卡。真 iPad 上卢明盖住教练和复述页的 Send 键（Send 中心点的 `elementFromPoint` 是卢明的按钮）。
+- 书（iPad 课堂）：Hang up 关掉落盘一次、一张书卡带线程 id，点卡开回线程、回答一次；插话后 200 ms 停止，前一回合 aborted 留 596 字，插话开下一回合答完；`read_pages` 拉到 15 s 时 SIGKILL，重启同一回合号重跑工具、接着跑完 done。恢复后第 4 轮首字节在第 3 轮工具之后 13.3 s，早于重开书，和 iPad 模拟器的 12.8 s 同样，没查。
+- 铃：读者 info 回合在流时往 `legion/bell/` 写一只 run-done 铃（deliverTo 简报），读者回合落盘后 93 ms 铃回合才起，落在读者回答之后，铃 acked，对话开着不放卡；重启后 turn-log 无新行、faux 0 次、不重投。
+- 真模型：没跑。Linux 上的 access token 跑之前已过期 13.9 小时，Haiku 0 次。
+- 库：本轮 31 个回合（门口 6、info 6、教练/复述 6、书 5、铃 1、subagent 7）后主库 1,359,872 字节、WAL 4.2 MB 未 checkpoint；第一阶段结束时主库 316 KB，约 33 KB/回合。拷出来 checkpoint 后 1.38 MB，`entries` 占 1.0 MB。
+- 没走：真模型一回合（要新的 access token）、语音（和用户一起）、复述停止和杀进程、三餐停止和杀进程。
+- 收尾：容器里占位凭据已删，`__faux*` 键已清，app 重起（PID 7599）不带 faux；没拷过真凭据。Mac 上 ios_webkit_debug_proxy 78195、vite 6861/6863 没动。容器里多了 Verify talk 主题（大纲、复述从 iPad 模拟器拷来）、`info-sources.json`、`info-meals.json`、今天的 briefing、`settings.meals`。
+- 接着做：access token 有效（离过期超过 30 分钟）时只拷 `access`、`expires` 进 `.dev` 容器，`refresh` 填假值；`~/v2.py flow door bg60` 跑一个 Haiku 回合（注意回前台可能多一次 `subagent` 请求），完了删凭据。`~/d.sh pull durable` 拉完 afc 不退出，文件到了就杀自己记下的那个 afc PID。
