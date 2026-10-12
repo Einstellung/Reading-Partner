@@ -1,0 +1,250 @@
+# Spike: an iOS dev loop with no Mac of our own. CI builds the two things that
+# need Xcode; a Linux box with the device on USB does the rest
+# (scripts/ios-linux/).
+#
+#   wda      WebDriverAgentRunner, development-signed, so Linux can start it as
+#            an XCUITest (pymobiledevice3) and drive the phone over USB.
+#   devbuild Reading Partner under com.xinyuan.readingpartner.dev in Tauri dev
+#            mode: the webview loads the Vite dev server on the Linux box, so
+#            TS/CSS edits hot-reload on the device and only Rust/Swift edits
+#            need another run of this workflow.
+#
+# Signing is the App Store Connect API key path of ios-testflight.yml
+# (-allowProvisioningUpdates + -authenticationKey*). Nothing here registers a
+# device: a development profile covers the devices already on the team.
+#
+# Never builds the shipping bundle id; devbuild refuses to upload anything that
+# is not .dev, since installing it would replace the TestFlight app.
+
+name: iOS Linux loop (spike)
+
+on:
+  push:
+    branches: [exp/linux-ios-loop]
+    paths:
+      - .github/workflows/ios-linux-loop.yml
+      - scripts/ios-linux/**
+      - src-tauri/**
+  workflow_dispatch:
+
+concurrency:
+  group: ios-linux-loop
+  cancel-in-progress: true
+
+env:
+  APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+  APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+  APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+  # iPhone 16 and iPad on the user's desk.
+  DEVICE_UDIDS: 00008140-000C31641EEB001C 00008120-001E78AC2EE00032
+  WDA_REF: v16.14.2
+  WDA_BUNDLE_ID: com.xinyuan.wda
+  DEV_ID: com.xinyuan.readingpartner.dev
+  # The Linux box's LAN address and a port that is not the user's own 1420.
+  DEV_HOST: 192.168.0.107
+  DEV_PORT: "1437"
+
+jobs:
+  devices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -m pip install --quiet cryptography
+      - name: Registered devices and bundle ids
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        # Report only: a missing device is a finding, not a reason to skip the builds.
+        run: python3 scripts/ios-linux/asc-devices.py --expect $DEVICE_UDIDS || true
+
+  wda:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Pin Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.5.app && xcodebuild -version
+      - name: Install the App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APPLE_API_KEY_P8_BASE64 }}" | base64 --decode > ~/private_keys/AuthKey_${APPLE_API_KEY}.p8
+          echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey_${APPLE_API_KEY}.p8" >> "$GITHUB_ENV"
+      - name: Fetch WebDriverAgent
+        run: git clone --quiet --depth 1 --branch "$WDA_REF" https://github.com/appium/WebDriverAgent "$RUNNER_TEMP/wda-src"
+      - name: Build WebDriverAgentRunner for devices (signed)
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project "$RUNNER_TEMP/wda-src/WebDriverAgent.xcodeproj" \
+            -scheme WebDriverAgentRunner \
+            -destination generic/platform=iOS \
+            -derivedDataPath "$RUNNER_TEMP/wda-dd" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APPLE_API_KEY_PATH" \
+            -authenticationKeyID "$APPLE_API_KEY" \
+            -authenticationKeyIssuerID "$APPLE_API_ISSUER" \
+            DEVELOPMENT_TEAM="$APPLE_DEVELOPMENT_TEAM" \
+            CODE_SIGN_STYLE=Automatic \
+            PRODUCT_BUNDLE_IDENTIFIER="$WDA_BUNDLE_ID" \
+            > "$RUNNER_TEMP/wda-build.log" 2>&1 || { grep -E 'error:|warning: .*sign' "$RUNNER_TEMP/wda-build.log" | head -40; tail -40 "$RUNNER_TEMP/wda-build.log"; exit 1; }
+          tail -5 "$RUNNER_TEMP/wda-build.log"
+      - name: Package and inspect the runner
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/wda-dd/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app"
+          [ -d "$APP" ] || { find "$RUNNER_TEMP/wda-dd/Build/Products" -maxdepth 2; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
+          codesign -dv "$APP" 2>&1 | grep -E 'Identifier|TeamIdentifier|Authority' || true
+          security cms -D -i "$APP/embedded.mobileprovision" > "$RUNNER_TEMP/wda.mobileprovision.plist"
+          for k in Name ExpirationDate Entitlements:application-identifier Entitlements:get-task-allow; do
+            printf '%s: ' "$k"; /usr/libexec/PlistBuddy -c "Print :$k" "$RUNNER_TEMP/wda.mobileprovision.plist"
+          done
+          echo "provisioned devices:"; /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$RUNNER_TEMP/wda.mobileprovision.plist"
+          mkdir -p "$RUNNER_TEMP/pkg/Payload" && cp -R "$APP" "$RUNNER_TEMP/pkg/Payload/"
+          (cd "$RUNNER_TEMP/pkg" && zip -qry "$GITHUB_WORKSPACE/WebDriverAgentRunner.ipa" Payload)
+          ls -la WebDriverAgentRunner.ipa
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wda-runner-ipa
+          path: WebDriverAgentRunner.ipa
+          if-no-files-found: error
+
+  devbuild:
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+      - name: Pin Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.5.app && xcodebuild -version
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: dev-mode
+      - run: bun install --frozen-lockfile
+      - name: Install the App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APPLE_API_KEY_P8_BASE64 }}" | base64 --decode > ~/private_keys/AuthKey_${APPLE_API_KEY}.p8
+          echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey_${APPLE_API_KEY}.p8" >> "$GITHUB_ENV"
+
+      # The identifier can only be changed through the CLI's config merge
+      # (gen/apple is regenerated from tauri.conf.json). The dev server lives on
+      # the Linux box, so nothing is started here.
+      - name: Dev config
+        run: |
+          printf '{"identifier":"%s","build":{"beforeDevCommand":"","devUrl":"http://localhost:%s"}}\n' "$DEV_ID" "$DEV_PORT" > "$RUNNER_TEMP/dev.json"
+          cat "$RUNNER_TEMP/dev.json"
+          echo "DEV_CONFIG=$RUNNER_TEMP/dev.json" >> "$GITHUB_ENV"
+      - name: Generate the Xcode project
+        run: bun tauri ios init --ci --config "$DEV_CONFIG"
+
+      # `tauri ios build` always compiles with tauri/custom-protocol, i.e. the
+      # bundled frontend; only `tauri ios dev` compiles without it (cfg(dev),
+      # devUrl). With no device attached, `ios dev --open` publishes its build
+      # options (dev: true, the devUrl rewritten to --host) on a local socket
+      # and waits. Xcode's "Build Rust Code" phase (tauri ios xcode-script)
+      # reads them from there, so an xcodebuild run while it waits produces a
+      # dev-mode app.
+      - name: Start tauri ios dev --open (options server)
+        run: |
+          nohup bun tauri ios dev --open --host "$DEV_HOST" --no-dev-server-wait --config "$DEV_CONFIG" \
+            > "$RUNNER_TEMP/tauri-dev.log" 2>&1 &
+          echo "TAURI_DEV_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 60); do
+            grep -qiE 'xcode|opening|waiting' "$RUNNER_TEMP/tauri-dev.log" && break
+            sleep 5
+          done
+          sleep 10
+          cat "$RUNNER_TEMP/tauri-dev.log"
+          xcodebuild -list -project src-tauri/gen/apple/reading-partner.xcodeproj
+
+      # Talking to a LAN dev server needs the local-network prompt, which iOS
+      # only shows when the bundle declares a usage string (pitfall 177). Dev
+      # builds only; never in Info.ios.plist on main.
+      - name: Declare local network use
+        run: |
+          PL=src-tauri/gen/apple/reading-partner_iOS/Info.plist
+          /usr/libexec/PlistBuddy -c 'Add :NSLocalNetworkUsageDescription string "Loads the app from the development server on your computer."' "$PL" \
+            || /usr/libexec/PlistBuddy -c 'Set :NSLocalNetworkUsageDescription "Loads the app from the development server on your computer."' "$PL"
+
+      - name: Archive (debug, signed)
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project src-tauri/gen/apple/reading-partner.xcodeproj \
+            -scheme reading-partner_iOS \
+            -configuration debug \
+            -destination generic/platform=iOS \
+            -archivePath "$RUNNER_TEMP/rp-dev.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APPLE_API_KEY_PATH" \
+            -authenticationKeyID "$APPLE_API_KEY" \
+            -authenticationKeyIssuerID "$APPLE_API_ISSUER" \
+            DEVELOPMENT_TEAM="$APPLE_DEVELOPMENT_TEAM" \
+            CODE_SIGN_STYLE=Automatic \
+            ARCHS=arm64 \
+            > "$RUNNER_TEMP/archive.log" 2>&1 || { grep -E 'error:|error\[' "$RUNNER_TEMP/archive.log" | head -40; tail -60 "$RUNNER_TEMP/archive.log"; exit 1; }
+          tail -5 "$RUNNER_TEMP/archive.log"
+          grep -E 'devUrl|dev server|custom-protocol|Compiling reading-partner' "$RUNNER_TEMP/archive.log" | head -10 || true
+
+      - name: Export (debugging)
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/export.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>debugging</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>${APPLE_DEVELOPMENT_TEAM}</string>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/rp-dev.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APPLE_API_KEY_PATH" \
+            -authenticationKeyID "$APPLE_API_KEY" \
+            -authenticationKeyIssuerID "$APPLE_API_ISSUER" 2>&1 | tail -15
+          ls -la "$RUNNER_TEMP/export"
+
+      - name: Verify the ipa is .dev and in dev mode
+        run: |
+          set -euo pipefail
+          IPA=$(find "$RUNNER_TEMP/export" -name '*.ipa' -print -quit)
+          W="$RUNNER_TEMP/verify"; rm -rf "$W"; mkdir -p "$W"; unzip -q "$IPA" -d "$W"
+          APP=$(ls -d "$W"/Payload/*.app | head -1)
+          BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          echo "bundle id: $BID"
+          [ "$BID" = "$DEV_ID" ] || { echo "::error::REFUSING: $BID is not $DEV_ID; it would replace the TestFlight app"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$APP/Info.plist"
+          EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
+          ls -la "$APP/$EXE"
+          echo "devUrl in binary:"; strings "$APP/$EXE" | grep -oE "http://${DEV_HOST}:${DEV_PORT}[^\"]*" | sort -u | head -3
+          strings "$APP/$EXE" | grep -q "${DEV_HOST}:${DEV_PORT}" || { echo "::error::devUrl ${DEV_HOST}:${DEV_PORT} not in the binary"; exit 1; }
+          # A production (custom-protocol) build embeds dist/; a dev build embeds no assets.
+          N=$(strings "$APP/$EXE" | grep -c '/assets/index-' || true)
+          echo "embedded /assets/index-* references: $N"
+          [ "$N" = "0" ] || { echo "::error::frontend assets are embedded: this is not a dev-mode build"; exit 1; }
+          security cms -D -i "$APP/embedded.mobileprovision" > "$RUNNER_TEMP/dev.mobileprovision.plist"
+          /usr/libexec/PlistBuddy -c 'Print :ExpirationDate' "$RUNNER_TEMP/dev.mobileprovision.plist"
+          /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$RUNNER_TEMP/dev.mobileprovision.plist"
+          cp "$IPA" "$GITHUB_WORKSPACE/reading-partner-dev.ipa"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rp-dev-ipa
+          path: reading-partner-dev.ipa
+          if-no-files-found: error
+
+      - name: Logs
+        if: always()
+        run: |
+          [ -n "${TAURI_DEV_PID:-}" ] && kill "$TAURI_DEV_PID" 2>/dev/null || true
+          echo "--- tauri-dev.log"; tail -40 "$RUNNER_TEMP/tauri-dev.log" 2>/dev/null || true
+          echo "--- archive.log (rust)"; grep -nE 'xcode-script|Compiling reading|Finished|error' "$RUNNER_TEMP/archive.log" 2>/dev/null | head -30 || true
