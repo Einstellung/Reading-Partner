@@ -879,3 +879,17 @@ Linux 复现（xvfb `:91`，`verifylinux` 二进制，本 worktree 的 vite 带 
 - 强制换代 abort 在跑的 pass，结果是 error 不是 `StoppedError`（B 棒记的）。
 - provider 抛出的错误经 pi-durable 变成 `stopReason: "error"` 的消息，抛出物类型丢了。经 `runSubagent` 的 pass 的 `failure.name` 现在一律是 `Error`，蒸馏的 `distill-failed` 事件的 `errorName` 分不出断网和没登录。
 - `research_literature` 没挂进任何桌面（A 棒记的，产品决定）。
+
+## 第三阶段 Linux 验收（分支 `verify/pi-durable-3-linux`，从 `origin/dev/pi-durable-3` c18da622 起）
+
+2026-10-12，xvfb `:91`，`verifylinux` debug 二进制，本 worktree 的 vite 带 `VITE_VERIFY_FAUX=1`，只用 faux。测试数据目录先整份备份到 `com.xinyuan.readingpartner.verifylinux.bak-p3`。驱动在会话 scratchpad `verify-phase3-linux/tools/`（`vd.py`、`door.py`、`openbook.js`、`prepstate.py`），报告页 `verify-phase3-linux/report.html`。没改产品代码；`dev-faux.ts` 的计划可以写 `[name, args]`，让委托的回合和 worker 各调各的工具。
+
+- 课堂预备过：用 ghostscript 造了 12 页、四条 outline 的 PDF，计划直接取 outline。四章各是一个 ownerless 后台对话，相隔约 3 s 起、并发跑，笔记落在 `prep-<id>/chapters/chapter-0N.md`，界面显示「Preparing 0/4」「2/4」。四章都在流时 SIGKILL：库里四个活的 `pi.generation`、四个 `placed` 的 `background:` submission；重启时 faux 0 次，四个对话各剩读者那句加一条 `aborted`，submission `unanswered`，库里空闲；打开书后四章回 pending，在四个新对话里各重做一次，然后出 overview，共 5 次调用，同一对话里没有重问。overview 和无 outline 时的计划是单次 `callModel`，不是后台回合；overview 中被杀，重开书后重做一次。
+- 蒸馏过：app 启动时 sweep 自己触发（Verify talk 的书线程），后台对话跑完，turn-log surface `subagent` 有 start/round/end，`observations/meta.json` 的 `lastDistilledAt` 前移，dream state `no-change`（空跑算成功）。第一次载入页面时在跑的那次被 reload 打断，reload 后从头重跑完，库里不留活任务。
+- link take 过：只有 X 帖子走 link agent（`xPostOfUrl` → `takeLinkInLive` → `runBackgroundTurn`），别的链接仍是单页文章。门口 faux 调 `take_link`，盒子出选主题卡，link agent 作为后台对话从 `placed` 到 `done`。faux 不调工具，run 结局 `run-failed`，铃回到门口。
+- 子 agent：`research_literature` 没挂桌面，UI 走不到。`delegate` 的 `tasking` 走 agent worker：后台对话里 `search_cables`、工具结果、正文，`run-done` 铃带回 brief 和 output，门口回答这条铃。faux 只给正文时 worker 诚实失败（没调工具不交），runner 重试。
+- 换代没在 app 里测到：库一直在 `turns-1791699996920`（远低于 100 MB）。页面里改 `durable_sqlite_size` 的返回做不到，`window.__TAURI_INTERNALS__.invoke` 不可写、不可配置，赋值静默失败；要测得在代码里开 `rotateAtBytes` 的口子。逻辑由 `background.test.ts` 盖着。
+- 库增长：一章笔记对话主库约 18 KB；门口回合加 worker 约 135 KB，门口回合加 link agent 约 90 KB；WAL 跑着时停在约 4.1 MB，重启后 618 KB。
+- 观察：被杀的后台 run 在 turn-log 里只有 start 没有 end（书回合恢复后有 `endUnbegun`，后台恢复不补）。收尾停 app 时门口正在回答 link run 的失败铃（会话 501 的 `rp.turn`），留给下次启动恢复，和后台 pass 无关。
+- 没有产品 bug。坑 561、562 没用（`__TAURI_INTERNALS__` 不可写算验证环境的意外，可补成坑）。
+- 环境：Xvfb、vite、app 的 PID 记在 `verify-phase3-linux/pids/history`，收尾已停。
