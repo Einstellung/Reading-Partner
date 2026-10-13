@@ -105,6 +105,7 @@ export default {
 
   "readPage.thePage": "страницу",
   "readPage.reading": "Чтение {url}",
+  "webSearch.searching": "Поиск в интернете: {query}",
 
   "plugins.daysPositiveInteger": "days должно быть положительным целым числом",
   "plugins.daysMustBeAtMost": "days должно быть не более {max}",

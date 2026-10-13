@@ -72,6 +72,7 @@ export default {
 
   "readPage.thePage": "이 페이지",
   "readPage.reading": "{url} 읽는 중",
+  "webSearch.searching": "웹 검색 중: {query}",
 
   "plugins.daysPositiveInteger": "days는 양의 정수여야 합니다",
   "plugins.daysMustBeAtMost": "days는 최대 {max}이어야 합니다",

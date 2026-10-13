@@ -76,6 +76,7 @@ export default {
 
   "readPage.thePage": "die Seite",
   "readPage.reading": "{url} wird gelesen",
+  "webSearch.searching": "Websuche: {query}",
 
   "plugins.daysPositiveInteger": "days muss eine positive ganze Zahl sein",
   "plugins.daysMustBeAtMost": "days darf höchstens {max} sein",

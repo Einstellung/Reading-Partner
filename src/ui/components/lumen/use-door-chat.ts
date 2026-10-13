@@ -25,6 +25,7 @@ import { t } from "../../../i18n";
 import { topicFiledNote } from "../../../info/briefer/call";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import { createTopic, listTopics } from "../../../platform/app/topics";
+import { loadSettings } from "../../../platform/app/settings";
 import { doorTurnNote, extractLinks, linksToTake } from "../../../reading/ingest/take-link-tool";
 import { chooseIntakeTopic, readIntake } from "../../../reading/ingest/topic-intake";
 import { readingDurable } from "../../../reading/turn/durable-runtime";
@@ -167,6 +168,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
             date,
             raiseCard: (prefix, payload) => raiseCardRef.current(prefix, payload),
             links: linksToTake(history),
+            settings: await loadSettings(),
           }),
           topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
         });

@@ -71,6 +71,7 @@ export default {
 
   "readPage.thePage": "该页面",
   "readPage.reading": "正在阅读 {url}",
+  "webSearch.searching": "正在搜索网页：{query}",
 
   "plugins.daysPositiveInteger": "days 必须是正整数",
   "plugins.daysMustBeAtMost": "days 最多为 {max}",

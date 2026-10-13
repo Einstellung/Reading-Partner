@@ -72,6 +72,7 @@ export default {
 
   "readPage.thePage": "このページ",
   "readPage.reading": "{url} を読み込み中",
+  "webSearch.searching": "ウェブを検索中：{query}",
 
   "plugins.daysPositiveInteger": "days は正の整数である必要があります",
   "plugins.daysMustBeAtMost": "days は最大 {max} である必要があります",

@@ -181,12 +181,14 @@ test("companion turn: reading tools only, kickoff as the first message", async (
     "observation_search",
     "read_chapter",
     "read_conversation",
+    "read_page",
     "read_pages",
     "read_supplement",
     "remove_supplement",
     "search_conversations",
     "search_topic",
     "translate_document",
+    "web_search",
   ]);
   expect(turn!.messages).toEqual([{ role: "user", text: EXPLAIN_KICKOFF }]);
   expect(turn!.systemPrompt).toContain("inline caches");
@@ -205,10 +207,12 @@ test("a book with no text layer gets no read_pages tool", async () => {
     "observation_read",
     "observation_search",
     "read_conversation",
+    "read_page",
     "read_supplement",
     "remove_supplement",
     "search_conversations",
     "translate_document",
+    "web_search",
   ]);
 });
 
@@ -227,12 +231,14 @@ test("a topic id mounts the tool that writes an observation", async () => {
     "observation_update",
     "read_chapter",
     "read_conversation",
+    "read_page",
     "read_pages",
     "read_supplement",
     "remove_supplement",
     "search_conversations",
     "search_topic",
     "translate_document",
+    "web_search",
   ]);
 });
 
@@ -249,6 +255,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
     "observation_search",
     "read_chapter",
     "read_conversation",
+    "read_page",
     "read_pages",
     "read_supplement",
     "remove_supplement",
@@ -256,6 +263,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
     "search_topic",
     "translate_document",
     "view_figure",
+    "web_search",
   ]);
   expect(turn!.systemPrompt).toContain("[fig:1]");
 });
@@ -276,6 +284,7 @@ test("a live pipeline mounts the source and paper tools, once", async () => {
     "read_chapter",
     "read_conversation",
     "read_note",
+    "read_page",
     "read_pages",
     "read_paper",
     "read_supplement",
@@ -283,6 +292,7 @@ test("a live pipeline mounts the source and paper tools, once", async () => {
     "search_conversations",
     "search_topic",
     "translate_document",
+    "web_search",
   ]);
   expect(turn!.systemPrompt).toContain("ingest_url");
 });
@@ -301,12 +311,14 @@ test("a pipeline with no plan yet mounts no paper tools", async () => {
     "observation_search",
     "read_chapter",
     "read_conversation",
+    "read_page",
     "read_pages",
     "read_supplement",
     "remove_supplement",
     "search_conversations",
     "search_topic",
     "translate_document",
+    "web_search",
   ]);
 });
 
@@ -332,6 +344,7 @@ test("kept articles mount the saved-article tools and their prompt line", async 
     "read_chapter",
     "read_conversation",
     "read_note",
+    "read_page",
     "read_pages",
     "read_paper",
     "read_supplement",
@@ -339,6 +352,7 @@ test("kept articles mount the saved-article tools and their prompt line", async 
     "search_conversations",
     "search_topic",
     "translate_document",
+    "web_search",
   ]);
   expect(turn!.systemPrompt).toContain("list_saved_articles");
   expect(turn!.systemPrompt).toContain("and only then");

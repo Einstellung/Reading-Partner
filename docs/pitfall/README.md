@@ -441,6 +441,7 @@
 - [559-pi-ai-error-message-keeps-only-the-text](./ai/559-pi-ai-error-message-keeps-only-the-text.md) — pi-ai 把凭据和网络抛出的错都变成 `stopReason: "error"` 的消息，只留 `errorMessage` 文字，类丢了；`providerFailureName` 按文字映射回 `NotSignedInError` / `OfflineError` / `ModelCallError`
 - [560-durable-turns-send-session-id-to-every-provider](./ai/560-durable-turns-send-session-id-to-every-provider.md) — durable 回合不走 `streamChat`，call-setup 的表管不到；pi-durable 每次请求都带对话的 `sessionId`，pi-ai 按它出 OpenCode 头、亲和头、Codex 的 `session-id` 和 `prompt_cache_key`；要改得在 `durable-models.ts` 的 `appProvider` 里改
 - [563-codex-sse-body-is-zstd](./ai/563-codex-sse-body-is-zstd.md) — Codex 走 SSE 时请求体 zstd 压缩（`content-encoding: zstd`），假 fetch 直接 `JSON.parse` 会抛，被当成 provider 错误；先 `Bun.zstdDecompressSync`
+- [568-codex-web-search-has-no-citations](./ai/568-codex-web-search-has-no-citations.md) — Codex 端点的 hosted `web_search` 不给 url_citation、completed 的 output 为空，来源只有搜索候选；让模型写行内链接，从回答里抽出来排在前面
 
 ## 开发环境
 

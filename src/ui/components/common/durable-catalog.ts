@@ -37,6 +37,7 @@ import { buildResearchAgent } from "../../../reading/papers/research-agent";
 import { subagentTool } from "../../../legion/subagent/tool";
 import { buildTakeLinkTool } from "../../../reading/ingest/take-link-tool";
 import { buildMealsCatalogTools } from "../../../info/meals/tools";
+import { buildWebSearchTool } from "../../../websearch/tool";
 import type { AgentTool } from "../../../legion/durable/contract";
 
 const inert = (value: unknown): never => value as never;
@@ -72,6 +73,7 @@ export function appToolCatalog(): AgentTool[] {
     ...buildArrangeTools(inert({ readOutline: async () => null, editOutline: async () => null })),
     ...buildSourceTools(inert({ fetchFn: noFetch, extract: async () => null, addSource: async () => {}, onProbeCard: () => {} })),
     buildReadPageTool(inert({ fetchFn: noFetch })),
+    buildWebSearchTool(inert({ search: async () => ({ text: "", sources: [] }) })),
     ...buildTaskingTools({}),
     subagentTool(buildResearchAgent(inert({})), inert({})),
     buildTakeLinkTool(inert({ links: () => [], origin: { place: "door", date: "" } })),

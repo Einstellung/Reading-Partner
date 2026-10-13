@@ -27,6 +27,7 @@ import { buildClassroomTools } from "../../src/reading/prep/papers/tools";
 import { buildSupplementTools } from "../../src/reading/ingest/remove-tool";
 import { buildReadSupplementTools } from "../../src/reading/ingest/read-supplement-tool";
 import { appToolCatalog } from "../../src/ui/components/common/durable-catalog";
+import { buildWebSearchTool } from "../../src/websearch/tool";
 import { buildSavedArticleTools } from "../../src/reading/saved/saved-article-tools";
 import { buildCitationTools } from "../../src/reading/papers/citation-tool";
 import { buildPaperSearchTools } from "../../src/reading/papers/search-tool";
@@ -193,6 +194,11 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
       ),
     ],
     names: ["research_literature"], safe: ["research_literature"],
+  },
+  {
+    where: "websearch",
+    tools: [buildWebSearchTool(any({ search: async () => ({ text: "", sources: [] }) }))],
+    names: ["web_search"], safe: ["web_search"],
   },
   {
     where: "reading/ingest/take-link-tool",

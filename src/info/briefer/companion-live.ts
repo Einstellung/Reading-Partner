@@ -26,6 +26,8 @@ import { pictureSummary } from "../picture/picture";
 import type { Picture } from "../picture/types";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
 import type { AgentTool } from "../../legion/durable/contract";
+import { loadSettings } from "../../platform/app/settings";
+import { liveWebSearchTools } from "../../websearch/tool";
 import type { RequestOutcome } from "./reader";
 
 // The briefing controller the host hands in so generate_briefing can kick a
@@ -124,7 +126,7 @@ export async function buildLiveCompanionTools(
   briefing: BriefingControl,
   opts: LiveCompanionOptions = {},
 ): Promise<AgentTool[]> {
-  return buildCompanionTools({
+  const tools = buildCompanionTools({
     // The research rooms (docs/63). The roster and the source list are both read
     // per call, so a room or a source added earlier in this same conversation is
     // proposed against rather than duplicated.
@@ -151,4 +153,7 @@ export async function buildLiveCompanionTools(
     // the collector, and says so.
     collecting: opts.collecting,
   });
+  // web_search where the provider has a search channel (docs/info/24); read_page is already here.
+  const search = liveWebSearchTools(await loadSettings(), { caller: "info", sessionId: opts.lab?.threadId ?? "info" });
+  return [...tools, ...search];
 }

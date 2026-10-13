@@ -19,6 +19,9 @@ import { TRANSLATE_PROMPT, buildTranslateTools } from "./translate/tool";
 import { bookDeleter, liveTranslateToolDeps } from "./translate/tool-live";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
 import { RESEARCH_PROMPT } from "./papers/research-agent";
+import { liveWebSearchTools } from "../websearch/tool";
+import { buildReadPageTool } from "../info/sources/read-page-tool";
+import { infoFetch } from "../workshop/extract/http";
 
 export interface BookSideToolDeps {
   bookId: string;
@@ -150,5 +153,10 @@ export function bookSideTools(deps: BookSideToolDeps): BookSideTools {
     s2ApiKey: s.semanticScholarApiKey ?? undefined,
   });
 
-  return { shelf: [...ingest, ...supplement, ...translate, ...readSupplement], literature: [findPaper] };
+  // web_search where the provider has a search channel (docs/info/24), with
+  // read_page beside it to open what a search cites.
+  const search = liveWebSearchTools(s, { caller: "reading", bookId, sessionId: threadId });
+  const web = search.length ? [...search, buildReadPageTool({ fetchFn: infoFetch })] : [];
+
+  return { shelf: [...ingest, ...supplement, ...translate, ...readSupplement], literature: [findPaper, ...web] };
 }

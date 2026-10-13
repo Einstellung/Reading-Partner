@@ -173,6 +173,9 @@ const LAYER: Record<string, Layer> = {
   // line are all callers, and nothing here knows any of them. Siblings may use
   // each other as long as the graph stays acyclic.
   workshop: "capability",
+  // web_search (docs/info/24): one search sub-request to the conversation's own
+  // provider with its hosted search tool, and the answer's sources.
+  websearch: "capability",
   // A web page to its readable body: the fetch, Readability with the defuddle
   // fallback, the article sanitizer and the hidden-webview fetchers.
   "workshop/extract": "capability",
