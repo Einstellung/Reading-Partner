@@ -27,12 +27,13 @@
 - 输出与开销：Markdown 或 HTML 简报，带各源的互动数字。README 说一次对比类查询约 3 分钟。每日预算闸默认 5 美元，超了就跳过这个话题。
 - 能否持续跑：加 `--store` 后写入 SQLite（FTS5 全文检索，URL 去重）。同一 URL 再次出现时更新它的互动数，并记一次"再现"。`watchlist delta` 给出新增和更新条数，有新内容时发 Slack 或 webhook；`briefing.py` 汇出日报、周报的数据，再由 agent 写成文字。仓库本身不装定时器，cron 要用户自己配。
 - README 与代码不一致："Zero config" 只对 Reddit、HN、Polymarket、GitHub 成立；X 实际要浏览器 cookie 或付费 key。"AI agent judge" 指的就是宿主 agent，不是独立的判官。
+- 源码拆解见 [last30days拆解](./last30days拆解.md)。
 
 ### 2. ai-research-arm（ARA，guzus）
 
-13 星，一次性开源的快照（只有一个 commit，2026-10-13），MIT。领域固定为 AI，号称从 2026-01 起无人值守运行。实际是 32 个 GitHub Actions workflow 组成的"自己写自己的报纸"。
+13 星，MIT，完整历史（2026-01-14 到 2026-10-13 共 11,056 个提交）。领域固定为 AI，号称从 2026-01 起无人值守运行。实际是 35 个 GitHub Actions workflow 组成的"自己写自己的报纸"。
 
-- 怎么说关心什么：没有对话入口，靠维护几份清单：X 账号清单 `twitter_accounts.json` 加 7 个 X 搜索词、RSS 和专家博客注册表、3 个 subreddit。账号清单由 agent 自己扩充：每周有一条 explorer 流程找新账号，优先"已在盯的账号为它背书过的"，同时要在 AI 话题上而不是只是热门，证据够就开 PR 等人审。
+- 怎么说关心什么：没有对话入口，靠维护几份清单：X 账号清单 `twitter_accounts.json` 加 7 个 X 搜索词、RSS 和专家博客注册表、3 个 subreddit。账号清单有一条每周的 explorer 流程找新账号，优先"已在盯的账号为它背书过的"，同时要在 AI 话题上而不是只是热门，证据够就开 PR 等人审。这条流程只在 06-20 到 06-30 合进过 4 个 bot PR，之后名单的大改动是人手做的。
 - 怎么搜：
   - X 用 Birdy，只读、靠 cookie（BIRD_AUTH_TOKEN/CT0），有封号和条款风险。
   - HN 走 Algolia；Reddit 走 RSS；Bluesky 走公开 API；arXiv 走 Atom；YouTube 走 tuber。
@@ -40,14 +41,15 @@
   - 模型通过 claude-code-action 加 Claude 订阅的 OAuth token 调用，每条流程用哪个模型写在 `data/agent-backends.json` 一个文件里。
 - 工作流：
   - 聚合：各源 2–6 小时一次，写成 markdown 提交进 git。
-  - 合成：每天 00:00 UTC 出全源日报，提示词里带"昨天的日报"和当天已跑过的段落。
+  - 合成：每天 00:00 UTC 出全源日报，日报本身不读昨天的日报；Twitter 分析员的提示词里带昨天的 Twitter 文件和当天已写的段落，`ai-news-research` 读昨天的 ai-news。
   - 模型发布时间线：每个发布、融资或诉讼一张 ticket，每天只增删改，不重新生成。
   - wiki：从当天日报累积。
   - 自审：每周审一遍自己的方法，提 PR 修。
-  - 快讯去重：先由程序判完全相同、同 URL、跨源 Jaccard ≥ 0.5 三种情况；Jaccard 在 [0.35, 0.5) 的"争议带"才交给 Haiku 判。只有判官给出 HIGH 置信度的"重复"才压掉，判官出错或缺结果时一律照发。判决按 URL 对号，不按数组下标。
+  - 快讯去重：先由程序判完全相同、同 URL、跨源 Jaccard ≥ 0.5 三种情况；Jaccard 在 [0.35, 0.5) 的"争议带"才交给 Opus 判（`twitter-judge` lane）。只有判官给出 HIGH 置信度的"重复"才压掉，判官出错或缺结果时一律照发。判决按 URL 对号，不按数组下标。
 - 输出：日报带 TTS 音频；头版是确定性的 SVG 转 PNG，渲染路径里不用模型；还有模型时间线、wiki、长文和 Telegram 快讯。仓库里找不到成本数字。
 - 能否持续跑：能，这是它的本职。状态全在 git 里。
 - README 与代码不一致：没有发现明显夸大。
+- 源码拆解见 [ai-research-arm拆解](./ai-research-arm拆解.md)。
 
 ### 3. worldmonitor（koala73）
 
@@ -344,9 +346,9 @@
   - 推文时间核验：X 推文 ID 里编码了发帖时间，可以零成本核对模型或第三方返回的推文是否真的在时间窗内。
 - ARA（MIT）：
   - 快讯三段去重：程序判完全相同、同 URL、高重叠；只把 Jaccard 0.35–0.5 的争议带交给便宜模型判；只有 HIGH 置信才压掉，出错一律照发，判决按 URL 对号。可以直接补进 [AI信息筛选调研](./AI信息筛选调研.md) 里 L1 去重之后。
-  - 源清单靠"已在盯的源为它背书"自己扩，开 PR 由人审。对应招募员加"add 那道闸"。
+  - 源清单靠"已在盯的源为它背书"扩，开 PR 由人审（实际只自动合进过 4 个 PR）。对应招募员加"add 那道闸"。
   - 实体 ticket 只增删改、不重新生成。对应态势里的判断记录。
-  - 日报读昨天的日报。
+  - Twitter 分析员读昨天的文件和当天已写的段落，续写多日脉络，不从头重报。
 - openmagpie（Apache）：watch 就是"判据加阈值加理由"再接一串动作，四个阶段各自独立定时。可以给"粗筛只输出可观测项命中"补一个可解释的理由字段。
 - obsei、harken（Apache、MIT）：源接口返回（记录, 游标），游标在数据入库后才推进；追新和回填各用一个游标，回填的条目不触发提醒。适合 info 源插件里需要增量拉取的那几个。
 - gpt-researcher（Apache）：深挖树"learnings 加追问"递归，可以直接当 tasking 的展开方式；上下文过滤没有 key 时退回 BM25，可以借。
