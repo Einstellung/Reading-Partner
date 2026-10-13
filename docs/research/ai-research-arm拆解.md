@@ -36,7 +36,7 @@
 | wiki-ingest | digest 成功后 | 当日 digest 加当天更新过的 tickets | 对 `research/wiki/` 增删改 |
 | daily-front-page | digest 后 | digest | 确定性 SVG 转 PNG，不用模型 |
 | generative-research（4228 行） | issue、手动、Twitter 自动派 | 主题，加 `prior_context.py` 找出的旧文 | `research/generative/` 长文 |
-| research-issue、translate-generative-research | issue / 手动 | | 深挖、韩文翻译 |
+| research-issue、translate-generative-research | issue / 长文发布后自动派，可手动补 | | 技术调研报告、韩文翻译 |
 
 **元（运维和改进）**
 
@@ -280,7 +280,219 @@ kept.append(item)
 - 其中 Opus 级的是 Twitter 8 次（每次最多 120 轮）、日报、timeline、ai-news。
 - X 请求每天约 1,000 次以上，另有 timeline 和 explorer 自己的抓取。
 
-## 9. 对我们的结论
+## 9. 长文流程 generative-research
+
+`generative-research.yml` 4,228 行。其中 Claude 后端的提示词约 1,100 行（685–1796 行），Fireworks 后端是同一份的拷贝（2171–3279 行），其余是后端解析、预检、重试、发布门、推送和通知。默认后端是 `claude-opus-5-5`（`agent-backends.json` 的 `generative-research-default`），10 月的 6 篇都是它写的。`research/generative/index.json` 共 132 篇，按月：5 月 40、6 月 18、7 月 24、8 月 32、9 月 12、10 月至今 6。
+
+### 触发
+
+- **issue**：带 `gen-research` 标签（开 issue 时就带，或之后打上），且作者是 OWNER、MEMBER 或 COLLABORATOR。标题当 topic；正文去掉 `backend:` 那行后还有内容，就当 brief。标题或正文里有 `x.com/.../status/...` 链接，就进推文种子模式。
+- **手动 workflow_dispatch**：参数是 topic、twitter_url（可以只给链接）、slug、backend、tags。
+- **推文种子模式**：程序拼进 prompt 的原话是
+  ```
+  Start by reading this tweet and its thread/conversation with the authenticated bird CLI.
+  Treat the tweet as a seed primary source for what the author said, not as proof that
+  every claim is true. Infer the underlying research question, identify the named entities
+  and claims, then expand into a full generative-research article using primary sources
+  outside X/Twitter.
+  ```
+- **Twitter 分析员自动派**：在 `hourly-twitter.yml` 里，每轮推送成功、后端是 claude 时跑三步，三步都是 `continue-on-error`。
+  1. 节流：`gh run list` 数过去 24 小时 generative-research 的 workflow_dispatch 事件，≥2 次，或离上一次不到 10 小时，就跳过。手动派的也算在额度里。
+  2. 选题：Opus，`--max-turns 10`，只读今天的 `research/twitter/<date>.md` 和 `index.json` 最后 30 条。判据原文：
+     ```
+     Be conservative: skipping is the default, not the exception.
+     Step 3 — pick ONE topic OR reject all. Hard bar for selection:
+       - Concrete: named entity (person, model, company, paper) +
+         specific verifiable claim + dated primary source
+       - Primary-sourced inside the twitter file (the "Evidence"
+         bullets cite a primary like an IR page, paper, official
+         tweet from a named principal — not commentary)
+       - Has a "Watch" list under the story (signals ongoing
+         developments worth tracking)
+       - Does NOT overlap with anything in the recent index
+         (compare by topic / tags / title — be strict)
+       - Substantive enough for a 4500–7000 word analyst piece
+         (a one-tweet rumour does not qualify, even if dramatic)
+     ```
+     输出一行不超过 140 字符的题目，或者 `NO_TOPIC`。
+  3. 派发：程序截到 200 字符，`gh workflow run generative-research.yml -f topic=...`。只传题目，不传推文链接和分析员找到的证据，长文从零开始搜。
+
+  上限是每月约 60 篇，9 月实际一共 12 篇，其中 6 篇的 `source` 是 `workflow_dispatch-twitter-url`，是带推文链接手动派的（自动派不传链接）。剩下 6 篇记成 `workflow_dispatch`，自动派和只给 topic 的手动派在 index 里分不开，所以 9 月自动派最多 6 篇。
+- **research-issue.yml** 是另一条线：`research` 标签，Sonnet 5.5，有 key 时挂 Exa/Perplexity MCP，30 分钟超时，写 `research/issues/<n>-research.md`。那是技术选型报告（Executive Summary / Key Findings / Tools & Libraries / Code Examples / Next Steps），不查旧文，不过发布门，仓库里只有 3 份。
+
+### 动笔前查旧文
+
+`scripts/prior_context.py` 225 行。只读 `index.json` 的元数据，不读正文，也不用 embedding：
+```python
+WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9\-]{1,}")   # 长度 >2，去停用词
+s = (
+    3 * len(topic_tokens & tag_tokens)       # tag 权重 3
+    + 2 * len(topic_tokens & title_tokens)   # 标题 2
+    + 1 * len(topic_tokens & prompt_tokens)  # 当初的 prompt 1
+)
+# --min-score 2，按分数取前 --limit 5
+```
+每条命中输出 slug、title、model、date、prompt、文件路径，加上从 HTML 里抽出的标题和 lede 前 400 字。整块包在 `<<<UNTRUSTED_PRIOR_ARTICLE … END_UNTRUSTED_PRIOR_ARTICLE>>>` 里，抽取前先剥掉 HTML 注释，正文里出现的围栏标记会被替换掉。中文 topic 一个 token 都抽不出来。
+
+提示词里只有 step 0.a 这一处用到它，加上脚本自己打印的头：
+```
+a. Run `uv run python scripts/prior_context.py "$(cat .gen-input/topic.txt)"`
+   and Read any high-overlap article files it returns.
+   Note what's already covered so you don't duplicate.
+
+# When researching, do not re-derive what these already cover. Build on them,
+# update with fresh facts, or deliberately depart. The full text of each lives
+# at the file: path below — use the Read tool when you need detail.
+```
+没有续写、引用旧文、写出「和上次比变了什么」的要求，作用只有防重复。抽查的三篇近作，正文都没有回指旧文。
+
+另有一套 claim store：`build_claim_index.py`（356 行）把每篇的 `claims.json` 并成 `research/claims/index.json`；`claim_search.py`（335 行）做 BM25 检索、按 host 或 URL 查，`--candidates` 列出同单位但数字不同的冲突候选。每条记录带 `reusable`，不可复用时给 `reuse_block`（volatile、contested、single-source、no-as-of、low-confidence），规定这些必须重新核实。CLAUDE.md 写「agent 研究前先跑它」，但 generative-research.yml 和三份其他后端的提示词里都没有调用它（grep 为零），实际没接上。
+
+### 取材
+
+- **歧义检查**：topic 是光秃秃一个词、prompt 里没有任何实体或问题、两边都没点名具体对象，三条全满足才不做全量研究，改出一篇「Scope Clarification」短文（1500–2500 词，给三个具体方向）。默认放行。
+- **计划**（只留在上下文里）：10–18 个可回答的问题，每题写明什么算 primary；3–5 个证伪问题；每题预估数据形状。再把题目归进 8 个领域之一（semiconductor、biotech、finance、crypto、policy、infra、software、general），领域决定子 agent 的专家角色字符串和来源优先表，例如 finance 是 EDGAR、电话会、IR、FRED。
+- **证据波次**：子 agent 每波最多 8 个（自托管 runner 并发超过约 10 个 Task 就 OOM），一共 16–32 个，分 2–4 波。每个子 agent 最多交约 10 个证据包，格式是：
+  ```
+  - claim: <the factual assertion in one sentence>
+  - source_url: <URL the agent actually fetched>
+  - source_type: primary | secondary | commentary
+  - date: <YYYY-MM-DD when published or claim was made>
+  - figure: <the exact number, name, or date the claim turns on>
+  - excerpt: <verbatim quote, <40 words>
+  - confidence: 1 (rumour) … 5 (multiple primary sources)
+  - caveat: <what would weaken or contradict the claim>
+  - shape: one of {single-fact, time-series, ranking, breakdown, paired-delta,
+    cross-entity-categorical, pictogram, key-value, chronology, quote}
+  ```
+- **工具**：
+  - WebSearch、WebFetch。
+  - `research_search.py`（964 行）：arxiv、edgar、crossref、semanticscholar、github、wikidata、uspto（走 Google Patents）、jedec（Wikipedia 加 Bing）、predictionmarket（Polymarket）、gdelt、nonenglish（GDELT 按语种过滤），都是免费公开接口。提示词要求有学术、SEC、GitHub 痕迹的题目先用它，再用 WebSearch。
+  - `curl -sL <url> | pdftotext | head -c 60000` 读 PDF。
+  - `source_cache.py`（944 行）：URL 规范化（去掉 utm_*、fbclid，query 排序）后取 sha256 做键，默认 TTL 30 天，PDF 另存一份 `.txt`。同一次运行的子 agent 共用缓存，缓存目录不进 git。
+  - `birdy search`、`birdy user-tweets`：点名当事人（创始人、官方账号、项目主力）的推文算 primary。
+  - 财报电话会的逐字引语算 primary。
+- **外链和论文**：没有程序层的「跟外链」机制。种子模式要求抽出推文里的链接和实体，再到 X 以外找原始材料；论文靠 research_search 的 arxiv、semanticscholar、crossref 加 pdftotext。跟哪些链接、跟几层，全由模型决定。
+- **怎么算够**：没有程序判停。主 agent 先建账本：按 URL 去重；confidence < 2 的丢掉，除非是某个问题唯一的信号；按计划问题分组。然后亲自重抓 5–8 个最承重的 primary，核对数字确实在页面上。目标写在提示词里：计划问题回答率 ≥85%，不同来源 URL ≥20，primary 占比 ≥50%，每千词 ≥12 条带引用的断言。真正卡住发布的只有 refs ≥20 和引用密度 ≥10/千词两条，不够时提示词的说法是「run more research waves」。
+- **上限**：主 agent `--max-turns 120`；模型步 wall-clock 90 分钟；Claude 失败时恢复重试一次（RECOVERY MODE，读盘上的草稿接着做，不重新研究），fable-5 不重试。
+
+### 成稿
+
+流程：
+1. 写 claim ledger（`.gen-claims-ledger.json`）。只放论点依赖的断言，每条有 type、source_urls、对应的 source_tiers、as_of、confidence、risk；metric、forecast、comparison 类型和 volatile、contested 风险的必须有 as_of。
+2. 大纲 5–10 个 `## N.` 节，每节一句论点。把证据包按数据形状分给可视化组件，写成路由表（例如「:::stats 用包 4、8、11」），写手只照表填。
+3. 每节派一个写手子 agent，每波最多 4 个，每节 600–1100 词。写手拿到完整大纲（避免重复）、本节的包和路由表。每节契约原文：
+   ```
+   each `## ` numbered section must contain:
+      - 1 section-thesis sentence
+      - 3–6 sourced factual claims (each with `[^N]` cite)
+      - ≥ 1 quantitative datapoint where one exists
+      - ≥ 1 counterpoint or "what would weaken this" line
+      - 1 sentence on why this matters
+   ```
+4. 主 agent 缝合：frontmatter（eyebrow、title、deck、lede、stats）；开头用 `:::kv` 或 callout 给 3–5 条直接回答；最后一节「什么会推翻结论」由主 agent 自己从账本写；文末 `:::references`，每条 `{id, title, url, source, date}`，都由模型写。正文每个实质断言后跟 `[^N]`。
+5. verifier 子 agent：逐个 `[^N]` 抓引用的 URL，再做 2–3 次去掉原站域名或只搜关键数字的搜索。找不到独立佐证或数字对不上，即使原 URL 支持也判 weak。输出 `.gen-verifier-findings.json`，每条带正文里的原句。
+6. 红队子 agent，原文节选：
+   ```
+   > "You are an adversarial reviewer. Your job is to
+   > FALSIFY the article's 3 strongest factual claims.
+   > ... For EACH claim:
+   >   1. WebSearch + WebFetch for explicitly
+   >      contradicting evidence. Try at least 3-5
+   >      distinct searches per claim: with
+   >      `-site:{cited_url_host}`, with alternative
+   >      phrasings, with recent dates appended for
+   >      updates, with related-but-different framings
+   > ...
+   > Do NOT rewrite the article. Do NOT add new claims.
+   ```
+   severity 分三级：primary 来源反驳是 high，可信二手来源是 medium，只有评论是 low。红队失败时必须写 3 条带 `redteam_failed: true` 的占位，不许写 `{"findings": []}`，免得被读成「三条都没被推翻」。
+7. 有限修订一次：unsupported 断言和 high 级反驳，要么换成账本里有支持的说法，要么整句包成 `==unverified: …==` 或 `==contested: …==`，要么删掉。不许借机扩写。
+
+程序门在 `check_generative_research.py`（2,653 行）。模型在提交前自己跑，writer 提交时再跑一遍，推送前 workflow 还有三道（post-write gate、verifier audit、methodology gate）。任何一道失败都 `git reset --hard` 回到运行前，不推送。具体检查：
+- DSL 编译、组件白名单、正文 ≤200KB；
+- 可视化 ≥3 种、callout ≤5 个；
+- 引用密度 ≥10/千词，引用 ≥20 条；
+- qsanity 只警告：饼图合计 >105%、份额 >100%、同比 >1000%、远期日期笔误；
+- verifier 审计：每条 unsupported 断言生成一组探针（80 字前缀、≥5 词的分段、每个 8 词 shingle），只要某个探针在正文里的出现次数多于在 `<mark>` 里的次数，就算没降级，整篇不发；
+- derived 断言（公式推算）在白名单 AST 里重算，误差、引用环、依赖深度都要查。
+
+兜底：没有降级版成品，失败就不发，推 Telegram。主题太泛时出的 Scope Clarification 短文也要过 refs ≥20 和引用密度门。
+
+长度目标 4500–7000 词，提示词说只是护栏。抽查三篇近作：
+
+| 篇 | 词数 | references | 节数 | verifier（supported / weak / unsupported） | 红队 |
+|---|---|---|---|---|---|
+| Reflection Beam（10-05） | 5,870 | 43 | 8 | 66 / 9 / 2 | 2 条未推翻，1 条 low |
+| OpenAI 722 篇数学稿（10-07） | 5,480 | 53 | 9 | 58 / 23 / 3 | 3 条未推翻 |
+| Google Suncatcher（10-02） | 8,263 | 52 | 9 | 58 / 12 / 3 | 1 条未推翻，medium、low 各 1 |
+
+5 月的早期作品（cerebras）只有 2,423 词、16 个引用标记，这些门是后来加的。每篇成品是一个 HTML 片段，加 4 个旁文件：`.ara.md` 源文、`claims.json`、`verification.json`、`redteam.json`。
+
+### 翻译
+
+每篇发布成功后自动派 `translate-generative-research.yml`（`auto_merge=true`），也能按 slug 手动补。走 Cursor Grok 4.6 fast（`generative-translation` route，fallback none）；作业超时 100 分钟，模型步 80 分钟。
+
+模型不碰结构，过程如下：
+1. 程序编译 `.ara.md`，只暴露读者看得到的文本槽，把数字、URL 等不可变字面量换成不透明 token `⟦ARA0000⟧`。
+2. 模型读一份 JSONL（`[segment_id, source_text, flag]`），只写 `{id, text}`。它没有 shell、网络、搜索和子 agent。
+3. 程序校验：每个 id 恰好出现一次；token 恰好出现一次且顺序不变；除了数字贴着韩文（`9일`）以外，不许出现裸数字。然后重建 HTML。
+4. `check_generative_translation.py`（292 行）比对源文和译文的数字、URL、脚注、指令是否对等。
+5. 用同一个 writer 发布，开 PR 自动合并。
+
+提示词节选：
+```
+Preserve every opaque token such as `⟦ARA0000⟧` exactly once and in its original order.
+- Do not invent raw digits. Source numbers are already opaque tokens. The only allowed
+  untokenized digits are an integer glued to Hangul (`9일`, `3배`). Never write `$1,000`,
+  `2.5`, `30%`, `2026`, or any other bare number.
+- Do not browse, research, add claims, add sources, drop sections, edit the English
+  source, or write any other file.
+```
+三篇韩文版的提交时间比英文版晚 14、22、32 分钟。
+
+### 成本和耗时
+
+仓库里没有单篇的花费或耗时记录。能找到的：
+- 默认 Opus 5.5 走订阅 OAuth，注释说在 OAuth 下重试一次「costs no more than the first would have」。
+- OpenCode Go 路线的文档说一次深挖只占周额度（30 美元）的一小部分。
+- 歧义短文那段注释写「caps the run at a few minutes instead of 30+」，可见正常一次在 30 分钟以上。
+- 早期不限并发的版本跑了约 19 分钟就把 runner 拖得失联，这才加了每波上限和 90 分钟硬上限。
+- 一次运行的子会话数：研究 16–32 个，写手 5–10 个，加 verifier 和红队各 1 个，合计 23–44 个。
+
+### 对「详细资料 → 合订本」的启示
+
+**可以搬的**（MIT，保留版权声明）
+
+1. `prior_context.py`（225 行）。改成查本 topic 已有的合订本和文档：按标题、tag、来源 URL 打分，阈值 2、取前 5，中文按二元组分词。比它多一步：按规范化 URL 精确比对，已经装进旧合订本的原文直接标出来（claim store 的 `by_url` 就是这个用途，只是 ARA 没接上）。提示词补上 ARA 没有的一条：指南要写清这本比上一本多了什么。
+2. 计划步约 20 行提示词：10–18 个问题、3–5 个证伪问题、每题写明什么算 primary。加上推文种子模式那段约 20 行，「推文只证明作者说了什么，顺着链接和实体到 X 以外找原始材料」，正好是我们「顺着帖子往下挖」的说法。
+3. 证据包 schema 约 40 行，改成材料候选，见下面铁律那条。
+4. 判停改成程序数：每个计划问题至少一份 primary 材料，每个证伪问题至少一份对立材料，材料总数有上下限。不够时程序把缺的问题号还给模型，再搜一轮。ARA 把这件事留给模型，硬门只数引用。
+5. `source_cache.py` 的 `canonicalize_url` 和追踪参数表，约 80 行，接到摄入和 fulltext 的键上，同一篇不会因为 utm 参数进两次。
+6. 翻译的段落化加不透明 token 加对等检查（`generative_translation_segments.py` 471 行、`check_generative_translation.py` 292 行，核心约 250 行）。67 的翻译已经定了「编号占位符、模型不写标签」，还可以补两条：数字和 URL 一律 token 化；源文和译文的数字、URL 集合必须对等。合订本第一部分是双语，直接受益。
+7. verifier 审计的探针法（`_claim_probes` 加 `audit_verifier_findings`，约 120 行），用来查阅读指南：指南里每句引原文的话，按 shingle 回原文必须找得到。中文改成按字数切窗。
+8. `research_search.py` 里 crossref、github、gdelt、polymarket、wikidata 的取数函数，每个 30–60 行，给 tasking 当工具。arXiv、S2、OpenAlex 我们已经有插件，不重复搬。
+9. 自动派的节流（约 30 行 bash）和选题硬标准（约 20 行），留到将来秘书主动提议深挖时再用。现在的入口是用户开口要，用不上。
+
+**不适合的**
+
+- 产物不同。ARA 产出模型写的 5,000–8,000 词长文，原文不留（缓存在 gitignore 里）；我们产出收原文的合订本，模型只写阅读指南、决定选哪些节。所以分节写手、可视化路由、组件 DSL、引用密度、refs ≥20、字数护栏都不要。
+- verifier 和红队查的是模型写的断言有没有依据。我们的正文就是原文，不用逐条核实。红队的思路挪到取材阶段，变成「证伪问题必须找到对立材料」。
+- 16–32 个子 agent 分波并发：桌面和手机都撑不住这个成本和并发。tasking 用一个 agent 多轮工具调用，轮数沿用 `TASKING_TURN_ROUNDS` 那套。
+- WebSearch、Exa：tasking 已定不引搜索供应商。X 搜索走桌面 webview，免费 API 走 iOS 直连。
+- 多后端、Fireworks 预检、OAuth 恢复重试：不需要，续跑由 pi-durable 管。
+- 8 个领域写死专家角色和来源表：换成研究室章程给的视角和来源优先表。
+
+**铁律下怎么改**
+
+ARA 让模型在证据包里写 `source_url`，在 references 里写 title、url、date，再派 verifier 重新抓回来核对。我们反过来：
+- 抓取层每取到一页就登记 `M<n>`：URL、规范化 URL、标题、作者、发布日期、内容哈希，以及按标题边界切好的节 `M<n>.§k`。模型只交编号。
+- 材料候选：模型回 `{id: "M3", role: primary|secondary|commentary, answers: [问题号], why}`，URL、标题、日期都由程序从登记表里取。
+- 选节：模型回 `{material: "M3", sections: ["M3.§2", "M3.§5"], whole: false, order: 2}`，程序校验编号存在再装订。附录、目录、篇末「全文见附录 A.n」、封面底行的来源、篇数和日期区间，全由程序生成。
+- 指南里的数字和日期必须出自它点名的那节。程序用 `check_generative_translation.py` 的 `NUMBER_RE` 抽出指南里的数字，在对应节里找不到就打回。ARA 的 qsanity 只警告，我们要拦。
+- 旧合订本也编号（P1…）。模型说「P2 已讲过 X」时只写编号，程序渲染成链接。
+
+## 10. 对我们的结论
 
 **对应关系**
 
@@ -328,7 +540,9 @@ kept.append(item)
 ## 没查完的
 
 - hourly-rss 和 community 两条 lane 的具体提示词没读。
-- generative-research.yml（4,228 行）没读。
+- generative-research 的 Codex、OpenCode、Cursor 三份提示词（`.github/{codex,opencode,cursor}/prompts/generative-research.md`）没和 Claude 版逐段比。
+- 长文子 agent 自己有没有轮数上限，没核实。
+- 长文单次的实际耗时和花费没有数据；自动派实际成功了几次，index.json 分不出来。
 - claude-code-review 会不会自动审 explorer 的 PR，没核实。
 - Claude 订阅的具体档位不详。
 - 判官的验证集 `judge_eval_cases.json` 里有几条用例没打开看。
