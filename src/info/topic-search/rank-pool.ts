@@ -22,6 +22,8 @@ import type { XReadResult } from "./x-reader";
 
 /** Candidates sent to the rerank: a day's run, and a first run's. */
 export const RERANK_POOL = { daily: 40, first: 60 } as const;
+/** Candidates each stream gives the fusion: an X line reads hundreds, an arXiv search a page. */
+export const STREAM_TAKE = { x: 40, arxiv: 12 } as const;
 /** Characters of a candidate's text the rerank sees. */
 export const RERANK_TEXT_CHARS = 420;
 /** Links of one post the rerank is shown. */
@@ -224,7 +226,9 @@ export function fusePool(topic: TopicSearch, kept: readonly Candidate[], size: n
         .map((c) => ({ c, r: relevanceTo(q, c) }))
         // A live line is newest first; its stream is ranked by how well each post answers the query.
         .sort((a, b) => b.r - a.r || a.c.order - b.c.order);
-      if (members.length) streams.push({ weight: q.weight, items: members.map(({ c }) => ({ key: c.key, author: c.author })) });
+      if (members.length) {
+        streams.push({ weight: q.weight, take: STREAM_TAKE[source], items: members.map(({ c }) => ({ key: c.key, author: c.author })) });
+      }
     }
   }
   return weightedRrf(streams)

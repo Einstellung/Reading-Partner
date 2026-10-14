@@ -28,6 +28,12 @@ test("only the first 12 of a stream count, and a repeat inside a stream counts o
   expect(only.rrf).toBeCloseTo(1 / 61, 12);
 });
 
+test("a stream that says how many it gives overrides the 12", () => {
+  const keys = Array.from({ length: 50 }, (_, i) => `k${i}`);
+  expect(weightedRrf([{ weight: 1, take: 40, items: items(...keys) }]).length).toBe(40);
+  expect(weightedRrf([{ weight: 1, take: 40, items: items(...keys) }, { weight: 1, items: items(...keys.map((k) => `a${k}`)) }]).length).toBe(52);
+});
+
 test("one author keeps at most three candidates, the best ones, @ and case ignored", () => {
   const stream = {
     weight: 1,
