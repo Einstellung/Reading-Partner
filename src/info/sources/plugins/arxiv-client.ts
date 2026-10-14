@@ -154,17 +154,41 @@ export interface ArxivTopicOptions {
   // instead of the best one, and on arXiv `sortBy=submittedDate` does not answer
   // at all (docs/pitfall/72).
   sinceYear?: number | null;
+  // A window of submission days, "YYYY-MM-DD" UTC, both inclusive. Either end
+  // may be left open; `since` takes over from `sinceYear` when both are given.
+  since?: string;
+  until?: string;
+  signal?: AbortSignal;
+}
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// The submittedDate clause for a query's window, or null when it has none.
+// Throws on a malformed day or an inverted window: the caller built it, and a
+// silently dropped bound would widen the search.
+export function arxivSubmittedRange(opts: ArxivTopicOptions): string | null {
+  for (const day of [opts.since, opts.until]) {
+    if (day !== undefined && (!DAY_RE.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`)))) {
+      throw new Error(`not a YYYY-MM-DD day: ${day}`);
+    }
+  }
+  if (opts.since !== undefined && opts.until !== undefined && opts.since > opts.until) {
+    throw new Error(`the window ends (${opts.until}) before it starts (${opts.since})`);
+  }
+  const from = opts.since !== undefined ? `${opts.since.replace(/-/g, "")}0000` : opts.sinceYear ? `${opts.sinceYear}01010000` : null;
+  const to = opts.until !== undefined ? `${opts.until.replace(/-/g, "")}2359` : null;
+  if (from === null && to === null) return null;
+  return `submittedDate:[${from ?? "199101010000"} TO ${to ?? "210001010000"}]`;
 }
 
 // The export API's date field wants a closed range of minute-precision stamps,
-// so an open-ended "since" needs an upper bound; 2100 is one no submission will
-// reach.
+// so an open end gets a bound no submission falls outside: 1991 (arXiv's first
+// year) below, 2100 above.
 export function arxivTopicSearchUrl(query: string, opts: ArxivTopicOptions = {}): string {
   const terms = arxivQueryTerms(query);
   const clauses = (terms.length ? terms : [query.trim()]).map((t) => `all:${t}`);
-  if (opts.sinceYear) {
-    clauses.push(`submittedDate:[${opts.sinceYear}01010000 TO 210001010000]`);
-  }
+  const range = arxivSubmittedRange(opts);
+  if (range) clauses.push(range);
   const q = encodeURIComponent(clauses.join(" AND "));
   return `https://export.arxiv.org/api/query?search_query=${q}&max_results=${opts.limit ?? 5}`;
 }
@@ -180,7 +204,8 @@ export async function searchArxivTopic(
   opts: ArxivTopicOptions = {},
   fetchFn?: FetchFn,
 ): Promise<ArxivEntry[]> {
-  const res = await fetchWithRetry(arxivTopicSearchUrl(query, opts), undefined, interactiveRetry(fetchFn));
+  const init = opts.signal ? { signal: opts.signal } : undefined;
+  const res = await fetchWithRetry(arxivTopicSearchUrl(query, opts), init, interactiveRetry(fetchFn));
   if (!res.ok) throw new HttpStatusError(res.status, "export.arxiv.org");
   return parseArxivAtom(await res.text());
 }

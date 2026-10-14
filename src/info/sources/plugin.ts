@@ -65,17 +65,28 @@ export interface SourcePlugin {
   // sources/plugins/all.ts registers at startup.
   site?: SiteAdapter;
 
-  // --- optional capabilities, unimplemented this release -------------------
+  // --- optional capabilities -------------------------------------------------
 
-  // Relevance search for an interactive caller (reading's paper search, a
-  // tasking run): free text in, headlines with signals out.
-  search?(text: string, opts: { sinceYear?: number; limit?: number }, deps: PluginDeps): Promise<InfoItem[]>;
+  // Relevance search (a topic search run, reading's paper search): free text
+  // in, headlines with signals out, in the library's relevance order. arXiv
+  // implements it.
+  search?(text: string, opts: SearchOptions, deps: PluginDeps): Promise<InfoItem[]>;
   // One known handle (an arXiv id, a repo full name, a Hub id) resolved to an
-  // item, or null when the library does not have it.
+  // item, or null when the library does not have it. GitHub implements it.
   lookup?(handle: string, deps: PluginDeps): Promise<InfoItem | null>;
   // The library's numbers for handles it knows — S2 citations for arXiv ids,
   // OpenDigger for repos — for the day-3 / day-14 re-scoring (docs/69).
   enrich?(handles: string[], deps: PluginDeps): Promise<Map<string, ItemSignals>>;
+}
+
+// What a search may be narrowed by. Recency is a filter, never a sort
+// (docs/pitfall/72). `since` and `until` are "YYYY-MM-DD" days, both inclusive;
+// `since` takes over from `sinceYear` when both are given.
+export interface SearchOptions {
+  sinceYear?: number;
+  since?: string;
+  until?: string;
+  limit?: number;
 }
 
 const providers = new Map<string, SourcePlugin>();

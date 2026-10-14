@@ -14,6 +14,7 @@
 import { throwIfAborted } from "../../../platform/app/abort";
 import {
   arxivIdUrl,
+  searchArxivTopic,
   arxivPaperOfUrl,
   arxivPdfUrl,
   arxivQueryTerms,
@@ -36,6 +37,7 @@ import {
   queryInt,
   queryStrings,
   type PluginDeps,
+  type SearchOptions,
   type SourcePlugin,
   type IndexQuery,
 } from "../plugin";
@@ -48,6 +50,8 @@ const DEFAULT_DAYS = 2;
 // A window wider than a month is an archive pull, not a recency query.
 const MAX_DAYS = 30;
 const SUMMARY_CHARS = 400;
+// The source a search item names: the plugin itself.
+const SEARCH_SOURCE = { id: "arxiv", name: "arXiv" };
 
 // "cs.RO", "math-ph", "q-bio.NC": an archive, optionally with a subject class.
 const CATEGORY_RE = /^[a-z-]+(\.[A-Z]{2})?$/;
@@ -101,7 +105,7 @@ export function arxivIndexUrl(query: IndexQuery, today: string, limit: number): 
   return `https://${HOST}/api/query?search_query=${q}&max_results=${limit}`;
 }
 
-function toItem(desc: SourceDescriptor, e: ArxivEntry): InfoItem {
+function toItem(desc: Pick<SourceDescriptor, "id" | "name">, e: ArxivEntry): InfoItem {
   const tags: string[] = [];
   if (e.primaryCategory) tags.push(e.primaryCategory);
   const n = e.authors.length;
@@ -120,6 +124,7 @@ function toItem(desc: SourceDescriptor, e: ArxivEntry): InfoItem {
     textContent: e.summary,
     summaryOnly: true,
   };
+  if (e.authors.length) item.authors = [...e.authors];
   if (tags.length) item.signals = { tags };
   return item;
 }
@@ -221,5 +226,24 @@ export const arxivPlugin: SourcePlugin = {
     const res = await fetchWithRetry(url, init, interactiveRetry(deps.fetchFn));
     if (!res.ok) throw new HttpStatusError(res.status, HOST);
     return parseArxivAtom(await res.text()).map((e) => toItem(desc, e));
+  },
+
+  // A topic search's arXiv words, run once (docs/88): every word an all:
+  // clause, the window a submittedDate range, relevance order. Items carry the
+  // plugin's own id and name as their source, since no descriptor asked.
+  async search(text: string, opts: SearchOptions, deps: PluginDeps): Promise<InfoItem[]> {
+    throwIfAborted(deps.signal);
+    const entries = await searchArxivTopic(
+      text,
+      {
+        limit: opts.limit ?? deps.limit ?? DEFAULT_LIMIT,
+        ...(opts.sinceYear === undefined ? {} : { sinceYear: opts.sinceYear }),
+        ...(opts.since === undefined ? {} : { since: opts.since }),
+        ...(opts.until === undefined ? {} : { until: opts.until }),
+        ...(deps.signal ? { signal: deps.signal } : {}),
+      },
+      deps.fetchFn,
+    );
+    return entries.map((e) => toItem(SEARCH_SOURCE, e));
   },
 };

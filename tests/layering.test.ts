@@ -238,6 +238,10 @@ const LAYER: Record<string, Layer> = {
   // hidden webview, and the post's record; registered as a reader of
   // info/links, and still the rule-based fan-out until the switch (docs/86).
   "info/x": "domain",
+  // A topic search's scoring (docs/88): local relevance, weighted RRF, X
+  // engagement, the final score, events and their clusters, and the 30-day
+  // dedupe. Pure; reads the arXiv, GitHub and X link parsers for event keys.
+  "info/rank": "domain",
   reading: "domain",
   "reading/chapters": "domain",
   // A reading turn's own corner: the desk assembly's tool set and history
