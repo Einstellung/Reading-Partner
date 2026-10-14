@@ -40,7 +40,7 @@ export type { ThinkingKind };
 // silent turn of the reader's conversation and thinks like one; only its model
 // is the everyday one.
 function thinkingFor(s: Settings, kind: ThinkingKind): ThinkingSetting {
-	if (kind === "chat" || kind === "meals" || kind === "distill") return s.chatThinking;
+	if (kind === "chat" || kind === "meals" || kind === "distill" || kind === "think") return s.chatThinking;
 	if (kind === "prep") return s.prepThinking;
 	return kind === "briefing" ? s.briefingThinking : s.briefingScreenThinking;
 }

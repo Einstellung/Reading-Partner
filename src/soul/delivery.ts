@@ -191,3 +191,82 @@ export function originLabel(origin: BoxOrigin): string {
   if (origin.place === "retell") return "a retell";
   return `at the door, ${origin.date}`;
 }
+
+// --- verbatim delivery (docs/companion/136 回来) -----------------------------
+//
+// A kind whose product is itself the answer — `think`, written to be read aloud
+// — is not answered with a turn. Its output is appended to the conversation it
+// was asked from as the soul's reply, word for word, and put in the box, always:
+// a call that heard "it's ready" has not read it. The kind declares this when it
+// is registered; every other kind is answered with a turn as before.
+
+const VERBATIM = new Set<string>();
+
+/** Say that a kind's output is delivered as it is, with no turn. Returns the undo. */
+export function declareVerbatim(kind: string): () => void {
+  VERBATIM.add(kind);
+  return () => {
+    VERBATIM.delete(kind);
+  };
+}
+
+/** Whether a kind's output is delivered as it is. */
+export function isVerbatim(kind: string): boolean {
+  return VERBATIM.has(kind);
+}
+
+/** One output to append to a place's conversation as the soul's reply. */
+export interface ReplyAppend {
+  origin: BoxOrigin;
+  text: string;
+  /** The run it came back from: the reply is stamped with it (MessageOrigin). */
+  runId: string;
+  at: number;
+}
+
+/**
+ * Append one reply to a place's conversation. False when there is no
+ * conversation there to append to after all; a throw leaves the bell queued.
+ */
+export type ReplyAppender = (input: ReplyAppend) => Promise<boolean>;
+
+const APPENDERS = new Map<BoxOrigin["place"], ReplyAppender>();
+
+/** Say how one place takes a reply appended as it is. Returns the undo. */
+export function registerReplyAppend(place: BoxOrigin["place"], append: ReplyAppender): () => void {
+  APPENDERS.set(place, append);
+  return () => {
+    if (APPENDERS.get(place) === append) APPENDERS.delete(place);
+  };
+}
+
+/** How a place takes an appended reply, or null where no domain registered one. */
+export function replyAppender(place: BoxOrigin["place"]): ReplyAppender | null {
+  return APPENDERS.get(place) ?? null;
+}
+
+/** A verbatim run that has landed: in the conversation and the box, or failed into the box. */
+export type VerbatimLanding =
+  | { status: "done"; runId: string; kind: string; text: string; cover: string; boxItemId: string }
+  | { status: "failed"; runId: string; kind: string; reason: string; boxItemId: string };
+
+const LANDINGS = new Set<(landing: VerbatimLanding) => void>();
+
+/** Hear every verbatim run that lands in this process. Returns the undo. */
+export function onVerbatimLanding(fn: (landing: VerbatimLanding) => void): () => void {
+  LANDINGS.add(fn);
+  return () => {
+    LANDINGS.delete(fn);
+  };
+}
+
+/** Tell whoever listens that a verbatim run landed. A listener that throws is its own problem. */
+export function announceVerbatim(landing: VerbatimLanding): void {
+  for (const fn of [...LANDINGS]) {
+    try {
+      fn(landing);
+    } catch (e) {
+      console.warn("a verbatim landing listener threw", e);
+    }
+  }
+}

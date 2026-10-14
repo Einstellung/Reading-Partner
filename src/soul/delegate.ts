@@ -38,6 +38,20 @@ export const DELEGATE_DESCRIPTION =
   "the whole job in the task, written for someone who cannot see this conversation " +
   "and has not read the material in front of you.";
 
+/** The `kind` parameter's wording, over the kinds this device has. */
+export function kindParameterDescription(kinds: readonly string[]): string {
+  return kinds.length === 0
+    ? "The kind of work. This device has no kind registered, so nothing can be delegated here."
+    : `The kind of work. One of: ${kinds.join(", ")}.`;
+}
+
+/** The `task` parameter's wording. */
+export const TASK_PARAMETER_DESCRIPTION =
+  "The brief: what to find out, and what would count as an answer. Everything " +
+  "that makes it answerable — the subject, the claim or passage in question, the " +
+  "field, any paper already identified (with its DOI or id), which years matter. " +
+  "One job per run.";
+
 export interface DelegateDeps {
   /** The place this turn is being held. The run is delivered back to it. */
   origin?: BoxOrigin;
@@ -84,19 +98,8 @@ export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
       effect: "write",
       description: DELEGATE_DESCRIPTION,
       parameters: Type.Object({
-        kind: Type.String({
-          description:
-            kinds.length === 0
-              ? "The kind of work. This device has no kind registered, so nothing can be delegated here."
-              : `The kind of work. One of: ${kinds.join(", ")}.`,
-        }),
-        task: Type.String({
-          description:
-            "The brief: what to find out, and what would count as an answer. Everything " +
-            "that makes it answerable — the subject, the claim or passage in question, the " +
-            "field, any paper already identified (with its DOI or id), which years matter. " +
-            "One job per run.",
-        }),
+        kind: Type.String({ description: kindParameterDescription(kinds) }),
+        task: Type.String({ description: TASK_PARAMETER_DESCRIPTION }),
       }),
       execute: async (args) => {
         const kind = String(args.kind ?? "").trim();
