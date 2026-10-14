@@ -522,6 +522,7 @@ test("a turn cut mid-tool still closes what it opened", async () => {
     turn: 2,
     cut: { utterance: 7, sentence: 0, charOffset: 0, playedMs: 0 },
   });
+  await h.userSaid(2, "算了");
 
   expect(h.aborted(1)).toBe(true);
   expect(h.activity).toEqual([

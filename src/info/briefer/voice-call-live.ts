@@ -14,14 +14,22 @@ import { glossaryTerms } from "../../ai/voice/cleanup";
 import { loadDeviceSettings } from "../../platform/app/device";
 import { hasWebviewSignIn } from "../../platform/app/platform";
 import { loadSettings } from "../../platform/app/settings";
-import { loadThreads } from "../../platform/app/threads";
+import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../platform/app/threads";
+import { delegableWorkerKinds } from "../../legion/runner/worker";
+import { callBackend, THINK_KIND } from "../../soul/think";
+import { bindCallBack } from "../../soul/voice/front/backend";
+import { createCascadeFront, type FrontCard } from "../../soul/voice/front/cascade";
+import { FRONT_DUTY } from "../../soul/voice/front/context";
+import { fillerNotConnected } from "../../soul/voice/front/filler";
+import { logMarks } from "../../soul/voice/front/marks";
+import { liveFrontModel } from "../../soul/voice/front/model";
 import { distillInfoThread } from "../../memory";
 import { assembleReaderSection } from "../../memory/live/assemble";
 import { loadSources } from "../sources/source-store";
 import { hasTopicSearches } from "../topic-search/store";
 import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
-import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
+import type { BriefingControl } from "./companion-live";
 import { nativeConversation } from "../../soul/voice/conversation";
 import {
   createVoiceCall,
@@ -61,8 +69,13 @@ export interface LiveVoiceCallOptions {
    * controller that reports a run it never started.
    */
   control?: BriefingControl;
-  /** The call's turns and transcript on the day's conversation. */
-  thread: VoiceThread;
+  /**
+   * The call's turns and transcript on the day's conversation, on the durable
+   * runtime. Unused while the call runs on the cascade front (docs/companion/136).
+   */
+  thread?: VoiceThread;
+  /** A result the reader asked to see (the front's `show`). */
+  onShow?: (card: FrontCard) => void;
 }
 
 /** Nothing to hold a call with: no plugin, so no microphone and no player. */
@@ -78,14 +91,6 @@ function contextualStrings(anchor: InfoCallAnchor, titles: string[]): string[] {
   });
 }
 
-const REFUSE_BRIEFING: BriefingControl = {
-  start() {
-    throw new Error(
-      "The briefing cannot be regenerated from the voice call. Tell the user to ask for it " +
-        "in the text chat.",
-    );
-  },
-};
 
 /**
  * The day's call, wired to the device. Null where there is no plugin to hold
@@ -131,41 +136,50 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
   // read is answered per call, in the transcript's `begin`.
   await loadThreads(bookId).catch(() => {});
 
-  // Built once per call rather than per turn: the extractor's chunk is a fetch
-  // (companion-live.ts) and a call is many turns. A failure to load it fails
-  // the turn that asked for it, which is where the driver can say so.
-  let tools: Promise<AgentTool[]> | null = null;
-  const { model, transcript } = opts.thread({
-    bookId,
-    dateKey: opts.dateKey,
-    anchor,
-    tools: () => {
-      if (!tools) {
-        tools = buildLiveCompanionTools(
-          // No cards in a call: there is no screen to put one on. The tools
-          // still answer the model in text, which is what it speaks.
-          () => {},
-          opts.control ?? REFUSE_BRIEFING,
-          {
-            collecting,
-            // The lab tools ride a call as well: the prompt the call shares
-            // tells the companion to propose a lab when the reader says what
-            // they want followed, and a described tool that is not mounted is
-            // a call that fails mid-sentence. (propose_topic is the soul's, and
-            // it does not ride a call at all: no desk surface is passed for it,
-            // because a proposal only exists as a card and there is no screen
-            // here to draw one on. Filing happens in the text chat.)
-            lab: { threadId: anchor.threadId, onLabCard: () => {} },
-          },
-        ).catch((e) => {
-          tools = null;
-          throw e;
-        });
+  // The front answers each turn with one short call and hands the rest to the
+  // back half (docs/companion/136); the turns are not on the durable runtime.
+  // Lines go to the day's thread as they settle, addressed by their stamp.
+  const threadId = anchor.threadId;
+  if (!getThread(bookId, threadId)) createThread(bookId, "info", threadId);
+  const stamps = new Map<string, number>();
+  let last = 0;
+  const place = briefing
+    ? `Today's briefing:\n${briefing.mustRead.map((r) => `- ${briefing.items[r.itemId]?.title ?? ""}`).join("\n")}`
+    : `No briefing for ${opts.dateKey}.`;
+  const front = createCascadeFront({
+    model: liveFrontModel(),
+    backend: bindCallBack({
+      backend: callBackend(),
+      callId: crypto.randomUUID(),
+      deliverTo: { place: "briefing", date: opts.dateKey },
+      // `think` is the front's own kind and is offered here whatever the soul's catalogue lists.
+      kinds: () => [THINK_KIND, ...delegableWorkerKinds().filter((k) => k !== THINK_KIND)],
+    }),
+    place: () => place,
+    write: ({ key, role, text }) => {
+      const at = stamps.get(key);
+      if (at !== undefined) {
+        patchThreadMessage(bookId, threadId, at, { text });
+        return;
       }
-      return tools;
+      const ts = Math.max(Date.now(), last + 1);
+      last = ts;
+      stamps.set(key, ts);
+      appendMessage(bookId, threadId, { role, text, ts });
     },
+    filler: fillerNotConnected(),
+    locale: settings.dictationLocale,
+    marks: logMarks,
+    onShow: opts.onShow ?? (() => {}),
   });
-  const call = createVoiceCall({ bridge, model, transcript });
+  await front.open({
+    prompt: FRONT_DUTY,
+    context: () => ({ place, list: front.list(), lines: [] }),
+    tools: [],
+    audio: { subscribe: () => () => {} },
+    record: () => {},
+  });
+  const call = createVoiceCall({ bridge, model: front.model, transcript: front.transcript, front });
   // Hanging up is what the text chat's close is: the call's turns are on the
   // thread by now (the transcript writes them as they settle), so the pass is
   // started here and not awaited — it has to outlive the call, and the caller is
@@ -174,6 +188,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     ...call,
     async stop(): Promise<void> {
       await call.stop();
+      await front.close();
       void distillInfoThread({ threadId: anchor.threadId, trigger: "info-close" });
     },
   };
