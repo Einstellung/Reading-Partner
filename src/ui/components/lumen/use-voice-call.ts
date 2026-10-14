@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createLiveVoiceCall, NO_VOICE_CALL } from "../../../info/briefer/voice-call-live";
-import { infoVoiceThread } from "../../../reading/turn/info-voice";
+import type { FrontCard } from "../../../soul/voice/front/cascade";
 import type { BriefingControl } from "../../../info/briefer/companion-live";
 import type { SessionPhase } from "../../../soul/voice/voice-session";
 import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../soul/voice/voice-call";
@@ -40,12 +40,17 @@ export type { VoiceCallView };
  */
 export interface VoiceCallState extends VoiceCallView {
   attention: Attention;
+  /** A result the reader asked to see during the call (docs/companion/136 show). */
+  card: FrontCard | null;
+  dismissCard: () => void;
 }
 
 export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
   const { dateKey, briefing, control } = opts;
   const [phase, setPhase] = useState<SessionPhase>("idle");
   const [error, setError] = useState<VoiceCallError | null>(null);
+  const [card, setCard] = useState<FrontCard | null>(null);
+  const dismissCard = useCallback(() => setCard(null), []);
   const callRef = useRef<VoiceCall | null>(null);
   const unsubsRef = useRef<(() => void)[]>([]);
   // Whether a start is already on its way, so a double tap does not build two
@@ -105,7 +110,7 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
     setError(null);
     void (async () => {
       try {
-        const call = await createLiveVoiceCall({ ...optsRef.current, thread: infoVoiceThread });
+        const call = await createLiveVoiceCall({ ...optsRef.current, onShow: setCard });
         if (!call) {
           setError({ reason: "start-failed", message: NO_VOICE_CALL });
           return;
@@ -153,7 +158,7 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
     };
   }, [drop]);
 
-  return { phase, error, start, stop, subscribeLevel, subscribeEnvelope, attention };
+  return { phase, error, start, stop, subscribeLevel, subscribeEnvelope, attention, card, dismissCard };
 }
 
 /**
