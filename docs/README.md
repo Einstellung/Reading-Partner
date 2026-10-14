@@ -63,6 +63,7 @@
 - [45 陪伴的形态](./companion/45-陪伴的形态.md) — 第一版陪伴：被唤起的语音可视化
 - [66 Lumen](./companion/66-Lumen.md) — Lumen 的形象与常驻位置
 - [68 Lumen与盒子的交互](./companion/68-Lumen与盒子的交互.md) — Lumen、公文盒与派工的交互
+- [136 混合语音架构](./companion/136-混合语音架构.md) — 快的前台陪聊、难题 delegate 给后台，结果落盒再念
 
 ## ui
 
