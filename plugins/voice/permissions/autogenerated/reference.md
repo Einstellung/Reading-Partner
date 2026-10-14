@@ -25,6 +25,7 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-set-speech-volume`
 - `allow-register-listener`
 - `allow-remove-listener`
+- `allow-harness`
 
 ## Permission Table
 
@@ -57,6 +58,32 @@ Enables the cancel_dictation command without any pre-configured scope.
 <td>
 
 Denies the cancel_dictation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-harness`
+
+</td>
+<td>
+
+Enables the harness command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-harness`
+
+</td>
+<td>
+
+Denies the harness command without any pre-configured scope.
 
 </td>
 </tr>

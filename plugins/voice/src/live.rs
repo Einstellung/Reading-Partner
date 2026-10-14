@@ -137,7 +137,7 @@ pub async fn run<R: Runtime>(app: AppHandle<R>, args: Value) -> Result<Value> {
 
 /// One relay event as a row of the record. Written out by hand rather than
 /// derived, so that the event type stays a domain type with no wire shape.
-fn record(event: &RelayEvent) -> Value {
+pub(crate) fn record(event: &RelayEvent) -> Value {
     match event {
         RelayEvent::Started { id, chars, at_ms } => {
             json!({ "event": "started", "id": id, "chars": chars, "atMs": at_ms })

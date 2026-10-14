@@ -176,6 +176,12 @@ final class AudioFront {
     /// is a call back into this object.
     private var onSpeakerLost: (() -> Void)?
 
+    /// True when this stack was built for the silent bench (VoiceHarness.swift):
+    /// no input node, a fed sink, a muted main mixer. A stack built one way is
+    /// never handed to a caller who wants the other.
+    private var harnessBuilt = false
+    private var harnessMixer: AVAudioMixerNode?
+
     /// Set by the bench only, to run one leg of the echo experiment with the
     /// voice-processing unit off (docs/33). Nothing in the app writes it; a hold
     /// with it unset behaves exactly as it always has.
@@ -277,6 +283,9 @@ final class AudioFront {
         }
 
         lostDuringHold = false
+        if engine != nil, harnessBuilt != VoiceHarness.shared.isArmed {
+            teardownLocked()
+        }
         if let reused = reuseLocked(
             pressedAt: pressedAt, timing: timing, needsPlayer: needsPlayer, sink: sink)
         {
@@ -384,6 +393,10 @@ final class AudioFront {
     ) throws -> Opened {
         teardownLocked()
 
+        if VoiceHarness.shared.isArmed {
+            return try openHarnessLocked(pressedAt: pressedAt, timing: timing, sink: sink)
+        }
+
         try configureSessionLocked()
         timing.mark("session", since: pressedAt)
 
@@ -481,6 +494,69 @@ final class AudioFront {
         return Opened(engine: engine, format: hardwareFormat, player: player)
     }
 
+    /// The bench's stack (VoiceHarness.swift). The microphone is never asked
+    /// for: `.playback` rather than `.playAndRecord`, the input node never read
+    /// (the first read is what instantiates the input unit), and the sink fed by
+    /// the harness at the tap's own size and rate. The player goes through a
+    /// mixer of its own so that its output can be tapped at full level while the
+    /// main mixer, muted, sends silence to the hardware.
+    private func openHarnessLocked(
+        pressedAt: CFAbsoluteTime,
+        timing: TimingLog,
+        sink: ((AVAudioPCMBuffer) -> Void)?
+    ) throws -> Opened {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: .default, options: [])
+            try session.setActive(true)
+        } catch {
+            throw DictationError(
+                "The bench's playback session would not start: \(DictationError.describe(error))")
+        }
+        sessionActive = true
+        timing.mark("session", since: pressedAt)
+
+        let engine = AVAudioEngine()
+        self.engine = engine
+        let node = AVAudioPlayerNode()
+        let tapMixer = AVAudioMixerNode()
+        engine.attach(node)
+        engine.attach(tapMixer)
+        engine.connect(node, to: tapMixer, format: SpeechOut.playbackFormat)
+        engine.connect(tapMixer, to: engine.mainMixerNode, format: SpeechOut.playbackFormat)
+        engine.mainMixerNode.outputVolume = 0
+        tapMixer.installTap(onBus: 0, bufferSize: 2400, format: nil) { buffer, when in
+            VoiceHarness.shared.capture(buffer, when: when)
+        }
+        engine.prepare()
+        player = node
+        harnessMixer = tapMixer
+        harnessBuilt = true
+        try startLocked(engine)
+
+        let format = VoiceHarness.inputFormat
+        self.format = format
+        setSink(sink)
+        VoiceHarness.shared.startFeeding { [weak self] buffer in
+            self?.deliver(buffer)
+        }
+        timing.recordReuse(false)
+        VoiceHarness.shared.stackBuilt(
+            outputLatencyMs: (session.outputLatency + session.ioBufferDuration) * 1000)
+        NSLog(
+            "RP-DICT front built for the harness: no microphone, main mixer at %.2f",
+            engine.mainMixerNode.outputVolume)
+        return Opened(engine: engine, format: format, player: node)
+    }
+
+    /// Whether the stack standing now is the bench's. ConversationRun asks, to
+    /// keep its own no-input-route check off a stack that never has one.
+    var isHarnessStack: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return harnessBuilt
+    }
+
     // MARK: - A voice
 
     /// Hands out the playback node, building the whole stack around it if there
@@ -495,6 +571,9 @@ final class AudioFront {
         defer { lock.unlock() }
 
         onSpeakerLost = onLost
+        if engine != nil, harnessBuilt != VoiceHarness.shared.isArmed {
+            teardownLocked()
+        }
         if let engine = engine, let player = player, sessionActive {
             if !engine.isRunning {
                 try startLocked(engine)
@@ -667,7 +746,10 @@ final class AudioFront {
             guard let self = self else { return }
             self.lock.lock()
             defer { self.lock.unlock() }
-            guard AVAudioSession.sharedInstance().currentRoute.inputs.isEmpty else { return }
+            // A bench stack runs under `.playback`, which has no input route at all.
+            guard !self.harnessBuilt,
+                AVAudioSession.sharedInstance().currentRoute.inputs.isEmpty
+            else { return }
             self.loseLocked("the input route went away")
         }
     }
@@ -926,6 +1008,7 @@ final class AudioFront {
             // which is how a teardown took the whole process with it twice
             // (docs/pitfall/199).
             player?.removeTap(onBus: 0)
+            harnessMixer?.removeTap(onBus: 0)
             player?.stop()
             if engine.isRunning {
                 engine.stop()
@@ -938,6 +1021,11 @@ final class AudioFront {
             // whole graph with it; a node that outlives nothing does not have to
             // be removed from a graph that is about to stop existing.
         }
+        if harnessBuilt {
+            VoiceHarness.shared.stopFeeding()
+        }
+        harnessBuilt = false
+        harnessMixer = nil
         player = nil
         speakerHeld = false
         tapInstalled = false

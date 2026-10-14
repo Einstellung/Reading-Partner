@@ -51,6 +51,12 @@ export interface CascadeFrontDeps {
   /** The recogniser's locale, which the filler line is said in. */
   locale: string;
   marks: MarkSink;
+  /**
+   * A named moment as it happens: each turn mark as `front:<mark>`, and the
+   * back half's traffic (`front:delegate-done`, `front:note`, `front:notify`,
+   * `front:read-out-start`/`-end`, `front:cue`). The silent bench's trace.
+   */
+  trace?: (name: string, data?: Record<string, unknown>) => void;
   onShow: (card: FrontCard) => void;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => () => void;
@@ -91,7 +97,8 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
       return () => clearTimeout(id);
     });
   const gap = deps.gapMs ?? FRONT_GAP_MS;
-  const marks = frontMarks(deps.marks, now);
+  const trace = deps.trace ?? (() => {});
+  const marks = frontMarks(deps.marks, now, (turn, name) => trace(`front:${name}`, { turn }));
 
   let floor: FrontFloor | null = null;
   let phase: SessionPhase = "idle";
@@ -250,7 +257,10 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
             .execute(args)
             .then(
               (out) => {
-                if (name === "delegate") handed = true;
+                if (name === "delegate") {
+                  handed = true;
+                  trace("front:delegate-done", { turn, out: (typeof out === "string" ? out : out.text).slice(0, 80) });
+                }
                 console.info(`RP-FRONT tool ${name}: ${typeof out === "string" ? out : out.text}`);
               },
               (e) => console.warn(`RP-FRONT tool ${name} failed`, e),
@@ -261,13 +271,21 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     });
     await Promise.all(calls);
     if (handed && !said && !req.signal.aborted) {
-      if (!(await deps.filler.play("thinking", deps.locale))) req.onDelta(fillerLine("thinking", deps.locale));
+      const played = await deps.filler.play("thinking", deps.locale);
+      trace("front:cue", { turn, kind: "thinking", played });
+      if (!played) req.onDelta(fillerLine("thinking", deps.locale));
     }
   }
 
   const model: VoiceCallModel = {
     async ask(req) {
       const program = programs.get(req.turn);
+      if (program) {
+        trace(program.kind === "read" ? "front:read-out-start" : "front:notify", {
+          turn: req.turn,
+          ...(program.kind === "read" ? { number: program.number } : { numbers: program.notes.map((n) => n.number) }),
+        });
+      }
       try {
         if (program?.kind === "read") await readOut(program, req.onDelta);
         else if (program?.kind === "notify") await notify(req.turn, program, req);
@@ -293,6 +311,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
       lines.push(line);
     } else lines[at] = line;
     if (program?.kind === "read") {
+      trace("front:read-out-end", { turn: entry.turn, number: program.number, interrupted: Boolean(entry.interrupted) });
       if (entry.interrupted) {
         resumeAt.set(program.number, program.from + resumeOffset(entry.text));
       } else {
@@ -314,6 +333,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   };
 
   function onNote(note: CallNote): void {
+    trace("front:note", { number: note.n, status: note.status });
     front.notify({
       number: note.n,
       task: note.task,

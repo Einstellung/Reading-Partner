@@ -137,4 +137,8 @@ impl<R: Runtime> Voice<R> {
     pub async fn speech_report(&self) -> crate::Result<SpeechReport> {
         Err(Error::Unsupported(UNSUPPORTED.to_string()))
     }
+
+    pub async fn harness(&self, _args: serde_json::Value) -> crate::Result<serde_json::Value> {
+        Err(Error::Unsupported(UNSUPPORTED.to_string()))
+    }
 }

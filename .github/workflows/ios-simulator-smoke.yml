@@ -21,7 +21,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ios-sim-smoke
+  # Per ref: parallel branches dispatching this cancelled each other (pitfall 601).
+  group: ios-sim-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

@@ -43,6 +43,12 @@ if (import.meta.env.DEV) {
 // voice plugin, which it cannot: SpeechTranscriber.isAvailable is false without
 // a Neural Engine, and a hold is a finger on a screen, so that one only means
 // anything on a real phone driven by src/smoke/dictation.ts.
+// The silent voice bench (docs/platform/560): listens on the HMR socket for a
+// script to run against the voice call. Dev server only.
+if (import.meta.env.DEV && import.meta.hot) {
+  void import("./smoke/voice-harness");
+}
+
 if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/smoke").then(({ runSmoke }) => runSmoke());
 } else if (import.meta.env.VITE_SMOKE === "dictation") {

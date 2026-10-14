@@ -225,7 +225,11 @@ final class ConversationRun {
             throw DictationError(
                 "This iPhone cannot transcribe on device. It needs iOS 26 on an iPhone 12 or later.")
         }
-        try await Recogniser.ensureMicrophonePermission()
+        // The bench never opens the microphone, and a permission prompt is a
+        // tap nobody is there to give.
+        if !VoiceHarness.shared.isArmed {
+            try await Recogniser.ensureMicrophonePermission()
+        }
 
         let locale = try await Recogniser.resolveLocale(requested)
         let transcriber = Recogniser.makeTranscriber(locale: locale)
@@ -437,7 +441,7 @@ final class ConversationRun {
             center.addObserver(
                 forName: AVAudioSession.routeChangeNotification, object: session, queue: .main
             ) { [weak self] _ in
-                guard let self = self, self.isLive,
+                guard let self = self, self.isLive, !AudioFront.shared.isHarnessStack,
                     AVAudioSession.sharedInstance().currentRoute.inputs.isEmpty
                 else { return }
                 NSLog("RP-CALL the microphone went away")
@@ -575,9 +579,11 @@ final class ConversationRun {
             open = window
             stateLock.unlock()
             let number = window.number
+            VoiceHarness.shared.log("turn-end", ["turn": number, "silentMs": silentMs])
             Task { [weak self] in
                 guard let self = self else { return }
                 await self.forceFinal()
+                VoiceHarness.shared.log("finalized", ["turn": number])
                 self.stateLock.lock()
                 let settled = self.open.flatMap { current in
                     current.number == number ? self.settleLocked(current) : nil

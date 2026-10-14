@@ -175,6 +175,8 @@ const LAYER: Record<string, Layer> = {
   "soul/voice/speech": "capability",
   // The call's front (docs/companion/136): the fast layer that answers and hands off.
   "soul/voice/front": "capability",
+  // The silent voice bench's trace, script driver and run analysis (docs/platform/560).
+  "soul/voice/harness": "capability",
   // Turning raw material into usable material (docs/85), grouped by what is
   // done to it rather than by who asks: the secretary, reading and the meals
   // line are all callers, and nothing here knows any of them. Siblings may use

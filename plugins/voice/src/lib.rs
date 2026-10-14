@@ -26,6 +26,8 @@ mod ios;
 
 mod commands;
 mod error;
+/// The silent bench's clock and log (docs/platform/560). Debug builds only.
+mod harness;
 /// The whole pipeline against the real vendor and the real speaker, driven from
 /// the bench. Debug builds only, and the one path that runs every stage at once.
 #[cfg(debug_assertions)]
@@ -90,7 +92,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::stop_conversation,
             commands::set_speech_volume,
             commands::register_listener,
-            commands::remove_listener
+            commands::remove_listener,
+            commands::harness
         ])
         .setup(|app, api| {
             #[cfg(target_os = "ios")]

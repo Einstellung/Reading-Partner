@@ -1,0 +1,57 @@
+{
+  "name": "en-mixed",
+  "locale": "en-US",
+  "finalReplies": 2,
+  "finalTimeoutMs": 180000,
+  "tailMs": 1500,
+  "steps": [
+    {
+      "clip": "en-hello.wav",
+      "text": "Hi, what's on today's briefing?",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 45000,
+      "expect": "turn"
+    },
+    {
+      "clip": "en-first.wav",
+      "text": "Okay, tell me a bit more about the first one, briefly.",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    },
+    {
+      "clip": "mix-key-point.wav",
+      "text": "So 这个 story 的 key point is what, in one sentence?",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    },
+    {
+      "clip": "en-paper.wav",
+      "text": "Can you check whether the paper's evidence actually supports its conclusion, and whether the method has any flaws?",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    },
+    {
+      "clip": "mix-this-week.wav",
+      "text": "Got it. 那 meanwhile, this week 最值得关注的是哪个？",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    },
+    {
+      "clip": "en-thanks.wav",
+      "text": "Thanks, that's all for now.",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    }
+  ]
+}

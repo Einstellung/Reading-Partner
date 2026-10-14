@@ -15,6 +15,7 @@
 // (pitfall 123). Run it only on a network you trust and stop it when done.
 import type { UserConfig } from "vite";
 import base from "../../vite.config";
+import { voiceHarness } from "./voice-harness-vite";
 import os from "node:os";
 import path from "node:path";
 
@@ -25,6 +26,8 @@ const cfg = base as UserConfig;
 export default {
   ...cfg,
   cacheDir: path.join(os.homedir(), ".cache", "rp-vite-lan"),
+  // The silent voice bench's trigger and progress (voice-run.sh).
+  plugins: [...(cfg.plugins ?? []), voiceHarness()],
   server: {
     ...cfg.server,
     host,

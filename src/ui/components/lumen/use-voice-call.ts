@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createLiveVoiceCall, NO_VOICE_CALL } from "../../../info/briefer/voice-call-live";
 import type { FrontCard } from "../../../soul/voice/front/cascade";
 import type { SessionPhase } from "../../../soul/voice/voice-session";
+import { registerVoiceCallHost } from "../../../soul/voice/harness/trace";
 import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../soul/voice/voice-call";
 import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 import type { Briefing } from "../../../info/boxes/types";
@@ -153,6 +154,9 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
 
   // The call is the orb's, and the orb going away ends it. Foreground-only v1:
   // nothing survives the component (docs/33 "分期").
+  // The silent bench starts and stops the call the page would (docs/platform/560).
+  useEffect(() => (import.meta.env.DEV ? registerVoiceCallHost({ start, stop }) : undefined), [start, stop]);
+
   useEffect(() => {
     return () => {
       const call = drop();

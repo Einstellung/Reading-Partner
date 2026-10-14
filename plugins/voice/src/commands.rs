@@ -185,12 +185,19 @@ pub(crate) async fn set_speech_key<R: Runtime>(
 /// Open a turn and answer with its number. Whatever was still speaking stops.
 #[command]
 pub(crate) async fn speak_begin<R: Runtime>(app: AppHandle<R>) -> Result<u64> {
-    app.state::<SpeechSession>().begin().await
+    crate::harness::mark("speak-begin", serde_json::json!({}));
+    let utterance = app.state::<SpeechSession>().begin().await?;
+    crate::harness::mark("speak-begun", serde_json::json!({ "utterance": utterance }));
+    Ok(utterance)
 }
 
 /// The turn's next sentence, already split by the caller.
 #[command]
 pub(crate) async fn speak_push<R: Runtime>(app: AppHandle<R>, text: String) -> Result<()> {
+    crate::harness::mark(
+        "speak-push",
+        serde_json::json!({ "chars": text.chars().count(), "text": text.chars().take(60).collect::<String>() }),
+    );
     app.state::<SpeechSession>().push(text).await
 }
 
@@ -205,6 +212,7 @@ pub(crate) async fn speak_close<R: Runtime>(app: AppHandle<R>) -> Result<()> {
 /// `SpeechSession::stop`.
 #[command]
 pub(crate) async fn speak_stop<R: Runtime>(app: AppHandle<R>) -> Result<SpeechStopped> {
+    crate::harness::mark("speak-stop", serde_json::json!({}));
     app.state::<SpeechSession>().stop().await
 }
 
@@ -224,6 +232,98 @@ pub(crate) async fn prime_speech_cues<R: Runtime>(
 #[command]
 pub(crate) async fn speak_cue<R: Runtime>(app: AppHandle<R>, id: String) -> Result<u64> {
     app.state::<SpeechSession>().speak_cue(&id).await
+}
+
+/// The silent bench (src/harness.rs, docs/platform/560). Debug builds only.
+///
+/// `clock` answers the shared clock; `mark` writes a webview row; `arm`
+/// opens a run directory under the app data directory and points the next
+/// call at the harness; `clip` writes one WAV (base64) into it; `feed` plays a
+/// written clip into the call and answers when it is over; `disarm` closes the
+/// run and answers with its directory.
+#[command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn harness<R: Runtime>(
+    app: AppHandle<R>,
+    op: String,
+    name: Option<String>,
+    run: Option<String>,
+    wav: Option<String>,
+    perf_ms: Option<f64>,
+    data: Option<serde_json::Value>,
+) -> Result<serde_json::Value> {
+    use serde_json::json;
+    if !cfg!(debug_assertions) {
+        return Err(crate::Error::Unsupported(
+            "The voice harness is in debug builds only.".into(),
+        ));
+    }
+    let safe = |s: &str| -> String {
+        s.chars()
+            .map(|c| if c.is_ascii_alphanumeric() || "-_.".contains(c) { c } else { '_' })
+            .collect()
+    };
+    let armed_dir = || {
+        crate::harness::dir()
+            .ok_or_else(|| crate::Error::Speech("The harness is not armed.".into()))
+    };
+    match op.as_str() {
+        "clock" => Ok(json!({ "t": crate::harness::now_ms() })),
+        "mark" => {
+            let t = crate::harness::mark_js(
+                name.as_deref().unwrap_or("mark"),
+                perf_ms,
+                data.unwrap_or(serde_json::Value::Null),
+            );
+            Ok(json!({ "t": t }))
+        }
+        "arm" => {
+            let run = safe(run.as_deref().unwrap_or("run"));
+            let dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| crate::Error::Speech(e.to_string()))?
+                .join("voice-harness")
+                .join(run);
+            crate::harness::arm(&dir)?;
+            let native = app
+                .voice()
+                .harness(json!({ "op": "arm", "dir": dir.join("native") }))
+                .await;
+            if let Err(e) = native {
+                crate::harness::disarm();
+                return Err(e);
+            }
+            Ok(json!({ "dir": dir, "t": crate::harness::now_ms() }))
+        }
+        "clip" => {
+            use base64::Engine as _;
+            let dir = armed_dir()?;
+            let name = safe(name.as_deref().unwrap_or("clip.wav"));
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(wav.unwrap_or_default())
+                .map_err(|e| crate::Error::Speech(format!("clip {name} is not base64: {e}")))?;
+            let path = dir.join("clips").join(&name);
+            std::fs::write(&path, &bytes)?;
+            Ok(json!({ "path": path, "bytes": bytes.len() }))
+        }
+        "feed" => {
+            let dir = armed_dir()?;
+            let name = safe(name.as_deref().unwrap_or("clip.wav"));
+            let path = dir.join("clips").join(&name);
+            crate::harness::mark("feed-call", json!({ "name": name }));
+            app.voice()
+                .harness(json!({ "op": "feed", "path": path, "name": name }))
+                .await
+        }
+        "disarm" => {
+            let native = app.voice().harness(json!({ "op": "disarm" })).await;
+            let dir = crate::harness::disarm();
+            native?;
+            Ok(json!({ "dir": dir }))
+        }
+        other => Err(crate::Error::Speech(format!("Unknown harness op {other}."))),
+    }
 }
 
 // The full-duplex call (docs/33 M-voice-3). Three forwarders, like the

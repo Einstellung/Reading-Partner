@@ -1,0 +1,57 @@
+{
+  "name": "zh-chat-then-delegate",
+  "locale": "zh-CN",
+  "finalReplies": 1,
+  "finalTimeoutMs": 240000,
+  "tailMs": 1500,
+  "steps": [
+    {
+      "clip": "zh-hello.wav",
+      "text": "你好，今天有什么值得看的？",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 45000,
+      "expect": "turn"
+    },
+    {
+      "clip": "zh-first.wav",
+      "text": "第一条讲的是什么？简单说两句就行。",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    },
+    {
+      "clip": "zh-paper.wav",
+      "text": "这篇论文的结论站得住吗？方法上有没有问题？你帮我仔细查一下。",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    },
+    {
+      "clip": "zh-chat-book.wav",
+      "text": "好，那先随便聊聊。你觉得周末适合读点什么？",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    },
+    {
+      "clip": "zh-chat-why.wav",
+      "text": "为什么推荐这本？用一句话说。",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    },
+    {
+      "clip": "zh-read-it.wav",
+      "text": "念吧。",
+      "start": "next-reply-end",
+      "offsetMs": 600,
+      "timeoutMs": 300000,
+      "expect": "turn"
+    }
+  ]
+}

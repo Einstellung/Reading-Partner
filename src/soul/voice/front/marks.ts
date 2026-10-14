@@ -29,12 +29,23 @@ export interface FrontMarks {
   flush(turn: number, program?: FrontTurnMarks["program"]): void;
 }
 
-export function frontMarks(sink: MarkSink, now: () => number = monotonicNow): FrontMarks {
+/**
+ * `onMark` hears each mark the moment it is first set, for a reader that cannot
+ * wait for the turn to end (the silent bench's trace, docs/platform/560).
+ */
+export function frontMarks(
+  sink: MarkSink,
+  now: () => number = monotonicNow,
+  onMark?: (turn: number, name: FrontMarkName) => void,
+): FrontMarks {
   const open = new Map<number, FrontTurnMarks["marks"]>();
   return {
     mark(turn, name) {
       const marks = open.get(turn) ?? {};
-      if (marks[name] === undefined) marks[name] = now();
+      if (marks[name] === undefined) {
+        marks[name] = now();
+        onMark?.(turn, name);
+      }
       open.set(turn, marks);
     },
     flush(turn, program) {

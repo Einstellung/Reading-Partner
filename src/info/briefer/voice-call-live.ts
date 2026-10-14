@@ -30,6 +30,7 @@ import {
   createVoiceCall,
   type VoiceCall,
 } from "../../soul/voice/voice-call";
+import { harnessLocale, traceModel, traceSource, voiceTrace } from "../../soul/voice/harness/trace";
 import type { Briefing } from "../boxes/types";
 import type { InfoCallAnchor } from "./anchors";
 
@@ -98,8 +99,10 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     ? briefingAnchor(briefing, ctx)
     : noBriefingAnchor(ctx, { dateKey: opts.dateKey, notices: [] });
 
+  // The silent bench's script names the recogniser's language for its run.
+  const locale = harnessLocale() ?? settings.dictationLocale;
   const bridge = nativeConversation({
-    locale: settings.dictationLocale,
+    locale,
     contextualStrings: contextualStrings(
       anchor,
       briefing ? briefing.mustRead.map((r) => briefing.items[r.itemId]?.title ?? "") : [],
@@ -147,8 +150,9 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
       appendMessage(bookId, threadId, { role, text, ts });
     },
     filler,
-    locale: settings.dictationLocale,
+    locale,
     marks: logMarks,
+    trace: voiceTrace,
     onShow: opts.onShow ?? (() => {}),
   });
   await front.open({
@@ -158,7 +162,13 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     audio: { subscribe: () => () => {} },
     record: () => {},
   });
-  const call = createVoiceCall({ bridge, model: front.model, transcript: front.transcript, front });
+  // Both wrappers hand back what they are given unless the silent bench is armed.
+  const call = createVoiceCall({
+    bridge: traceSource(bridge),
+    model: traceModel(front.model),
+    transcript: front.transcript,
+    front,
+  });
   const report = () => opts.onRunning?.(front.list().filter((row) => row.status === "running").length);
   const reporting = [call.subscribePhase(report), back.subscribe(report)];
   // Hanging up is what the text chat's close is: the call's turns are on the
@@ -170,7 +180,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     async start(): Promise<void> {
       // The filler lines are made while the call opens. One asked for before
       // they are ready is synthesised from its text instead.
-      void filler.prime(settings.dictationLocale).catch((e) => console.warn("RP-FRONT cue prime failed", e));
+      void filler.prime(locale).catch((e) => console.warn("RP-FRONT cue prime failed", e));
       await call.start();
     },
     async stop(): Promise<void> {
