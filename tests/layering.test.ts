@@ -245,6 +245,9 @@ const LAYER: Record<string, Layer> = {
   // engagement, the final score, events and their clusters, and the 30-day
   // dedupe. Pure; reads the arXiv, GitHub and X link parsers for event keys.
   "info/rank": "domain",
+  // The material registry of topic searches and dossiers (docs/info/88 材料登记):
+  // M<n> numbers, sections, the cached bodies. Reads info/rank's canonical URL.
+  "info/dossier": "domain",
   reading: "domain",
   "reading/chapters": "domain",
   // A reading turn's own corner: the desk assembly's tool set and history

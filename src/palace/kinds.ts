@@ -96,6 +96,7 @@ export type PalaceId =
   | "threadId"
   | "labId"
   | "boxItemId"
+  | "resultId"
   | "fixed";
 
 // What a record does when the thing it points at is deleted (docs/61). The
@@ -1115,6 +1116,38 @@ export const PALACE = [
     deleteWith: "never",
     retention: NEVER,
     note: "the reader's topic searches (docs/info/88): drafted in conversation at the door, records-merged on the search id; a stopped search is kept, and a deleted topic leaves the search pointing at nothing until it is re-drafted",
+  },
+  {
+    kind: "info-topic-search-result",
+    about: "One run's result of a topic search: the panorama or the day's new items, with their facts, materials and questions.",
+    domain: "info",
+    match: keyed(new RegExp(`^topic-search-(ts-[0-9a-f]+-${DATE}(?:-\\d+)?)\\.json$`)),
+    pathFor: (id: string) => `topic-search-${id}.json`,
+    samples: ["topic-search-ts-0a1b2c3d-2026-10-14.json", "topic-search-ts-0a1b2c3d-2026-10-14-2.json"],
+    id: "resultId",
+    refs: [
+      { kind: "info-topic-searches", via: "searchId", onDelete: "keep" },
+      { kind: "topics", via: "topicId", onDelete: "keep" },
+    ],
+    sync: "data",
+    merge: "opaque",
+    deleteWith: "never",
+    retention: NEVER,
+    note: "written once by the collecting desktop at the end of a run and never changed; the next runs read the last 30 days of them back as the topic's history (dedupe, continuation, the metric questions)",
+  },
+  {
+    kind: "info-topic-search-questions",
+    domain: "info",
+    match: fixed("info-topic-search-questions.json"),
+    samples: ["info-topic-search-questions.json"],
+    id: "fixed",
+    refs: [],
+    sync: "data",
+    merge: "records",
+    shape: { kind: "map", container: "topics", idField: null },
+    deleteWith: "never",
+    retention: NEVER,
+    note: "questions a topic search saved up for the reader (docs/info/88 攒着问), records-merged on the search id; only the collecting desktop writes it, and it syncs so that what was asked follows the topic to whichever desktop runs next",
   },
   {
     kind: "info-meals",
