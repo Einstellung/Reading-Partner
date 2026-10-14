@@ -313,7 +313,7 @@
 
 ## WebKit / webview
 
-- [600-a-hidden-webview-never-runs-a-rendering-update](./webview/600-a-hidden-webview-never-runs-a-rendering-update.md) — 从不 show 的隐藏窗口视口 0×0，页面 `hidden`，rAF、IntersectionObserver、ResizeObserver 和 `scrollBy` 后的 scroll 事件一次都不来，只有被节流的定时器在跑；手动 `size_allocate` 治好视口，渲染更新仍然不跑，靠滚动加载的列表要另想办法
+- [600-a-hidden-webview-never-runs-a-rendering-update](./webview/600-a-hidden-webview-never-runs-a-rendering-update.md) — 从不 show 的隐藏窗口视口 0×0，页面 `hidden`，rAF、IntersectionObserver、ResizeObserver 和 `scrollBy` 后的 scroll 事件一次都不来，只有被节流的定时器在跑，靠滚动加载的列表加载不出下一页；手动 `size_allocate` 只治视口。浏览会话把 WebKit 控件挪进 `GtkOffscreenWindow`，页面 `visible`、四样都跑，又不上任何屏幕；屏幕外坐标、1×1、透明三种也能渲染但都有真窗口。macOS 的对应写法未实测
 - [304-a-detached-shadow-host-lays-out-again-from-scratch](./webview/304-a-detached-shadow-host-lays-out-again-from-scratch.md) — 页卡片是 shadow host，从文档里 `remove()` 再挂回去等于整篇 spine 文档重排一遍；Cordis 那本公式书上一次摘挂 830-870ms，而卡片上的 `show()`、CFI 解析、换栏加起来不到 2ms。滚动时每翻一页就摘挂一次，0.18.1 保留 MathML 把同一棵树从 2344 个元素撑到 40497 个，平均帧 217ms 变 876ms。卡片改挂在 strip 上按页号摆位，离开窗口只 `visibility: hidden`
 - [281-a-multiply-over-a-transparent-backdrop-paints-the-source](./webview/281-a-multiply-over-a-transparent-backdrop-paints-the-source.md) — `isolation: isolate` 的组里，`mix-blend-mode: multiply` 盖在没人画过的地方直接画出乘数色本身（αb 为 0 时 `(1-αb)·Cs + αb·B` 就是 Cs）：纸留在组外，整张纸照样正好乘成 `--page-wash`。组里放什么按「谁该被乘」定，别为了垫底把纸搬进组，也别把「组里空的」当成 no-op
 - [340-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it](./webview/340-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it.md) — `scaleY(0)` 的矩阵不可逆，浏览器整个不画这个元素；加 `vector-effect="non-scaling-stroke"` 保线宽之后线宽按屏幕像素算，1000 见方的 viewBox 里 `strokeWidth={9}` 在 72 px 的元素上从 0.65 px 变成 9 px。形状之间要变就画几张交叉淡入，缩放一律留不为零的下限

@@ -608,8 +608,9 @@ pub(crate) fn build_window<R: Runtime>(
     let blank = Url::parse("about:blank").expect("about:blank parses");
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(blank))
         // A fetch window is created hidden and never shown; nothing in this
-        // module calls show() on one. The sign-in window is the exception, and
-        // it is one the user asked for.
+        // module calls show() on one (the browse session renders its view off
+        // every screen instead: browse.rs, `render_unseen`). The sign-in window
+        // is the exception, and it is one the user asked for.
         .visible(visible)
         .focused(visible)
         .skip_taskbar(!visible)

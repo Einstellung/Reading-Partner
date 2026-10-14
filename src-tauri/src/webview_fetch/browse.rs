@@ -8,8 +8,8 @@
 // to go are the caller's business.
 //
 // Everything that makes the fetch windows safe holds here too, because it is the
-// same window: created hidden and never shown, the same profile and cookie jar
-// (docs/pitfall/385 for macOS's store), the same user agent, the navigation
+// same window: created hidden and never put on a screen, the same profile and
+// cookie jar (docs/pitfall/385 for macOS's store), the same user agent, the navigation
 // exemption registered in `WebviewFetchState::live` for exactly as long as the
 // window exists, the same lid on dialogs and permission prompts
 // (`connect_engine_signals`). Each call that touches the page takes the fetcher's
@@ -30,10 +30,12 @@
 // page has its posts on screen at 15 seconds and reports itself loaded at 48
 // (docs/pitfall/496) — and an in-page navigation never reports one at all.
 //
-// The page is never shown, and WebKit treats it so: no rendering update ever
-// runs in it, so requestAnimationFrame, IntersectionObserver, ResizeObserver and
-// the scroll event after a scrollBy never fire (docs/pitfall/600). Timers and
-// scripts do. The viewport, which GTK would leave at 0x0, is allocated here.
+// Unlike the fetch windows, the page has to render. WebKit runs no rendering
+// update in a page nobody can see, so in a window that is merely hidden
+// requestAnimationFrame, IntersectionObserver, ResizeObserver and the scroll
+// event after a scrollBy never fire (docs/pitfall/600), and a list that loads
+// more when its end comes into view never loads more. `render_unseen` puts the
+// page somewhere that counts as visible to WebKit and is on no screen.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, TryRecvError};
@@ -405,7 +407,7 @@ fn open_blocking(app: &AppHandle, idle_timeout_ms: Option<u64>) -> BrowseOpened 
         Err(err) => return refuse(BrowseStatus::Network, format!("window failed: {err}")),
     };
     connect_engine_signals(&window, tx);
-    allocate_viewport(&window);
+    render_unseen(&window);
 
     let id = state.browse.seq.fetch_add(1, Ordering::Relaxed) + 1;
     let idle = idle_window(idle_timeout_ms);
@@ -427,30 +429,85 @@ fn open_blocking(app: &AppHandle, idle_timeout_ms: Option<u64>) -> BrowseOpened 
     }
 }
 
-/// Give the never-shown view the size it was built with.
+/// Make the page render without putting it on any screen.
 ///
-/// WebKitGTK sizes the page from the widget's allocation, and GTK allocates
-/// nothing in a window that is never mapped: the page in a hidden window lays
-/// out in a 0x0 viewport — `innerWidth`, `innerHeight` and the body's width all
-/// 0 — so a site with a responsive layout draws its narrowest one, and anything
-/// measured in screens measures nothing. Allocating by hand gives the page the
-/// 1440x900 the window was asked for. It does not make the page visible: rendering
-/// updates stay suspended (docs/pitfall/600).
+/// The window `build_window` made is hidden and stays hidden. A hidden view is
+/// a hidden page to WebKit (`visibilityState` "hidden"), and a hidden page gets
+/// no rendering updates (docs/pitfall/600). On GTK the view is moved out of that
+/// window into a `GtkOffscreenWindow`: a toplevel that GTK maps and draws into
+/// memory and never hands to the display server. The view counts as mapped, so
+/// the page is visible to itself, and there is no X11 or Wayland window to show
+/// up on a screen, in a taskbar or in the focus chain. The offscreen window also
+/// gives the view its 1440x900, which a never-mapped window would leave at 0x0.
 ///
-/// macOS keeps a hidden WKWebView's frame, so there is nothing to do there.
+/// wry still owns the view and destroys it when the Tauri window goes; the
+/// offscreen window goes with it.
 #[cfg(target_os = "linux")]
-fn allocate_viewport(window: &WebviewWindow<Wry>) {
+fn render_unseen(window: &WebviewWindow<Wry>) {
     let _ = window.with_webview(|platform| {
-        use gtk::prelude::WidgetExt;
+        use gtk::prelude::*;
         let view = platform.inner();
-        view.realize();
+        if let Some(parent) = view.parent().and_then(|p| p.downcast::<gtk::Container>().ok()) {
+            parent.remove(&view);
+        }
         let (w, h) = policy::VIEWPORT;
-        view.size_allocate(&gtk::Allocation::new(0, 0, w as i32, h as i32));
+        view.set_size_request(w as i32, h as i32);
+        let offscreen = gtk::OffscreenWindow::new();
+        offscreen.add(&view);
+        offscreen.show_all();
+        view.connect_destroy(move |_| {
+            // Safety: the offscreen window is ours alone; nothing else holds it
+            // or will touch it after this.
+            unsafe { offscreen.destroy() };
+        });
     });
 }
 
-#[cfg(not(target_os = "linux"))]
-fn allocate_viewport(_window: &WebviewWindow<Wry>) {}
+/// The macOS counterpart, written blind: nothing here has been built or run
+/// (docs/pitfall/600). WKWebView takes a page to be hidden when its window is
+/// not ordered in or is occluded, and a window placed outside every screen is
+/// occluded. So the window is made borderless (AppKit only pulls titled windows
+/// back onto a screen), moved far outside every screen, kept out of the mouse,
+/// Mission Control, the window cycle and the Window menu, ordered in at the back
+/// without becoming key, and the view's occlusion detection is switched off
+/// through WebKit's private `_setWindowOcclusionDetectionEnabled:`, when the
+/// view answers to it.
+#[cfg(target_os = "macos")]
+fn render_unseen(window: &WebviewWindow<Wry>) {
+    let _ = window.with_webview(|platform| {
+        use objc2::runtime::AnyObject;
+        use objc2::{msg_send, sel};
+        use objc2_foundation::NSPoint;
+        // NSWindowStyleMaskBorderless.
+        const BORDERLESS: usize = 0;
+        // NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle.
+        const BEHAVIOR: usize = (1 << 3) | (1 << 6);
+        // Safety: on the main thread, `inner` is wry's WKWebView and `ns_window`
+        // its NSWindow, both alive for the length of this closure.
+        unsafe {
+            let view = platform.inner() as *mut AnyObject;
+            let ns_window = platform.ns_window() as *mut AnyObject;
+            let (Some(view), Some(ns_window)) = (view.as_ref(), ns_window.as_ref()) else {
+                return;
+            };
+            let private = sel!(_setWindowOcclusionDetectionEnabled:);
+            let answers: bool = msg_send![view, respondsToSelector: private];
+            if answers {
+                let _: () = msg_send![view, _setWindowOcclusionDetectionEnabled: false];
+            }
+            let _: () = msg_send![ns_window, setStyleMask: BORDERLESS];
+            let _: () = msg_send![ns_window, setHasShadow: false];
+            let _: () = msg_send![ns_window, setIgnoresMouseEvents: true];
+            let _: () = msg_send![ns_window, setExcludedFromWindowsMenu: true];
+            let _: () = msg_send![ns_window, setCollectionBehavior: BEHAVIOR];
+            let _: () = msg_send![ns_window, setFrameOrigin: NSPoint::new(-20_000.0, -20_000.0)];
+            let _: () = msg_send![ns_window, orderBack: std::ptr::null::<AnyObject>()];
+        }
+    });
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn render_unseen(_window: &WebviewWindow<Wry>) {}
 
 /// Close session `id` once nothing has touched it for its idle window.
 fn spawn_reaper(app: AppHandle, id: u64) {
