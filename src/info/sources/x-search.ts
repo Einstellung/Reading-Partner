@@ -4,9 +4,10 @@
 // It is not a subscription. Nothing polls it, it is never in info-sources.json,
 // and the engine never runs it; what reads X is the topic search's own run. The
 // descriptor exists for the one thing every source with a session shares: the
-// sign-in row. site-session.ts folds it in with the subscribed sources, so x.com
-// gets the same row Bloomberg has — open the login window, check the session,
-// sign out — on the same cookie jar the browse window reads through.
+// sign-in row. Once the reader has a topic search, site-session.ts folds it in
+// with the subscribed sources, so x.com gets the same row Bloomberg has — open
+// the login window, check the session, sign out — on the same cookie jar the
+// browse window reads through.
 
 import type { SourceDescriptor } from "./descriptor";
 

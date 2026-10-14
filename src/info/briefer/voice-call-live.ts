@@ -18,6 +18,7 @@ import { loadThreads } from "../../platform/app/threads";
 import { distillInfoThread } from "../../memory";
 import { assembleReaderSection } from "../../memory/live/assemble";
 import { loadSources } from "../sources/source-store";
+import { hasTopicSearches } from "../topic-search/store";
 import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
 import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
@@ -93,17 +94,19 @@ const REFUSE_BRIEFING: BriefingControl = {
  */
 export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<VoiceCall | null> {
   const briefing = opts.briefing;
-  const [reader, sources, settings, device] = await Promise.all([
+  const [reader, sources, settings, device, topicSearch] = await Promise.all([
     assembleReaderSection(),
     loadSources(),
     loadSettings(),
     loadDeviceSettings(),
+    hasTopicSearches(),
   ]);
   const collecting = device.role === "collector";
   const ctx = {
     reader,
     sources,
     aiLanguage: settings.aiLanguage,
+    topicSearch,
     canSignIn: hasWebviewSignIn() && collecting,
     collecting,
   };

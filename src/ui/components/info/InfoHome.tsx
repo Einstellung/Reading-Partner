@@ -431,6 +431,7 @@ export default function InfoHome(props: {
         <div className="absolute inset-0 overflow-y-auto bg-background">
           <SourcesPage
             sources={info.sources}
+            topicSearch={info.topicSearch}
             health={info.sourceHealth}
             labs={info.labs ?? []}
             sessions={info.siteSessions}

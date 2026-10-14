@@ -359,11 +359,14 @@ test("a host with no webview is told nothing about a window it cannot open", asy
   expect(prompt).toContain("generate_briefing");
 });
 
-test("formatSignInSites lists X search's site whatever is subscribed", () => {
+test("formatSignInSites lists X search's site once there is a topic search", () => {
   // The topic search reads X through a session of its own (docs/info/88), so
-  // x.com is offered even to a reader with no sign-in source.
-  const bare = formatSignInSites(SOURCES);
+  // x.com is offered even to a reader with no sign-in source, as long as there
+  // is a topic search to read it for.
+  const bare = formatSignInSites(SOURCES, true);
   expect(bare).toContain("on the user's request only");
   expect(bare).toContain("- x.com — X search");
-  expect(formatSignInSites([BLOOMBERG])).toContain("bloomberg.com — ");
+  expect(formatSignInSites(SOURCES, false)).toContain("nothing to sign in to");
+  expect(formatSignInSites([BLOOMBERG], false)).not.toContain("x.com");
+  expect(formatSignInSites([BLOOMBERG], true)).toContain("bloomberg.com — ");
 });

@@ -61,16 +61,19 @@ test("an identifier that is not in the list resolves to nothing, and an address 
   expect(resolveSignInSite([], "bloomberg.com")).toBeNull();
 });
 
-test("X search gets a row of its own, after the subscribed sites", () => {
-  // Not a subscription (docs/info/88): the topic search reads X through it.
-  const bare = allSignInSites([]);
+test("X search gets a row of its own once there is a topic search", () => {
+  // Not a subscription (docs/info/88): the topic search reads X through it, so
+  // without one there is no X row, whatever is subscribed.
+  expect(allSignInSites([], false)).toEqual([]);
+  expect(allSignInSites(BLOOMBERG, false).map((s) => s.label)).toEqual(["bloomberg.com"]);
+  const bare = allSignInSites([], true);
   expect(bare.map((s) => s.host)).toEqual(["x.com"]);
   expect(bare[0].signInUrl).toBe(X_SIGN_IN_URL);
   // The session is checked on the site root, never on the login page.
   expect(bare[0].checkUrl).toBe("https://x.com/");
   expect(resolveSignInSite(bare, "x.com")).toBe(bare[0]);
   expect(resolveSignInSite(bare, "X search")).toBe(bare[0]);
-  const both = allSignInSites(BLOOMBERG);
+  const both = allSignInSites(BLOOMBERG, true);
   expect(both.map((s) => s.label)).toEqual(["bloomberg.com", "x.com"]);
   // The pure fold is unchanged: only what it is given.
   expect(signInSites([])).toEqual([]);

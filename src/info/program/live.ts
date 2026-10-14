@@ -91,6 +91,7 @@ import { subscribeSyncStatus } from "../../platform/sync";
 import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
 import { allSignInSites } from "../sources/site-session";
+import { hasTopicSearches } from "../topic-search/store";
 import {
   loadPool,
   removePoolDays,
@@ -798,9 +799,13 @@ function platformName(): string {
 // the cookie does not leave the webview it was set in (docs/36).
 async function siteStates(): Promise<Record<string, boolean>> {
   try {
-    const [sources, sessions] = await Promise.all([loadSources(), loadSiteSessions()]);
+    const [sources, sessions, topicSearch] = await Promise.all([
+      loadSources(),
+      loadSiteSessions(),
+      hasTopicSearches(),
+    ]);
     const out: Record<string, boolean> = {};
-    for (const site of allSignInSites(sources)) {
+    for (const site of allSignInSites(sources, topicSearch)) {
       const state = sessions[site.host];
       out[site.host] = !!state && !state.unknown && state.signedIn;
     }

@@ -25,6 +25,7 @@ import { loadBriefing } from "../boxes/store";
 import { loadPublishedBriefing } from "../boxes/publish";
 import type { Briefing } from "../boxes/types";
 import { loadSources } from "../sources/source-store";
+import { hasTopicSearches } from "../topic-search/store";
 import { todayLocal } from "../collect/store";
 import { INFO_MEALS_KIND } from "../meals/desk";
 import { buildLiveMealsTools } from "../meals/live";
@@ -66,17 +67,19 @@ async function loadDayBriefing(date: string): Promise<Briefing | null> {
 }
 
 async function liveContext(): Promise<CompanionContext> {
-  const [reader, sources, settings, device] = await Promise.all([
+  const [reader, sources, settings, device, topicSearch] = await Promise.all([
     assembleReaderSection(),
     loadSources(),
     loadSettings(),
     loadDeviceSettings(),
+    hasTopicSearches(),
   ]);
   const collecting = device.role === "collector";
   return {
     reader,
     sources,
     aiLanguage: settings.aiLanguage,
+    topicSearch,
     canSignIn: hasWebviewFetch() && collecting,
     collecting,
   };
