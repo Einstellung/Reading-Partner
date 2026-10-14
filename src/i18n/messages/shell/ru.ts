@@ -38,6 +38,7 @@ export default {
   "lumen.holdForMenu": "Удерживайте, чтобы открыть меню Lumen",
   "lumen.menuVoice": "Голос",
   "lumen.menuType": "Текст",
+  "lumen.callCardClose": "Закрыть",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
