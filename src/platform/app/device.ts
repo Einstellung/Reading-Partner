@@ -58,6 +58,8 @@ export interface DeviceSettings {
   defaultProviderId?: string | null;
   defaultModelId?: string | null;
   everydayModelId?: string | null;
+  voiceFrontModelId?: string | null;
+  voiceFrontThinking?: "off" | "low";
   sttApiBase?: string | null;
   sttModel?: string | null;
 }

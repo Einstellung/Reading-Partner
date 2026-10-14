@@ -168,6 +168,8 @@ const LAYER: Record<string, Layer> = {
   // whatever desk it speaks over; info/briefer holds the wiring of one caller.
   "soul/voice": "capability",
   "soul/voice/speech": "capability",
+  // The call's front (docs/companion/136): the fast layer that answers and hands off.
+  "soul/voice/front": "capability",
   // Turning raw material into usable material (docs/85), grouped by what is
   // done to it rather than by who asks: the secretary, reading and the meals
   // line are all callers, and nothing here knows any of them. Siblings may use
