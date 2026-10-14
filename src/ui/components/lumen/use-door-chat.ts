@@ -50,6 +50,8 @@ import {
 import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools } from "./door-tools";
+import { TOPIC_SEARCH_APPLY_OP, topicSearchAppliedNote } from "../../../info/topic-search/cards";
+import { applyTopicSearchCard, loadTopicSearchGuidance } from "../../../info/topic-search/live";
 import {
   INTAKE_CHOOSE_OP,
   INTAKE_NEW_TOPIC_OP,
@@ -169,8 +171,14 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
             raiseCard: (prefix, payload) => raiseCardRef.current(prefix, payload),
             links: linksToTake(history),
             settings: await loadSettings(),
+            readerLines: () =>
+              history
+                .filter((m) => m.role === "user")
+                .map((m) => ({ ...(m.id ? { id: m.id } : {}), ts: m.ts, text: m.text })),
           }),
           topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
+          // How a topic search is drafted, and the ones the reader has (docs/info/88).
+          prompt: await loadTopicSearchGuidance(),
         });
         if (prepared.kind === "no-provider") return { kind: "failed", message: t("info.errors.noProvider") };
         if (prepared.kind === "refused") return { kind: "refused", message: prepared.text };
@@ -292,6 +300,25 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     [key, threadId, note, setMessages],
   );
 
+  // The drafting card's Apply (docs/info/88): the config, the concern, and the
+  // first run handed off, all in info/topic-search/apply.ts.
+  const applyTopicSearch = useCallback(
+    async (cardId: string) => {
+      if (!threadId) return;
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "topic-search-proposal") return;
+      const card = found.payload;
+      const result = await applyTopicSearchCard(card);
+      if (!result.ok) return;
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
+      patchThreadMessage(key, threadId, found.ts, {
+        parts: [toPersistedCardPart(cardId, { ...card, phase: "applied" })],
+      });
+      note(topicSearchAppliedNote(card));
+    },
+    [key, threadId, note, setMessages],
+  );
+
   // The intake card's pick: a topic on the shelf, or one made on the card first.
   // The card redraws off the intake record, so nothing is patched here.
   const intakeOf = useCallback((cardId: string): string | null => {
@@ -326,6 +353,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       switch (action.kind) {
         case "mutate":
           if (action.op === "apply-topic") void applyTopic(cardId);
+          else if (action.op === TOPIC_SEARCH_APPLY_OP) void applyTopicSearch(cardId);
           else if (action.op === INTAKE_CHOOSE_OP && action.arg) void pickIntakeTopic(cardId, { id: action.arg });
           else if (action.op === INTAKE_NEW_TOPIC_OP && action.arg) void pickIntakeTopic(cardId, { name: action.arg });
           break;
@@ -342,7 +370,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           break;
       }
     },
-    [applyTopic, pickIntakeTopic, openIntakeDocument, note, setMessages],
+    [applyTopic, applyTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages],
   );
 
   return { messages, stickKey, ready: threadId !== null, streaming, send, stop, onCardAction };

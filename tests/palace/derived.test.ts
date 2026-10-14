@@ -172,6 +172,7 @@ test("a conversation row's sample is the file its store key names, and nothing e
 // kind, is the point.
 const STORES_A_TOPIC_ID: Record<string, readonly PalaceKind[]> = {
   "info/labs/types.ts": ["info-labs"],
+  "info/topic-search/types.ts": ["info-topic-searches"],
   "memory/usage/model-calls.ts": ["model-calls"],
   "platform/app/threads.ts": ["info-thread", "conversation", "info-meals-thread"],
   "reading/ingest/intake-store.ts": ["link-intake"],

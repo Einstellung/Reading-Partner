@@ -53,6 +53,9 @@ export interface AssembleInput {
   // it to bring them: the door's own (soul/door.ts). Priced and checked for a
   // second owner with everything else.
   tools?: readonly AgentTool[];
+  // What the surface tells the model beside its tools: the door's drafting
+  // rules for a topic search (docs/info/88). Printed last.
+  prompt?: string;
 }
 
 export interface AssembledTurn {
@@ -177,6 +180,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
     // publishes goes last either way.
     if (!anchor) blocks.push(memory);
     blocks.push(soul.prompt);
+    blocks.push(input.prompt ?? "");
     return [duty, ...blocks].filter((p) => p !== "").join("\n\n");
   }
 

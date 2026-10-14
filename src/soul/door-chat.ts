@@ -25,6 +25,8 @@ export interface DoorSendInput {
   /** What the surface mounts beside the soul's own set. */
   tools?: readonly AgentTool[];
   topic?: TopicProposalSurface;
+  /** What the surface tells the model beside its tools. */
+  prompt?: string;
 }
 
 export interface DoorSendDeps {
@@ -72,6 +74,7 @@ export async function prepareDoorTurn(
     signal: input.signal,
     ...(input.tools ? { tools: input.tools } : {}),
     ...(input.topic ? { topic: input.topic } : {}),
+    ...(input.prompt ? { prompt: input.prompt } : {}),
   });
   if (!turn) return { kind: "aborted" };
   if (turn.refusal) return { kind: "refused", text: turn.refusal };

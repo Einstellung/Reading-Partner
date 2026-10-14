@@ -309,3 +309,35 @@ test("a confirmedOn that is not a day is refused rather than stamped", async () 
     }),
   ).rejects.toThrow(/not a day/);
 });
+
+// docs/info/88 不关注了: a concern is marked lapsed and followed again, as an
+// edit — the record and its evidence stay — and only a concern can lapse.
+test("setLapsed marks a concern lapsed and clears it again, and refuses a profile", async () => {
+  const { store, files } = makeStore();
+  const concern = await store.createStatement({
+    kind: "concern",
+    text: "Following AI for science",
+    author: "reader",
+    evidence: [`thread-1:${JULY_17}`],
+  });
+  const lapsed = await store.setLapsed(concern.id, true);
+  expect(lapsed?.lapsed).toBe(true);
+  expect(lapsed?.evidence).toEqual(concern.evidence);
+  expect((await store.getStatement(concern.id))?.lapsed).toBe(true);
+
+  const back = await store.setLapsed(concern.id, false);
+  expect(back).toEqual(concern);
+  expect("lapsed" in (back as Statement)).toBe(false);
+  expect(JSON.parse(files.get(STATEMENTS_FILE) as string)).toEqual({ statements: [concern] });
+
+  expect(await store.setLapsed("s-nope", true)).toBeNull();
+
+  const profile = await store.createStatement({
+    kind: "profile",
+    text: "Reads English originals only",
+    author: "reader",
+    evidence: [`thread-1:${JULY_17}`],
+  });
+  await expect(store.setLapsed(profile.id, true)).rejects.toThrow("only a concern");
+  expect((await store.getStatement(profile.id))?.lapsed).toBeUndefined();
+});

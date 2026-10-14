@@ -78,6 +78,11 @@ export interface StatementStore {
   // pointer is where its evidence went, and overwriting it would lose the only
   // record of that.
   markSuperseded(id: string, byId: string): Promise<Statement | null>;
+  // Marks a concern as no longer being followed, or follows it again (docs/info/88
+  // 不关注了). An edit, not a delete: the statement and its evidence stay. Null
+  // when there is no such statement; a profile statement throws, since being
+  // lapsed is something only a concern can be.
+  setLapsed(id: string, lapsed: boolean): Promise<Statement | null>;
 }
 
 // The one date a caller is allowed to supply, and the narrowest opening that
@@ -247,6 +252,22 @@ export function createStatementStore(io: StatementIo): StatementStore {
       if (at < 0) return null;
       if (all[at].supersededBy) return null;
       const next: Statement = { ...all[at], supersededBy: byId };
+      all[at] = next;
+      await writeAll(all);
+      return next;
+    },
+
+    async setLapsed(id, lapsed) {
+      const all = await readAll();
+      const at = all.findIndex((s) => s.id === id);
+      if (at < 0) return null;
+      const prev = all[at];
+      if (prev.kind !== "concern") throw new Error(`only a concern can lapse, and ${id} is a ${prev.kind}`);
+      if ((prev.lapsed === true) === lapsed) return prev;
+      // Followed again drops the field rather than writing false, so a concern
+      // that lapsed and came back reads the same as one that never lapsed.
+      const { lapsed: _was, ...rest } = prev;
+      const next: Statement = lapsed ? { ...rest, lapsed: true } : rest;
       all[at] = next;
       await writeAll(all);
       return next;

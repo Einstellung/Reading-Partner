@@ -35,6 +35,9 @@ export interface InfoItem {
   // source, a fetch that failed, or a paywall-truncated feed body). Triage marks
   // these so the model does not pretend to have read the full text (docs/17).
   summaryOnly?: boolean;
+  // The bylines the library gave, in its order (an arXiv paper's authors), when
+  // the source knows them. Facts the program writes into a result (docs/88).
+  authors?: string[];
   // What the index that yielded this item counted for it (docs/69): attention
   // and citation numbers, present only when an index source reported them. The
   // cable carries them on, so the screen and the analyst read the same numbers.
@@ -69,6 +72,13 @@ export interface ItemSignals {
   // When the thing itself was created (a repo, a model), ISO-ish, if it differs
   // from publishedAt (which for an index is when it surfaced in the query).
   createdAt?: string;
+  // GitHub, from a repo lookup (docs/88): the latest commit on the default
+  // branch, the latest release, and the license's SPDX id (or its name when
+  // GitHub has no SPDX id for it). ISO-ish dates.
+  lastCommitAt?: string;
+  releaseTag?: string;
+  releaseAt?: string;
+  license?: string;
 }
 
 // One line of the signals for a prompt: "★ 1240 (+310) · ↑ 87 · cites 12 ·

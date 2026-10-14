@@ -230,6 +230,9 @@ const LAYER: Record<string, Layer> = {
   // bodies, a room's picture — and the briefer only names its kind, so the edge
   // runs briefer -> tasking and never back.
   "info/tasking": "domain",
+  // Topic searches (docs/info/88): the config, the drafting card and the door
+  // tools' logic. Mounted at the door by ui/components/lumen/door-tools.ts.
+  "info/topic-search": "domain",
   // AI-driven link intake (docs/86): the link agent's prompt, tools, candidate
   // table and caps, the reader registry, the receipt and the source records.
   // Knows no site and no reader: info/x registers into it, reading files for it.
@@ -238,6 +241,10 @@ const LAYER: Record<string, Layer> = {
   // hidden webview, and the post's record; registered as a reader of
   // info/links, and still the rule-based fan-out until the switch (docs/86).
   "info/x": "domain",
+  // A topic search's scoring (docs/88): local relevance, weighted RRF, X
+  // engagement, the final score, events and their clusters, and the 30-day
+  // dedupe. Pure; reads the arXiv, GitHub and X link parsers for event keys.
+  "info/rank": "domain",
   reading: "domain",
   "reading/chapters": "domain",
   // A reading turn's own corner: the desk assembly's tool set and history

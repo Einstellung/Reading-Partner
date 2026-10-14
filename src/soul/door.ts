@@ -68,6 +68,8 @@ export interface DoorTurnInput {
   tools?: readonly AgentTool[];
   /** Where a topic proposal is drawn; nothing is proposed without one. */
   topic?: TopicProposalSurface;
+  /** What the surface tells the model beside its tools (turn.ts). */
+  prompt?: string;
 }
 
 /**
@@ -109,6 +111,7 @@ export async function openDoorTurn(input: DoorTurnInput): Promise<AssembledTurn 
     ...(input.purpose ? { purpose: input.purpose } : {}),
     ...(input.tools ? { tools: input.tools } : {}),
     ...(input.topic ? { topic: input.topic } : {}),
+    ...(input.prompt ? { prompt: input.prompt } : {}),
   });
 }
 
