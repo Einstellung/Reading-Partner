@@ -49,6 +49,17 @@ class EnqueueSpeechArgs: Decodable {
     let index: Int
     let chars: Int
     let last: Bool
+    /// Which piece of the sentence this is, from 0, and whether it ends the
+    /// sentence. Rust hands a sentence over in pieces as the vendor streams it
+    /// (src/tts/relay.rs). Absent reads as a whole sentence in one piece.
+    let part: Int?
+    let complete: Bool?
+    /// Monotonic milliseconds (CLOCK_MONOTONIC_RAW, the clock `SpeechOut.monoMs`
+    /// reads) the sentence's request went out, its first bytes came back, and
+    /// this piece left the relay.
+    let requestedMs: Double?
+    let firstAudioMs: Double?
+    let handedMs: Double?
     let sampleRate: Double
     let pcm: Data
 }
@@ -378,7 +389,11 @@ class VoicePlugin: Plugin {
             do {
                 let ack = try SpeechOut.shared.enqueue(
                     pcm: args.pcm, sampleRate: args.sampleRate, chars: args.chars,
-                    utterance: args.utterance, index: args.index, last: args.last)
+                    utterance: args.utterance, index: args.index, last: args.last,
+                    part: args.part ?? 0, complete: args.complete ?? true,
+                    marks: SpeechMarks(
+                        requestedMs: args.requestedMs ?? 0, firstAudioMs: args.firstAudioMs ?? 0,
+                        handedMs: args.handedMs ?? 0))
                 invoke.resolve(ack)
             } catch {
                 invoke.reject(DictationError.describe(error))

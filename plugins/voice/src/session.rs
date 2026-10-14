@@ -378,11 +378,17 @@ mod tests {
             &self,
             sentence: SentenceAudio,
         ) -> std::result::Result<PlaybackState, TtsError> {
-            self.heard.lock().unwrap().push((
-                sentence.id,
-                sentence.format.duration_ms(sentence.pcm.len()),
-                sentence.last,
-            ));
+            // A sentence arrives in pieces; the record is one row per
+            // sentence, its pieces summed.
+            let ms = sentence.format.duration_ms(sentence.pcm.len());
+            let mut heard = self.heard.lock().unwrap();
+            match heard.last_mut() {
+                Some(row) if row.0 == sentence.id && sentence.part > 0 => {
+                    row.1 += ms;
+                    row.2 |= sentence.last;
+                }
+                _ => heard.push((sentence.id, ms, sentence.last)),
+            }
             Ok(PlaybackState {
                 queued_ahead_ms: 0.0,
                 playing: true,
@@ -474,7 +480,9 @@ mod tests {
         for _ in 0..200 {
             {
                 let turn = session.turn.lock().await;
-                let Some(turn) = turn.as_ref() else { return true };
+                let Some(turn) = turn.as_ref() else {
+                    return true;
+                };
                 if !turn.relay.close() {
                     return true;
                 }

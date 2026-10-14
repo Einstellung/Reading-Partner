@@ -80,6 +80,9 @@ impl<R: Runtime> Player for DevicePlayer<R> {
                 sentence.id as u32,
                 sentence.chars as u32,
                 sentence.last,
+                sentence.part,
+                sentence.complete,
+                sentence.marks,
                 sentence.format.sample_rate_hz,
                 sentence.pcm,
             )
@@ -108,11 +111,20 @@ impl<R: Runtime> Player for DevicePlayer<R> {
         let mut book = self.book.lock().unwrap();
         book.queued_ahead_ms = ack.queued_ms;
         book.measured_at = Some(Instant::now());
-        book.sentences.push(Placed {
-            id: sentence.id,
-            start_ms: ack.start_ms,
-            duration_ms,
-        });
+        // A sentence arrives in pieces. Its row starts where the first piece
+        // was placed and runs to the end of the latest one, which counts a gap
+        // the player waited out inside the sentence as part of it — the same
+        // timeline Swift's clock keeps.
+        match book.sentences.iter_mut().find(|s| s.id == sentence.id) {
+            Some(placed) => {
+                placed.duration_ms = ack.start_ms + duration_ms - placed.start_ms;
+            }
+            None => book.sentences.push(Placed {
+                id: sentence.id,
+                start_ms: ack.start_ms,
+                duration_ms,
+            }),
+        }
         Ok(PlaybackState {
             queued_ahead_ms: ack.queued_ms,
             playing: true,

@@ -26,6 +26,16 @@ function sentence(
 	return { utterance, sentence, startsInMs, windowMs, values };
 }
 
+test("a sentence's later piece is kept beside its first, a repeat replaces it", () => {
+	// Four windows from 1000 ms end at 1100; the next piece starts there.
+	let q = queueEnvelope(ENVELOPE_EMPTY, sentence([0.5, 0.5, 0.5, 0.5]), 1000);
+	q = queueEnvelope(q, sentence([0.9, 0.9], { startsInMs: 95 }), 1000);
+	expect(q.pending.map((s) => s.startAtMs)).toEqual([1000, 1095]);
+	// The same index again from its start is a repeat.
+	q = queueEnvelope(q, sentence([0.1, 0.1, 0.1, 0.1]), 1000);
+	expect(q.pending.map((s) => s.startAtMs)).toEqual([1000]);
+});
+
 test("a sentence that has not started yet is silence", () => {
 	const q = queueEnvelope(ENVELOPE_EMPTY, sentence([1, 1, 1], { startsInMs: 200 }), 1000);
 	const read = readEnvelope(q, 1199);

@@ -27,7 +27,7 @@ struct SpeechClock {
         let index: Int
         let chars: Int
         let startFrame: Int
-        let frames: Int
+        var frames: Int
     }
 
     private(set) var segments: [Segment] = []
@@ -53,6 +53,25 @@ struct SpeechClock {
             Segment(index: index, chars: chars, startFrame: startFrame, frames: frames))
         queuedFrames += frames
         return startFrame
+    }
+
+    /// Lengthen the latest sentence by `frames` that are already in its future:
+    /// the rest of its audio, arriving in pieces. Answers where they start.
+    @discardableResult
+    mutating func extend(frames: Int) -> Int {
+        let startFrame = queuedFrames
+        guard var last = segments.popLast() else { return startFrame }
+        last.frames += frames
+        segments.append(last)
+        queuedFrames += frames
+        return startFrame
+    }
+
+    /// Silence the player waited through before the next piece, counted as part
+    /// of the sentence it fell in (or after), so the timeline stays the node's.
+    mutating func pad(frames: Int) {
+        guard frames > 0 else { return }
+        extend(frames: frames)
     }
 
     /// Which sentence and which character a frame on this timeline falls in.

@@ -48,6 +48,11 @@ export interface QueuedSentence {
 // hidden must not come back to an unbounded queue.
 export const ENVELOPE_QUEUE_MAX = 16;
 
+// How far, in windows, a piece may start before the queued one ends and still
+// count as its continuation: the two delays crossed the bridge on different
+// hops, so their difference carries that much skew.
+const PIECE_SLACK_WINDOWS = 1;
+
 export interface EnvelopeQueue {
 	/** Sentences not yet finished, oldest first. */
 	readonly pending: readonly QueuedSentence[];
@@ -83,8 +88,15 @@ export function queueEnvelope(
 		windowMs,
 		values: envelope.values.map(clampLevel),
 	};
+	// A sentence reaches the player in pieces as the vendor streams it
+	// (plugins/voice/src/tts/relay.rs), and each piece brings its own envelope
+	// under the same index. One that starts where the queued one ends is the
+	// next piece and is kept beside it; one that starts earlier is a repeat.
 	const kept = queue.pending.filter(
-		(s) => s.utterance !== next.utterance || s.sentence !== next.sentence,
+		(s) =>
+			s.utterance !== next.utterance ||
+			s.sentence !== next.sentence ||
+			(next.startAtMs > s.startAtMs && next.startAtMs >= s.endAtMs - PIECE_SLACK_WINDOWS * windowMs),
 	);
 	kept.push(next);
 	kept.sort((a, b) => a.startAtMs - b.startAtMs);

@@ -103,6 +103,9 @@ impl<R: Runtime> Voice<R> {
         _index: u32,
         _chars: u32,
         _last: bool,
+        _part: u32,
+        _complete: bool,
+        _marks: crate::tts::SentenceMarks,
         _sample_rate: u32,
         _pcm: Vec<u8>,
     ) -> crate::Result<SpeechEnqueued> {

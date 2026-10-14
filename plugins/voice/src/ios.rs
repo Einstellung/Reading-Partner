@@ -176,6 +176,17 @@ struct EnqueueSpeechArgs {
     /// offset inside it and never sees the text.
     chars: u32,
     last: bool,
+    /// Which piece of the sentence this is, from 0, and whether it ends the
+    /// sentence. A sentence is handed over in pieces as the vendor streams it;
+    /// until its `complete` piece arrives, running out of audio is a wait
+    /// inside the sentence, not the end of it.
+    part: u32,
+    complete: bool,
+    /// Monotonic milliseconds (CLOCK_MONOTONIC_RAW) the sentence's request
+    /// went out, its first bytes came back, and this piece left the relay.
+    requested_ms: f64,
+    first_audio_ms: f64,
+    handed_ms: f64,
     sample_rate: u32,
     /// Little-endian 16-bit mono, already trimmed (src/tts/trim.rs) and already
     /// carrying the pause that follows the sentence. serde writes a `Vec<u8>`
@@ -207,6 +218,9 @@ impl<R: Runtime> Voice<R> {
         index: u32,
         chars: u32,
         last: bool,
+        part: u32,
+        complete: bool,
+        marks: crate::tts::SentenceMarks,
         sample_rate: u32,
         pcm: Vec<u8>,
     ) -> crate::Result<SpeechEnqueued> {
@@ -219,6 +233,11 @@ impl<R: Runtime> Voice<R> {
                     index,
                     chars,
                     last,
+                    part,
+                    complete,
+                    requested_ms: marks.requested_ms,
+                    first_audio_ms: marks.first_audio_ms,
+                    handed_ms: marks.handed_ms,
                     sample_rate,
                     pcm: base64::engine::general_purpose::STANDARD.encode(pcm),
                 },

@@ -16,6 +16,14 @@
 //    ending (the `last` sentence has been played) and the turn starving (it has
 //    not) with the same mechanism; only the record afterwards tells them apart.
 //
+//    The exception is a sentence still arriving. Rust hands a sentence over in
+//    pieces as the vendor streams it, and running out between two pieces of
+//    one sentence is not the turn starving: stopping there would end the
+//    `speaking` state and open a fresh immunity window on the next piece. The
+//    node keeps playing through that gap, and the next piece is scheduled at
+//    an explicit time with the gap written into the book, so the count stays
+//    the node's own timeline.
+//
 // 2. Nothing touches the player while the engine is not running.
 //    `-[AVAudioPlayerNode play]` asserts `required condition is false:
 //    _engine->IsRunning()`, which is an Objective-C exception that Swift `try`
@@ -50,6 +58,14 @@ struct SpeechAck: Encodable {
     let queuedMs: Double
     /// Where this sentence starts on the current player timeline.
     let startMs: Double
+}
+
+/// When a sentence passed the Rust stages, in `SpeechOut.monoMs` milliseconds.
+struct SpeechMarks {
+    let requestedMs: Double
+    let firstAudioMs: Double
+    let handedMs: Double
+    static let none = SpeechMarks(requestedMs: 0, firstAudioMs: 0, handedMs: 0)
 }
 
 /// Where the voice is. Answered by `stop_speaking` and by `position`.
@@ -154,6 +170,14 @@ final class SpeechOut {
     private var generation: UInt64 = 0
     private var pending = 0
     private var sawLast = false
+    /// The sentence whose pieces are still arriving: some of it is queued and
+    /// its `complete` piece is not. Running dry while this is set is a wait
+    /// inside a sentence, and the player keeps going through it (rule 1's
+    /// exception, below).
+    private var openIndex: Int?
+    /// When the queue ran dry inside `openIndex`, for the mark that says how
+    /// long the listener heard nothing.
+    private var dryAtMs: Double?
     private var clock = SpeechClock()
     private var startedAt: CFAbsoluteTime = 0
 
@@ -309,7 +333,8 @@ final class SpeechOut {
     /// carries the trim and the queue depth, and Rust wants both before it
     /// decides whether to keep synthesising ahead.
     func enqueue(
-        pcm: Data, sampleRate: Double, chars: Int, utterance: UInt64, index: Int, last: Bool
+        pcm: Data, sampleRate: Double, chars: Int, utterance: UInt64, index: Int, last: Bool,
+        part: Int = 0, complete: Bool = true, marks: SpeechMarks = .none
     ) throws -> SpeechAck {
         try queue.sync {
             guard sampleRate == SpeechOut.sampleRate else {
@@ -343,6 +368,11 @@ final class SpeechOut {
                 return SpeechAck(dropped: true, busy: false, queuedMs: 0, startMs: 0)
             }
             if !speaking && utterance < self.utterance {
+                return SpeechAck(dropped: true, busy: false, queuedMs: 0, startMs: 0)
+            }
+            // The rest of a sentence whose start is no longer playing: the turn
+            // was stopped under it, and this piece is over with it.
+            if !speaking && part > 0 {
                 return SpeechAck(dropped: true, busy: false, queuedMs: 0, startMs: 0)
             }
 
@@ -401,6 +431,23 @@ final class SpeechOut {
                 }
             }
 
+            // A queue that has already run dry under a turn still speaking: the
+            // gap inside a sentence (rule 1), or the moment between a sentence
+            // ending and the drain check below stopping the turn. The piece
+            // goes at an explicit time far enough ahead of the render that it
+            // cannot land in the past, and the gap goes in the book.
+            var when: AVAudioTime? = nil
+            var gapFrames = 0
+            if speaking, let rendered = renderedFrameLocked() {
+                let io = Int(AVAudioSession.sharedInstance().ioBufferDuration * SpeechOut.sampleRate)
+                if rendered + io >= clock.queuedFrames {
+                    let at = max(clock.queuedFrames, rendered + max(1200, 2 * io))
+                    gapFrames = at - clock.queuedFrames
+                    when = AVAudioTime(
+                        sampleTime: AVAudioFramePosition(at), atRate: SpeechOut.sampleRate)
+                }
+            }
+
             if !speaking {
                 guard let engine = try AudioFront.shared.speakerEngine() else {
                     throw DictationError("The player has no engine to speak through.")
@@ -439,22 +486,61 @@ final class SpeechOut {
                 node.play()
             }
 
-            let startFrame = clock.append(index: index, chars: chars, frames: frames)
+            clock.pad(frames: gapFrames)
+            let continuing = openIndex == index
+            let startFrame =
+                continuing
+                ? clock.extend(frames: frames)
+                : clock.append(index: index, chars: chars, frames: frames)
+            openIndex = complete ? nil : index
             pending += 1
-            if last { sawLast = true }
+            if last && complete { sawLast = true }
+            if let dryAt = dryAtMs {
+                NSLog(
+                    "RP-TTS resumed utt=%llu idx=%d part=%d silentMs=%.1f gapFrames=%d",
+                    utterance, index, part, SpeechOut.monoMs() - dryAt, gapFrames)
+                dryAtMs = nil
+            }
             let scheduledGeneration = generation
             let enqueuedAt = (CFAbsoluteTimeGetCurrent() - startedAt) * 1000
             let chars_ = chars
             let bytes_ = bytes
 
-            node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) {
-                [weak self] _ in
+            let utterance_ = utterance
+            let handler: AVAudioPlayerNodeCompletionHandler = { [weak self] _ in
                 self?.queue.async {
                     self?.completed(
                         generation: scheduledGeneration, index: index, chars: chars_,
                         bytes: bytes_, frames: frames, startFrame: startFrame,
                         enqueuedAtMs: enqueuedAt)
+                    if complete {
+                        NSLog(
+                            "RP-TTS played utt=%llu idx=%d at=%.1f", utterance_, index,
+                            SpeechOut.monoMs())
+                    }
                 }
+            }
+            if let when = when {
+                node.scheduleBuffer(
+                    buffer, at: when, options: [], completionCallbackType: .dataPlayedBack,
+                    completionHandler: handler)
+            } else {
+                node.scheduleBuffer(
+                    buffer, completionCallbackType: .dataPlayedBack, completionHandler: handler)
+            }
+
+            // The per-sentence marks (docs/136, 一期): request, first bytes and
+            // hand-over from Rust, and here the moment the first piece went on
+            // the node and how long until the listener hears it. One clock on
+            // both sides, CLOCK_MONOTONIC_RAW.
+            if part == 0 {
+                let startsIn =
+                    Double(max(0, startFrame - playedFrameLocked())) / SpeechOut.sampleRate * 1000
+                NSLog(
+                    "RP-TTS first utt=%llu idx=%d chars=%d req=%.1f firstAudio=%.1f handed=%.1f "
+                        + "scheduled=%.1f startsInMs=%.1f",
+                    utterance, index, chars, marks.requestedMs, marks.firstAudioMs, marks.handedMs,
+                    SpeechOut.monoMs(), startsIn)
             }
 
             // Ahead of the listener and not ahead of the node: `playedFrameLocked`
@@ -806,6 +892,8 @@ final class SpeechOut {
         self.utterance = utterance
         generation &+= 1
         sawLast = false
+        openIndex = nil
+        dryAtMs = nil
         pending = 0
         startedAt = CFAbsoluteTimeGetCurrent()
         // A turn that reached the player did not fail on its way to speaking,
@@ -838,6 +926,8 @@ final class SpeechOut {
         generation &+= 1
         node.stop()
         pending = 0
+        openIndex = nil
+        dryAtMs = nil
         stops.append(reason)
         finishLocked(reason: reason)
         return at
@@ -872,6 +962,22 @@ final class SpeechOut {
     /// on to it. `outputPresentationLatency` is read every time rather than
     /// cached: the header says it changes when the engine starts and stops and
     /// when connections change, and this engine does both between turns.
+    /// The node's own position at its last render, before any output latency:
+    /// how far it has consumed the queue, which is what says whether a piece
+    /// arriving now can still be spliced on the end.
+    private func renderedFrameLocked() -> Int? {
+        guard let node = player, let render = node.lastRenderTime,
+            let time = node.playerTime(forNodeTime: render)
+        else { return nil }
+        return Int(time.sampleTime)
+    }
+
+    /// Milliseconds on CLOCK_MONOTONIC_RAW, the clock Rust stamps its marks
+    /// with (src/tts/player.rs `mono_ms`).
+    static func monoMs() -> Double {
+        Double(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)) / 1_000_000
+    }
+
     private func playedFrameLocked() -> Int {
         guard let node = player, let render = node.lastRenderTime,
             let time = node.playerTime(forNodeTime: render)
@@ -907,6 +1013,18 @@ final class SpeechOut {
             guard let self = self, self.speaking, self.pending == 0,
                 drainGeneration == self.generation
             else { return }
+            // Dry inside a sentence still arriving: wait for the next piece
+            // with the node running (rule 1's exception).
+            if let open = self.openIndex, !self.sawLast {
+                if self.dryAtMs == nil {
+                    self.underruns += 1
+                    self.dryAtMs = SpeechOut.monoMs()
+                    NSLog(
+                        "RP-TTS dry utt=%llu idx=%d at=%.1f", self.utterance, open,
+                        self.dryAtMs ?? 0)
+                }
+                return
+            }
             if !self.sawLast {
                 self.underruns += 1
                 NSLog("RP-SPEECH ran dry before the last sentence")

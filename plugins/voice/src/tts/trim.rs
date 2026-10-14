@@ -5,16 +5,16 @@
 // air between every pair — forty sentences is eighteen seconds of nothing.
 //
 // The trim is streaming rather than whole-sentence: the head is decided as soon
-// as a loud enough window shows up, and the tail by holding back a fixed window
-// of the most recent audio and never emitting it until the stream ends. So it
-// costs no pass of its own and no buffer of its own beyond that window.
+// as a loud enough window shows up, and the tail is decided as it arrives. What
+// is held back is only the quiet run since the last loud window — if speech
+// resumes, the run was a pause inside the sentence and goes out; if the stream
+// ends, it was the tail and is cut. The run is never held past
+// `tail_holdback_ms`, so trailing silence longer than that is trimmed only down
+// to it.
 //
-// It does not make the first sentence audible any sooner. The relay hands the
-// player one finished sentence at a time (docs/33, `plugins/voice/README.md`),
-// so the first sentence of an answer still waits for its own last byte —
-// measured at 1560 ms on a real briefing. What removes that wait is the opening
-// cache, not this; sub-sentence hand-off is the thing that would, and it is not
-// what was built.
+// That is what lets the relay hand a sentence to the player in pieces (docs/136,
+// TTS 首帧开播): everything up to the last loud window is safe to play the moment
+// it arrives.
 
 use std::collections::VecDeque;
 
@@ -104,6 +104,10 @@ pub struct SilenceTrimmer {
     /// Whether anything above the threshold was ever seen. False means this
     /// sentence was never analysable, and neither end of it is trimmed.
     found_onset: bool,
+    /// Bytes of release guard still owed to the last loud window that went
+    /// out. The held run starts right after that window, so its first
+    /// `tail_guard_ms` belong to the sentence whatever comes next.
+    owed_guard: usize,
     report: TrimReport,
 }
 
@@ -120,6 +124,7 @@ impl SilenceTrimmer {
             remainder: Vec::new(),
             scanned: 0,
             found_onset: false,
+            owed_guard: 0,
             report: TrimReport::default(),
         }
     }
@@ -182,7 +187,10 @@ impl SilenceTrimmer {
         // whole. Trimming it would mean deleting most of it on the strength of a
         // measurement that already said it could not be measured.
         let keep_to = if self.found_onset {
-            last_loud_end(&tail, self.format, &self.config)
+            match last_loud_end(&tail, self.format, &self.config) {
+                0 => self.owed_guard.min(tail.len()),
+                end => end,
+            }
         } else {
             tail.len()
         };
@@ -229,15 +237,36 @@ impl SilenceTrimmer {
         None
     }
 
+    /// Everything up to the end of the last loud window, and whatever of the
+    /// quiet run after it is past the holdback. Only whole windows leave, so the
+    /// held run stays on the window grid the body started on and the answer is
+    /// the same however the bytes were split.
     fn drain_beyond_holdback(&mut self) -> Vec<u8> {
+        let win = window_bytes(self.format, &self.config);
         let holdback = self.format.bytes_for_ms(self.config.tail_holdback_ms);
+        let guard = self.format.bytes_for_ms(self.config.tail_guard_ms);
+        let found_onset = self.found_onset;
+        let format = self.format;
+        let config = self.config;
         let Phase::Body { hold } = &mut self.phase else {
             return Vec::new();
         };
-        if hold.len() <= holdback {
+        let held = hold.make_contiguous();
+        let loud_end = if found_onset {
+            last_loud_window_end(held, format, &config)
+        } else {
+            0
+        };
+        let past_holdback = held.len().saturating_sub(holdback);
+        let take = loud_end.max(past_holdback - past_holdback % win);
+        if take == 0 {
             return Vec::new();
         }
-        let take = hold.len() - holdback;
+        self.owed_guard = if loud_end > 0 {
+            guard.saturating_sub(take - loud_end)
+        } else {
+            self.owed_guard.saturating_sub(take)
+        };
         let out: Vec<u8> = hold.drain(..take).collect();
         self.report.kept_ms += self.format.duration_ms(out.len());
         out
@@ -245,7 +274,9 @@ impl SilenceTrimmer {
 }
 
 fn window_bytes(format: AudioFormat, config: &TrimConfig) -> usize {
-    format.bytes_for_ms(config.window_ms).max(format.bytes_per_frame())
+    format
+        .bytes_for_ms(config.window_ms)
+        .max(format.bytes_per_frame())
 }
 
 fn threshold_amplitude(config: &TrimConfig) -> i32 {
@@ -279,6 +310,22 @@ fn onset_in(
         at += win;
     }
     None
+}
+
+/// The end of the last loud window, with no guard: what is certainly speech.
+/// Zero when the whole buffer is silence. Windows are counted from the front of
+/// the buffer, which the streaming release keeps on the body's grid.
+fn last_loud_window_end(buf: &[u8], format: AudioFormat, config: &TrimConfig) -> usize {
+    let win = window_bytes(format, config);
+    let threshold = threshold_amplitude(config);
+    let mut end = buf.len() - (buf.len() % win);
+    while end >= win {
+        if window_peak(&buf[end - win..end]) > threshold {
+            return end;
+        }
+        end -= win;
+    }
+    0
 }
 
 /// One past the last byte worth keeping: the end of the last loud window plus
@@ -364,6 +411,38 @@ mod tests {
         }
         // Three seconds in, only the holdback is still being kept back.
         assert!(F.duration_ms(emitted) > 2000.0, "emitted {emitted} bytes");
+    }
+
+    #[test]
+    fn speech_goes_out_as_it_arrives_and_only_the_quiet_run_is_held() {
+        let mut t = SilenceTrimmer::new(F, TrimConfig::default());
+        let mut emitted = t.push(&tone(60.0, 0)).len();
+        // 200 ms of speech in: all of it is out, and nothing waits for a
+        // holdback to fill.
+        emitted += t.push(&tone(200.0, 8000)).len();
+        assert!(
+            F.duration_ms(emitted) > 180.0,
+            "emitted {} ms",
+            F.duration_ms(emitted)
+        );
+        // A pause is held until speech resumes, then goes out whole.
+        assert_eq!(t.push(&tone(300.0, 0)).len(), 0);
+        let resumed = t.push(&tone(100.0, 8000)).len();
+        assert!(
+            F.duration_ms(resumed) >= 390.0,
+            "resumed {} ms",
+            F.duration_ms(resumed)
+        );
+    }
+
+    #[test]
+    fn the_tail_guard_survives_a_tail_that_arrives_after_the_speech_went_out() {
+        let mut t = SilenceTrimmer::new(F, TrimConfig::default());
+        let mut out = t.push(&tone(500.0, 8000));
+        out.extend(t.push(&tone(600.0, 0)));
+        out.extend(t.finish());
+        let kept = F.duration_ms(out.len());
+        assert!((kept - 560.0).abs() < 15.0, "kept {kept} ms");
     }
 
     #[test]

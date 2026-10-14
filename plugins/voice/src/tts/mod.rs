@@ -32,7 +32,9 @@ pub use backend::{SpeechRequest, TtsBackend};
 pub use error::TtsError;
 pub use format::AudioFormat;
 pub use opening::{OpeningCache, OpeningKey, PrimedOpening, DEFAULT_TTL};
-pub use player::{Heard, PlaybackState, Player, SentenceAudio, VirtualPlayer};
+pub use player::{
+    mono_ms, Heard, PlaybackState, Player, SentenceAudio, SentenceMarks, VirtualPlayer,
+};
 pub use relay::{RelayConfig, RelayEvent, SpeechRelay};
 pub use trim::{silence, SilenceTrimmer, TrimConfig, TrimReport};
 

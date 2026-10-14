@@ -24,7 +24,7 @@ use tokio::task::JoinSet;
 
 use super::backend::{SpeechRequest, TtsBackend};
 use super::error::TtsError;
-use super::player::{Heard, Player, SentenceAudio};
+use super::player::{mono_ms, Heard, Player, SentenceAudio, SentenceMarks};
 use super::trim::{silence, SilenceTrimmer, TrimConfig, TrimReport};
 use super::{synthesize_with_retry, AudioFormat};
 
@@ -44,6 +44,12 @@ pub struct RelayConfig {
     /// before the answer travelled back, and the player taking a moment more to
     /// notice it has run out.
     pub busy_grace_ms: f64,
+    /// The least audio of an unfinished sentence worth a hand-over of its own.
+    /// A sentence goes to the player in pieces as the vendor streams it, and
+    /// each piece is one crossing to Swift and one buffer on the node; this
+    /// keeps the count down without holding the first sound back: 200 ms of
+    /// audio arrives in about 70 ms at the vendor's RTF.
+    pub min_chunk_ms: f64,
     pub voice: String,
     pub trim: TrimConfig,
 }
@@ -55,6 +61,7 @@ impl Default for RelayConfig {
             concurrency: 2,
             gap_ms: 160.0,
             busy_grace_ms: 1000.0,
+            min_chunk_ms: 200.0,
             voice: String::new(),
             trim: TrimConfig::default(),
         }
@@ -71,7 +78,8 @@ const CHARS_PER_SECOND: f64 = 4.41;
 pub enum RelayEvent {
     /// A sentence was admitted and its request went out.
     Started { id: u64, chars: usize, at_ms: f64 },
-    /// The first PCM of that sentence came back.
+    /// The first PCM of that sentence came back. Its trimmed audio starts going
+    /// to the player from here, a piece at a time.
     FirstAudio { id: u64, at_ms: f64 },
     /// The whole sentence is synthesised and trimmed.
     Ready {
@@ -81,8 +89,9 @@ pub enum RelayEvent {
         attempts: u32,
         trim: TrimReport,
     },
-    /// It went to the player. `queued_ahead_ms` is the margin at that moment:
-    /// how long the speaker could go on if nothing else ever arrived.
+    /// Its first piece went to the player. `queued_ahead_ms` is the margin at
+    /// that moment: how long the speaker could go on if nothing else ever
+    /// arrived.
     Queued {
         id: u64,
         at_ms: f64,
@@ -113,6 +122,7 @@ pub enum RelayEvent {
 
 enum Command {
     Push(String),
+    PushAudio { pcm: Vec<u8>, chars: usize },
     Close,
     Stop(oneshot::Sender<Result<Heard, TtsError>>),
 }
@@ -139,6 +149,15 @@ impl SpeechRelay {
     /// Hand over the next sentence. Returns false once the relay has stopped.
     pub fn push(&self, text: impl Into<String>) -> bool {
         self.commands.send(Command::Push(text.into())).is_ok()
+    }
+
+    /// Hand over a sentence whose audio is already made: trimmed, carrying its
+    /// pause, in the backend's format (tts/opening.rs). It takes its place in
+    /// line like any other sentence and is never sent to the vendor.
+    pub fn push_audio(&self, pcm: Vec<u8>, chars: usize) -> bool {
+        self.commands
+            .send(Command::PushAudio { pcm, chars })
+            .is_ok()
     }
 
     /// No more sentences are coming in this turn. What was already pushed is
@@ -178,8 +197,30 @@ struct Pending {
 
 struct Done {
     id: u64,
+    result: Result<(TrimReport, u32), TtsError>,
+}
+
+/// What a synthesis sends back while it runs, ahead of its `Done`.
+enum Piece {
+    /// The vendor's first bytes of this sentence arrived, at this monotonic ms.
+    First(u64, f64),
+    /// Trimmed PCM that is safe to play.
+    Audio(u64, Vec<u8>),
+}
+
+/// One admitted sentence, from its request to its last piece reaching the
+/// player.
+struct Stream {
     chars: usize,
-    result: Result<(Vec<u8>, TrimReport, u32), TtsError>,
+    /// Trimmed audio received and not yet handed over.
+    pcm: Vec<u8>,
+    /// Pieces the player has taken.
+    parts: u32,
+    /// The synthesis is over. `Some(true)` with audio to finish, `Some(false)`
+    /// for a sentence that failed before any of it was heard.
+    done: Option<bool>,
+    requested_ms: f64,
+    first_audio_ms: f64,
 }
 
 async fn run(
@@ -194,28 +235,26 @@ async fn run(
     let mut pending: VecDeque<Pending> = VecDeque::new();
     let mut inflight: JoinSet<Done> = JoinSet::new();
     let mut inflight_chars: BTreeMap<u64, usize> = BTreeMap::new();
-    let mut ready: BTreeMap<u64, (Vec<u8>, usize)> = BTreeMap::new();
-    let mut failed: BTreeMap<u64, ()> = BTreeMap::new();
+    let mut streams: BTreeMap<u64, Stream> = BTreeMap::new();
+    let (pieces_tx, mut pieces) = mpsc::unbounded_channel::<Piece>();
     let mut next_id: u64 = 0;
     let mut next_to_queue: u64 = 0;
     let mut closed = false;
     // False once the handle is gone. The turn still finishes what it holds:
     // dropping a relay is the caller letting go, not the caller cancelling.
     let mut listening = true;
-    // The sentence the player would not take yet because it is still finishing
-    // an earlier turn, held for the next attempt. It sits here rather than back
-    // in `ready` because it is already past `next_to_queue`: the id left the
-    // queue when it was first offered, and everything behind it waits for it.
-    let mut waiting: Option<(u64, Vec<u8>, usize)> = None;
-    // When to stop offering it. Set from the tail the player reported, so the
-    // wait is bounded by what the player says it is still holding rather than by
-    // a number chosen here.
+    // When to stop offering a turn's first piece to a player still finishing an
+    // earlier turn. Set from the tail the player reported, so the wait is
+    // bounded by what the player says it is still holding rather than by a
+    // number chosen here.
     let mut wait_until: Option<Instant> = None;
-    // True once the player has taken a sentence of this turn. From then on it is
-    // this turn the player is speaking, so nothing later can come back `Busy`,
-    // and nothing is kept for a second attempt.
+    // Not before this: the next offer after a `Busy`, so that pieces arriving
+    // while the old tail plays do not each cost a round trip.
+    let mut retry_at: Option<Instant> = None;
+    // True once the player has taken a piece of this turn. From then on it is
+    // this turn the player is speaking, so nothing later can come back `Busy`.
     let mut accepted = false;
-    // True once a sentence went over with `last` on it. The flag rides on the
+    // True once a piece went over with `last` on it. The flag rides on the
     // audio, so a turn whose final sentences all failed never sends one, and the
     // player has to be told some other way before the loop ends.
     let mut told_last = false;
@@ -224,23 +263,51 @@ async fn run(
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
-        // Anything finished and next in line goes to the player before more work
-        // is admitted: the margin the gate reads has to be up to date.
-        while let Some((id, pcm, chars)) = waiting.take().or_else(|| {
-            ready
-                .remove(&next_to_queue)
-                .map(|(pcm, chars)| (next_to_queue, pcm, chars))
-        }) {
-            if id == next_to_queue {
+        // The sentence next in line goes to the player as its audio arrives,
+        // before more work is admitted: the margin the gate reads has to be up
+        // to date. Sentences behind it collect their audio until it is their
+        // turn.
+        loop {
+            let id = next_to_queue;
+            let Some(stream) = streams.get_mut(&id) else {
+                break;
+            };
+            if stream.done == Some(false) {
+                // A sentence nobody heard any of must not hold up the ones
+                // behind it.
+                streams.remove(&id);
                 next_to_queue += 1;
+                continue;
             }
+            let complete = stream.done == Some(true);
+            if !complete
+                && (stream.pcm.is_empty()
+                    || format.duration_ms(stream.pcm.len()) < config.min_chunk_ms)
+            {
+                break;
+            }
+            if retry_at.is_some_and(|at| Instant::now() < at) {
+                break;
+            }
+            let pcm = std::mem::take(&mut stream.pcm);
+            let part = stream.parts;
+            let chars = stream.chars;
+            let marks = SentenceMarks {
+                requested_ms: stream.requested_ms,
+                first_audio_ms: stream.first_audio_ms,
+                handed_ms: mono_ms(),
+            };
             // Nothing else can produce a sentence and no more are coming, so
             // this is the turn's last. The player needs it to tell a turn that
             // ended from a turn that starved.
-            let last = closed && pending.is_empty() && inflight.is_empty() && ready.is_empty();
-            // Only a sentence offered before the player has taken any of this
+            let last = complete
+                && closed
+                && pending.is_empty()
+                && inflight.is_empty()
+                && streams.len() == 1;
+            // Only a piece offered before the player has taken any of this
             // turn's can come back `Busy`, so that is exactly how long a copy is
-            // worth keeping. Past that point the audio is handed over once.
+            // worth keeping.
             let second_attempt = (!accepted).then(|| pcm.clone());
             let state = player
                 .enqueue(SentenceAudio {
@@ -249,6 +316,9 @@ async fn run(
                     pcm,
                     chars,
                     last,
+                    part,
+                    complete,
+                    marks,
                 })
                 .await;
             match state {
@@ -256,18 +326,26 @@ async fn run(
                     accepted = true;
                     told_last |= last;
                     wait_until = None;
-                    let _ = events.send(RelayEvent::Queued {
-                        id,
-                        at_ms: elapsed_ms(started),
-                        queued_ahead_ms: state.queued_ahead_ms,
-                    });
+                    retry_at = None;
+                    if part == 0 {
+                        let _ = events.send(RelayEvent::Queued {
+                            id,
+                            at_ms: elapsed_ms(started),
+                            queued_ahead_ms: state.queued_ahead_ms,
+                        });
+                    }
+                    if complete {
+                        streams.remove(&id);
+                        next_to_queue += 1;
+                    } else if let Some(stream) = streams.get_mut(&id) {
+                        stream.parts += 1;
+                    }
                 }
-                // Not this sentence being refused: the player carries one
+                // Not this piece being refused: the player carries one
                 // utterance for its whole life and answers `Cancelled` only
                 // when that turn is behind the one being spoken (speaker.rs),
-                // so everything behind this sentence would be refused too.
-                // Going on would spend the vendor's quota on audio nobody can
-                // hear.
+                // so everything behind it would be refused too. Going on would
+                // spend the vendor's quota on audio nobody can hear.
                 Err(TtsError::Cancelled) => {
                     inflight.shutdown().await;
                     let _ = events.send(RelayEvent::Abandoned {
@@ -278,13 +356,14 @@ async fn run(
                 }
                 // The other way round: this turn is ahead of the one being
                 // spoken, and the player is only finishing that one's tail. The
-                // sentence is offered again on the next tick, for as long as the
-                // tail the player reported says it needs.
+                // piece goes back in front of the sentence's audio and is
+                // offered again, for as long as the tail the player reported
+                // says it needs.
                 Err(TtsError::Busy { tail_ms }) => {
                     let now = Instant::now();
                     let spent = wait_until.is_some_and(|until| now >= until);
                     match second_attempt {
-                        Some(pcm) if !spent => {
+                        Some(mut pcm) if !spent => {
                             // A tail that is not a length of time is a tail of
                             // none: the deadline lands now and the next refusal
                             // ends the turn.
@@ -295,17 +374,21 @@ async fn run(
                                 .unwrap_or_default();
                             wait_until =
                                 Some(wait_until.map_or(horizon, |until| until.max(horizon)));
+                            retry_at = Some(now + std::time::Duration::from_millis(100));
                             let _ = events.send(RelayEvent::Waiting {
                                 id,
                                 at_ms: elapsed_ms(started),
                                 tail_ms,
                             });
-                            waiting = Some((id, pcm, chars));
+                            if let Some(stream) = streams.get_mut(&id) {
+                                pcm.extend_from_slice(&stream.pcm);
+                                stream.pcm = pcm;
+                            }
                             break;
                         }
                         // Either the tail has had as long as it said it needed
                         // and something other than playback is keeping the
-                        // player, or the player took a sentence of this turn and
+                        // player, or the player took a piece of this turn and
                         // is somehow busy with an earlier one anyway. Both mean
                         // this turn is not going to be spoken.
                         _ => {
@@ -318,18 +401,22 @@ async fn run(
                         }
                     }
                 }
+                // One piece lost. The rest of the sentence still goes, and the
+                // sentence still ends where its last piece does.
                 Err(e) => {
                     let _ = events.send(RelayEvent::Failed {
                         id,
                         at_ms: elapsed_ms(started),
                         error: e.to_string(),
                     });
+                    if complete {
+                        streams.remove(&id);
+                        next_to_queue += 1;
+                    } else if let Some(stream) = streams.get_mut(&id) {
+                        stream.parts += 1;
+                    }
                 }
             }
-        }
-        // A sentence nobody will ever hear must not hold up the ones behind it.
-        while failed.remove(&next_to_queue).is_some() {
-            next_to_queue += 1;
         }
 
         // Admission.
@@ -339,9 +426,9 @@ async fn run(
                 .await
                 .map(|s| s.queued_ahead_ms)
                 .unwrap_or(0.0);
-            let coming = ready
+            let coming = streams
                 .values()
-                .map(|(pcm, _)| format.duration_ms(pcm.len()))
+                .map(|s| format.duration_ms(s.pcm.len()))
                 .sum::<f64>()
                 + inflight_chars
                     .values()
@@ -353,6 +440,17 @@ async fn run(
             let job = pending.pop_front().expect("checked above");
             let chars = job.text.chars().count();
             inflight_chars.insert(job.id, chars);
+            streams.insert(
+                job.id,
+                Stream {
+                    chars,
+                    pcm: Vec::new(),
+                    parts: 0,
+                    done: None,
+                    requested_ms: mono_ms(),
+                    first_audio_ms: 0.0,
+                },
+            );
             let _ = events.send(RelayEvent::Started {
                 id: job.id,
                 chars,
@@ -360,9 +458,9 @@ async fn run(
             });
             let backend = backend.clone();
             let events_for_task = events.clone();
+            let pieces_for_task = pieces_tx.clone();
             let voice = config.voice.clone();
             let trim = config.trim;
-            let gap_ms = config.gap_ms;
             inflight.spawn(async move {
                 let result = synthesize_one(
                     backend,
@@ -372,32 +470,23 @@ async fn run(
                     },
                     format,
                     trim,
-                    gap_ms,
                     job.id,
                     started,
                     events_for_task,
+                    pieces_for_task,
                 )
                 .await;
-                Done {
-                    id: job.id,
-                    chars,
-                    result,
-                }
+                Done { id: job.id, result }
             });
         }
 
         // The turn is through. Nothing can produce another sentence, and the
-        // last one went to the player in the drain above — the three emptied
-        // together is exactly what says every id was handed over. Returning
-        // here rather than idling on the tick is what makes a closed turn cost
+        // last piece went to the player in the hand-over above — every stream
+        // gone is exactly what says every id was handed over. Returning here
+        // rather than idling on the tick is what makes a closed turn cost
         // nothing between turns; the caller is left holding a handle whose
         // `push` answers false and whose `stop` answers `Cancelled`.
-        if closed
-            && pending.is_empty()
-            && inflight.is_empty()
-            && ready.is_empty()
-            && waiting.is_none()
-        {
+        if closed && pending.is_empty() && inflight.is_empty() && streams.is_empty() {
             // The turn ended on a sentence the player never got: the last one
             // failed, or was refused. Nothing carried the flag, so the player is
             // told separately — otherwise its queue running out reads as a turn
@@ -419,6 +508,23 @@ async fn run(
                     pending.push_back(Pending { id: next_id, text });
                     next_id += 1;
                 }
+                Some(Command::PushAudio { pcm, chars }) => {
+                    // Made before it was asked for (tts/opening.rs): already
+                    // trimmed, already carrying its gap, and whole.
+                    let now = mono_ms();
+                    streams.insert(
+                        next_id,
+                        Stream {
+                            chars,
+                            pcm,
+                            parts: 0,
+                            done: Some(true),
+                            requested_ms: now,
+                            first_audio_ms: now,
+                        },
+                    );
+                    next_id += 1;
+                }
                 Some(Command::Close) => closed = true,
                 Some(Command::Stop(reply)) => {
                     inflight.shutdown().await;
@@ -436,19 +542,28 @@ async fn run(
                     listening = false;
                 }
             },
+            Some(piece) = pieces.recv() => take_piece(&mut streams, piece),
             Some(done) = inflight.join_next(), if !inflight.is_empty() => {
                 let Ok(done) = done else { continue };
+                // Every piece a synthesis sent was sent before it returned, so
+                // whatever of this sentence is still in the channel lands first.
+                while let Ok(piece) = pieces.try_recv() {
+                    take_piece(&mut streams, piece);
+                }
                 inflight_chars.remove(&done.id);
+                let Some(stream) = streams.get_mut(&done.id) else { continue };
+                let heard_some = stream.parts > 0 || !stream.pcm.is_empty();
                 match done.result {
-                    Ok((pcm, trim, attempts)) => {
+                    Ok((trim, attempts)) => {
+                        stream.pcm.extend(silence(format, config.gap_ms));
+                        stream.done = Some(true);
                         let _ = events.send(RelayEvent::Ready {
                             id: done.id,
                             at_ms: elapsed_ms(started),
-                            speech_ms: format.duration_ms(pcm.len()),
+                            speech_ms: trim.kept_ms + config.gap_ms,
                             attempts,
                             trim,
                         });
-                        ready.insert(done.id, (pcm, done.chars));
                     }
                     Err(e) => {
                         let _ = events.send(RelayEvent::Failed {
@@ -456,11 +571,32 @@ async fn run(
                             at_ms: elapsed_ms(started),
                             error: e.to_string(),
                         });
-                        failed.insert(done.id, ());
+                        // Part of it may already be playing. That part ends
+                        // where the vendor stopped, with the usual pause, so
+                        // the player is not left holding a sentence open.
+                        if heard_some {
+                            stream.pcm.extend(silence(format, config.gap_ms));
+                        }
+                        stream.done = Some(heard_some);
                     }
                 }
             },
             _ = tick.tick() => {}
+        }
+    }
+}
+
+fn take_piece(streams: &mut BTreeMap<u64, Stream>, piece: Piece) {
+    match piece {
+        Piece::First(id, at) => {
+            if let Some(stream) = streams.get_mut(&id) {
+                stream.first_audio_ms = at;
+            }
+        }
+        Piece::Audio(id, pcm) => {
+            if let Some(stream) = streams.get_mut(&id) {
+                stream.pcm.extend(pcm);
+            }
         }
     }
 }
@@ -471,47 +607,53 @@ async fn synthesize_one(
     request: SpeechRequest,
     format: AudioFormat,
     trim: TrimConfig,
-    gap_ms: f64,
     id: u64,
     started: Instant,
     events: mpsc::UnboundedSender<RelayEvent>,
-) -> Result<(Vec<u8>, TrimReport, u32), TtsError> {
+    pieces: mpsc::UnboundedSender<Piece>,
+) -> Result<(TrimReport, u32), TtsError> {
     // Bounded: the trimmer drains it as fast as chunks arrive, and a bound is
     // what makes a stopped reader push back on a running synthesis.
     let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
 
-    // Trimming runs beside the synthesis rather than after it. The tail cannot
-    // be decided until the stream ends, but the head can, and everything past
-    // the holdback window can go out while the rest is still arriving.
+    // Trimming runs beside the synthesis, and what the trim releases goes
+    // straight on towards the player: the head is cut the moment speech shows
+    // up, and only the quiet run at the end is held until the stream says
+    // whether it was a pause or the tail.
     let collector = tokio::spawn(async move {
         let mut trimmer = SilenceTrimmer::new(format, trim);
-        let mut out = Vec::new();
         let mut first = true;
         while let Some(chunk) = rx.recv().await {
             if first {
                 first = false;
+                let _ = pieces.send(Piece::First(id, mono_ms()));
                 let _ = events.send(RelayEvent::FirstAudio {
                     id,
                     at_ms: elapsed_ms(started),
                 });
             }
-            out.extend(trimmer.push(&chunk));
+            let out = trimmer.push(&chunk);
+            if !out.is_empty() {
+                let _ = pieces.send(Piece::Audio(id, out));
+            }
         }
-        out.extend(trimmer.finish());
-        (out, trimmer.report())
+        let out = trimmer.finish();
+        if !out.is_empty() {
+            let _ = pieces.send(Piece::Audio(id, out));
+        }
+        trimmer.report()
     });
 
     // `tx` goes in by value: dropping it on the way out is what ends the loop
-    // above, on the error path as much as on the good one.
+    // above, on the error path as much as on the good one. A retry happens only
+    // before the first byte (TtsError::is_retryable), so nothing already sent
+    // on is ever sent twice.
     let attempts = synthesize_with_retry(backend.as_ref(), &request, tx).await;
-    let (mut out, report) = collector.await.map_err(|e| TtsError::Protocol(e.to_string()))?;
+    let report = collector
+        .await
+        .map_err(|e| TtsError::Protocol(e.to_string()))?;
     let attempts = attempts?;
-
-    // The pause between sentences goes on the end of each one rather than in
-    // front of the next, so that the first sentence of a turn starts speaking
-    // the moment it is queued.
-    out.extend(silence(format, gap_ms));
-    Ok((out, report, attempts))
+    Ok((report, attempts))
 }
 
 fn elapsed_ms(from: Instant) -> f64 {
@@ -622,16 +764,23 @@ mod tests {
             // taken, and it is offered again.
             if self
                 .busy_offers
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| left.checked_sub(1))
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                    left.checked_sub(1)
+                })
                 .is_ok()
             {
                 self.bounced.fetch_add(1, Ordering::SeqCst);
                 return Err(TtsError::Busy { tail_ms: 30.0 });
             }
-            self.queued
-                .lock()
-                .unwrap()
-                .push((sentence.id, sentence.last));
+            // A sentence arrives in pieces; the record is one row per
+            // sentence, opened by its first piece and marked by its last.
+            {
+                let mut queued = self.queued.lock().unwrap();
+                match queued.last_mut() {
+                    Some(row) if row.0 == sentence.id => row.1 |= sentence.last,
+                    _ => queued.push((sentence.id, sentence.last)),
+                }
+            }
             if self.refuse_from.is_some_and(|from| sentence.id >= from) {
                 return Err(TtsError::Cancelled);
             }
@@ -758,6 +907,79 @@ mod tests {
         assert_eq!(
             *player.queued.lock().unwrap(),
             vec![(0, false), (1, false), (2, true)]
+        );
+    }
+
+    /// A vendor that streams: five loud chunks of 300 ms, 60 ms apart.
+    struct Drip;
+
+    #[async_trait::async_trait]
+    impl TtsBackend for Drip {
+        fn id(&self) -> &'static str {
+            "drip"
+        }
+        fn model(&self) -> &str {
+            "drip"
+        }
+        fn format(&self) -> AudioFormat {
+            AudioFormat::PCM16_24K_MONO
+        }
+        fn default_voice(&self) -> &str {
+            "drip"
+        }
+        async fn synthesize(
+            &self,
+            _request: &SpeechRequest,
+            out: mpsc::Sender<Vec<u8>>,
+        ) -> Result<(), TtsError> {
+            let format = AudioFormat::PCM16_24K_MONO;
+            for _ in 0..5 {
+                let samples = format.bytes_for_ms(300.0) / 2;
+                let pcm: Vec<u8> = (0..samples)
+                    .flat_map(|i| (if i % 2 == 0 { 8000i16 } else { -8000 }).to_le_bytes())
+                    .collect();
+                out.send(pcm).await.map_err(|_| TtsError::Cancelled)?;
+                tokio::time::sleep(Duration::from_millis(60)).await;
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn the_first_sentence_starts_playing_before_the_vendor_finishes_it() {
+        let player = Arc::new(VirtualPlayer::new());
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Drip),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push("一句话");
+        relay.close();
+
+        let seen = timeline(&mut incoming).await;
+        let queued = seen.iter().find_map(|e| match e {
+            RelayEvent::Queued { id: 0, at_ms, .. } => Some(*at_ms),
+            _ => None,
+        });
+        let ready = seen.iter().find_map(|e| match e {
+            RelayEvent::Ready { id: 0, at_ms, .. } => Some(*at_ms),
+            _ => None,
+        });
+        let (queued, ready) = (queued.unwrap(), ready.unwrap());
+        assert!(
+            queued + 200.0 < ready,
+            "queued at {queued} ms, ready at {ready} ms"
+        );
+        // Played back to back the pieces leave no gap: synthesis runs faster
+        // than the audio plays.
+        assert!(player.underruns().is_empty(), "{:?}", player.underruns());
+        assert!(player.told_the_end());
+        assert!(
+            (player.played_ms() - 1660.0).abs() < 30.0,
+            "{}",
+            player.played_ms()
         );
     }
 

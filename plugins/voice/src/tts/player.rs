@@ -21,7 +21,49 @@ use std::time::Instant;
 use super::error::TtsError;
 use super::format::AudioFormat;
 
-/// One trimmed sentence, ready to be heard.
+/// When a sentence passed each stage on its way to the speaker, in monotonic
+/// milliseconds (`mono_ms`). The same clock Swift reads with
+/// `clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)`, so the native side can line its
+/// own marks up with these without reconciling anything.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SentenceMarks {
+    /// The request to the vendor went out.
+    pub requested_ms: f64,
+    /// The vendor's first bytes arrived.
+    pub first_audio_ms: f64,
+    /// This piece left the relay for the player.
+    pub handed_ms: f64,
+}
+
+/// Milliseconds on CLOCK_MONOTONIC_RAW: mach_continuous_time on Apple
+/// platforms, the raw monotonic clock on Linux and Android. Comparable across
+/// Rust and Swift in one process, and across processes on one device.
+#[cfg(unix)]
+pub fn mono_ms() -> f64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: `ts` is a valid, writable timespec for the call's duration.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC_RAW, &mut ts) };
+    ts.tv_sec as f64 * 1000.0 + ts.tv_nsec as f64 / 1_000_000.0
+}
+
+/// Off unix there is no native side to line up with; this keeps the field
+/// monotonic within the process.
+#[cfg(not(unix))]
+pub fn mono_ms() -> f64 {
+    use std::sync::OnceLock;
+    static EPOCH: OnceLock<Instant> = OnceLock::new();
+    EPOCH.get_or_init(Instant::now).elapsed().as_secs_f64() * 1000.0
+}
+
+/// One piece of a trimmed sentence, ready to be heard.
+///
+/// A sentence reaches the player in pieces, in order, as the vendor streams it:
+/// `part` counts them from 0 and `complete` marks the one that ends the
+/// sentence. Every piece carries the sentence's `id` and `chars`, so a player
+/// that has seen only some of them can still say where in the text it is.
 #[derive(Debug, Clone)]
 pub struct SentenceAudio {
     pub id: u64,
@@ -34,8 +76,16 @@ pub struct SentenceAudio {
     pub chars: usize,
     /// The turn's final sentence. A player cannot work this out for itself: a
     /// turn that ended and a turn that starved both look like a queue running
-    /// dry, and this is the only thing that tells them apart.
+    /// dry, and this is the only thing that tells them apart. Only ever set on
+    /// the `complete` piece.
     pub last: bool,
+    /// Which piece of the sentence this is, from 0.
+    pub part: u32,
+    /// This piece ends the sentence, and carries the pause that follows it.
+    /// Until it arrives the sentence is open: a player that runs out of audio
+    /// before it has run out mid-sentence, not between sentences.
+    pub complete: bool,
+    pub marks: SentenceMarks,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -105,8 +155,10 @@ pub struct VirtualPlayer {
 }
 
 struct Virtual {
-    /// (id, when it starts, how long it lasts)
+    /// (id, when it starts, how long it lasts), one row per piece.
     queue: VecDeque<(u64, Instant, f64)>,
+    /// Per sentence: when its first piece starts, and its length so far.
+    sentences: std::collections::BTreeMap<u64, (Instant, f64)>,
     /// When the last queued sentence finishes.
     ends_at: Option<Instant>,
     /// Every time the queue ran dry before the next sentence arrived, and by how
@@ -130,6 +182,7 @@ impl VirtualPlayer {
         Self {
             state: Mutex::new(Virtual {
                 queue: VecDeque::new(),
+                sentences: std::collections::BTreeMap::new(),
                 ends_at: None,
                 underruns: Vec::new(),
                 played_ms: 0.0,
@@ -177,6 +230,13 @@ impl Player for VirtualPlayer {
         state.told_the_end |= sentence.last;
         let ends_at = starts_at + std::time::Duration::from_secs_f64(duration / 1000.0);
         state.queue.push_back((sentence.id, starts_at, duration));
+        let row = state
+            .sentences
+            .entry(sentence.id)
+            .or_insert((starts_at, 0.0));
+        // A gap inside a sentence is part of it on the timeline, the way the
+        // phone's clock counts it.
+        row.1 = ends_at.duration_since(row.0).as_secs_f64() * 1000.0;
         state.ends_at = Some(ends_at);
         state.played_ms += duration;
 
@@ -207,17 +267,19 @@ impl Player for VirtualPlayer {
             position_ms: 0.0,
             duration_ms: 0.0,
         };
-        for (id, starts_at, duration) in state.queue.iter() {
+        for (id, starts_at, _) in state.queue.iter() {
             if *starts_at <= now {
-                let into = now.duration_since(*starts_at).as_secs_f64() * 1000.0;
+                let (began, length) = state.sentences[id];
+                let into = now.duration_since(began).as_secs_f64() * 1000.0;
                 heard = Heard {
                     sentence: *id,
-                    position_ms: into.min(*duration),
-                    duration_ms: *duration,
+                    position_ms: into.min(length),
+                    duration_ms: length,
                 };
             }
         }
         state.queue.clear();
+        state.sentences.clear();
         state.ends_at = None;
         Ok(heard)
     }
@@ -240,6 +302,9 @@ mod tests {
             pcm: vec![0; format.bytes_for_ms(ms)],
             chars: 10,
             last: false,
+            part: 0,
+            complete: true,
+            marks: SentenceMarks::default(),
         }
     }
 
@@ -266,6 +331,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_sentence_in_pieces_is_one_sentence_to_the_listener() {
+        let p = VirtualPlayer::new();
+        p.enqueue(SentenceAudio {
+            complete: false,
+            ..sentence(1, 100.0)
+        })
+        .await
+        .unwrap();
+        p.enqueue(SentenceAudio {
+            part: 1,
+            ..sentence(1, 400.0)
+        })
+        .await
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        let heard = p.stop().await.unwrap();
+        assert_eq!(heard.sentence, 1);
+        assert!(
+            heard.position_ms > 120.0 && heard.position_ms < 300.0,
+            "{heard:?}"
+        );
+        assert!((heard.duration_ms - 500.0).abs() < 20.0, "{heard:?}");
+    }
+
+    #[tokio::test]
     async fn stopping_says_which_sentence_was_playing_and_how_far_in() {
         let p = VirtualPlayer::new();
         p.enqueue(sentence(1, 100.0)).await.unwrap();
@@ -273,7 +363,10 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         let heard = p.stop().await.unwrap();
         assert_eq!(heard.sentence, 2);
-        assert!(heard.position_ms > 10.0 && heard.position_ms < 200.0, "{heard:?}");
+        assert!(
+            heard.position_ms > 10.0 && heard.position_ms < 200.0,
+            "{heard:?}"
+        );
         assert!((heard.duration_ms - 1000.0).abs() < 20.0);
     }
 }
