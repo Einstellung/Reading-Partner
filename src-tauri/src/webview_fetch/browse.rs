@@ -363,14 +363,30 @@ fn with_session<T>(
 
 /// Open the session's hidden window, blank. Nothing is loaded until the first
 /// navigation.
+///
+/// `viewport` is the page's [width, height] in CSS pixels; the caller picks a
+/// size a real screen has, since the page can read it. Clamped to 800-3840 by
+/// 600-4320; absent, `policy::VIEWPORT`.
 #[tauri::command]
-pub async fn browse_open(app: AppHandle, idle_timeout_ms: Option<u64>) -> Result<BrowseOpened, String> {
-    tauri::async_runtime::spawn_blocking(move || open_blocking(&app, idle_timeout_ms))
+pub async fn browse_open(
+    app: AppHandle,
+    idle_timeout_ms: Option<u64>,
+    viewport: Option<[f64; 2]>,
+) -> Result<BrowseOpened, String> {
+    tauri::async_runtime::spawn_blocking(move || open_blocking(&app, idle_timeout_ms, viewport))
         .await
         .map_err(|e| format!("browse open task failed: {e}"))
 }
 
-fn open_blocking(app: &AppHandle, idle_timeout_ms: Option<u64>) -> BrowseOpened {
+/// The viewport a session asked for, inside sane bounds.
+fn viewport_size(asked: Option<[f64; 2]>) -> (f64, f64) {
+    match asked {
+        Some([w, h]) if w.is_finite() && h.is_finite() => (w.clamp(800.0, 3840.0), h.clamp(600.0, 4320.0)),
+        _ => policy::VIEWPORT,
+    }
+}
+
+fn open_blocking(app: &AppHandle, idle_timeout_ms: Option<u64>, viewport: Option<[f64; 2]>) -> BrowseOpened {
     let refuse = |status: BrowseStatus, detail: String| BrowseOpened {
         status,
         session: None,
@@ -407,7 +423,7 @@ fn open_blocking(app: &AppHandle, idle_timeout_ms: Option<u64>) -> BrowseOpened 
         Err(err) => return refuse(BrowseStatus::Network, format!("window failed: {err}")),
     };
     connect_engine_signals(&window, tx);
-    render_unseen(&window);
+    render_unseen(&window, viewport_size(viewport));
 
     let id = state.browse.seq.fetch_add(1, Ordering::Relaxed) + 1;
     let idle = idle_window(idle_timeout_ms);
@@ -438,19 +454,19 @@ fn open_blocking(app: &AppHandle, idle_timeout_ms: Option<u64>) -> BrowseOpened 
 /// memory and never hands to the display server. The view counts as mapped, so
 /// the page is visible to itself, and there is no X11 or Wayland window to show
 /// up on a screen, in a taskbar or in the focus chain. The offscreen window also
-/// gives the view its 1440x900, which a never-mapped window would leave at 0x0.
+/// gives the view its size (`policy::VIEWPORT` unless the session asked for
+/// another), which a never-mapped window would leave at 0x0.
 ///
 /// wry still owns the view and destroys it when the Tauri window goes; the
 /// offscreen window goes with it.
 #[cfg(target_os = "linux")]
-fn render_unseen(window: &WebviewWindow<Wry>) {
-    let _ = window.with_webview(|platform| {
+fn render_unseen(window: &WebviewWindow<Wry>, (w, h): (f64, f64)) {
+    let _ = window.with_webview(move |platform| {
         use gtk::prelude::*;
         let view = platform.inner();
         if let Some(parent) = view.parent().and_then(|p| p.downcast::<gtk::Container>().ok()) {
             parent.remove(&view);
         }
-        let (w, h) = policy::VIEWPORT;
         view.set_size_request(w as i32, h as i32);
         let offscreen = gtk::OffscreenWindow::new();
         offscreen.add(&view);
@@ -473,7 +489,8 @@ fn render_unseen(window: &WebviewWindow<Wry>) {
 /// through WebKit's private `_setWindowOcclusionDetectionEnabled:`, when the
 /// view answers to it.
 #[cfg(target_os = "macos")]
-fn render_unseen(window: &WebviewWindow<Wry>) {
+fn render_unseen(window: &WebviewWindow<Wry>, (w, h): (f64, f64)) {
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(w, h)));
     let _ = window.with_webview(|platform| {
         use objc2::runtime::AnyObject;
         use objc2::{msg_send, sel};
@@ -507,7 +524,7 @@ fn render_unseen(window: &WebviewWindow<Wry>) {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn render_unseen(_window: &WebviewWindow<Wry>) {}
+fn render_unseen(_window: &WebviewWindow<Wry>, _size: (f64, f64)) {}
 
 /// Close session `id` once nothing has touched it for its idle window.
 fn spawn_reaper(app: AppHandle, id: u64) {
@@ -1021,6 +1038,8 @@ enum ProbeStep {
 #[serde(rename_all = "camelCase")]
 struct ProbePlan {
     idle_timeout_ms: Option<u64>,
+    viewport: Option<[f64; 2]>,
+    #[serde(default)]
     steps: Vec<ProbeStep>,
 }
 
@@ -1057,6 +1076,11 @@ pub fn run_probe_from_env(app: &AppHandle) {
     };
     let app = app.clone();
     std::thread::spawn(move || {
+        if path == "-" {
+            run_stdin(&app);
+            app.exit(0);
+            return;
+        }
         let plan: Result<ProbePlan, String> = std::fs::read_to_string(&path)
             .map_err(|e| e.to_string())
             .and_then(|text| serde_json::from_str(&text).map_err(|e| e.to_string()));
@@ -1073,22 +1097,83 @@ pub fn run_probe_from_env(app: &AppHandle) {
     });
 }
 
-fn run_plan(app: &AppHandle, plan: ProbePlan) {
-    let opened = open_blocking(app, plan.idle_timeout_ms);
+/// `RP_WEBVIEW_BROWSE_PROBE=-`: the plan comes in on stdin one JSON line at a
+/// time, so a driver can choose each step from the last answer
+/// (scripts/x-reader-live.ts runs the topic-search reader this way). The first
+/// line is the plan without steps (`idleTimeoutMs`, `viewport`); every line after
+/// it is one step, answered by one `RP-BROWSE` line. End of input closes the
+/// session.
+fn run_stdin(app: &AppHandle) {
+    use std::io::BufRead;
+    let mut lines = std::io::stdin().lock().lines();
+    let header: ProbePlan = match lines.next() {
+        Some(Ok(text)) => match serde_json::from_str(&text) {
+            Ok(plan) => plan,
+            Err(err) => {
+                println!("RP-BROWSE {}", serde_json::json!({ "error": format!("header: {err}") }));
+                return;
+            }
+        },
+        _ => return,
+    };
+    let opened = open_blocking(app, header.idle_timeout_ms, header.viewport);
     probe_line(0, "open", serde_json::to_value(&opened).unwrap_or_default());
     let Some(id) = opened.session else {
         return;
     };
-    let mut last_value: Option<serde_json::Value> = None;
-    let mut viewport: Option<f64> = None;
+    let mut run = ProbeRun::default();
+    for (i, line) in lines.enumerate() {
+        let Ok(text) = line else { break };
+        if text.trim().is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<ProbeStep>(&text) {
+            Ok(step) => {
+                if !run.step(app, id, i + 1, step) {
+                    break;
+                }
+            }
+            Err(err) => probe_line(i + 1, "error", serde_json::json!({ "error": err.to_string() })),
+        }
+    }
+    let closed = close_blocking(app, id);
+    probe_line(0, "close", serde_json::json!({ "closed": closed }));
+}
+
+fn run_plan(app: &AppHandle, plan: ProbePlan) {
+    let opened = open_blocking(app, plan.idle_timeout_ms, plan.viewport);
+    probe_line(0, "open", serde_json::to_value(&opened).unwrap_or_default());
+    let Some(id) = opened.session else {
+        return;
+    };
+    let mut run = ProbeRun::default();
     for (i, step) in plan.steps.into_iter().enumerate() {
-        let n = i + 1;
+        if !run.step(app, id, i + 1, step) {
+            break;
+        }
+    }
+    let closed = close_blocking(app, id);
+    probe_line(0, "close", serde_json::json!({ "closed": closed }));
+}
+
+/// What a probe carries from one step to the next.
+#[derive(Default)]
+struct ProbeRun {
+    last_value: Option<serde_json::Value>,
+    viewport: Option<f64>,
+}
+
+impl ProbeRun {
+    /// Run one step and print its line. False ends the plan.
+    fn step(&mut self, app: &AppHandle, id: u64, n: usize, step: ProbeStep) -> bool {
+        let last_value = &mut self.last_value;
+        let viewport = &mut self.viewport;
         match step {
             ProbeStep::Navigate { url, until, timeout_ms } => {
                 let result = match policy::validate_target(&url) {
                     Ok(target) => {
                         let load = navigate_blocking(app, id, &target, until.as_deref(), timeout_ms);
-                        last_value = load.value.clone();
+                        *last_value = load.value.clone();
                         serde_json::to_value(&load).unwrap_or_default()
                     }
                     Err(err) => serde_json::json!({ "status": "rejected", "detail": err }),
@@ -1097,12 +1182,12 @@ fn run_plan(app: &AppHandle, plan: ProbePlan) {
             }
             ProbeStep::Back { until, timeout_ms } => {
                 let load = back_blocking(app, id, until.as_deref(), timeout_ms);
-                last_value = load.value.clone();
+                *last_value = load.value.clone();
                 probe_line(n, "back", serde_json::to_value(&load).unwrap_or_default());
             }
             ProbeStep::Eval { script, stop_if } => {
                 let out = eval_blocking(app, id, &script, None);
-                last_value = out.value.clone();
+                *last_value = out.value.clone();
                 probe_line(n, "eval", serde_json::to_value(&out).unwrap_or_default());
                 let hit = stop_if
                     .as_deref()
@@ -1110,11 +1195,11 @@ fn run_plan(app: &AppHandle, plan: ProbePlan) {
                 if let Some((field, value)) = hit {
                     if truthy(&Some(value.clone())) {
                         probe_line(n, "stop", serde_json::json!({ "field": field, "value": value }));
-                        break;
+                        return false;
                     }
                 }
                 if out.status == BrowseStatus::Closed {
-                    break;
+                    return false;
                 }
             }
             ProbeStep::Scroll { dy, screens } => {
@@ -1123,7 +1208,7 @@ fn run_plan(app: &AppHandle, plan: ProbePlan) {
                     (None, Some(screens)) => {
                         if viewport.is_none() {
                             let out = eval_blocking(app, id, "window.innerHeight", None);
-                            viewport = out.value.and_then(|v| v.as_f64());
+                            *viewport = out.value.and_then(|v| v.as_f64());
                         }
                         viewport.map(|h| h * screens)
                     }
@@ -1133,7 +1218,7 @@ fn run_plan(app: &AppHandle, plan: ProbePlan) {
                     Some(px) if px.is_finite() => {
                         let moved = scroll_blocking(app, id, px);
                         if moved.viewport > 0.0 {
-                            viewport = Some(moved.viewport);
+                            *viewport = Some(moved.viewport);
                         }
                         serde_json::to_value(&moved).unwrap_or_default()
                     }
@@ -1168,7 +1253,6 @@ fn run_plan(app: &AppHandle, plan: ProbePlan) {
                 probe_line(n, "check", probe_value(out));
             }
         }
+        true
     }
-    let closed = close_blocking(app, id);
-    probe_line(0, "close", serde_json::json!({ "closed": closed }));
 }

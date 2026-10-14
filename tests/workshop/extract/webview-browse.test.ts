@@ -41,7 +41,7 @@ test("every call names the session it was opened with", async () => {
 		browse_scroll: { status: "ok", before: 0, after: 600, height: 4000, viewport: 900, detail: null },
 		browse_close: true,
 	});
-	const opened = await openBrowse({ idleTimeoutMs: 90_000 }, host);
+	const opened = await openBrowse({ idleTimeoutMs: 90_000, viewport: { width: 1440, height: 2400 } }, host);
 	expect(opened.status).toBe("ok");
 	if (opened.status !== "ok") return;
 	const page = opened.session;
@@ -54,7 +54,7 @@ test("every call names the session it was opened with", async () => {
 	expect(await page.close()).toBe(true);
 
 	expect(calls).toEqual([
-		{ cmd: "browse_open", args: { idleTimeoutMs: 90_000 } },
+		{ cmd: "browse_open", args: { idleTimeoutMs: 90_000, viewport: [1440, 2400] } },
 		{ cmd: "browse_navigate", args: { session: 4, url: "https://x.com/search?q=a", until: "1", timeoutMs: null } },
 		{ cmd: "browse_back", args: { session: 4, until: null, timeoutMs: null } },
 		{ cmd: "browse_eval", args: { session: 4, script: "document.title", timeoutMs: 2000 } },

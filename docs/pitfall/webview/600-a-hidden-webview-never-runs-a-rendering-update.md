@@ -22,7 +22,7 @@ GTK 不给从未映射的窗口分配尺寸，WebKitGTK 按控件分配的大小
 
 ## 解法
 
-浏览会话（`browse.rs` 的 `render_unseen`）把 WebKit 控件从 Tauri 的隐藏窗口里摘出来，放进一个 `GtkOffscreenWindow` 再 `show_all()`。离屏窗口是 GTK 自己在内存里画的顶层窗口，不交给 X11 或 Wayland，所以不上任何屏幕、不进任务栏、不拿焦点；控件算已映射，页面就是 `visible`，视口按 `set_size_request` 给的 1440×900。Tauri 窗口销毁时 wry 销毁控件，控件的 `destroy` 信号顺手销毁离屏窗口（实测关会话后触发）。
+浏览会话（`browse.rs` 的 `render_unseen`）把 WebKit 控件从 Tauri 的隐藏窗口里摘出来，放进一个 `GtkOffscreenWindow` 再 `show_all()`。离屏窗口是 GTK 自己在内存里画的顶层窗口，不交给 X11 或 Wayland，所以不上任何屏幕、不进任务栏、不拿焦点；控件算已映射，页面就是 `visible`，视口按 `set_size_request` 给的尺寸（默认 1440×900，`browse_open` 的 `viewport` 可另给）。Tauri 窗口销毁时 wry 销毁控件，控件的 `destroy` 信号顺手销毁离屏窗口（实测关会话后触发）。
 
 几种「人看不见但真在渲染」的办法，用本地测试页（哨兵元素进视口就追加 20 条）在 Xvfb 下比过，WebKitGTK 2.52：
 
@@ -35,6 +35,8 @@ GTK 不给从未映射的窗口分配尺寸，WebKitGTK 按控件分配的大小
 | `GtkOffscreenWindow`（新建，或从隐藏窗口挪进去） | 在跑 | 在跑，20→60 | 在跑 | 6/6 | visible | 无 |
 
 屏幕外坐标在 Wayland 上做不到（客户端不能给窗口定位），透明靠合成器、窗口照样挡鼠标，所以用离屏窗口。`WEBKIT_DISABLE_DMABUF_RENDERER=1`、`WEBKIT_DISABLE_COMPOSITING_MODE=1` 下离屏窗口结果相同。app 本体里实测（调试包，Xvfb，`RP_WEBVIEW_BROWSE_PROBE` 把测试页写进会话的空白页）：rAF 约每秒 100 次，6 次 `scroll` 每次 0.9 屏，列表 20→60 条、文档高 2401→7201，`hasFocus()` 为 false，Xvfb 上没有一个可见窗口。只在 Xvfb 上量过：真 GPU 的 X11 桌面和 Wayland 会话没跑过。
+
+离屏窗口里页面读到的 `screen.width`、`screen.height`、`screen.availHeight` 是显示服务器那块屏的尺寸，不跟视口走（Xvfb `-screen 0 1440x2560x24` 加视口 1440×2420：`screen` 1440×2560，`innerHeight` 2420）。`xvfb-run` 不给 `-s` 时屏幕是 1280×1024，探针那样跑时页面看到一个比屏幕还宽的 1440×900 窗口。在用户桌面上 `screen` 是他的显示器，所以 X 读取器开会话后先读 `screen.availHeight`，视口高不超过它减 140（`info/topic-search/x-pace.ts` 的 `fitViewport`）；在 Xvfb 上实测时用 `-s` 给一块和视口相称的屏（`scripts/x-reader-live.ts`）。
 
 `scripts/x-search-probe.ts` 原来在每次小步滚动后手动派发 scroll 事件，现在默认不派，`--synthetic-scroll` 打开。
 
