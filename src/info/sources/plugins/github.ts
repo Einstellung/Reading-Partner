@@ -30,6 +30,7 @@ import {
 import type { InfoItem, ItemSignals } from "../item";
 import { t } from "../../../i18n";
 import { githubSiteAdapter } from "./github-site";
+import { lookupRepoFacts, type RepoFacts } from "./github-lookup";
 
 const OSSINSIGHT_HOST = "api.ossinsight.io";
 const GITHUB_HOST = "api.github.com";
@@ -186,7 +187,7 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }
 
-function repoItem(desc: SourceDescriptor, fullName: string, description: string | undefined, url: string, publishedAt: string, signals: ItemSignals): InfoItem {
+function repoItem(desc: Pick<SourceDescriptor, "id" | "name">, fullName: string, description: string | undefined, url: string, publishedAt: string, signals: ItemSignals): InfoItem {
   const item: InfoItem = {
     id: itemId(desc.id, fullName),
     source: desc.id,
@@ -352,6 +353,22 @@ async function enrich(items: InfoItem[], deps: PluginDeps): Promise<void> {
   }
 }
 
+// --- lookup (docs/88) ---------------------------------------------------------
+
+// A repo's facts as an item: the signals carry every fact, the title is the
+// name and description as search items have it.
+export function repoFactsItem(f: RepoFacts): InfoItem {
+  const signals: ItemSignals = { stars: f.stars, forks: f.forks };
+  if (f.createdAt) signals.createdAt = f.createdAt;
+  if (f.lastCommitAt) signals.lastCommitAt = f.lastCommitAt;
+  if (f.release) {
+    signals.releaseTag = f.release.tag;
+    if (f.release.publishedAt) signals.releaseAt = f.release.publishedAt;
+  }
+  if (f.license) signals.license = f.license;
+  return repoItem({ id: "github", name: "GitHub" }, f.fullName, f.description ?? undefined, f.url, f.createdAt, signals);
+}
+
 // --- the provider ------------------------------------------------------------
 
 export const githubPlugin: SourcePlugin = {
@@ -395,5 +412,12 @@ export const githubPlugin: SourcePlugin = {
         : await discoverSearch(desc, query, deps, limit);
     await enrich(items, deps);
     return items;
+  },
+
+  // Uncounted; a topic search run goes through RepoLookups (github-lookup.ts),
+  // which caps the repos a run asks about.
+  async lookup(handle: string, deps: PluginDeps): Promise<InfoItem | null> {
+    const facts = await lookupRepoFacts(handle, deps.signal ? { fetchFn: deps.fetchFn, signal: deps.signal } : { fetchFn: deps.fetchFn });
+    return facts ? repoFactsItem(facts) : null;
   },
 };

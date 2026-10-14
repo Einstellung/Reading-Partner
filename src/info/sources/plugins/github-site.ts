@@ -73,6 +73,28 @@ function decoded(segment: string): string {
   }
 }
 
+/**
+ * The repo any github.com link sits in (an issue, a release, a file of any
+ * kind), or null for a page of the site itself: "https://github.com/a/b/issues/3"
+ * -> { owner: "a", repo: "b" }. The case is the link's own.
+ */
+export function githubRepoOfUrl(raw: string): { owner: string; repo: string } | null {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (url.hostname !== "github.com" && url.hostname !== "www.github.com") return null;
+  const segments = url.pathname.split("/").filter((s) => s !== "").map(decoded);
+  if (segments.length < 2) return null;
+  const owner = segments[0];
+  const repo = segments[1].replace(/\.git$/i, "");
+  if (NOT_OWNERS.has(owner.toLowerCase()) || repo === "") return null;
+  return { owner, repo };
+}
+
 /** The repo, directory or Markdown file a github.com link names, or null. */
 export function githubTargetOfUrl(raw: string): GithubTarget | null {
   let url: URL;
