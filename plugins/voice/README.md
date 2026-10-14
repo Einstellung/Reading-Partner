@@ -135,6 +135,8 @@ Player            where finished audio goes. DevicePlayer is the phone;
                   is how the relay is measured.
 OpeningCache      one slot for the sentence that is known before it is asked
                   for.
+CueStore          the program's own short lines ("我去想想。"), made when a call
+                  opens and replayed from memory (tts/cues.rs).
 ```
 
 The Swift half below is what consumes it. `Player` is the Rust-side shape of
@@ -148,11 +150,13 @@ everywhere and speaks only where there is something to speak through.
 
 `Player` is the whole contract, and it has four calls.
 
-`enqueue(sentence)` takes one finished sentence — `id`, `chars`, whether it is
-the turn's `last`, the audio format, and PCM that is already trimmed and already
-carries the pause that goes after it. `last` is there because a player cannot
-work it out: a turn that ended and a turn that starved both look like a queue
-running dry. It schedules a buffer on the player node and returns immediately, and
+`enqueue(piece)` takes one piece of a sentence — `id`, `chars`, `part` (from 0),
+whether it is the `complete` piece that ends the sentence, whether that sentence
+is the turn's `last`, the audio format, the sentence's timing marks, and PCM that
+is already trimmed. Only the `complete` piece carries the pause that goes after
+the sentence, and only it can carry `last`. `last` is there because a player
+cannot work it out: a turn that ended and a turn that starved both look like a
+queue running dry. It schedules a buffer on the player node and returns immediately, and
 it answers with **how much audio is queued ahead of the playhead**, in
 milliseconds, counting the one just added. That number is the only feedback the
 relay gets and the only thing it needs: it is what says whether there is time to
@@ -183,10 +187,43 @@ to truncate a transcript with.
 Rust does not poll. Every enqueue refreshes the margin, and between enqueues it
 decays with the wall clock, which is what playback does anyway.
 
-The relay hands over whole sentences, not chunks. Within a sentence the trim
-streams — audio goes out while the rest is still arriving — but nothing leaves
-the relay until the sentence is complete, because the tail cannot be trimmed
-before the end of it is known.
+The sentence at the head of the line is handed over in pieces as the vendor
+streams it, so it starts playing from its first frames rather than after its
+last. A piece goes once it holds `min_chunk_ms` (200 ms) of trimmed audio; the
+trim releases everything up to the last loud window and holds back only the
+quiet run after it, which is either a pause inside the sentence or the tail, and
+the end of the stream says which. Sentences behind the head collect their audio
+and go over when they reach the front. A piece refused as `busy` is put back and
+offered again. A sentence that fails after some of it was handed over is closed
+with a `complete` piece of silence, so the player is never left holding an open
+sentence.
+
+Running dry inside an open sentence (some pieces queued, the `complete` one not
+yet) is the vendor being slower than the playhead, not the turn ending: Swift
+does not stop. It schedules the next piece at an explicit `AVAudioTime` far
+enough ahead of the render that it cannot land in the past, counts the gap into
+`SpeechClock` so positions stay right, and logs `RP-TTS dry` and
+`RP-TTS resumed` with how long the listener heard nothing. `RP-TTS first`
+carries the marks (`requestedMs`, `firstAudioMs`, `handedMs`, all on
+`CLOCK_MONOTONIC_RAW`) beside the moment the first frame was scheduled, and
+`RP-TTS played` the moment the `complete` piece finished.
+
+Audio made ahead of need goes in with `SpeechRelay::push_audio(pcm, chars)`:
+already trimmed, already carrying its pause, whole. It takes its place in line
+like any sentence and never reaches the vendor. The cues use it: `prime_speech_cues`
+makes a language's lines (`zh`, `en`) when a call opens, and `speak_cue` opens a
+turn, pushes the stored audio, and closes it, cutting off whatever was speaking
+the way `speak_begin` does. A cue that was never made, or was made for a
+different vendor, model, voice or text, is synthesised from its text instead.
+
+| cue | text |
+|---|---|
+| `zh/think` | 我去想想。 |
+| `zh/look` | 我查一下，你接着说。 |
+| `zh/moment` | 稍等，我想一想。 |
+| `en/think` | Let me think about that. |
+| `en/look` | Let me look into that. |
+| `en/moment` | Give me a moment, keep going. |
 
 ### When a turn is over
 
@@ -235,8 +272,8 @@ going, and a position would read as a turn that had been silenced.
 
 The same engine also speaks (`docs/33`, M-voice-2). An `AVAudioPlayerNode` is
 attached to the stack the microphone already keeps and connected to the main
-mixer at 24 kHz mono float32; sentences are queued onto it one at a time and
-play end to end with no gap inserted between them.
+mixer at 24 kHz mono float32; pieces are queued onto it in order and play end
+to end, with a gap inserted only where the queue ran dry inside an open sentence.
 
 | command | arguments | answer |
 |---|---|---|
@@ -273,9 +310,12 @@ contract between the two halves:
 | `utterance` | one number per turn of conversation, increasing |
 | `index` | sentence number within the turn, from 0 |
 | `chars` | how many characters that sentence is. Never the text — nothing native has ever held a word anybody said, and this does not start |
-| `last` | this is the turn's final sentence. `finish_speech`, carrying only the turn's `utterance`, says the same thing when the final sentence never came back to carry it |
+| `last` | this is the turn's final sentence, on its `complete` piece only. `finish_speech`, carrying only the turn's `utterance`, says the same thing when the final sentence never came back to carry it |
+| `part` | which piece of the sentence this is, from 0 |
+| `complete` | this piece ends the sentence and carries the pause after it |
+| `requestedMs`, `firstAudioMs`, `handedMs` | when the vendor was asked, when its first bytes came back, and when this piece left the relay, in `CLOCK_MONOTONIC_RAW` milliseconds. Diagnostics only |
 | `sampleRate` | 24000. Anything else is refused with both numbers, never resampled |
-| `pcm` | base64 of little-endian 16-bit mono, already trimmed and already carrying the pause after the sentence |
+| `pcm` | base64 of little-endian 16-bit mono, already trimmed; the `complete` piece also carries the pause after the sentence |
 
 | Swift answers | |
 |---|---|
