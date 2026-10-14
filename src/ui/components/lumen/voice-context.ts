@@ -18,7 +18,6 @@
 
 import { useEffect } from "react";
 
-import type { BriefingControl } from "../../../info/briefer/companion-live";
 import type { Briefing } from "../../../info/boxes/types";
 
 export interface VoiceContext {
@@ -26,8 +25,6 @@ export interface VoiceContext {
   dateKey: string;
   /** The day's briefing as the screen holds it; see LiveVoiceCallOptions. */
   briefing: Briefing | null;
-  /** What generate_briefing does, where the screen can offer one. */
-  control?: BriefingControl;
 }
 
 let current: VoiceContext | null = null;
@@ -70,11 +67,10 @@ export function resetVoiceContext(): void {
 export function useRegisterVoiceContext(context: VoiceContext | null): void {
   const dateKey = context?.dateKey ?? null;
   const briefing = context?.briefing ?? null;
-  const control = context?.control;
   useEffect(() => {
     if (dateKey === null) return;
-    return registerVoiceContext({ dateKey, briefing, control });
-  }, [dateKey, briefing, control]);
+    return registerVoiceContext({ dateKey, briefing });
+  }, [dateKey, briefing]);
 }
 
 function announce(): void {

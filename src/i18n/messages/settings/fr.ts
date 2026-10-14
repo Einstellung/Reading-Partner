@@ -30,6 +30,9 @@ export default {
   "account.sameAsChat": "Comme pour le chat",
   "account.everydayHint":
     "Les tâches de routine tournent ici plutôt que sur le modèle ci-dessus : les repas et le briefing de la nuit. Personne ne les attend, donc un modèle moins cher ne vous coûte rien ; c'est l'app qui décide quelles tâches en relèvent, pas ce réglage. Il utilise le fournisseur ci-dessus.",
+  "account.voiceFront": "Appel vocal",
+  "account.voiceFrontHint":
+    "La première réponse rapide d'un appel vocal tourne ici, avant tout travail en arrière-plan. Un modèle rapide répond le plus vite ; laissez la réflexion désactivée sauf si les réponses sont trop superficielles. Un fournisseur qui ne peut pas désactiver la réflexion utilise son niveau le plus bas. Il utilise le fournisseur ci-dessus.",
   "account.briefing": "Briefing",
   "account.screening": "Tri",
   "account.analysis": "Analyse",

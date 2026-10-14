@@ -215,6 +215,7 @@ test("the act is the phase crossed with where the attention is", () => {
 	expect(actFor("listening", "reader")).toBe("listen");
 	expect(actFor("thinking", "reader")).toBe("think");
 	expect(actFor("thinking", "work")).toBe("check");
+	expect(actFor("listening", "work")).toBe("check");
 	expect(actFor("thinking", "away")).toBe("think");
 	expect(actFor("speaking", "work")).toBe("speak");
 	// Attention is a second axis, not a fifth phase: with none given the body

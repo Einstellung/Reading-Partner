@@ -30,6 +30,9 @@ export default {
   "account.sameAsChat": "Wie beim Chat",
   "account.everydayHint":
     "Die Routinearbeit läuft hier statt auf dem Modell oben: Mahlzeiten und das nächtliche Briefing. Niemand wartet darauf, ein günstigeres Modell kostet dich also nichts; welche Aufgaben dazugehören, entscheidet die App, nicht diese Einstellung. Es nutzt den Anbieter oben.",
+  "account.voiceFront": "Sprachanruf",
+  "account.voiceFrontHint":
+    "Die schnelle erste Antwort eines Sprachanrufs läuft hier, vor jeder Hintergrundarbeit. Ein schnelles Modell antwortet am zügigsten; lass das Denken aus, solange die Antworten nicht zu flach sind. Anbieter, die das Denken nicht abschalten können, nutzen ihre niedrigste Stufe. Es nutzt den Anbieter oben.",
   "account.briefing": "Briefing",
   "account.screening": "Sichtung",
   "account.analysis": "Analyse",

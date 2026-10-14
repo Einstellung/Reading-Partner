@@ -30,6 +30,9 @@ export default {
   "account.sameAsChat": "Same as chat",
   "account.everydayHint":
     "The routine work runs here instead of on the model above: meals, and the nightly briefing. It is work nobody is waiting for, so a cheaper model costs you nothing; which tasks belong to it is decided by the app, not here. It uses the provider above.",
+  "account.voiceFront": "Voice call",
+  "account.voiceFrontHint":
+    "A voice call's quick first answer runs here, before any background work. A fast model answers soonest; leave thinking off unless the answers are too shallow. A provider that cannot turn thinking off uses its lowest level. It uses the provider above.",
   "account.briefing": "Briefing",
   "account.screening": "Screening",
   "account.analysis": "Analysis",

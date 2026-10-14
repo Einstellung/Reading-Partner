@@ -41,6 +41,7 @@ import SyncCard from "./SyncCard";
 const SAME_AS_CHAT = "same-as-chat";
 
 const THINKING_OPTIONS: ThinkingSetting[] = ["off", "low", "medium", "high"];
+const VOICE_FRONT_THINKING_OPTIONS: ThinkingSetting[] = ["off", "low"];
 
 export default function AccountPanel({
   settings,
@@ -174,6 +175,37 @@ export default function AccountPanel({
       )}
 
       {connectedProviders.length > 0 && (
+        <SettingsSection title={t("settings.account.voiceFront")}>
+          <div className={CARD}>
+            <FieldGrid>
+              <ChoiceField
+                label={t("settings.account.model")}
+                value={settings.voiceFrontModelId ?? SAME_AS_CHAT}
+                disabled={!settings.defaultProviderId || models.length === 0}
+                choices={[
+                  { value: SAME_AS_CHAT, label: t("settings.account.sameAsChat") },
+                  ...models.map((m) => ({ value: m.id, label: modelChoiceLabel(m) })),
+                ]}
+                onChange={(v) =>
+                  onSettingsChange({
+                    ...settings,
+                    voiceFrontModelId: v === SAME_AS_CHAT ? null : v,
+                  })
+                }
+              />
+              <ThinkingField
+                label={t("settings.account.thinking")}
+                value={settings.voiceFrontThinking}
+                options={VOICE_FRONT_THINKING_OPTIONS}
+                onChange={(v) => onSettingsChange({ ...settings, voiceFrontThinking: v === "low" ? "low" : "off" })}
+              />
+            </FieldGrid>
+            <p className="m-0 text-xs text-faint-foreground">{t("settings.account.voiceFrontHint")}</p>
+          </div>
+        </SettingsSection>
+      )}
+
+      {connectedProviders.length > 0 && (
         <SettingsSection title={t("settings.account.briefing")}>
           <div className={CARD}>
             <FieldGrid>
@@ -225,10 +257,12 @@ export default function AccountPanel({
 function ThinkingField({
   label,
   value,
+  options = THINKING_OPTIONS,
   onChange,
 }: {
   label: string;
   value: ThinkingSetting;
+  options?: ThinkingSetting[];
   onChange: (v: ThinkingSetting) => void;
 }) {
   const t = useT();
@@ -236,7 +270,7 @@ function ThinkingField({
     <ChoiceField
       label={label}
       value={value}
-      choices={THINKING_OPTIONS.map((v) => ({ value: v, label: t(`settings.thinking.${v}`) }))}
+      choices={options.map((v) => ({ value: v, label: t(`settings.thinking.${v}`) }))}
       onChange={(v) => onChange(v as ThinkingSetting)}
     />
   );

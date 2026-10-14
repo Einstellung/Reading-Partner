@@ -24,9 +24,9 @@
 // after any answer. Only a stall ends a bell's turn differently: it is not
 // asked again here, the bell stays queued.
 //
-// A voice call's turn on the conversation runs here the same way while the
-// chat is open (reading/turn/info-voice.ts): the chat draws it, the spoken line
-// above it, and a line typed meanwhile goes into it.
+// A voice call's turn on the conversation ran here the same way while the chat
+// was open (voice(); the call no longer has a caller for it, since it runs on
+// the cascade front, docs/companion/136).
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { applyRowChange } from "../../ai/turn-view/turn-rows";

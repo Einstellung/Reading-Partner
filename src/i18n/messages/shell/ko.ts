@@ -38,6 +38,7 @@ export default {
   "lumen.holdForMenu": "길게 눌러 Lumen 메뉴 열기",
   "lumen.menuVoice": "음성",
   "lumen.menuType": "텍스트",
+  "lumen.callCardClose": "닫기",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",

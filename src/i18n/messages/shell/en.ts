@@ -53,6 +53,7 @@ export default {
   "lumen.holdForMenu": "Hold for Lumen's menu",
   "lumen.menuVoice": "Voice",
   "lumen.menuType": "Text",
+  "lumen.callCardClose": "Close",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
