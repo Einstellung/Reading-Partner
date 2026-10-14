@@ -1,0 +1,41 @@
+{
+  "name": "barge-in",
+  "locale": "zh-CN",
+  "finalReplies": 1,
+  "finalTimeoutMs": 120000,
+  "tailMs": 1500,
+  "steps": [
+    {
+      "clip": "zh-long.wav",
+      "text": "给我详细讲讲今天的第一条新闻，多说一点。",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 45000,
+      "expect": "turn"
+    },
+    {
+      "clip": "zh-uh-huh.wav",
+      "text": "嗯。",
+      "start": "reply-start",
+      "offsetMs": 3500,
+      "timeoutMs": 90000,
+      "expect": "none"
+    },
+    {
+      "clip": "zh-wait.wav",
+      "text": "等一下。",
+      "start": "clip-end",
+      "offsetMs": 2500,
+      "timeoutMs": 90000,
+      "expect": "interrupt"
+    },
+    {
+      "clip": "zh-go-on.wav",
+      "text": "好，你接着说吧，简短一点。",
+      "start": "reply-end",
+      "offsetMs": 800,
+      "timeoutMs": 90000,
+      "expect": "turn"
+    }
+  ]
+}

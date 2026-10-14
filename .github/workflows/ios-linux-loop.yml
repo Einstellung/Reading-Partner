@@ -28,7 +28,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ios-linux-loop
+  # Per ref, like the simulator smoke (pitfall 601).
+  group: ios-linux-loop-${{ github.ref }}
   cancel-in-progress: true
 
 env:

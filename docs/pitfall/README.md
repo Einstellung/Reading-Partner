@@ -277,6 +277,7 @@
 - [565-iphone-use-reports-to-posthog-by-default](./ios-build/565-iphone-use-reports-to-posthog-by-default.md) — iPhone-use MCP 默认往 PostHog 上报每次工具调用；起 server 时带 `IPHONE_USE_ANALYTICS=0 DO_NOT_TRACK=1`
 - [566-simctl-bootstatus-never-returns-over-ssh](./ios-build/566-simctl-bootstatus-never-returns-over-ssh.md) — SSH 里 `simctl bootstatus -b` 永不返回，无头 boot 的模拟器截图报 `no default display port`；boot 后经 `launchctl asuser` 在图形会话里 `open -a Simulator`
 - [567-dev-reinstall-asks-for-local-network-again](./ios-build/567-dev-reinstall-asks-for-local-network-again.md) — 每次重装 .dev 都要重新给本地网络权限，不给就整页报 `did you grant local network permissions?`、Linux 上收不到一条连接；装完先 `dvt launch` + `dvt screenshot` 看弹窗
+- [601-sim-smoke-dispatches-cancel-each-other](./ios-build/601-sim-smoke-dispatches-cancel-each-other.md) — `ios-simulator-smoke.yml` 的 concurrency group 不带 ref，别的分支一 dispatch 就把你正在跑的 smoke 取消成 `cancelled`、没有报错；group 改成按 ref
 
 ## Android 构建与签名
 

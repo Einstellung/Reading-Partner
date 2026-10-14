@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
   armVoiceTrace,
   disarmVoiceTrace,
@@ -257,6 +258,16 @@ describe("latency", () => {
     const stats = summarize(turns);
     expect(stats.at(-1)).toEqual({ segment: "TOTAL speechEnd→audible", n: 1, p50: 4950, p90: 4950 });
     expect(formatReport(turns)).toContain("TOTAL speechEnd→audible");
+  });
+
+  test("every fixture script parses and its clips exist", () => {
+    const dir = new URL("../../../fixtures/voice-scripts/", import.meta.url).pathname;
+    const names = readdirSync(dir).filter((f) => f.endsWith(".json"));
+    expect(names.sort()).toEqual(["barge-in.json", "en-mixed.json", "zh-chat-then-delegate.json"]);
+    for (const name of names) {
+      const script = parseScript(JSON.parse(readFileSync(dir + name, "utf8")));
+      for (const step of script.steps) expect(existsSync(dir + step.clip)).toBe(true);
+    }
   });
 
   test("percentile is nearest-rank", () => {
