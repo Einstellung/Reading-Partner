@@ -182,7 +182,7 @@ struct EnqueueSpeechArgs {
     /// inside the sentence, not the end of it.
     part: u32,
     complete: bool,
-    /// Monotonic milliseconds (CLOCK_MONOTONIC_RAW) the sentence's request
+    /// Monotonic milliseconds (CLOCK_UPTIME_RAW) the sentence's request
     /// went out, its first bytes came back, and this piece left the relay.
     requested_ms: f64,
     first_audio_ms: f64,

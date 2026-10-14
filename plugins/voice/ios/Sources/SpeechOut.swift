@@ -499,6 +499,12 @@ final class SpeechOut {
                 NSLog(
                     "RP-TTS resumed utt=%llu idx=%d part=%d silentMs=%.1f gapFrames=%d",
                     utterance, index, part, SpeechOut.monoMs() - dryAt, gapFrames)
+                VoiceHarness.shared.log(
+                    "tts-resumed",
+                    [
+                        "utterance": utterance, "index": index, "part": part,
+                        "silentMs": SpeechOut.monoMs() - dryAt, "gapFrames": gapFrames,
+                    ])
                 dryAtMs = nil
             }
             let scheduledGeneration = generation
@@ -517,6 +523,8 @@ final class SpeechOut {
                         NSLog(
                             "RP-TTS played utt=%llu idx=%d at=%.1f", utterance_, index,
                             SpeechOut.monoMs())
+                        VoiceHarness.shared.log(
+                            "tts-played", ["utterance": utterance_, "index": index])
                     }
                 }
             }
@@ -532,7 +540,7 @@ final class SpeechOut {
             // The per-sentence marks (docs/136, 一期): request, first bytes and
             // hand-over from Rust, and here the moment the first piece went on
             // the node and how long until the listener hears it. One clock on
-            // both sides, CLOCK_MONOTONIC_RAW.
+            // both sides, CLOCK_UPTIME_RAW.
             if part == 0 {
                 let startsIn =
                     Double(max(0, startFrame - playedFrameLocked())) / SpeechOut.sampleRate * 1000
@@ -541,6 +549,13 @@ final class SpeechOut {
                         + "scheduled=%.1f startsInMs=%.1f",
                     utterance, index, chars, marks.requestedMs, marks.firstAudioMs, marks.handedMs,
                     SpeechOut.monoMs(), startsIn)
+                VoiceHarness.shared.log(
+                    "tts-first",
+                    [
+                        "utterance": utterance, "index": index, "chars": chars,
+                        "req": marks.requestedMs, "firstAudio": marks.firstAudioMs,
+                        "handed": marks.handedMs, "startsInMs": startsIn,
+                    ])
             }
 
             // Ahead of the listener and not ahead of the node: `playedFrameLocked`
@@ -972,10 +987,10 @@ final class SpeechOut {
         return Int(time.sampleTime)
     }
 
-    /// Milliseconds on CLOCK_MONOTONIC_RAW, the clock Rust stamps its marks
-    /// with (src/tts/player.rs `mono_ms`).
+    /// Milliseconds on CLOCK_UPTIME_RAW, the clock Rust stamps its marks with
+    /// (src/tts/player.rs `mono_ms`) and the silent bench logs on.
     static func monoMs() -> Double {
-        Double(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)) / 1_000_000
+        HarnessClock.nowMs()
     }
 
     private func playedFrameLocked() -> Int {
@@ -1022,6 +1037,9 @@ final class SpeechOut {
                     NSLog(
                         "RP-TTS dry utt=%llu idx=%d at=%.1f", self.utterance, open,
                         self.dryAtMs ?? 0)
+                    VoiceHarness.shared.log(
+                        "tts-dry", at: self.dryAtMs ?? HarnessClock.nowMs(),
+                        ["utterance": self.utterance, "index": open])
                 }
                 return
             }

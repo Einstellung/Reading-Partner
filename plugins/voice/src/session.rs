@@ -256,6 +256,7 @@ impl SpeechSession {
             }
             held += 1;
         }
+        crate::harness::mark("cues-primed", serde_json::json!({ "lang": lang, "held": held }));
         Ok(held)
     }
 
@@ -273,6 +274,10 @@ impl SpeechSession {
         let mut turn = self.turn.lock().await;
         let utterance = self.open(&mut turn, backend).await;
         let open = turn.as_ref().expect("the turn just opened");
+        crate::harness::mark(
+            "cue",
+            serde_json::json!({ "id": id, "utterance": utterance, "premade": audio.is_some() }),
+        );
         match audio {
             Some(pcm) => open.relay.push_audio(pcm, cue.text.chars().count()),
             None => open.relay.push(cue.text),

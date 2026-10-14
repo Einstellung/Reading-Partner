@@ -23,8 +23,8 @@ use super::format::AudioFormat;
 
 /// When a sentence passed each stage on its way to the speaker, in monotonic
 /// milliseconds (`mono_ms`). The same clock Swift reads with
-/// `clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)`, so the native side can line its
-/// own marks up with these without reconciling anything.
+/// `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` and the silent bench stamps its
+/// rows with (src/harness.rs), so every mark lines up without reconciling.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct SentenceMarks {
     /// The request to the vendor went out.
@@ -35,27 +35,11 @@ pub struct SentenceMarks {
     pub handed_ms: f64,
 }
 
-/// Milliseconds on CLOCK_MONOTONIC_RAW: mach_continuous_time on Apple
-/// platforms, the raw monotonic clock on Linux and Android. Comparable across
-/// Rust and Swift in one process, and across processes on one device.
-#[cfg(unix)]
+/// Milliseconds on the voice plugin's one clock (`crate::harness::now_ms`):
+/// CLOCK_UPTIME_RAW on Apple platforms, which is `mach_absolute_time` and the
+/// audio engine's host time; a process-local monotonic clock elsewhere.
 pub fn mono_ms() -> f64 {
-    let mut ts = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    // SAFETY: `ts` is a valid, writable timespec for the call's duration.
-    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC_RAW, &mut ts) };
-    ts.tv_sec as f64 * 1000.0 + ts.tv_nsec as f64 / 1_000_000.0
-}
-
-/// Off unix there is no native side to line up with; this keeps the field
-/// monotonic within the process.
-#[cfg(not(unix))]
-pub fn mono_ms() -> f64 {
-    use std::sync::OnceLock;
-    static EPOCH: OnceLock<Instant> = OnceLock::new();
-    EPOCH.get_or_init(Instant::now).elapsed().as_secs_f64() * 1000.0
+    crate::harness::now_ms()
 }
 
 /// One piece of a trimmed sentence, ready to be heard.

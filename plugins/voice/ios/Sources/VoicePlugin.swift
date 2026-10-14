@@ -54,7 +54,7 @@ class EnqueueSpeechArgs: Decodable {
     /// (src/tts/relay.rs). Absent reads as a whole sentence in one piece.
     let part: Int?
     let complete: Bool?
-    /// Monotonic milliseconds (CLOCK_MONOTONIC_RAW, the clock `SpeechOut.monoMs`
+    /// Monotonic milliseconds (CLOCK_UPTIME_RAW, the clock `SpeechOut.monoMs`
     /// reads) the sentence's request went out, its first bytes came back, and
     /// this piece left the relay.
     let requestedMs: Double?
