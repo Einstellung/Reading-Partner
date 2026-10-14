@@ -15,7 +15,7 @@ import {
   loadSources,
   saveSiteSessions,
 } from "../sources/source-store";
-import { applySessionCheck, signInSites } from "../sources/site-session";
+import { allSignInSites, applySessionCheck } from "../sources/site-session";
 import { liveWebviewFetch } from "../sources/source-live";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { LabArchiveCardData, LabProposalCardData } from "../boxes/cards";
@@ -97,7 +97,7 @@ export async function labCompanionContext(
 // says what the chat just said (the page reloads it on entry).
 function liveSiteSignIn(): SiteSignInDeps {
   return {
-    signInSites: async () => signInSites(await loadSources()),
+    signInSites: async () => allSignInSites(await loadSources()),
     openSignIn: (site) => openSiteSignIn(site.signInUrl),
     checkSession: async (site) => {
       const status = await checkSiteSession(site.checkUrl);

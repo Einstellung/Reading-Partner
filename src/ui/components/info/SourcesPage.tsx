@@ -20,7 +20,7 @@ import { pipeLabel } from "../../../info/sources/probe";
 import {
   sessionRowLine,
   sessionWorkFor,
-  signInSites,
+  allSignInSites,
   type SessionBusy,
   type SiteSessions,
   type SignInSite,
@@ -181,7 +181,7 @@ export interface SourcesPageProps {
 
 export function SourcesPage(props: SourcesPageProps) {
   const t = useT();
-  const sites = signInSites(props.sources);
+  const sites = allSignInSites(props.sources);
   const [removing, setRemoving] = useState<SourceDescriptor | null>(null);
 
   return (

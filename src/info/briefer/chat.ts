@@ -11,7 +11,7 @@
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
-import { signInSiteLine, signInSites } from "../sources/site-session";
+import { allSignInSites, signInSiteLine } from "../sources/site-session";
 import { labGuidance } from "./lab-tool";
 import type { Lab } from "../labs/types";
 import type { Briefing } from "../boxes/types";
@@ -155,7 +155,7 @@ export function formatSources(sources: SourceDescriptor[]): string {
 // and the tool resolves the address here rather than taking one — so the list is
 // what the model picks from, spelled the way the tool expects it back.
 export function formatSignInSites(sources: SourceDescriptor[]): string {
-  const sites = signInSites(sources);
+  const sites = allSignInSites(sources);
   if (!sites.length) {
     return "Sign-in: none of these sources has a sign-in page, so there is nothing to sign in to.";
   }
