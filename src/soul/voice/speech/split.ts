@@ -9,9 +9,10 @@
 // Normalization runs first and never splits (see normalize.ts). That ordering is
 // what makes the rules here safe: by the time text reaches the splitter a URL is
 // already "x 链接", a number is already Chinese characters, and an acronym is
-// already spelled out, so no boundary can land inside one. The ASCII period is
-// deliberately not a boundary — normalize leaves it alone because "Inc." and
-// "U.S." are not sentence ends.
+// already spelled out, so no boundary can land inside one. Normalize leaves the
+// ASCII period alone, so an English sentence end is recognised here: . ? ! with
+// whitespace after it, unless the word before the period is an abbreviation or
+// an initial ("Inc.", "U.S.", "J."). A decimal point has no space after it.
 
 import { normalizeForSpeech } from "./normalize";
 
@@ -29,6 +30,47 @@ export interface SpokenSentence {
 
 const HARD = "。！？；：";
 const SOFT = "，、";
+// English punctuation counts only with whitespace after it: "3.5", "1,000" and
+// "10:30" are not boundaries, "Yes. No" and "first, then" are.
+const EN_HARD = ".?!";
+const EN_SOFT = ",;:";
+
+// Words whose period is not a sentence end. Lowercased; a token with a period of
+// its own inside ("U.S", "e.g") and a single letter (an initial) are caught by
+// shape and need no entry.
+const ABBREVIATIONS = new Set([
+  "mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "inc", "ltd", "co", "corp",
+  "vs", "etc", "al", "fig", "no", "vol", "approx", "dept", "est", "jan", "feb",
+  "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+]);
+
+function isSpace(c: string | undefined): boolean {
+  return c !== undefined && c !== "\n" && /\s/.test(c);
+}
+
+// Whether the period at `i` ends the word before it rather than a sentence.
+function abbreviates(cps: string[], from: number, i: number): boolean {
+  let j = i;
+  while (j > from && !/\s/.test(cps[j - 1])) j--;
+  const word = cps.slice(j, i).join("").replace(/^[("'“‘《]+/, "");
+  if (/^[A-Za-z]$/.test(word)) return true;
+  if (word.includes(".")) return true;
+  return ABBREVIATIONS.has(word.toLowerCase());
+}
+
+// What kind of boundary the code point at `i` is, given its neighbours. English
+// punctuation has to see the whitespace after it, so at the end of a buffer that
+// is still growing it is not a boundary yet.
+function boundaryAt(cps: string[], from: number, i: number): "hard" | "soft" | null {
+  const c = cps[i];
+  if (isHard(c)) return "hard";
+  if (SOFT.includes(c)) return "soft";
+  if (!isSpace(cps[i + 1])) return null;
+  if (EN_SOFT.includes(c)) return "soft";
+  if (!EN_HARD.includes(c)) return null;
+  if (c === "." && abbreviates(cps, from, i)) return null;
+  return "hard";
+}
 
 // A soft boundary only cuts once the sentence has this many code points, so
 // "OpenAI，" does not become a sentence of its own. Top of the 8-12 band in
@@ -93,19 +135,69 @@ function marksOpen(prefix: string): boolean {
   return /[*`[]/.test(paired);
 }
 
+// A soft boundary freezes the same way a hard one does, which is what lets the
+// first sentence of a turn go out at its first comma instead of waiting for a
+// full stop. English punctuation freezes once whitespace separates it from the
+// next word and a letter or an ideograph sits before it. The letter is what
+// keeps every `\s*` rule out: each of them needs a digit, a currency sign or one
+// of - ~ / : on the left of the gap, the same argument as BEFORE_NEWLINE.
+const BEFORE_EN = /[A-Za-z㐀-鿿]/;
+
+function freezesAt(raw: string, i: number): boolean {
+  const before = raw[i - 1];
+  if (HARD.includes(before) || SOFT.includes(before)) return true;
+  if (before === "\n") {
+    let j = i - 2;
+    while (j >= 0 && /\s/.test(raw[j])) j--;
+    return j >= 0 && BEFORE_NEWLINE.test(raw[j]);
+  }
+  if (before !== " " && before !== "\t") return false;
+  let j = i - 2;
+  while (j >= 0 && (raw[j] === " " || raw[j] === "\t")) j--;
+  return j >= 1 && (EN_HARD + EN_SOFT).includes(raw[j]) && BEFORE_EN.test(raw[j - 1]);
+}
+
 function lastFreezePoint(raw: string): number {
   for (let i = raw.length - 1; i >= 1; i--) {
     if (!RESUMES.test(raw[i])) continue;
-    const before = raw[i - 1];
-    if (!HARD.includes(before)) {
-      if (before !== "\n") continue;
-      let j = i - 2;
-      while (j >= 0 && /\s/.test(raw[j])) j--;
-      if (j < 0 || !BEFORE_NEWLINE.test(raw[j])) continue;
-    }
-    if (!marksOpen(raw.slice(0, i))) return i;
+    if (!freezesAt(raw, i)) continue;
+    if (marksOpen(raw.slice(0, i))) continue;
+    if (!spaceSettled(raw.slice(0, i), raw[i])) continue;
+    return i;
   }
   return 0;
+}
+
+// Whether the space a fragment ends with is decided without the word after it.
+// Mid-text, normalize drops a space between two ideographs, and a rewrite can
+// turn either side into one: a URL eats the period before the space and reads
+// as 链接, "et al." after it reads as 等人. Behind an ideograph, a Latin word
+// whose reading is not known yet leaves the space undecided, so the freeze
+// waits for an earlier point or a later one.
+function spaceSettled(fragment: string, next: string): boolean {
+  if (!/[ \t]$/.test(fragment) || !/[A-Za-z]/.test(next)) return true;
+  return !/[㐀-鿿] $/.test(normalizeFragment(fragment, next));
+}
+
+// A fragment normalized on its own is a text that ends there, and normalize
+// tidies a text's end in ways it does not tidy the same spot mid-text: it trims
+// the newline the splitter needs, strips the trailing comma or 、 a soft freeze
+// was made at, and drops the space that tells an English period from a decimal
+// point. So the fragment is normalized with the character that follows the
+// freeze point still on it, and that character's own reading is taken off the
+// end again. The freeze rule guarantees it is a single word character that no
+// rule reaches across, so its reading is the same alone as in place. `next` is
+// absent only for the stream's own end, which really is the end of the text.
+function normalizeFragment(fragment: string, next: string | undefined): string {
+  if (next === undefined) {
+    const piece = normalizeForSpeech(fragment);
+    return piece && fragment.endsWith("\n") ? `${piece}\n` : piece;
+  }
+  const tail = normalizeForSpeech(next);
+  const both = normalizeForSpeech(fragment + next);
+  if (tail && both.endsWith(tail)) return both.slice(0, both.length - tail.length);
+  const piece = normalizeForSpeech(fragment);
+  return piece && fragment.endsWith("\n") ? `${piece}\n` : piece;
 }
 
 /**
@@ -127,11 +219,9 @@ export function createSpeechSplitter(): SpeechSplitter {
 
   function freeze(upTo: number): void {
     const fragment = raw.slice(0, upTo);
+    const next = upTo < raw.length ? raw[upTo] : undefined;
     raw = raw.slice(upTo);
-    const piece = normalizeForSpeech(fragment);
-    if (!piece) return;
-    // normalize trims, and a trailing newline is a boundary the splitter needs.
-    normalized += fragment.endsWith("\n") ? `${piece}\n` : piece;
+    normalized += normalizeFragment(fragment, next);
   }
 
   function drain(final: boolean): SpokenSentence[] {
@@ -203,12 +293,13 @@ function scan(buffer: string, started: boolean, final: boolean): [Cut[], string]
 
   for (let i = 0; i < cps.length; i++) {
     const c = cps[i];
-    if (isHard(c)) {
+    const kind = boundaryAt(cps, start, i);
+    if (kind === "hard") {
       // A newline is where a sentence ends, not something to say.
       take(c === "\n" ? i : i + 1, i + 1);
       continue;
     }
-    if (!SOFT.includes(c)) continue;
+    if (kind !== "soft") continue;
     if (i - start < (first ? SOFT_MIN_FIRST : SOFT_MIN)) continue;
     take(i + 1, i + 1);
   }
@@ -372,10 +463,9 @@ export function createSourcedSplitter(): SourcedSplitter {
 
   function freeze(upTo: number): void {
     const fragment = raw.slice(0, upTo);
+    const next = upTo < raw.length ? raw[upTo] : undefined;
     raw = raw.slice(upTo);
-    const piece = normalizeForSpeech(fragment);
-    // normalize trims, and a trailing newline is a boundary the splitter needs.
-    const norm = piece ? (fragment.endsWith("\n") ? `${piece}\n` : piece) : "";
+    const norm = normalizeFragment(fragment, next);
     const normStart = normBase + normalized.length;
     // Recorded even when it normalized to nothing, so the raw stays tiled: a
     // fragment that says nothing aloud still has to belong to some sentence.

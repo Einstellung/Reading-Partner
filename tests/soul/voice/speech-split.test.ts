@@ -88,6 +88,37 @@ test("a sentence goes out on the chunk that finishes it, not at the end", () => 
   expect(texts(splitter.end())).toEqual(["第二条还没"]);
 });
 
+test("the first sentence goes out at its first comma, before any full stop", () => {
+  const splitter = createSpeechSplitter();
+  expect(texts(splitter.push("好的，我"))).toEqual(["好的，"]);
+  expect(texts(splitter.push("们先看第一条"))).toEqual([]);
+});
+
+test("an English reply goes out at its first comma and at each sentence end", () => {
+  const splitter = createSpeechSplitter();
+  // normalize turns , ! ? ; : into their full-width forms on the way in.
+  expect(texts(splitter.push("Sure, let"))).toEqual(["Sure，"]);
+  expect(texts(splitter.push(" me check that for you. The"))).toEqual(["let me check that for you."]);
+  expect(texts(splitter.push(" answer is yes! Any"))).toEqual(["The answer is yes！"]);
+  expect(texts(splitter.end())).toEqual(["Any"]);
+});
+
+test("English punctuation is a boundary only with whitespace after it", () => {
+  expect(texts(splitSentences("Yes. No? Maybe! Then, later"))).toEqual(["Yes.", "No?", "Maybe!", "Then, later"]);
+  // A decimal point, a thousands separator and a clock time have no space.
+  expect(texts(splitSentences("It rose 3.5 points to 1,000 at 10:30 today"))).toEqual([
+    "It rose 3.5 points to 1,000 at 10:30 today",
+  ]);
+});
+
+test("an abbreviation or an initial is not a sentence end", () => {
+  expect(texts(splitSentences("Ask Dr. Smith at Acme Inc. about J. K. Rowling and the U.S. market. Done."))).toEqual([
+    "Ask Dr. Smith at Acme Inc. about J. K. Rowling and the U.S. market.",
+    "Done.",
+  ]);
+  expect(texts(splitSentences("Use e.g. this one. Next"))).toEqual(["Use e.g. this one.", "Next"]);
+});
+
 test("end flushes a text that has no boundary at all", () => {
   expect(texts(stream(["没有任何", "边界"]))).toEqual(["没有任何边界"]);
   expect(texts(stream([]))).toEqual([]);
@@ -114,6 +145,8 @@ const BRIEFINGS = [
   "**要点。**模型说了三件事：一是 MoE，二是 RL，三是长上下文。\n- 明天继续。",
   "没有任何边界的一段话",
   "短",
+  "Sure, let me check. The answer is 3.5 points, per Dr. Smith of Acme Inc. in the U.S. Okay!",
+  "OK. 好的，我看一下。Then, the next one: GPT-5 at https://example.com/x. Done.",
 ];
 
 function reference(text: string): SpokenSentence[] {
@@ -177,6 +210,7 @@ const PIECES = [
   "0", "1", "2", "5", "8", "9", "-", "/", ".", ":", "%", "+", "~", ",", ";", "!", "?",
   "a", "G", "P", "T", "x", "s", "m", "#", ">", "*", "[", "]", "(", ")", "`", "|",
   "https://", "www.", "et al.", "2026-08-09", "GPT-5", "MoE", "¥", "°C", "“", "”", "《", "》",
+  ". ", ", ", "? ", "! ", "; ", ": ", "Dr. ", "U.S. ", "word", "the", "  ", "\t",
 ];
 
 test("chunking adversarial text gives the whole-text answer", () => {

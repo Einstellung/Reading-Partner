@@ -207,12 +207,14 @@ test("the first sentence of a turn is cut at the first soft boundary", async () 
   await h.open();
   await h.userSaid(1, "今天有什么");
 
-  // Nothing can be frozen while the boundary is still the last character.
-  await h.delta(1, "好的，今天有三条要闻。");
-  expect(h.of("speak-push")).toEqual([]);
+  // The comma is a freeze point of its own: the first sentence goes out on the
+  // character after it, without waiting for the full stop.
+  await h.delta(1, "好的，今");
+  expect(h.of("speak-push")).toEqual([{ type: "speak-push", turn: 1, text: "好的，" }]);
 
-  // The next character frees it, and the turn's first sentence is the comma's,
-  // not twelve characters' worth.
+  // The full stop still waits for the character after it.
+  await h.delta(1, "天有三条要闻。");
+  expect(h.of("speak-push")).toHaveLength(1);
   await h.delta(1, "第");
   expect(h.of("speak-push")).toEqual([
     { type: "speak-push", turn: 1, text: "好的，" },
