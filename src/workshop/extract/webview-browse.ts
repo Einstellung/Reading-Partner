@@ -8,10 +8,9 @@
 // opening a second while one is live answers `busy`, and a session left
 // untouched for its idle window closes itself.
 //
-// Known limit (docs/pitfall/600): the page is never shown, so WebKit never runs
-// a rendering update in it — no requestAnimationFrame, no IntersectionObserver
-// or ResizeObserver callbacks, and no scroll event after a scroll. Timers and
-// scripts run; a loader that waits on any of those four does not fire.
+// The page is never on a screen but does render (docs/pitfall/600): on Linux
+// the view sits in an offscreen window, so requestAnimationFrame, the observers
+// and real scroll events all run, and a list that loads as it is scrolled does.
 
 import { invoke } from "@tauri-apps/api/core";
 import { hasWebviewFetch } from "../../platform/app/platform";
@@ -106,16 +105,19 @@ interface Opened {
 
 /**
  * Open the browse page, blank. `idleTimeoutMs` is how long it may sit untouched
- * before it closes itself (host-side 1-60 min, default 15).
+ * before it closes itself (host-side 1-60 min, default 15). `viewport` is the
+ * page's size in CSS pixels (host-side default 1440x900); the page can read it,
+ * so pick one a real screen has.
  */
 export async function openBrowse(
-	opts: { idleTimeoutMs?: number } = {},
+	opts: { idleTimeoutMs?: number; viewport?: { width: number; height: number } } = {},
 	host: BrowseHost = tauriHost,
 ): Promise<BrowseOpen> {
 	if (!host.available()) {
 		return { status: "unsupported", detail: "no hidden-webview browser on this platform" };
 	}
-	const opened = await host.invoke<Opened>("browse_open", { idleTimeoutMs: opts.idleTimeoutMs ?? null });
+	const viewport = opts.viewport ? [opts.viewport.width, opts.viewport.height] : null;
+	const opened = await host.invoke<Opened>("browse_open", { idleTimeoutMs: opts.idleTimeoutMs ?? null, viewport });
 	if (opened.status !== "ok" || opened.session === null) {
 		const status = opened.status === "ok" ? "closed" : opened.status;
 		return { status, detail: opened.detail };
