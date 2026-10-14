@@ -47,6 +47,7 @@ use std::time::{Duration, Instant};
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+pub mod browse;
 pub mod jar;
 pub mod page;
 pub mod policy;
@@ -102,6 +103,8 @@ pub struct WebviewFetchState {
     /// caller (a briefing run walking a feed) has no reason to parallelise.
     pub(crate) gate: Mutex<()>,
     seq: AtomicU64,
+    /// The one long-lived page a caller can drive (browse.rs).
+    pub(crate) browse: browse::Slot,
 }
 
 impl WebviewFetchState {
