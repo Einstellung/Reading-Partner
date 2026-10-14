@@ -132,6 +132,14 @@ export interface VoiceSession {
    * for the same turn and role replaces it.
    */
   stopped(turn: number, at: SpeechStopped): SessionEffect[];
+  /**
+   * A turn the program starts on its own, with no line of the reader's under
+   * it: the front telling the reader a result is back, or a result read out
+   * (docs/companion/136). `turn` is the caller's and negative, so its reply is
+   * never mistaken for the answer to a reader's turn. Nothing happens unless
+   * the floor is free: no reply in flight, nothing playing, no stop pending.
+   */
+  program(turn: number): SessionEffect[];
   snapshot(): VoiceSessionSnapshot;
 }
 
@@ -170,8 +178,19 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
   // The last reply cut without anyone saying where the playhead was, kept so
   // `stopped` can correct the entry it recorded.
   let guessed: { turn: number; sentences: SourcedSentence[]; raw: string } | null = null;
+  // A stop that came before anything of the reply was audible (docs/companion/136
+  // 一期): the user, or a noise, started while the reply was still being
+  // written. Whether it was the user is known only at `speech-end`: words there
+  // cut the reply, an empty string lets it go on. Until then what the reply
+  // writes is kept back here rather than spoken over them.
+  let pendingCut = false;
+  let heldBack: SourcedSentence[] = [];
+  let heldDone = false;
 
   function clearSpeech(): void {
+    pendingCut = false;
+    heldBack = [];
+    heldDone = false;
     splitter = null;
     spoken = [];
     began = false;
@@ -273,6 +292,29 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
     }
   }
 
+  function release(out: SessionEffect[]): void {
+    const back = heldBack;
+    const ended = heldDone;
+    pendingCut = false;
+    heldBack = [];
+    heldDone = false;
+    speak(back, out);
+    if (ended) close(out);
+  }
+
+  // The reply has been written out. What is spoken of it is closed off.
+  function close(out: SessionEffect[]): void {
+    asked = null;
+    if (!began) {
+      clearSpeech();
+      go("listening", out);
+      return;
+    }
+    closed = true;
+    out.push({ type: "speak-close", turn: speakingTurn });
+    if (drained) finish(out);
+  }
+
   function ask(text: string, out: SessionEffect[]): void {
     heard.set(turn, text);
     out.push({ type: "record", entry: { role: "user", turn, text, interrupted: false } });
@@ -334,7 +376,10 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
           // `cut` says how far it got, and that is where the transcript is cut.
           // An event that does not say is still a stop, and falls back to the
           // same guess every other unwitnessed stop makes.
-          cut(speechCut(e.cut)?.sentence ?? null, out);
+          // Nothing audible yet: the reply is held, not dropped, until
+          // `speech-end` says whether anyone said anything.
+          if (!began && asked !== null) pendingCut = true;
+          else cut(speechCut(e.cut)?.sentence ?? null, out);
           // The duck that led here is over: the next turn must not open quiet.
           if (ducked) {
             ducked = false;
@@ -357,21 +402,28 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
           // It still has to go, and it goes marked: the user talked over it,
           // whatever the detector decided about the first syllable. Settled,
           // not a placeholder.
-          if (asked !== null || began) cut(null, out);
           if (ducked) {
             ducked = false;
             volume(config.fullVolume, out);
           }
           if (!text) {
+            // Nothing was said, so nothing in flight is given up for it
+            // (docs/companion/136 一期): a reply held back by a stop goes on.
+            heard.set(turn, "");
+            if (pendingCut) {
+              release(out);
+              return out;
+            }
+            if (asked !== null || began) return out;
             // The hangover expired before the recognizer had a word. The turn
             // still happened, and its slot is kept: a `final` that settles a
             // second later is the whole of what was said, and with no slot to
             // land in it would be dropped as belonging to no turn at all. That
             // is the only thing `final` is for.
-            heard.set(turn, "");
             go("listening", out);
             return out;
           }
+          if (asked !== null || began) cut(null, out);
           ask(text, out);
           return out;
         }
@@ -428,28 +480,24 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
     delta(forTurn: number, chunk: string): SessionEffect[] {
       const out: SessionEffect[] = [];
       if (asked === null || forTurn !== asked || !splitter) return out;
-      speak(splitter.push(chunk), out);
+      if (pendingCut) heldBack.push(...splitter.push(chunk));
+      else speak(splitter.push(chunk), out);
       return out;
     },
 
     done(forTurn: number): SessionEffect[] {
       const out: SessionEffect[] = [];
       if (asked === null || forTurn !== asked || !splitter) return out;
-      speak(splitter.end(), out);
-      asked = null;
-      if (!began) {
-        // The model answered with nothing to say aloud. There is no turn to
-        // close and nothing will ever be spoken, so the floor goes back now.
-        clearSpeech();
-        go("listening", out);
+      if (pendingCut) {
+        heldBack.push(...splitter.end());
+        heldDone = true;
         return out;
       }
-      closed = true;
-      out.push({ type: "speak-close", turn: speakingTurn });
-      // The player already fell silent with this turn open. Nothing more is
-      // going to it, so that was the end of the speech and no other event will
-      // say so.
-      if (drained) finish(out);
+      speak(splitter.end(), out);
+      // The model answered with nothing to say aloud: close() gives the floor
+      // back at once. Otherwise the player may already have fallen silent with
+      // this turn open, and then that was the end of the speech.
+      close(out);
       return out;
     },
 
@@ -486,6 +534,20 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
       if (sentence < 0 || sentence >= was.sentences.length - 1) return out;
       const entry = keep(was.sentences, was.raw, sentence, true, forTurn);
       if (entry) out.push({ type: "record", entry });
+      return out;
+    },
+
+    program(id: number): SessionEffect[] {
+      const out: SessionEffect[] = [];
+      if (phase !== "listening" || asked !== null || began || pendingCut) return out;
+      asked = id;
+      speakingTurn = id;
+      splitter = createSourcedSplitter();
+      spoken = [];
+      began = false;
+      closed = false;
+      out.push({ type: "ask", turn: id, text: "" });
+      go("thinking", out);
       return out;
     },
 
