@@ -25,6 +25,12 @@ export interface ScriptStep {
   clip: string;
   /** What the clip says, for the record and the report. */
   text: string;
+  /**
+   * A trace mark (e.g. `front:notify`) that has to have happened, at any point
+   * in the run; `start` then counts from it instead of from the previous clip.
+   * How "once the front has asked whether to read the result" is said.
+   */
+  after?: string;
   start: StepStart;
   /** Wait this long after the cue before feeding. */
   offsetMs: number;
@@ -41,6 +47,8 @@ export interface VoiceScript {
   steps: ScriptStep[];
   /** After the last clip: wait for this many replies to finish, up to `finalTimeoutMs`. */
   finalReplies: number;
+  /** A trace mark the final replies are counted from (e.g. `front:read-out-start`). */
+  finalAfter?: string;
   finalTimeoutMs: number;
   /** Then this long before hanging up. */
   tailMs: number;
@@ -69,9 +77,13 @@ export function parseScript(raw: unknown): VoiceScript {
     if (!STARTS.includes(start)) throw new Error(`${o.name} step ${i}: unknown start ${String(start)}.`);
     const expect = (step.expect ?? "turn") as ScriptStep["expect"];
     if (!EXPECTS.includes(expect)) throw new Error(`${o.name} step ${i}: unknown expect ${String(expect)}.`);
+    if (step.after !== undefined && (typeof step.after !== "string" || !step.after)) {
+      throw new Error(`${o.name} step ${i}: after must be a mark name.`);
+    }
     return {
       clip: step.clip,
       text: typeof step.text === "string" ? step.text : "",
+      ...(typeof step.after === "string" ? { after: step.after } : {}),
       start,
       offsetMs: num(step.offsetMs, start === "reply-end" ? 800 : 0),
       timeoutMs: num(step.timeoutMs, 90_000),
@@ -83,6 +95,7 @@ export function parseScript(raw: unknown): VoiceScript {
     locale: o.locale,
     steps,
     finalReplies: num(o.finalReplies, 1),
+    ...(typeof o.finalAfter === "string" && o.finalAfter ? { finalAfter: o.finalAfter } : {}),
     finalTimeoutMs: num(o.finalTimeoutMs, 90_000),
     tailMs: num(o.tailMs, 1500),
   };
@@ -147,15 +160,33 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
     return waitFor(isReplyEnd, startIdx + 1, timeoutMs);
   };
 
+  /** The index just past the first `name` mark at or after `since`, or null on timeout. */
+  const after = async (name: string, since: number, timeoutMs: number) => {
+    const isIt = (m: TraceMark) => m.name === name;
+    if (!(await waitFor(isIt, since, timeoutMs))) return null;
+    return seen.findIndex((m, i) => i >= since && isIt(m)) + 1;
+  };
+
   const outcomes: StepOutcome[] = [];
   let cursor = 0;
   try {
     for (const [index, step] of script.steps.entries()) {
       deps.mark("step-wait", { index, clip: step.clip, start: step.start });
       let cued = true;
-      if (step.start === "reply-end") cued = await waitFor(isReplyEnd, cursor, step.timeoutMs);
-      else if (step.start === "reply-start") cued = await waitFor(isReplyStart, cursor, step.timeoutMs);
-      else if (step.start === "next-reply-end") cued = await waitNextReply(seen.length, step.timeoutMs);
+      let from = cursor;
+      if (step.after) {
+        const past = await after(step.after, 0, step.timeoutMs);
+        if (past === null) cued = false;
+        else from = past;
+      }
+      // A mark that never came leaves the step to be fed on timeout.
+      if (cued) {
+        if (step.start === "reply-end") cued = await waitFor(isReplyEnd, from, step.timeoutMs);
+        else if (step.start === "reply-start") cued = await waitFor(isReplyStart, from, step.timeoutMs);
+        else if (step.start === "next-reply-end") {
+          cued = await waitNextReply(step.after ? from : seen.length, step.timeoutMs);
+        }
+      }
       if (!cued) deps.mark("step-timeout", { index, clip: step.clip });
       if (step.offsetMs > 0) await deps.sleep(step.offsetMs);
       deps.mark("step-feed", { index, clip: step.clip, text: step.text, expect: step.expect });
@@ -165,6 +196,11 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
       outcomes.push({ index, clip: step.clip, cued });
     }
     let since = cursor;
+    if (script.finalAfter) {
+      const past = await after(script.finalAfter, cursor, script.finalTimeoutMs);
+      if (past === null) deps.mark("final-timeout", { after: script.finalAfter });
+      else since = past;
+    }
     for (let i = 0; i < script.finalReplies; i++) {
       const ok = await waitFor(isReplyEnd, since, script.finalTimeoutMs);
       if (!ok) {

@@ -18,6 +18,7 @@ import {
   parseRows,
   percentile,
   summarize,
+  tasksOf,
   turnsOf,
   type Row,
 } from "../../../../src/soul/voice/harness/latency";
@@ -213,15 +214,12 @@ describe("latency", () => {
     n(2400, "turn-end"),
     n(2450, "finalized"),
     n(2455, "conv:speech-end"),
-    j(2460, "conv:speech-end"),
-    j(2461, "model-ask"),
-    j(2600, "model-request"),
-    j(4000, "model-first-delta"),
-    j(4500, "speak-push-first"),
-    r(4510, "tts:started"),
-    r(5100, "tts:firstAudio"),
-    r(6000, "tts:queued"),
+    j(2460, "front:speech-end"),
+    j(2600, "front:request-sent"),
+    j(4000, "front:first-byte"),
+    j(4500, "front:first-sentence-to-tts"),
     n(6005, "enqueue"),
+    n(6008, "tts-first", { req: 4510, firstAudio: 5100, handed: 6000 }),
     n(6010, "speech:speaking", { value: 1 }),
     n(6050, "audible-start"),
     j(6900, "step-feed", { clip: "b.wav", text: "wait", expect: "interrupt" }),
@@ -230,6 +228,19 @@ describe("latency", () => {
     n(7400, "conv:speech-stop"),
     n(7450, "audible-end"),
     n(7800, "clip-speech-end", { name: "b.wav" }),
+    // A hard question: handed off, the cue plays, the result comes back later.
+    j(8900, "step-feed", { clip: "c.wav", text: "check it", expect: "turn" }),
+    n(9000, "clip-start", { name: "c.wav" }),
+    n(10000, "clip-speech-end", { name: "c.wav" }),
+    j(10500, "front:delegate-sent", { turn: 3 }),
+    j(10900, "front:delegate-done", { turn: 3, out: "Handed over as task 2. It comes back on its own" }),
+    r(10950, "cue", { id: "zh/think", premade: true }),
+    n(11100, "audible-start"),
+    n(11500, "tts-dry"),
+    n(11700, "tts-resumed", { silentMs: 200 }),
+    j(20000, "front:note", { number: 2, status: "done" }),
+    j(22000, "front:notify", { turn: -1, numbers: [2] }),
+    n(23000, "audible-start"),
   ];
 
   test("parseRows skips torn lines", () => {
@@ -243,21 +254,40 @@ describe("latency", () => {
 
   test("a turn is cut into its segments and an interruption is timed from its clip", () => {
     const turns = turnsOf(rows);
-    expect(turns).toHaveLength(2);
+    expect(turns).toHaveLength(3);
     const [a, b] = turns;
     expect(a.totalMs).toBe(4950);
     expect(a.segments["speechEnd→turnEnd"]).toBe(1300);
-    expect(a.segments["jsHeard→ask"]).toBe(1);
-    expect(a.segments["firstPush→ttsStarted"]).toBe(10);
-    expect(a.segments["speaking→audible"]).toBe(40);
+    expect(a.segments["frontHeard→request"]).toBe(140);
+    expect(a.segments["firstSentence→ttsRequested"]).toBe(10);
+    expect(a.segments["ttsRequested→ttsFirstAudio"]).toBe(590);
+    expect(a.segments["ttsHanded→enqueue"]).toBe(5);
+    expect(a.segments["scheduled→audible"]).toBe(42);
+    expect(a.delegateMs).toBeUndefined();
     expect(b.expect).toBe("interrupt");
     expect(b.duckMs).toBe(100);
     expect(b.stopMs).toBe(400);
     expect(b.silencedMs).toBe(450);
     expect(b.interrupted).toBe(true);
     const stats = summarize(turns);
-    expect(stats[stats.length - 1]).toEqual({ segment: "TOTAL speechEnd→audible", n: 1, p50: 4950, p90: 4950 });
+    expect(stats[stats.length - 1]).toEqual({ segment: "TOTAL speechEnd→audible", n: 2, p50: 1100, p90: 4950 });
     expect(formatReport(turns)).toContain("TOTAL speechEnd→audible");
+  });
+
+  test("a handed-off question is timed to its filler, and its task to the notice", () => {
+    const c = turnsOf(rows)[2];
+    expect(c.delegateMs).toBe(500);
+    expect(c.fillerMs).toBe(1100);
+    expect(c.cue).toBe(true);
+    expect(c.dry).toBe(1);
+    expect(c.drySilentMs).toBe(200);
+    const tasks = tasksOf(rows);
+    expect(tasks).toEqual([
+      { number: 2, status: "done", sent: 10500, backMs: 9500, notifyMs: 2000, heardMs: 1000, totalMs: 12500 },
+    ]);
+    const report = formatReport(turnsOf(rows), tasks);
+    expect(report).toContain("hard question→filler heard");
+    expect(report).toContain("sent→back");
   });
 
   test("every fixture script parses and its clips exist", () => {
@@ -268,6 +298,49 @@ describe("latency", () => {
       const script = parseScript(JSON.parse(readFileSync(dir + name, "utf8")));
       for (const step of script.steps) expect(existsSync(dir + step.clip)).toBe(true);
     }
+  });
+
+  test("a step can wait for a mark that already happened, then for the reply after it", async () => {
+    const listeners = new Set<(m: TraceMark) => void>();
+    const emit = (name: string, data?: Record<string, unknown>) => {
+      for (const cb of [...listeners]) cb({ name, perfMs: 0, ...(data ? { data } : {}) });
+    };
+    const fed: string[] = [];
+    const script = parseScript({
+      name: "s",
+      locale: "zh-CN",
+      finalReplies: 0,
+      tailMs: 0,
+      steps: [
+        { clip: "a.wav", start: "clip-end", offsetMs: 0 },
+        { clip: "b.wav", after: "front:notify", start: "reply-end", offsetMs: 0, timeoutMs: 1000 },
+      ],
+    });
+    expect(script.steps[1].after).toBe("front:notify");
+    const done = runScript(script, {
+      subscribe: (cb) => {
+        listeners.add(cb);
+        return () => listeners.delete(cb);
+      },
+      feed: async (clip) => {
+        fed.push(clip);
+        if (clip === "a.wav") {
+          emit("conv:spoken");
+          emit("front:notify");
+          emit("speech:speaking", { value: 1 });
+        }
+      },
+      // Timeouts never fire here; the zero tail does.
+      sleep: (ms) => (ms === 0 ? Promise.resolve() : new Promise<void>(() => {})),
+      mark: () => {},
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    // The reply that ended before the notice does not count.
+    expect(fed).toEqual(["a.wav"]);
+    emit("conv:spoken");
+    const outcomes = await done;
+    expect(fed).toEqual(["a.wav", "b.wav"]);
+    expect(outcomes[1].cued).toBe(true);
   });
 
   test("percentile is nearest-rank", () => {

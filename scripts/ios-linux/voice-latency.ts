@@ -7,7 +7,7 @@
 // next to each run.
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { formatReport, parseRows, turnsOf, type TurnLatency } from "../../src/soul/voice/harness/latency";
+import { formatReport, parseRows, tasksOf, turnsOf, type TaskLatency, type TurnLatency } from "../../src/soul/voice/harness/latency";
 
 const dirs = process.argv.slice(2);
 if (dirs.length === 0) {
@@ -16,6 +16,7 @@ if (dirs.length === 0) {
 }
 
 const all: TurnLatency[] = [];
+const allTasks: TaskLatency[] = [];
 for (const dir of dirs) {
   const files = [join(dir, "rust.jsonl"), join(dir, "native", "native.jsonl")];
   const rows = files.filter(existsSync).flatMap((f) => parseRows(readFileSync(f, "utf8")));
@@ -25,13 +26,15 @@ for (const dir of dirs) {
     continue;
   }
   const turns = turnsOf(rows);
-  writeFileSync(join(dir, "latency.json"), JSON.stringify(turns, null, 2));
+  const tasks = tasksOf(rows);
+  writeFileSync(join(dir, "latency.json"), JSON.stringify({ turns, tasks }, null, 2));
   console.log(`== ${dir}`);
-  console.log(formatReport(turns));
+  console.log(formatReport(turns, tasks));
   console.log("");
   all.push(...turns);
+  allTasks.push(...tasks);
 }
 if (dirs.length > 1) {
   console.log("== pooled");
-  console.log(formatReport(all));
+  console.log(formatReport(all, allTasks));
 }
