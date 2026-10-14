@@ -30,6 +30,9 @@ export default {
   "account.sameAsChat": "与对话相同",
   "account.everydayHint":
     "例行工作改用这里的模型，而不是上面那个：三餐，以及夜间的新闻简报。这些工作没人在等，用更便宜的模型不会让你损失什么；哪些任务归它由应用决定，不在这里设置。它使用上面的服务商。",
+  "account.voiceFront": "语音通话",
+  "account.voiceFrontHint":
+    "语音通话里先开口的那句快速回答用这里的模型，在任何后台工作之前。模型越快，开口越早；回答太浅时再打开思考。无法关闭思考的服务商使用它的最低档。它使用上面的服务商。",
   "account.briefing": "新闻简报",
   "account.screening": "筛选",
   "account.analysis": "分析",

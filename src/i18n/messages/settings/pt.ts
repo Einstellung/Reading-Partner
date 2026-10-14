@@ -31,6 +31,9 @@ export default {
   "account.sameAsChat": "Igual ao chat",
   "account.everydayHint":
     "O trabalho de rotina roda aqui em vez de no modelo acima: as refeições e o resumo noturno. Ninguém está esperando por ele, então um modelo mais barato não custa nada a você; quais tarefas pertencem a ele é o app que decide, não este ajuste. Ele usa o provedor acima.",
+  "account.voiceFront": "Chamada de voz",
+  "account.voiceFrontHint":
+    "A primeira resposta rápida de uma chamada de voz roda aqui, antes de qualquer trabalho em segundo plano. Um modelo rápido responde antes; deixe o raciocínio desligado, a menos que as respostas fiquem superficiais demais. Um provedor que não consegue desligar o raciocínio usa o nível mais baixo. Ele usa o provedor acima.",
   "account.briefing": "Resumo de notícias",
   "account.screening": "Triagem",
   "account.analysis": "Análise",

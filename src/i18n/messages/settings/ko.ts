@@ -30,6 +30,9 @@ export default {
   "account.sameAsChat": "채팅과 동일",
   "account.everydayHint":
     "일상적인 작업은 위의 모델 대신 여기서 실행됩니다: 식단과 야간 브리핑입니다. 아무도 기다리지 않는 작업이라 더 저렴한 모델을 써도 손해가 없습니다. 어떤 작업이 여기에 속하는지는 앱이 정합니다. 제공업체는 위와 같은 것을 사용합니다.",
+  "account.voiceFront": "음성 통화",
+  "account.voiceFrontHint":
+    "음성 통화의 빠른 첫 응답은 백그라운드 작업보다 먼저 여기서 실행됩니다. 빠른 모델일수록 먼저 답합니다. 답이 너무 얕지 않다면 사고는 꺼 두세요. 사고를 끌 수 없는 제공업체는 가장 낮은 단계를 사용합니다. 제공업체는 위와 같은 것을 사용합니다.",
   "account.briefing": "브리핑",
   "account.screening": "선별",
   "account.analysis": "분석",
