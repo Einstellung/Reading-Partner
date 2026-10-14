@@ -26,7 +26,8 @@ import type { XHalt } from "../x/search-page";
 import { resolveRedirect } from "../x/live";
 import { stopFollowing } from "./apply";
 import { registerFirstRunDispatcher } from "./first-run";
-import { recordHalt, haltNeedsReader, xGate } from "./halt";
+import { recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
+import type { XResume } from "./resume-tool";
 import { lastNightAnchor, type NightConditions } from "./nightly";
 import {
   TOPIC_SEARCH_BOX_KIND,
@@ -225,10 +226,15 @@ export async function checkTopicSearchNight(collecting: () => Promise<boolean>):
   }
 }
 
-/** The reader said to read X again after a second challenge or limit. */
-export async function resumeXReading(): Promise<boolean> {
-  const after = await state.update((s) => (s.halt?.paused ? { ...s, halt: null } : s));
-  return after.halt === null;
+/** The reader said to read X again after a second challenge or limit (resume-tool.ts). */
+export async function resumeXReading(): Promise<XResume> {
+  let lifted = false;
+  const after = await state.update((s) => {
+    const resumed = resumeHalt(s.halt);
+    lifted = resumed.lifted;
+    return lifted ? { ...s, halt: resumed.record } : s;
+  });
+  return { lifted, halt: after.halt };
 }
 
 /** Why X is not read on this device tonight, or null. */

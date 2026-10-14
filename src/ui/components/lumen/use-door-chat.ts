@@ -40,6 +40,7 @@ import {
 import {
   cardRow,
   findCardPart,
+  latestCardOf,
   nextCardId,
   patchCardPayload,
   rehydrateMessage,
@@ -51,6 +52,7 @@ import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools } from "./door-tools";
 import { TOPIC_SEARCH_APPLY_OP, topicSearchAppliedNote } from "../../../info/topic-search/cards";
+import type { ApplyResult } from "../../../info/topic-search/apply";
 import { applyTopicSearchCard, loadTopicSearchGuidance } from "../../../info/topic-search/live";
 import {
   INTAKE_CHOOSE_OP,
@@ -135,6 +137,8 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   );
   const raiseCardRef = useRef(raiseCard);
   raiseCardRef.current = raiseCard;
+  // The drafting card's Apply, for confirm_topic_search in a turn assembled earlier.
+  const applyTopicSearchRef = useRef<(cardId: string) => Promise<ApplyResult>>(async () => ({ ok: false }));
 
   useEffect(() => {
     let live = true;
@@ -175,6 +179,12 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
               history
                 .filter((m) => m.role === "user")
                 .map((m) => ({ ...(m.id ? { id: m.id } : {}), ts: m.ts, text: m.text })),
+            // Read when called: a card drawn earlier in the same turn counts.
+            latestTopicSearchCard: () => {
+              const found = latestCardOf(messagesRef.current, "topic-search-proposal");
+              return found ? { cardId: found.cardId, card: found.payload } : null;
+            },
+            applyTopicSearchCard: (cardId) => applyTopicSearchRef.current(cardId),
           }),
           topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
           // How a topic search is drafted, and the ones the reader has (docs/info/88).
@@ -301,22 +311,43 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   );
 
   // The drafting card's Apply (docs/info/88): the config, the concern, and the
-  // first run handed off, all in info/topic-search/apply.ts.
+  // first run handed off, all in info/topic-search/apply.ts. The Follow button
+  // and confirm_topic_search both land here; a second call while one is in
+  // flight waits for it instead of filing the search twice.
+  const applyingRef = useRef(new Map<string, Promise<ApplyResult>>());
   const applyTopicSearch = useCallback(
-    async (cardId: string) => {
-      if (!threadId) return;
-      const found = findCardPart(messagesRef.current, cardId);
-      if (!found || found.payload.kind !== "topic-search-proposal") return;
-      const card = found.payload;
-      const result = await applyTopicSearchCard(card);
-      if (!result.ok) return;
-      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
-      patchThreadMessage(key, threadId, found.ts, {
-        parts: [toPersistedCardPart(cardId, { ...card, phase: "applied" })],
-      });
-      note(topicSearchAppliedNote(card));
+    (cardId: string): Promise<ApplyResult> => {
+      const inFlight = applyingRef.current.get(cardId);
+      if (inFlight) return inFlight;
+      const run = async (): Promise<ApplyResult> => {
+        if (!threadId) return { ok: false };
+        const found = findCardPart(messagesRef.current, cardId);
+        if (!found || found.payload.kind !== "topic-search-proposal") return { ok: false };
+        const card = found.payload;
+        const result = await applyTopicSearchCard(card);
+        if (!result.ok) return result;
+        setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
+        patchThreadMessage(key, threadId, found.ts, {
+          parts: [toPersistedCardPart(cardId, { ...card, phase: "applied" })],
+        });
+        return result;
+      };
+      const pending = run().finally(() => applyingRef.current.delete(cardId));
+      applyingRef.current.set(cardId, pending);
+      return pending;
     },
-    [key, threadId, note, setMessages],
+    [key, threadId, setMessages],
+  );
+  applyTopicSearchRef.current = applyTopicSearch;
+
+  // The Follow button leaves a line in the conversation; confirm_topic_search's receipt stands for it.
+  const followTopicSearch = useCallback(
+    async (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      const result = await applyTopicSearch(cardId);
+      if (result.ok && found?.payload.kind === "topic-search-proposal") note(topicSearchAppliedNote(found.payload));
+    },
+    [applyTopicSearch, note],
   );
 
   // The intake card's pick: a topic on the shelf, or one made on the card first.
@@ -353,7 +384,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       switch (action.kind) {
         case "mutate":
           if (action.op === "apply-topic") void applyTopic(cardId);
-          else if (action.op === TOPIC_SEARCH_APPLY_OP) void applyTopicSearch(cardId);
+          else if (action.op === TOPIC_SEARCH_APPLY_OP) void followTopicSearch(cardId);
           else if (action.op === INTAKE_CHOOSE_OP && action.arg) void pickIntakeTopic(cardId, { id: action.arg });
           else if (action.op === INTAKE_NEW_TOPIC_OP && action.arg) void pickIntakeTopic(cardId, { name: action.arg });
           break;
@@ -370,7 +401,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           break;
       }
     },
-    [applyTopic, applyTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages],
+    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages],
   );
 
   return { messages, stickKey, ready: threadId !== null, streaming, send, stop, onCardAction };

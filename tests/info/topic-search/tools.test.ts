@@ -15,6 +15,10 @@ import {
   openingAnchor,
   resolveFiledTopic,
 } from "../../../src/info/topic-search/propose-tool";
+import { buildConfirmTopicSearchTool } from "../../../src/info/topic-search/confirm-tool";
+import { resumeHalt, type XHaltRecord } from "../../../src/info/topic-search/halt";
+import { buildResumeXReadingTool, type XResume } from "../../../src/info/topic-search/resume-tool";
+import type { AgentTool } from "../../../src/legion/durable/contract";
 import { applyTopicSearchUpdate } from "../../../src/info/topic-search/topic-searches";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import { createStatementStore } from "../../../src/memory/statements/store";
@@ -282,4 +286,133 @@ test("update writes the change at once with a 'saved to this topic' receipt", as
   expect(typeof nothing === "object" && nothing.receipt).toBeNull();
   const unknown = await tool.execute({ searchId: "nope", addAvoid: ["x"] });
   expect(typeof unknown === "object" && unknown.text).toContain("not one of the reader's topic searches");
+});
+
+const PROPOSE_ARGS = {
+  name: "AI for science",
+  scope: "AI used to do science",
+  subtopics: [{ name: "Materials", picked: true }],
+  want: [],
+  avoid: [],
+  judgments: [],
+  anchors: ["AI for science"],
+  queries: [{ subtopic: "", x: "AI for science", arxiv: "", ranking: "" }],
+  answers: [],
+  topic: "",
+  concern: "Following AI for science",
+  opening: "AI for science",
+};
+
+// The door conversation in miniature: proposed cards in order, by id, with
+// confirm_topic_search applying the newest through the real Apply.
+function door() {
+  const store = statements();
+  const file = memoryFile();
+  const dispatched: string[] = [];
+  const cards: { cardId: string; card: TopicSearchProposalCardData }[] = [];
+  const propose = buildProposeTopicSearchTool({
+    threadId: "thread-1",
+    readerLines: () => [{ ts: OCT_14, text: "帮我整理 AI for science 的资料" }],
+    searches: file.load,
+    topics: async () => [],
+    statements: async () => [],
+    claims: async () => [],
+    now: () => OCT_14,
+    raiseCard: (c) => cards.push({ cardId: `topic-search-${cards.length + 1}`, card: c }),
+  });
+  const confirm = buildConfirmTopicSearchTool({
+    latestCard: () => cards[cards.length - 1] ?? null,
+    apply: async (cardId) => {
+      const at = cards.find((c) => c.cardId === cardId)!;
+      const result = await applyTopicSearchProposal(at.card, {
+        concern: store,
+        load: file.load,
+        put: file.put,
+        topicExists: async () => false,
+        createTopic: async () => ({ id: "topic-new" }),
+        dispatchFirstRun: async (s) => {
+          dispatched.push(s.id);
+        },
+        now: () => OCT_14,
+        random: () => 0,
+      });
+      if (result.ok) at.card = { ...at.card, phase: "applied" };
+      return result;
+    },
+  });
+  return { file, dispatched, cards, propose, confirm };
+}
+
+type ToolResult = Awaited<ReturnType<AgentTool["execute"]>>;
+const textOf = (r: ToolResult) => (typeof r === "string" ? r : r.text);
+const receiptOf = (r: ToolResult) => (typeof r === "string" ? undefined : r.receipt);
+
+test("confirm_topic_search applies the newest card like its Follow button, once", async () => {
+  const d = door();
+  expect(receiptOf(await d.confirm.execute({ name: "AI for science" }))).toBeNull();
+  expect(d.file.all).toHaveLength(0);
+
+  await d.propose.execute({ ...PROPOSE_ARGS, scope: "first draft" });
+  await d.propose.execute(PROPOSE_ARGS);
+  expect(receiptOf(await d.confirm.execute({ name: "Chips" }))).toBeNull();
+  expect(d.file.all).toHaveLength(0);
+
+  const done = await d.confirm.execute({ name: "ai  for SCIENCE" });
+  expect(receiptOf(done)?.summary).toBe("AI for science");
+  expect(d.file.all.map((s) => `${s.name} | ${s.scope} | ${s.status}`)).toEqual(["AI for science | AI used to do science | active"]);
+  expect(d.dispatched).toEqual(["ts-00000000"]);
+  expect(d.cards.map((c) => c.card.phase)).toEqual(["draft", "applied"]);
+
+  const again = await d.confirm.execute({ name: "AI for science" });
+  expect(receiptOf(again)).toBeNull();
+  expect(textOf(again)).toContain("already applied");
+  expect(d.dispatched).toHaveLength(1);
+});
+
+test("a failed Apply files nothing and says so", async () => {
+  const drawn = card();
+  const tool = buildConfirmTopicSearchTool({
+    latestCard: () => ({ cardId: "c1", card: drawn }),
+    apply: async () => ({ ok: false }),
+  });
+  const result = await tool.execute({ name: drawn.name });
+  expect(receiptOf(result)).toBeNull();
+  expect(textOf(result)).toContain("could not be applied");
+});
+
+test("once rides from propose through Apply onto the config", async () => {
+  const d = door();
+  await d.propose.execute({ ...PROPOSE_ARGS, once: true });
+  expect(d.cards[0].card.once).toBe(true);
+  expect(textOf(await d.confirm.execute({ name: "AI for science" }))).toContain("Just this once");
+  expect(d.file.all[0].once).toBe(true);
+
+  const plain = door();
+  await plain.propose.execute(PROPOSE_ARGS);
+  expect("once" in plain.cards[0].card).toBe(false);
+  await plain.confirm.execute({ name: "AI for science" });
+  expect("once" in plain.file.all[0]).toBe(false);
+});
+
+const HALT: XHaltRecord = { kind: "challenge", detail: "verify", at: OCT_14, night: "2026-10-14", strikes: 2, paused: true };
+
+test("resuming lifts only a pause the reader holds", () => {
+  expect(resumeHalt(HALT)).toEqual({ record: null, lifted: true });
+  const skipped: XHaltRecord = { ...HALT, strikes: 1, paused: false };
+  expect(resumeHalt(skipped)).toEqual({ record: skipped, lifted: false });
+  const signedOut: XHaltRecord = { ...HALT, kind: "signed-out", strikes: 0, paused: false };
+  expect(resumeHalt(signedOut)).toEqual({ record: signedOut, lifted: false });
+  expect(resumeHalt(null)).toEqual({ record: null, lifted: false });
+});
+
+test("resume_x_reading answers by what was held on this device", async () => {
+  const run = (resume: XResume) => buildResumeXReadingTool({ resume: async () => resume }).execute({});
+  expect(receiptOf(await run({ lifted: true, halt: null }))?.label).toBe("X reading resumed");
+  const none = await run({ lifted: false, halt: null });
+  expect(receiptOf(none)).toBeNull();
+  expect(textOf(none)).toContain("not paused on this device");
+  const signedOut = await run({ lifted: false, halt: { ...HALT, kind: "signed-out", strikes: 0, paused: false } });
+  expect(textOf(signedOut)).toContain("signs in to X again");
+  const skipped = await run({ lifted: false, halt: { ...HALT, strikes: 1, paused: false } });
+  expect(textOf(skipped)).toContain("only the next night is skipped");
 });

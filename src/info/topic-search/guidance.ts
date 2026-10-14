@@ -21,9 +21,11 @@ export interface GuidanceInput {
   searches: readonly TopicSearch[];
   statements: readonly Statement[];
   topics: readonly { id: string; name: string }[];
+  /** Why X is not read on this device tonight (runs-live.ts xReadingPaused), or null. */
+  xPaused?: string | null;
 }
 
-export function topicSearchGuidance({ searches, statements, topics }: GuidanceInput): string {
+export function topicSearchGuidance({ searches, statements, topics, xPaused = null }: GuidanceInput): string {
   const stoppedConcerns = new Set(
     searches.filter((s) => s.status === "stopped" && s.concernId).map((s) => s.concernId as string),
   );
@@ -46,6 +48,7 @@ export function topicSearchGuidance({ searches, statements, topics }: GuidanceIn
     topics.length
       ? ["Their reading topics:", ...topics.map((tp) => `- ${tp.name} (id: ${tp.id})`)].join("\n")
       : "",
+    xPaused ? `X reading on this device: ${xPaused}.` : "",
     [
       "When the reader says they follow something and want material on it, draft a topic search",
       "with them before calling propose_topic_search:",
@@ -62,6 +65,10 @@ export function topicSearchGuidance({ searches, statements, topics }: GuidanceIn
       "  or non-Latin script.",
       "- Settle scope, subtopics, what they want and what they don't. Then propose. The card",
       "  files nothing until they apply it; if they correct it in words, propose again.",
+      "- When they say yes to the card in words (\"ok\", \"好\", \"go ahead\"), call",
+      "  confirm_topic_search: it does what the card's Follow button does.",
+      "- When they want one look only, not a daily follow (\"just this once\", \"只看这一次\"),",
+      "  propose with once: the first overview comes, then it stops by itself.",
       "- Name an existing concern above that says the same thing as existingConcern, and a stopped",
       "  search they want back as searchId. File into an existing topic by id where one fits.",
       "When they answer a question, write it where it holds: only for this topic, with",
@@ -69,6 +76,7 @@ export function topicSearchGuidance({ searches, statements, topics }: GuidanceIn
       "originals\"), with statement_write as a profile; both when it is both. Then say in one line",
       "where it went: \"Saved to this topic\" or \"Saved to your profile\", in their language.",
       "When they say they no longer care about a topic search, call stop_topic_search.",
+      "When X reading is paused and they say to read X again, call resume_x_reading.",
     ].join("\n"),
   ]
     .filter((b) => b !== "")

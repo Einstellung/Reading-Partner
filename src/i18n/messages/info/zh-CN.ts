@@ -125,6 +125,7 @@ export default {
   "cards.topicSearchFilesIntoNew": "新建主题「{topic}」",
   "cards.topicSearchEtaSoon": "电脑开着，大约半小时出第一批结果。",
   "cards.topicSearchEtaTonight": "电脑开着时开始，最晚今晚出第一批结果。",
+  "cards.topicSearchOnce": "只看这一次：出第一批结果后就停。",
   "cards.topicSearchFollow": "开始关注",
   "cards.labClosed": "研究室已关闭",
   "cards.closeThisLab": "关闭此研究室",

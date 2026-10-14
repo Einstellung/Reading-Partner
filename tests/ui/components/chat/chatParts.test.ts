@@ -8,6 +8,7 @@ import {
   chatGlance,
   findCardPart,
   insertBeforeLast,
+  latestCardOf,
   messageToParts,
   nextCardId,
   patchCardPayload,
@@ -82,6 +83,18 @@ test("upsertCardRow appends when the id is new, then updates that row in place",
   const after = upsertCardRow(msgs, "briefing", ready);
   expect(after).toHaveLength(2); // reused the same row, not appended
   expect(findCardPart(after, "briefing")?.payload).toEqual(ready);
+});
+
+test("latestCardOf finds the newest card of a kind, by row and then by part", () => {
+  const ready: CardPayload = { kind: "briefing-ready", date: "2026-07-22", worth: 3, oneLiners: 1, labs: 2 };
+  const msgs: ThreadMessage[] = [
+    cardRow("old", probe(false), 1),
+    { role: "ai", ts: 2, text: "", parts: [{ type: "card", id: "mid", card: probe(true) }, { type: "card", id: "r", card: ready }] },
+    cardRow("other", ready, 3),
+  ];
+  expect(latestCardOf(msgs, "probe-confirm")).toEqual({ cardId: "mid", ts: 2, payload: probe(true) });
+  expect(latestCardOf(msgs, "briefing-ready")?.cardId).toBe("other");
+  expect(latestCardOf(msgs, "briefing-progress")).toBeUndefined();
 });
 
 test("patchCardPayload merges into the addressed card; a miss returns the same ref", () => {

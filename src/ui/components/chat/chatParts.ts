@@ -212,6 +212,23 @@ export function findCardPart(
   return undefined;
 }
 
+// The newest card of this kind in the conversation, with its id and host row's ts.
+export function latestCardOf<K extends CardPayload["kind"]>(
+  messages: ThreadMessage[],
+  kind: K,
+): { cardId: string; ts: number; payload: Extract<CardPayload, { kind: K }> } | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const parts = messageToParts(messages[i]);
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const p = parts[j];
+      if (p.type === "card" && p.card.kind === kind) {
+        return { cardId: p.id, ts: messages[i].ts, payload: p.card as Extract<CardPayload, { kind: K }> };
+      }
+    }
+  }
+  return undefined;
+}
+
 // Insert a card row just before the last row (a trial's confirm card belongs
 // above the AI's concluding text). An empty list becomes just the card row.
 export function insertBeforeLast(messages: ThreadMessage[], row: ThreadMessage): ThreadMessage[] {

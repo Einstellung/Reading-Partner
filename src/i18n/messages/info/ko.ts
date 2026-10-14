@@ -125,6 +125,7 @@ export default {
   "cards.topicSearchFilesIntoNew": "새 주제 「{topic}」에 넣습니다",
   "cards.topicSearchEtaSoon": "컴퓨터가 켜져 있어 약 30분 뒤 첫 결과가 나옵니다.",
   "cards.topicSearchEtaTonight": "컴퓨터가 켜지면 시작하며, 늦어도 오늘 밤 첫 결과가 나옵니다.",
+  "cards.topicSearchOnce": "이번 한 번만: 첫 결과를 낸 뒤 멈춥니다.",
   "cards.topicSearchFollow": "팔로우하기",
   "cards.labClosed": "랩이 닫혔습니다",
   "cards.closeThisLab": "이 랩 닫기",
