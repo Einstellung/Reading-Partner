@@ -256,7 +256,7 @@ describe("latency", () => {
     expect(b.silencedMs).toBe(450);
     expect(b.interrupted).toBe(true);
     const stats = summarize(turns);
-    expect(stats.at(-1)).toEqual({ segment: "TOTAL speechEnd→audible", n: 1, p50: 4950, p90: 4950 });
+    expect(stats[stats.length - 1]).toEqual({ segment: "TOTAL speechEnd→audible", n: 1, p50: 4950, p90: 4950 });
     expect(formatReport(turns)).toContain("TOTAL speechEnd→audible");
   });
 
