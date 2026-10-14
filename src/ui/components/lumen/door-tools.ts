@@ -15,6 +15,7 @@ import type { Settings } from "../../../platform/app/settings";
 import { liveWebSearchTools } from "../../../websearch/tool";
 import { buildReadPageTool } from "../../../info/sources/read-page-tool";
 import { infoFetch } from "../../../workshop/extract/http";
+import { topicSearchDoorTools, type TopicSearchDoorPorts } from "../../../info/topic-search/live";
 
 export interface DoorToolPorts {
   /** The day's conversation and the day it is filed under. */
@@ -26,6 +27,8 @@ export interface DoorToolPorts {
   links: readonly string[];
   /** Which provider and models this turn runs on: web_search mounts only where the provider can search. */
   settings: Pick<Settings, "defaultProviderId" | "defaultModelId" | "everydayModelId">;
+  /** The reader's lines so far, oldest first: where a topic search's concern takes its evidence. */
+  readerLines: TopicSearchDoorPorts["readerLines"];
 }
 
 export function doorTools(ports: DoorToolPorts): AgentTool[] {
@@ -41,6 +44,12 @@ export function doorTools(ports: DoorToolPorts): AgentTool[] {
       start: (url, origin) => startTopicIntake(url, undefined, { origin }),
       topics: () => listTopics(),
       raiseCard: (card) => ports.raiseCard("intake", card),
+    }),
+    // Drafting, changing and stopping a topic search (docs/info/88); the card's Apply is in use-door-chat.ts.
+    ...topicSearchDoorTools({
+      threadId: ports.threadId,
+      readerLines: ports.readerLines,
+      raiseCard: (card) => ports.raiseCard("topic-search", card),
     }),
   ];
 }

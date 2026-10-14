@@ -230,6 +230,9 @@ const LAYER: Record<string, Layer> = {
   // bodies, a room's picture — and the briefer only names its kind, so the edge
   // runs briefer -> tasking and never back.
   "info/tasking": "domain",
+  // Topic searches (docs/info/88): the config, the drafting card and the door
+  // tools' logic. Mounted at the door by ui/components/lumen/door-tools.ts.
+  "info/topic-search": "domain",
   // AI-driven link intake (docs/86): the link agent's prompt, tools, candidate
   // table and caps, the reader registry, the receipt and the source records.
   // Knows no site and no reader: info/x registers into it, reading files for it.
