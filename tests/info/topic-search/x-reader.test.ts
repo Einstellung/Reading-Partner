@@ -223,6 +223,16 @@ describe("stopping", () => {
     expect(result.posts.length).toBe(6);
     expect(h.saved.memory.marks["t:q1"].topId).toBe(pid(0));
   });
+
+  test("a ceiling still leaves the follow-ups of what was read", async () => {
+    const site = new FakeSite();
+    const card = (i: number) => ({ ...raw(pid(i)), links: [{ href: `https://t.co/card${i}`, text: "", label: "example.org", card: true }] });
+    site.pages.set("protein", [screen([card(0), card(1)]), screen([card(2)])]);
+    const h = harness(site);
+    const result = await readXSearch(input([line("t:q1", "protein")], { limits: { posts: 2, searchPages: 30, permalinkPages: 0, activeMs: 9e9 } }), h.deps);
+    expect(result.status).toBe("limit");
+    expect(result.posts.map((p) => p.post.links[0].url)).toEqual(["https://example.org/ard0", "https://example.org/ard1"]);
+  });
 });
 
 describe("resuming", () => {

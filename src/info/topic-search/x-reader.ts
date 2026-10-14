@@ -216,8 +216,21 @@ class Run {
       }
       return await this.finish("done", null);
     } catch (e) {
-      if (e instanceof Stop) return await this.finish(e.status, e.why);
-      throw e;
+      if (!(e instanceof Stop)) throw e;
+      // A ceiling ends the reading, not the follow-ups of what was read: they
+      // keep to their own ceilings (followUp checks them).
+      if (e.status === "limit" || e.status === "quota") {
+        try {
+          for (const key of order) {
+            const line = byKey.get(key);
+            if (line && this.past.ended.has(key)) await this.followUp(session, line);
+          }
+        } catch (late) {
+          if (late instanceof Stop) return await this.finish(late.status, late.why);
+          throw late;
+        }
+      }
+      return await this.finish(e.status, e.why);
     } finally {
       await session.close().catch(() => false);
     }
