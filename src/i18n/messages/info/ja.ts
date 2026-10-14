@@ -214,6 +214,16 @@ export default {
   "tool.savedToTopic": "このトピックに記録しました",
   "tool.stoppingTopicSearch": "「{name}」を停止中",
   "tool.stoppedFollowing": "フォローを停止しました",
+  "topicSearch.boxFirst": "{name}：初回の全体像",
+  "topicSearch.boxDaily": "{name}：新着 {n} 件",
+  "topicSearch.haltSignedOut": "X の読み取りを停止：X からログアウトしています",
+  "topicSearch.haltChallenge": "X の読み取りを停止：X が確認を求めています",
+  "topicSearch.haltRateLimited": "X の読み取りを停止：X がリクエストを制限しています",
+  "topicSearch.haltStructure": "X の読み取りを停止：X の検索ページが変わりました",
+  "tool.confirmingTopicSearch": "{name} を確定中",
+  "tool.confirmedTopicSearch": "フォロー中",
+  "tool.resumingXReading": "X の読み取りを再開中",
+  "tool.resumedXReading": "X の読み取りを再開しました",
   "tool.proposedCloseLabel": "ラボの閉鎖を提案しました",
 
   "noLabs.notice":

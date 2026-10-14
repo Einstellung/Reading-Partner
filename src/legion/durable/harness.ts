@@ -48,6 +48,7 @@ import {
 import { DeskCache, toolRegistration, type DeskResolver, type DurableTool } from "./tools";
 import { ChildDesks, childExtension, type ChildExtension } from "./child";
 import { createLandStep, type Lander } from "./turn";
+import { onProgramTasks, programExtension } from "./program-task";
 
 export const DURABLE_DIR = "durable";
 
@@ -216,6 +217,10 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
   });
   const registry = createRegistry();
   registry.install(extension);
+  // Program tasks a domain registered (program-task.ts), on the registry before
+  // the first generation resumes, so a task left mid-phase finds its definition.
+  registry.install(programExtension());
+  const offPrograms = onProgramTasks(() => registry.install(programExtension()));
   const installChild = (name: string, tools: readonly AgentTool[]): ChildExtension => {
     const child = childExtension(name, tools, children);
     for (const tool of child.tools) childTools.set(tool.name, tool);
@@ -339,7 +344,10 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
       rotating = next;
       return next;
     },
-    close: (context) => harness.close(context),
+    close: (context) => {
+      offPrograms();
+      return harness.close(context);
+    },
   };
   return self;
 }

@@ -214,6 +214,16 @@ export default {
   "tool.savedToTopic": "In diesem Thema gespeichert",
   "tool.stoppingTopicSearch": "Beende {name}",
   "tool.stoppedFollowing": "Nicht mehr verfolgt",
+  "topicSearch.boxFirst": "{name}: erster Überblick",
+  "topicSearch.boxDaily": "{name}: {n} neu",
+  "topicSearch.haltSignedOut": "X-Lesen gestoppt: bei X abgemeldet",
+  "topicSearch.haltChallenge": "X-Lesen gestoppt: X verlangt eine Bestätigung",
+  "topicSearch.haltRateLimited": "X-Lesen gestoppt: X begrenzt Anfragen",
+  "topicSearch.haltStructure": "X-Lesen gestoppt: Die X-Suchseite hat sich geändert",
+  "tool.confirmingTopicSearch": "Bestätige {name}",
+  "tool.confirmedTopicSearch": "Wird verfolgt",
+  "tool.resumingXReading": "X-Lesen wird fortgesetzt",
+  "tool.resumedXReading": "X-Lesen fortgesetzt",
   "tool.proposedCloseLabel": "Laborschließung vorgeschlagen",
 
   "noLabs.notice":
