@@ -11,9 +11,26 @@ import type { DeskMessage } from "../../desk";
 import { modelIdFor } from "../../ai/model-tier";
 import { replayableHistory } from "../../ai/turn-view/turn-rows";
 import type { ThreadOrigin } from "../../legion/durable/extension";
-import { toReasoning, type Settings } from "../../platform/app/settings";
-import { createThread, getThread, loadThreads } from "../../platform/app/threads";
-import { registerTurnDelivery, type AssembledTurn, type TurnDelivery, type TurnDeliveryOutcome } from "../../soul";
+import { loadSettings, toReasoning, type Settings } from "../../platform/app/settings";
+import {
+  appendMessage,
+  createThread,
+  flushThreads,
+  getThread,
+  loadThreads,
+  newThreadMessageId,
+  type ThreadMessage,
+} from "../../platform/app/threads";
+import {
+  registerReplyAppend,
+  registerTurnDelivery,
+  type AssembledTurn,
+  type ReplyAppend,
+  type TurnDelivery,
+  type TurnDeliveryOutcome,
+} from "../../soul";
+import { registerThinkDesk } from "../../soul/think";
+import type { AgentTool } from "../../legion/durable/contract";
 import { briefingThreadId } from "../../info/briefer/anchors";
 import { layBriefingTurn, layMealsTurn } from "../../info/briefer/deliver";
 import {
@@ -110,12 +127,71 @@ export async function deliverInfoBell(
   );
 }
 
+export interface InfoReplyDeps {
+  openThread(key: string, threadId: string): Promise<void>;
+  append(key: string, threadId: string, message: ThreadMessage): void;
+  flush(): Promise<void>;
+}
+
+const appInfoReplyDeps: InfoReplyDeps = {
+  openThread: async (key, threadId) => {
+    await loadThreads(key).catch(() => ({}));
+    if (!getThread(key, threadId)) createThread(key, "info", threadId);
+  },
+  append: (key, threadId, message) => {
+    appendMessage(key, threadId, message);
+  },
+  flush: flushThreads,
+};
+
+/**
+ * Append a verbatim run's output (docs/companion/136 回来) to the day's
+ * briefing conversation or the meals conversation, as the soul's reply,
+ * stamped with the run it came back from.
+ */
+export async function appendInfoReply(input: ReplyAppend, deps: InfoReplyDeps = appInfoReplyDeps): Promise<boolean> {
+  const origin = conversationOf(input.origin);
+  if (!origin) return false;
+  const address = infoAddress(origin);
+  await deps.openThread(address.key, address.threadId);
+  deps.append(address.key, address.threadId, {
+    id: newThreadMessageId(),
+    role: "ai",
+    text: input.text,
+    ts: input.at,
+    origin: { runId: input.runId },
+  });
+  await deps.flush();
+  return true;
+}
+
+/**
+ * The tools a think run handed off from a briefing call gets: the secretary's
+ * desk of that day, laid the way a bell's turn lays it. kind.ts keeps the reads.
+ */
+async function briefingThinkDesk(origin: BoxOrigin): Promise<AgentTool[]> {
+  if (origin.place !== "briefing") return [];
+  const settings = await loadSettings();
+  const turn = await layBriefingTurn(origin.date, {
+    settings,
+    messages: [{ role: "user", text: "" }],
+    origin,
+  });
+  return turn?.tools ?? [];
+}
+
 /** Say that a run delegated from a briefing or the meals conversation is answered there. The undo is for tests. */
 export function registerInfoDelivery(): () => void {
   const briefing = registerTurnDelivery("briefing", (input) => deliverInfoBell(input));
   const meals = registerTurnDelivery("meals", (input) => deliverInfoBell(input));
+  const briefingReply = registerReplyAppend("briefing", (input) => appendInfoReply(input));
+  const mealsReply = registerReplyAppend("meals", (input) => appendInfoReply(input));
+  const thinkDesk = registerThinkDesk("briefing", briefingThinkDesk);
   return () => {
     briefing();
     meals();
+    briefingReply();
+    mealsReply();
+    thinkDesk();
   };
 }

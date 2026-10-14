@@ -51,6 +51,7 @@ import { registerBookDelivery } from "../../../reading/turn/deliver";
 import { registerDoorDelivery } from "../../../reading/turn/door-bell";
 import { registerInfoDelivery } from "../../../reading/turn/info-bell";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
+import { registerThinkWorker } from "../../../soul/think";
 import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerSourceSiteAdapters } from "../../../info/sources/plugins/all";
 import { registerXLinkReader } from "../../../info/x/live";
@@ -235,6 +236,9 @@ export function bootDomains(): void {
   registerReadingDesk();
   // The literature research kind, and where its answer is given back (docs/68).
   registerResearchWorker();
+  // A voice call's hard question (docs/companion/136): its output is the
+  // answer, appended and boxed as it is, with no turn.
+  registerThinkWorker();
   // Taking a pasted URL in, as a run of its own (docs/55): the reader's turn
   // writes it and ends, and what came in is said back into the same thread. Not
   // a kind the soul can delegate — the ask is a URL and a book, and the tool
