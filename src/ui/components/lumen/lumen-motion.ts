@@ -229,8 +229,10 @@ export type LumenAct = "rest" | "listen" | "think" | "check" | "speak";
 
 export function actFor(phase: OrbPhase, attention: Attention = "reader"): LumenAct {
 	switch (phase) {
+		// A call waiting on the reader while its background work runs: the
+		// attention is on the desk (background-scan.ts).
 		case "listening":
-			return "listen";
+			return attention === "work" ? "check" : "listen";
 		// Checking is thinking with the attention on the desk. If a turn never
 		// puts it there, the act never happens and the answer comes straight
 		// back from the look upward — a glance down at nothing would be a lie
