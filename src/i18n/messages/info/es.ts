@@ -214,6 +214,16 @@ export default {
   "tool.savedToTopic": "Guardado en este tema",
   "tool.stoppingTopicSearch": "Deteniendo {name}",
   "tool.stoppedFollowing": "Dejé de seguirlo",
+  "topicSearch.boxFirst": "{name}: primera vista",
+  "topicSearch.boxDaily": "{name}: {n} nuevos",
+  "topicSearch.haltSignedOut": "Lectura de X detenida: sesión de X cerrada",
+  "topicSearch.haltChallenge": "Lectura de X detenida: X pidió verificación",
+  "topicSearch.haltRateLimited": "Lectura de X detenida: X está limitando solicitudes",
+  "topicSearch.haltStructure": "Lectura de X detenida: la página de búsqueda de X cambió",
+  "tool.confirmingTopicSearch": "Confirmando {name}",
+  "tool.confirmedTopicSearch": "Siguiendo",
+  "tool.resumingXReading": "Reanudando la lectura de X",
+  "tool.resumedXReading": "Lectura de X reanudada",
   "tool.proposedCloseLabel": "Cierre de laboratorio propuesto",
 
   "noLabs.notice":

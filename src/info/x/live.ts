@@ -36,7 +36,7 @@ const embedFetch: FetchBytes = async (url) => {
 };
 
 // One redirect of a t.co link, read off the 301 without fetching the target.
-async function resolveRedirect(url: string): Promise<string | null> {
+export async function resolveRedirect(url: string): Promise<string | null> {
   const res = isTauri()
     ? await cleanTauriFetch(url, { method: "GET", maxRedirections: 0 })
     : await fetch(url, { method: "GET", redirect: "manual" });

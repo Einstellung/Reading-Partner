@@ -102,6 +102,9 @@ export interface CollectorSession {
   amICollecting(): Promise<boolean>;
   // Whether this session is running at all — not the election, just the switch.
   isCollecting(): boolean;
+  // Put a halt line on this machine's state file: a run other than the
+  // briefing's (a topic search reading X, docs/info/88) stopped short.
+  noteHalt(text: string): Promise<void>;
 }
 
 export function createCollectorSession<Handle>(
@@ -262,5 +265,8 @@ export function createCollectorSession<Handle>(
     publishClaim: () => writer.publish(),
     amICollecting,
     isCollecting: () => writer.running(),
+    noteHalt: async (text) => {
+      if (writer.current()) await writer.patch({ halt: text });
+    },
   };
 }

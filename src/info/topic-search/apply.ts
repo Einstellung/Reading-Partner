@@ -110,6 +110,7 @@ export async function applyTopicSearchProposal(
     queries: card.queries,
     answers: [...(before?.answers ?? []), ...card.answers.map((a) => ({ ...a, at: now }))],
     status: "active",
+    ...(card.once ? { once: true } : {}),
     revision: (before?.revision ?? 0) + 1,
     createdAt: before?.createdAt ?? now,
     lastRunAt: before?.lastRunAt ?? null,

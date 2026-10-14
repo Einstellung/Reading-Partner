@@ -214,6 +214,16 @@ export default {
   "tool.savedToTopic": "이 주제에 기록했습니다",
   "tool.stoppingTopicSearch": "「{name}」 중지 중",
   "tool.stoppedFollowing": "팔로우를 중지했습니다",
+  "topicSearch.boxFirst": "{name}: 첫 개관",
+  "topicSearch.boxDaily": "{name}: 새 항목 {n}개",
+  "topicSearch.haltSignedOut": "X 읽기 중단: X에서 로그아웃됨",
+  "topicSearch.haltChallenge": "X 읽기 중단: X가 확인을 요구함",
+  "topicSearch.haltRateLimited": "X 읽기 중단: X가 요청을 제한함",
+  "topicSearch.haltStructure": "X 읽기 중단: X 검색 페이지가 바뀜",
+  "tool.confirmingTopicSearch": "{name} 확정 중",
+  "tool.confirmedTopicSearch": "팔로우 중",
+  "tool.resumingXReading": "X 읽기 재개 중",
+  "tool.resumedXReading": "X 읽기 재개됨",
   "tool.proposedCloseLabel": "랩 닫기를 제안했습니다",
 
   "noLabs.notice":

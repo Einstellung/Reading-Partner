@@ -266,6 +266,11 @@ async function backgroundHost(signal?: AbortSignal): Promise<BackgroundHost> {
   }
 }
 
+/** The device runtime once the shell has opened it: what a program task (program-task.ts) runs on. */
+export async function deviceRuntime(signal?: AbortSignal): Promise<DurableRuntime> {
+  return (await backgroundHost(signal)).runtime;
+}
+
 /** One background run on the device runtime: what distillation, chapter notes and digests run on. */
 export async function runBackgroundTurn(request: BackgroundTurnRequest): Promise<BackgroundTurnOutcome> {
   return runBackgroundTurnOn(await backgroundHost(request.signal), request);

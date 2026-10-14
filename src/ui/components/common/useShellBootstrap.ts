@@ -58,7 +58,8 @@ import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-work
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photos/photo-sweep";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerProseAdjudicateWorker } from "../../../memory/adjudicate/live";
-import { registerInfoCollectWorker } from "../../../info/program/live";
+import { noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
+import { registerTopicSearchRuns } from "../../../info/topic-search/runs-live";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../info/briefer/deliver";
 import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
 import { retireReplacedBook } from "../../../reading/delete/retire-book";
@@ -263,6 +264,10 @@ export function bootDomains(): void {
   // device: which one collects is the election's answer, and a device with no
   // worker for the kind could not win it.
   registerInfoCollectWorker();
+  // Topic searches' first look and nightly increment (docs/info/88): a run that
+  // reads X in the hidden window, so only a desktop collector claims it. The
+  // result builder is handed in here once it exists (run.ts BuildTopicSearchResult).
+  registerTopicSearchRuns({ noteHalt: noteCollectorHalt });
   // Settling a prose file sync parked a conflict copy of, with a model (docs/59
   // §6). Registered on every device for the same reason as collect: the
   // election picks the executor among the devices that hold the worker.

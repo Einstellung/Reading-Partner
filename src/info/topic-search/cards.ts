@@ -29,6 +29,8 @@ export interface TopicSearchProposalCardData {
   // under `name` on Apply.
   topic: { id: string | null; name: string };
   eta: FirstRunEta;
+  // The reader wants this one look only, not a daily follow.
+  once?: boolean;
   // Not drawn.
   anchors: string[];
   queries: TopicQuery[];

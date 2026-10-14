@@ -79,6 +79,7 @@ import { buildObservationSnapshot, trimObservations } from "../../memory/observa
 import { runDreamIfDue } from "../../memory/dream/live";
 import { sweepProseConflictsNow } from "../../memory/adjudicate/live";
 import { DAILY_ANCHOR_HOUR, DAILY_TICK_MS, lastAnchorDate } from "./daily";
+import { checkTopicSearchNight } from "../topic-search/runs-live";
 import { registerCollectWorker, writeCollectBrief, type CollectScope } from "./collect-worker";
 import { appRunner } from "../../legion/runner/runner";
 import { collectorStatusLine, InfoCollector } from "../collect/collector";
@@ -461,6 +462,10 @@ async function checkDailyRound(): Promise<void> {
   } catch (e) {
     console.warn("the nightly memory pass check failed", e);
   }
+  // The topic searches' nightly increment (docs/info/88 「排队」): 01:00, on the
+  // collector, owns its own window and gates (topic-search/runs-live.ts) and
+  // never throws.
+  await checkTopicSearchNight(() => session.amICollecting());
   // Every device looks for parked prose copies and asks for a run per copy
   // (docs/59 §6); the run is keyed by content, so the devices' asks meet in one
   // file and the election picks who settles it. Never throws, never calls a model.
@@ -860,4 +865,9 @@ let session = liveSession();
 // running collector, so every caller can ask without knowing the role.
 export function amICollecting(): Promise<boolean> {
   return session.amICollecting();
+}
+
+/** Put a halt line on this machine's collector state file (docs/info/36 `halt`). */
+export function noteCollectorHalt(text: string): Promise<void> {
+  return session.noteHalt(text);
 }

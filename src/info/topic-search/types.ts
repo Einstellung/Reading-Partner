@@ -55,6 +55,9 @@ export interface TopicSearch {
   queries: TopicQuery[];
   answers: TopicAnswer[];
   status: TopicSearchStatus;
+  // The reader wanted one look only: the first run's delivery stops the search
+  // and lapses its concern (88 定下的细节).
+  once?: boolean;
   // Bumped on every write of the record.
   revision: number;
   createdAt: number;
