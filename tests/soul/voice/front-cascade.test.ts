@@ -11,6 +11,7 @@ import {
   frontMessages,
   frontRequest,
 } from "../../../src/soul/voice/front/context";
+import type { FillerPort } from "../../../src/soul/voice/front/filler";
 import type { FrontTurnMarks } from "../../../src/soul/voice/front/marks";
 import type { FrontModel, FrontModelRequest } from "../../../src/soul/voice/front/model";
 import { frontReasoning } from "../../../src/soul/voice/front/model";
@@ -46,7 +47,7 @@ class Back {
   };
 }
 
-function setup(script: (req: FrontModelRequest) => Promise<void>) {
+function setup(script: (req: FrontModelRequest) => Promise<void>, filler: FillerPort = { play: async () => false }) {
   const back = new Back();
   const told: number[] = [];
   const backend: CallBack = {
@@ -75,7 +76,7 @@ function setup(script: (req: FrontModelRequest) => Promise<void>) {
     backend,
     place: () => "Today: three labs.",
     write: (l) => written.push({ key: l.key, text: l.text }),
-    filler: { play: async () => false },
+    filler,
     locale: "zh-CN",
     marks: (m) => marks.push(m),
     onShow: (c) => cards.push(c),
@@ -135,6 +136,24 @@ test("a reply that only hands off gets the filler line", async () => {
   });
   const r = await ask(h.front, 1, "Y?");
   expect(r.said).toBe("我去想想。");
+});
+
+test("a hand-off with the cue ready plays the cue and writes no line", async () => {
+  const played: string[] = [];
+  const h = setup(
+    async (req) => {
+      req.onToolCall({ name: "delegate", args: { kind: "think", task: "Find Y" } });
+    },
+    {
+      play: async (kind, locale) => {
+        played.push(`${kind}:${locale}`);
+        return true;
+      },
+    },
+  );
+  const r = await ask(h.front, 1, "Y?");
+  expect(played).toEqual(["thinking:zh-CN"]);
+  expect(r.said).toBe("");
 });
 
 test("a barge-in cuts the sentence but not the run it handed off", async () => {

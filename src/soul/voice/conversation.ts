@@ -314,6 +314,10 @@ export const SPEAK_BEGIN = "plugin:voice|speak_begin";
 export const SPEAK_PUSH = "plugin:voice|speak_push";
 export const SPEAK_CLOSE = "plugin:voice|speak_close";
 export const SPEAK_STOP = "plugin:voice|speak_stop";
+/** Make the program's cue lines for a language ahead of need (front/filler.ts). */
+export const PRIME_SPEECH_CUES = "plugin:voice|prime_speech_cues";
+/** Say one cue line as a turn of its own; answers the turn's number. */
+export const SPEAK_CUE = "plugin:voice|speak_cue";
 
 /** `speak_stop`'s answer. A sentinel on the barge-in path; see SpeechCut. */
 export interface SpeechStopped {

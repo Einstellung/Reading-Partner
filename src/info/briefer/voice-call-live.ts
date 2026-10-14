@@ -16,7 +16,7 @@ import { callBackend, THINK_KIND } from "../../soul/think";
 import { bindCallBack } from "../../soul/voice/front/backend";
 import { createCascadeFront, type FrontCard } from "../../soul/voice/front/cascade";
 import { FRONT_DUTY } from "../../soul/voice/front/context";
-import { fillerNotConnected } from "../../soul/voice/front/filler";
+import { nativeFiller } from "../../soul/voice/front/filler";
 import { logMarks } from "../../soul/voice/front/marks";
 import { liveFrontModel } from "../../soul/voice/front/model";
 import { distillInfoThread } from "../../memory";
@@ -130,6 +130,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     // `think` is the front's own kind and is offered here whatever the soul's catalogue lists.
     kinds: () => [THINK_KIND, ...delegableWorkerKinds().filter((k) => k !== THINK_KIND)],
   });
+  const filler = nativeFiller();
   const front = createCascadeFront({
     model: liveFrontModel(),
     backend: back,
@@ -145,7 +146,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
       stamps.set(key, ts);
       appendMessage(bookId, threadId, { role, text, ts });
     },
-    filler: fillerNotConnected(),
+    filler,
     locale: settings.dictationLocale,
     marks: logMarks,
     onShow: opts.onShow ?? (() => {}),
@@ -166,6 +167,12 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
   // waiting to take the orb off the screen.
   return {
     ...call,
+    async start(): Promise<void> {
+      // The filler lines are made while the call opens. One asked for before
+      // they are ready is synthesised from its text instead.
+      void filler.prime(settings.dictationLocale).catch((e) => console.warn("RP-FRONT cue prime failed", e));
+      await call.start();
+    },
     async stop(): Promise<void> {
       await call.stop();
       for (const off of reporting) off();
