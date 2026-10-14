@@ -55,9 +55,10 @@ export interface Statement {
   // how its evidence was read at the time, and the observations it covered stop
   // being covered the moment it is superseded (links.ts).
   supersededBy?: string;
-  // Concern-only, and typed here before anything acts on them: how often a
-  // concern expects to see evidence, and whether it has gone that long without.
-  // Nothing computes `lapsed` yet.
+  // Concern-only: how often a concern expects to see evidence, and whether it
+  // is no longer being followed. `lapsed` is set by store.setLapsed when the
+  // reader stops a topic search (docs/info/88) and cleared when they follow it
+  // again; a lapsed concern is not printed where concerns are read.
   expectedIntervalDays?: number;
   lapsed?: boolean;
 }
