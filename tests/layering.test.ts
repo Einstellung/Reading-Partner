@@ -168,6 +168,8 @@ const LAYER: Record<string, Layer> = {
   // whatever desk it speaks over; info/briefer holds the wiring of one caller.
   "soul/voice": "capability",
   "soul/voice/speech": "capability",
+  // The silent voice bench's trace, script driver and run analysis (docs/platform/560).
+  "soul/voice/harness": "capability",
   // Turning raw material into usable material (docs/85), grouped by what is
   // done to it rather than by who asks: the secretary, reading and the meals
   // line are all callers, and nothing here knows any of them. Siblings may use

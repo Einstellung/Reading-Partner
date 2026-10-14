@@ -29,6 +29,7 @@ import {
   type VoiceCallModel,
   type VoiceCallTranscript,
 } from "../../soul/voice/voice-call";
+import { harnessLocale, traceModel, traceSource } from "../../soul/voice/harness/trace";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { Briefing } from "../boxes/types";
 import type { InfoCallAnchor } from "./anchors";
@@ -117,7 +118,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     : noBriefingAnchor(ctx, { dateKey: opts.dateKey, notices: [] });
 
   const bridge = nativeConversation({
-    locale: settings.dictationLocale,
+    locale: harnessLocale() ?? settings.dictationLocale,
     contextualStrings: contextualStrings(
       anchor,
       briefing ? briefing.mustRead.map((r) => briefing.items[r.itemId]?.title ?? "") : [],
@@ -165,7 +166,12 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
       return tools;
     },
   });
-  const call = createVoiceCall({ bridge, model, transcript });
+  // Both wrappers hand back what they are given unless the silent bench is armed.
+  const call = createVoiceCall({
+    bridge: traceSource(bridge),
+    model: traceModel(model),
+    transcript,
+  });
   // Hanging up is what the text chat's close is: the call's turns are on the
   // thread by now (the transcript writes them as they settle), so the pass is
   // started here and not awaited — it has to outlive the call, and the caller is

@@ -55,6 +55,7 @@ import type { CallRow } from "./call-state";
 import { readingDurable } from "./durable-runtime";
 import type { StallOptions } from "./durable-turn";
 import { openPlaceSession, type PlaceBellRequest, type PlaceSession } from "./place-session";
+import { voiceTrace } from "../../soul/voice/harness/trace";
 
 /** One reply row's text inside the stream the call speaks. */
 export interface VoiceSpan {
@@ -324,6 +325,7 @@ export function infoVoiceThread(opts: InfoVoiceOptions): { model: VoiceCallModel
       const after = lineTs !== undefined ? Math.max(lineTs - 1, ...stamps) : Math.max(now(), ...stamps);
       // The reader hears the reply as it is written: it lands as one they saw, without a box card.
       const unwatch = watch(prepared.key);
+      voiceTrace("model-request", { turn });
       try {
         end = await run(runtime, request, after, (rows) => feed.push(rows), signal);
       } finally {
