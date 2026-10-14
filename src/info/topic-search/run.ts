@@ -6,7 +6,10 @@
 //            read (halt.ts) and the session is real; take the keep-awake lock
 //   read     the X lines (x-reader.ts), in the X lane, inside the lock; what
 //            came back is written to the run directory before moving on
-//   build    the result, by the builder the caller injected (not built here)
+//   build    the result, by the builder the caller injected (not built here),
+//            opening X pages only from what is left of the day's allowance and
+//            the run's ceiling; then the source health it wrote goes into the
+//            collector's state file
 //   deliver  a box item pointing at the result file; nothing when empty. A
 //            search the reader wanted to see only once stops after its first
 //   wrap     the lock let go
@@ -23,23 +26,13 @@ import { StoppedError } from "../../legion/stop";
 import type { KeepAwakeLock } from "../../platform/app/keep-awake";
 import type { BrowseOpen } from "../../workshop/extract/webview-browse";
 import type { XHalt } from "../x/search-page";
+import type { BuildTopicSearchResult, BuildTopicSearchResultOutput, XPageBudget } from "./build-result";
 import { lastNightAnchor, nightEndAt } from "./nightly";
 import type { TopicSearch } from "./types";
 import { localDay, replay, type XProgressLog, type XReaderStore, type XRunStatus } from "./x-progress";
 import { readXSearch, X_FIRST_RUN_LIMITS, type XReadLimits, type XReadLine, type XReadResult } from "./x-reader";
 
-/** Builds the result file out of what was read. Injected; another part of phase 3 implements it. */
-export type BuildTopicSearchResult = (args: {
-  topic: TopicSearch;
-  kind: "first" | "daily";
-  x: XReadResult;
-  /** Start of this run's window, ms: 30 days back for the first run, the last run for a daily one. */
-  since: number;
-  runDir: string;
-  signal: AbortSignal;
-}) => Promise<{ resultFile: string | null; itemCount: number; empty: boolean }>;
-
-export type BuiltTopicSearchResult = Awaited<ReturnType<BuildTopicSearchResult>>;
+export type BuiltTopicSearchResult = BuildTopicSearchResultOutput;
 
 export const TOPIC_SEARCH_KIND = "topic-search";
 export const TOPIC_SEARCH_TASK = "rp.topicsearch";
@@ -153,6 +146,10 @@ export interface TopicSearchRunDeps {
   /** Stop a search the reader wanted to see once (apply.ts stopFollowing). */
   stopOnce(search: TopicSearch): Promise<void>;
   builder(): BuildTopicSearchResult | null;
+  /** The X pages the build may open after a read that used `x` (the daily allowance, the run's or night's ceiling). */
+  xPages(about: { kind: TopicSearchRunKind; night: string; x: XReadResult }): XPageBudget;
+  /** Fold the run's `<dir>/topic-search-source-health.json` into the collector's state file. */
+  foldSourceHealth(dir: string, search: TopicSearch): Promise<void>;
   /** The run's directory, made if missing. */
   runDir(runId: string): Promise<string>;
   progress(dir: string): XProgressLog;
@@ -339,8 +336,13 @@ export function topicSearchTask(
         const x = (await deps.loadRead(dir)) ?? unread("unavailable", "what was read is missing");
         let built = await runtime.memo<BuiltTopicSearchResult>("built", context);
         if (!built) {
-          const made = await build({ topic: search, kind: brief.kind, x, since: window.since, runDir: dir, signal: runtime.signal });
+          const xPages = deps.xPages({ kind: brief.kind, night: window.night, x });
+          const made = await build({ topic: search, kind: brief.kind, x, since: window.since, runDir: dir, xPages, signal: runtime.signal });
           built = await runtime.memo("built", { resultFile: made.resultFile, itemCount: made.itemCount, empty: made.empty }, context);
+        }
+        if (!(await runtime.memo<boolean>("health-folded", context))) {
+          await deps.foldSourceHealth(dir, search);
+          await runtime.memo("health-folded", true, context);
         }
         await next(runtime, { phase: "deliver", built, ...window }, context);
       }),

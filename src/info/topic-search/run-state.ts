@@ -14,9 +14,10 @@
 // is read leniently; writes are chained so two writers never interleave
 // (docs/pitfall/484).
 
-import { X_NIGHTLY_LIMITS, type XReadLimits, type XReadResult } from "./x-reader";
+import type { XPageBudget } from "./build-result";
+import { X_DAILY_ALLOWANCE, X_FIRST_RUN_LIMITS, X_NIGHTLY_LIMITS, type XReadLimits, type XReadResult } from "./x-reader";
 import type { XHaltRecord } from "./halt";
-import type { XProgressLog, XReaderMemory, XReaderStore, XStep } from "./x-progress";
+import { localDay, today, type XProgressLog, type XReaderMemory, type XReaderStore, type XStep } from "./x-progress";
 
 export const TOPIC_SEARCH_STATE_FILE = "info-topic-search-state.json";
 export const TOPIC_SEARCH_RUNS_DIR = "topic-search-runs";
@@ -85,6 +86,50 @@ export function spendNight(use: NightUse | null, night: string, x: XReadResult):
     searchPages: base.searchPages + x.pages.search,
     permalinkPages: base.permalinkPages + x.pages.permalink,
     activeMs: base.activeMs + x.activeMs,
+  };
+}
+
+/**
+ * One more permalink page, if the day's allowance and the run's ceiling both
+ * have one: the state after spending it, or null. A daily run's ceiling is the
+ * night's, shared by every topic (spent on the state's `night`); a first run's
+ * is its own, `runLeft`.
+ */
+export function takePermalink(
+  state: TopicSearchLocalState,
+  at: { day: string; kind: "first" | "daily"; night: string; runLeft: number },
+  allowance: { permalink: number } = X_DAILY_ALLOWANCE,
+): TopicSearchLocalState | null {
+  const daily = today(state.reader.daily, at.day);
+  if (daily.permalink >= allowance.permalink) return null;
+  let night = state.night;
+  if (at.kind === "daily") {
+    if (nightLimits(state.night, at.night).permalinkPages <= 0) return null;
+    const base = state.night && state.night.night === at.night ? state.night : { night: at.night, posts: 0, searchPages: 0, permalinkPages: 0, activeMs: 0 };
+    night = { ...base, permalinkPages: base.permalinkPages + 1 };
+  } else if (at.runLeft <= 0) return null;
+  return { ...state, reader: { ...state.reader, daily: { ...daily, permalink: daily.permalink + 1 } }, night };
+}
+
+/** The X pages a build may open, spent on the state file one at a time. */
+export function permalinkBudget(
+  store: TopicSearchStateStore,
+  about: { kind: "first" | "daily"; night: string; x: XReadResult },
+  now: () => number,
+  allowance: { permalink: number } = X_DAILY_ALLOWANCE,
+): XPageBudget {
+  let runLeft = about.kind === "first" ? Math.max(0, X_FIRST_RUN_LIMITS.permalinkPages - about.x.pages.permalink) : 0;
+  return {
+    take: async () => {
+      let took = false;
+      await store.update((s) => {
+        const next = takePermalink(s, { day: localDay(now()), kind: about.kind, night: about.night, runLeft }, allowance);
+        took = next !== null;
+        return next ?? s;
+      });
+      if (took) runLeft--;
+      return took;
+    },
   };
 }
 

@@ -1,6 +1,7 @@
 // Weighted reciprocal rank fusion (docs/88 「打分」 step 3). Each (query,
 // source) stream is a ranked list; a candidate earns weight / (60 + rank) from
-// every stream it is in, over the first 12 of each. The sum is normalized to
+// every stream it is in, over the top of each (12 unless the stream says how
+// many). The sum is normalized to
 // 0-100 against 0.08 (about what a candidate near the top of several streams
 // accumulates). One author keeps at most 3 candidates, the best ones.
 //
@@ -30,6 +31,8 @@ export interface Stream {
   weight: number;
   /** Best first. */
   items: StreamItem[];
+  /** Candidates taken from its top; the call's `perStream` when absent. */
+  take?: number;
 }
 
 export interface Fused {
@@ -65,8 +68,9 @@ export function weightedRrf(
   for (const stream of streams) {
     const seen = new Set<string>();
     let rank = 0;
+    const take = stream.take ?? perStream;
     for (const item of stream.items) {
-      if (rank >= perStream) break;
+      if (rank >= take) break;
       if (seen.has(item.key)) continue;
       seen.add(item.key);
       rank++;
