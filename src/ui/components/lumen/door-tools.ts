@@ -29,6 +29,9 @@ export interface DoorToolPorts {
   settings: Pick<Settings, "defaultProviderId" | "defaultModelId" | "everydayModelId">;
   /** The reader's lines so far, oldest first: where a topic search's concern takes its evidence. */
   readerLines: TopicSearchDoorPorts["readerLines"];
+  /** The newest topic-search card on screen, and its Apply: confirm_topic_search (use-door-chat.ts). */
+  latestTopicSearchCard: TopicSearchDoorPorts["latestCard"];
+  applyTopicSearchCard: TopicSearchDoorPorts["applyCard"];
 }
 
 export function doorTools(ports: DoorToolPorts): AgentTool[] {
@@ -45,11 +48,14 @@ export function doorTools(ports: DoorToolPorts): AgentTool[] {
       topics: () => listTopics(),
       raiseCard: (card) => ports.raiseCard("intake", card),
     }),
-    // Drafting, changing and stopping a topic search (docs/info/88); the card's Apply is in use-door-chat.ts.
+    // Drafting, confirming, changing and stopping a topic search, and resuming X (docs/info/88);
+    // the card's Apply is in use-door-chat.ts.
     ...topicSearchDoorTools({
       threadId: ports.threadId,
       readerLines: ports.readerLines,
       raiseCard: (card) => ports.raiseCard("topic-search", card),
+      latestCard: ports.latestTopicSearchCard,
+      applyCard: ports.applyTopicSearchCard,
     }),
   ];
 }

@@ -169,6 +169,11 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
       opening: Type.String({
         description: "A few words copied exactly from the reader's message where they first said they follow this.",
       }),
+      once: Type.Optional(
+        Type.Boolean({
+          description: "True when the reader wants one look only, not a daily follow: it stops after the first result.",
+        }),
+      ),
     }),
     execute: async (args) => {
       const name = asString(args.name).trim();
@@ -207,6 +212,7 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
         judgments: asStrings(args.judgments),
         topic,
         eta: firstRunEta(await deps.claims(), deps.now()),
+        ...(args.once === true ? { once: true } : {}),
         anchors: asStrings(args.anchors),
         queries,
         answers: draftAnswers(args.answers),
@@ -223,7 +229,8 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
         text:
           `Drew the card for "${name}": ${subtopics.length - unpicked} picked subtopics, ${queries.length} ` +
           `queries, filing into ${topic.id ? `the topic "${topic.name}"` : `a new topic "${topic.name}"`}` +
-          `${concern ? `, hung on concern ${concern.id}` : ""}. Nothing is filed until the reader applies it.`,
+          `${concern ? `, hung on concern ${concern.id}` : ""}${card.once ? ", once only" : ""}. ` +
+          `Nothing is filed until the reader applies it.`,
         receipt: {
           label: t("info.tool.draftedTopicSearchLabel"),
           summary: t("info.tool.draftedTopicSearchSummary", { name, scope }),

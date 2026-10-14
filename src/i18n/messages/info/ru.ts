@@ -125,6 +125,7 @@ export default {
   "cards.topicSearchFilesIntoNew": "Попадёт в новую тему «{topic}»",
   "cards.topicSearchEtaSoon": "Компьютер включён: первые результаты примерно через полчаса.",
   "cards.topicSearchEtaTonight": "Первые результаты, когда включится компьютер, не позже сегодняшнего вечера.",
+  "cards.topicSearchOnce": "Только один раз: первый обзор, и на этом всё.",
   "cards.topicSearchFollow": "Следить",
   "cards.labClosed": "Лаборатория закрыта",
   "cards.closeThisLab": "Закрыть эту лабораторию",

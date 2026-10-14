@@ -125,6 +125,7 @@ export default {
   "cards.topicSearchFilesIntoNew": "新しいトピック「{topic}」に入れます",
   "cards.topicSearchEtaSoon": "パソコンが起動中です。約30分で最初の結果が出ます。",
   "cards.topicSearchEtaTonight": "パソコンが起動しているときに始め、遅くとも今夜には最初の結果が出ます。",
+  "cards.topicSearchOnce": "今回だけ：最初の結果を出したら止めます。",
   "cards.topicSearchFollow": "フォローする",
   "cards.labClosed": "ラボを閉鎖しました",
   "cards.closeThisLab": "このラボを閉鎖",

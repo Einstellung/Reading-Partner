@@ -188,4 +188,18 @@ test("the guidance lists searches and live concerns, and a lapsed concern only b
   expect(text).not.toContain("s-old");
   expect(text).not.toContain("s-prof");
   expect(text).toContain("keyword trap");
+  expect(text).toContain("confirm_topic_search");
+  expect(text).toContain("propose with once");
+  expect(text).not.toContain("X reading on this device");
+});
+
+test("the guidance says when X reading is held on this device", () => {
+  const text = topicSearchGuidance({
+    searches: [],
+    statements: [],
+    topics: [],
+    xPaused: "X reading is paused after a second challenge until the reader resumes it",
+  });
+  expect(text).toContain("X reading on this device: X reading is paused after a second challenge");
+  expect(text).toContain("resume_x_reading");
 });

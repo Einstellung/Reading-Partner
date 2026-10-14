@@ -125,6 +125,7 @@ export default {
   "cards.topicSearchFilesIntoNew": "Vai para um tema novo: {topic}",
   "cards.topicSearchEtaSoon": "Há um computador ligado: primeiros resultados em cerca de meia hora.",
   "cards.topicSearchEtaTonight": "Primeiros resultados quando um computador estiver ligado, no máximo hoje à noite.",
+  "cards.topicSearchOnce": "Só desta vez: um primeiro panorama e depois para.",
   "cards.topicSearchFollow": "Acompanhar",
   "cards.labClosed": "Laboratório fechado",
   "cards.closeThisLab": "Fechar este laboratório",

@@ -134,6 +134,7 @@ export default {
   "cards.topicSearchFilesIntoNew": "Files into a new topic: {topic}",
   "cards.topicSearchEtaSoon": "A computer is on: first results in about half an hour.",
   "cards.topicSearchEtaTonight": "First results when a computer is on, by tonight at the latest.",
+  "cards.topicSearchOnce": "Just this once: one first look, then it stops.",
   "cards.topicSearchFollow": "Follow this",
   "cards.labClosed": "Lab closed",
   "cards.closeThisLab": "Close this lab",

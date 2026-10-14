@@ -7,10 +7,13 @@ import { listStatements, statementStore } from "../../memory";
 import { createTopic, listTopics } from "../../platform/app/topics";
 import { applyTopicSearchProposal, type ApplyResult } from "./apply";
 import type { TopicSearchProposalCardData } from "./cards";
+import { buildConfirmTopicSearchTool, type ConfirmToolDeps } from "./confirm-tool";
 import { buildStopTopicSearchTool, buildUpdateTopicSearchTool, type EditToolDeps } from "./edit-tools";
 import { dispatchFirstRun } from "./first-run";
 import { topicSearchGuidance } from "./guidance";
 import { buildProposeTopicSearchTool, type ReaderLine } from "./propose-tool";
+import { buildResumeXReadingTool } from "./resume-tool";
+import { resumeXReading, xReadingPaused } from "./runs-live";
 import { changeTopicSearch, loadTopicSearches, putTopicSearch } from "./store";
 
 const editDeps: EditToolDeps = {
@@ -24,9 +27,13 @@ export interface TopicSearchDoorPorts {
   threadId: string;
   readerLines(): readonly ReaderLine[];
   raiseCard(card: TopicSearchProposalCardData): void;
+  /** The newest drafting card in the conversation, read when confirm_topic_search is called. */
+  latestCard: ConfirmToolDeps["latestCard"];
+  /** The card's Apply as the conversation answers it, the card then marked applied. */
+  applyCard: ConfirmToolDeps["apply"];
 }
 
-/** propose_topic_search, update_topic_search and stop_topic_search, in that order. */
+/** propose, confirm, update and stop a topic search, then resume_x_reading. */
 export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
   return [
     buildProposeTopicSearchTool({
@@ -39,19 +46,22 @@ export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
       now: () => Date.now(),
       raiseCard: ports.raiseCard,
     }),
+    buildConfirmTopicSearchTool({ latestCard: ports.latestCard, apply: ports.applyCard }),
     buildUpdateTopicSearchTool(editDeps),
     buildStopTopicSearchTool(editDeps),
+    buildResumeXReadingTool({ resume: resumeXReading }),
   ];
 }
 
 /** The drafting rules and roster for the door's system prompt. */
 export async function loadTopicSearchGuidance(): Promise<string> {
-  const [searches, statements, topics] = await Promise.all([
+  const [searches, statements, topics, xPaused] = await Promise.all([
     loadTopicSearches().catch(() => []),
     listStatements().catch(() => []),
     listTopics().catch(() => []),
+    xReadingPaused().catch(() => null),
   ]);
-  return topicSearchGuidance({ searches, statements, topics });
+  return topicSearchGuidance({ searches, statements, topics, xPaused });
 }
 
 /** The card's Apply on this device. */

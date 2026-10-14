@@ -44,6 +44,14 @@ export function xGate(record: XHaltRecord | null, night: string): string | null 
   return null;
 }
 
+/**
+ * The reader said to read X again. Only a pause is theirs to lift: a skipped
+ * night passes by itself, and signing out waits for them to sign in.
+ */
+export function resumeHalt(record: XHaltRecord | null): { record: XHaltRecord | null; lifted: boolean } {
+  return record?.paused ? { record: null, lifted: true } : { record, lifted: false };
+}
+
 /** Whether a halt waits on the reader: everything but a changed page. */
 export function haltNeedsReader(kind: XHaltKind): boolean {
   return kind !== "structure";
