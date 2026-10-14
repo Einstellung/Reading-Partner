@@ -15,12 +15,13 @@
 
 import type { Statement } from "./types";
 
-// Live statements of one kind, the reader's own words before what a pass
-// concluded — they are not equally revisable, and the model acts on the first
+// Live statements of one kind — not superseded, and for a concern not lapsed
+// (docs/info/88: a concern the reader stopped following is not read) — the
+// reader's own words before what a pass concluded — they are not equally revisable, and the model acts on the first
 // thing it reads (live/memory-section.ts says the same of the reading turn).
 function standing(statements: readonly Statement[], kind: Statement["kind"]): Statement[] {
   const live = statements.filter(
-    (s) => s.kind === kind && !s.supersededBy && s.text.trim() !== "",
+    (s) => s.kind === kind && !s.supersededBy && s.lapsed !== true && s.text.trim() !== "",
   );
   return [...live.filter((s) => s.author === "reader"), ...live.filter((s) => s.author !== "reader")];
 }
