@@ -20,7 +20,7 @@ import { pipeLabel } from "../../../info/sources/probe";
 import {
   sessionRowLine,
   sessionWorkFor,
-  signInSites,
+  allSignInSites,
   type SessionBusy,
   type SiteSessions,
   type SignInSite,
@@ -156,6 +156,8 @@ function SignInRow(props: {
 
 export interface SourcesPageProps {
   sources: SourceDescriptor[];
+  // Whether the reader has a topic search, which puts X on the sign-in list.
+  topicSearch: boolean;
   health: Record<string, SourceHealth>;
   // The reader's research rooms, for the "read by" chips under each row. The
   // rooms a source is read by is roomsUsingSource's answer, not a field on the
@@ -181,7 +183,7 @@ export interface SourcesPageProps {
 
 export function SourcesPage(props: SourcesPageProps) {
   const t = useT();
-  const sites = signInSites(props.sources);
+  const sites = allSignInSites(props.sources, props.topicSearch);
   const [removing, setRemoving] = useState<SourceDescriptor | null>(null);
 
   return (

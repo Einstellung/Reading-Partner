@@ -36,6 +36,19 @@ export async function loadTopicSearches(io: TopicSearchIo = topicSearchIo): Prom
   return (await readFile(io)).searches;
 }
 
+/**
+ * Whether the reader has a topic search at all, active or stopped: what X's
+ * sign-in row waits for (site-session.ts). A file that cannot be read answers
+ * no; nothing is written from this answer, and the row comes back with the file.
+ */
+export async function hasTopicSearches(io: TopicSearchIo = topicSearchIo): Promise<boolean> {
+  try {
+    return (await loadTopicSearches(io)).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // Apply a change and write the file; entries this build could not read go back
 // unchanged. A change that returns null writes nothing. Returns what is on disk
 // afterwards.

@@ -12,6 +12,7 @@
 // in workshop/extract/webview-session.ts.
 
 import type { SourceDescriptor } from "./descriptor";
+import { X_SEARCH_SOURCE } from "./x-search";
 import { t } from "../../i18n";
 
 /** One site the reader can sign in to, and the sources behind it. */
@@ -86,6 +87,18 @@ export function signInSites(sources: SourceDescriptor[]): SignInSite[] {
 		});
 	}
 	return [...byHost.values()];
+}
+
+/**
+ * Every site the reader can sign in to on this device: the subscribed sources'
+ * sites, then X when the reader has a topic search (`hasTopicSearches`, active
+ * or stopped). X search is not a subscription; the topic search reads it in the
+ * browse window (x-search.ts), and a reader with no topic search has no use for
+ * an X session. What the sources page, the companion and the collector's status
+ * file all list.
+ */
+export function allSignInSites(subscribed: SourceDescriptor[], topicSearch: boolean): SignInSite[] {
+	return signInSites(topicSearch ? [...subscribed, X_SEARCH_SOURCE] : subscribed);
 }
 
 /** How a site is offered to a caller that has to pick one: name, then sources. */

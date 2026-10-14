@@ -16,6 +16,10 @@ mod voice;
 // depends on is not known to survive. See the module note.
 #[cfg(desktop)]
 mod webview_fetch;
+// Holding off idle sleep for a long unattended run (docs/info/88). Desktop only:
+// the runs that need it are the collector's, and the collector is a desktop.
+#[cfg(desktop)]
+mod keep_awake;
 // The tray icon and close-to-tray (docs/36). Desktop only: there is no tray on a
 // phone, and the collector this keeps alive does not run there either.
 #[cfg(desktop)]
@@ -79,6 +83,7 @@ pub fn run() {
         // hidden fetcher window from the app's own, so it is managed before any
         // window exists.
         .manage(webview_fetch::WebviewFetchState::default())
+        .manage(keep_awake::KeepAwakeState::default())
         .invoke_handler(tauri::generate_handler![
             atomic_fs::write_text_file_atomic,
             atomic_fs::quarantine_file,
@@ -103,6 +108,14 @@ pub fn run() {
             webview_fetch::session::open_site_sign_in,
             webview_fetch::session::check_site_session,
             webview_fetch::session::clear_site_cookies,
+            webview_fetch::browse::browse_open,
+            webview_fetch::browse::browse_navigate,
+            webview_fetch::browse::browse_back,
+            webview_fetch::browse::browse_eval,
+            webview_fetch::browse::browse_scroll,
+            webview_fetch::browse::browse_close,
+            keep_awake::keep_awake_acquire,
+            keep_awake::keep_awake_release,
             tray::set_tray_status
         ]);
     #[cfg(mobile)]
@@ -155,6 +168,17 @@ pub fn run() {
                 webview_fetch::run_probe_from_env(app.handle());
                 webview_fetch::page::run_probe_from_env(app.handle());
                 webview_fetch::session::run_probe_from_env(app.handle());
+                // These two have no use for the frontend, and a debug build's
+                // frontend is whatever dev server answers on the dev port — on
+                // this machine, often the one the user is working in. So the
+                // app's own window is hidden and emptied before they start.
+                if std::env::var_os("RP_WEBVIEW_BROWSE_PROBE").is_some()
+                    || std::env::var_os("RP_KEEP_AWAKE_PROBE").is_some()
+                {
+                    park_main_window(app.handle());
+                }
+                webview_fetch::browse::run_probe_from_env(app.handle());
+                keep_awake::run_probe_from_env(app.handle());
                 // The tray is what lets the app go on collecting with its window
                 // closed (docs/36), so the close button only stops being a quit
                 // button once there is an icon to reach the app by.
@@ -166,4 +190,17 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Hide the app's window and send it to `about:blank`, for a dev probe that runs
+/// without the frontend.
+#[cfg(desktop)]
+fn park_main_window(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
+        if let Ok(blank) = tauri::Url::parse("about:blank") {
+            let _ = main.navigate(blank);
+        }
+    }
 }

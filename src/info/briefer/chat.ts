@@ -11,7 +11,7 @@
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
-import { signInSiteLine, signInSites } from "../sources/site-session";
+import { allSignInSites, signInSiteLine } from "../sources/site-session";
 import { labGuidance } from "./lab-tool";
 import type { Lab } from "../labs/types";
 import type { Briefing } from "../boxes/types";
@@ -154,8 +154,8 @@ export function formatSources(sources: SourceDescriptor[]): string {
 // list. This is the closed set — the companion has no other way to name a site,
 // and the tool resolves the address here rather than taking one — so the list is
 // what the model picks from, spelled the way the tool expects it back.
-export function formatSignInSites(sources: SourceDescriptor[]): string {
-  const sites = signInSites(sources);
+export function formatSignInSites(sources: SourceDescriptor[], topicSearch: boolean): string {
+  const sites = allSignInSites(sources, topicSearch);
   if (!sites.length) {
     return "Sign-in: none of these sources has a sign-in page, so there is nothing to sign in to.";
   }
@@ -205,6 +205,9 @@ export interface CompanionContext {
   sources: SourceDescriptor[];
   aiLanguage?: AiLanguage;
   canSignIn?: boolean;
+  // Whether the reader has a topic search (hasTopicSearches), which is what puts
+  // X among the sites to sign in to. Absent reads as none.
+  topicSearch?: boolean;
   // The reader's open research rooms (docs/63), for the roster the companion
   // proposes out of and for the picture blocks. Absent reads as none, which is
   // the first-run shape: the prompt then says nothing is being followed yet.
@@ -234,7 +237,7 @@ function preamble(ctx: CompanionContext): string[] {
     formatReader(ctx.reader),
     "",
     formatSources(ctx.sources),
-    ...(ctx.canSignIn ? ["", formatSignInSites(ctx.sources)] : []),
+    ...(ctx.canSignIn ? ["", formatSignInSites(ctx.sources, !!ctx.topicSearch)] : []),
     "",
     labGuidance(ctx.labs ?? [], ctx.sources, ctx.pictures ?? {}),
   ];

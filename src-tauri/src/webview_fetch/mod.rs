@@ -47,6 +47,7 @@ use std::time::{Duration, Instant};
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+pub mod browse;
 pub mod jar;
 pub mod page;
 pub mod policy;
@@ -102,6 +103,8 @@ pub struct WebviewFetchState {
     /// caller (a briefing run walking a feed) has no reason to parallelise.
     pub(crate) gate: Mutex<()>,
     seq: AtomicU64,
+    /// The one long-lived page a caller can drive (browse.rs).
+    pub(crate) browse: browse::Slot,
 }
 
 impl WebviewFetchState {
@@ -605,8 +608,9 @@ pub(crate) fn build_window<R: Runtime>(
     let blank = Url::parse("about:blank").expect("about:blank parses");
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(blank))
         // A fetch window is created hidden and never shown; nothing in this
-        // module calls show() on one. The sign-in window is the exception, and
-        // it is one the user asked for.
+        // module calls show() on one (the browse session renders its view off
+        // every screen instead: browse.rs, `render_unseen`). The sign-in window
+        // is the exception, and it is one the user asked for.
         .visible(visible)
         .focused(visible)
         .skip_taskbar(!visible)

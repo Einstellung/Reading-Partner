@@ -59,6 +59,7 @@ import {
 } from "../../../info/sources/source-store";
 import type { SourceDescriptor } from "../../../info/sources/descriptor";
 import { loadLabs } from "../../../info/labs/store";
+import { hasTopicSearches } from "../../../info/topic-search/store";
 import type { Lab } from "../../../info/labs/types";
 import type { SourceHealth } from "../../../info/sources/engine";
 import {
@@ -148,6 +149,8 @@ export interface InfoHomeController {
   // Sources page state.
   hasSources: boolean | null;
   sources: SourceDescriptor[];
+  // Whether the reader has a topic search, which puts X on the sign-in list.
+  topicSearch: boolean;
   sourceHealth: Record<string, SourceHealth>;
   // The research rooms, so the source list can say which of them read each
   // source (docs/63) and the launch card can say when there are none open.
@@ -193,6 +196,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
   // source list + health for the source-list page (docs/17).
   const [hasSourcesState, setHasSourcesState] = useState<boolean | null>(null);
   const [sourcesList, setSourcesList] = useState<SourceDescriptor[]>([]);
+  const [topicSearch, setTopicSearch] = useState(false);
   const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
   const [labs, setLabs] = useState<Lab[] | null>(null);
   // Last known sign-in state per site, and which site is being worked on. Both
@@ -291,13 +295,15 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
 
   // Reload the source list + health (source-list page) and the hasSources flag.
   const refreshSources = useCallback(async () => {
-    const [list, health, sessions, rooms] = await Promise.all([
+    const [list, health, sessions, rooms, searches] = await Promise.all([
       loadSources(),
       loadSourceHealth(),
       loadSiteSessions(),
       loadLabs(),
+      hasTopicSearches(),
     ]);
     setSourcesList(list);
+    setTopicSearch(searches);
     setSourceHealth(health);
     setSiteSessions(sessions);
     setLabs(rooms);
@@ -416,12 +422,13 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
   // What every anchor needs beside the briefing itself: who the reader is, what
   // they subscribe to, and what this device can do about it.
   const companionContext = useCallback(async () => {
-    const [reader, sources, settings] = await Promise.all([
+    const [reader, sources, settings, topicSearch] = await Promise.all([
       assembleReaderSection(),
       loadSources(),
       loadSettings(),
+      hasTopicSearches(),
     ]);
-    return { reader, sources, aiLanguage: settings.aiLanguage, canSignIn, collecting };
+    return { reader, sources, aiLanguage: settings.aiLanguage, topicSearch, canSignIn, collecting };
   }, [canSignIn, collecting]);
 
   const askMeals = useCallback(
@@ -493,6 +500,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     collectorSites,
     hasSources: hasSourcesState,
     sources: sourcesList,
+    topicSearch,
     sourceHealth,
     labs,
     siteSessions,
