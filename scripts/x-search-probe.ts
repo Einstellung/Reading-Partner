@@ -11,7 +11,7 @@
 //
 //   bun scripts/x-search-probe.ts login     # visible X login window; sign in, then close it
 //   bun scripts/x-search-probe.ts check     # is the probe profile signed in to X (Xvfb)
-//   bun scripts/x-search-probe.ts run [--query "AI for science"] [--screens 12] [--no-synthetic-scroll]
+//   bun scripts/x-search-probe.ts run [--query "AI for science"] [--screens 12] [--synthetic-scroll]
 //   bun scripts/x-search-probe.ts analyze <log>
 //
 // Build first: (cd src-tauri && cargo build). PROFILE defaults to
@@ -71,6 +71,9 @@ const READ = `(() => {
     scrollY: Math.round(scrollY), height: root ? root.scrollHeight : 0, viewport: innerHeight, halt };
 })()`;
 
+// The browse page renders (docs/pitfall/600), so scrollBy fires real scroll
+// events. `--synthetic-scroll` adds a dispatched one after each step anyway, for
+// a build or platform where the page does not render.
 const SYNTHETIC_SCROLL = `(() => { window.dispatchEvent(new Event("scroll")); return true; })()`;
 
 // --- plans ------------------------------------------------------------------
@@ -237,7 +240,7 @@ if (mode === "login") {
 } else if (mode === "run") {
 	const query = flag("--query") ?? "\"AI for science\"";
 	const screens = Number(flag("--screens") ?? 12);
-	const synthetic = !rest.includes("--no-synthetic-scroll");
+	const synthetic = rest.includes("--synthetic-scroll");
 	const all = lines(query, Date.now());
 	const shuffled = [...all].sort(() => Math.random() - 0.5);
 	const steps: Step[] = [];
@@ -253,6 +256,6 @@ if (mode === "login") {
 	const meta = JSON.parse(readFileSync(join(PROFILE, "last-lines.json"), "utf8")) as Line[];
 	for (const l of analyze(parseLog(rest[0]), meta)) console.log(l);
 } else {
-	console.error("usage: bun scripts/x-search-probe.ts login | check | run [--query q] [--screens n] [--no-synthetic-scroll] | analyze <log>");
+	console.error("usage: bun scripts/x-search-probe.ts login | check | run [--query q] [--screens n] [--synthetic-scroll] | analyze <log>");
 	process.exit(1);
 }
