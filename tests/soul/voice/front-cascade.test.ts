@@ -71,6 +71,7 @@ function setup(script: (req: FrontModelRequest) => Promise<void>, filler: Filler
     await script(req);
   };
   const written: { key: string; text: string }[] = [];
+  const traced: { name: string; data?: Record<string, unknown> }[] = [];
   const front = createCascadeFront({
     model,
     backend,
@@ -79,6 +80,7 @@ function setup(script: (req: FrontModelRequest) => Promise<void>, filler: Filler
     filler,
     locale: "zh-CN",
     marks: (m) => marks.push(m),
+    trace: (name, data) => traced.push({ name, ...(data ? { data } : {}) }),
     onShow: (c) => cards.push(c),
     now: () => clock,
     setTimer: (fn, ms) => {
@@ -104,7 +106,7 @@ function setup(script: (req: FrontModelRequest) => Promise<void>, filler: Filler
       }
     }
   };
-  return { back, told, front, marks, cards, requests, written, programs, advance };
+  return { back, told, front, marks, cards, requests, written, programs, advance, traced };
 }
 
 async function ask(front: ReturnType<typeof setup>["front"], turn: number, text = "", signal = new AbortController().signal) {
@@ -154,6 +156,26 @@ test("a hand-off with the cue ready plays the cue and writes no line", async () 
   const r = await ask(h.front, 1, "Y?");
   expect(played).toEqual(["thinking:zh-CN"]);
   expect(r.said).toBe("");
+});
+
+test("the trace hears each mark as it is set, the hand-off and the cue", async () => {
+  const h = setup(
+    async (req) => {
+      req.onSent();
+      req.onToolCall({ name: "delegate", args: { kind: "think", task: "Find Y" } });
+    },
+    { play: async () => true },
+  );
+  h.front.event({ kind: "speech-end", turn: 1, text: "Y?", silentMs: 0 });
+  await ask(h.front, 1, "Y?");
+  expect(h.traced.map((t) => t.name)).toEqual([
+    "front:speech-end",
+    "front:request-sent",
+    "front:delegate-sent",
+    "front:delegate-done",
+    "front:cue",
+  ]);
+  expect(h.traced[4]!.data).toEqual({ turn: 1, kind: "thinking", played: true });
 });
 
 test("a barge-in cuts the sentence but not the run it handed off", async () => {
