@@ -13,8 +13,9 @@ import type { ConversationEvent } from "../conversation";
 import type { SessionEffect, SessionPhase, VoiceTurn } from "../voice-session";
 import { INTERRUPTED_MARK } from "../voice-session";
 import type { VoiceCallModel, VoiceCallTranscript } from "../voice-call";
-import type { BackOutcome, VoiceBackend } from "./backend";
-import { FRONT_IN_FLIGHT, frontRequest } from "./context";
+import type { CallNote } from "../../think/contract";
+import type { CallBack } from "./backend";
+import { frontRequest } from "./context";
 import type { CallLine, FrontCall, FrontListRow, FrontNote, HeardUpTo, VoiceFront } from "./contract";
 import { fillerLine, type FillerPort } from "./filler";
 import { frontMarks, monotonicNow, type MarkSink } from "./marks";
@@ -36,13 +37,12 @@ export type FrontWriter = (line: { key: string; role: "user" | "ai"; text: strin
 /** A result the reader asked to see on screen. */
 export interface FrontCard {
   number: number;
-  runId: string;
   text: string;
 }
 
 export interface CascadeFrontDeps {
   model: FrontModel;
-  backend: VoiceBackend;
+  backend: CallBack;
   /** Where the call is held, as the front is told it. */
   place: () => string;
   /** The conversation file. Read-outs are not written: the result is in it already. */
@@ -59,7 +59,7 @@ export interface CascadeFrontDeps {
 
 type Program =
   | { kind: "notify"; notes: FrontNote[] }
-  | { kind: "read"; number: number; runId: string; from: number };
+  | { kind: "read"; number: number; from: number };
 
 export interface CascadeFront extends VoiceFront {
   model: VoiceCallModel;
@@ -107,37 +107,20 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   const programs = new Map<number, Program>();
   let notes: FrontNote[] = [];
   let reads: Program[] = [];
-  // Where an interrupted read-out picks up again, by run.
-  const resumeAt = new Map<string, number>();
-
-  // Numbers are the call's: stable for as long as the call is up.
-  const numbers = new Map<string, number>();
-  const ids = new Map<number, { id: string; source: "run" | "box" }>();
-  const numberOf = (id: string, source: "run" | "box") => {
-    let n = numbers.get(id);
-    if (n === undefined) {
-      n = numbers.size + 1;
-      numbers.set(id, n);
-      ids.set(n, { id, source });
-    }
-    return n;
-  };
+  // Where an interrupted read-out picks up again, by number.
+  const resumeAt = new Map<number, number>();
 
   function list(): FrontListRow[] {
-    const rows: FrontListRow[] = deps.backend.runs().map((r) => ({
-      number: numberOf(r.runId, "run"),
-      id: r.runId,
-      source: "run",
-      task: r.task,
-      status: r.status,
-      ...(r.progress ? { progress: r.progress } : {}),
-      ...(r.cover ? { cover: r.cover } : {}),
-    }));
-    for (const item of deps.backend.unopened()) {
-      if (numbers.has(item.id) && rows.some((r) => r.id === item.id)) continue;
-      rows.push({ number: numberOf(item.id, "box"), id: item.id, source: "box", task: item.cover, status: "unopened" });
-    }
-    return rows.sort((a, b) => a.number - b.number).slice(-10);
+    return deps.backend
+      .tasks()
+      .slice(-10)
+      .map((t) => ({
+        number: t.n,
+        task: t.task,
+        status: t.state,
+        ...(t.progress ? { progress: t.progress } : {}),
+        ...(t.cover ? { cover: t.cover } : t.reason ? { cover: t.reason } : {}),
+      }));
   }
 
   function context() {
@@ -160,13 +143,19 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     else timer = setTimer(schedule, wait);
   }
 
+  // One program turn asked for at a time: the floor answers asynchronously.
+  let taking = false;
+
   async function take(): Promise<void> {
-    if (!floor) return;
+    if (!floor || taking) return;
     const program: Program | undefined = reads.length > 0 ? reads[0] : notes.length > 0 ? { kind: "notify", notes } : undefined;
     if (!program) return;
     const id = nextProgram--;
     programs.set(id, program);
-    const took = await floor.program(id);
+    taking = true;
+    const took = await floor.program(id).finally(() => {
+      taking = false;
+    });
     if (!took) {
       programs.delete(id);
       return;
@@ -178,43 +167,29 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   }
 
   const actions: FrontActions = {
-    async delegate(req) {
-      const running = deps.backend.runs().filter((r) => r.status === "running").length;
-      if (running >= FRONT_IN_FLIGHT) return `Not sent: ${running} runs are already out.`;
-      const follows = req.follows === undefined ? undefined : ids.get(req.follows)?.id;
-      const answer = await deps.backend.delegate({ kind: req.kind, task: req.task, ...(follows ? { follows } : {}) });
-      if (!answer.ok) return `Not sent: ${answer.reason}`;
-      return `Sent as #${numberOf(answer.runId, "run")}.`;
-    },
     async cancel(n) {
-      const at = ids.get(n);
-      if (!at) return `There is no #${n}.`;
-      const r = await deps.backend.cancel(at.id);
+      const r = await deps.backend.cancel(n);
       return r.ok ? `#${n} called back.` : `#${n} not called back: ${r.reason ?? "unknown"}`;
     },
     async readOut(n) {
-      const at = ids.get(n);
-      if (!at) return `There is no #${n}.`;
-      const text = await deps.backend.original(at.id);
+      const text = await deps.backend.text(n);
       if (!text) return `#${n} has nothing to read yet.`;
-      reads.push({ kind: "read", number: n, runId: at.id, from: resumeAt.get(at.id) ?? 0 });
+      reads.push({ kind: "read", number: n, from: resumeAt.get(n) ?? 0 });
       return `#${n} will be read out.`;
     },
     async show(n) {
-      const at = ids.get(n);
-      if (!at) return `There is no #${n}.`;
-      const text = await deps.backend.original(at.id);
+      const text = await deps.backend.text(n);
       if (!text) return `#${n} has nothing to show yet.`;
-      deps.onShow({ number: n, runId: at.id, text });
-      await deps.backend.told(at.id);
+      deps.onShow({ number: n, text });
+      await deps.backend.told(n);
       return `#${n} is open on screen.`;
     },
   };
-  const tools = buildFrontTools(actions);
+  const tools = buildFrontTools(deps.backend.delegateTool(), actions);
   const byName = new Map(tools.map((t) => [t.name, t]));
 
   async function readOut(program: Extract<Program, { kind: "read" }>, onDelta: (s: string) => void): Promise<void> {
-    const text = await deps.backend.original(program.runId);
+    const text = await deps.backend.text(program.number);
     if (text) onDelta(text.slice(program.from));
   }
 
@@ -275,8 +250,8 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
             .execute(args)
             .then(
               (out) => {
-                if (name === "delegate" && typeof out === "string" && out.startsWith("Sent")) handed = true;
-                console.info(`RP-FRONT tool ${name}: ${typeof out === "string" ? out : "ok"}`);
+                if (name === "delegate") handed = true;
+                console.info(`RP-FRONT tool ${name}: ${typeof out === "string" ? out : out.text}`);
               },
               (e) => console.warn(`RP-FRONT tool ${name} failed`, e),
             )
@@ -310,7 +285,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
       role: entry.role,
       text: entry.text,
       ...(entry.interrupted ? { interrupted: true } : {}),
-      ...(program?.kind === "read" ? { readOut: program.runId } : {}),
+      ...(program?.kind === "read" ? { readOut: String(program.number) } : {}),
     };
     const at = lineAt.get(key);
     if (at === undefined) {
@@ -319,10 +294,10 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     } else lines[at] = line;
     if (program?.kind === "read") {
       if (entry.interrupted) {
-        resumeAt.set(program.runId, program.from + resumeOffset(entry.text));
+        resumeAt.set(program.number, program.from + resumeOffset(entry.text));
       } else {
-        resumeAt.delete(program.runId);
-        void deps.backend.told(program.runId);
+        resumeAt.delete(program.number);
+        void deps.backend.told(program.number);
       }
       held = false;
       return;
@@ -338,14 +313,12 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     record: keep,
   };
 
-  function onOutcome(o: BackOutcome): void {
-    const run = deps.backend.runs().find((r) => r.runId === o.runId);
+  function onNote(note: CallNote): void {
     front.notify({
-      number: numberOf(o.runId, "run"),
-      runId: o.runId,
-      task: run?.task ?? "",
-      outcome: o.outcome,
-      cover: o.cover,
+      number: note.n,
+      task: note.task,
+      outcome: note.status,
+      cover: note.status === "done" ? note.cover : note.reason,
     });
   }
 
@@ -358,13 +331,13 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     list,
     async open(c: FrontCall) {
       void c;
-      unsubscribe = deps.backend.subscribe(onOutcome);
+      unsubscribe = deps.backend.subscribe(onNote);
     },
     bind(f) {
       floor = f;
     },
     notify(note) {
-      if (!notes.some((n) => n.runId === note.runId)) notes.push(note);
+      if (!notes.some((n) => n.number === note.number)) notes.push(note);
       schedule();
     },
     // The cascade's barge-in is the driver's: the session cuts the sentence
@@ -386,9 +359,12 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     },
     event(e) {
       if (e?.kind === "speech-duck") userSpeaking = true;
-      if (e?.kind === "speech-resume" || e?.kind === "speech-stop" || e?.kind === "speech-end") userSpeaking = false;
+      // The quiet is counted from whoever stopped last.
+      if (e?.kind === "speech-resume" || e?.kind === "speech-stop" || e?.kind === "speech-end") {
+        userSpeaking = false;
+        quietSince = now();
+      }
       if (e?.kind === "speech-end" && typeof e.text === "string" && e.text.trim()) marks.mark(e.turn, "speech-end");
-      if (e?.kind === "speech-end") quietSince = now();
       schedule();
     },
     async close() {

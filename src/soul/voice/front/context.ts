@@ -2,14 +2,15 @@
 // fixed duty, the place, the numbered list, the call's last ten turns, in that
 // order and capped near 4k tokens, so the fixed part leads and is cached.
 
+import { MAX_IN_FLIGHT } from "../../think/contract";
 import type { CallLine, FrontContext, FrontListRow } from "./contract";
 
 export const FRONT_TOKEN_CAP = 4000;
 export const FRONT_PLACE_CAP = 400;
 export const FRONT_LIST_ROWS = 10;
 export const FRONT_TURNS = 10;
-/** Runs in flight at once (136 "并行、取消、改口"; a starting value). */
-export const FRONT_IN_FLIGHT = 3;
+/** Runs in flight at once: the back half's cap, which it enforces. */
+export const FRONT_IN_FLIGHT = MAX_IN_FLIGHT;
 
 export const FRONT_DUTY = [
   "You are the voice at the front of a spoken call with the reader. You speak aloud: no lists, no markdown, no headings.",
@@ -46,11 +47,11 @@ function clip(text: string, tokens: number): string {
 }
 
 export function listText(rows: readonly FrontListRow[]): string {
-  if (rows.length === 0) return "Nothing has been handed off in this call and the box has nothing unopened.";
+  if (rows.length === 0) return "Nothing has been handed off in this call.";
   return rows
     .slice(0, FRONT_LIST_ROWS)
     .map((r) => {
-      const parts = [`#${r.number}`, r.source === "box" ? "box" : r.status, r.task];
+      const parts = [`#${r.number}`, r.status, r.task];
       if (r.progress) parts.push(`progress: ${r.progress}`);
       if (r.cover) parts.push(`cover: ${r.cover}`);
       return parts.join(" | ");
@@ -63,7 +64,7 @@ export function frontSystemPrompt(place: string, rows: readonly FrontListRow[]):
   return [
     FRONT_DUTY,
     `Where this call is held:\n${clip(place, FRONT_PLACE_CAP)}`,
-    `The numbered list (runs from this call and unopened box items):\n${listText(rows)}`,
+    `The numbered list (what this call handed off):\n${listText(rows)}`,
   ].join("\n\n");
 }
 

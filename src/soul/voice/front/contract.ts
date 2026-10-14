@@ -10,7 +10,6 @@ import type { ConversationEvent } from "../conversation";
 export interface FrontNote {
   /** The run's number in the call's list. */
   number: number;
-  runId: string;
   /** The task in one sentence. */
   task: string;
   outcome: "done" | "failed";
@@ -42,11 +41,8 @@ export interface CallLine {
 /** One row of the numbered list (136 "前台的上下文与模型" 3). */
 export interface FrontListRow {
   number: number;
-  /** The run, or the box item, the number stands for. */
-  id: string;
-  source: "run" | "box";
   task: string;
-  status: "running" | "done" | "failed" | "cancelled" | "unopened";
+  status: "running" | "done" | "failed" | "cancelled";
   progress?: string;
   cover?: string;
 }

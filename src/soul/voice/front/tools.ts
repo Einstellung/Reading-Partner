@@ -10,7 +10,6 @@ export const FRONT_TOOL_NAMES = ["delegate", "cancel", "read_out", "show"] as co
 
 /** What the tools do, by list number. The cascade front implements it. */
 export interface FrontActions {
-  delegate(req: { kind: string; task: string; follows?: number }): Promise<string>;
   cancel(number: number): Promise<string>;
   readOut(number: number): Promise<string>;
   show(number: number): Promise<string>;
@@ -24,32 +23,10 @@ function num(v: unknown, tool: string): number {
   return n;
 }
 
-export function buildFrontTools(actions: FrontActions): AgentTool[] {
+/** `delegate` is the back half's (soul/think's buildCallDelegateTool), passed in. */
+export function buildFrontTools(delegate: AgentTool, actions: FrontActions): AgentTool[] {
   return [
-    {
-      name: "delegate",
-      label: () => "Handing it over",
-      effect: "write",
-      gate: "instruction",
-      description:
-        "Hand a question to a worker that thinks it through out of sight and comes back later. Say one short sentence " +
-        "to the reader in the same reply; this returns at once and the answer arrives in the box, not in this reply.",
-      parameters: Type.Object({
-        kind: Type.String({ description: 'The kind of work. Usually "think".' }),
-        task: Type.String({
-          description:
-            "The brief, for someone who cannot hear this call: what to answer and what counts as answered. Whole, never \"same as before\".",
-        }),
-        follows: Type.Optional(numberParam("earlier result this one follows on from")),
-      }),
-      execute: async (args) => {
-        const kind = String(args.kind ?? "").trim() || "think";
-        const task = String(args.task ?? "").trim();
-        if (!task) throw new Error("delegate needs a task.");
-        const follows = args.follows === undefined ? undefined : num(args.follows, "delegate");
-        return actions.delegate({ kind, task, ...(follows === undefined ? {} : { follows }) });
-      },
-    },
+    delegate,
     {
       name: "cancel",
       label: () => "Calling it back",
