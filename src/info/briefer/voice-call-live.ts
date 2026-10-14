@@ -1,14 +1,10 @@
 // The voice call, bound to the real thing (docs/33 M-voice-3): the native
 // plugin under it, the info companion behind it, and the day's thread beside
 // it. voice-call.ts holds the driver and knows none of this; this file builds
-// the bridge and the tools, and takes the two ports that keep the turns and the
-// transcript on the day's conversation from the caller (reading/turn/
-// info-voice.ts, which runs them on the durable runtime and sits above this
-// directory).
+// the bridge and the cascade front's tools (docs/companion/136).
 //
 // The call is the info call in another modality, not a second AI: same day's
-// pseudo-book thread (call.ts's infoBookId), same anchors, same tools
-// (companion-live.ts), and the same conversation on the runtime.
+// pseudo-book thread (call.ts's infoBookId) and same anchors.
 
 import { glossaryTerms } from "../../ai/voice/cleanup";
 import { loadDeviceSettings } from "../../platform/app/device";
@@ -29,25 +25,13 @@ import { loadSources } from "../sources/source-store";
 import { hasTopicSearches } from "../topic-search/store";
 import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
-import type { BriefingControl } from "./companion-live";
 import { nativeConversation } from "../../soul/voice/conversation";
 import {
   createVoiceCall,
   type VoiceCall,
-  type VoiceCallModel,
-  type VoiceCallTranscript,
 } from "../../soul/voice/voice-call";
-import type { AgentTool } from "../../legion/durable/contract";
 import type { Briefing } from "../boxes/types";
 import type { InfoCallAnchor } from "./anchors";
-
-/** The call's turns and transcript on the day's conversation. */
-export type VoiceThread = (opts: {
-  bookId: string;
-  dateKey: string;
-  anchor: InfoCallAnchor;
-  tools: () => Promise<AgentTool[]>;
-}) => { model: VoiceCallModel; transcript: VoiceCallTranscript };
 
 export interface LiveVoiceCallOptions {
   /** The day whose thread the call is about, and what it is called. */
@@ -62,20 +46,13 @@ export interface LiveVoiceCallOptions {
    * same one so both open the same conversation.
    */
   briefing: Briefing | null;
-  /**
-   * What generate_briefing does. Absent where the caller holds no pipeline
-   * view: the tool is still mounted (the model is told about it either way) and
-   * saying so through a thrown tool error is the honest answer — better than a
-   * controller that reports a run it never started.
-   */
-  control?: BriefingControl;
-  /**
-   * The call's turns and transcript on the day's conversation, on the durable
-   * runtime. Unused while the call runs on the cascade front (docs/companion/136).
-   */
-  thread?: VoiceThread;
   /** A result the reader asked to see (the front's `show`). */
   onShow?: (card: FrontCard) => void;
+  /**
+   * How many of this call's background runs are in flight, reported when it
+   * may have changed: a phase change, or a run coming back.
+   */
+  onRunning?: (running: number) => void;
 }
 
 /** Nothing to hold a call with: no plugin, so no microphone and no player. */
@@ -146,15 +123,16 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
   const place = briefing
     ? `Today's briefing:\n${briefing.mustRead.map((r) => `- ${briefing.items[r.itemId]?.title ?? ""}`).join("\n")}`
     : `No briefing for ${opts.dateKey}.`;
+  const back = bindCallBack({
+    backend: callBackend(),
+    callId: crypto.randomUUID(),
+    deliverTo: { place: "briefing", date: opts.dateKey },
+    // `think` is the front's own kind and is offered here whatever the soul's catalogue lists.
+    kinds: () => [THINK_KIND, ...delegableWorkerKinds().filter((k) => k !== THINK_KIND)],
+  });
   const front = createCascadeFront({
     model: liveFrontModel(),
-    backend: bindCallBack({
-      backend: callBackend(),
-      callId: crypto.randomUUID(),
-      deliverTo: { place: "briefing", date: opts.dateKey },
-      // `think` is the front's own kind and is offered here whatever the soul's catalogue lists.
-      kinds: () => [THINK_KIND, ...delegableWorkerKinds().filter((k) => k !== THINK_KIND)],
-    }),
+    backend: back,
     place: () => place,
     write: ({ key, role, text }) => {
       const at = stamps.get(key);
@@ -180,6 +158,8 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     record: () => {},
   });
   const call = createVoiceCall({ bridge, model: front.model, transcript: front.transcript, front });
+  const report = () => opts.onRunning?.(front.list().filter((row) => row.status === "running").length);
+  const reporting = [call.subscribePhase(report), back.subscribe(report)];
   // Hanging up is what the text chat's close is: the call's turns are on the
   // thread by now (the transcript writes them as they settle), so the pass is
   // started here and not awaited — it has to outlive the call, and the caller is
@@ -188,6 +168,8 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     ...call,
     async stop(): Promise<void> {
       await call.stop();
+      for (const off of reporting) off();
+      opts.onRunning?.(0);
       await front.close();
       void distillInfoThread({ threadId: anchor.threadId, trigger: "info-close" });
     },

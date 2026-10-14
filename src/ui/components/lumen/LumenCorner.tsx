@@ -198,7 +198,6 @@ export function LumenCorner({
 	const call = useVoiceCall({
 		dateKey: context?.dateKey ?? "",
 		briefing: context?.briefing ?? null,
-		control: context?.control,
 	});
 	const live = call.phase !== "idle";
 	// A host that cannot speak has nothing to hold for — the whole audio path is
