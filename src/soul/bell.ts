@@ -40,7 +40,16 @@ import { plainBlocks } from "../platform/std/markdown-plain";
 import type { Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
 import { doorDate } from "./door";
-import { parseOrigin, turnDeliverer, type TurnDeliverer, type TurnDeliveryOutcome } from "./delivery";
+import {
+  announceVerbatim,
+  isVerbatim,
+  parseOrigin,
+  replyAppender,
+  turnDeliverer,
+  type TurnDeliverer,
+  type TurnDeliveryOutcome,
+  type VerbatimLanding,
+} from "./delivery";
 
 export interface AnswerBellDeps {
   settings: Settings;
@@ -275,6 +284,23 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
       const run = await runs.get(bell.payload.runId).catch(() => null);
       const delegator = bell.payload.delegator ?? run?.delegator;
       origin = parseOrigin(bell.payload.deliverTo) ?? parseOrigin(run?.deliverTo);
+      // A kind whose output is the answer (docs/companion/136): no turn. The
+      // output goes into the conversation as it is and into the box, always.
+      if (isVerbatim(bell.payload.kind)) {
+        const place = origin ?? { place: "door" as const, date };
+        const landing = await landVerbatim(bell, place, { box, readFile, at }).catch((e) => {
+          deps.onTrouble?.(bell, e instanceof Error ? e.message : String(e));
+          return null;
+        });
+        // The conversation would not take it: the bell stays queued and nothing was boxed.
+        if (!landing) break;
+        await bells.delivered(bell.id);
+        await bells.ack(bell.id);
+        await runs.markDelivered(bell.payload.runId, now()).catch(() => null);
+        announceVerbatim(landing);
+        answered += 1;
+        continue;
+      }
       // A program run whose reader is waiting in the conversation it names (a
       // link taken in at the door) has its failure told there, in one sentence,
       // by the turn below; its card shows the rest.
@@ -416,6 +442,60 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
   return answered;
 }
 
+/**
+ * Land one verbatim run: its output appended to the conversation it was asked
+ * from, then one box item carrying the same text; or, failed, one box item to
+ * decide about and nothing in the conversation. The three copies — the output
+ * file, the item's body, the reply — are one text.
+ */
+async function landVerbatim(
+  bell: Exclude<Bell, { type: "wake" }>,
+  origin: BoxOrigin,
+  deps: { box: BoxStore; readFile: ReadAppText; at: number },
+): Promise<VerbatimLanding> {
+  const { runId, kind } = bell.payload;
+  const failed = async (reason: string): Promise<VerbatimLanding> => {
+    const item = await deps.box.put({
+      boxId: runId,
+      source: "run",
+      cover: coverOf(reason) || `${kind} failed`,
+      origin,
+      kind,
+      runId,
+      needsDecision: true,
+      at: deps.at,
+    });
+    return { status: "failed", runId, kind, reason, boxItemId: item.id };
+  };
+  if (bell.type === "run-failed") return failed(bell.payload.reason);
+  const substance = await runSubstance(bell.payload, deps.readFile);
+  const text = substance.output;
+  if (!text) return failed(substance.outputMissing ? "The output is not on this device." : "It left nothing behind.");
+  await replyAppender(origin.place)?.({ origin, text, runId, at: deps.at });
+  const cover = coverOf(text);
+  const item = await deps.box.put({
+    boxId: runId,
+    source: "run",
+    cover,
+    body: text,
+    origin,
+    kind,
+    runId,
+    needsDecision: false,
+    at: deps.at,
+  });
+  return { status: "done", runId, kind, text, cover, boxItemId: item.id };
+}
+
+// The watch's own look, so a run that has just finished in this process can
+// have its bell answered now instead of at the next tick.
+let lookNow: (() => void) | null = null;
+
+/** Answer the bell now if the watch is running; otherwise nothing. */
+export function answerBellSoon(): void {
+  lookNow?.();
+}
+
 export interface BellWatchDeps {
   /** Read per pass: settings change while the app is open. */
   settings: () => Settings;
@@ -442,7 +522,9 @@ export function startBellWatch(deps: BellWatchDeps): () => void {
   look();
   const timer = setInterval(look, deps.intervalMs);
   const uninstallBridge = installBellBridge(look);
+  lookNow = look;
   return () => {
+    if (lookNow === look) lookNow = null;
     clearInterval(timer);
     uninstallBridge();
   };
