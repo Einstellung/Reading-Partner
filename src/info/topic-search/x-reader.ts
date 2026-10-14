@@ -209,7 +209,7 @@ class Run {
       for (const key of order) {
         const line = byKey.get(key);
         if (!line || this.past.ended.has(key)) continue;
-        this.checkCeilings();
+        this.checkCeilings(true);
         if (opened++ > 0) await this.stay(draw(this.pace.betweenPagesMs, this.deps.random), 0, "between", key);
         await this.readLine(session, line);
         await this.followUp(session, line);
@@ -358,7 +358,7 @@ class Run {
           await this.stay(draw(this.pace.longPauseMs, this.deps.random), 0, "long", key);
           nextLong = screens + drawInt(this.pace.longPauseEvery, this.deps.random);
         }
-        this.checkCeilings();
+        this.checkCeilings(false);
         await this.sitting(key);
 
         let asked = 0;
@@ -477,11 +477,13 @@ class Run {
     this.sittingEnd = this.active + draw(this.pace.segmentMs, this.deps.random);
   }
 
-  private checkCeilings(): void {
+  /** The run's ceilings; the page counts only before a new page is opened. */
+  private checkCeilings(opening: boolean): void {
     this.tick();
     const limits = this.input.limits;
     if (this.past.posts.size >= limits.posts) throw new Stop("limit", "posts");
     if (this.active >= limits.activeMs) throw new Stop("limit", "reading time");
+    if (!opening) return;
     if (this.past.pages.search >= limits.searchPages) throw new Stop("limit", "search pages");
     if (this.daily.search >= this.allowance.search) throw new Stop("quota", "search pages for today used up");
   }

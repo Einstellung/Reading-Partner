@@ -200,6 +200,19 @@ describe("stopping", () => {
     expect(site.navigations).toEqual([]);
   });
 
+  test("the search page ceiling stops the next page, not the one being read", async () => {
+    const site = new FakeSite();
+    site.pages.set("protein", [screen([0, 1].map((i) => raw(pid(i)))), screen([2, 3].map((i) => raw(pid(i)))), screen([4].map((i) => raw(pid(i))))]);
+    site.pages.set("enzyme", [screen([raw(pid(20))])]);
+    const h = harness(site);
+    const lines = [line("t:a", "protein"), line("t:b", "enzyme")];
+    const result = await readXSearch(input(lines, { limits: { posts: 400, searchPages: 1, permalinkPages: 0, activeMs: 9e9 } }), h.deps);
+    expect(result.status).toBe("limit");
+    expect(result.why).toBe("search pages");
+    expect(site.navigations.length).toBe(1);
+    expect(result.lines[0].screens).toBeGreaterThan(1);
+  });
+
   test("the run's post ceiling ends it and still moves the mark", async () => {
     const site = new FakeSite();
     site.pages.set("protein", [screen([0, 1, 2, 3, 4, 5].map((i) => raw(pid(i)))), screen([6, 7].map((i) => raw(pid(i))))]);
