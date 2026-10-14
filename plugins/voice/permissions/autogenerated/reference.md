@@ -1,6 +1,6 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call.
+Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call.
 
 #### This default permission set includes the following:
 
@@ -18,6 +18,8 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-speak-push`
 - `allow-speak-close`
 - `allow-speak-stop`
+- `allow-prime-speech-cues`
+- `allow-speak-cue`
 - `allow-start-conversation`
 - `allow-stop-conversation`
 - `allow-set-speech-volume`
@@ -55,6 +57,32 @@ Enables the cancel_dictation command without any pre-configured scope.
 <td>
 
 Denies the cancel_dictation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-prime-speech-cues`
+
+</td>
+<td>
+
+Enables the prime_speech_cues command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-prime-speech-cues`
+
+</td>
+<td>
+
+Denies the prime_speech_cues command without any pre-configured scope.
 
 </td>
 </tr>
@@ -263,6 +291,32 @@ Enables the speak_close command without any pre-configured scope.
 <td>
 
 Denies the speak_close command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-speak-cue`
+
+</td>
+<td>
+
+Enables the speak_cue command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-speak-cue`
+
+</td>
+<td>
+
+Denies the speak_cue command without any pre-configured scope.
 
 </td>
 </tr>

@@ -17,8 +17,10 @@
 //   relay    how far ahead of the player to work
 //   player   where finished PCM goes, and what it says back
 //   opening  the first sentence, made before it is asked for
+//   cues     the program's own short lines, made once a call and replayed
 
 mod backend;
+pub mod cues;
 mod error;
 mod format;
 pub mod mimo;

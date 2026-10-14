@@ -31,7 +31,8 @@ mod error;
 #[cfg(debug_assertions)]
 mod live;
 mod models;
-/// One turn of speech, held together across the four `speak_*` commands.
+/// One turn of speech, held together across the four `speak_*` commands, and
+/// the cues made ahead of need.
 mod session;
 /// The relay's far end on the phone: `tts::Player` over `Voice::enqueue_speech`.
 mod speaker;
@@ -83,6 +84,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::speak_push,
             commands::speak_close,
             commands::speak_stop,
+            commands::prime_speech_cues,
+            commands::speak_cue,
             commands::start_conversation,
             commands::stop_conversation,
             commands::set_speech_volume,

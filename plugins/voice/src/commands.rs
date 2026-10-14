@@ -208,6 +208,24 @@ pub(crate) async fn speak_stop<R: Runtime>(app: AppHandle<R>) -> Result<SpeechSt
     app.state::<SpeechSession>().stop().await
 }
 
+/// Make the program's own short lines in `lang` (`zh`, `en`) ahead of need,
+/// and answer how many are ready (tts/cues.rs). Called when a call opens.
+#[command]
+pub(crate) async fn prime_speech_cues<R: Runtime>(
+    app: AppHandle<R>,
+    lang: String,
+) -> Result<usize> {
+    app.state::<SpeechSession>().prime_cues(&lang).await
+}
+
+/// Say one of those lines as a turn of its own, and answer with the turn's
+/// number. Whatever was speaking stops. A line that was not made in advance is
+/// synthesised from its text.
+#[command]
+pub(crate) async fn speak_cue<R: Runtime>(app: AppHandle<R>, id: String) -> Result<u64> {
+    app.state::<SpeechSession>().speak_cue(&id).await
+}
+
 // The full-duplex call (docs/33 M-voice-3). Three forwarders, like the
 // dictation ones: the microphone, the recogniser, the turn detector and the
 // player are all in Swift, and the verdicts reach the webview as the

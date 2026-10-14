@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the cancel_dictation command without any pre-configured scope."
         },
         {
+          "description": "Enables the prime_speech_cues command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-prime-speech-cues",
+          "markdownDescription": "Enables the prime_speech_cues command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the prime_speech_cues command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-prime-speech-cues",
+          "markdownDescription": "Denies the prime_speech_cues command without any pre-configured scope."
+        },
+        {
           "description": "Enables the register_listener command without any pre-configured scope.",
           "type": "string",
           "const": "allow-register-listener",
@@ -401,6 +413,18 @@
           "type": "string",
           "const": "deny-speak-close",
           "markdownDescription": "Denies the speak_close command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the speak_cue command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-speak-cue",
+          "markdownDescription": "Enables the speak_cue command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the speak_cue command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-speak-cue",
+          "markdownDescription": "Denies the speak_cue command without any pre-configured scope."
         },
         {
           "description": "Enables the speak_push command without any pre-configured scope.",
@@ -523,10 +547,10 @@
           "markdownDescription": "Denies the stop_speaking command without any pre-configured scope."
         },
         {
-          "description": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-live`\n- `allow-speech-report`\n- `allow-set-speech-key`\n- `allow-speak-begin`\n- `allow-speak-push`\n- `allow-speak-close`\n- `allow-speak-stop`\n- `allow-start-conversation`\n- `allow-stop-conversation`\n- `allow-set-speech-volume`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-live`\n- `allow-speech-report`\n- `allow-set-speech-key`\n- `allow-speak-begin`\n- `allow-speak-push`\n- `allow-speak-close`\n- `allow-speak-stop`\n- `allow-prime-speech-cues`\n- `allow-speak-cue`\n- `allow-start-conversation`\n- `allow-stop-conversation`\n- `allow-set-speech-volume`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-live`\n- `allow-speech-report`\n- `allow-set-speech-key`\n- `allow-speak-begin`\n- `allow-speak-push`\n- `allow-speak-close`\n- `allow-speak-stop`\n- `allow-start-conversation`\n- `allow-stop-conversation`\n- `allow-set-speech-volume`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-live`\n- `allow-speech-report`\n- `allow-set-speech-key`\n- `allow-speak-begin`\n- `allow-speak-push`\n- `allow-speak-close`\n- `allow-speak-stop`\n- `allow-prime-speech-cues`\n- `allow-speak-cue`\n- `allow-start-conversation`\n- `allow-stop-conversation`\n- `allow-set-speech-volume`\n- `allow-register-listener`\n- `allow-remove-listener`"
         }
       ]
     }

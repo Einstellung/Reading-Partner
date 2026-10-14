@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-prime-speech-cues"
+description = "Enables the prime_speech_cues command without any pre-configured scope."
+commands.allow = ["prime_speech_cues"]
+
+[[permission]]
+identifier = "deny-prime-speech-cues"
+description = "Denies the prime_speech_cues command without any pre-configured scope."
+commands.deny = ["prime_speech_cues"]

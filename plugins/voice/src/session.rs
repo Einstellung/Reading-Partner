@@ -22,7 +22,8 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::models::SpeechStopped;
 use crate::speaker::Speakers;
-use crate::tts::{Heard, Player, RelayConfig, SpeechRelay, TtsBackend};
+use crate::tts::cues::{self, CueStore};
+use crate::tts::{Heard, OpeningKey, Player, RelayConfig, SpeechRelay, SpeechRequest, TtsBackend};
 use crate::{Error, Result};
 
 /// The vendor key's fallback source: the process environment. A bench launch is
@@ -107,6 +108,8 @@ pub struct SpeechSession {
     /// sentinel below uses 0 for the utterance too. A real turn numbered 0 could
     /// not be told apart from an absent one.
     utterances: AtomicU64,
+    /// The program's own short lines, made by `prime_cues` (tts/cues.rs).
+    cues: CueStore,
 }
 
 impl SpeechSession {
@@ -121,6 +124,7 @@ impl SpeechSession {
             config,
             turn: Mutex::new(None),
             utterances: AtomicU64::new(0),
+            cues: CueStore::new(),
         }
     }
 
@@ -154,6 +158,7 @@ impl SpeechSession {
             .map(|backend| Arc::new(backend) as Arc<dyn TtsBackend>);
         let speaking = backend.is_some();
         *self.backend.lock().expect("speech backend lock") = backend;
+        self.cues.clear();
         speaking
     }
 
@@ -176,8 +181,13 @@ impl SpeechSession {
     /// two answers at once.
     pub async fn begin(&self) -> Result<u64> {
         let backend = self.vendor()?;
-
         let mut turn = self.turn.lock().await;
+        Ok(self.open(&mut turn, backend).await)
+    }
+
+    /// `begin` with the turn lock already held, so that a cue can open, fill
+    /// and close its turn without another command landing in between.
+    async fn open(&self, turn: &mut Option<Turn>, backend: Arc<dyn TtsBackend>) -> u64 {
         if let Some(previous) = turn.take() {
             // A player that will not stop does not stop a turn from opening. The
             // new turn's first sentence is refused for as long as the old tail
@@ -198,6 +208,74 @@ impl SpeechSession {
             relay,
             player,
         });
+        utterance
+    }
+
+    /// What a cue's audio has to have been made with to be played for it now.
+    fn cue_key(&self, backend: &dyn TtsBackend, text: &str) -> OpeningKey {
+        OpeningKey {
+            backend: backend.id().to_string(),
+            model: backend.model().to_string(),
+            voice: self.cue_voice(backend),
+            text: text.to_string(),
+        }
+    }
+
+    fn cue_voice(&self, backend: &dyn TtsBackend) -> String {
+        if self.config.voice.is_empty() {
+            backend.default_voice().to_string()
+        } else {
+            self.config.voice.clone()
+        }
+    }
+
+    /// Make every cue in `lang` (`zh`, `en`) that is not already held, one after
+    /// another, and answer how many are held afterwards. Called when a call
+    /// opens; a cue that failed to be made is spoken from its text instead.
+    pub async fn prime_cues(&self, lang: &str) -> Result<usize> {
+        let backend = self.vendor()?;
+        let mut held = 0;
+        for cue in cues::cues_for(lang) {
+            let key = self.cue_key(backend.as_ref(), cue.text);
+            if !self.cues.has(cue.id, &key) {
+                let request = SpeechRequest {
+                    text: cue.text.to_string(),
+                    voice: key.voice.clone(),
+                };
+                let audio = cues::make(
+                    backend.as_ref(),
+                    &request,
+                    self.config.trim.clone(),
+                    self.config.gap_ms,
+                )
+                .await
+                .map_err(|e| Error::Speech(e.to_string()))?;
+                self.cues.store(cue.id, key, audio);
+            }
+            held += 1;
+        }
+        Ok(held)
+    }
+
+    /// Say one cue as a turn of its own and answer with the turn's number. The
+    /// audio made by `prime_cues` goes straight to the player; a cue that was
+    /// not made is synthesised from its text like any sentence. Whatever was
+    /// speaking stops, as with `begin`.
+    pub async fn speak_cue(&self, id: &str) -> Result<u64> {
+        let cue =
+            cues::cue(id).ok_or_else(|| Error::Speech(format!("There is no cue called {id}.")))?;
+        let backend = self.vendor()?;
+        let audio = self
+            .cues
+            .get(cue.id, &self.cue_key(backend.as_ref(), cue.text));
+        let mut turn = self.turn.lock().await;
+        let utterance = self.open(&mut turn, backend).await;
+        let open = turn.as_ref().expect("the turn just opened");
+        match audio {
+            Some(pcm) => open.relay.push_audio(pcm, cue.text.chars().count()),
+            None => open.relay.push(cue.text),
+        };
+        open.relay.close();
         Ok(utterance)
     }
 
@@ -785,5 +863,71 @@ mod tests {
             numbers.push(session.begin().await.unwrap());
         }
         assert_eq!(numbers, vec![1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn a_primed_cue_is_played_from_memory_every_time_it_is_asked_for() {
+        let stage = Arc::new(Stage::default());
+        let backend = Arc::new(Fake::default());
+        let started = backend.started.clone();
+        let session = session_with(stage.clone(), backend);
+
+        assert_eq!(session.prime_cues("zh").await.unwrap(), 3);
+        assert_eq!(started.load(Ordering::SeqCst), 3);
+        // Priming again makes nothing new.
+        assert_eq!(session.prime_cues("zh").await.unwrap(), 3);
+        assert_eq!(started.load(Ordering::SeqCst), 3);
+
+        for _ in 0..2 {
+            let utterance = session.speak_cue("zh/think").await.unwrap();
+            let player = stage.player_for(utterance);
+            assert!(until(|| player.sentences().len() == 1).await);
+            let (id, ms, _) = player.sentences()[0];
+            assert_eq!(id, 0);
+            assert!(near(ms, spoken_ms("我去想想。")), "{ms} ms");
+        }
+        assert_eq!(started.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn a_cue_that_was_not_made_is_synthesised_from_its_text() {
+        let stage = Arc::new(Stage::default());
+        let backend = Arc::new(Fake::default());
+        let started = backend.started.clone();
+        let session = session_with(stage.clone(), backend);
+
+        let utterance = session.speak_cue("en/look").await.unwrap();
+        let player = stage.player_for(utterance);
+        assert!(until(|| player.sentences().len() == 1).await);
+        assert!(near(
+            player.sentences()[0].1,
+            spoken_ms("Let me look into that.")
+        ));
+        assert_eq!(started.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn a_cue_cuts_off_the_turn_that_was_speaking() {
+        let stage = Arc::new(Stage::default());
+        let session = session(stage.clone());
+        let first = session.begin().await.unwrap();
+        session.push("slow one".to_string()).await.unwrap();
+
+        let second = session.speak_cue("zh/moment").await.unwrap();
+        assert_eq!(second, first + 1);
+        assert_eq!(stage.player_for(first).stops(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_unknown_cue_is_refused_and_a_new_key_drops_what_was_made() {
+        let session = session(Arc::new(Stage::default()));
+        assert!(session.speak_cue("zh/nope").await.is_err());
+
+        session.prime_cues("en").await.unwrap();
+        let backend = session.vendor().unwrap();
+        let key = session.cue_key(backend.as_ref(), "Let me think about that.");
+        assert!(session.cues.has("en/think", &key));
+        session.use_key_with(None, None);
+        assert!(!session.cues.has("en/think", &key));
     }
 }
