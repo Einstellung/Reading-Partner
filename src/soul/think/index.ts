@@ -4,12 +4,12 @@
 
 import { appBox } from "../../box";
 import { appRunner } from "../../legion/runner/runner";
-import { delegableWorkerKinds } from "../../legion/runner/worker";
 import { appData } from "../../platform/app/appdata";
 import { answerBellSoon } from "../bell";
 import { writeBriefFile } from "../delegate";
 import { onVerbatimLanding } from "../delivery";
 import { createCallBackend } from "./calls";
+import { callKinds } from "./kind";
 import type { CallBackend } from "./contract";
 
 export * from "./contract";
@@ -19,6 +19,7 @@ export {
   THINK_ROUNDS,
   THINK_TOKEN_CAP,
   registerThinkDesk,
+  callKinds,
   registerThinkWorker,
   thinkAgent,
   thinkTools,
@@ -42,7 +43,7 @@ export function callBackend(): CallBackend {
     box: appBox(),
     onLanding: onVerbatimLanding,
     answerSoon: answerBellSoon,
-    kinds: delegableWorkerKinds,
+    kinds: callKinds,
   });
   return live;
 }

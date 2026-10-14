@@ -12,8 +12,9 @@ import { createBellStore } from "../../src/legion/bell";
 import type { AgentTool } from "../../src/legion/durable/contract";
 import { createRunStore } from "../../src/legion/run/store";
 import type { Run } from "../../src/legion/run";
-import { workerFor, type WorkerContext } from "../../src/legion/runner/worker";
-import type { SubagentTurnRequest } from "../../src/legion/subagent";
+import { delegableWorkerKinds, workerFor, type WorkerContext } from "../../src/legion/runner/worker";
+import { buildDelegateTools } from "../../src/soul/delegate";
+import { withoutBriefNote, type SubagentTurnRequest } from "../../src/legion/subagent";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
 import { rebuildThreadStoreForTests, type ThreadMessage } from "../../src/platform/app/threads";
 import {
@@ -26,7 +27,14 @@ import {
   type ReplyAppend,
   type VerbatimLanding,
 } from "../../src/soul";
-import { THINK_KIND, THINK_PROMPT, registerThinkDesk, registerThinkWorker, thinkWorker } from "../../src/soul/think";
+import {
+  THINK_KIND,
+  THINK_PROMPT,
+  callKinds,
+  registerThinkDesk,
+  registerThinkWorker,
+  thinkWorker,
+} from "../../src/soul/think";
 import { appendInfoReply } from "../../src/reading/turn/info-bell";
 import { infoBookId } from "../../src/info/briefer/call";
 import { briefingThreadId } from "../../src/info/briefer/anchors";
@@ -56,11 +64,22 @@ test("think runs on the talk tier", () => {
   expect(tierForKind("think")).toBe("talk");
 });
 
-test("think registers as a local, delegable agent kind whose output is delivered as it is", () => {
+test("think registers as a local agent kind whose output is delivered as it is", () => {
   undo.push(registerThinkWorker());
   const reg = workerFor(THINK_KIND)!;
-  expect(reg).toMatchObject({ kind: THINK_KIND, tier: "local", agent: true, delegable: true });
+  expect(reg).toMatchObject({ kind: THINK_KIND, tier: "local", agent: true, delegable: false });
   expect(isVerbatim(THINK_KIND)).toBe(true);
+});
+
+test("only a voice call can hand work to think: an ordinary soul turn's delegate does not offer it", async () => {
+  undo.push(registerThinkWorker());
+  expect(delegableWorkerKinds()).not.toContain(THINK_KIND);
+  const [ordinary] = buildDelegateTools({ writeBrief: async () => "legion/briefs/b.md", delegate: async () => ({ ok: false, reason: "x" }) });
+  expect(JSON.stringify(ordinary!.parameters)).not.toContain(THINK_KIND);
+  await expect(ordinary!.execute({ kind: THINK_KIND, task: "q" })).rejects.toThrow(`Nothing here runs the kind "${THINK_KIND}"`);
+  // A call's catalogue has it, first, with the ordinary kinds after it.
+  expect(callKinds()[0]).toBe(THINK_KIND);
+  expect(callKinds().slice(1)).toEqual(delegableWorkerKinds());
 });
 
 test("a think run gets the reads of the desk it is delivered to, the talk model, and writes its answer as the output", async () => {
@@ -132,6 +151,9 @@ function scene() {
   const OUTPUT = "Rates did it. The gap between the two widened, and the yen went with it.";
   const readFile = async (path: string) => {
     if (path === "legion/outputs/r-1.md") return OUTPUT;
+    if (path === "legion/outputs/r-noted.md") {
+      return `${OUTPUT}\n\nSub-agent note: 1 of its 2 tool calls failed (web_search: timeout), so this may be incomplete.`;
+    }
     if (path === "legion/briefs/b-1.md") return "Why did the yen fall?";
     throw new Error(`no file ${path}`);
   };
@@ -170,6 +192,28 @@ test("a think run that came back is appended and boxed as it is, with no turn, e
     { status: "done", runId: "r-1", kind: THINK_KIND, text: s.OUTPUT, cover: "Rates did it.", boxItemId: items[0]!.id },
   ]);
   expect(await s.bells.read()).toEqual([]);
+});
+
+test("the runner's note on failed lookups is not delivered: not in the conversation, not in the box", async () => {
+  const s = scene();
+  await s.bells.ring("run-done", {
+    runId: "r-1",
+    kind: THINK_KIND,
+    brief: "legion/briefs/b-1.md",
+    output: "legion/outputs/r-noted.md",
+    deliverTo: JSON.stringify(PLACE),
+    delegator: { kind: "soul" },
+  });
+  expect(await s.answer()).toBe(1);
+  expect(s.appended[0]!.text).toBe(s.OUTPUT);
+  expect((await s.box.list())[0]!.body).toBe(s.OUTPUT);
+  expect(s.landings[0]).toMatchObject({ status: "done", text: s.OUTPUT });
+});
+
+test("withoutBriefNote takes off only the runner's note on the end", () => {
+  expect(withoutBriefNote("A.\n\nSub-agent note: the brief was cut off.")).toBe("A.");
+  expect(withoutBriefNote("A.\n\nB.")).toBe("A.\n\nB.");
+  expect(withoutBriefNote("Sub-agent note: alone")).toBe("Sub-agent note: alone");
 });
 
 test("a think run that failed leaves one item to decide about and nothing in the conversation", async () => {

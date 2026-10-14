@@ -58,7 +58,9 @@ function harness(kinds: readonly string[] = [THINK_KIND, "research-literature"])
       return path;
     },
     readFile: async (path) => {
-      if (path === "legion/outputs/r-1.md") return "Three papers. The 1971 one settles it.";
+      if (path === "legion/outputs/r-1.md") {
+        return "Three papers. The 1971 one settles it.\n\nSub-agent note: the brief was longer than 1200 tokens and was cut off.";
+      }
       throw new Error(`no file ${path}`);
     },
     box: {
@@ -213,7 +215,7 @@ test("a cancelled task is never told, even if a landing arrives", async () => {
   expect(notes).toEqual([]);
 });
 
-test("a kind answered with a turn settles when its run ends, its output read off the run", async () => {
+test("a kind answered with a turn settles when its run ends, its output read off the run without the runner's note", async () => {
   const h = harness();
   const notes: CallNote[] = [];
   h.backend.subscribe("c1", (note) => notes.push(note));

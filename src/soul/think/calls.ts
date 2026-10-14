@@ -11,6 +11,7 @@
 import type { BoxStore } from "../../box";
 import type { Run } from "../../legion/run";
 import type { DelegateInput, Delegated } from "../../legion/runner/worker";
+import { withoutBriefNote } from "../../legion/subagent";
 import { firstSentence } from "../../platform/std/text";
 import { coverOf } from "../bell";
 import { isVerbatim, type VerbatimLanding } from "../delivery";
@@ -100,7 +101,7 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
   async function finished(task: Task, run: Run): Promise<void> {
     if (run.state === "done") {
       const text = run.output ? await deps.readFile(run.output).catch(() => null) : null;
-      settleDone(task, (text ?? "").trim());
+      settleDone(task, withoutBriefNote((text ?? "").trim()));
     } else if (run.state === "failed") {
       settleFailed(task, run.progress ?? "the run failed");
     }

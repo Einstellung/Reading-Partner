@@ -12,6 +12,7 @@ export { runSubagent, type SubagentDeps, type SubagentRequest } from "./run";
 export { agentWorker, type AgentWorkerDeps, type AgentWorkerSpec } from "./worker";
 export { subagentTool, type SubagentToolDeps } from "./tool";
 export { createSubagentQuota, type SubagentQuota } from "./quota";
+export { BRIEF_NOTE_PREFIX, withoutBriefNote } from "./brief";
 export {
   DEFAULT_BRIEF_TOKEN_CAP,
   DEFAULT_SUBAGENT_ROUNDS,

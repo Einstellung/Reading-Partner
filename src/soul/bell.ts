@@ -35,6 +35,7 @@
 
 import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
+import { withoutBriefNote } from "../legion/subagent";
 import { appData } from "../platform/app/appdata";
 import { plainBlocks } from "../platform/std/markdown-plain";
 import type { Settings } from "../platform/app/settings";
@@ -469,7 +470,8 @@ async function landVerbatim(
   };
   if (bell.type === "run-failed") return failed(bell.payload.reason);
   const substance = await runSubstance(bell.payload, deps.readFile);
-  const text = substance.output;
+  // The runner's note on tool failures stays in the output file and out of what is read aloud.
+  const text = substance.output === null ? null : withoutBriefNote(substance.output);
   if (!text) return failed(substance.outputMissing ? "The output is not on this device." : "It left nothing behind.");
   await replyAppender(origin.place)?.({ origin, text, runId, at: deps.at });
   const cover = coverOf(text);

@@ -1,7 +1,7 @@
 // The `think` kind (docs/companion/136 delegate): a question too heavy for a
 // voice call's front, handed to the soul sitting at the call's own desk.
 //
-// An agent worker, `local` tier, delegable. The body is a sub-agent over the
+// An agent worker, `local` tier, handed work only by a voice call. The body is a sub-agent over the
 // read-only tools of the desk at `deliverTo` — the place registers them here,
 // since the soul cannot open a domain's desk itself — and no write tool at all:
 // there is no confirmation card on a call. It runs on the talk model at the
@@ -15,7 +15,12 @@
 import type { BoxOrigin } from "../../box";
 import { resolveModel } from "../../ai/model-call";
 import type { AgentTool } from "../../legion/durable/contract";
-import { registerWorker, type Worker } from "../../legion/runner/worker";
+import {
+  delegableWorkerKinds,
+  registerWorker,
+  registeredWorkerKinds,
+  type Worker,
+} from "../../legion/runner/worker";
 import { agentWorker, type AgentWorkerDeps, type SubagentDefinition, type SubagentModel } from "../../legion/subagent";
 import { declareVerbatim, parseOrigin } from "../delivery";
 import { THINK_KIND } from "./contract";
@@ -111,8 +116,20 @@ export function registerThinkWorker(deps: ThinkWorkerDeps = {}): () => void {
     kind: THINK_KIND,
     tier: "local",
     agent: true,
-    delegable: true,
+    // Only a voice call hands work to it (buildCallDelegateTool): a soul turn
+    // at a book or the door has no conversation-side landing for a verbatim
+    // answer, so the ordinary delegate catalogue leaves it out.
+    delegable: false,
     run: thinkWorker(deps),
   });
   return declareVerbatim(THINK_KIND);
+}
+
+/**
+ * The kinds a voice call may hand work to: think where this device registered
+ * it, then everything the soul's ordinary catalogue offers.
+ */
+export function callKinds(): string[] {
+  const delegable = delegableWorkerKinds().filter((kind) => kind !== THINK_KIND);
+  return registeredWorkerKinds().includes(THINK_KIND) ? [THINK_KIND, ...delegable] : delegable;
 }
