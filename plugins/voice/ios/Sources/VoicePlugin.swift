@@ -364,6 +364,62 @@ class VoicePlugin: Plugin {
     /// Resolves as soon as the sentence is queued — the answer says how much
     /// speech is now ahead of the listener, which is what the synthesiser needs
     /// to decide whether to keep running ahead.
+    /// The silent bench (VoiceHarness.swift, docs/platform/560). Debug builds
+    /// only. `arm` points the next call at the harness, `feed` plays one clip
+    /// into it and answers when the clip is over, `disarm` closes the files and
+    /// puts the stack back to nothing so the next call opens the microphone.
+    @objc(voice_harness:)
+    public func voiceHarness(_ invoke: Invoke) {
+        #if DEBUG
+            let args: HarnessArgs
+            do {
+                args = try invoke.parseArgs(HarnessArgs.self)
+            } catch {
+                invoke.reject("The harness call did not parse: \(DictationError.describe(error))")
+                return
+            }
+            switch args.op {
+            case "arm":
+                guard let dir = args.dir else {
+                    invoke.reject("arm needs a dir.")
+                    return
+                }
+                do {
+                    // Whatever stack is standing was built for the microphone.
+                    AudioFront.shared.close()
+                    try VoiceHarness.shared.arm(dir: dir)
+                    invoke.resolve(HarnessAck(dir: dir, t: HarnessClock.nowMs()))
+                } catch {
+                    invoke.reject(DictationError.describe(error))
+                }
+            case "feed":
+                guard let path = args.path else {
+                    invoke.reject("feed needs a path.")
+                    return
+                }
+                let name = args.name ?? (path as NSString).lastPathComponent
+                Task {
+                    do {
+                        let result = try await VoiceHarness.shared.feed(path: path, name: name)
+                        invoke.resolve(result)
+                    } catch {
+                        invoke.reject(DictationError.describe(error))
+                    }
+                }
+            case "disarm":
+                let dir = VoiceHarness.shared.disarm()
+                AudioFront.shared.close()
+                invoke.resolve(HarnessAck(dir: dir, t: HarnessClock.nowMs()))
+            case "clock":
+                invoke.resolve(HarnessAck(dir: nil, t: HarnessClock.nowMs()))
+            default:
+                invoke.reject("Unknown harness op \(args.op).")
+            }
+        #else
+            invoke.reject("The voice harness is in debug builds only.")
+        #endif
+    }
+
     @objc(enqueue_speech:)
     public func enqueueSpeech(_ invoke: Invoke) {
         let args: EnqueueSpeechArgs
@@ -374,6 +430,12 @@ class VoicePlugin: Plugin {
             return
         }
 
+        VoiceHarness.shared.log(
+            "enqueue",
+            [
+                "utterance": Double(args.utterance), "index": args.index, "chars": args.chars,
+                "last": args.last, "bytes": args.pcm.count,
+            ])
         serial {
             do {
                 let ack = try SpeechOut.shared.enqueue(
@@ -601,6 +663,10 @@ class VoicePlugin: Plugin {
     /// name and the listener registry is keyed by the name the webview passed —
     /// and it leaves every promise the dictation event makes untouched.
     private func emitSpeech(kind: String, value: Double, reason: String?) {
+        if kind != "level" {
+            VoiceHarness.shared.log(
+                "speech:\(kind)", ["value": value, "reason": reason ?? ""])
+        }
         var payload = JSObject()
         payload["kind"] = kind
         payload["value"] = value
@@ -614,6 +680,7 @@ class VoicePlugin: Plugin {
     /// the dictation reducer's vocabulary is closed. Encodable rather than a
     /// JSObject because `cut` and `range` are nested.
     private func emitConversation(_ event: ConversationEvent) {
+        VoiceHarness.shared.logEvent("conv", event)
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             try? self.trigger("conversation", data: event)

@@ -191,7 +191,9 @@ impl SpeechSession {
         // The timeline is dropped on the floor. It is what the bench reads, and
         // a turn of conversation has no reader for it; the relay is written to
         // carry on with the receiver gone.
-        let (events, _timeline) = mpsc::unbounded_channel();
+        // The silent bench (src/harness.rs) is the one reader it has.
+        let (events, timeline) = mpsc::unbounded_channel();
+        crate::harness::watch_relay(timeline);
         let relay = SpeechRelay::start(backend, player.clone(), self.config.clone(), events);
         *turn = Some(Turn {
             utterance,

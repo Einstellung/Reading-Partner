@@ -29,6 +29,7 @@ const COMMANDS: &[&str] = &[
     "set_speech_volume",
     "register_listener",
     "remove_listener",
+    "harness",
 ];
 
 fn main() {

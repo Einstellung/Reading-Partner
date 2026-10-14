@@ -20,4 +20,5 @@ permissions = [
   "allow-set-speech-volume",
   "allow-register-listener",
   "allow-remove-listener",
+  "allow-harness",
 ]

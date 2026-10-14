@@ -251,6 +251,13 @@ impl<R: Runtime> Voice<R> {
             .map_err(Into::into)
     }
 
+    pub async fn harness(&self, args: serde_json::Value) -> crate::Result<serde_json::Value> {
+        self.0
+            .run_mobile_plugin_async("voice_harness", args)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn speech_report(&self) -> crate::Result<SpeechReport> {
         self.0
             .run_mobile_plugin_async("speech_report", ())
