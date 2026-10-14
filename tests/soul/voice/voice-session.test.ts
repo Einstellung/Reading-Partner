@@ -346,6 +346,9 @@ test("a stop before a word was spoken leaves no reply in the transcript", async 
   await h.userSaid(1, "今天有什么");
   await h.delta(1, "好的");
   await h.event({ kind: "speech-stop", turn: 2, cut: { ...CUT, sentence: 0 } });
+  // Held until speech-end says whether anyone spoke (docs/companion/136 一期).
+  expect(h.wasAborted(1)).toBe(false);
+  await h.userSaid(2, "等一下");
 
   expect(h.wasAborted(1)).toBe(true);
   expect(h.transcript.filter((t) => t.role === "ai")).toEqual([]);
@@ -683,8 +686,33 @@ test("a speech-end with an empty string is a turn, not a broken payload", async 
   await h.stream(1, REPLY);
   await h.userSaid(2, "");
 
-  expect(h.session.snapshot().phase).toBe("listening");
-  expect(h.ai(1)?.interrupted).toBe(true);
+  // Nothing was said, so the reply in flight goes on (docs/companion/136 一期).
+  expect(h.wasAborted(1)).toBe(false);
+  expect(h.session.snapshot().phase).toBe("speaking");
+  expect(h.ai(1)).toBeUndefined();
+});
+
+test("a stop before anything was audible holds the reply, and an empty speech-end lets it go on", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.event({ kind: "speech-stop", turn: 2, cut: { ...CUT, sentence: 0 } });
+  await h.delta(1, "好的。今天三件事。");
+  expect(h.calls).toEqual([]);
+  await h.userSaid(2, "");
+
+  expect(h.wasAborted(1)).toBe(false);
+  expect(h.session.snapshot().phase).toBe("speaking");
+  expect(h.session.snapshot().spoken).toBeGreaterThan(0);
+});
+
+test("a program turn takes the floor only when it is free", async () => {
+  const h = new Harness();
+  await h.open();
+  expect(h.session.program(-1).map((e) => e.type)).toEqual(["ask", "orb"]);
+  expect(h.session.program(-2)).toEqual([]);
+  await h.delta(-1, "刚才那个想好了。要我念吗");
+  expect(h.session.snapshot().phase).toBe("speaking");
 });
 
 // A stop with no position is still a stop: the user is talking over the

@@ -51,6 +51,7 @@
 // store's own subscribe covers a write made in this process, and the sync tick
 // covers an item that arrived from the other device.
 
+import { CallResultCard } from "./CallResultCard";
 import {
 	useCallback,
 	useEffect,
@@ -476,6 +477,7 @@ export function LumenCorner({
 			// onto it — which is why the drag never touches this style.
 			style={drag.bottomPx ? { marginBottom: `${drag.bottomPx}px` } : undefined}
 		>
+			{call.card && <CallResultCard card={call.card} onClose={call.dismissCard} />}
 			{errorLine && <ErrorLine line={errorLine} />}
 			{menu.state.open && (
 				<LumenMenu

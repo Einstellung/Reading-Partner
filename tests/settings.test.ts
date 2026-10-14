@@ -85,6 +85,8 @@ test("loadSettings round-trips a fully persisted object", async () => {
     defaultProviderId: "anthropic",
     defaultModelId: "claude",
     everydayModelId: "haiku",
+    voiceFrontModelId: "haiku",
+    voiceFrontThinking: "low",
     semanticScholarApiKey: "k",
     chatThinking: "high",
     prepThinking: "off",

@@ -167,7 +167,14 @@ const LAYER: Record<string, Layer> = {
   // is handed. A capability with the soul because the voice is the soul's on
   // whatever desk it speaks over; info/briefer holds the wiring of one caller.
   "soul/voice": "capability",
+  // The back half of a voice call (docs/companion/136): the `think` kind, the
+  // call's numbered list of handed-off tasks, and the seam the front calls.
+  // Reads the soul's root (delegate, bell, delivery); soul/voice reads it, and
+  // neither the root nor this reaches back for soul/voice.
+  "soul/think": "capability",
   "soul/voice/speech": "capability",
+  // The call's front (docs/companion/136): the fast layer that answers and hands off.
+  "soul/voice/front": "capability",
   // Turning raw material into usable material (docs/85), grouped by what is
   // done to it rather than by who asks: the secretary, reading and the meals
   // line are all callers, and nothing here knows any of them. Siblings may use

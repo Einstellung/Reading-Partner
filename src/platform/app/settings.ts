@@ -126,6 +126,11 @@ export interface Settings {
   // (migrateSettings below). The briefing was the first thing in the app that
   // spent money with nobody watching; it is no longer the only one.
   everydayModelId: string | null;
+  // The voice call's front (docs/companion/136): the model it answers on, null
+  // following the talk model, and whether it thinks at all. Per device, with
+  // the models.
+  voiceFrontModelId: string | null;
+  voiceFrontThinking: "off" | "low";
   // Optional Semantic Scholar API key. When set, prep fetches use it instead of
   // the shared free rate-limit pool.
   semanticScholarApiKey: string | null;
@@ -199,6 +204,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultProviderId: null,
   defaultModelId: null,
   everydayModelId: null,
+  voiceFrontModelId: null,
+  voiceFrontThinking: "off",
   semanticScholarApiKey: null,
   chatThinking: "low",
   prepThinking: "medium",
@@ -221,6 +228,8 @@ export const DEVICE_SETTING_KEYS = [
   "defaultProviderId",
   "defaultModelId",
   "everydayModelId",
+  "voiceFrontModelId",
+  "voiceFrontThinking",
   "sttApiBase",
   "sttModel",
 ] as const;
@@ -393,9 +402,11 @@ function liveStore(): SettingsStore {
       const out: Partial<Record<DeviceSettingKey, string | null>> = {};
       for (const key of DEVICE_SETTING_KEYS) {
         const value = device[key];
-        if (value === null || typeof value === "string") out[key] = value;
+        if (key === "voiceFrontThinking") {
+          if (value === "off" || value === "low") out[key] = value;
+        } else if (value === null || typeof value === "string") out[key] = value;
       }
-      return out;
+      return out as Partial<DeviceBoundSettings>;
     },
     // Read first so the patch lands on device.json as it is on disk, not on
     // whatever copy the device store last cached.

@@ -6,6 +6,7 @@ export { assembleTurn, configuredModel, type AssembleInput, type AssembledTurn }
 export {
   OUTPUT_MAX,
   answerBell,
+  answerBellSoon,
   renderBell,
   runSubstance,
   startBellWatch,
@@ -25,7 +26,16 @@ export {
   type DelegateDeps,
 } from "./delegate";
 export {
+  announceVerbatim,
+  declareVerbatim,
   deliveryOpener,
+  isVerbatim,
+  onVerbatimLanding,
+  registerReplyAppend,
+  replyAppender,
+  type ReplyAppend,
+  type ReplyAppender,
+  type VerbatimLanding,
   originLabel,
   parseOrigin,
   registerDelivery,

@@ -162,7 +162,20 @@ export function briefNote(f: BriefFacts, clipped: boolean): string {
     );
   }
   if (clipped) parts.push(`the brief was longer than ${f.tokenCap} tokens and was cut off`);
-  return parts.length === 0 ? "" : `Sub-agent note: ${parts.join("; ")}.`;
+  return parts.length === 0 ? "" : `${BRIEF_NOTE_PREFIX}${parts.join("; ")}.`;
+}
+
+/** How the runner's note on a brief begins. */
+export const BRIEF_NOTE_PREFIX = "Sub-agent note: ";
+
+/**
+ * A brief without the runner's note on its end: for a brief that is itself the
+ * answer and goes in front of the reader as it is (docs/companion/136), where a
+ * line about tool failures would be read aloud. The run's output keeps it.
+ */
+export function withoutBriefNote(brief: string): string {
+  const at = brief.lastIndexOf(`\n\n${BRIEF_NOTE_PREFIX}`);
+  return at === -1 ? brief : brief.slice(0, at).trimEnd();
 }
 
 export interface ComposedBrief {

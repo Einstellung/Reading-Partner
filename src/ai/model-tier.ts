@@ -32,7 +32,8 @@ export type ThinkingKind =
 	| "distill"
 	| "briefing"
 	| "briefing-screen"
-	| "meals";
+	| "meals"
+	| "think";
 
 // Purpose to tier, for the headless calls (ai/model-call.ts).
 const TIER_FOR_KIND: Record<ThinkingKind, ModelTier> = {
@@ -42,6 +43,10 @@ const TIER_FOR_KIND: Record<ThinkingKind, ModelTier> = {
 	briefing: "everyday",
 	"briefing-screen": "everyday",
 	meals: "everyday",
+	// A voice call's hard question, handed off (docs/companion/136): the reader
+	// is on the call waiting for it, and it runs to the end on this tier after
+	// a hang-up too.
+	think: "talk",
 };
 
 export function tierForKind(kind: ThinkingKind): ModelTier {

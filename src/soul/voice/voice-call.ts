@@ -111,6 +111,15 @@ export interface VoiceCallDeps {
   transcript: VoiceCallTranscript;
   /** The note the opening turn is asked with. */
   kickoff?: string;
+  /**
+   * A front that also takes the floor on its own (docs/companion/136): it sees
+   * every event and every effect, and starts program turns through `bind`.
+   */
+  front?: {
+    bind(floor: { program(turn: number): Promise<boolean> }): void;
+    observe(effect: SessionEffect): void;
+    event(event: ConversationEvent): void;
+  };
   session?: Partial<VoiceSessionConfig>;
 }
 
@@ -305,6 +314,7 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
   // One effect. Everything that can reject is a native command; what to do when
   // one does is decided by the loop below.
   async function performOne(e: SessionEffect): Promise<void> {
+    deps.front?.observe(e);
     switch (e.type) {
       case "ask":
         // Not awaited: the turn streams alongside the rest of the effects,
@@ -423,6 +433,7 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
     // The player is already stopped on the native side, so every sentence
     // queued ahead of the cut is a sentence nobody will hear.
     if (e?.kind === "speech-stop") emitEnvelope(null);
+    deps.front?.event(e);
     if (e?.kind === "state" && e.running === false) emitEnvelope(null);
     enqueue(async () => {
       await perform(session.event(e));
@@ -441,6 +452,19 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       if (tail === at) return;
     }
   }
+
+  deps.front?.bind({
+    program(turn) {
+      return new Promise<boolean>((resolve) => {
+        enqueue(async () => {
+          if (!running) return resolve(false);
+          const effects = session.program(turn);
+          resolve(effects.length > 0);
+          await perform(effects);
+        });
+      });
+    },
+  });
 
   return {
     async start(): Promise<void> {
