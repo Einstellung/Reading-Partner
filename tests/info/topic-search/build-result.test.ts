@@ -33,6 +33,8 @@ function fixturePosts(): XSearchPost[] {
 }
 
 const POSTS = fixturePosts();
+/** A budget that never runs out of X pages. */
+const ANY_PAGES = { take: async () => true };
 const post = (handle: string) => POSTS.find((p) => p.handle === handle)!;
 
 const TOPIC: TopicSearch = {
@@ -239,7 +241,7 @@ describe("a first run, then a day, then a quiet day", () => {
 
   test("first run: the file, its items and facts", async () => {
     const build = makeResultBuilder(deps({ files, log: firstLog, today: "2026-10-14", writeFails: 1, opened }));
-    const out = await build({ topic: TOPIC, kind: "first", x: xRead(POSTS), since: firstNow - 30 * 86_400_000, runDir: RUN_DIR, signal: new AbortController().signal });
+    const out = await build({ topic: TOPIC, kind: "first", x: xRead(POSTS), since: firstNow - 30 * 86_400_000, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal });
     expect(out.resultFile).toBe("topic-search-ts-0a1b2c3d-2026-10-14.json");
     expect(out.empty).toBe(false);
     first = parseResultFile(files.files.get(out.resultFile!)!)!;
@@ -333,7 +335,7 @@ describe("a first run, then a day, then a quiet day", () => {
       x: xRead([grown, post("yashgurbani4"), fresh]),
       since: Date.parse("2026-10-14T12:00:00Z"),
       runDir: "runs/topic-search-2",
-      signal: new AbortController().signal,
+      xPages: ANY_PAGES, signal: new AbortController().signal,
     });
     expect(out.resultFile).toBe("topic-search-ts-0a1b2c3d-2026-10-15.json");
     const day = parseResultFile(files.files.get(out.resultFile!)!)!;
@@ -353,7 +355,7 @@ describe("a first run, then a day, then a quiet day", () => {
   test("a quiet day: nothing new, no model write, an empty file", async () => {
     const log: TopicModelCall[] = [];
     const build = makeResultBuilder(deps({ files, log, today: "2026-10-16", arxiv: { "AI for science": [AGENTIC] } }));
-    const out = await build({ topic: TOPIC, kind: "daily", x: xRead([post("yashgurbani4")]), since: Date.parse("2026-10-15T12:00:00Z"), runDir: "runs/topic-search-3", signal: new AbortController().signal });
+    const out = await build({ topic: TOPIC, kind: "daily", x: xRead([post("yashgurbani4")]), since: Date.parse("2026-10-15T12:00:00Z"), runDir: "runs/topic-search-3", xPages: ANY_PAGES, signal: new AbortController().signal });
     expect(out).toEqual({ resultFile: "topic-search-ts-0a1b2c3d-2026-10-16.json", itemCount: 0, empty: true });
     const day = parseResultFile(files.files.get(out.resultFile!)!)!;
     expect(day.writeup).toBe("none");
@@ -366,7 +368,7 @@ test("a write-up that fails twice falls back to the program's version", async ()
   const log: TopicModelCall[] = [];
   const build = makeResultBuilder(deps({ files, log, today: "2026-10-14", writeFails: 2 }));
   const now = Date.parse("2026-10-14T12:00:00Z");
-  const out = await build({ topic: TOPIC, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, signal: new AbortController().signal });
+  const out = await build({ topic: TOPIC, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal });
   const result = parseResultFile(files.files.get(out.resultFile!)!)!;
   expect(result.writeup).toBe("fallback");
   expect(result.overview).toBeNull();
@@ -379,7 +381,7 @@ test("a rerank that fails ranks by relevance instead", async () => {
   const model = d.model;
   d.model = async (call) => (call.site === "rerank" ? "not json" : model(call));
   const now = Date.parse("2026-10-14T12:00:00Z");
-  const out = await makeResultBuilder(d)({ topic: TOPIC, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, signal: new AbortController().signal });
+  const out = await makeResultBuilder(d)({ topic: TOPIC, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal });
   const result = parseResultFile(files.files.get(out.resultFile!)!)!;
   expect(result.stats.reranked).toBe(false);
   expect(result.items.length).toBeGreaterThan(0);
@@ -435,4 +437,21 @@ describe("pieces", () => {
     const asked = metricQuestions(TOPIC, "2026-10-14", stats, past);
     expect(asked.map((q) => q.template?.params.subtopic)).toEqual(["Materials"]);
   });
+});
+
+test("with the X pages spent, a post on X is not opened and stays as the search page showed it", async () => {
+  const files = memoryFiles();
+  const opened: string[] = [];
+  let asked = 0;
+  const spent = { take: async () => (asked++, false) };
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  const out = await makeResultBuilder(deps({ files, log: [], today: "2026-10-14", opened }))({
+    topic: TOPIC, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, xPages: spent, signal: new AbortController().signal,
+  });
+  const result = parseResultFile(files.files.get(out.resultFile!)!)!;
+  expect(asked).toBeGreaterThan(0);
+  expect(opened.filter((u) => new URL(u).hostname === "x.com")).toEqual([]);
+  expect(result.items.find((i) => i.key === `x:${post("thePandaily").id}`)?.title).not.toBe("SRHarness: an open-source runtime for agents");
+  // Pages off X still open.
+  expect(opened.some((u) => !u.includes("x.com"))).toBe(true);
 });

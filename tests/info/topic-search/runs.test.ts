@@ -15,11 +15,11 @@ import {
   searchLines,
   topicSearchRunKey,
   topicSearchTask,
-  type BuildTopicSearchResult,
   type TopicSearchRunDeps,
   type TopicSearchRunResult,
 } from "../../../src/info/topic-search/run";
-import { createStateStore, nightLimits, progressLog, spendNight, type StateFs } from "../../../src/info/topic-search/run-state";
+import type { BuildTopicSearchResult } from "../../../src/info/topic-search/build-result";
+import { createStateStore, nightLimits, permalinkBudget, progressLog, spendNight, takePermalink, emptyState, type StateFs } from "../../../src/info/topic-search/run-state";
 import { createNightTick, topicSearchWorker } from "../../../src/info/topic-search/run-worker";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import { unread } from "../../../src/info/topic-search/run";
@@ -121,6 +121,30 @@ test("the night's ceiling is shared by its runs", () => {
   expect(nightLimits(used, "2026-10-15").searchPages).toBe(30);
 });
 
+test("a build's permalink pages come off the day's allowance and the run's or night's ceiling", () => {
+  const at = { day: "2026-10-14", kind: "daily" as const, night: "2026-10-14", runLeft: 0 };
+  const full = { ...emptyState(), reader: { marks: {}, daily: { day: "2026-10-14", search: 3, permalink: 80 } } };
+  expect(takePermalink(full, at)).toBeNull();
+  // Yesterday's count starts over.
+  expect(takePermalink(full, { ...at, day: "2026-10-15" })?.reader.daily).toEqual({ day: "2026-10-15", search: 0, permalink: 1 });
+  const nightSpent = { ...emptyState(), night: { night: "2026-10-14", posts: 0, searchPages: 0, permalinkPages: 40, activeMs: 0 } };
+  expect(takePermalink(nightSpent, at)).toBeNull();
+  const took = takePermalink(emptyState(), at)!;
+  expect(took.night?.permalinkPages).toBe(1);
+  expect(took.reader.daily?.permalink).toBe(1);
+  // A first run spends its own ceiling, not the night's.
+  expect(takePermalink(nightSpent, { ...at, kind: "first", runLeft: 1 })?.night).toEqual(nightSpent.night);
+  expect(takePermalink(emptyState(), { ...at, kind: "first", runLeft: 0 })).toBeNull();
+});
+
+test("a first run's build has what the read left of its 40 permalink pages", async () => {
+  const store = createStateStore(memFs(), "state.json");
+  const x = { ...unread("done", ""), pages: { search: 2, permalink: 38 } };
+  const budget = permalinkBudget(store, { kind: "first", night: "2026-10-14", x }, () => local(2026, 10, 14, 14));
+  expect([await budget.take(), await budget.take(), await budget.take()]).toEqual([true, true, false]);
+  expect((await store.load()).reader.daily?.permalink).toBe(2);
+});
+
 test("the state store chains writes and the progress log skips a torn line", async () => {
   const fs = memFs();
   const store = createStateStore(fs, "state.json");
@@ -181,6 +205,8 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
       trace.built++;
       return { resultFile: "topic-search-ts-0000aaaa-2026-10-14.json", itemCount: 3, empty: false };
     },
+    xPages: (about) => permalinkBudget(store, about, () => now),
+    foldSourceHealth: async () => {},
     runDir: async (runId) => `runs/${runId}`,
     progress: (dir) => progressLog(fs, dir),
     saveRead: async (dir, x) => void fs.files.set(`${dir}/x-read.json`, JSON.stringify(x)),

@@ -4,6 +4,7 @@
 
 import { labsForSource } from "../../../info/labs/labs";
 import type { Lab } from "../../../info/labs/types";
+import type { SourceHealth, TopicSearchLineHealth } from "../../../info/sources/engine";
 
 /**
  * The names of the rooms that read this source, in the order the rooms are
@@ -21,4 +22,22 @@ import type { Lab } from "../../../info/labs/types";
  */
 export function roomsUsingSource(labs: readonly Lab[], sourceId: string): string[] {
   return labsForSource(labs, sourceId).map((l) => l.name);
+}
+
+/**
+ * The topic searches' lines in the health map (docs/info/88 源健康), grouped by
+ * search name, then query, X before arXiv.
+ */
+export function topicSearchHealthRows(
+  health: Readonly<Record<string, SourceHealth>>,
+): { key: string; health: SourceHealth; line: TopicSearchLineHealth }[] {
+  return Object.entries(health)
+    .filter((e): e is [string, SourceHealth & { topicSearch: TopicSearchLineHealth }] => !!e[1].topicSearch)
+    .map(([key, h]) => ({ key, health: h, line: h.topicSearch }))
+    .sort(
+      (a, b) =>
+        a.line.name.localeCompare(b.line.name) ||
+        a.line.query.localeCompare(b.line.query) ||
+        (a.line.source === b.line.source ? 0 : a.line.source === "x" ? -1 : 1),
+    );
 }

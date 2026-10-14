@@ -609,6 +609,23 @@ export interface SourceHealth {
   // only per-source timing anyone has when a run feels slow.
   lastDurationMs?: number;
   lastItems?: number;
+  // A topic search's (search, query, source) line rather than a source
+  // (docs/info/88 源健康): what its last run read, and whether that was nothing
+  // new or nothing read at all.
+  topicSearch?: TopicSearchLineHealth;
+}
+
+export interface TopicSearchLineHealth {
+  searchId: string;
+  name: string;
+  query: string;
+  /** The query's text for this source. */
+  label: string;
+  source: "x" | "arxiv";
+  status: "ok" | "empty" | "failed";
+  read: number;
+  fresh: number;
+  passedFloor: number;
 }
 
 // Run every enabled descriptor with per-source isolation: one source throwing

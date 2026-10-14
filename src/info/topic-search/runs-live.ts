@@ -1,9 +1,9 @@
 // The live wiring of topic-search runs (docs/info/88 「两种 run」「排队」「停手」
 // 「送达」): this device's files, browse window, keep-awake lock, box, runner and
 // durable runtime. The shell calls registerTopicSearchRuns once at startup,
-// handing in the result builder and how to put a halt on the collector's
-// state file (info/program owns that file; it imports this directory, not the
-// other way round).
+// handing in how to put a halt on the collector's state file (info/program
+// owns that file; it imports this directory, not the other way round). The
+// result builder is build-live.ts's unless the caller hands in another.
 
 import { appBox, randomBoxItemId } from "../../box/store";
 import { t } from "../../i18n";
@@ -20,11 +20,13 @@ import { hasWebviewFetch } from "../../platform/app/platform";
 import { openBrowse } from "../../workshop/extract/webview-browse";
 import { checkSiteSession } from "../../workshop/extract/webview-session";
 import { allSignInSites, applySessionCheck } from "../sources/site-session";
-import { loadSiteSessions, saveSiteSessions } from "../sources/source-store";
+import { loadSiteSessions, loadSourceHealth, saveSiteSessions, saveSourceHealth } from "../sources/source-store";
 import { X_SIGN_IN_URL } from "../sources/x-search";
 import type { XHalt } from "../x/search-page";
 import { resolveRedirect } from "../x/live";
 import { stopFollowing } from "./apply";
+import { SOURCE_HEALTH_FILE, type BuildTopicSearchResult } from "./build-result";
+import { buildTopicSearchResult } from "./build-live";
 import { registerFirstRunDispatcher } from "./first-run";
 import { recordHalt, haltNeedsReader, xGate } from "./halt";
 import { lastNightAnchor, type NightConditions } from "./nightly";
@@ -33,19 +35,20 @@ import {
   TOPIC_SEARCH_HALT_BOX_KIND,
   TOPIC_SEARCH_KIND,
   topicSearchTask,
-  type BuildTopicSearchResult,
   type TopicSearchRunDeps,
 } from "./run";
 import {
   createStateStore,
   loadRead,
   nightLimits,
+  permalinkBudget,
   progressLog,
   runDirOf,
   saveRead,
   spendNight,
 } from "./run-state";
 import { createNightTick, firstRunDispatcher, topicSearchWorker } from "./run-worker";
+import { foldTopicSearchHealth, parseSourceHealthFile } from "./source-health";
 import { changeTopicSearch, loadTopicSearches } from "./store";
 import { localDay } from "./x-progress";
 import { inXLane } from "./x-lane";
@@ -56,7 +59,7 @@ const X_HOST = new URL(X_SIGN_IN_URL).hostname;
 
 const state = createStateStore(appData);
 const reporters = new Map<string, (text: string) => void>();
-let builder: BuildTopicSearchResult | null = null;
+let builder: BuildTopicSearchResult | null = buildTopicSearchResult;
 
 /** Hand in (or take back) the function that turns what a run read into its result file. */
 export function setTopicSearchResultBuilder(build: BuildTopicSearchResult | null): void {
@@ -117,6 +120,13 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
       });
     },
     builder: () => ports.build ?? builder,
+    xPages: (about) => permalinkBudget(state, about, () => Date.now()),
+    foldSourceHealth: async (dir, search) => {
+      const path = `${dir}/${SOURCE_HEALTH_FILE}`;
+      if (!(await appData.exists(path))) return;
+      const file = parseSourceHealthFile(await appData.readText(path));
+      if (file) await saveSourceHealth(foldTopicSearchHealth(await loadSourceHealth(), file, search));
+    },
     runDir: async (runId) => {
       const dir = runDirOf(runId);
       await appData.mkdirp(dir);

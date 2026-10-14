@@ -266,7 +266,7 @@ export function bootDomains(): void {
   registerInfoCollectWorker();
   // Topic searches' first look and nightly increment (docs/info/88): a run that
   // reads X in the hidden window, so only a desktop collector claims it. The
-  // result builder is handed in here once it exists (run.ts BuildTopicSearchResult).
+  // result builder is topic-search/build-live.ts's.
   registerTopicSearchRuns({ noteHalt: noteCollectorHalt });
   // Settling a prose file sync parked a conflict copy of, with a model (docs/59
   // §6). Registered on every device for the same reason as collect: the

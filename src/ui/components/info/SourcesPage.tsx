@@ -29,7 +29,7 @@ import { useT, type Translate } from "../../../i18n";
 import { HIT_44 } from "../base/buttons";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
-import { roomsUsingSource } from "./sources-page";
+import { roomsUsingSource, topicSearchHealthRows } from "./sources-page";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 
 function timeAgo(ts: number, t: Translate): string {
@@ -185,6 +185,7 @@ export function SourcesPage(props: SourcesPageProps) {
   const t = useT();
   const sites = allSignInSites(props.sources, props.topicSearch);
   const [removing, setRemoving] = useState<SourceDescriptor | null>(null);
+  const topicLines = topicSearchHealthRows(props.health);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
@@ -312,6 +313,35 @@ export function SourcesPage(props: SourcesPageProps) {
             );
           })}
         </ul>
+      )}
+
+      {/* Each topic search's lines as its last run read them (docs/info/88 源健康). */}
+      {topicLines.length > 0 && (
+        <div className="mt-6">
+          <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-faint-foreground">
+            {t("sources.topicSearches")}
+          </div>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {topicLines.map(({ key, health, line }) => (
+              <li key={key} className="flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3">
+                <HealthDot health={health} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-medium text-foreground">
+                    {`${line.name} · ${line.source === "x" ? "X" : "arXiv"}`}
+                  </div>
+                  <div className="truncate text-[12px] text-faint-foreground">{line.label}</div>
+                  <div className="truncate text-[12px] text-muted-foreground">
+                    {line.status === "failed"
+                      ? t("sources.topicSearchNotRead", { why: health.lastError ?? "" })
+                      : line.status === "empty"
+                        ? t("sources.topicSearchNothingNew", { read: line.read })
+                        : t("sources.topicSearchCounts", { read: line.read, fresh: line.fresh, passedFloor: line.passedFloor })}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {removing && (

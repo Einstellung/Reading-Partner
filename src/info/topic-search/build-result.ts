@@ -7,7 +7,9 @@
 // Everything outside — the model, the network, AppData, the clock, the
 // reader's profile — comes in through BuildResultDeps; build-live.ts wires the
 // real ones. The run pipeline (run.ts) calls the function `makeResultBuilder`
-// returns with the shape below; the source health it works out goes to
+// returns with the shape below, and hands in what is left of the X pages it may
+// open: a cut-short post or an X Article read whole is a permalink page, counted
+// like the reader's. The source health it works out goes to
 // `<runDir>/topic-search-source-health.json` for the pipeline to fold into the
 // collector's state file.
 
@@ -76,16 +78,41 @@ export interface BuildTopicSearchResultArgs {
   /** Start of this run's window, epoch ms. */
   since: number;
   runDir: string;
+  /** The X pages this build may still open. */
+  xPages: XPageBudget;
   signal: AbortSignal;
 }
 
-export interface BuildTopicSearchResultOutput {
+/**
+ * X permalink pages left to the build: the device's daily allowance and the
+ * run's permalink ceiling (88). `take` spends one, or says none is left.
+ */
+export interface XPageBudget {
+  take(): Promise<boolean>;
+}
+
+/** What a link to X reads as once the budget is spent. */
+export const X_PAGES_USED_UP = "X pages for today used up";
+
+const X_HOST = /^(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com)$/i;
+
+/** Whether opening `url` opens a page on X. */
+export function isXPage(url: string): boolean {
+  try {
+    return X_HOST.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+// A type, not an interface: the run keeps it as a durable memo, which takes JSON values.
+export type BuildTopicSearchResultOutput = {
   /** The result file, relative to AppData. */
   resultFile: string | null;
   itemCount: number;
   /** Nothing new: the file says so and no box item goes out. */
   empty: boolean;
-}
+};
 
 export type BuildTopicSearchResult = (args: BuildTopicSearchResultArgs) => Promise<BuildTopicSearchResultOutput>;
 
@@ -261,7 +288,7 @@ async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<Top
 }
 
 async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs): Promise<BuildTopicSearchResultOutput> {
-  const { topic, kind, x, since, runDir, signal } = args;
+  const { topic, kind, x, since, runDir, xPages, signal } = args;
   throwIfAborted(signal);
   const now = deps.now();
   const today = deps.today();
@@ -352,7 +379,12 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   // Verify (88 「看原文」) and the items.
   const registry = new MaterialRegistry(runDir, { write: (path, content) => deps.files.write(path, content) });
   const lookups = deps.repoLookups();
-  const sourceDeps = { fetchText: deps.fetchText, openLink: deps.openLink, lookupRepo: (n: string) => lookups.lookup(n), repoQuotaLeft: () => lookups.quotaLeft() };
+  // A page on X opens only while the budget lasts; past it a cut-short post stays cut.
+  const openLink: OpenLink = async (url, s) => {
+    if (isXPage(url) && !(await xPages.take())) return { ok: false, reason: X_PAGES_USED_UP };
+    return deps.openLink(url, s);
+  };
+  const sourceDeps = { fetchText: deps.fetchText, openLink, lookupRepo: (n: string) => lookups.lookup(n), repoQuotaLeft: () => lookups.quotaLeft() };
   const items: TopicSearchResultItem[] = [];
   for (const [i, d] of chosen.entries()) {
     throwIfAborted(signal);
