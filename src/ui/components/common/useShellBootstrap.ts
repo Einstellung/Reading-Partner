@@ -58,11 +58,11 @@ import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-work
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photos/photo-sweep";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerProseAdjudicateWorker } from "../../../memory/adjudicate/live";
-import { noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
+import { amICollecting, noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
 import { registerTopicSearchRuns } from "../../../info/topic-search/runs-live";
-import { issueRunClosed } from "../../../info/issue/live";
+import { issueRunClosed, liveIssueExpiryMarker } from "../../../info/issue/live";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../info/briefer/deliver";
-import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
+import { deleteBook, deleteIfUnreferenced } from "../../../reading/delete/delete-book";
 import { retireReplacedBook } from "../../../reading/delete/retire-book";
 import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
 import { setBookRetirer } from "../../../reading/replace/live";
@@ -303,6 +303,9 @@ export function bootDomains(): void {
   registerGarbageMarker(runFilesMarker());
   registerGarbageMarker(bellMarker);
   registerGarbageMarker(infoDailyMarker);
+  // Old issues of the brief go the way a book does (docs/info/88), on the
+  // collector, the one device that writes the info shelf.
+  registerGarbageMarker(liveIssueExpiryMarker({ deleteBook: (bookId) => deleteBook(bookId), isCollector: amICollecting }));
 }
 
 export interface ShellBootstrap {

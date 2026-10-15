@@ -1145,8 +1145,8 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    retention: NEVER,
-    note: "written by the collecting desktop when it assembles an issue (src/info/issue, docs/info/88 「info 书架与专题册」); the issues' books are library entries of kind issue on no reading topic. Old issues expiring is slice 2's",
+    retention: marker("info-issue-expiry"),
+    note: "written by the collecting desktop when it assembles an issue and when an old issue expires (src/info/issue, docs/info/88 「info 书架与专题册」); the issues' books are library entries of kind issue on no reading topic. The marker's flow deletes an expired issue's book (reading's deleteBook) and drops its row; the file itself is never deleted",
   },
   {
     kind: "info-topic-search-questions",

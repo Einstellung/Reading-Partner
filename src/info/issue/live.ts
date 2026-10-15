@@ -24,7 +24,10 @@ import type { RegisteredMaterial } from "../dossier/registry";
 import { nightEndAt } from "../topic-search/nightly";
 import { loadTopicSearches } from "../topic-search/store";
 import { localDay } from "../topic-search/x-progress";
-import { assembleDue, runClosed, type AssembleOutcome, type ClosedRun, type IssueDeps } from "./assemble";
+import { assembleDue, runClosed, type ClosedRun, type IssueDeps } from "./assemble";
+import { issueExpiryMarker } from "./expiry";
+import { INFO_SHELF_FILE } from "./types";
+import type { GarbageMarker } from "../../housekeeper";
 
 export interface IssueFiling {
   importBook(bytes: Uint8Array, path: string, meta: ImportMeta): Promise<{ hash: string }>;
@@ -81,7 +84,8 @@ const deps: IssueDeps = {
 
 let queue: Promise<unknown> = Promise.resolve();
 
-function serial(work: () => Promise<AssembleOutcome[]>): Promise<AssembleOutcome[]> {
+// Assembly and expiry both rewrite info-shelf.json, so they take turns.
+function serial<T>(work: () => Promise<T>): Promise<T> {
   const next = queue.then(work, work);
   queue = next.catch(() => {});
   return next;
@@ -103,4 +107,21 @@ export async function checkIssuesDue(): Promise<void> {
   } catch (e) {
     console.warn("the brief could not be assembled", e);
   }
+}
+
+/**
+ * The expiry marker on the real host (expiry.ts). The shell registers it with
+ * reading's deleteBook and the collector check, neither of which info imports.
+ */
+export function liveIssueExpiryMarker(ports: {
+  deleteBook(bookId: string): Promise<void>;
+  isCollector(): Promise<boolean>;
+}): GarbageMarker {
+  return issueExpiryMarker({
+    ...ports,
+    readShelf: () => deps.files.read(INFO_SHELF_FILE),
+    writeShelf: (text) => deps.files.write(INFO_SHELF_FILE, text),
+    today: localDay,
+    serial,
+  });
 }

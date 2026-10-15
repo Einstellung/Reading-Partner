@@ -4,6 +4,7 @@
 
 export {
   garbageMarkerRegistered,
+  markerFlows,
   registerGarbageMarker,
   registeredGarbageMarkers,
   type GarbageMarker,
