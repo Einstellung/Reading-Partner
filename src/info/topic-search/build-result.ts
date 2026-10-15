@@ -21,7 +21,7 @@ import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
 import type { InfoItem } from "../sources/item";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
-import { composeResult } from "./compose";
+import { composeResult, EARLIER_LINES, type EarlierLine } from "./compose";
 import { parseJsonReply, type TopicModel } from "./model-io";
 import { enqueue, loadQueue, metricQuestions, pickQuestions, questionCap, saveQueue, waiting, type NewQuestion } from "./questions";
 import {
@@ -398,6 +398,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         id,
         keys: [...new Set([...prev.keys, ...d.keys])],
         summary: null,
+        body: [],
+        unknown: null,
         links: { original: prev.links.original, posts: d.posts },
         facts: prev.facts.kind === "post" ? { ...prev.facts, counts: d.continuing.after } : prev.facts,
         materials: [],
@@ -467,6 +469,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       title: title ? cut120(title) : fromPost,
       titleFrom: title ? "original" : "post",
       summary: null,
+      body: [],
+      unknown: null,
       facts,
       links: { original, posts: d.posts },
       materials,
@@ -516,7 +520,16 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     const offered = waiting(queue).slice(0, 6);
     const label = new Map(offered.map((q, i) => [`Q${i + 1}`, q.id]));
     const { written, calls } = await composeResult(
-      { topic, kind, items, registry, profile, questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })), language },
+      {
+        topic,
+        kind,
+        items,
+        registry,
+        profile,
+        questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })),
+        language,
+        earlier: earlierLines(recent),
+      },
       deps.model,
       signal,
       Math.max(0, callsLeft()),
@@ -525,7 +538,12 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     if (written) {
       writeup = "model";
       overview = written.overview;
-      for (const item of items) item.summary = written.summaries.get(item.id) ?? null;
+      for (const item of items) {
+        const entry = written.items.get(item.id);
+        item.summary = entry?.summary ?? null;
+        item.body = entry?.body ?? [];
+        item.unknown = entry?.unknown ?? null;
+      }
       repeats = new Set([...written.repeats].map((r) => label.get(r)).filter((r): r is string => !!r));
       const keyOf = new Map(items.map((i) => [i.id, i.key]));
       queue = enqueue(
@@ -576,6 +594,17 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     `${JSON.stringify(sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now), null, 2)}\n`,
   );
   return { resultFile: name, itemCount: items.length, empty };
+}
+
+/** The conclusions earlier results of the topic wrote, newest first (88 「跨天延续」). */
+export function earlierLines(recent: readonly TopicSearchResult[]): EarlierLine[] {
+  const out: EarlierLine[] = [];
+  for (const r of [...recent].sort((a, b) => b.createdAt - a.createdAt)) {
+    for (const item of r.items) {
+      if (item.summary && out.length < EARLIER_LINES) out.push({ date: r.date, title: item.title, summary: item.summary });
+    }
+  }
+  return out;
 }
 
 /** One call for the near ones: only "duplicate" with "high" confidence takes an item out. */

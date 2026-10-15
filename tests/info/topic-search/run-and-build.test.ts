@@ -112,7 +112,7 @@ function model(log: TopicModelCall[]) {
     const ids = [...new Set([...call.user.matchAll(/<material id="(E\d+)">/g)].map((m) => m[1]))];
     return JSON.stringify({
       overview: { text: `Work on AI for science this window; see ${ids[0]}.`, cites: [ids[0]] },
-      items: ids.map((e) => ({ e, summary: "Work relevant to the topic.", cites: [] })),
+      items: ids.map((e) => ({ e, conclusion: "Work relevant to the topic.", body: ["What it is.", "Why it likely matters."], unknown: "Whether it holds up.", cites: [] })),
       doubts: [],
       repeats: [],
     });

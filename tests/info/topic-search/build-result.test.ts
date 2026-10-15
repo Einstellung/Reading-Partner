@@ -162,7 +162,7 @@ function scriptedModel(log: TopicModelCall[], opts: { writeFails?: number } = {}
     const bad = writes <= (opts.writeFails ?? 0);
     return JSON.stringify({
       overview: { text: bad ? `Seventy-seven labs, 77 in all, joined; see ${paperItem}.` : `Agent markets for discovery lead this window; see ${paperItem}.`, cites: [paperItem] },
-      items: ids.filter((m) => !m[3]).map((m) => ({ e: m[1], summary: m[1] === paperItem ? "A study of agent markets, posted September 30, 2026." : "Work relevant to the topic.", cites: [] })),
+      items: ids.filter((m) => !m[3]).map((m) => ({ e: m[1], summary: m[1] === paperItem ? "A study of agent markets, posted September 30, 2026." : "Work relevant to the topic.", body: ["What it is."], cites: [] })),
       doubts: [],
       repeats: [],
     });
