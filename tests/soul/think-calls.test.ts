@@ -95,8 +95,14 @@ function harness(kinds: readonly string[] = [THINK_KIND, "research-literature"])
   };
 }
 
-const dispatch = (h: ReturnType<typeof harness>, task: string, follows?: number) =>
-  h.backend.dispatch({ callId: "c1", task, deliverTo: PLACE, ...(follows === undefined ? {} : { follows }) });
+const dispatch = (h: ReturnType<typeof harness>, task: string, follows?: number, replaces?: number) =>
+  h.backend.dispatch({
+    callId: "c1",
+    task,
+    deliverTo: PLACE,
+    ...(follows === undefined ? {} : { follows }),
+    ...(replaces === undefined ? {} : { replaces }),
+  });
 
 test("a task is a think run numbered within its call, delivered to the call's place", async () => {
   const h = harness();
@@ -142,17 +148,28 @@ test("cancel stops the run; the task is cancelled and frees its place", async ()
   expect((await h.backend.cancel("c1", 9)).ok).toBe(false);
 });
 
-test("a change of mind replaces a running task: the old one is cancelled, the new one follows it", async () => {
+test("a change of mind replaces a running task: the old one is cancelled, the new one stands alone", async () => {
   const h = harness();
   for (let i = 0; i < MAX_IN_FLIGHT; i++) await dispatch(h, `q${i}`);
   // Full, and still the replacement is taken: it does not add to what is running.
-  const again = await dispatch(h, "Not the yen, the euro.", 2);
+  const again = await dispatch(h, "Not the yen, the euro.", undefined, 2);
   expect(again).toEqual({ ok: true, n: 4, runId: "r-4", replaced: 2 });
   expect(h.cancelled).toEqual(["r-2"]);
   expect(h.backend.tasks("c1").map((t) => t.state)).toEqual(["running", "cancelled", "running", "running"]);
-  expect(h.backend.tasks("c1")[3]!.follows).toBe(2);
+  expect(h.backend.tasks("c1")[3]!.replaces).toBe(2);
+  expect((await dispatch(h, "x", undefined, 9)).ok).toBe(false);
   // The new brief is written in full, not "as above".
   expect(h.briefs.get(h.delegated[3]!.brief)).toBe("Not the yen, the euro.");
+});
+
+test("a task that follows one still running leaves it running and carries its brief", async () => {
+  const h = harness();
+  await dispatch(h, "What is worth reading today?");
+  const next = await dispatch(h, "What is the first item about?", 1);
+  expect(next).toEqual({ ok: true, n: 2, runId: "r-2" });
+  expect(h.cancelled).toEqual([]);
+  expect(h.backend.tasks("c1").map((t) => t.state)).toEqual(["running", "running"]);
+  expect(h.briefs.get(h.delegated[1]!.brief)).toContain("What is worth reading today?");
 });
 
 test("following a task that came back attaches its brief and what came back", async () => {
@@ -241,8 +258,12 @@ test("the call's delegate tool numbers through the ledger and throws a refusal",
   expect(tool.name).toBe("delegate");
   const result = await tool.execute({ kind: "think", task: "Why did the yen fall?" });
   expect(typeof result === "string" ? result : result.text).toContain("task 1");
-  await tool.execute({ kind: "", task: "Why the euro?", follows: 1 });
+  const second = await tool.execute({ kind: "", task: "And the euro?", follows: 1 });
   expect(h.delegated[1]!.kind).toBe(THINK_KIND);
-  expect(h.cancelled).toEqual(["r-1"]);
+  expect(h.cancelled).toEqual([]);
+  expect(typeof second === "string" ? second : second.text).not.toContain("replaces");
+  const third = await tool.execute({ kind: "think", task: "Why the pound, not the euro?", replaces: 2 });
+  expect(h.cancelled).toEqual(["r-2"]);
+  expect(typeof third === "string" ? third : third.text).toContain("replaces task 2");
   await expect(tool.execute({ kind: "think", task: "x", follows: 9 })).rejects.toThrow("no task 9");
 });

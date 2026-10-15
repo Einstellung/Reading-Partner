@@ -231,6 +231,71 @@ test("a result back is said in the next gap, not while anyone is talking", async
   expect(h.requests[0]!.messages[h.requests[0]!.messages.length - 1]!.text).toContain("#1 (Find X) is ready");
 });
 
+test("a notice waits out the user's whole turn: speech-stop opens it, speech-end closes it", async () => {
+  const h = setup(async (req) => req.onText("想好了。"));
+  h.front.observe({ type: "orb", phase: "listening" });
+  h.front.event({ kind: "speech-duck", turn: 3 });
+  h.front.event({ kind: "speech-stop", turn: 4, cut: { utterance: -1, sentence: -1, charOffset: -1, playedMs: 0 } });
+  for (const fn of h.back.listeners) fn({ callId: "c", n: 1, task: "Find X", status: "done", cover: "X is Y." });
+  h.advance(5000);
+  expect(h.programs).toEqual([]);
+  h.front.event({ kind: "speech-end", turn: 4, text: "", silentMs: 0 });
+  h.advance(2100);
+  expect(h.programs).toEqual([-1]);
+});
+
+test("a notice cut off by the user is said at the next gap, once, together with what came in since", async () => {
+  const cut = new AbortController();
+  let notices = 0;
+  const h = setup(async (req) => {
+    notices++;
+    if (notices === 1) {
+      // The 10-15 run: the user started talking while the request was out.
+      await new Promise((r) => cut.signal.addEventListener("abort", r));
+      throw new Error("Request was aborted");
+    }
+    req.onText("两个都好了，要念还是要看？");
+  });
+  h.front.observe({ type: "orb", phase: "listening" });
+  for (const fn of h.back.listeners) fn({ callId: "c", n: 1, task: "Find X", status: "done", cover: "X is Y." });
+  h.advance(2100);
+  expect(h.programs).toEqual([-1]);
+  const first = ask(h.front, -1, "", cut.signal);
+  h.front.observe({ type: "orb", phase: "thinking" });
+  // The user talks over it; a second result comes back meanwhile.
+  h.front.event({ kind: "speech-duck", turn: 1 });
+  h.front.event({ kind: "speech-stop", turn: 2, cut: { utterance: -1, sentence: -1, charOffset: -1, playedMs: 0 } });
+  h.front.observe({ type: "orb", phase: "listening" });
+  for (const fn of h.back.listeners) fn({ callId: "c", n: 2, task: "Find Z", status: "done", cover: "Z is W." });
+  h.front.event({ kind: "speech-end", turn: 2, text: "周末读什么？", silentMs: 0 });
+  h.front.observe({ type: "abort", turn: -1 });
+  h.front.observe({ type: "orb", phase: "thinking" });
+  cut.abort();
+  await first;
+  expect(h.traced.some((t) => t.name === "front:notify-requeued")).toBe(true);
+  // The reply to the user's turn: no gap, so nothing is said.
+  h.advance(3000);
+  h.front.observe({ type: "orb", phase: "speaking" });
+  h.advance(3000);
+  expect(h.programs).toEqual([-1]);
+  h.front.observe({ type: "orb", phase: "listening" });
+  h.advance(1900);
+  expect(h.programs).toEqual([-1]);
+  h.advance(200);
+  expect(h.programs).toEqual([-1, -2]);
+  const r = await ask(h.front, -2);
+  expect(r.said).toContain("两个都好了");
+  const asked = h.requests[1]!.messages[h.requests[1]!.messages.length - 1]!.text;
+  expect(asked).toContain("#1 (Find X) is ready");
+  expect(asked).toContain("#2 (Find Z) is ready");
+  // Said once: later gaps bring nothing back.
+  h.front.observe({ type: "orb", phase: "speaking" });
+  h.front.observe({ type: "orb", phase: "listening" });
+  h.advance(10000);
+  expect(h.programs).toEqual([-1, -2]);
+  expect(h.requests).toHaveLength(2);
+});
+
 test("read_out speaks the original without the model; told only when heard to the end", async () => {
   let call = 0;
   const h = setup(async (req) => {

@@ -21,7 +21,8 @@ export const FRONT_DUTY = [
   "Never make up a fact. Never retell what came back from a delegated run: offer to read it out (read_out) or to show it (show).",
   `At most ${FRONT_IN_FLIGHT} runs can be out at once; when the list already has that many running, tell the reader to wait for one to come back.`,
   "When the reader asks whether something is ready, answer from the list's progress line without calling a tool.",
-  "When the reader drops a request (\"never mind\"), call cancel with its number. When they change it, cancel the old one and delegate a new one with the whole task written out.",
+  "Every new question gets its own delegate, even while other runs are out; they run side by side.",
+  "When the reader drops a request (\"never mind\"), call cancel with its number. When they change it, delegate the new one with replaces set to the old number and the whole task written out.",
   "Back-channel with a word or two at most.",
   "The delegate task is read by someone who cannot hear this call: say what to answer and what counts as an answer. " +
     "Use kind \"think\" unless another kind plainly fits.",

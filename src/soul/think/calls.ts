@@ -140,8 +140,12 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
       if (input.follows !== undefined && !earlier) {
         return { ok: false, reason: `There is no task ${input.follows} on this call.` };
       }
+      const revised = input.replaces === undefined ? undefined : list.find((t) => t.n === input.replaces);
+      if (input.replaces !== undefined && !revised) {
+        return { ok: false, reason: `There is no task ${input.replaces} on this call.` };
+      }
       // A change of mind replaces a task still running: it does not count against the limit.
-      const replacing = earlier?.state === "running" ? earlier : undefined;
+      const replacing = revised?.state === "running" ? revised : undefined;
       const running = list.filter((t) => t.state === "running" && t !== replacing).length;
       if (running >= MAX_IN_FLIGHT) {
         return {
@@ -151,7 +155,7 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
       }
 
       let brief = task;
-      if (earlier && !replacing) {
+      if (earlier && earlier !== revised) {
         brief += `\n\n---\nThis follows on from an earlier task on the same call:\n\n${earlier.brief}`;
         if (earlier.text) brief += `\n\nWhat came back then:\n\n${earlier.text}`;
       }
@@ -173,6 +177,7 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
         task: firstSentence(task),
         brief: task,
         ...(input.follows === undefined ? {} : { follows: input.follows }),
+        ...(input.replaces === undefined ? {} : { replaces: input.replaces }),
         state: "running",
         told: false,
       };
