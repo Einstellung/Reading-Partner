@@ -74,7 +74,7 @@ export default function InfoShelf(props: {
 
   return (
     <div className="absolute inset-0 overflow-y-auto bg-background">
-      <div className="mx-auto flex w-full max-w-4xl flex-col px-4 py-5 sm:px-6 sm:py-8">
+      <div className="mx-auto flex w-full max-w-4xl flex-col px-4 pt-5 pb-28 sm:px-6 sm:pt-8">
         <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-3 border-b border-border-subtle bg-background/85 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
           {props.onBack && (
             <Button variant="subtle" size="chip" onClick={props.onBack}>
@@ -94,13 +94,13 @@ export default function InfoShelf(props: {
           {view?.issues.map((issue) => (
             <li key={issue.key}>
               <button
-                className="relative flex aspect-[3/4] w-full flex-col justify-between rounded-xl border border-border-soft bg-card p-4 text-left can-hover:hover:border-secondary-border active:bg-muted"
+                className="relative flex aspect-[4/5] w-full flex-col rounded-xl border border-border-soft bg-card p-4 text-left can-hover:hover:border-secondary-border active:bg-muted"
                 onClick={() => open(issue)}
               >
                 <span className="text-[11px] font-medium tracking-[0.08em] text-faint-foreground uppercase">
                   {issue.title}
                 </span>
-                <span className="font-serif text-[30px] leading-tight text-foreground">{issue.dateLabel}</span>
+                <span className="flex flex-1 items-center font-serif text-[30px] leading-tight text-foreground">{issue.dateLabel}</span>
                 <span className="flex flex-col gap-1">
                   <span className="line-clamp-2 text-[13px] leading-snug text-muted-foreground">{issue.topicsLine}</span>
                   <span className="text-[12px] text-faint-foreground">{issue.itemsLine}</span>
