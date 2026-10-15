@@ -16,6 +16,7 @@ import type { InfoCard } from "../../../info/boxes/cards";
 import type { AsideCard } from "../../../reading/aside";
 import type { IntakeCard } from "../../../reading/ingest/intake-card";
 import type { TopicSearchCard } from "../../../info/topic-search/cards";
+import type { BoxItemCard } from "../../../box/card";
 import type { ReadingCard } from "../../../reading/retell/cards";
 import type {
   PersistedCardPayload,
@@ -33,7 +34,7 @@ import { persistedTrace, type Receipt, type ToolStatus } from "../../../ai/turn-
 // reading/retell so neither has to import the other to be in the union. The
 // registry (ui/components/cardRegistry.ts, one level above chat/) is where the
 // components are gathered.
-export type CardPayload = InfoCard | ReadingCard | AsideCard | IntakeCard | TopicSearchCard;
+export type CardPayload = InfoCard | ReadingCard | AsideCard | IntakeCard | TopicSearchCard | BoxItemCard;
 export type CardKind = CardPayload["kind"];
 
 // The component table the render layer looks a card up in, by kind. The mapped

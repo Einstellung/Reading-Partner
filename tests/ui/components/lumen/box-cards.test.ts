@@ -1,5 +1,5 @@
-// The column the case opens: its order, its size, the line under each cover,
-// and what the count decides about the corner (docs/68).
+// The box as the corner and the conversation see it: the line under each
+// cover, and what the count decides about the corner (docs/68).
 //
 // Run: bun test.
 
@@ -7,18 +7,12 @@ import { expect, test } from "bun:test";
 
 import type { BoxItem, BoxOrigin } from "../../../../src/box/types";
 import {
-  MAX_VISIBLE_CARDS,
   badgeCount,
   bookIdsIn,
-  columnMaxPx,
   caseLabel,
   showsCase,
   isDismissSwipe,
   originLabel,
-  sortBoxCards,
-  visibleCardCount,
-  CARD_PX,
-  CARD_GAP_PX,
   SWIPE_DISMISS_PX,
 } from "../../../../src/ui/components/lumen/box-cards";
 
@@ -37,31 +31,6 @@ function item(id: string, over: Partial<BoxItem> = {}): BoxItem {
     ...over,
   };
 }
-
-test("the ones that need deciding come first, and keep the store's order among themselves", () => {
-  const items = [
-    item("a"),
-    item("b", { needsDecision: true }),
-    item("c"),
-    item("d", { needsDecision: true }),
-  ];
-  expect(sortBoxCards(items).map((one) => one.id)).toEqual(["b", "d", "a", "c"]);
-});
-
-test("sorting does not reorder the array it was handed", () => {
-  const items = [item("a"), item("b", { needsDecision: true })];
-  sortBoxCards(items);
-  expect(items.map((one) => one.id)).toEqual(["a", "b"]);
-});
-
-test("five cards are on screen and the sixth is a scroll", () => {
-  expect(MAX_VISIBLE_CARDS).toBe(5);
-  expect(visibleCardCount(3)).toBe(3);
-  expect(visibleCardCount(5)).toBe(5);
-  expect(visibleCardCount(9)).toBe(5);
-  expect(visibleCardCount(0)).toBe(0);
-  expect(columnMaxPx()).toBe(5 * CARD_PX + 4 * CARD_GAP_PX);
-});
 
 test("the case stands there whenever anything is open, and only then", () => {
   expect(showsCase(0)).toBe(false);
@@ -104,7 +73,7 @@ test("the door and the briefing name themselves and the day", () => {
   );
 });
 
-test("the books a column has to look up are each asked for once", () => {
+test("the books the cards have to look up are each asked for once", () => {
   const items = [
     item("a", { origin: { place: "book", bookId: "b1", threadId: "t1" } }),
     item("b", { origin: { place: "book", bookId: "b1", threadId: "t2" } }),
@@ -118,7 +87,7 @@ test("a swipe dismisses only when it is sideways and long enough", () => {
   expect(isDismissSwipe(SWIPE_DISMISS_PX, 4)).toBe(true);
   expect(isDismissSwipe(-SWIPE_DISMISS_PX, 4)).toBe(true);
   expect(isDismissSwipe(SWIPE_DISMISS_PX - 1, 0)).toBe(false);
-  // A finger scrolling the column travels further down than across.
+  // A finger scrolling the conversation travels further down than across.
   expect(isDismissSwipe(80, 120)).toBe(false);
 });
 

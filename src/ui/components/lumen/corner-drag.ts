@@ -3,7 +3,7 @@
 // The corner is the bottom right until it is dragged. A drag ends at whichever
 // side edge the body is nearer, at the height the finger let go at, and the
 // pair is what this device remembers. Nothing else about the corner changes:
-// the column still rises from it, the case still stands beside the body.
+// the panel still stands on it, the case still stands beside the body.
 //
 // All of it is arithmetic over the window's box and its safe-area insets. The
 // two docks are where `pl-safe-4` / `pr-safe-4` put the body and the floor is
@@ -101,11 +101,6 @@ export function liftFraction(px: number, frame: CornerFrame): number {
  */
 export function cornerBottomPx(liftPx: number, composerLiftPx: number): number {
   return Math.max(liftPx, composerLiftPx);
-}
-
-/** Which way the column hangs off the corner it rises from. */
-export function columnAlign(side: CornerSide): "start" | "end" {
-  return side === "left" ? "start" : "end";
 }
 
 /** Where the body was when the press began: its left edge, and its lift. */

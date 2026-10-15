@@ -35,13 +35,13 @@ export default {
   "lumen.show": "Lumen 표시",
   "lumen.hide": "Lumen 숨기기",
   "lumen.needsDecision": "결정이 필요합니다",
-  "lumen.holdForMenu": "길게 눌러 Lumen 메뉴 열기",
-  "lumen.menuVoice": "음성",
-  "lumen.menuType": "텍스트",
+  "lumen.tapToChat": "Lumen: 탭하면 채팅, 길게 누르면 음성",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
   "door.close": "닫기",
+  "door.expand": "크게",
+  "door.shrink": "작게",
   "door.empty": "무슨 생각을 하고 있나요?",
   "door.placeholder": "Lumen에게 메시지…",
   "door.failed": "답장을 시작하지 못했어요.",
@@ -56,7 +56,7 @@ export default {
   "box.notOnPhone": "이 항목은 iPad나 데스크톱에서 열립니다.",
   "box.label": "박스",
   "box.waiting": { other: "박스, {count}개 대기 중" },
-  "box.empty": "박스에 아무것도 없습니다.",
+  "box.cardKicker": "박스에서",
 
   "figure.label": "그림 {id} · {page}쪽",
   "figure.number": "그림 {id}",

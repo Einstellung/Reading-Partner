@@ -36,13 +36,13 @@ export default {
   "lumen.show": "Mostrar Lumen",
   "lumen.hide": "Ocultar Lumen",
   "lumen.needsDecision": "Precisa de uma decisão",
-  "lumen.holdForMenu": "Mantenha pressionado para o menu do Lumen",
-  "lumen.menuVoice": "Voz",
-  "lumen.menuType": "Texto",
+  "lumen.tapToChat": "Lumen: toque para conversar, mantenha pressionado para falar",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
   "door.close": "Fechar",
+  "door.expand": "Ampliar",
+  "door.shrink": "Reduzir",
   "door.empty": "O que você tem em mente?",
   "door.placeholder": "Mensagem para o Lumen…",
   "door.failed": "Não foi possível iniciar esta resposta.",
@@ -57,7 +57,7 @@ export default {
   "box.notOnPhone": "Este abre no iPad ou no computador.",
   "box.label": "A caixa",
   "box.waiting": { one: "A caixa, {count} pendente", other: "A caixa, {count} pendentes" },
-  "box.empty": "Não há nada na caixa.",
+  "box.cardKicker": "Da caixa",
 
   "figure.label": "Fig. {id} · p.{page}",
   "figure.number": "Fig. {id}",

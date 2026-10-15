@@ -35,13 +35,13 @@ export default {
   "lumen.show": "显示 Lumen",
   "lumen.hide": "隐藏 Lumen",
   "lumen.needsDecision": "需要你定",
-  "lumen.holdForMenu": "长按打开 Lumen 的菜单",
-  "lumen.menuVoice": "语音",
-  "lumen.menuType": "文字",
+  "lumen.tapToChat": "Lumen：点一下聊天，长按说话",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
   "door.close": "关闭",
+  "door.expand": "放大",
+  "door.shrink": "缩小",
   "door.empty": "想说点什么？",
   "door.placeholder": "和 Lumen 说点什么…",
   "door.failed": "这次回复没能开始。",
@@ -56,7 +56,7 @@ export default {
   "box.notOnPhone": "这一条请在 iPad 或桌面端打开。",
   "box.label": "盒子",
   "box.waiting": { other: "盒子，{count} 件待处理" },
-  "box.empty": "盒子里什么都没有。",
+  "box.cardKicker": "盒子里的",
 
   "figure.label": "图 {id} · 第{page}页",
   "figure.number": "图 {id}",

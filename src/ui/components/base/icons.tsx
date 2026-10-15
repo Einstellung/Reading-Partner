@@ -253,6 +253,21 @@ export function IconExpand({ size = 16 }: IconProps) {
 	);
 }
 
+// The expand glyph turned inwards: back to the smaller size.
+export function IconShrink({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path
+				d="M2.5 6H6V2.5M13.5 6H10V2.5M10 13.5V10H13.5M2.5 10H6V13.5"
+				stroke="currentColor"
+				strokeWidth="1.3"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
+
 // Panel glyph for the sidebar collapse/expand toggle.
 export function IconSidebar({ size = 20 }: IconProps) {
 	return (

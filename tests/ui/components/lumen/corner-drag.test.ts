@@ -11,7 +11,6 @@ import {
   CORNER_BODY_PX,
   CORNER_SPOT_DEFAULT,
   DRAG_SLOP_PX,
-  columnAlign,
   cornerBottomPx,
   dockX,
   dragOffset,
@@ -133,11 +132,6 @@ test("the composer only lifts a corner that is not already above it", () => {
   expect(cornerBottomPx(0, 120)).toBe(120);
   expect(cornerBottomPx(300, 120)).toBe(300);
   expect(cornerBottomPx(0, 0)).toBe(0);
-});
-
-test("the column hangs off the edge the corner is docked at", () => {
-  expect(columnAlign("left")).toBe("start");
-  expect(columnAlign("right")).toBe("end");
 });
 
 test("no offset is no transform", () => {

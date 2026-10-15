@@ -1,9 +1,9 @@
-// Lumen in the corner of every place, and the column of cards that rises from
-// it (docs/68).
+// Lumen in the corner of every place, and the way into his conversation
+// (docs/68).
 //
-// Rendering and event binding only. The order of the column, the labels under
-// the covers, the pose and where a card jumps to are box-cards.ts and
-// box-jump.ts.
+// Rendering and event binding only. What a press means is lumen-press.ts, which
+// box items the conversation draws and where is box-timeline.ts, the count is
+// box-cards.ts, and where a card jumps to is box-jump.ts.
 //
 // One body, bottom right, 72px, in both shells and on every screen including
 // the open reader. It does not grow and it does not re-centre — that was the
@@ -16,40 +16,32 @@
 // from behind itself and sets it down, the box empties and it puts it back
 // (case-motion.ts). The eyes and the lean go with it, in the reader too.
 //
-// Two controls, and the body is one of them now. The case is the trigger the
-// column rises from; a long press on Lumen opens a small menu beside it — voice
-// and typing — and during a call the same press ends it (docs/68,
-// hold-toggle.ts, lumen-menu.ts). The finger can stay down and slide onto an
-// item. The desktop's right-click is the same menu. A tap on the body is still
-// wired to nothing — Lumen is not a button, the props it brings are.
-//
-// Typing opens the day's conversation at the door (DoorChat.tsx): the whole
-// screen on the phone, with Lumen standing down, and a panel standing on Lumen
-// everywhere else.
+// The corner is only a way in (2026-10-15). A tap on Lumen or on the case opens
+// his conversation, the day's conversation at the door (DoorChat.tsx): the
+// whole screen on the phone, with Lumen standing down, and a panel standing on
+// Lumen everywhere else, which its expand button fills the shell with. What is
+// in the box is drawn there as cards among the day's rows. A hold on Lumen
+// talks to him — the info voice session — and during a call the same hold ends
+// it; where there is no call to have, the hold does not charge and a long press
+// is a tap. The desktop's right-click is the hold.
 //
 // The body is also the handle it is dragged by (corner-drag.ts). One press
 // feeds both machines and the first one to claim it wins: past the slop it is a
 // drag, and the hold is cancelled on that same move, so a press that travels
 // never opens a call and a press that stays never moves the corner. Dragged to
 // the left edge the whole corner is mirrored — the case to the body's right,
-// the badge on its outer corner, the column hanging off the left — which is one
+// the badge on its outer corner, the panel standing on the left — which is one
 // transform on the box the two stand in rather than a second composition.
 //
 // The session is the info screen's. What it would be about is published by
 // whichever screen holds it (voice-context.ts) and the call is built here, so
 // it outlives the screen it was opened from and can be hung up from anywhere.
-// Where nothing is registered the menu has no voice row; typing is offered
-// everywhere, so the body charges everywhere.
 //
 // A call that never got going says so. The hold charges and buzzes before
 // anything is known about the microphone, and iOS can refuse it outright, so a
 // failure with nothing on screen is a hold that swallowed the gesture. The one
 // line stacks over the body the way the briefing's layer drew it (ErrorLine),
 // and takes no presses: the way back is another hold, on the body behind it.
-//
-// The count. `appBox()` caches nothing, so the number is read twice over: the
-// store's own subscribe covers a write made in this process, and the sync tick
-// covers an item that arrived from the other device.
 
 import {
 	useCallback,
@@ -59,54 +51,31 @@ import {
 	useState,
 	type MouseEvent,
 	type PointerEvent,
-	type ReactElement,
 } from "react";
 
-import { UNSEEN, appBox } from "../../../box";
+import { appBox } from "../../../box";
 import type { BoxItem } from "../../../box/types";
 import { useT } from "../../../i18n";
-import {
-	longPressFeedback,
-	voiceStartFeedback,
-	voiceStopFeedback,
-} from "../../../platform/app/haptics";
-import { getLibraryEntry } from "../../../platform/app/library";
+import { voiceStartFeedback, voiceStopFeedback } from "../../../platform/app/haptics";
 import { hasNativeSpeech } from "../../../platform/app/platform";
-import { TICK_MS } from "../../../platform/sync";
-import { displayFileTitle } from "../shelf/file-title";
 import { cn } from "../lib/utils";
 import { orbErrorLine } from "../orb/orb";
 import { OVERLAY_Z, useBottomSheetOpen } from "../ui/overlay";
 import { useShellKeyboard } from "../common/useKeyboardInset";
 import { panelOnKeyboard } from "./door-panel";
-import { Button } from "../ui/button";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { ErrorLine } from "./ErrorLine";
 import { Lumen, LumenCase } from "./Lumen";
-import { DoorChat } from "./DoorChat";
-import { startsHold, type LumenMenuItem } from "./lumen-menu";
+import { DoorChat, type DoorBox } from "./DoorChat";
+import { PRESS_REST, lumenPressStep, startsHold, type LumenPressEffect, type LumenPressInput } from "./lumen-press";
 import { useHoldToggle } from "./use-hold-toggle";
-import { useLumenMenu } from "./use-lumen-menu";
 import { useVoiceCall, voiceCallHandle } from "./use-voice-call";
 import { getVoiceContext, subscribeVoiceContext, type VoiceContext } from "./voice-context";
-import {
-	bookIdsIn,
-	badgeCount,
-	caseLabel,
-	columnMaxPx,
-	emptyBoxLine,
-	isDismissSwipe,
-	originLabel,
-	showsCase,
-	sortBoxCards,
-	cardsHere,
-} from "./box-cards";
+import { badgeCount, caseLabel } from "./box-cards";
+import { useBoxItems } from "./use-box-items";
 import { useCaseMotion } from "./use-case-motion";
-import { columnAlign } from "./corner-drag";
 import { useCornerDrag } from "./use-corner-drag";
 import { doorFocusKey, planItemJump, stateAfterFollow, staysUntilDecided, type DoorFocus, type Place, type Shell } from "./box-jump";
 import type { IntakeOpenDocument } from "./intake-view";
-import { readIntake } from "../../../reading/ingest/topic-intake";
 
 // What the body is announced as during a call: the hold that ends it.
 const HOLD_TO_END = "Hold to end the conversation";
@@ -135,9 +104,6 @@ interface DoorOpen {
 	focus?: DoorFocus;
 }
 
-// Whether this device has the intake a box card stands for (box-cards.ts cardsHere).
-const hasIntakeHere = (intakeId: string) => readIntake(intakeId).then((intake) => intake !== null);
-
 export function LumenCorner({
 	shell,
 	shown,
@@ -153,7 +119,7 @@ export function LumenCorner({
 	/**
 	 * How far above the bottom edge to stand, for a screen whose own controls
 	 * are on that edge — the full-window chat's composer (corner-placement.ts).
-	 * The column rises from the corner, so lifting the corner lifts it too.
+	 * The panel stands on the corner, so lifting the corner lifts it too.
 	 */
 	liftPx?: number;
 	/**
@@ -177,15 +143,15 @@ export function LumenCorner({
 	const shellKeyboard = useShellKeyboard();
 	const mirrored = drag.side === "left";
 
-	const [open, setOpen] = useState(false);
-	const [count, setCount] = useState(0);
-	const [items, setItems] = useState<BoxItem[] | null>(null);
-	const [titles, setTitles] = useState<Record<string, string>>({});
+	// What is in the box for this device, read continuously: the badge counts
+	// it and the conversation draws it.
+	const box = useBoxItems();
+	const count = box.items.length;
 	const [note, setNote] = useState<string | null>(null);
 	// The case's own life: pulled out when the count first rises, put back
 	// when the box empties, and where it is drawn on every frame in between
 	// (use-case-motion.ts).
-	const box = useCaseMotion(count);
+	const motion = useCaseMotion(count);
 
 	// What a hold would talk about, as whichever screen holds it publishes it.
 	const [context, setContext] = useState<VoiceContext | null>(getVoiceContext);
@@ -202,13 +168,15 @@ export function LumenCorner({
 	const live = call.phase !== "idle";
 	// A host that cannot speak has nothing to hold for — the whole audio path is
 	// the iOS plugin's (docs/33) — and neither has a screen with nothing to talk
-	// about, unless the call the hold would end is already up.
+	// about, unless the call the hold would end is already up. There the body
+	// does not charge, and a long press is a press.
 	const canTalk = hasNativeSpeech() && (live || context !== null);
 	const handle = voiceCallHandle(call);
 	const t = useT();
 	const [door, setDoor] = useState<DoorOpen | null>(null);
-	// Only where the body is a control: everywhere else there is no call of
-	// theirs to have broken, and a sentence in the corner of a book would be
+	const [full, setFull] = useState(false);
+	// Only where the body is a voice control: everywhere else there is no call
+	// of theirs to have broken, and a sentence in the corner of a book would be
 	// about nothing they did.
 	const errorLine = canTalk ? orbErrorLine(handle.error) : null;
 	const { start, stop } = call;
@@ -216,148 +184,84 @@ export function LumenCorner({
 	const liveRef = useRef(live);
 	liveRef.current = live;
 
-	// What the menu decided. Each is read at the moment it lands, not at the
-	// render the press began in.
-	const menu = useLumenMenu((effect) => {
-		if (effect === "hang-up") {
-			stop();
-			void voiceStopFeedback();
-			return;
-		}
-		if (effect === "voice") {
-			if (!getVoiceContext()) return;
-			start();
-			void voiceStartFeedback();
-			return;
-		}
-		setOpen(false);
-		setDoor({});
-	});
-	const feedMenu = menu.feed;
-	const menuContext = useCallback(
+	const openDoor = useCallback(() => {
+		setNote(null);
+		setDoor((open) => open ?? {});
+	}, []);
+	const closeDoor = useCallback(() => {
+		setDoor(null);
+		setFull(false);
+		setNote(null);
+	}, []);
+
+	// What a press decided. Read at the moment it lands, not at the render the
+	// press began in.
+	const act = useCallback(
+		(effect: LumenPressEffect) => {
+			if (effect === "hang-up") {
+				stop();
+				void voiceStopFeedback();
+			} else if (effect === "voice") {
+				if (!getVoiceContext()) return;
+				start();
+				void voiceStartFeedback();
+			} else if (effect === "open-door") openDoor();
+		},
+		[start, stop, openDoor],
+	);
+	// The press's state, stepped synchronously: a late fire and the release
+	// that follows it arrive in one event.
+	const pressState = useRef(PRESS_REST);
+	const press = useCallback(
+		(input: LumenPressInput) => {
+			const step = lumenPressStep(pressState.current, input);
+			pressState.current = step.state;
+			act(step.effect);
+		},
+		[act],
+	);
+	const pressContext = useCallback(
 		() => ({ live: liveRef.current, canVoice: hasNativeSpeech() && getVoiceContext() !== null }),
 		[],
 	);
 
-	// Full charge: the menu opens, or the call ends. The buzz for the menu is
-	// the long-press one; the call's own ending buzzes on its way out.
-	const fire = useCallback(() => {
-		if (!liveRef.current) {
-			setOpen(false);
-			void longPressFeedback();
-		}
-		feedMenu({ kind: "fired", ...menuContext() });
-	}, [feedMenu, menuContext]);
-
-	const hold = useHoldToggle(true, fire);
+	const fire = useCallback(() => press({ kind: "fired", ...pressContext() }), [press, pressContext]);
+	const hold = useHoldToggle(canTalk, fire);
 
 	// One press and two machines to feed. The drag answers first: the move that
 	// carries the press past the slop is the move the hold is told to let go on,
 	// so a press ends as a drag or as a hold and never as both, and a press that
-	// never travels is the hold it always was.
-	//
-	// Once the hold has fired the press belongs to the menu: its moves are a
-	// finger sliding onto a row, not a drag and not a hold drifting away, and
-	// the charge stays up until it lets go.
+	// never travels is the hold, or the tap, it always was.
 	const handlers = {
 		onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
 			if (!startsHold(event.pointerType, event.button)) return;
-			menu.feed({ kind: "down" });
+			press({ kind: "down" });
 			drag.onPointerDown(event);
 			hold.handlers.onPointerDown(event);
 		},
 		onPointerMove: (event: PointerEvent<HTMLButtonElement>) => {
-			if (menu.sliding()) {
-				menu.feed({ kind: "slide", item: menu.itemAt(event.clientX, event.clientY) });
-				return;
-			}
 			if (drag.onPointerMove(event)) {
 				hold.handlers.onPointerCancel(event);
-				menu.feed({ kind: "cancel" });
-				menu.feed({ kind: "dismiss" });
+				press({ kind: "dragged" });
 			} else hold.handlers.onPointerMove(event);
 		},
 		onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
 			drag.onPointerUp(event);
 			// A release past full charge that no frame saw fires here, before the
-			// menu hears the release.
+			// press hears the release.
 			hold.handlers.onPointerUp(event);
-			menu.feed({ kind: "up", item: menu.itemAt(event.clientX, event.clientY) });
+			press({ kind: "up" });
 		},
 		onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
 			drag.onPointerCancel(event);
 			hold.handlers.onPointerCancel(event);
-			menu.feed({ kind: "cancel" });
+			press({ kind: "cancel" });
 		},
 		onContextMenu: (event: MouseEvent<HTMLButtonElement>) => {
 			hold.handlers.onContextMenu(event);
-			if (!liveRef.current) setOpen(false);
-			menu.feed({ kind: "context", ...menuContext() });
+			press({ kind: "context", ...pressContext() });
 		},
 	};
-	const holdRef = hold.ref;
-	const menuBodyRef = menu.bodyRef;
-	const bodyRef = useCallback(
-		(el: HTMLButtonElement | null) => {
-			holdRef(el);
-			menuBodyRef(el);
-		},
-		[holdRef, menuBodyRef],
-	);
-
-	// The number on the badge. Both readings land here: the store's announcement
-	// of a write this process made, and the tick that catches the other device's.
-	useEffect(() => {
-		let alive = true;
-		const read = () => {
-			void appBox()
-				.open(UNSEEN)
-				.then((open) => cardsHere(open, hasIntakeHere))
-				.then(({ length: n }) => {
-					if (!alive) return;
-					setCount(n);
-					// The last card followed or pressed away takes the column with
-					// it: the case is about to be put away, and a column hanging off
-					// a case on its way out reads as a tear.
-					if (!showsCase(n)) setOpen(false);
-				})
-				.catch(() => {});
-		};
-		read();
-		const timer = window.setInterval(read, TICK_MS);
-		const stop = appBox().subscribe(read);
-		return () => {
-			alive = false;
-			window.clearInterval(timer);
-			stop();
-		};
-	}, []);
-
-	// The column is read when it opens, not held between openings: an item the
-	// other device moved on is one nobody wants to see a stale copy of.
-	const load = useCallback(() => {
-		void appBox()
-			.open(UNSEEN)
-			.then((all) => cardsHere(all, hasIntakeHere))
-			.then(async (open) => {
-				setItems(sortBoxCards(open));
-				const names: Record<string, string> = {};
-				for (const bookId of bookIdsIn(open)) {
-					const entry = await getLibraryEntry(bookId).catch(() => null);
-					// The shelf's own name for it, and the file name cleaned up where the
-					// entry never got one (the same fallback the shelf draws).
-					if (entry) names[bookId] = entry.title || displayFileTitle(entry.originalFilename);
-				}
-				setTitles(names);
-			})
-			.catch(() => setItems([]));
-	}, []);
-
-	useEffect(() => {
-		if (!open) return;
-		setNote(null);
-		load();
-	}, [open, load]);
 
 	const place = useMemo<Place>(
 		() => ({ shell, inReader, openBookId }),
@@ -366,7 +270,9 @@ export function LumenCorner({
 
 	// Awaited step by step, not fired off together: opening a book is the one
 	// step with a wait in it, and the page and the thread after it are both
-	// inside the book being opened.
+	// inside the book being opened. A card that goes back to a door
+	// conversation reopens the conversation at that day and row; any other
+	// takes the conversation down, since what it goes to is under it.
 	const follow = useCallback(
 		async (item: BoxItem) => {
 			const jump = planItemJump(item, place);
@@ -374,6 +280,8 @@ export function LumenCorner({
 				setNote(jump.unreachable);
 				return;
 			}
+			setNote(null);
+			if (!jump.steps.some((step) => step.step === "open-door-chat")) closeDoor();
 			for (const step of jump.steps) {
 				switch (step.step) {
 					case "open-book":
@@ -410,53 +318,55 @@ export function LumenCorner({
 			}
 			const next = stateAfterFollow(item);
 			if (next) void appBox().setState(item.id, next);
-			setOpen(false);
 		},
-		[place, targets],
-	);
-
-	const onFollow = useCallback(
-		(item: BoxItem) => {
-			void follow(item);
-		},
-		[follow],
+		[place, targets, closeDoor],
 	);
 
 	const dismiss = useCallback((item: BoxItem) => {
 		if (staysUntilDecided(item)) return;
-		setItems((current) => current?.filter((one) => one.id !== item.id) ?? current);
 		void appBox().setState(item.id, "dismissed");
 	}, []);
 
+	const doorBox = useMemo<DoorBox>(
+		() => ({
+			items: box.items,
+			titles: box.titles,
+			onFollow: (item) => void follow(item),
+			onDismiss: dismiss,
+			note,
+		}),
+		[box, follow, dismiss, note],
+	);
+
 	const openDocument = useCallback(
 		(doc: IntakeOpenDocument) => {
-			setDoor(null);
+			closeDoor();
 			void targets.openDocument?.(doc);
 		},
-		[targets],
+		[targets, closeDoor],
 	);
-	const doorChat = (form: "sheet" | "panel") =>
-		door && (
-			<DoorChat
-				key={`${door.date ?? "today"}:${doorFocusKey(door.focus)}`}
-				form={form}
-				{...(form === "panel" ? { liftPx: drag.bottomPx, mirrored } : {})}
-				{...(door.date ? { date: door.date } : {})}
-				{...(door.focus ? { focus: door.focus } : {})}
-				onOpenDocument={openDocument}
-				onClose={() => setDoor(null)}
-			/>
-		);
 
 	if (!shown) return null;
 
 	const asSheet = shell === "phone";
 	// The panel stands on the keyboard while one is up, over where Lumen would be
-	// (door-panel.ts); Lumen stands down under it until the keyboard goes.
-	const underPanel = !asSheet && door !== null && panelOnKeyboard(shellKeyboard);
+	// (door-panel.ts), and filled it stands over the whole shell; Lumen stands
+	// down under it either way.
+	const underPanel = !asSheet && door !== null && (full || panelOnKeyboard(shellKeyboard));
 	return (
 		<>
-		{doorChat(asSheet ? "sheet" : "panel")}
+		{door && (
+			<DoorChat
+				key={`${door.date ?? "today"}:${doorFocusKey(door.focus)}`}
+				form={asSheet ? "sheet" : "panel"}
+				{...(asSheet ? {} : { liftPx: drag.bottomPx, mirrored, full, onToggleFull: () => setFull((f) => !f) })}
+				{...(door.date ? { date: door.date } : {})}
+				{...(door.focus ? { focus: door.focus } : {})}
+				box={doorBox}
+				onOpenDocument={openDocument}
+				onClose={closeDoor}
+			/>
+		)}
 		<div
 			ref={drag.frameRef}
 			className={cn(
@@ -477,206 +387,86 @@ export function LumenCorner({
 			style={drag.bottomPx ? { marginBottom: `${drag.bottomPx}px` } : undefined}
 		>
 			{errorLine && <ErrorLine line={errorLine} />}
-			{menu.state.open && (
-				<LumenMenu
-					items={menu.state.items}
-					hot={menu.state.hot}
-					// Opened by a right-click or the keyboard, the first row takes
-					// the focus; under a finger nothing does.
-					focusFirst={menu.state.press === null}
-					mirrored={mirrored}
-					menuRef={menu.menuRef}
-					rowRef={menu.rowRef}
-					label={(item) => t(item === "voice" ? "shell.lumen.menuVoice" : "shell.lumen.menuType")}
-					onPick={(item) => menu.feed({ kind: "pick", item })}
-				/>
-			)}
-			<Popover open={open} onOpenChange={setOpen}>
-				{/* The body's own box, with the case hanging off its left edge.
-				    Nothing here clips: the corner's footprint is wider than the
-				    body now, and the layer it sits in is the screen.
+			{/* The body's own box, with the case hanging off its left edge.
+			    Nothing here clips: the corner's footprint is wider than the body
+			    now, and the layer it sits in is the screen.
 
-				    It is also what the column is measured from. The case is the
-				    button, but the column rises from the corner (docs/68), and
-				    anchoring it to the case alone would set it in from the margin
-				    the corner keeps by the width of the body. */}
-				<PopoverAnchor asChild>
-					{/* `isolate`: the case comes out from behind the body, and a
-					    negative layer only means "under the body" inside a stacking
-					    context of its own — without one it would go under the page
-					    the corner floats over. */}
-					<div
-						className="relative isolate"
-						// Docked at the left edge the corner is the same composition
-						// seen in a mirror: the case comes out on the body's right,
-						// away from the screen edge, and the eyes and the lean that
-						// follow it (case-motion.ts) go with it for nothing. The
-						// count is the one thing that must not read backwards, so it
-						// turns itself back over.
-						style={mirrored ? { transform: "scaleX(-1)" } : undefined}
-					>
-						<Lumen
-							ref={bodyRef}
-							handle={handle}
-							attention={call.attention}
-							// Beside an open book nothing moves but the case and the
-							// hands on it (docs/68).
-							still={inReader}
-							reach={box.reach}
-							reaching={box.moving}
-							// A named control everywhere: a hold opens the menu, and
-							// on the desktop so do a right-click and the menu key.
-							label={live ? HOLD_TO_END : t("shell.lumen.holdForMenu")}
-							aria-haspopup={live ? undefined : "menu"}
-							aria-expanded={live ? undefined : menu.state.open}
-							// A tap is still wired to nothing: Lumen is not a button,
-							// the props it brings are (docs/68).
-							onActivate={NOTHING}
-							// Which way round the body is drawn, so the eyes still
-							// follow the real pointer through the mirror.
-							mirrored={mirrored}
-							// `touch-none`, `select-none` and the callout off: a hold on
-							// iOS otherwise raises the system callout and starts a
-							// selection over the body (docs/pitfall/49, 262).
-							// Unconditional now — the body takes a press everywhere,
-							// because everywhere it can be dragged.
-							className="h-18 w-18 pointer-events-auto touch-none select-none [-webkit-touch-callout:none]"
-							{...handlers}
-						/>
-						{box.drawn && (
-							<PopoverTrigger asChild>
-								<button
-									ref={box.caseRef}
-									type="button"
-									aria-label={caseLabel(count)}
-									// A case in Lumen's hands is not a button: no press, no
-									// tab stop and nothing announced until it is standing in
-									// its place.
-									aria-hidden={box.atRest ? undefined : true}
-									tabIndex={box.atRest ? undefined : -1}
-									// `box-content`: the style's padding is the 44px
-									// touch target and it grows outwards, so the case
-									// draws at its own size (case-box.ts).
-									className={cn(
-										"absolute box-content block",
-										box.atRest ? "pointer-events-auto" : "pointer-events-none",
-									)}
-									// The pose at the last render. The loop owns the
-									// element's style between renders, and every render it
-									// does make lands on the same numbers.
-									style={box.style}
-								>
-									<span className="relative block h-full w-full">
-										<LumenCase />
-										{/* The number rides the case, it does not travel
-										    with it: it appears once the case is down. */}
-										{box.atRest && <CountBadge count={count} mirrored={mirrored} />}
-									</span>
-								</button>
-							</PopoverTrigger>
+			    `isolate`: the case comes out from behind the body, and a negative
+			    layer only means "under the body" inside a stacking context of its
+			    own — without one it would go under the page the corner floats
+			    over. */}
+			<div
+				className="relative isolate"
+				// Docked at the left edge the corner is the same composition seen in
+				// a mirror: the case comes out on the body's right, away from the
+				// screen edge, and the eyes and the lean that follow it
+				// (case-motion.ts) go with it for nothing. The count is the one
+				// thing that must not read backwards, so it turns itself back over.
+				style={mirrored ? { transform: "scaleX(-1)" } : undefined}
+			>
+				<Lumen
+					ref={hold.ref}
+					handle={handle}
+					attention={call.attention}
+					// Beside an open book nothing moves but the case and the hands on
+					// it (docs/68).
+					still={inReader}
+					reach={motion.reach}
+					reaching={motion.moving}
+					label={live ? HOLD_TO_END : t("shell.lumen.tapToChat")}
+					aria-haspopup={live ? undefined : "dialog"}
+					aria-expanded={live ? undefined : door !== null}
+					// The tap. A keyboard's Enter lands here too, with no press
+					// before it; a press that was a drag or a hold swallows the
+					// click its release brings (lumen-press.ts).
+					onActivate={() => press({ kind: "click" })}
+					// Which way round the body is drawn, so the eyes still follow
+					// the real pointer through the mirror.
+					mirrored={mirrored}
+					// `touch-none`, `select-none` and the callout off: a hold on iOS
+					// otherwise raises the system callout and starts a selection over
+					// the body (docs/pitfall/49, 262). Unconditional — the body takes
+					// a press everywhere, because everywhere it can be dragged.
+					className="h-18 w-18 pointer-events-auto touch-none select-none [-webkit-touch-callout:none]"
+					{...handlers}
+				/>
+				{motion.drawn && (
+					<button
+						ref={motion.caseRef}
+						type="button"
+						aria-label={caseLabel(count)}
+						aria-haspopup="dialog"
+						// A case in Lumen's hands is not a button: no press, no tab stop
+						// and nothing announced until it is standing in its place.
+						aria-hidden={motion.atRest ? undefined : true}
+						tabIndex={motion.atRest ? undefined : -1}
+						// `box-content`: the style's padding is the 44px touch target
+						// and it grows outwards, so the case draws at its own size
+						// (case-box.ts).
+						className={cn(
+							"absolute box-content block",
+							motion.atRest ? "pointer-events-auto" : "pointer-events-none",
 						)}
-					</div>
-				</PopoverAnchor>
-				{/* The column rises from the corner and hangs off the edge the
-				    corner is docked at (docs/68). */}
-				<PopoverContent
-					side="top"
-					align={columnAlign(drag.side)}
-					className="pointer-events-auto w-[19rem]"
-				>
-					<Column
-						items={items}
-						titles={titles}
-						note={note}
-						onFollow={onFollow}
-						onDismiss={dismiss}
-					/>
-				</PopoverContent>
-			</Popover>
+						// The pose at the last render. The loop owns the element's
+						// style between renders, and every render it does make lands on
+						// the same numbers.
+						style={motion.style}
+						// The same as a tap on Lumen: his conversation, with the box in it.
+						onClick={openDoor}
+					>
+						<span className="relative block h-full w-full">
+							<LumenCase />
+							{/* The number rides the case, it does not travel with it: it
+							    appears once the case is down. */}
+							{motion.atRest && <CountBadge count={count} mirrored={mirrored} />}
+						</span>
+					</button>
+				)}
+			</div>
 		</div>
 		</>
 	);
 }
-
-const MENU_ICON_CLASS = "h-[19px] w-[19px] flex-none text-muted-foreground";
-
-const MENU_ICON: Record<LumenMenuItem, ReactElement> = {
-	voice: (
-		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={MENU_ICON_CLASS}>
-			<rect x="9" y="3" width="6" height="11" rx="3" />
-			<path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
-		</svg>
-	),
-	type: (
-		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={MENU_ICON_CLASS}>
-			<rect x="2.5" y="6" width="19" height="12" rx="2.5" />
-			<path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M7.5 14h9" />
-		</svg>
-	),
-};
-
-// The menu a hold opens, standing on Lumen in the corner's column. Not a Radix
-// popover: the finger that opened it is still down on the body, captured there,
-// and the rows are hit-tested against its moves (lumen-menu.ts) rather than
-// waiting for presses of their own.
-function LumenMenu({
-	items,
-	hot,
-	focusFirst,
-	mirrored,
-	menuRef,
-	rowRef,
-	label,
-	onPick,
-}: {
-	items: readonly LumenMenuItem[];
-	hot: LumenMenuItem | null;
-	focusFirst: boolean;
-	mirrored: boolean;
-	menuRef: (el: HTMLElement | null) => void;
-	rowRef: (item: LumenMenuItem) => (el: HTMLElement | null) => void;
-	label: (item: LumenMenuItem) => string;
-	onPick: (item: LumenMenuItem) => void;
-}) {
-	const first = useRef<HTMLButtonElement | null>(null);
-	useEffect(() => {
-		if (focusFirst) first.current?.focus({ preventScroll: true });
-	}, [focusFirst]);
-	return (
-		<div
-			ref={menuRef}
-			role="menu"
-			className={cn(
-				"pointer-events-auto min-w-[8.5rem] select-none rounded-[14px] border border-border bg-popover p-[5px] shadow-lg [-webkit-touch-callout:none] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95",
-				mirrored ? "origin-bottom-left" : "origin-bottom-right",
-			)}
-		>
-			{items.map((item, i) => (
-				<Button
-					key={item}
-					ref={(el: HTMLButtonElement | null) => {
-						rowRef(item)(el);
-						if (i === 0) first.current = el;
-					}}
-					type="button"
-					role="menuitem"
-					variant="ghost"
-					size="lg"
-					data-hot={hot === item ? "" : undefined}
-					onClick={() => onPick(item)}
-					className="flex h-11 w-full items-center justify-start gap-2.5 rounded-[10px] pl-3 pr-3.5 text-left text-[15px] text-foreground data-[hot]:bg-secondary can-hover:hover:bg-secondary"
-				>
-					{MENU_ICON[item]}
-					{label(item)}
-				</Button>
-			))}
-		</div>
-	);
-}
-
-// Nothing, named so the corner says out loud that the body's press is wired to
-// nothing rather than looking like an oversight.
-const NOTHING = () => {};
 
 // The count, straddling the case's outer top corner (docs/68). On the case and
 // not on the body: the number is how many are in the box, and the box is the
@@ -703,123 +493,3 @@ function CountBadge({ count, mirrored }: { count: number; mirrored: boolean }) {
 	);
 }
 
-// The column. Five cards of room and a scroll under them.
-function Column({
-	items,
-	titles,
-	note,
-	onFollow,
-	onDismiss,
-}: {
-	items: BoxItem[] | null;
-	titles: Record<string, string>;
-	note: string | null;
-	onFollow: (item: BoxItem) => void;
-	onDismiss: (item: BoxItem) => void;
-}) {
-	if (items !== null && items.length === 0) {
-		return <p className="m-0 px-2 py-3 text-[13px] text-muted-foreground">{emptyBoxLine()}</p>;
-	}
-	return (
-		<>
-			<div
-				className="flex flex-col gap-2 overflow-y-auto"
-				style={{ maxHeight: `${columnMaxPx()}px` }}
-			>
-				{(items ?? []).map((item) => (
-					<Card
-						key={item.id}
-						item={item}
-						title={item.origin.place === "book" ? (titles[item.origin.bookId] ?? null) : null}
-						pinned={staysUntilDecided(item)}
-						onFollow={() => onFollow(item)}
-						onDismiss={() => onDismiss(item)}
-					/>
-				))}
-			</div>
-			{note && <p className="m-0 px-2 pt-2 text-[12px] text-muted-foreground">{note}</p>}
-		</>
-	);
-}
-
-// One card. A press follows it; a horizontal drag on a finger presses it away,
-// and where there is a pointer instead of a finger the same thing is a control
-// that only appears under the cursor.
-function Card({
-	item,
-	title,
-	pinned,
-	onFollow,
-	onDismiss,
-}: {
-	item: BoxItem;
-	title: string | null;
-	/** Stays until the reader decides (box-jump.ts staysUntilDecided): no swipe, no ×. */
-	pinned: boolean;
-	onFollow: () => void;
-	onDismiss: () => void;
-}) {
-	const t = useT();
-	const from = useRef<{ x: number; y: number; touch: boolean } | null>(null);
-	const [swiped, setSwiped] = useState(false);
-
-	return (
-		<div
-			className="group relative"
-			onPointerDown={(event) => {
-				from.current = {
-					x: event.clientX,
-					y: event.clientY,
-					touch: event.pointerType !== "mouse",
-				};
-				setSwiped(false);
-			}}
-			onPointerUp={(event) => {
-				const start = from.current;
-				from.current = null;
-				if (!start || !start.touch || pinned) return;
-				if (isDismissSwipe(event.clientX - start.x, event.clientY - start.y)) {
-					setSwiped(true);
-					onDismiss();
-				}
-			}}
-		>
-			<button
-				type="button"
-				className="flex w-full flex-col items-start gap-0.5 rounded-md border border-border-soft bg-card px-3 py-2 text-left can-hover:hover:bg-muted coarse:min-h-[44px]"
-				onClick={() => {
-					if (!swiped) onFollow();
-				}}
-			>
-				<span className="flex w-full items-start gap-1.5">
-					{/* "要你定": the one mark a card carries. */}
-					{item.needsDecision && (
-						<span
-							aria-label={t("shell.lumen.needsDecision")}
-							className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-accent-line"
-						/>
-					)}
-					<span className="line-clamp-2 text-[13px] leading-snug text-foreground">
-						{item.cover}
-					</span>
-				</span>
-				<span className="text-[11px] text-muted-foreground">
-					{originLabel(item.origin, title)}
-				</span>
-			</button>
-			{/* The finger swipes; the cursor gets a target, because there is no
-			    swipe on a mouse and a card with no way out on the desktop would be
-			    a card that only accumulates. */}
-			{!pinned && (
-			<button
-				type="button"
-				aria-label={t("shell.action.dismiss")}
-				className="absolute right-1 top-1 hidden h-6 w-6 items-center justify-center rounded-md text-[13px] leading-none text-muted-foreground can-hover:group-hover:flex can-hover:hover:bg-muted"
-				onClick={onDismiss}
-			>
-				×
-			</button>
-			)}
-		</div>
-	);
-}
