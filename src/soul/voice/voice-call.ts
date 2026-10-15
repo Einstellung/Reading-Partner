@@ -43,6 +43,7 @@ import {
   type VoiceSessionSnapshot,
   type VoiceTurn,
 } from "./voice-session";
+import { aiLanguageName } from "../../platform/app/settings";
 import { errMsg } from "../../platform/std/errors";
 
 /** The turn the opening line is asked as. Native turns start at 1. */
@@ -55,10 +56,20 @@ export const KICKOFF_TURN = 0;
 // player with a script (docs/33 "不播稿"). The wording is the info desk's, the
 // only desk with a call today; a second desk passes its own through
 // `deps.kickoff`.
-export const VOICE_OPENING_KICKOFF =
+const OPENING =
   "(The user just opened the voice call — you are speaking aloud, so keep it short. " +
   "Greet them, give ONE sentence on what today's briefing amounts to, and ask what they " +
-  "want to hear about. Do not read the briefing out and do not list the items.)";
+  "want to hear about. Do not read the briefing out and do not list the items.";
+export const VOICE_OPENING_KICKOFF = `${OPENING})`;
+
+// The same note with the call's language named. The greeting comes before the
+// reader has said a word, so "the reader's language" has nothing to go on and
+// the model falls back to the note's English. `locale` is the recogniser's:
+// the language the reader is about to speak.
+export function voiceOpeningKickoff(locale: string): string {
+  const language = aiLanguageName(locale.toLowerCase().startsWith("zh") ? "zh-CN" : "en");
+  return `${OPENING} Say it in ${language}.)`;
+}
 
 /**
  * Why a call is not up. `reason` is the native side's word for it where there
