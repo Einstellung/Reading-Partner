@@ -218,7 +218,13 @@ test("stopping marks the search stopped and its concern lapsed; re-drafting it f
   });
   const file = memoryFile();
   await file.put(search("ts-1", { concernId: concern.id }));
-  const deps: EditToolDeps = { searches: file.load, change: file.change, setLapsed: store.setLapsed, now: () => OCT_14 };
+  const deps: EditToolDeps = {
+    searches: file.load,
+    known: () => file.all,
+    change: file.change,
+    setLapsed: store.setLapsed,
+    now: () => OCT_14,
+  };
 
   const stop = buildStopTopicSearchTool(deps);
   await stop.execute({ searchId: "ts-1" });
@@ -243,11 +249,27 @@ test("stopping marks the search stopped and its concern lapsed; re-drafting it f
   expect(back.evidence).toHaveLength(2);
 });
 
+test("the line a running update or stop shows names the topic; an id nobody knows stands as said", () => {
+  const deps: EditToolDeps = {
+    searches: async () => [],
+    known: () => [search("ts-1", { name: "Chips" })],
+    change: async () => null,
+    setLapsed: async () => null,
+    now: () => OCT_14,
+  };
+  const update = buildUpdateTopicSearchTool(deps);
+  expect(update.label({ searchId: "ts-1" })).toBe("Updating Chips");
+  expect(update.label({ searchId: "chips" })).toBe("Updating Chips");
+  expect(update.label({ searchId: "ts-9" })).toBe("Updating ts-9");
+  expect(buildStopTopicSearchTool(deps).label({ searchId: "ts-1" })).toContain("Chips");
+});
+
 test("update writes the change at once with a 'saved to this topic' receipt", async () => {
   const file = memoryFile();
   await file.put(search("ts-1"));
   const tool = buildUpdateTopicSearchTool({
     searches: file.load,
+    known: () => file.all,
     change: file.change,
     setLapsed: async () => null,
     now: () => OCT_14,

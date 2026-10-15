@@ -104,6 +104,20 @@ export function opensDoor(shownFor: string | null, issue: OpenIssue | null): boo
 }
 
 /**
+ * The line Lumen opened a brief with, once it has landed in the conversation:
+ * the first message of Lumen's at or after `since` (when the conversation came
+ * up). Earlier ones are the day's older talk. A brief opened a second time says
+ * nothing new, so no message comes after `since` and nothing is placed.
+ */
+export function openingReplyTs(messages: readonly { role: string; ts: number }[], since: number): number | null {
+  let first: number | null = null;
+  for (const m of messages) {
+    if (m.role === "ai" && m.ts >= since && (first === null || m.ts < first)) first = m.ts;
+  }
+  return first;
+}
+
+/**
  * What the door's turn lays on the desk and notes on the reader's line while an
  * issue is open: the issue as material, and where the reader is in it. Nothing
  * of either with no issue open.

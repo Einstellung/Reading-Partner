@@ -13,10 +13,11 @@ import { topicSearchGuidance } from "./guidance";
 import { buildProposeTopicSearchTool, type ReaderLine } from "./propose-tool";
 import { buildResumeXReadingTool } from "./resume-tool";
 import { resumeXReading, xReadingPaused } from "./runs-live";
-import { changeTopicSearch, loadTopicSearches, putTopicSearch } from "./store";
+import { changeTopicSearch, knownTopicSearches, loadTopicSearches, putTopicSearch } from "./store";
 
 const editDeps: EditToolDeps = {
   searches: () => loadTopicSearches(),
+  known: knownTopicSearches,
   change: (id, change) => changeTopicSearch(id, change),
   setLapsed: (id, lapsed) => statementStore.setLapsed(id, lapsed),
   now: () => Date.now(),
@@ -34,6 +35,9 @@ export interface TopicSearchDoorPorts {
 
 /** propose, confirm, update and stop a topic search, then resume_x_reading. */
 export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
+  // Read now, so the lines of update and stop can name the search by the time
+  // the model calls them (edit-tools.ts known).
+  void loadTopicSearches().catch(() => {});
   return [
     buildProposeTopicSearchTool({
       threadId: ports.threadId,

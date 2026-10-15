@@ -6,9 +6,9 @@
 // marks, supplements — through reading's deleteBook, which the shell hands in:
 // info does not import reading. The marker's mark names info-shelf.json (the
 // palace row that names this marker) with the issue's key as its subject; the
-// flow deletes the book first and drops the row after, so a crash in between
-// leaves the row, which the next night marks again and deleteBook, being
-// idempotent, finishes.
+// flow deletes the book first, dismisses the issue's box item, and drops the
+// row after, so a crash in between leaves the row, which the next night marks
+// again and deleteBook and the dismissal, being idempotent, finish.
 //
 // Only the collector runs it: info-shelf.json has one writer, the device that
 // assembles the issues, and the book's tombstone carries the deletion to the
@@ -53,6 +53,8 @@ export interface IssueExpiryDeps {
   isCollector(): Promise<boolean>;
   /** Reading's deleteBook: the book and everything about it. */
   deleteBook(bookId: string): Promise<void>;
+  /** The box item that hands the reader the issue, dismissed: its book is gone. */
+  dismissBoxItem(boxItemId: string): Promise<void>;
   readShelf(): Promise<string | null>;
   writeShelf(text: string): Promise<void>;
   /** The local date at `now`, YYYY-MM-DD. */
@@ -83,6 +85,7 @@ export function issueExpiryMarker(deps: IssueExpiryDeps): GarbageMarker {
         const issue = shelf.issues.find((one) => one.key === mark.subject);
         if (!issue) return;
         await deps.deleteBook(issue.bookId);
+        await deps.dismissBoxItem(issue.boxItemId);
         const latest = parseShelf(await deps.readShelf());
         await deps.writeShelf(`${JSON.stringify(withoutIssues(latest, [issue.key]), null, 2)}\n`);
       });

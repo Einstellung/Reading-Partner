@@ -125,6 +125,7 @@ export function liveIssueExpiryMarker(ports: {
 }): GarbageMarker {
   return issueExpiryMarker({
     ...ports,
+    dismissBoxItem: async (id) => void (await appBox().setState(id, "dismissed")),
     readShelf: () => deps.files.read(INFO_SHELF_FILE),
     writeShelf: (text) => deps.files.write(INFO_SHELF_FILE, text),
     today: localDay,

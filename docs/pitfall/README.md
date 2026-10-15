@@ -348,6 +348,7 @@
 - [399-the-app-csp-has-no-media-src-so-blob-media-never-loads](./webview/399-the-app-csp-has-no-media-src-so-blob-media-never-loads.md) — CSP 没写 `media-src`，回退到 `default-src 'self'`，blob 源的 video/audio 报 `MEDIA_ERR_SRC_NOT_SUPPORTED`（code 4）和 `NotSupportedError`，像编码问题；`img-src` 有 `blob:` 所以图一直没事。Linux WebKitGTK 和 iPhone WKWebView 一样，加 `media-src 'self' blob:` 即可
 - [366-a-shortened-scroller-keeps-the-old-offset](./webview/366-a-shortened-scroller-keeps-the-old-offset.md) — 内容变矮之后 WKWebView 不夹回过期的 `scrollTop`，也不发 scroll 事件：它照旧报旧偏移并把这段量算进 `scrollHeight`，直到有人往这条轴上写一次。EPUB 从纵向栏切 paged flip 时 `placePage` 只写 `scrollLeft`，一行卡片的页带被顶到视口上方 2068px，整片全白而页码照走。改内容尺寸之后，该布局拥有的那条轴无条件写一遍，答案是 0 也写
 - [444-range-client-rects-count-an-element-and-its-text-twice](./webview/444-range-client-rects-count-an-element-and-its-text-twice.md) — `Range.getClientRects()` 对完整包住的元素（引文里的 `<em>`）既给元素盒又给文字盒，半透明的引文底和高亮在那个词上叠两层（实测取色 (174,163,194) 对 (205,196,205)）；`drawQuote` / `drawStroke` 先过 `lineBands`，同一行上重叠或相接的并成一条
+- [644-a-quote-landing-leaves-the-page-count-on-the-top-edge-page](./webview/644-a-quote-landing-leaves-the-page-count-on-the-top-edge-page.md) — 手机滚动视图点页码引文跳转后底部计数不变：当前页读顶边下的位置，引文落点在顶边下方一截，顶边上还是前一页。`highlightQuote` 落定后像 `settle` 那样设 `pinned`（引文起点 CFI + 引文所在页）
 
 ## 浮层与 shadcn 原语
 

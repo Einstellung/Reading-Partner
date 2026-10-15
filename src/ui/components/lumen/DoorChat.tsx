@@ -32,7 +32,7 @@ import type { Fulltext } from "../../../fulltext/types";
 import type { Citation } from "../../../reading/prep/anchors";
 import { createQuoteCheck } from "../../../reading/session/citations";
 import { CitationContext, QuoteCheckContext } from "../markdown/Markdown";
-import { doorCitationJump, useOpenIssue, type IssueQuote } from "./issue-context";
+import { doorCitationJump, openingReplyTs, useOpenIssue, type IssueQuote } from "./issue-context";
 
 import { BOX_CARD_DISMISS_OP, BOX_CARD_FOLLOW_OP } from "../../../box/card";
 import type { BoxItem } from "../../../box/types";
@@ -41,7 +41,7 @@ import { doorDate } from "../../../soul";
 import { IconClose, IconExpand, IconShrink } from "../base/icons";
 import type { CardAction } from "../chat/chatParts";
 import CallView from "../chat/call/CallView";
-import { holdInView } from "../common/stick-to-bottom";
+import { holdInView, revealSent } from "../common/stick-to-bottom";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { ShellKeyboardContext, useShellKeyboard, type ShellKeyboard } from "../common/useKeyboardInset";
@@ -229,6 +229,30 @@ export function DoorChat({
 			cancelAnimationFrame(inner);
 		};
 	}, [selector, chat.ready, chat.messages.length]);
+
+	// The brief's opening, once it lands, is put near the top of the conversation
+	// so what follows it (the questions) is in view. Once, not a follow: nothing
+	// after it moves the list (common/stick-to-bottom.ts revealSent).
+	const [cameUpAt] = useState(() => Date.now());
+	const openingPlaced = useRef(false);
+	useEffect(() => {
+		if (!openedFor || openingPlaced.current) return;
+		const ts = openingReplyTs(chat.messages, cameUpAt);
+		if (ts === null) return;
+		let inner = 0;
+		const outer = requestAnimationFrame(() => {
+			inner = requestAnimationFrame(() => {
+				const row = document.querySelector(`[data-reply-ts="${ts}"]`);
+				if (!row) return;
+				openingPlaced.current = true;
+				revealSent(row);
+			});
+		});
+		return () => {
+			cancelAnimationFrame(outer);
+			cancelAnimationFrame(inner);
+		};
+	}, [openedFor, chat.messages, cameUpAt]);
 
 	const sizeLabel = full ? t("shell.door.shrink") : t("shell.door.expand");
 	const header = (

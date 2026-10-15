@@ -24,7 +24,7 @@ import { parseResultFile, type TopicSearchResult } from "../topic-search/result-
 import { QUESTIONS_FILE, parseQuestionsFile } from "../topic-search/questions";
 import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type IssueOpeningRecord } from "./opening-record";
 import { planIssue, type IssuePlan, type IssueTopic, type PlannedItem } from "./plan";
-import { issueCoverLine, issueEpubInput, issueFileName } from "./render";
+import { issueBookName, issueCoverLine, issueEpubInput, issueFileName } from "./render";
 import { INFO_SHELF_FILE, ISSUE_BOX_KIND, nextIssueNumber, parseShelf, type IssueEntry } from "./types";
 
 /** This device's record of which runs closed on which night (local, collector only). */
@@ -132,7 +132,7 @@ export interface IssueDeps {
   activeSearchIds(): Promise<string[]>;
   buildEpub(input: SectionedEpubInput): Promise<Uint8Array>;
   /** File the issue in the library as kind "issue", on no topic. Injected (reading or the shell). */
-  importBook(bytes: Uint8Array, fileName: string, meta: { kind: "issue"; publishedAt: string }): Promise<{ hash: string }>;
+  importBook(bytes: Uint8Array, fileName: string, meta: { kind: "issue"; publishedAt: string; filename: string }): Promise<{ hash: string }>;
   /** Read an original through the bindery, file it and attach it to the issue; false when it could not be. */
   attachOriginal(bookId: string, material: RegisteredMaterial): Promise<boolean>;
   putBox(item: { id: string; boxId: string; kind: string; cover: string; body: string; origin: { place: "door"; date: string } }): Promise<void>;
@@ -197,7 +197,12 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
   if (!plan) return { key, issue: null, supplements: 0 };
   const meta = { number: nextIssueNumber(shelf), date };
   const bytes = await deps.buildEpub(issueEpubInput(plan, meta));
-  const { hash } = await deps.importBook(bytes, issueFileName(meta), { kind: "issue", publishedAt: date });
+  const { hash } = await deps.importBook(bytes, issueFileName(meta), {
+    kind: "issue",
+    publishedAt: date,
+    // The library takes this as the entry's title: a name, not "….epub".
+    filename: issueBookName(meta),
+  });
   const opening = await writeOpening(deps, plan, results);
   let supplements = 0;
   for (const m of supplementCandidates(plan, results)) {

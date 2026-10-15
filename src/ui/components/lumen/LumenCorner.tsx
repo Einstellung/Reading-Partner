@@ -54,6 +54,7 @@ import {
 } from "react";
 
 import { appBox } from "../../../box";
+import { markIssueTold } from "../../../info/issue/box-state";
 import type { BoxItem } from "../../../box/types";
 import { useT } from "../../../i18n";
 import { voiceStartFeedback, voiceStopFeedback } from "../../../platform/app/haptics";
@@ -198,6 +199,10 @@ export function LumenCorner({
 			const issue = getOpenIssue();
 			if (opensDoor(shownForRef.current, issue)) {
 				shownForRef.current = issue!.bookId;
+				// Opened from anywhere: the box has told the reader of this issue.
+				void markIssueTold(appBox(), issue!.bookId).catch((e: unknown) =>
+					console.warn("the issue's box item could not be marked told", e),
+				);
 				setNote(null);
 				setFull(false);
 				setDoor({ issue: issue!.bookId });

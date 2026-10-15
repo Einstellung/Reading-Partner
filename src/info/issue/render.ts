@@ -46,6 +46,12 @@ export function issueTitle(meta: IssueMeta): string {
   return `Daily Brief No. ${meta.number}, ${longDate(meta.date)}`;
 }
 
+/** The name the shelf and the reader show: "Daily Brief No. 7 · Oct 15". */
+export function issueBookName(meta: IssueMeta): string {
+  const p = parts(meta.date);
+  return `Daily Brief No. ${meta.number} · ${MONTHS[p.m - 1].slice(0, 3)} ${p.d}`;
+}
+
 /** The file name the library entry is filed under. */
 export function issueFileName(meta: IssueMeta): string {
   return `Daily Brief ${meta.date} No. ${meta.number}.epub`;

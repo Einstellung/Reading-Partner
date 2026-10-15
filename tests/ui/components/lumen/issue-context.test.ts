@@ -7,6 +7,7 @@ import {
   doorCitationJump,
   getOpenIssue,
   noteOnLastLine,
+  openingReplyTs,
   opensDoor,
   publishOpenIssue,
   resetIssueContext,
@@ -86,4 +87,18 @@ test("a brief's rack has no AI pen; a book's keeps it", () => {
   expect(rackOmits(true, "issue")).toEqual(["ai"]);
   expect(rackOmits(false, "issue")).toEqual(["navlock", "ai"]);
   expect(rackOmits(true)).toEqual([]);
+});
+
+test("the opening is the first line of Lumen's at or after the conversation came up", () => {
+  const talk = [
+    { role: "user", ts: 100 },
+    { role: "ai", ts: 101 },
+    { role: "ai", ts: 5_000 },
+    { role: "ai", ts: 5_001 },
+  ];
+  expect(openingReplyTs(talk, 5_000)).toBe(5_000);
+  // Nothing new yet: the day's older talk stays where it is.
+  expect(openingReplyTs(talk.slice(0, 2), 5_000)).toBeNull();
+  // Her lines only; the reader's own do not count.
+  expect(openingReplyTs([{ role: "user", ts: 6_000 }], 5_000)).toBeNull();
 });

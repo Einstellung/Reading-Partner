@@ -43,7 +43,11 @@ test("an issue dated more than 30 days back has expired; the volumes are not iss
 function deps(over: Partial<IssueExpiryDeps> = {}) {
   let text: string | null = JSON.stringify(shelf());
   const deleted: string[] = [];
+  const dismissed: string[] = [];
   const d: IssueExpiryDeps = {
+    dismissBoxItem: async (id) => {
+      dismissed.push(id);
+    },
     isCollector: async () => true,
     deleteBook: async (bookId) => {
       deleted.push(bookId);
@@ -55,7 +59,7 @@ function deps(over: Partial<IssueExpiryDeps> = {}) {
     today: () => "2026-10-15",
     ...over,
   };
-  return { d, deleted, shelf: () => parseShelf(text) };
+  return { d, deleted, dismissed, shelf: () => parseShelf(text) };
 }
 
 test("the night deletes each expired issue's book and drops its row; volumes and the rest stay", async () => {
@@ -69,6 +73,8 @@ test("the night deletes each expired issue's book and drops its row; volumes and
   });
   expect(res).toMatchObject({ done: 1, refused: 0, failed: 0, purged: 0 });
   expect(s.deleted).toEqual(["book-1"]);
+  // Its box item goes with it: nothing in the box points at a book that is gone.
+  expect(s.dismissed).toEqual(["box-1"]);
   expect(s.shelf().issues.map((i) => i.number)).toEqual([2, 3, 4]);
   expect(s.shelf().volumes.map((v) => v.id)).toEqual(["v1"]);
   // The index file itself is never removed by the housekeeper.
@@ -92,6 +98,7 @@ test("a book that would not go keeps its row for the next night", async () => {
   const marker = issueExpiryMarker(s.d);
   await expect(marker.carryOut!({ path: INFO_SHELF_FILE, action: "flow", subject: "night:2026-09-10", reason: "" })).rejects.toThrow();
   expect(s.shelf().issues).toHaveLength(4);
+  expect(s.dismissed).toEqual([]);
   // A subject already gone is nothing to do.
   const ok = deps();
   await issueExpiryMarker(ok.d).carryOut!({ path: INFO_SHELF_FILE, action: "flow", subject: "night:1999-01-01", reason: "" });

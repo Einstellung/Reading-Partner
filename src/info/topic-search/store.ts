@@ -21,14 +21,24 @@ export type TopicSearchIo = GuardedFileIo<ParsedTopicSearches>;
 
 export const topicSearchIo: TopicSearchIo = appGuardedFileIo();
 
+// The searches as last read or written on this device, for the one reader that
+// cannot wait on the disk: the line a running tool shows is made in one step
+// (legion/durable/contract.ts AgentToolStart.label).
+let known: readonly TopicSearch[] = [];
+
+/** The topic searches as last seen, possibly none yet; read it, do not rely on it. */
+export function knownTopicSearches(): readonly TopicSearch[] {
+  return known;
+}
+
 async function readFile(io: TopicSearchIo): Promise<ParsedTopicSearches> {
-  return (
-    (await readGuardedFile(io, TOPIC_SEARCHES_FILE, parseTopicSearchesFile)) ?? {
-      searches: [],
-      foreign: [],
-      repaired: false,
-    }
-  );
+  const file = (await readGuardedFile(io, TOPIC_SEARCHES_FILE, parseTopicSearchesFile)) ?? {
+    searches: [],
+    foreign: [],
+    repaired: false,
+  };
+  if (io === topicSearchIo) known = file.searches;
+  return file;
 }
 
 /** Every search in the file, active and stopped alike. */
@@ -63,6 +73,7 @@ async function mutate(
   const foreign = file.foreign.filter((e) => !taken.has(entryId(e)));
   if (file.repaired && !(await quarantineBeforeWrite(io, TOPIC_SEARCHES_FILE))) return file.searches;
   await io.write(TOPIC_SEARCHES_FILE, topicSearchesFileBody(next, foreign));
+  if (io === topicSearchIo) known = next;
   return next;
 }
 

@@ -114,6 +114,7 @@ function withDomainMarkers<T>(body: () => T): T {
       issueExpiryMarker({
         isCollector: async () => false,
         deleteBook: async () => {},
+        dismissBoxItem: async () => {},
         readShelf: async () => null,
         writeShelf: async () => {},
         today: () => "2026-10-15",

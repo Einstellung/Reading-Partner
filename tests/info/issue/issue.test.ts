@@ -18,7 +18,7 @@ import {
   type IssueDeps,
 } from "../../../src/info/issue/assemble";
 import { MAIN_MAX, planIssue } from "../../../src/info/issue/plan";
-import { issueCoverLine, issueEpubInput, longDate } from "../../../src/info/issue/render";
+import { issueBookName, issueCoverLine, issueEpubInput, longDate } from "../../../src/info/issue/render";
 import { INFO_SHELF_FILE, ISSUE_BOX_KIND, issueBookOfItem, parseShelf } from "../../../src/info/issue/types";
 import type { RegisteredMaterial } from "../../../src/info/dossier/registry";
 import type { TopicSearchResult, TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
@@ -134,6 +134,7 @@ test("the document: contents lines, entries, Notes with separators, the Annex; t
   expect(input.sections[3].html.split("<p>* * *</p>").length).toBe(3);
   expect(input.sections[4].html).toContain("see [1] and [2].");
   expect(input.title).toBe("Daily Brief No. 3, Thursday, 15 October 2026");
+  expect(issueBookName({ number: 7, date: "2026-10-15" })).toBe("Daily Brief No. 7 · Oct 15");
   expect(input.cover?.svg).toContain("No. 3");
   expect(longDate("2026-10-15")).toBe("Thursday, 15 October 2026");
   expect(issueCoverLine("2026-10-15", 4)).toBe("Oct 15 brief · 4 items");
@@ -191,7 +192,7 @@ describe("two topics' results become one issue", () => {
     expect(await runClosed(w.deps, { searchId: science.searchId, kind: "daily", night: "2026-10-15", resultFile: `${science.id}.json` })).toEqual([]);
     const [made] = await runClosed(w.deps, { searchId: engineering.searchId, kind: "daily", night: "2026-10-15", resultFile: `${engineering.id}.json` });
     expect(made.issue).toMatchObject({ key: "night:2026-10-15", number: 1, date: "2026-10-15", items: 5, bookId: "h1", boxItemId: "box-1" });
-    expect(w.library.get("h1")).toMatchObject({ fileName: "Daily Brief 2026-10-15 No. 1.epub", meta: { kind: "issue", publishedAt: "2026-10-15" } });
+    expect(w.library.get("h1")).toMatchObject({ fileName: "Daily Brief 2026-10-15 No. 1.epub", meta: { kind: "issue", publishedAt: "2026-10-15", filename: "Daily Brief No. 1 · Oct 15" } });
     // Only the GitHub original: the X post is not a document of its own.
     expect(w.attached).toEqual(["h1 https://github.com/acme/E1"]);
     expect(parseShelf(w.files.get(INFO_SHELF_FILE) ?? null).issues.map((i) => `${i.key} ${i.number} ${i.topics.map((t) => t.name).join("+")}`)).toEqual([
