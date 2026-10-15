@@ -46,7 +46,7 @@ SCRIPT=${1:?usage: voice-run.sh <script> [timeout-seconds]}
 TIMEOUT=${2:-900}
 [[ -f "$REPO/tests/fixtures/voice-scripts/$SCRIPT.json" ]] || { echo "no script $SCRIPT" >&2; exit 2; }
 
-sent=$(curl -fsS -X POST "$BASE/run?script=$SCRIPT")
+sent=$(curl -fsS -X POST "$BASE/run?script=$SCRIPT&timeout=$TIMEOUT")
 id=$(field "$sent" id)
 echo "sent $SCRIPT ($id)"
 
@@ -68,6 +68,22 @@ while ((SECONDS < deadline)); do
   fi
   sleep 2
 done
+
+# Out of time: ask the app to hang up and end the run, and wait for it to say so,
+# so the next run does not start on this one's call. The app has its own deadline
+# a little inside ours, so this is the backstop for a run that never answered.
+if [[ $state != done && $state != failed ]]; then
+  echo "timed out; asking the app to end the run" >&2
+  curl -fsS -X POST "$BASE/cancel?id=$id" >/dev/null || true
+  grace=$((SECONDS + 40))
+  while ((SECONDS < grace)); do
+    st=$(curl -fsS "$BASE/status?id=$id" || echo null)
+    state=$(field "$st" state)
+    [[ $state == done || $state == failed ]] && break
+    sleep 2
+  done
+  echo "$st"
+fi
 
 run=$(field "$st" run)
 dir=$(field "$st" dir)

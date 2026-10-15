@@ -2,6 +2,7 @@
 //
 //   POST /__voice-harness/run?script=<name>  → sends `voice-harness:run` to the
 //        app over the HMR socket and answers {"id"}.
+//   POST /__voice-harness/cancel?id=<id>    → tells the app to end that run.
 //   POST /__voice-harness/status?id=<id>     ← the app's progress (JSON body).
 //   GET  /__voice-harness/status?id=<id>     → the latest progress, or null.
 //
@@ -26,9 +27,15 @@ export function voiceHarness(): Plugin {
           const script = url.searchParams.get("script");
           if (!script || !/^[\w.-]+$/.test(script)) return reply(400, { error: "script=<name>" });
           const id = `${Date.now()}-${++seq}`;
+          const timeoutSec = Number(url.searchParams.get("timeout")) || undefined;
           status.set(id, { state: "sent", script });
-          server.ws.send({ type: "custom", event: "voice-harness:run", data: { script, id } });
+          server.ws.send({ type: "custom", event: "voice-harness:run", data: { script, id, timeoutSec } });
           return reply(200, { id });
+        }
+        if (req.method === "POST" && url.pathname === "/cancel") {
+          const id = url.searchParams.get("id") ?? "";
+          server.ws.send({ type: "custom", event: "voice-harness:cancel", data: { id } });
+          return reply(200, { ok: true });
         }
         if (url.pathname === "/status") {
           const id = url.searchParams.get("id") ?? "";

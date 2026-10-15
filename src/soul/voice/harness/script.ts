@@ -205,6 +205,24 @@ export interface DriverDeps {
   now(): number;
   /** A driver row in the run's log. */
   mark(name: string, data?: Record<string, unknown>): void;
+  /** Aborting ends the run at once, as failed, with the signal's reason. */
+  signal?: AbortSignal;
+  /**
+   * How long the call may take to report `opened` before the run gives up. Off
+   * unless given: a driver fed canned marks has no call to wait for.
+   */
+  callUpMs?: number;
+}
+
+/** Why a run stopped before the script was done. */
+export class RunEnded extends Error {
+  constructor(
+    readonly kind: "call-ended" | "call-never-up" | "aborted",
+    message: string,
+  ) {
+    super(message);
+    this.name = "RunEnded";
+  }
 }
 
 export interface StepOutcome {
@@ -225,10 +243,38 @@ const isReplyStart = (m: TraceMark) => m.name === "speech:speaking" && m.data?.v
 export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<StepOutcome[]> {
   const seen: TraceMark[] = [];
   const state = new CallState();
-  const waiters = new Set<{ since: number; pred: (m: TraceMark) => boolean; done: () => void }>();
+  const waiters = new Set<{
+    since: number;
+    pred: (m: TraceMark) => boolean;
+    done: () => void;
+    fail: (e: Error) => void;
+  }>();
+  // Set once, by whatever ends the run first; every wait fails with it and
+  // every step checks it before it acts.
+  let ended: RunEnded | null = null;
+  const end = (e: RunEnded) => {
+    if (ended) return;
+    ended = e;
+    for (const w of [...waiters]) {
+      waiters.delete(w);
+      w.fail(e);
+    }
+  };
+  const check = () => {
+    if (ended) throw ended;
+  };
+  let up = false;
   const off = deps.subscribe((m) => {
     seen.push(m);
     state.apply(m);
+    if (m.name === "conv:state" && typeof m.data?.running === "boolean") {
+      // A close that comes before this call's own opening is the last call's
+      // tail, not this one going away.
+      if (m.data.running) up = true;
+      else if (up) {
+        end(new RunEnded("call-ended", `The call ended during the run (reason: ${String(m.data.reason ?? "unknown")}).`));
+      }
+    }
     const at = seen.length - 1;
     for (const w of [...waiters]) {
       if (at >= w.since && w.pred(m)) {
@@ -241,8 +287,9 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
   /** Resolves true on the first match at or after `since`, false on timeout. */
   const waitFor = (pred: (m: TraceMark) => boolean, since: number, timeoutMs: number) => {
     for (let i = since; i < seen.length; i++) if (pred(seen[i])) return Promise.resolve(true);
-    return new Promise<boolean>((resolve) => {
-      const w = { since, pred, done: () => resolve(true) };
+    if (ended) return Promise.reject(ended);
+    return new Promise<boolean>((resolve, reject) => {
+      const w = { since, pred, done: () => resolve(true), fail: reject };
       waiters.add(w);
       void deps.sleep(timeoutMs).then(() => {
         if (waiters.delete(w)) resolve(false);
@@ -287,8 +334,20 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
 
   const outcomes: StepOutcome[] = [];
   let cursor = 0;
+  const signal = deps.signal;
+  const onAbort = () => end(new RunEnded("aborted", String(signal?.reason ?? "The run was cancelled.")));
+  if (signal) {
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  }
+  if (deps.callUpMs !== undefined) {
+    void deps.sleep(deps.callUpMs).then(() => {
+      if (!up) end(new RunEnded("call-never-up", `The call did not open within ${deps.callUpMs} ms.`));
+    });
+  }
   try {
     for (const [index, step] of script.steps.entries()) {
+      check();
       deps.mark("step-wait", { index, clip: step.clip, start: step.start });
       let cued = true;
       let from = cursor;
@@ -321,6 +380,7 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
         // The reply ended in the offset: the clip lands in silence.
         deps.mark("step-late", { index, clip: step.clip });
       }
+      check();
       deps.mark("step-feed", { index, clip: step.clip, text: step.text, expect: step.expect });
       await deps.feed(step.clip);
       cursor = seen.length;
@@ -342,8 +402,10 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
       since = seen.findIndex((m, j) => j >= since && isReplyEnd(m)) + 1;
     }
     await deps.sleep(script.tailMs);
+    check();
   } finally {
     off();
+    signal?.removeEventListener("abort", onAbort);
   }
   return outcomes;
 }
