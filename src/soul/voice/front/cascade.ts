@@ -155,7 +155,8 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
 
   async function take(): Promise<void> {
     if (!floor || taking) return;
-    const program: Program | undefined = reads.length > 0 ? reads[0] : notes.length > 0 ? { kind: "notify", notes } : undefined;
+    const program: Program | undefined =
+      reads.length > 0 ? reads[0] : notes.length > 0 ? { kind: "notify", notes: [...notes] } : undefined;
     if (!program) return;
     const id = nextProgram--;
     programs.set(id, program);
@@ -170,7 +171,15 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     if (program.kind === "read") {
       reads.shift();
       held = true;
-    } else notes = [];
+    } else notes = notes.filter((n) => !program.notes.includes(n));
+  }
+
+  // A notice whose request was cut before it was said goes back in line, ahead
+  // of whatever came in since, for the next gap.
+  function requeue(program: Extract<Program, { kind: "notify" }>): void {
+    const numbers = new Set(program.notes.map((n) => n.number));
+    notes = [...program.notes, ...notes.filter((n) => !numbers.has(n.number))];
+    schedule();
   }
 
   const actions: FrontActions = {
@@ -288,8 +297,15 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
       }
       try {
         if (program?.kind === "read") await readOut(program, req.onDelta);
-        else if (program?.kind === "notify") await notify(req.turn, program, req);
-        else await answer(req);
+        else if (program?.kind === "notify") {
+          await notify(req.turn, program, req).catch((e) => {
+            if (!req.signal.aborted) throw e;
+          });
+          if (req.signal.aborted) {
+            trace("front:notify-requeued", { turn: req.turn, numbers: program.notes.map((n) => n.number) });
+            requeue(program);
+          }
+        } else await answer(req);
       } finally {
         marks.flush(req.turn, program ? (program.kind === "read" ? "read-out" : "notify") : undefined);
       }
@@ -382,9 +398,11 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
       }
     },
     event(e) {
-      if (e?.kind === "speech-duck") userSpeaking = true;
+      // `speech-stop` stops the player because the user is really talking: it
+      // opens the user's turn, and only `speech-end` closes it.
+      if (e?.kind === "speech-duck" || e?.kind === "speech-stop") userSpeaking = true;
       // The quiet is counted from whoever stopped last.
-      if (e?.kind === "speech-resume" || e?.kind === "speech-stop" || e?.kind === "speech-end") {
+      if (e?.kind === "speech-resume" || e?.kind === "speech-end") {
         userSpeaking = false;
         quietSince = now();
       }
