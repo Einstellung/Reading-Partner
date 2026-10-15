@@ -224,6 +224,34 @@ describe("stopping", () => {
     expect(h.saved.memory.marks["t:q1"].topId).toBe(pid(0));
   });
 
+  test("a busy line takes its share of the posts and leaves the rest to the lines after it", async () => {
+    const site = new FakeSite();
+    const many = (from: number) => [0, 1, 2].map((s) => screen([0, 1, 2, 3].map((i) => raw(pid(from + s * 4 + i)))));
+    site.pages.set("protein", many(0));
+    site.pages.set("enzyme", many(100));
+    const h = harness(site);
+    const lines = [line("t:a", "protein"), line("t:b", "enzyme")];
+    const result = await readXSearch(input(lines, { limits: { posts: 8, searchPages: 30, permalinkPages: 0, activeMs: 9e9 } }), h.deps);
+    expect(site.navigations.length).toBe(2);
+    const first = h.steps.find((s) => s.kind === "start") as { order: string[] };
+    const ends = result.lines;
+    expect(ends.find((l) => l.key === first.order[0])).toMatchObject({ why: "share", kept: 4 });
+    expect(result.posts.filter((p) => p.line === first.order[1]).length).toBe(4);
+    expect(result.status).toBe("limit");
+  });
+
+  test("a line's share of the reading time ends it too", async () => {
+    const site = new FakeSite();
+    const many = (from: number) => Array.from({ length: 20 }, (_, s) => screen([raw(pid(from + s))]));
+    site.pages.set("protein", many(0));
+    site.pages.set("enzyme", many(100));
+    const h = harness(site);
+    const lines = [line("t:a", "protein"), line("t:b", "enzyme")];
+    const result = await readXSearch(input(lines, { limits: { posts: 400, searchPages: 30, permalinkPages: 0, activeMs: 60_000 } }), h.deps);
+    expect(site.navigations.length).toBe(2);
+    expect(result.lines.some((l) => l.why === "share")).toBe(true);
+  });
+
   test("a ceiling still leaves the follow-ups of what was read", async () => {
     const site = new FakeSite();
     const card = (i: number) => ({ ...raw(pid(i)), links: [{ href: `https://t.co/card${i}`, text: "", label: "example.org", card: true }] });

@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildSectionedEpub } from "../../../src/workshop/bindery/build-article";
 import { assembleIssue, type IssueDeps } from "../../../src/info/issue/assemble";
-import { openingRecord, pickIssueQuestions, returnUnasked, type OpeningQuestion } from "../../../src/info/issue/opening-record";
+import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type OpeningQuestion } from "../../../src/info/issue/opening-record";
 import { openingText, parseSpoken, speakOpening, SPOKEN_FILE, type OpeningDeps } from "../../../src/info/issue/opening";
 import { cardAwaitingWords, issueAnswerNote, questionCard, questionWords, type IssueQuestionCard } from "../../../src/info/issue/question-card";
 import { planIssue } from "../../../src/info/issue/plan";
@@ -81,6 +81,13 @@ test("an issue asks at most three questions, a topic at a time; the rest wait ag
   expect(back.topics["ts-0000aaaa"].questions.map((p) => `${p.id} ${p.askedIn}`)).toEqual(["q-a2 r", "q-a3 null"]);
   // One result that already carries a single question (its topic past its third issue) keeps it.
   expect(pickIssueQuestions([night()[1]], (_id, name) => name).asked.map((a) => a.id)).toEqual(["q-b1"]);
+});
+
+test("the prompt names a language: the reader's when set, the items' own under auto", () => {
+  const plan = planIssue(night(), TOPICS)!;
+  expect(openingPrompt(plan, [], "Respond in Deutsch.").system).toContain("Respond in Deutsch.");
+  expect(openingPrompt(plan, [], "Respond in Deutsch.").system).not.toContain("the language the items");
+  expect(openingPrompt(plan, [], "").system).toContain("Write in the language the items below are written in.");
 });
 
 test("the record: the model's numbers past the items dropped, quick answers kept for its own questions only", () => {

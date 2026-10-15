@@ -110,7 +110,10 @@ export function openingPrompt(plan: IssuePlan, questions: readonly OpeningQuesti
     "For each question listed, give two or three short replies the reader could tap, in the reader's own voice, each under eight words, covering the likely answers.",
     "",
     'Reply with JSON only: {"opening": "...", "quick": {"Q1": ["...", "..."]}}',
-    language,
+    // No language set ("auto"): nothing in the prompt is the reader's own words,
+    // and left alone the model picked Chinese one run and English the next
+    // (docs/pitfall/647). The brief's own language is the one the reader just opened.
+    language || "Write in the language the items below are written in.",
   ]
     .filter(Boolean)
     .join("\n");

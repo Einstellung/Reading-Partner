@@ -11,6 +11,7 @@ export type XLineStop =
   | "exhausted" // screens in a row that brought nothing new
   | "bottom" // the page would not scroll further
   | "no-results"
+  | "share" // took its part of the run's posts or reading time; the other lines get the rest
   | "limit"; // the run's or the day's ceiling came first
 
 /** One step. `n` counts from 1 across the run, resumes included; `activeMs` is the run's reading time so far. */

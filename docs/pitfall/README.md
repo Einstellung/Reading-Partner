@@ -178,6 +178,7 @@
 - [493-syndication-truncates-long-posts-and-gives-articles-a-preview](./network/493-syndication-truncates-long-posts-and-gives-articles-a-preview.md) — X 嵌入接口（`tweet-result`）对长帖在 `display_text_range` 处截断、`note_tweet` 里只有 id；Article 推文只给标题和约百字预览，引用 Article 时被引用那条的 text 也只是 `t.co`；都回 200 不报错。有 `note_tweet` 或 `article` 字段就只用元数据，正文走隐藏 webview 读永久链接页
 - [494-a-logged-in-x-page-403s-its-own-background-calls](./network/494-a-logged-in-x-page-403s-its-own-background-calls.md) — 登录态读 X 永久链接页，页面自己的 `UsersByRestIds`、`app_context.json` 8 次里 6 次回 403，内容却完整，不登录一个都没有。限流判据别写成「x.com 任何请求 403」，只认取内容的请求 429、落地 URL 不再是 `/status/`、正文里的限流或验证提示
 - [496-webkitgtk-reports-an-x-permalink-loaded-only-after-48-seconds](./network/496-webkitgtk-reports-an-x-permalink-loaded-only-after-48-seconds.md) — WebKitGTK 冷启动读 X 永久链接页，推文 15 秒就渲染好，FINISHED 却在 48 秒才来，Linux 的 `webview_fetch` 只等这个事件，45 秒超时；超时后照样读文档跑脚本，内容拿得到。读 X 不看 `status`，只看脚本读没读到推文
+- [646-a-top-sorted-x-search-line-never-ends-on-its-own](./network/646-a-top-sorted-x-search-line-never-ends-on-its-own.md) — 主题搜索第一次 run 用热门排序加 `since:`，没有上次位置、每屏都有新帖，一条线自己停不下来，先开的线吃光整次的条数和时长（实测 26 屏 101 条，其余四条线一页没开）。`readXSearch` 按剩下的线平分条数和时长（`Run.share`），线读够自己那份以 `share` 收尾
 - [498-drive-download-is-octet-stream-named-only-in-content-disposition](./network/498-drive-download-is-octet-stream-named-only-in-content-disposition.md) — Drive 的 `uc?export=download` 303 到 usercontent，PDF 也回 `application/octet-stream`，文件名只在 `Content-Disposition`。判 PDF 只看 `%PDF` 魔数，HTML 页面拒收；`FetchedBytes.contentDisposition` 要由宿主 fetch 传上来
 - [503-code-repos-pass-the-book-tests-by-numbered-files-deep-in-the-tree](./network/503-code-repos-pass-the-book-tests-by-numbered-files-deep-in-the-tree.md) — GitHub 适配器的编号文件规则取递归整棵树，`PraisonAI` 四层目录下五个 `0N-*.md` 设计笔记、`lcu` 的 `docs/releases/0.8.1.md` 发布说明都算章节，代码仓库被整个打成十几万字的书。没有 `SUMMARY.md` 时，README 列表和编号文件只在 md 占 README 所在目录文件一半以上（图片不计）时才算
 
@@ -444,6 +445,7 @@
 - [560-durable-turns-send-session-id-to-every-provider](./ai/560-durable-turns-send-session-id-to-every-provider.md) — durable 回合不走 `streamChat`，call-setup 的表管不到；pi-durable 每次请求都带对话的 `sessionId`，pi-ai 按它出 OpenCode 头、亲和头、Codex 的 `session-id` 和 `prompt_cache_key`；要改得在 `durable-models.ts` 的 `appProvider` 里改
 - [563-codex-sse-body-is-zstd](./ai/563-codex-sse-body-is-zstd.md) — Codex 走 SSE 时请求体 zstd 压缩（`content-encoding: zstd`），假 fetch 直接 `JSON.parse` 会抛，被当成 provider 错误；先 `Bun.zstdDecompressSync`
 - [568-codex-web-search-has-no-citations](./ai/568-codex-web-search-has-no-citations.md) — Codex 端点的 hosted `web_search` 不给 url_citation、completed 的 output 为空，来源只有搜索候选；让模型写行内链接，从回答里抽出来排在前面
+- [647-an-auto-language-prompt-with-no-reader-words-picks-any-language](./ai/647-an-auto-language-prompt-with-no-reader-words-picks-any-language.md) — 语言设成 auto 时 `languageInstruction` 返回空串，主题搜索的结果和卢明开场话没有语言指令：同样的英文材料一次写成英文书、一次写成中文书（夹着英文的程序标签），开场话另挑一次。开场话改成跟这期条目的语言走；书在 auto 下用什么语言待定
 
 ## 开发环境
 

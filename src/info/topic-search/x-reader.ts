@@ -128,6 +128,12 @@ export interface XReadResult {
   activeMs: number;
 }
 
+/** One line's part of what is left of the run's ceilings (Run.share). */
+export interface LineShare {
+  posts: number;
+  activeMs: number;
+}
+
 class Stop {
   constructor(
     readonly status: XRunStatus,
@@ -211,7 +217,7 @@ class Run {
         if (!line || this.past.ended.has(key)) continue;
         this.checkCeilings(true);
         if (opened++ > 0) await this.stay(draw(this.pace.betweenPagesMs, this.deps.random), 0, "between", key);
-        await this.readLine(session, line);
+        await this.readLine(session, line, this.share(order));
         await this.followUp(session, line);
       }
       return await this.finish("done", null);
@@ -256,8 +262,26 @@ class Run {
     return opened.status === "ok" ? opened.session : null;
   }
 
-  private async readLine(session: BrowseSession, line: XReadLine): Promise<void> {
+  /**
+   * What the next line may take of what is left: an even split of the posts
+   * and the reading time among the lines not yet read, so one busy query
+   * cannot spend the whole run while the others are never opened. A line that
+   * stops short leaves its unspent part to the ones after it. The last line
+   * has no share: the run's ceilings end it.
+   */
+  share(order: readonly string[]): LineShare | null {
+    const left = order.filter((k) => !this.past.ended.has(k)).length;
+    if (left <= 1) return null;
+    const { limits } = this.input;
+    return {
+      posts: Math.max(1, Math.ceil((limits.posts - this.past.posts.size) / left)),
+      activeMs: Math.max(0, (limits.activeMs - this.active) / left),
+    };
+  }
+
+  private async readLine(session: BrowseSession, line: XReadLine, share: LineShare | null): Promise<void> {
     const key = line.key;
+    const startedActive = this.active;
     const mark = this.memory.marks[key];
     if (this.daily.search >= this.allowance.search) throw new Stop("quota", "search pages for today used up");
     const url = xSearchUrl(line);
@@ -357,6 +381,10 @@ class Run {
         });
         if (caughtUp) {
           why = "caught-up";
+          break;
+        }
+        if (share && (kept >= share.posts || this.active - startedActive >= share.activeMs)) {
+          why = "share";
           break;
         }
         quiet = arrived === 0 ? quiet + 1 : 0;
