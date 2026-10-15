@@ -42,6 +42,7 @@ export default {
   "door.close": "Закрыть",
   "door.expand": "Развернуть",
   "door.shrink": "Свернуть",
+  "door.dropQuote": "Убрать цитату",
   "door.empty": "О чём думаете?",
   "door.placeholder": "Сообщение для Lumen…",
   "door.failed": "Не удалось начать ответ.",

@@ -76,13 +76,14 @@ import { useCaseMotion } from "./use-case-motion";
 import { useCornerDrag } from "./use-corner-drag";
 import { doorFocusKey, planItemJump, stateAfterFollow, staysUntilDecided, type DoorFocus, type Place, type Shell } from "./box-jump";
 import type { IntakeOpenDocument } from "./intake-view";
+import { getOpenIssue, opensDoor, subscribeAskLumen, subscribeOpenIssue, type IssueQuote } from "./issue-context";
 
 // What the body is announced as during a call: the hold that ends it.
 const HOLD_TO_END = "Hold to end the conversation";
 
 /** What the shell can do about a card, in the shell's own terms. */
 export interface LumenJumpTargets {
-	/** Desktop only: the phone opens a book's conversation in one step (openBookConversation). */
+	/** Open a book in the reader. The phone has it only for a brief; a book's conversation opens in one step there (openBookConversation). */
 	openBook?: (bookId: string) => void | Promise<void>;
 	goToPage?: (page: number) => void;
 	openThread?: (bookId: string, threadId: string) => void;
@@ -102,6 +103,8 @@ export interface LumenJumpTargets {
 interface DoorOpen {
 	date?: string;
 	focus?: DoorFocus;
+	/** The brief whose opening brought it up (issue-context.ts). */
+	issue?: string;
 }
 
 export function LumenCorner({
@@ -184,6 +187,38 @@ export function LumenCorner({
 	const liveRef = useRef(live);
 	liveRef.current = live;
 
+	// A brief opened in the reader brings the conversation up with it, whether
+	// or not Lumen is shown (docs/info/88 「简报的对话」); the same brief
+	// published again does not. An Ask on a passage in it brings today's
+	// conversation up with the passage above the composer.
+	const [quote, setQuote] = useState<IssueQuote | null>(null);
+	const shownForRef = useRef<string | null>(null);
+	useEffect(() => {
+		const opened = () => {
+			const issue = getOpenIssue();
+			if (opensDoor(shownForRef.current, issue)) {
+				shownForRef.current = issue!.bookId;
+				setNote(null);
+				setFull(false);
+				setDoor({ issue: issue!.bookId });
+			} else if (!issue) {
+				shownForRef.current = null;
+				setQuote(null);
+			}
+		};
+		opened();
+		const offIssue = subscribeOpenIssue(opened);
+		const offAsk = subscribeAskLumen((asked) => {
+			setNote(null);
+			setQuote(asked);
+			setDoor((open) => (open && !open.date ? open : {}));
+		});
+		return () => {
+			offIssue();
+			offAsk();
+		};
+	}, []);
+
 	const openDoor = useCallback(() => {
 		setNote(null);
 		setDoor((open) => open ?? {});
@@ -192,6 +227,7 @@ export function LumenCorner({
 		setDoor(null);
 		setFull(false);
 		setNote(null);
+		setQuote(null);
 	}, []);
 
 	// What a press decided. Read at the moment it lands, not at the render the
@@ -346,27 +382,33 @@ export function LumenCorner({
 		[targets, closeDoor],
 	);
 
-	if (!shown) return null;
-
 	const asSheet = shell === "phone";
+	const doorChat = door && (
+		<DoorChat
+			key={`${door.date ?? "today"}:${doorFocusKey(door.focus)}:${door.issue ?? ""}`}
+			form={asSheet ? "sheet" : "panel"}
+			{...(asSheet ? {} : { liftPx: drag.bottomPx, mirrored, full, onToggleFull: () => setFull((f) => !f) })}
+			{...(door.date ? { date: door.date } : {})}
+			{...(door.focus ? { focus: door.focus } : {})}
+			{...(door.issue ? { openedFor: door.issue } : {})}
+			quote={quote}
+			onQuoteDone={() => setQuote(null)}
+			box={doorBox}
+			onOpenDocument={openDocument}
+			onClose={closeDoor}
+		/>
+	);
+	// Hidden is hidden: no body and no case, and no tool in their place. The
+	// conversation still comes up for a brief (docs/68), on its own.
+	if (!shown) return <>{doorChat}</>;
+
 	// The panel stands on the keyboard while one is up, over where Lumen would be
 	// (door-panel.ts), and filled it stands over the whole shell; Lumen stands
 	// down under it either way.
 	const underPanel = !asSheet && door !== null && (full || panelOnKeyboard(shellKeyboard));
 	return (
 		<>
-		{door && (
-			<DoorChat
-				key={`${door.date ?? "today"}:${doorFocusKey(door.focus)}`}
-				form={asSheet ? "sheet" : "panel"}
-				{...(asSheet ? {} : { liftPx: drag.bottomPx, mirrored, full, onToggleFull: () => setFull((f) => !f) })}
-				{...(door.date ? { date: door.date } : {})}
-				{...(door.focus ? { focus: door.focus } : {})}
-				box={doorBox}
-				onOpenDocument={openDocument}
-				onClose={closeDoor}
-			/>
-		)}
+		{doorChat}
 		<div
 			ref={drag.frameRef}
 			className={cn(

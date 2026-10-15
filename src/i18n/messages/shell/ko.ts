@@ -42,6 +42,7 @@ export default {
   "door.close": "닫기",
   "door.expand": "크게",
   "door.shrink": "작게",
+  "door.dropQuote": "인용 빼기",
   "door.empty": "무슨 생각을 하고 있나요?",
   "door.placeholder": "Lumen에게 메시지…",
   "door.failed": "답장을 시작하지 못했어요.",

@@ -42,6 +42,7 @@ export default {
   "door.close": "閉じる",
   "door.expand": "拡大",
   "door.shrink": "縮小",
+  "door.dropQuote": "引用を外す",
   "door.empty": "何か話したいことは？",
   "door.placeholder": "Lumen にメッセージ…",
   "door.failed": "返信を始められませんでした。",

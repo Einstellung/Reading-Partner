@@ -22,6 +22,7 @@ import { readerPageText } from "./reader-page-text";
 import { zoomResetLabel } from "./reader-zoom-keys";
 import PenToolbar from "./PenToolbar";
 import { hasTouchInput, rackOmits } from "./reader-tool";
+import type { ReaderMode } from "../../../reading/issue";
 import { Button } from "../ui/button";
 import lumenIcon from "../lumen/lumen-icon.webp";
 import { Separator } from "../ui/separator";
@@ -65,11 +66,17 @@ export default function ReaderTopBar(props: {
   // about the open book.
   lumenShown: boolean;
   onToggleLumen: () => void;
+  // A brief opens without the lesson and the AI pen (reading/issue.ts).
+  mode?: ReaderMode;
 }) {
   const t = useT();
   const { view, stats, sidebarOpen, gate } = props;
   // Read once: the pointers a device has do not change under a reading session.
-  const omit = useMemo(() => rackOmits(hasTouchInput(typeof window === "undefined" ? undefined : window)), []);
+  const issue = props.mode === "issue";
+  const omit = useMemo(
+    () => rackOmits(hasTouchInput(typeof window === "undefined" ? undefined : window), props.mode),
+    [props.mode],
+  );
   const BOOK_THREAD = t("reader.top.learnBook");
 
   const pageText = readerPageText(stats, t);
@@ -190,17 +197,21 @@ export default function ReaderTopBar(props: {
 
       {/* RIGHT: AI entry + overflow */}
       <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="flex-none text-muted-foreground"
-          disabled={gate.bookThread !== null}
-          title={gate.bookThread ?? BOOK_THREAD}
-          aria-label={gate.bookThread === null ? BOOK_THREAD : `${BOOK_THREAD}: ${gate.bookThread}`}
-          onClick={props.onOpenBookThread}
-        >
-          <IconBookSparkle size={20} />
-        </Button>
+        {/* A brief has no lesson: Lumen is the one who talks about it, and
+            nothing takes the button's place (docs/info/88). */}
+        {!issue && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="flex-none text-muted-foreground"
+            disabled={gate.bookThread !== null}
+            title={gate.bookThread ?? BOOK_THREAD}
+            aria-label={gate.bookThread === null ? BOOK_THREAD : `${BOOK_THREAD}: ${gate.bookThread}`}
+            onClick={props.onOpenBookThread}
+          >
+            <IconBookSparkle size={20} />
+          </Button>
+        )}
         <MoreMenu items={moreItems} alert={props.settingsAlert} />
       </div>
     </>

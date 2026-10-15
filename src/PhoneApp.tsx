@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType }
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID, listTopics, onFiledElsewhere, type Topic } from "./platform/app/topics";
 import { libraryHas, listLibraryEntries, type LibraryEntry } from "./platform/app/library";
+import { readerModeOf } from "./reading/issue";
 import {
   libraryFilePath,
   openIn,
@@ -507,6 +508,7 @@ export default function PhoneApp({
               onOverlayChange={onOverlayChange}
               onBack={goBack}
               {...(openedBook.threadId ? { threadId: openedBook.threadId } : {})}
+              mode={readerModeOf(entries[openedBook.bookId])}
             />
           )}
           </ComposerSlotContext.Provider>
@@ -559,6 +561,11 @@ export default function PhoneApp({
         // would stand, so Lumen stands down for that screen (docs/74).
         stoodDown={base.kind === "lesson"}
         targets={{
+          // A brief (docs/info/88): on no topic, opened straight in the reader.
+          openBook: (bookId) => {
+            const entry = entries[bookId];
+            if (entry) openReader({ bookId, name: entry.title, topicId: "", path: "" });
+          },
           goToBriefing: () => onNavigate("briefing"),
           goToMeals: () => onNavigate("meals"),
           // A book's conversation: a paper's lesson, or an EPUB's thread over its page.

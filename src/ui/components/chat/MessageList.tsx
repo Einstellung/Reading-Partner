@@ -29,6 +29,7 @@ import { ReceiptPart } from './ReceiptPart';
 import { DeliveredRunsContext, deliveredRunIds, type DeliveredRuns } from './deliveredRuns';
 import { useCardRegistry } from './cardRegistryContext';
 import { useT } from '../../../i18n';
+import { splitQuotedQuestion } from './quoted-question';
 
 // Copy the reply's Markdown source. Hidden until the row is hovered or the
 // button itself is focused; confirms for a moment, then returns.
@@ -221,6 +222,8 @@ const MessageBubble = memo(function MessageBubble({
 		// The bubble fill comes from the enclosing surface (--chat-bubble-bg): this
 		// row also renders in the corner bubble and in RetellView, both on white.
 		const hasImages = !!images && images.length > 0;
+		// A question about a passage draws the passage above it (quoted-question.ts).
+		const { quote, question } = splitQuotedQuestion(message.text);
 		return (
 			<div data-sent-row={index} className="flex flex-col items-end gap-1.5">
 				{hasImages && <MessageImages images={images!} />}
@@ -233,7 +236,12 @@ const MessageBubble = memo(function MessageBubble({
 								: 'px-3 py-1.5 text-[13px] leading-relaxed')
 						}
 					>
-						{message.text}
+						{quote !== null && (
+							<span className="mb-1 block border-l-2 border-border pl-2 italic text-neutral-500 line-clamp-4">
+								{quote}
+							</span>
+						)}
+						{question}
 					</div>
 				)}
 				{message.queued && (
