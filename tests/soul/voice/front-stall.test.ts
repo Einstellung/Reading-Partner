@@ -14,7 +14,8 @@ import {
 } from "../../../src/soul/voice/front/cascade";
 import type { FrontModel, FrontModelRequest } from "../../../src/soul/voice/front/model";
 import type { ConversationEvent, ConversationSource } from "../../../src/soul/voice/conversation";
-import { createVoiceCall } from "../../../src/soul/voice/voice-call";
+import { fillerLine } from "../../../src/soul/voice/front/filler";
+import { KICKOFF_TURN, createVoiceCall } from "../../../src/soul/voice/voice-call";
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
@@ -65,9 +66,11 @@ const backend: CallBack = {
 /** A model whose stream never yields and never hears the abort. */
 const hung: FrontModel = () => new Promise<void>(() => {});
 
-function setup(model: FrontModel) {
+function setup(model: FrontModel, opts: { clip?: boolean; gapMs?: number } = {}) {
   const clock = virtualClock();
   const traced: string[] = [];
+  const cues: { kind: string; played: boolean }[] = [];
+  const plays: [string, string][] = [];
   const requests: FrontModelRequest[] = [];
   const front = createCascadeFront({
     model: (req) => {
@@ -77,21 +80,30 @@ function setup(model: FrontModel) {
     backend,
     place: () => "Today: three labs.",
     write: () => {},
-    filler: { play: async () => false },
+    filler: {
+      play: async (kind, locale) => {
+        plays.push([kind, locale]);
+        return opts.clip ?? true;
+      },
+    },
     locale: "zh-CN",
     marks: () => {},
-    trace: (name) => traced.push(name),
+    trace: (name, data) => {
+      traced.push(name);
+      if (name === "front:cue") cues.push(data as { kind: string; played: boolean });
+    },
     onShow: () => {},
     stall: createStallWatches({ timers: clock.timers }),
+    ...(opts.gapMs !== undefined ? { gapMs: opts.gapMs } : {}),
   });
-  return { front, clock, traced, requests };
+  return { front, clock, traced, requests, plays, cues };
 }
 
-function ask(front: ReturnType<typeof setup>["front"], turn: number) {
+function ask(front: ReturnType<typeof setup>["front"], turn: number, signal = new AbortController().signal) {
   const deltas: string[] = [];
   let outcome: "pending" | "done" | Error = "pending";
   const done = front.model
-    .ask({ turn, text: "你好", signal: new AbortController().signal, onDelta: (c) => deltas.push(c), onActivity: () => {} })
+    .ask({ turn, text: "你好", signal, onDelta: (c) => deltas.push(c), onActivity: () => {} })
     .then(
       () => {
         outcome = "done";
@@ -230,4 +242,78 @@ test("a stalled turn hands the floor back and the next turn is answered", async 
   await call.settled();
   expect(h.requests).toHaveLength(3);
   expect(b.commands).toContain("speak_push 读小说吧。");
+});
+
+test("a stalled reply that said nothing plays the line asking again, once", async () => {
+  const h = setup(hung);
+  const r = ask(h.front, 1);
+  await h.clock.advance(FRONT_FIRST_BYTE_MS);
+  await r.done;
+  expect(r.outcome()).toBeInstanceOf(FrontStallError);
+  expect(h.plays).toEqual([["lost", "zh-CN"]]);
+  expect(h.cues).toEqual([{ turn: 1, kind: "lost", played: true }] as never);
+  expect(r.deltas).toEqual([]);
+  await h.clock.advance(FRONT_FIRST_BYTE_MS * 2);
+  expect(h.plays).toHaveLength(1);
+});
+
+test("with no clip the line is said as the reply, and the turn ends as one that answered", async () => {
+  const h = setup(async () => {
+    throw new Error("503 Service Unavailable");
+  }, { clip: false });
+  const r = ask(h.front, 1);
+  await r.done;
+  expect(r.outcome()).toBe("done");
+  expect(r.deltas.join("")).toBe(fillerLine("lost", "zh-CN"));
+  expect(h.cues).toEqual([{ turn: 1, kind: "lost", played: false }] as never);
+});
+
+test("a reply the reader cut into is not followed by the line", async () => {
+  const barge = new AbortController();
+  const h = setup(
+    (req) =>
+      new Promise<void>((_, reject) => {
+        req.signal.addEventListener("abort", () => reject(new Error("Request was aborted")));
+      }),
+  );
+  const r = ask(h.front, 1, barge.signal);
+  await h.clock.advance(3000);
+  barge.abort();
+  await r.done;
+  expect(r.outcome()).toBeInstanceOf(Error);
+  expect(h.plays).toEqual([]);
+});
+
+test("a reply that had already started talking is not followed by the line", async () => {
+  const h = setup(async (req) => {
+    req.onText("我觉得，");
+    await new Promise<void>(() => {});
+  });
+  const r = ask(h.front, 1);
+  await h.clock.advance(FRONT_CHUNK_STALL_MS);
+  await r.done;
+  expect((r.outcome() as FrontStallError).waitedFor).toBe("chunk");
+  expect(h.plays).toEqual([]);
+});
+
+test("a failed notice and a failed opening line are not followed by the line", async () => {
+  const h = setup(hung, { gapMs: 0 });
+  const programs: number[] = [];
+  h.front.bind({
+    program: async (turn) => {
+      programs.push(turn);
+      return true;
+    },
+  });
+  h.front.notify({ number: 1, task: "Find X", outcome: "done", cover: "X is Y." });
+  h.front.observe({ type: "orb", phase: "listening" });
+  await flush();
+  expect(programs).toEqual([-1]);
+  const notice = ask(h.front, -1);
+  const opening = ask(h.front, KICKOFF_TURN);
+  await h.clock.advance(FRONT_FIRST_BYTE_MS);
+  await Promise.all([notice.done, opening.done]);
+  expect(notice.outcome()).toBeInstanceOf(FrontStallError);
+  expect(opening.outcome()).toBeInstanceOf(FrontStallError);
+  expect(h.plays).toEqual([]);
 });

@@ -8,12 +8,13 @@
 // A reply can carry a sentence and a delegate together. The sentence is spoken
 // as it streams, the call is carried out as soon as it arrives, nothing is fed
 // back, and the turn ends. A reply that only hands off gets the filler line; one
-// that only calls a run back gets a short acknowledgement.
+// that only calls a run back gets a short acknowledgement; one that fails before
+// it said or did anything gets a line asking the reader to say it again.
 
 import type { ConversationEvent } from "../conversation";
 import type { SessionEffect, SessionPhase, VoiceTurn } from "../voice-session";
 import { INTERRUPTED_MARK } from "../voice-session";
-import type { VoiceCallModel, VoiceCallTranscript } from "../voice-call";
+import { KICKOFF_TURN, type VoiceCallModel, type VoiceCallTranscript } from "../voice-call";
 import type { CallNote } from "../../think/contract";
 import type { CallBack } from "./backend";
 import { frontRequest } from "./context";
@@ -335,7 +336,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     let handed = false;
     let calledBack = false;
     const calls: Promise<void>[] = [];
-    await request(turn, {
+    const asked = request(turn, {
       system,
       messages,
       tools,
@@ -371,6 +372,21 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
         );
       },
     });
+    try {
+      await asked;
+    } catch (e) {
+      // Nothing was said and nothing went out, and the reader did not cut in:
+      // otherwise the reader hears nothing and does not know to ask again. Not
+      // for the opening line, which answers nobody.
+      if (said || calls.length > 0 || req.signal.aborted || turn === KICKOFF_TURN) throw e;
+      const played = await deps.filler.play("lost", deps.locale);
+      trace("front:cue", { turn, kind: "lost", played });
+      if (played) throw e;
+      // Said as the reply instead, so the turn ends as one that answered.
+      console.warn("RP-FRONT reply failed", e);
+      req.onDelta(fillerLine("lost", deps.locale));
+      return;
+    }
     await Promise.all(calls);
     if (handed && !said && !req.signal.aborted) {
       const played = await deps.filler.play("thinking", deps.locale);

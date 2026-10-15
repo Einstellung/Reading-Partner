@@ -17,6 +17,8 @@ test("the cue is picked by the locale's language", () => {
   expect(cueId("thinking", "zh-TW")).toBe("zh/think");
   expect(cueId("thinking", "en-US")).toBe("en/think");
   expect(cueId("thinking", "ja-JP")).toBe("en/think");
+  expect(cueId("lost", "zh-CN")).toBe("zh/lost");
+  expect(cueId("lost", "en-US")).toBe("en/lost");
 });
 
 test("playing asks the plugin for the cue and says it played", async () => {
@@ -39,4 +41,6 @@ test("priming asks for the locale's language", async () => {
 test("the spoken fallback is the same line as the cue", () => {
   expect(fillerLine("thinking", "zh-CN")).toBe("我去想想。");
   expect(fillerLine("thinking", "en-US")).toBe("Let me think about that.");
+  expect(fillerLine("lost", "zh-CN")).toBe("刚才没连上，你再说一遍。");
+  expect(fillerLine("lost", "en-US")).toBe("Sorry, I lost that. Could you say it again?");
 });

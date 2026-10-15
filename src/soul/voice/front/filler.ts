@@ -1,12 +1,13 @@
-// The pre-synthesised line the program plays when the front handed something
-// off and said nothing (docs/companion/136 "级联前台的一次回复"). The lines are
+// The pre-synthesised lines the program says on its own (docs/companion/136
+// "级联前台的一次回复"): "thinking" when the front handed something off and said
+// nothing, "lost" when its reply failed before it said anything. The lines are
 // made natively when a call opens (`prime`) and played from memory
 // (plugins/voice/src/tts/cues.rs); the ids here mirror the table there.
 
 import { invoke } from "@tauri-apps/api/core";
 import { PRIME_SPEECH_CUES, SPEAK_CUE } from "../conversation";
 
-export type FillerKind = "thinking";
+export type FillerKind = "thinking" | "lost";
 
 export interface FillerPort {
   /** Play the clip. False when there is none to play, and the caller says it some other way. */
@@ -30,7 +31,7 @@ export function cueLang(locale: string): "zh" | "en" {
   return locale.startsWith("zh") ? "zh" : "en";
 }
 
-const CUE_OF: Record<FillerKind, string> = { thinking: "think" };
+const CUE_OF: Record<FillerKind, string> = { thinking: "think", lost: "lost" };
 
 export function cueId(kind: FillerKind, locale: string): string {
   return `${cueLang(locale)}/${CUE_OF[kind]}`;
@@ -61,9 +62,14 @@ export function nativeFiller(): CueFiller {
 
 /** The line itself, for a front with no clip to play. */
 export function fillerLine(kind: FillerKind, locale: string): string {
-  void kind;
-  return cueLang(locale) === "zh" ? "我去想想。" : "Let me think about that.";
+  return LINES[kind][cueLang(locale)];
 }
+
+// The same text as the cue table in cues.rs.
+const LINES: Record<FillerKind, Record<"zh" | "en", string>> = {
+  thinking: { zh: "我去想想。", en: "Let me think about that." },
+  lost: { zh: "刚才没连上，你再说一遍。", en: "Sorry, I lost that. Could you say it again?" },
+};
 
 /** What the front says when its reply only called a run back. True whether or not the run was still out. */
 export function ackLine(locale: string): string {
