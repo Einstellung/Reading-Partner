@@ -1,6 +1,7 @@
 // The short lines the program says on its own (docs/companion/136,
 // "级联前台的一次回复"): a front reply that only handed something off is
-// followed by "我去想想".
+// followed by "我去想想", and one that failed before it said anything by
+// "刚才没连上，你再说一遍".
 // The text is fixed, so the audio is made once when a call opens and played from
 // memory each time it is wanted, with no vendor round trip in front of it.
 //
@@ -47,6 +48,11 @@ pub const CUES: &[Cue] = &[
         text: "稍等，我想一想。",
     },
     Cue {
+        id: "zh/lost",
+        lang: "zh",
+        text: "刚才没连上，你再说一遍。",
+    },
+    Cue {
         id: "en/think",
         lang: "en",
         text: "Let me think about that.",
@@ -60,6 +66,11 @@ pub const CUES: &[Cue] = &[
         id: "en/moment",
         lang: "en",
         text: "Give me a moment, keep going.",
+    },
+    Cue {
+        id: "en/lost",
+        lang: "en",
+        text: "Sorry, I lost that. Could you say it again?",
     },
 ];
 
@@ -166,7 +177,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(ids("zh"), ids("en"));
-        assert_eq!(ids("zh").len(), 3);
+        assert_eq!(ids("zh").len(), 4);
         for c in CUES {
             assert!(c.id.starts_with(&format!("{}/", c.lang)), "{c:?}");
         }
