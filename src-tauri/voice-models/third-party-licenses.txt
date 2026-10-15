@@ -3,8 +3,9 @@ Fetched by scripts/fetch-voice-models.sh at the revisions pinned there.
 
 == Silero VAD v6 (https://github.com/snakers4/silero-vad) ==
 silero-vad.mlmodelc: the CoreML conversion by FluidInference
-(https://huggingface.co/FluidInference/silero-vad-coreml, MIT), file
-silero-vad-unified-v6.0.0.mlmodelc.
+(https://huggingface.co/FluidInference/silero-vad-coreml, MIT), revision
+b419383c55c110e2c9271fa6ee0ea83d03c70d96, file silero-vad-unified-v6.0.0.mlmodelc.
+Upstream: snakers4/silero-vad v6.0.0.
 
 MIT License
 
@@ -31,7 +32,10 @@ SOFTWARE.
 smart-turn.mlmodelc: the CoreML conversion of pipecat-ai/smart-turn-v3
 (smart-turn-v3.2-gpu.onnx, revision f766f81d) by aufklarer
 (https://huggingface.co/aufklarer/Smart-Turn-v3.2-CoreML, BSD-2-Clause),
-file smart_turn.mlmodelc.
+revision 75f069717f500947195fa1945c46ddb472559cff, file smart_turn.mlmodelc.
+Upstream: pipecat-ai/smart-turn v3.2, weights at
+https://huggingface.co/pipecat-ai/smart-turn-v3 revision
+f766f81d3cfdf7737ac64aad813d91bbfd56bf93.
 
 BSD 2-Clause License
 
