@@ -7,15 +7,17 @@
 //
 //   callBackend(): CallBackend                  the app's one instance
 //
-//   dispatch({ callId, task, follows?, deliverTo, kind? })
+//   dispatch({ callId, task, follows?, replaces?, deliverTo, kind? })
 //     -> { ok: true, n, runId, replaced? } | { ok: false, reason }
 //       Starts a run (kind `think` unless named) and numbers it within the
 //       call, from 1. `deliverTo` is where the call is held — the program fills
-//       it, never the model. `follows` is an earlier number: if that task is
-//       still running it is cancelled and this one replaces it (a change of
-//       mind; `replaced` says which); if it came back, its task and output are
-//       attached to the new brief. More than MAX_IN_FLIGHT running is refused,
-//       and so is a `follows` that names nothing.
+//       it, never the model. `follows` is an earlier number this one builds
+//       on: its task, and its output if it came back, are attached to the new
+//       brief, and it goes on running. `replaces` is the one the reader changed
+//       their mind about: if it is still running it is cancelled (`replaced`
+//       says so). Only `replaces` ever cancels; a new question is a task of its
+//       own. More than MAX_IN_FLIGHT running is refused, and so is a number
+//       that names nothing.
 //   cancel(callId, n) -> { ok: true } | { ok: false, reason }
 //       The run goes `cancelled`: no box item, no line in the conversation.
 //       Hanging up cancels nothing.
@@ -55,8 +57,10 @@ export interface CallTask {
   kind: string;
   /** The brief's first sentence. */
   task: string;
-  /** The number this one followed on from or replaced. */
+  /** The number this one builds on. */
   follows?: number;
+  /** The number this one was asked instead of. */
+  replaces?: number;
   state: CallTaskState;
   /** The run's last progress line. */
   progress?: string;
@@ -75,6 +79,7 @@ export interface DispatchInput {
   /** The brief, written for someone who cannot hear the call. */
   task: string;
   follows?: number;
+  replaces?: number;
   /** Where the call is held. The run's answer goes back there. */
   deliverTo: BoxOrigin;
   /** A delegable kind. `think` when absent. */

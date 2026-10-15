@@ -1,7 +1,7 @@
 // The soul's `delegate` tool as a voice call mounts it (docs/companion/136
-// delegate): the same name, kind and task, plus `follows`, and routed through
-// the call's ledger so the run is numbered on the call's list. Where the answer
-// goes is the call's place, filled here and never by the model.
+// delegate): the same name, kind and task, plus `follows` and `replaces`, and
+// routed through the call's ledger so the run is numbered on the call's list.
+// Where the answer goes is the call's place, filled here and never by the model.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { BoxOrigin } from "../../box";
@@ -32,9 +32,16 @@ export function buildCallDelegateTool(deps: CallDelegateDeps): AgentTool {
       follows: Type.Optional(
         Type.Integer({
           description:
-            "A number from this call's list. To think further on from a task that came back, " +
-            "or to replace one still running when the reader changed their mind: the new task " +
-            "must still be written in full.",
+            "A number from this call's list this task builds on, such as a follow-up question about it. " +
+            "Its brief, and what came back if anything, go with the new task; it goes on running.",
+        }),
+      ),
+      replaces: Type.Optional(
+        Type.Integer({
+          description:
+            "Only when the reader changed their mind about an earlier request (\"no, I meant…\"): its number. " +
+            "That task is called back and this one is asked instead, written in full. A new question, " +
+            "even about the same thing, replaces nothing.",
         }),
       ),
     }),
@@ -45,6 +52,7 @@ export function buildCallDelegateTool(deps: CallDelegateDeps): AgentTool {
         ...(kind ? { kind } : {}),
         task: String(args.task ?? ""),
         ...(typeof args.follows === "number" ? { follows: args.follows } : {}),
+        ...(typeof args.replaces === "number" ? { replaces: args.replaces } : {}),
         deliverTo: deps.deliverTo,
       });
       if (!result.ok) throw new Error(result.reason);
