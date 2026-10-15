@@ -8,6 +8,7 @@ import { initDeviceSettings } from "./platform/app/device";
 import { detectShell } from "./platform/app/shell";
 import { syncSpeechKey } from "./ai/voice/speech-key";
 import { initPaperTint } from "./ui/components/base/paper-tint";
+import { reloadAfterFailedShell, shellLoaded } from "./dev-reload";
 import "./styles.css";
 
 // Dev-only: silence the Tauri http plugin's fire-and-forget cleanup rejections.
@@ -152,11 +153,19 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void (shell === "phone"
     ? import("./PhoneApp").then((m) => m.default)
     : import("./App").then((m) => m.default)
-  ).then((Shell) => {
-    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-      <React.StrictMode>
-        <Shell />
-      </React.StrictMode>,
-    );
-  });
+  ).then(
+    (Shell) => {
+      if (import.meta.env.DEV) shellLoaded(sessionStorage);
+      ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+        <React.StrictMode>
+          <Shell />
+        </React.StrictMode>,
+      );
+    },
+    (err) => {
+      // A device's dev build can lose one of its modules on the way in (dev-reload.ts).
+      if (import.meta.env.DEV && reloadAfterFailedShell(sessionStorage, () => location.reload())) return;
+      throw err;
+    },
+  );
 }
