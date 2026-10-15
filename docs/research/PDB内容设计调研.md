@@ -83,6 +83,18 @@
 - 福特时期的附件里放过 NIE 要点的摘要：1975-11 符拉迪沃斯托克会晤前一天，PDB 附上 NIE 11-3/8（年度苏联战略力量评估）的 key judgments。（Peterson 文，尼克松、福特册子第 31-35 页，书/文章性质的回忆）
 - 条目之间怎么排序：我读到的原件和册子都没有写出排序规则。1975 年那期把当天最大的事放第一页单独一条，1970 年的备忘录里是按「最需要引起总统注意」选题。排序规则：没查到。
 
+### 原件实读（2026-10-15 补）
+
+后来在 archive.org 镜像上读到了 CIA 阅览室的完整原件 OCR 文本，和前面册子里的转载互相补充。各期的编号、日期见 `PDB主题连续性调研.md`。
+
+1975-10-09 期（cia-readingroom-document-0006014923），15 页。封面；目录页每条一行「地区：一句结论（Page n）」，四条正文、一行 Notes 列三个小题，末句「At Annex we present an assessment of the current situation in Spain」。正文一条一页，地区名大写，首段是斜体导语，与目录里那句相同，下接两三段正文，判断用 may / appears / almost certainly。Notes 用 `* * *` 分隔，每条一句斜体加一段。Annex 是西班牙评估，五页，页码 A1-A5，页边竖印 ANNEX。
+
+1967-06-09 期（cia-readingroom-document-0005973846）。封面后先是一页 LATE ITEM，写付印后的消息：以色列称埃及违反停火。正文编号 1 到 6，第一条（Arab States - Israel）约半页，其余各一段，国名在左边页边。有分析口吻，例如「On balance, it looks like a rather feeble effort to save face.」「we have no reason to doubt that…」。
+
+1962-10-22 期 PICL（cia-readingroom-document-0005995995）。封面后第一页是古巴导弹活动地图。正文按 1 Cuba / 2 USSR / 3 India-China 编号，每题下分 a、b、c 小点，多为一两句。之后 NOTES 用 A、B 列短讯。最后整份附上美国情报委员会（USIB）的 Special Watch Report 原文。
+
+Meador and Cerf 2013 一文的要点：读者最常问的是看原始来源（「Access to original source intelligence is the most frequently asked question by principals」）；简报员应记录读者在哪里停顿、有什么反应；读者可以直接反馈和派任务；可以调出以前各期看变化；读者与简报员共用一屏，双方都能翻页（paired relationship）；从 editorial 转向 curatorial；避免把原始材料直接给读者（缺背景、被海量淹没、不会要）；保留面对面。
+
 ## 二、编辑和制作流程
 
 ### 谁写谁审
