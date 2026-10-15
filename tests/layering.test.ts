@@ -248,6 +248,11 @@ const LAYER: Record<string, Layer> = {
   // The material registry of topic searches and dossiers (docs/info/88 材料登记):
   // M<n> numbers, sections, the cached bodies. Reads info/rank's canonical URL.
   "info/dossier": "domain",
+  // The nightly brief (docs/info/88 「简报书」): the night's topic-search results
+  // planned and rendered as one EPUB, filed, attached, indexed on the info shelf
+  // and handed to the box. Reads topic-search's result types; topic-search
+  // never imports it (the runs reach it through a port the shell hands in).
+  "info/issue": "domain",
   reading: "domain",
   "reading/chapters": "domain",
   // A reading turn's own corner: the desk assembly's tool set and history

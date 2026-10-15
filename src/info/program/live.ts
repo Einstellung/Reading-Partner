@@ -80,6 +80,7 @@ import { runDreamIfDue } from "../../memory/dream/live";
 import { sweepProseConflictsNow } from "../../memory/adjudicate/live";
 import { DAILY_ANCHOR_HOUR, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { checkTopicSearchNight } from "../topic-search/runs-live";
+import { checkIssuesDue } from "../issue/live";
 import { registerCollectWorker, writeCollectBrief, type CollectScope } from "./collect-worker";
 import { appRunner } from "../../legion/runner/runner";
 import { collectorStatusLine, InfoCollector } from "../collect/collector";
@@ -466,6 +467,9 @@ async function checkDailyRound(): Promise<void> {
   // collector, owns its own window and gates (topic-search/runs-live.ts) and
   // never throws.
   await checkTopicSearchNight(() => session.amICollecting());
+  // The night's brief at 04:40 from whatever runs closed, and any issue a
+  // crash left half done (info/issue). Never throws.
+  if (await session.amICollecting().catch(() => false)) await checkIssuesDue();
   // Every device looks for parked prose copies and asks for a run per copy
   // (docs/59 §6); the run is keyed by content, so the devices' asks meet in one
   // file and the election picks who settles it. Never throws, never calls a model.

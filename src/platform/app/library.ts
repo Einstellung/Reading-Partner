@@ -63,7 +63,9 @@ export function documentPath(hash: string, fileName: string): string {
 // that is never migrated in place — the same rule `format` follows above.
 // A book and an article are the same document to the reader (docs/67): the only
 // difference is that an article has no cover and knows where it came from.
-export type LibraryKind = "book" | "article";
+// An issue is one night's brief (docs/info/88 「简报书」): filed on no reading
+// topic, listed on the info shelf (info/issue) instead.
+export type LibraryKind = "book" | "article" | "issue";
 
 export interface LibraryEntry {
   hash: string;

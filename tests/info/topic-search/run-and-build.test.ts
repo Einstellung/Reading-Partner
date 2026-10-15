@@ -3,7 +3,9 @@
 // Harness, the X reader in a fake browse session that serves the real
 // signed-in search page in tests/info/x/fixtures, a scripted model and scripted
 // pages. What is checked is what crosses from one half to the other: the result
-// file on disk, the box item, the X pages counted on the device's allowance,
+// file on disk, the brief issue the closed run made (info/issue: the EPUB filed
+// as kind issue, the shelf row, one box item), the X pages counted on the
+// device's allowance,
 // the source health on the collector's state file, and the questions saved up.
 
 import { describe, expect, test } from "bun:test";
@@ -36,6 +38,10 @@ import { topicSearchHealthRows } from "../../../src/ui/components/info/sources-p
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import type { BrowseEval, BrowseLoad, BrowseSession } from "../../../src/workshop/extract/webview-browse";
 import { openTestRuntime } from "../../legion/durable/support/runtime";
+import { runClosed, type IssueDeps } from "../../../src/info/issue/assemble";
+import { INFO_SHELF_FILE, ISSUE_BOX_KIND, parseShelf } from "../../../src/info/issue/types";
+import { buildSectionedEpub } from "../../../src/workshop/bindery/build-article";
+import { nightEndAt } from "../../../src/info/topic-search/nightly";
 
 const FIXTURE = readFileSync(join(import.meta.dir, "../x/fixtures/search-live-ai-for-science.html"), "utf8");
 
@@ -150,7 +156,8 @@ function world() {
   const browse = { navigations: [] as string[] };
   const opened: string[] = [];
   const modelLog: TopicModelCall[] = [];
-  const box: { id: string; cover: string; resultFile: string }[] = [];
+  const box: { id: string; kind: string; cover: string; body: string; date: string }[] = [];
+  const library = new Map<string, { fileName: string; bytes: Uint8Array }>();
   let ids = 0;
   const day = () => {
     const d = new Date(now);
@@ -204,18 +211,35 @@ function world() {
     keepAwake: async () => ({ held: true, detail: null, release: async () => {} }),
     open: async () => ({ status: "ok", session: fakeSession(screen, browse) }),
     expandLink: async () => null,
-    deliver: async (item) => void box.push({ id: item.id, cover: item.cover, resultFile: item.resultFile }),
-    newBoxItemId: () => `box-${++ids}`,
+    closed: (closedRun) => runClosed(issueDeps, closedRun).then(() => {}),
     lane: (work) => work(),
     now: () => now,
     random: () => 0.5,
     sleep: async (ms) => void (now += ms),
+  };
+  const issueDeps: IssueDeps = {
+    files: { read: async (path) => fs.files.get(path) ?? null, write: async (path, text) => void fs.files.set(path, text) },
+    topics: async () => [{ searchId: search.id, name: search.name, subtopics: search.subtopics }],
+    activeSearchIds: async () => [search.id],
+    buildEpub: buildSectionedEpub,
+    importBook: async (bytes, fileName) => {
+      const hash = `book-${library.size + 1}`;
+      library.set(hash, { fileName, bytes });
+      return { hash };
+    },
+    attachOriginal: async () => false,
+    putBox: async (item) => void box.push({ id: item.id, kind: item.kind, cover: item.cover, body: item.body, date: item.origin.date }),
+    newBoxItemId: () => `box-${++ids}`,
+    nightEndAt,
+    now: () => now,
+    today: day,
   };
   return {
     fs,
     store,
     deps,
     box,
+    library,
     opened,
     modelLog,
     browse,
@@ -243,7 +267,7 @@ const xOpens = (urls: string[]) => urls.filter((u) => new URL(u).hostname === "x
 describe("a first run, then the next night", () => {
   const w = world();
 
-  test("the first run reads X, builds, writes the result and puts it in the box", async () => {
+  test("the first run reads X, builds, writes the result and its own brief issue goes in the box", async () => {
     const result = await run(w, "r-first", { searchId: SEARCH.id, kind: "first", night: null });
     expect(result.status).toBe("delivered");
     expect(result.x?.status).toBe("done");
@@ -255,7 +279,12 @@ describe("a first run, then the next night", () => {
     expect(file.items.length).toBe(result.itemCount);
     expect(file.items.length).toBeGreaterThan(0);
     expect(file.runDir).toBe("topic-search-runs/r-first");
-    expect(w.box).toEqual([{ id: "box-1", cover: "AI for science: first look", resultFile: result.resultFile! }]);
+    expect(w.box).toEqual([{ id: "box-1", kind: ISSUE_BOX_KIND, cover: `Oct 14 brief · ${file.items.length} items`, body: "book-1", date: "2026-10-14" }]);
+    expect(w.library.get("book-1")?.fileName).toBe("Daily Brief 2026-10-14 No. 1.epub");
+    const shelf = parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null);
+    expect(shelf.issues.map((i) => `${i.key} ${i.number} ${i.bookId} ${i.results.join(",")}`)).toEqual([
+      `first:${SEARCH.id} 1 book-1 ${file.id}`,
+    ]);
     expect(w.search().lastRunAt).toBe(local(2026, 10, 14, 14));
   });
 
@@ -298,8 +327,13 @@ describe("a first run, then the next night", () => {
     const file = parseResultFile(w.fs.files.get(result.resultFile!)!)!;
     expect(file.kind).toBe("daily");
     expect(file.window.since).toBe(local(2026, 10, 14, 14));
+    // The only search's run closed, so the night's issue was made at once.
     expect(w.box.map((b) => b.id)).toEqual(["box-1", "box-2"]);
-    expect(w.box[1].cover).toContain("AI for science");
+    expect(w.box[1].cover).toMatch(/^Oct 15 brief · \d+ items?$/);
+    expect(parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null).issues.map((i) => `${i.key} ${i.number}`)).toEqual([
+      `first:${SEARCH.id} 1`,
+      "night:2026-10-15 2",
+    ]);
 
     const state = await w.store.load();
     const read = JSON.parse(w.fs.files.get("topic-search-runs/r-night/x-read.json")!) as { pages: { search: number; permalink: number } };

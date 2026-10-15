@@ -60,6 +60,7 @@ import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerProseAdjudicateWorker } from "../../../memory/adjudicate/live";
 import { noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
 import { registerTopicSearchRuns } from "../../../info/topic-search/runs-live";
+import { issueRunClosed } from "../../../info/issue/live";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../info/briefer/deliver";
 import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
 import { retireReplacedBook } from "../../../reading/delete/retire-book";
@@ -266,8 +267,12 @@ export function bootDomains(): void {
   registerInfoCollectWorker();
   // Topic searches' first look and nightly increment (docs/info/88): a run that
   // reads X in the hidden window, so only a desktop collector claims it. The
-  // result builder is topic-search/build-live.ts's.
-  registerTopicSearchRuns({ noteHalt: noteCollectorHalt });
+  // result builder is topic-search/build-live.ts's; a closed run goes to the
+  // nightly brief (info/issue), which files the issue through the platform.
+  registerTopicSearchRuns({
+    noteHalt: noteCollectorHalt,
+    closed: ({ searchId, kind, night, resultFile }) => issueRunClosed({ searchId, kind, night, resultFile }),
+  });
   // Settling a prose file sync parked a conflict copy of, with a model (docs/59
   // §6). Registered on every device for the same reason as collect: the
   // election picks the executor among the devices that hold the worker.

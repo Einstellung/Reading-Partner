@@ -215,8 +215,6 @@ export default {
   "tool.savedToTopic": "Guardado en este tema",
   "tool.stoppingTopicSearch": "Deteniendo {name}",
   "tool.stoppedFollowing": "Dejé de seguirlo",
-  "topicSearch.boxFirst": "{name}: primera vista",
-  "topicSearch.boxDaily": "{name}: {n} nuevos",
   "topicSearch.haltSignedOut": "Lectura de X detenida: sesión de X cerrada",
   "topicSearch.haltChallenge": "Lectura de X detenida: X pidió verificación",
   "topicSearch.haltRateLimited": "Lectura de X detenida: X está limitando solicitudes",

@@ -215,8 +215,6 @@ export default {
   "tool.savedToTopic": "このトピックに記録しました",
   "tool.stoppingTopicSearch": "「{name}」を停止中",
   "tool.stoppedFollowing": "フォローを停止しました",
-  "topicSearch.boxFirst": "{name}：初回の全体像",
-  "topicSearch.boxDaily": "{name}：新着 {n} 件",
   "topicSearch.haltSignedOut": "X の読み取りを停止：X からログアウトしています",
   "topicSearch.haltChallenge": "X の読み取りを停止：X が確認を求めています",
   "topicSearch.haltRateLimited": "X の読み取りを停止：X がリクエストを制限しています",

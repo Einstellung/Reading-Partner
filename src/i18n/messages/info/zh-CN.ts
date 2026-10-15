@@ -215,8 +215,6 @@ export default {
   "tool.savedToTopic": "已记进这个主题",
   "tool.stoppingTopicSearch": "正在停止「{name}」",
   "tool.stoppedFollowing": "已停止关注",
-  "topicSearch.boxFirst": "{name}：初次全景",
-  "topicSearch.boxDaily": "{name}：{n} 条新内容",
   "topicSearch.haltSignedOut": "X 读取已停：X 登录已失效",
   "topicSearch.haltChallenge": "X 读取已停：X 要求验证",
   "topicSearch.haltRateLimited": "X 读取已停：X 在限流",

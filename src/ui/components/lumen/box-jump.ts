@@ -8,6 +8,7 @@
 import { t } from "../../../i18n";
 import type { BoxItem, BoxItemState, BoxOrigin } from "../../../box/types";
 import { intakeIdOfItem } from "../../../reading/ingest/intake-box";
+import { issueBookOfItem } from "../../../info/issue/types";
 
 export type Shell = "desktop" | "phone";
 
@@ -126,6 +127,9 @@ type ItemFacts = Pick<BoxItem, "origin" | "kind" | "body" | "runId">;
  * a run's at the reply that answered it. Anything else goes by origin.
  */
 export function planItemJump(item: ItemFacts, place: Place): Jump {
+  // A brief issue opens its book (docs/info/88); the door card for it is the 68 slice's.
+  const issueBook = issueBookOfItem(item);
+  if (issueBook) return { steps: [{ step: "open-book", bookId: issueBook }], unreachable: null };
   if (item.origin.place === "door") {
     const intakeId = intakeIdOfItem(item);
     const focus: DoorFocus | null = intakeId ? { intakeId } : item.runId ? { runId: item.runId } : null;
