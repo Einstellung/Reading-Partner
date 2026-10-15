@@ -44,6 +44,8 @@ export default {
   "statements.writingSelf": "Записывает, что вы сказали о себе",
   "statements.wroteKind": "Записано: {kind}",
   "statements.rewroteKind": "Переписано: {kind}",
+  "statements.wroteAboutYou": "Записано о вас",
+  "statements.rewroteAboutYou": "Переписано то, что я о вас знаю",
 
   "filing.proposingUnder": "Предлагает отнести это к «{topic}»",
   "filing.proposingWhere": "Предлагает, куда это отнести",

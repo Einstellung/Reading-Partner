@@ -21,6 +21,8 @@
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
 import { parseResultFile, type TopicSearchResult } from "../topic-search/result-types";
+import { QUESTIONS_FILE, parseQuestionsFile } from "../topic-search/questions";
+import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type IssueOpeningRecord } from "./opening-record";
 import { planIssue, type IssuePlan, type IssueTopic, type PlannedItem } from "./plan";
 import { issueCoverLine, issueEpubInput, issueFileName } from "./render";
 import { INFO_SHELF_FILE, ISSUE_BOX_KIND, nextIssueNumber, parseShelf, type IssueEntry } from "./types";
@@ -135,6 +137,13 @@ export interface IssueDeps {
   attachOriginal(bookId: string, material: RegisteredMaterial): Promise<boolean>;
   putBox(item: { id: string; boxId: string; kind: string; cover: string; body: string; origin: { place: "door"; date: string } }): Promise<void>;
   newBoxItemId(): string;
+  /**
+   * The everyday-tier model writing Lumen's opening (opening-record.ts); null
+   * or a throw leaves the program's line alone. Absent: no model is asked.
+   */
+  writeOpening?(prompt: { system: string; user: string }): Promise<string | null>;
+  /** The reader's language instruction for the model. */
+  language?(): Promise<string>;
   /** The night's end, epoch ms. */
   nightEndAt(night: string): number;
   now(): number;
@@ -189,6 +198,7 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
   const meta = { number: nextIssueNumber(shelf), date };
   const bytes = await deps.buildEpub(issueEpubInput(plan, meta));
   const { hash } = await deps.importBook(bytes, issueFileName(meta), { kind: "issue", publishedAt: date });
+  const opening = await writeOpening(deps, plan, results);
   let supplements = 0;
   for (const m of supplementCandidates(plan, results)) {
     try {
@@ -207,12 +217,42 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
     bookId: hash,
     boxItemId: deps.newBoxItemId(),
     createdAt: deps.now(),
+    opening,
   };
   // Read again: a volume may have been written meanwhile.
   const latest = parseShelf(await deps.files.read(INFO_SHELF_FILE));
   await deps.files.write(INFO_SHELF_FILE, `${JSON.stringify({ ...latest, issues: [...latest.issues, issue] }, null, 2)}\n`);
   await deps.putBox(boxItem(issue));
   return { key, issue, supplements };
+}
+
+/**
+ * Lumen's opening and the issue's questions. The questions it had no room for
+ * wait in their queue again. A model that fails or is absent leaves the text
+ * null: the program's line and the questions are said all the same.
+ */
+async function writeOpening(deps: IssueDeps, plan: IssuePlan, results: readonly TopicSearchResult[]): Promise<IssueOpeningRecord> {
+  const used = results.filter((r) => plan.results.includes(r.id));
+  const names = new Map(plan.topics.map((t) => [t.searchId, t.name]));
+  const { asked, left } = pickIssueQuestions(used, (id, fallback) => names.get(id) ?? fallback);
+  if (left.length > 0) {
+    try {
+      const file = parseQuestionsFile(await deps.files.read(QUESTIONS_FILE));
+      await deps.files.write(QUESTIONS_FILE, `${JSON.stringify(returnUnasked(file, left), null, 2)}\n`);
+    } catch (e) {
+      console.warn("the brief's unasked questions could not go back to their queue", e);
+    }
+  }
+  let reply: string | null = null;
+  if (deps.writeOpening) {
+    try {
+      const language = deps.language ? await deps.language() : "";
+      reply = await deps.writeOpening(openingPrompt(plan, asked, language));
+    } catch (e) {
+      console.warn("Lumen's opening for the brief could not be written", e);
+    }
+  }
+  return openingRecord(plan, asked, reply);
 }
 
 function boxItem(issue: IssueEntry) {

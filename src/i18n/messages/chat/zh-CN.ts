@@ -44,6 +44,8 @@ export default {
   "statements.writingSelf": "正在记下你对自己说的话",
   "statements.wroteKind": "记下了一条{kind}",
   "statements.rewroteKind": "重写了一条{kind}",
+  "statements.wroteAboutYou": "记进了关于你本人",
+  "statements.rewroteAboutYou": "改写了关于你本人的一条",
 
   "filing.proposingUnder": "正在提议归入{topic}",
   "filing.proposingWhere": "正在提议归属",

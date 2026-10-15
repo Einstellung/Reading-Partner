@@ -96,6 +96,11 @@ function continuingLine(item: TopicSearchResultItem): string {
   return `<p><small>Still drawing attention: likes ${c.before.likes ?? 0} → ${c.after.likes ?? 0}, reposts ${c.before.reposts ?? 0} → ${c.after.reposts ?? 0}.</small></p>`;
 }
 
+/** The words an item stands under in the book: its section's heading, or the start of its Note. */
+export function itemHeading(item: Pick<TopicSearchResultItem, "title">): string {
+  return cut(item.title, HEADING_CHARS);
+}
+
 function entryHtml(p: PlannedItem): string {
   const { item } = p;
   return [

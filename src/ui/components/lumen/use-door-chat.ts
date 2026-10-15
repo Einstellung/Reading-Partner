@@ -54,6 +54,14 @@ import { doorTools } from "./door-tools";
 import { getOpenIssue, issueDoorTurn, noteOnLastLine, type IssueQuote } from "./issue-context";
 import { quotedQuestion } from "../chat/quoted-question";
 import { speakIssueOpening } from "../../../info/issue/opening";
+import {
+  ISSUE_ANSWER_OP,
+  ISSUE_OWN_OP,
+  cardAwaitingWords,
+  issueAnswerNote,
+  type IssueQuestionCard,
+} from "../../../info/issue/question-card";
+import { headingPage } from "../../../reading/issue";
 import { TOPIC_SEARCH_APPLY_OP, topicSearchAppliedNote } from "../../../info/topic-search/cards";
 import type { ApplyResult } from "../../../info/topic-search/apply";
 import { applyTopicSearchCard, loadTopicSearchGuidance } from "../../../info/topic-search/live";
@@ -94,6 +102,14 @@ export interface DoorChatOptions {
 }
 
 const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
+
+// The questions Lumen asked when a brief opened, in the order they stand.
+const issueCards = (rows: readonly UiMessage[]): { cardId: string; card: IssueQuestionCard }[] =>
+  rows.flatMap((m) =>
+    (m.parts ?? []).flatMap((part) =>
+      part.type === "card" && part.card.kind === "issue-question" ? [{ cardId: part.id, card: part.card }] : [],
+    ),
+  );
 
 export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   // The day the chat was opened on. A conversation left open over midnight
@@ -174,7 +190,9 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
         // With a brief open, the brief is on the desk and where the reader is
         // in it rides the same note (issue-context.ts, docs/info/88).
         const issue = await issueDoorTurn(getOpenIssue(), latest?.role === "user" ? latest.text : "");
-        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) + issue.note : "";
+        // A line answering one of the brief's questions says which (info/issue/question-card.ts).
+        const answers = latest?.role === "user" ? issueAnswerNote(issueCards(history).map((c) => c.card), latest.ts) : "";
+        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) + issue.note + answers : "";
         const sent = noteOnLastLine(history, note);
         const prepared = await prepareDoorTurn({
           threadId: id,
@@ -249,13 +267,16 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
         unwatchDoor();
       };
       lookingRef.current = session.resume().catch((e: unknown) => console.warn("door turn could not be resumed", e));
-      // An issue just opened: Lumen speaks first about it (the next slice's, info/issue/opening.ts).
+      // An issue just opened: Lumen speaks first about it (info/issue/opening.ts),
+      // its items cited by the page they stand on in the book that is open.
       if (openedFor) {
-        void lookingRef.current.then(() =>
-          speakIssueOpening({ bookId: openedFor, date, threadId: id }).catch((e: unknown) =>
-            console.warn("the brief's opening could not be said", e),
-          ),
-        );
+        void lookingRef.current
+          .then(async () => {
+            const open = getOpenIssue();
+            const text = open?.bookId === openedFor ? await open.fulltext().catch(() => null) : null;
+            await speakIssueOpening({ bookId: openedFor, date, threadId: id, pageOf: (heading) => headingPage(text, heading) });
+          })
+          .catch((e: unknown) => console.warn("the brief's opening could not be said", e));
       }
     });
     return () => {
@@ -290,8 +311,22 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     [key, threadId, setMessages, stamp],
   );
 
-  const send = useCallback(
-    async (typed: string, quote?: IssueQuote) => {
+  // A question of the brief's answered by the line said at `ts`: the card shows
+  // the answer, on screen and in the thread file.
+  const markAnswered = useCallback(
+    (cardId: string, answer: string, ts: number) => {
+      if (!threadId) return;
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "issue-question") return;
+      const patch = { phase: "answered" as const, answer, answerTs: ts };
+      setMessages((prev) => patchCardPayload(prev, cardId, patch));
+      patchThreadMessage(key, threadId, found.ts, { parts: [toPersistedCardPart(cardId, { ...found.payload, ...patch })] });
+    },
+    [key, threadId, setMessages],
+  );
+
+  const say = useCallback(
+    async (typed: string, quote?: IssueQuote, answering?: string) => {
       if (!typed.trim() || !threadId) return;
       // A question about a passage carries the passage above it (quoted-question.ts).
       const text = quote ? quotedQuestion(quote.text, typed) : typed;
@@ -299,13 +334,29 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       const session = sessionRef.current;
       if (!session) return;
       const ts = stamp();
+      // A quick answer, or the words a question was left waiting for.
+      const card = answering ?? cardAwaitingWords(issueCards(messagesRef.current));
+      if (card) markAnswered(card, typed, ts);
       // Into the turn that is running (docs/72); otherwise a turn of its own.
       if (session.say(text, ts)) return;
       setMessages((prev) => [...prev, { role: "user", text, ts }]);
       appendMessage(key, threadId, { role: "user", text, ts });
       session.ask();
     },
-    [key, threadId, setMessages, stamp],
+    [key, threadId, setMessages, stamp, markAnswered],
+  );
+  const send = useCallback((typed: string, quote?: IssueQuote) => say(typed, quote), [say]);
+
+  // "In my own words": the card waits for the next line typed.
+  const awaitWords = useCallback(
+    (cardId: string) => {
+      if (!threadId) return;
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "issue-question" || found.payload.phase === "answered") return;
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "own" }));
+      patchThreadMessage(key, threadId, found.ts, { parts: [toPersistedCardPart(cardId, { ...found.payload, phase: "own" })] });
+    },
+    [key, threadId, setMessages],
   );
 
   const stop = useCallback(() => sessionRef.current?.stop(), []);
@@ -411,6 +462,8 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           else if (action.op === TOPIC_SEARCH_APPLY_OP) void followTopicSearch(cardId);
           else if (action.op === INTAKE_CHOOSE_OP && action.arg) void pickIntakeTopic(cardId, { id: action.arg });
           else if (action.op === INTAKE_NEW_TOPIC_OP && action.arg) void pickIntakeTopic(cardId, { name: action.arg });
+          else if (action.op === ISSUE_ANSWER_OP && action.arg) void say(action.arg, undefined, cardId);
+          else if (action.op === ISSUE_OWN_OP) awaitWords(cardId);
           break;
         case "local":
           setMessages((prev) => patchCardPayload(prev, cardId, action.patch));
@@ -425,7 +478,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           break;
       }
     },
-    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages],
+    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages, say, awaitWords],
   );
 
   return { messages, stickKey, ready: threadId !== null, streaming, send, stop, onCardAction };

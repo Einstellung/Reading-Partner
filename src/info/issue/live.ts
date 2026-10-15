@@ -11,10 +11,12 @@
 // collector's five-minute tick (info/program/live.ts) for the night's end and
 // for anything a crash left half done. One assembly at a time.
 
+import { callModel, resolveModel } from "../../ai/model-call";
 import { appBox, randomBoxItemId } from "../../box/store";
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { importBook, type ImportMeta } from "../../platform/app/library";
+import { languageInstruction } from "../../platform/app/settings";
 import { addSupplement, type SupplementRef } from "../../platform/app/supplements";
 import { fetchWithRetry, interactiveRetry } from "../../platform/http/throttled-fetch";
 import { bind, type FetchBytes } from "../../workshop/bindery";
@@ -77,6 +79,10 @@ const deps: IssueDeps = {
     await appBox().put({ ...item, source: "run" });
   },
   newBoxItemId: randomBoxItemId,
+  // The everyday tier, as the result builder writes with (topic-search/build-live.ts).
+  writeOpening: ({ system, user }) =>
+    callModel("prep", "plan", system, user, { signal: new AbortController().signal, onProgress: () => {} }, { spend: { caller: "info" } }),
+  language: async () => languageInstruction((await resolveModel("prep")).aiLanguage),
   nightEndAt,
   now: () => Date.now(),
   today: () => localDay(Date.now()),

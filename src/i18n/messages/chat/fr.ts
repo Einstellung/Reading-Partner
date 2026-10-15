@@ -44,6 +44,8 @@ export default {
   "statements.writingSelf": "Note de ce que vous avez dit sur vous-même",
   "statements.wroteKind": "{kind} noté",
   "statements.rewroteKind": "{kind} réécrit",
+  "statements.wroteAboutYou": "Noté à ton sujet",
+  "statements.rewroteAboutYou": "Réécrit ce que je sais de toi",
 
   "filing.proposingUnder": "Proposition de classer ceci sous {topic}",
   "filing.proposingWhere": "Proposition d’un classement",

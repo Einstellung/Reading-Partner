@@ -66,6 +66,25 @@ export function pageOfQuote(fulltext: { pages: readonly string[] } | null, quote
   return null;
 }
 
+/**
+ * The page (1-based) an item of the brief stands on, found by its heading: the
+ * page that opens with it (an entry's section), otherwise the first page that
+ * holds it other than the contents (a Note). Null when no page does.
+ */
+export function headingPage(fulltext: { pages: readonly string[] } | null, heading: string): number | null {
+  if (!fulltext || !heading.trim()) return null;
+  const fold = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const want = fold(heading);
+  const opens = fulltext.pages.findIndex((p) => p && fold(p).startsWith(want));
+  if (opens >= 0) return opens + 1;
+  for (let i = 0; i < fulltext.pages.length; i++) {
+    const text = fulltext.pages[i];
+    if (!text || /^\s*contents\b/i.test(text)) continue;
+    if (locateQuote(text, heading) !== null) return i + 1;
+  }
+  return null;
+}
+
 export interface IssueNoteInput {
   title: string;
   /** Where the reader is, 1-based, and how many pages there are; null before the view reports. */

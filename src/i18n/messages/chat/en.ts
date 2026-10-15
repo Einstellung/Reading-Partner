@@ -46,6 +46,8 @@ export default {
   "statements.writingSelf": "Writing down what you said about yourself",
   "statements.wroteKind": "Wrote down a {kind}",
   "statements.rewroteKind": "Rewrote a {kind}",
+  "statements.wroteAboutYou": "Noted about you",
+  "statements.rewroteAboutYou": "Rewrote what I know about you",
 
   "filing.proposingUnder": "Proposing this belongs under {topic}",
   "filing.proposingWhere": "Proposing where this belongs",

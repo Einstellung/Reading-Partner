@@ -44,6 +44,8 @@ export default {
   "statements.writingSelf": "Notiert, was du über dich selbst gesagt hast",
   "statements.wroteKind": "{kind} notiert",
   "statements.rewroteKind": "{kind} neu geschrieben",
+  "statements.wroteAboutYou": "Über dich notiert",
+  "statements.rewroteAboutYou": "Was ich über dich weiß, neu geschrieben",
 
   "filing.proposingUnder": "Schlägt vor, dies unter {topic} einzuordnen",
   "filing.proposingWhere": "Schlägt eine Einordnung vor",

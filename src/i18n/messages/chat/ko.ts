@@ -44,6 +44,8 @@ export default {
   "statements.writingSelf": "당신이 자신에 대해 한 말을 적는 중",
   "statements.wroteKind": "{kind}을(를) 적었습니다",
   "statements.rewroteKind": "{kind}을(를) 다시 썼습니다",
+  "statements.wroteAboutYou": "당신에 대해 기록했습니다",
+  "statements.rewroteAboutYou": "당신에 대한 기록을 고쳐 썼습니다",
 
   "filing.proposingUnder": "{topic} 아래에 두는 것을 제안하는 중",
   "filing.proposingWhere": "어디에 둘지 제안하는 중",

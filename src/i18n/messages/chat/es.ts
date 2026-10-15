@@ -44,6 +44,8 @@ export default {
   "statements.writingSelf": "Anotando lo que dijiste sobre ti",
   "statements.wroteKind": "Se anotó un {kind}",
   "statements.rewroteKind": "Se reescribió un {kind}",
+  "statements.wroteAboutYou": "Anotado sobre ti",
+  "statements.rewroteAboutYou": "Reescrito lo que sé de ti",
 
   "filing.proposingUnder": "Proponiendo incluir esto en {topic}",
   "filing.proposingWhere": "Proponiendo dónde va esto",

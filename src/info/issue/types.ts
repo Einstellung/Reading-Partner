@@ -8,6 +8,7 @@
 // reading topic, so no reading shelf shows them.
 
 import type { BoxItem } from "../../box/types";
+import type { IssueOpeningRecord } from "./opening-record";
 
 export const INFO_SHELF_FILE = "info-shelf.json";
 export const INFO_SHELF_VERSION = 1;
@@ -31,6 +32,8 @@ export interface IssueEntry {
   bookId: string;
   boxItemId: string;
   createdAt: number;
+  /** What Lumen says when the issue is first opened (opening-record.ts); absent on issues made before it. */
+  opening?: IssueOpeningRecord;
 }
 
 /** A topic volume (合订本) on the info shelf. Filled by the volume slice. */

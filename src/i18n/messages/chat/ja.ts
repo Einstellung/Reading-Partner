@@ -44,6 +44,8 @@ export default {
   "statements.writingSelf": "あなたが自分について言ったことを書き留めています",
   "statements.wroteKind": "{kind} を書き留めました",
   "statements.rewroteKind": "{kind} を書き直しました",
+  "statements.wroteAboutYou": "あなたについて記録しました",
+  "statements.rewroteAboutYou": "あなたについての記録を書き直しました",
 
   "filing.proposingUnder": "{topic} に入れることを提案しています",
   "filing.proposingWhere": "どこに入れるか提案しています",

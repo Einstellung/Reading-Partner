@@ -52,6 +52,13 @@ export function latestReaderMessage<T extends { role: "user" | "ai" }>(
 
 const KIND_LIST = STATEMENT_KINDS.join(" | ");
 
+// A profile holds for the reader whatever they are doing, so its receipt says
+// so in those words (docs/info/88 记忆回写); the other kinds name themselves.
+function wroteLabel(kind: string, rewrote: boolean): string {
+  if (kind === "profile") return t(rewrote ? "chat.statements.rewroteAboutYou" : "chat.statements.wroteAboutYou");
+  return t(rewrote ? "chat.statements.rewroteKind" : "chat.statements.wroteKind", { kind });
+}
+
 export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
   const message = ctx.message ?? null;
   if (!message || message.role !== "user") return [];
@@ -134,7 +141,7 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
           const written = await ctx.store.createStatement(input);
           return {
             text: `Wrote ${written.id} (${written.kind}, in the reader's own words): ${written.text}`,
-            receipt: { label: t("chat.statements.wroteKind", { kind: written.kind }), summary: written.text },
+            receipt: { label: wroteLabel(written.kind, false), summary: written.text },
           };
         }
 
@@ -164,7 +171,7 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
         }
         return {
           text: `Wrote ${written.id} (${written.kind}, in the reader's own words): ${written.text}\nIt supersedes ${supersedes}, which is kept.`,
-          receipt: { label: t("chat.statements.rewroteKind", { kind: written.kind }), summary: written.text },
+          receipt: { label: wroteLabel(written.kind, true), summary: written.text },
         };
       },
     },
