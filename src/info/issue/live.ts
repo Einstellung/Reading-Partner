@@ -48,7 +48,7 @@ const fetchBytes: FetchBytes = async (url) => {
 async function attachOriginal(bookId: string, m: RegisteredMaterial): Promise<boolean> {
   const made = await bind({ kind: "url", url: m.url }, { fetch: fetchBytes });
   if (!made.ok) return false;
-  const title = (("passedThrough" in made ? made.metadata.title : made.metadata.title) || m.title || m.url).trim();
+  const title = (made.metadata.title || m.title || m.url).trim();
   const ext = "passedThrough" in made ? made.format : "epub";
   const entry = await filing.importBook("passedThrough" in made ? made.bytes : made.epub, `${title}.${ext}`, {
     kind: "article",

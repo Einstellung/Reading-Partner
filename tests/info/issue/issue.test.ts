@@ -149,6 +149,8 @@ test("a night is due when every active search's run closed, or at its end with w
   expect(dueIssues(state, ["a", "b"], 0, end).map((d) => d.files)).toEqual([["ra.json"]]);
   state = noteClosed(state, { searchId: "c", kind: "first", night: null, resultFile: "rc.json" });
   expect(dueIssues({ ...state, done: ["night:2026-10-15"] }, ["a", "b"], 0, end)).toEqual([{ key: "first:c", date: null, files: ["rc.json"] }]);
+  const late = noteClosed({ ...emptyIssueState(), done: ["night:2026-10-15"] }, { searchId: "a", kind: "daily", night: "2026-10-15", resultFile: "ra.json" });
+  expect(late.nights).toEqual({});
 });
 
 function world() {

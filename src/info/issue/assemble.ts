@@ -73,7 +73,8 @@ export interface ClosedRun {
 /** The ledger with one more run closed. Pure. */
 export function noteClosed(state: IssueState, run: ClosedRun): IssueState {
   if (run.kind === "first") return { ...state, firsts: { ...state.firsts, [run.searchId]: run.resultFile } };
-  if (!run.night) return state;
+  // A run that closes after its night was assembled has nothing left to join.
+  if (!run.night || state.done.includes(nightKey(run.night))) return state;
   return { ...state, nights: { ...state.nights, [run.night]: { ...state.nights[run.night], [run.searchId]: run.resultFile } } };
 }
 
