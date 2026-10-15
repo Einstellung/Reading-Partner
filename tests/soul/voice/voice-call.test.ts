@@ -432,6 +432,22 @@ test("a call closed on purpose is not an error", async () => {
   expect(h.call.snapshot().phase).toBe("idle");
 });
 
+test("a call started over a live native call is not ended by that call's release", async () => {
+  const h = new Harness();
+  await h.call.start();
+  // The native side stops the call it still held, then opens this one.
+  await h.emit({ kind: "state", turn: 4, running: false, reason: "released" });
+  await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
+  expect(h.call.snapshot().running).toBe(true);
+  expect(h.call.snapshot().error).toBeNull();
+  expect(h.commands("stop")).toHaveLength(0);
+  expect(h.asked.map((a) => a.turn)).toEqual([KICKOFF_TURN]);
+
+  // Its own end, once it is up, still ends it.
+  await h.emit({ kind: "state", turn: 0, running: false, reason: "lost" });
+  expect(h.call.snapshot().running).toBe(false);
+});
+
 test("a start the plugin refuses is reported and leaves nothing running", async () => {
   const h = new Harness();
   h.failStart(new Error("the microphone is busy"));

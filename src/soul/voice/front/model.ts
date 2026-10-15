@@ -21,6 +21,8 @@ export interface FrontModelRequest {
   onSent(): void;
   onText(chunk: string): void;
   onToolCall(call: { name: string; args: Record<string, unknown> }): void;
+  /** Any event from the provider, said or not: thinking, a tool call's arguments as they stream. */
+  onProgress?(): void;
 }
 
 /** Resolves when the reply is complete; rejects when it failed. */
@@ -61,6 +63,7 @@ export function liveFrontModel(): FrontModel {
     );
     req.onSent();
     for await (const ev of stream) {
+      req.onProgress?.();
       if (ev.type === "text_delta") req.onText(ev.delta);
       else if (ev.type === "toolcall_end") req.onToolCall({ name: ev.toolCall.name, args: ev.toolCall.arguments });
       else if (ev.type === "error") throw new Error(ev.error.errorMessage || "front call failed");

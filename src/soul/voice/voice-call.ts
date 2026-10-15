@@ -217,6 +217,9 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
   let error: VoiceCallError | null = null;
   let running = false;
   let greeted = false;
+  // The native side said this call is up. Until it does, an end that arrives is
+  // the previous native call's (see onEvent).
+  let opened = false;
   let utterance: number | null = null;
   // The model turns in flight, by turn. An `abort` effect drops one; a turn that
   // settles after being dropped is a stream that was already in the air and is
@@ -428,6 +431,11 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
   }
 
   function onEvent(e: ConversationEvent): void {
+    // A call started while the native side still held one (the webview reloaded
+    // under a live call) first hears that one go: `released`, with its turn.
+    // Taken as this call's end, it stopped the call that was just opening.
+    if (e?.kind === "state" && e.running === false && !opened) return;
+    if (e?.kind === "state" && e.running === true) opened = true;
     // Straight through, off the queue: the orb reads levels on an animation
     // frame and a level that waited behind a speak_push is a level too late.
     if (e?.kind === "level") {
@@ -482,6 +490,7 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       if (running) return;
       session = createVoiceSession(deps.session);
       greeted = false;
+      opened = false;
       utterance = null;
       setPhase("idle");
       setError(null);

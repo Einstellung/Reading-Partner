@@ -314,6 +314,7 @@
 - [203-voice-processing-off-leaves-the-engine-with-no-output](./native-audio/203-voice-processing-off-leaves-the-engine-with-no-output.md) — `setVoiceProcessingEnabled(false)` 之后 `engine.outputNode.outputFormat(forBus:0)` 是 0 Hz：开 VPIO 那 450 ms 是 I/O 单元把采集和播放一起绑上硬件，关掉它只剩输入那半被 `inputNode` 拉起来。懒创建的 `mainMixerNode` 于是退回兜底的 44100 立体声，`play()` 抛 `player started when in a disconnected state`。`nodeOut=1 mixerOut=1` 和 `isRunning=1` 全是真的也没用——连接是声明出来的，渲染链里没有输出这一段；唯一的判据是输出格式的采样率为 0。同一轮里「拆栈重建 + VPIO 开」那条腿好好的，所以拆栈不是变量
 - [199-stopping-the-engine-first-does-not-make-detach-safe](./native-audio/199-stopping-the-engine-first-does-not-make-detach-safe.md) — 停了 engine 再 `detach` 照样 abort，`RemoveNode` 的前置条件从外面看不全，而它报错的方式是 ObjC 异常；解法是拆栈时根本不 detach，摘 tap、停 player、停 engine，然后让 engine 引用置空带走整张图。真机实测有效：同一处拆栈走完打出 `RP-DICT front closed`，没再 abort，崩的是它后面 1.3 秒的另一件事（坑 201）
 - [612-the-first-input-node-read-stops-a-running-engine](./native-audio/612-the-first-input-node-read-stops-a-running-engine.md) — 只放音的栈从没读过 `engine.inputNode`，engine 跑起来之后第一次读它（哪怕只是 DEBUG 日志的一个参数）会把 engine 静默停掉：没有异常、没有配置变更通知，下次 `start()` 才恢复。测试台上每句开场白都因此听不见；建栈之后不许第一次碰 `inputNode`
+- [614-a-new-call-hears-the-old-native-call-released](./native-audio/614-a-new-call-hears-the-old-native-call-released.md) — webview 重载后原生通话还开着；新页面开通话时原生先以 `released` 停掉旧的，这条事件带着旧 turn 先到新通话的监听，被当成自己的结束把刚开的通话关了。`opened` 之前到的 `running=false` 一律丢掉
 
 ## WebKit / webview
 
