@@ -277,7 +277,7 @@ final class SpeechOut {
     private static let loudDb: Double = -9
     /// 2400 frames at 24 kHz is 100 ms, the smallest the header allows, and the
     /// same 10 Hz the dictation meter already runs at.
-    private static let tapFrames: AVAudioFrameCount = 2400
+    static let tapFrames: AVAudioFrameCount = 2400
 
     /// dBFS to the 0..1 the webview draws. One function for the output bus's
     /// 100 ms meter and for the per-sentence envelope, so the two never drift
@@ -890,11 +890,9 @@ final class SpeechOut {
             self?.lost()
         }
         let node = speaker.player
-        // format: nil, always. This bus is already connected to the main mixer
-        // and installing a tap with an explicit format on a connected bus is
-        // refused. 100 ms of frames is the smallest the header allows.
-        node.installTap(onBus: 0, bufferSize: SpeechOut.tapFrames, format: nil) {
-            [weak self] buffer, _ in
+        // The tap went on with the stack, before its engine started
+        // (AudioFront.installPlayerTapLocked); this only says where it delivers.
+        AudioFront.shared.setPlayerTap { [weak self] buffer in
             self?.meter(buffer)
         }
         player = node

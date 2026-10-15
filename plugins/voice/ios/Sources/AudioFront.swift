@@ -212,6 +212,9 @@ final class AudioFront {
     /// called while that lock is held.
     private let sinkLock = NSLock()
     private var sink: ((AVAudioPCMBuffer) -> Void)?
+    /// Where the player's tap delivers: SpeechOut's meter, set when it takes the
+    /// node. Same rule as `sink`.
+    private var playerTap: ((AVAudioPCMBuffer) -> Void)?
 
     /// The probe's own tally, so a stage that is supposed to be consuming audio
     /// can be seen to be consuming it. Counts and a level, never content.
@@ -469,6 +472,7 @@ final class AudioFront {
                     describeFormat(engine.outputNode.inputFormat(forBus: 0)),
                     describeFormat(engine.outputNode.outputFormat(forBus: 0)))
             #endif
+            installPlayerTapLocked(node)
             player = node
         }
 
@@ -525,6 +529,7 @@ final class AudioFront {
         engine.connect(node, to: tapMixer, format: SpeechOut.playbackFormat)
         engine.connect(tapMixer, to: engine.mainMixerNode, format: SpeechOut.playbackFormat)
         engine.mainMixerNode.outputVolume = 0
+        installPlayerTapLocked(node)
         tapMixer.installTap(onBus: 0, bufferSize: 2400, format: nil) { buffer, when in
             VoiceHarness.shared.capture(buffer, when: when)
         }
@@ -1049,6 +1054,36 @@ final class AudioFront {
     }
 
     // MARK: - The audio thread
+
+    /// The player's tap, installed while the stack is built and before its
+    /// engine starts. Installed on the running engine instead — at the first
+    /// sentence, which is when the speaker first needed it — it left the graph
+    /// in a state the next `play()` answered by stopping the engine: no error,
+    /// no configuration-change notification, `isRunning` false two
+    /// milliseconds later, and nothing rendered until the next sentence's
+    /// `speakerEngine()` restarted it. Every call's opening line went silent
+    /// that way (docs/pitfall/612). format: nil, always: this bus is already
+    /// connected and a tap with an explicit format on a connected bus is
+    /// refused.
+    private func installPlayerTapLocked(_ node: AVAudioPlayerNode) {
+        node.installTap(onBus: 0, bufferSize: SpeechOut.tapFrames, format: nil) {
+            [weak self] buffer, _ in
+            self?.deliverPlayer(buffer)
+        }
+    }
+
+    func setPlayerTap(_ value: ((AVAudioPCMBuffer) -> Void)?) {
+        sinkLock.lock()
+        playerTap = value
+        sinkLock.unlock()
+    }
+
+    private func deliverPlayer(_ buffer: AVAudioPCMBuffer) {
+        sinkLock.lock()
+        let target = playerTap
+        sinkLock.unlock()
+        target?(buffer)
+    }
 
     private func setSink(_ value: ((AVAudioPCMBuffer) -> Void)?) {
         sinkLock.lock()
