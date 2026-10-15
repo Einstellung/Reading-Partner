@@ -38,6 +38,8 @@ export default {
   "home.mealsBlurb": "이번 주 아침, 점심, 저녁과 장 볼 것.",
   "home.open": "열기 →",
   "home.savedLabel": "저장한 항목",
+  "home.briefsLabel": "브리프",
+  "home.briefsBlurb": "매일 밤의 브리프를 한 권씩, 그리고 주제 합본.",
   "home.savedBlurb": "저장해 둔 기사, 언제든 읽으세요.",
   "home.savedCount": { other: "기사 {count}건" },
   "home.savedEmpty": "아직 저장한 것이 없습니다. 브리핑에서 기사를 저장하면 여기에 모입니다.",

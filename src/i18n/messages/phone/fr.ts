@@ -42,6 +42,8 @@ export default {
   "home.mealsBlurb": "Les petits-déjeuners, déjeuners et dîners de la semaine, et ce qu'il faut acheter.",
   "home.open": "Ouvrir →",
   "home.savedLabel": "Enregistrés",
+  "home.briefsLabel": "Bulletins",
+  "home.briefsBlurb": "Le bulletin de chaque nuit en livre, et les volumes thématiques.",
   "home.savedBlurb": "Les articles que vous avez enregistrés, à lire quand vous voulez.",
   "home.savedCount": { one: "{count} article", other: "{count} articles" },
   "home.savedEmpty": "Rien d'enregistré pour l'instant. Enregistrez un article du résumé, il vous attendra ici.",

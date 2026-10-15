@@ -658,6 +658,24 @@ export function IconBriefing({ size = 20 }: IconProps) {
 	);
 }
 
+// The info shelf (docs/info/88): issues of the brief stacked like booklets.
+export function IconBriefs({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M6 3.5H15C15.55 3.5 16 3.95 16 4.5V14.5" />
+			<path d="M4 6.5C4 5.95 4.45 5.5 5 5.5H13C13.55 5.5 14 5.95 14 6.5V16.5H5C4.45 16.5 4 16.05 4 15.5V6.5Z" />
+			<path d="M6.5 9H11.5" />
+			<path d="M6.5 11.5H10" />
+		</svg>
+	);
+}
+
 // The mark on a card that is itself a button: the whole card opens, and this is
 // where it says so.
 export function IconChevronRight({ size = 20 }: IconProps) {

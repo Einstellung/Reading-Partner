@@ -178,7 +178,6 @@ test("the guidance lists searches and live concerns, and a lapsed concern only b
       st("s-old", { supersededBy: "s-live" }),
       st("s-prof", { kind: "profile" }),
     ],
-    topics: [{ id: "topic-1", name: "Science" }],
   });
   expect(text).toContain("- ts-1 (id: ts-1, stopped) —");
   expect(text).toContain("(id s-live, reader)");
@@ -196,7 +195,6 @@ test("the guidance says when X reading is held on this device", () => {
   const text = topicSearchGuidance({
     searches: [],
     statements: [],
-    topics: [],
     xPaused: "X reading is paused after a second challenge until the reader resumes it",
   });
   expect(text).toContain("X reading on this device: X reading is paused after a second challenge");

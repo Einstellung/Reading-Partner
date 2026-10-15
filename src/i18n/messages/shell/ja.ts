@@ -94,6 +94,7 @@ export default {
 
   "nav.today": "今日",
   "nav.briefing": "ブリーフィング",
+  "nav.briefs": "ブリーフ",
   "nav.meals": "食事",
   "nav.topics": "トピック",
 

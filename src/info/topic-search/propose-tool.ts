@@ -39,7 +39,6 @@ export interface ProposeToolDeps {
   // The reader's lines so far, oldest first, read when the tool is called.
   readerLines(): readonly ReaderLine[];
   searches(): Promise<TopicSearch[]>;
-  topics(): Promise<readonly { id: string; name: string }[]>;
   statements(): Promise<readonly Statement[]>;
   claims(): Promise<readonly DeviceClaim[]>;
   now(): number;
@@ -62,22 +61,6 @@ export function openingAnchor(lines: readonly ReaderLine[], quote: string, threa
   }
   const line = hit ?? lines[lines.length - 1];
   return messageAnchor({ ...(line.id ? { id: line.id } : {}), ts: line.ts }, threadId);
-}
-
-/** A topic the model named by id or name, or a new one under that name (or the search's). */
-export function resolveFiledTopic(
-  raw: string,
-  topics: readonly { id: string; name: string }[],
-  fallbackName: string,
-): { id: string | null; name: string } {
-  const wanted = raw.trim();
-  const hit =
-    topics.find((tp) => tp.id === wanted) ??
-    topics.find((tp) => tp.name.trim().toLowerCase() === wanted.toLowerCase());
-  if (wanted && hit) return { id: hit.id, name: hit.name };
-  const name = wanted || fallbackName;
-  const same = topics.find((tp) => tp.name.trim().toLowerCase() === name.trim().toLowerCase());
-  return same ? { id: same.id, name: same.name } : { id: null, name };
 }
 
 /** The concern the model pointed at, when it is a live concern. */
@@ -156,9 +139,6 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
       answers: Type.Array(ANSWER_SCHEMA, {
         description: "What the reader answered to your questions while drafting, word for word.",
       }),
-      topic: Type.String({
-        description: "Reading topic to file into: an existing topic's id or name, or empty for a new one named after the search.",
-      }),
       concern: Type.String({ description: "One sentence: that the reader is following this." }),
       existingConcern: Type.Optional(
         Type.String({ description: "Id (s-…) of a concern already saying the same thing." }),
@@ -198,7 +178,6 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
           "propose_topic_search needs at least one query, over the whole topic or a picked subtopic.",
         );
       }
-      const topic = resolveFiledTopic(asString(args.topic), await deps.topics(), name);
       const concern = resolveConcern(asString(args.existingConcern), await deps.statements());
       const card: TopicSearchProposalCardData = {
         kind: "topic-search-proposal",
@@ -210,7 +189,6 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
         want: asStrings(args.want),
         avoid: asStrings(args.avoid),
         judgments: asStrings(args.judgments),
-        topic,
         eta: firstRunEta(await deps.claims(), deps.now()),
         ...(args.once === true ? { once: true } : {}),
         anchors: asStrings(args.anchors),
@@ -228,8 +206,7 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
       return {
         text:
           `Drew the card for "${name}": ${subtopics.length - unpicked} picked subtopics, ${queries.length} ` +
-          `queries, filing into ${topic.id ? `the topic "${topic.name}"` : `a new topic "${topic.name}"`}` +
-          `${concern ? `, hung on concern ${concern.id}` : ""}${card.once ? ", once only" : ""}. ` +
+          `queries${concern ? `, hung on concern ${concern.id}` : ""}${card.once ? ", once only" : ""}. ` +
           `Nothing is filed until the reader applies it.`,
         receipt: {
           label: t("info.tool.draftedTopicSearchLabel"),

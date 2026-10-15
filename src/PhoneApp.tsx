@@ -35,6 +35,7 @@ import { registerPlaces } from "./desk";
 import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
+import InfoShelf from "./ui/components/info/InfoShelf";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
 import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
@@ -413,6 +414,7 @@ export default function PhoneApp({
                 launch={launch}
                 savedCount={savedArticles?.length ?? null}
                 onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
+                onOpenBriefs={() => setStack((s) => push(s, screen("briefs")))}
                 continueBook={topics === null ? undefined : continueReading(topics, entries)}
                 onContinue={(book) => openReader({ ...book, name: book.title })}
                 onOpenLibrary={() => setStack((s) => push(s, screen("library")))}
@@ -436,6 +438,19 @@ export default function PhoneApp({
                 await refreshShelf();
               }}
               onNotice={pushToast}
+            />
+          )}
+
+          {base.kind === "briefs" && (
+            <InfoShelf
+              // An issue or a volume is on no topic: the reader opens it from
+              // the library alone.
+              onOpenBook={(bookId, name) => openReader({ bookId, name, topicId: "", path: "" })}
+              onBack={goBack}
+              sheet
+              onTell={(line) => pushToast("info", line)}
+              onSay={(line) => pushToast("error", line)}
+              onTopicsChanged={refreshShelf}
             />
           )}
 

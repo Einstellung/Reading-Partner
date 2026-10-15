@@ -20,12 +20,11 @@ function line(s: string): string {
 export interface GuidanceInput {
   searches: readonly TopicSearch[];
   statements: readonly Statement[];
-  topics: readonly { id: string; name: string }[];
   /** Why X is not read on this device tonight (runs-live.ts xReadingPaused), or null. */
   xPaused?: string | null;
 }
 
-export function topicSearchGuidance({ searches, statements, topics, xPaused = null }: GuidanceInput): string {
+export function topicSearchGuidance({ searches, statements, xPaused = null }: GuidanceInput): string {
   const stoppedConcerns = new Set(
     searches.filter((s) => s.status === "stopped" && s.concernId).map((s) => s.concernId as string),
   );
@@ -43,9 +42,6 @@ export function topicSearchGuidance({ searches, statements, topics, xPaused = nu
           "What they are keeping an eye on (concerns, by id):",
           ...concerns.map((s) => `- ${s.text.trim()} (id ${s.id}, ${s.author}${s.lapsed ? ", lapsed" : ""})`),
         ].join("\n")
-      : "",
-    topics.length
-      ? ["Their reading topics:", ...topics.map((tp) => `- ${tp.name} (id: ${tp.id})`)].join("\n")
       : "",
     xPaused ? `X reading on this device: ${xPaused}.` : "",
     [

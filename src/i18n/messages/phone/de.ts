@@ -42,6 +42,8 @@ export default {
   "home.mealsBlurb": "Frühstück, Mittag- und Abendessen dieser Woche, und was eingekauft werden muss.",
   "home.open": "Öffnen →",
   "home.savedLabel": "Gespeichert",
+  "home.briefsLabel": "Briefs",
+  "home.briefsBlurb": "Der Brief jeder Nacht als Buch, dazu die Themenbände.",
   "home.savedBlurb": "Artikel, die du gespeichert hast, zum Lesen wann immer du willst.",
   "home.savedCount": { one: "{count} Artikel", other: "{count} Artikel" },
   "home.savedEmpty": "Noch nichts gespeichert. Speichere einen Artikel aus dem Briefing, und er wartet hier.",

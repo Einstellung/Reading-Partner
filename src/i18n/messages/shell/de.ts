@@ -96,6 +96,7 @@ export default {
 
   "nav.today": "Heute",
   "nav.briefing": "Briefing",
+  "nav.briefs": "Briefs",
   "nav.meals": "Mahlzeiten",
   "nav.topics": "Themen",
 

@@ -13,7 +13,6 @@ import { buildStopTopicSearchTool, buildUpdateTopicSearchTool, type EditToolDeps
 import {
   buildProposeTopicSearchTool,
   openingAnchor,
-  resolveFiledTopic,
 } from "../../../src/info/topic-search/propose-tool";
 import { buildConfirmTopicSearchTool } from "../../../src/info/topic-search/confirm-tool";
 import { resumeHalt, type XHaltRecord } from "../../../src/info/topic-search/halt";
@@ -76,7 +75,6 @@ function card(over: Partial<TopicSearchProposalCardData> = {}): TopicSearchPropo
     want: [],
     avoid: [],
     judgments: ["AI chip design counts as engineering"],
-    topic: { id: null, name: "AI for science" },
     eta: "tonight",
     anchors: ["AI for science"],
     queries: [{ id: "q1", subtopic: null, x: "AI for science", arxiv: null, ranking: "", weight: 1 }],
@@ -115,9 +113,6 @@ test("the opening message is the latest line holding the quote, or the latest li
   expect(openingAnchor(lines, "ai for science", "th")).toBe("th:1");
   expect(openingAnchor(lines, "not said", "th")).toBe("t-abc@th:2");
   expect(openingAnchor([], "x", "th")).toBeNull();
-  expect(resolveFiledTopic("Science", [{ id: "tp", name: "science" }], "x")).toEqual({ id: "tp", name: "science" });
-  expect(resolveFiledTopic("", [{ id: "tp", name: "AI" }], "AI")).toEqual({ id: "tp", name: "AI" });
-  expect(resolveFiledTopic("", [], "AI")).toEqual({ id: null, name: "AI" });
 });
 
 test("propose draws a card and writes nothing; a taken name is refused", async () => {
@@ -126,7 +121,6 @@ test("propose draws a card and writes nothing; a taken name is refused", async (
     threadId: "thread-1",
     readerLines: () => [{ ts: OCT_14, text: "帮我整理 AI for science 的资料" }],
     searches: async () => [search("ts-1", { name: "Chips" })],
-    topics: async () => [],
     statements: async () => [],
     claims: async () => [],
     now: () => OCT_14,
@@ -146,7 +140,6 @@ test("propose draws a card and writes nothing; a taken name is refused", async (
       { subtopic: "Weather", x: "AI weather", arxiv: "", ranking: "" },
     ],
     answers: [],
-    topic: "",
     concern: "Following AI for science",
     opening: "AI for science",
   };
@@ -155,7 +148,6 @@ test("propose draws a card and writes nothing; a taken name is refused", async (
   expect(cards).toHaveLength(1);
   expect(cards[0].queries.map((q) => q.x)).toEqual(["AI for science"]);
   expect(cards[0].concern.evidence).toBe(`thread-1:${OCT_14}`);
-  expect(cards[0].topic).toEqual({ id: null, name: "AI for science" });
   expect(cards[0].eta).toBe("tonight");
 
   const refused = await tool.execute({ ...args, name: "chips" });
@@ -289,7 +281,6 @@ const PROPOSE_ARGS = {
   anchors: ["AI for science"],
   queries: [{ subtopic: "", x: "AI for science", arxiv: "", ranking: "" }],
   answers: [],
-  topic: "",
   concern: "Following AI for science",
   opening: "AI for science",
 };
@@ -305,7 +296,6 @@ function door() {
     threadId: "thread-1",
     readerLines: () => [{ ts: OCT_14, text: "帮我整理 AI for science 的资料" }],
     searches: file.load,
-    topics: async () => [],
     statements: async () => [],
     claims: async () => [],
     now: () => OCT_14,

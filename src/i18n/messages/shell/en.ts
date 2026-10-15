@@ -120,6 +120,7 @@ export default {
   // The sidebar's items (base/shell-nav.ts).
   "nav.today": "Today",
   "nav.briefing": "Briefing",
+  "nav.briefs": "Briefs",
   "nav.meals": "Meals",
   "nav.topics": "Topics",
 

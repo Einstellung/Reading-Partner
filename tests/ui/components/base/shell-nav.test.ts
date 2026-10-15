@@ -14,17 +14,18 @@ import {
 } from "../../../../src/ui/components/base/shell-nav";
 
 test("the sidebar's items are in the order a day uses them", () => {
-  expect(SHELL_NAV_ITEMS.map((i) => i.id)).toEqual(["today", "briefing", "meals", "topics"]);
-  expect(SHELL_NAV_ITEMS.map((i) => translate("en", i.labelKey))).toEqual(["Today", "Briefing", "Meals", "Topics"]);
+  expect(SHELL_NAV_ITEMS.map((i) => i.id)).toEqual(["today", "briefing", "briefs", "meals", "topics"]);
+  expect(SHELL_NAV_ITEMS.map((i) => translate("en", i.labelKey))).toEqual(["Today", "Briefing", "Briefs", "Meals", "Topics"]);
 });
 
 // Meals is opt-in (settings.meals, docs/73), and off it is not in the column
 // at all — the reader having said no is not a reason to show them a row.
 test("Meals is drawn only when it is switched on, in its own place", () => {
-  expect(shellNavItems({ meals: false }).map((i) => i.id)).toEqual(["today", "briefing", "topics"]);
+  expect(shellNavItems({ meals: false }).map((i) => i.id)).toEqual(["today", "briefing", "briefs", "topics"]);
   expect(shellNavItems({ meals: true }).map((i) => i.id)).toEqual([
     "today",
     "briefing",
+    "briefs",
     "meals",
     "topics",
   ]);
@@ -33,6 +34,7 @@ test("Meals is drawn only when it is switched on, in its own place", () => {
 test("each item opens its screen", () => {
   expect(screenForNav("today")).toBe("vestibule");
   expect(screenForNav("briefing")).toBe("briefing");
+  expect(screenForNav("briefs")).toBe("briefs");
   expect(screenForNav("meals")).toBe("meals");
   expect(screenForNav("topics")).toBe("library");
 });

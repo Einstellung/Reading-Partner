@@ -38,6 +38,8 @@ export default {
   "home.mealsBlurb": "今週の朝食・昼食・夕食と、買うもの。",
   "home.open": "開く →",
   "home.savedLabel": "保存済み",
+  "home.briefsLabel": "ブリーフ",
+  "home.briefsBlurb": "毎晩のブリーフを一冊ずつ、そしてトピック合本。",
   "home.savedBlurb": "保存した記事。いつでも読めます。",
   "home.savedCount": { other: "記事 {count} 件" },
   "home.savedEmpty": "まだ何も保存されていません。ブリーフィングから記事を保存すると、ここに並びます。",

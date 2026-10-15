@@ -25,9 +25,6 @@ export interface TopicSearchProposalCardData {
   want: string[];
   avoid: string[];
   judgments: string[];
-  // The reading topic it files into: an existing one by id, or a new one made
-  // under `name` on Apply.
-  topic: { id: string | null; name: string };
   eta: FirstRunEta;
   // The reader wants this one look only, not a daily follow.
   once?: boolean;

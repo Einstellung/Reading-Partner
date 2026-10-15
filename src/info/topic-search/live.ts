@@ -4,7 +4,6 @@
 import type { AgentTool } from "../../legion/durable/contract";
 import { appClaims } from "../../legion/claim";
 import { listStatements, statementStore } from "../../memory";
-import { listTopics } from "../../platform/app/topics";
 import { applyTopicSearchProposal, type ApplyResult } from "./apply";
 import type { TopicSearchProposalCardData } from "./cards";
 import { buildConfirmTopicSearchTool, type ConfirmToolDeps } from "./confirm-tool";
@@ -40,7 +39,6 @@ export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
       threadId: ports.threadId,
       readerLines: ports.readerLines,
       searches: () => loadTopicSearches(),
-      topics: () => listTopics(),
       statements: () => listStatements(),
       claims: () => appClaims().readAll(),
       now: () => Date.now(),
@@ -55,13 +53,12 @@ export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
 
 /** The drafting rules and roster for the door's system prompt. */
 export async function loadTopicSearchGuidance(): Promise<string> {
-  const [searches, statements, topics, xPaused] = await Promise.all([
+  const [searches, statements, xPaused] = await Promise.all([
     loadTopicSearches().catch(() => []),
     listStatements().catch(() => []),
-    listTopics().catch(() => []),
     xReadingPaused().catch(() => null),
   ]);
-  return topicSearchGuidance({ searches, statements, topics, xPaused });
+  return topicSearchGuidance({ searches, statements, xPaused });
 }
 
 /** The card's Apply on this device. */

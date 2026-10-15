@@ -39,6 +39,7 @@ import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
+import InfoShelf from "./ui/components/info/InfoShelf";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
@@ -895,6 +896,22 @@ export default function App() {
     return bookId ? openDocument(bookId, bookTitle) : null;
   }, [openDocument, bookTitle]);
 
+  // A book on no topic, from the info shelf (docs/info/88): an issue of the
+  // brief or a topic volume, read straight from the library.
+  const openIssueBook = useCallback(
+    async (bookId: string, name: string) => {
+      try {
+        const bytes = await readLibraryBook(bookId);
+        if (!bytes) throw new Error("the book is not in the library");
+        await openInReader(bookId, name, bytes);
+      } catch (e) {
+        console.error("failed to open the book", e);
+        pushToast("error", t("shell.toast.cantOpenDownloading"));
+      }
+    },
+    [openInReader, pushToast, t],
+  );
+
   // Open a topic file. If its book id is known and the library holds the
   // authoritative copy, open straight from the library (the original path may be
   // gone). Otherwise read the original, import a copy into the library, migrate
@@ -1583,6 +1600,15 @@ export default function App() {
               onSettingsChange={applySettings}
               device={device}
               onDeviceChange={applyDevice}
+            />
+          )}
+
+          {!inReader && homeScreen === "briefs" && (
+            <InfoShelf
+              onOpenBook={(bookId, name) => void openIssueBook(bookId, name)}
+              onTell={(line) => pushToast("info", line)}
+              onSay={(line) => pushToast("error", line)}
+              onTopicsChanged={refreshTopics}
             />
           )}
 

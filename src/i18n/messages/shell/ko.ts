@@ -94,6 +94,7 @@ export default {
 
   "nav.today": "오늘",
   "nav.briefing": "브리핑",
+  "nav.briefs": "브리프",
   "nav.meals": "식단",
   "nav.topics": "주제",
 
