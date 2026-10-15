@@ -4,8 +4,8 @@
 // 30-day history (dedupe, continuation, the metric questions).
 //
 // Every fact here — titles, URLs, authors, dates, counts, stars — is the
-// program's. A model wrote only `overview.text`, each item's `summary`, and the
-// `says` / `difference` of a discrepancy, and all of those passed the number
+// program's. A model wrote only `overview.text`, each item's `summary`, `body`
+// and `unknown`, and the `says` / `difference` of a discrepancy, and all of those passed the number
 // check (numbers.ts) against the materials they cite.
 
 import type { RegisteredMaterial } from "../dossier/registry";
@@ -112,8 +112,16 @@ export interface TopicSearchResultItem {
   /** The original's title; else the author and the post's first sentence, cut to 120 characters. Never rewritten. */
   title: string;
   titleFrom: "original" | "post";
-  /** One or two sentences, the model's. Null in the fallback write-up and for a continuing item. */
+  /**
+   * The one-sentence conclusion, the model's: the brief's contents line and the
+   * entry's italic lede (88 「简报书」). Null in the fallback write-up, and for a
+   * continuing item the model had nothing new to say about.
+   */
   summary: string | null;
+  /** Two or three paragraphs, facts before judgements. Empty where `summary` is null. Absent in files written before 2026-10-15. */
+  body?: string[];
+  /** One sentence on what is not yet known or could not be checked; null when the model had none. */
+  unknown?: string | null;
   facts: ResultFacts;
   /** The original (null when the post is the original) and the posts that led to it. */
   links: { original: string | null; posts: ResultPost[] };
@@ -152,7 +160,6 @@ export interface TopicSearchResult {
   /** The file name without ".json". */
   id: string;
   searchId: string;
-  topicId: string;
   name: string;
   kind: ResultRunKind;
   /** Local date of the run, YYYY-MM-DD. */

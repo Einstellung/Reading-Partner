@@ -5,7 +5,7 @@
 // owns that file; it imports this directory, not the other way round). The
 // result builder is build-live.ts's unless the caller hands in another.
 
-import { appBox, randomBoxItemId } from "../../box/store";
+import { appBox } from "../../box/store";
 import { t } from "../../i18n";
 import { WEBVIEW_FETCH } from "../../legion/claim";
 import { deviceRuntime } from "../../legion/durable/background";
@@ -32,7 +32,6 @@ import { recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
 import type { XResume } from "./resume-tool";
 import { lastNightAnchor, type NightConditions } from "./nightly";
 import {
-  TOPIC_SEARCH_BOX_KIND,
   TOPIC_SEARCH_HALT_BOX_KIND,
   TOPIC_SEARCH_KIND,
   topicSearchTask,
@@ -69,6 +68,8 @@ export function setTopicSearchResultBuilder(build: BuildTopicSearchResult | null
 
 export interface TopicSearchRunPorts {
   build?: BuildTopicSearchResult;
+  /** A run closed: the nightly brief (info/issue/live.ts issueRunClosed) takes it from here. */
+  closed?: TopicSearchRunDeps["closed"];
   /** Put the halt line on this machine's collector state file (docs/info/36 `halt`). */
   noteHalt(text: string): Promise<void>;
 }
@@ -150,19 +151,9 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
     keepAwake: (reason) => keepAwake(reason),
     open: (viewport) => openBrowse({ idleTimeoutMs: BROWSE_IDLE_MS, viewport }),
     expandLink: (tco) => resolveRedirect(tco),
-    deliver: async (item) => {
-      await appBox().put({
-        id: item.id,
-        boxId: item.runId,
-        source: "run",
-        kind: TOPIC_SEARCH_BOX_KIND,
-        runId: item.runId,
-        cover: item.cover,
-        body: item.resultFile,
-        origin: { place: "door", date: item.date },
-      });
+    closed: async (run) => {
+      await ports.closed?.(run);
     },
-    newBoxItemId: randomBoxItemId,
     lane: inXLane,
     report: (runId, text) => reporters.get(runId)?.(text),
     now: () => Date.now(),

@@ -215,8 +215,6 @@ export default {
   "tool.savedToTopic": "In diesem Thema gespeichert",
   "tool.stoppingTopicSearch": "Beende {name}",
   "tool.stoppedFollowing": "Nicht mehr verfolgt",
-  "topicSearch.boxFirst": "{name}: erster Überblick",
-  "topicSearch.boxDaily": "{name}: {n} neu",
   "topicSearch.haltSignedOut": "X-Lesen gestoppt: bei X abgemeldet",
   "topicSearch.haltChallenge": "X-Lesen gestoppt: X verlangt eine Bestätigung",
   "topicSearch.haltRateLimited": "X-Lesen gestoppt: X begrenzt Anfragen",

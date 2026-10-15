@@ -63,7 +63,7 @@ export function topicSearchWorker(ports: TopicSearchWorkerPorts): Worker {
           { task: ports.task, key: ctx.run.id, name: TOPIC_SEARCH_KIND, input: { runId: ctx.run.id, brief: parsed }, signal: stop.signal },
         );
         if (outcome.status === "completed") {
-          const output = outcome.result.boxItemId ?? outcome.result.resultFile ?? undefined;
+          const output = outcome.result.resultFile ?? undefined;
           return { ...(output ? { output } : {}), progress: line(outcome.result) };
         }
         if (outcome.status === "aborted" || stop.signal.aborted) throw new StoppedError();

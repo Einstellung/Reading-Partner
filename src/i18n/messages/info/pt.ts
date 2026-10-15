@@ -215,8 +215,6 @@ export default {
   "tool.savedToTopic": "Salvo neste tema",
   "tool.stoppingTopicSearch": "Parando {name}",
   "tool.stoppedFollowing": "Deixei de acompanhar",
-  "topicSearch.boxFirst": "{name}: primeira visão",
-  "topicSearch.boxDaily": "{name}: {n} novos",
   "topicSearch.haltSignedOut": "Leitura do X parada: sessão do X encerrada",
   "topicSearch.haltChallenge": "Leitura do X parada: o X pediu verificação",
   "topicSearch.haltRateLimited": "Leitura do X parada: o X está limitando pedidos",

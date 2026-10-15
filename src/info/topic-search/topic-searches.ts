@@ -55,11 +55,13 @@ export function entryId(entry: unknown): string {
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
 
 // A stored entry read as a TopicSearch, or null when a field this build
-// depends on is missing or of the wrong type. Unknown fields ride along.
+// depends on is missing or of the wrong type. Unknown fields ride along: a
+// search written before 2026-10-15 still carries the reading topic it was
+// filed under (`topicId`), which nothing reads any more.
 export function validateTopicSearch(entry: unknown): TopicSearch | null {
   if (!isObject(entry)) return null;
   if (typeof entry.id !== "string" || entry.id === "") return null;
-  if (typeof entry.name !== "string" || typeof entry.topicId !== "string") return null;
+  if (typeof entry.name !== "string") return null;
   if (entry.concernId !== null && typeof entry.concernId !== "string") return null;
   if (typeof entry.scope !== "string") return null;
   if (!STATUSES.includes(entry.status as TopicSearchStatus)) return null;

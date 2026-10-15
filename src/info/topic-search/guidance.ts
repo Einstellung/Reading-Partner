@@ -33,8 +33,7 @@ export function topicSearchGuidance({ searches, statements, topics, xPaused = nu
     (s) => s.kind === "concern" && !s.supersededBy && s.text.trim() !== "" && (!s.lapsed || stoppedConcerns.has(s.id)),
   );
   const roster = searches.map((s) => {
-    const topic = topics.find((tp) => tp.id === s.topicId)?.name ?? s.topicId;
-    return `- ${s.name} (id: ${s.id}, ${s.status}, topic "${topic}") — ${line(s.scope)}`;
+    return `- ${s.name} (id: ${s.id}, ${s.status}) — ${line(s.scope)}`;
   });
   return [
     "TOPIC SEARCHES",
@@ -70,7 +69,7 @@ export function topicSearchGuidance({ searches, statements, topics, xPaused = nu
       "- When they want one look only, not a daily follow (\"just this once\", \"只看这一次\"),",
       "  propose with once: the first overview comes, then it stops by itself.",
       "- Name an existing concern above that says the same thing as existingConcern, and a stopped",
-      "  search they want back as searchId. File into an existing topic by id where one fits.",
+      "  search they want back as searchId.",
       "When they answer a question, write it where it holds: only for this topic, with",
       "update_topic_search; for them in general, whatever the topic (\"I only read English",
       "originals\"), with statement_write as a profile; both when it is both. Then say in one line",

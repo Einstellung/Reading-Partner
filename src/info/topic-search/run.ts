@@ -10,18 +10,20 @@
 //            opening X pages only from what is left of the day's allowance and
 //            the run's ceiling; then the source health it wrote goes into the
 //            collector's state file
-//   deliver  a box item pointing at the result file; nothing when empty. A
-//            search the reader wanted to see only once stops after its first
-//   wrap     the lock let go
+//   deliver  the search's last run time; a search the reader wanted to see
+//            only once stops after its first
+//   wrap     the lock let go, and the run told closed (`closed`): the nightly
+//            brief (info/issue) waits for every search's run of the night and
+//            gives a first look an issue of its own. A run puts nothing in the
+//            box itself
 //
 // Every phase writes before it commits, and reads what an earlier attempt of
 // it wrote, so a phase run again after a kill does not read X twice, build
-// twice, or put two items in the box. The definition lives here and reaches
+// twice, or tell the brief twice. The definition lives here and reaches
 // the Harness through legion/durable's program-task registry.
 
 import type { Context } from "@earendil-works/chord";
 import { defineTask, type Task, type TaskRuntime } from "@earendil-works/pi-durable";
-import { t } from "../../i18n";
 import { StoppedError } from "../../legion/stop";
 import type { KeepAwakeLock } from "../../platform/app/keep-awake";
 import type { BrowseOpen } from "../../workshop/extract/webview-browse";
@@ -36,7 +38,6 @@ export type BuiltTopicSearchResult = BuildTopicSearchResultOutput;
 
 export const TOPIC_SEARCH_KIND = "topic-search";
 export const TOPIC_SEARCH_TASK = "rp.topicsearch";
-export const TOPIC_SEARCH_BOX_KIND = "topic-search";
 export const TOPIC_SEARCH_HALT_BOX_KIND = "topic-search-halt";
 /** How far back the first run looks (88: initial value). */
 export const FIRST_LOOK_BACK_MS = 30 * 24 * 60 * 60_000;
@@ -86,13 +87,6 @@ export function searchLines(search: TopicSearch, kind: TopicSearchRunKind, since
     }));
 }
 
-/** The box item's line, written by the program (88 「送达」). */
-export function deliveryCover(name: string, kind: TopicSearchRunKind, itemCount: number): string {
-  return kind === "first"
-    ? t("info.topicSearch.boxFirst", { name })
-    : t("info.topicSearch.boxDaily", { name, n: String(itemCount) });
-}
-
 /** A read that opened nothing, with the reason. */
 export function unread(status: XRunStatus, why: string): XReadResult {
   return { status, why, halt: null, posts: [], lines: [], pages: { search: 0, permalink: 0 }, activeMs: 0 };
@@ -135,7 +129,6 @@ export interface TopicSearchRunResult {
   why: string | null;
   resultFile: string | null;
   itemCount: number;
-  boxItemId: string | null;
   x: { status: XRunStatus; why: string | null; posts: number; searchPages: number; permalinkPages: number } | null;
 }
 
@@ -169,9 +162,12 @@ export interface TopicSearchRunDeps {
   keepAwake(reason: string): Promise<KeepAwakeLock>;
   open(viewport: { width: number; height: number }): Promise<BrowseOpen>;
   expandLink(tco: string): Promise<string | null>;
-  /** Put the result in the box under `id`; an id already there is left alone. */
-  deliver(item: { id: string; runId: string; cover: string; resultFile: string; date: string }): Promise<void>;
-  newBoxItemId(): string;
+  /**
+   * The run is over: the brief (info/issue) takes the result file, null when
+   * the run left nothing new. Called once per run, skipped runs included, so a
+   * night's issue does not wait for a run that will never deliver.
+   */
+  closed(run: { runId: string; searchId: string; kind: TopicSearchRunKind; night: string | null; resultFile: string | null }): Promise<void>;
   /** One piece of X work at a time (x-lane.ts). */
   lane<T>(work: () => Promise<T>): Promise<T>;
   report?(runId: string, text: string): void;
@@ -210,7 +206,7 @@ export function topicSearchTask(
   const skip = (runtime: Runtime, why: string, context: Context) =>
     next(
       runtime,
-      { phase: "wrap", result: { status: "skipped", why, resultFile: null, itemCount: 0, boxItemId: null, x: null } },
+      { phase: "wrap", result: { status: "skipped", why, resultFile: null, itemCount: 0, x: null } },
       context,
     );
 
@@ -351,17 +347,6 @@ export function topicSearchTask(
         const { built, startedAt } = task.state.checkpoint;
         const search = await deps.loadSearch(brief.searchId);
         if (!search) return skip(runtime, "the topic search is gone", context);
-        let boxItemId: string | null = null;
-        if (!built.empty && built.resultFile) {
-          boxItemId = await runtime.memo("box-item", deps.newBoxItemId(), context);
-          await deps.deliver({
-            id: boxItemId,
-            runId,
-            cover: deliveryCover(search.name, brief.kind, built.itemCount),
-            resultFile: built.resultFile,
-            date: localDay(deps.now()),
-          });
-        }
         await deps.ran(search, startedAt);
         if (brief.kind === "first" && search.once) await deps.stopOnce(search);
         const x = await deps.loadRead(await deps.runDir(runId));
@@ -370,11 +355,10 @@ export function topicSearchTask(
           {
             phase: "wrap",
             result: {
-              status: boxItemId ? "delivered" : "empty",
+              status: !built.empty && built.resultFile ? "delivered" : "empty",
               why: null,
               resultFile: built.resultFile,
               itemCount: built.itemCount,
-              boxItemId,
               x: x
                 ? { status: x.status, why: x.why, posts: x.posts.length, searchPages: x.pages.search, permalinkPages: x.pages.permalink }
                 : null,
@@ -384,8 +368,19 @@ export function topicSearchTask(
         );
       }),
       wrap: guarded<Extract<Checkpoint, { phase: "wrap" }>>(async (task, runtime, context) => {
-        await release(task.input.runId);
+        const { runId, brief } = task.input;
+        await release(runId);
         const result = task.state.checkpoint.result;
+        if (!(await runtime.memo<boolean>("closed", context))) {
+          await deps.closed({
+            runId,
+            searchId: brief.searchId,
+            kind: brief.kind,
+            night: brief.night,
+            resultFile: result.status === "delivered" ? result.resultFile : null,
+          });
+          await runtime.memo("closed", true, context);
+        }
         await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result } }), context);
       }),
     },

@@ -215,8 +215,6 @@ export default {
   "tool.savedToTopic": "Записано в эту тему",
   "tool.stoppingTopicSearch": "Останавливаю «{name}»",
   "tool.stoppedFollowing": "Больше не слежу",
-  "topicSearch.boxFirst": "{name}: первый обзор",
-  "topicSearch.boxDaily": "{name}: новых {n}",
   "topicSearch.haltSignedOut": "Чтение X остановлено: выход из X",
   "topicSearch.haltChallenge": "Чтение X остановлено: X просит подтверждение",
   "topicSearch.haltRateLimited": "Чтение X остановлено: X ограничивает запросы",

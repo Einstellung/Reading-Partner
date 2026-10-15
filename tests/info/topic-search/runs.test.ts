@@ -32,7 +32,6 @@ function search(over: Partial<TopicSearch> = {}): TopicSearch {
   return {
     id: "ts-0000aaaa",
     name: "AI for science",
-    topicId: "t1",
     concernId: "s-1",
     scope: "AI used in science",
     subtopics: [
@@ -177,7 +176,7 @@ test("briefs, keys and lines", () => {
 // --- the task on a real Harness ------------------------------------------------
 
 interface Trace {
-  delivered: { id: string; cover: string; resultFile: string }[];
+  closed: { searchId: string; kind: string; night: string | null; resultFile: string | null }[];
   ran: number[];
   stopped: string[];
   locks: { taken: number; released: number };
@@ -192,11 +191,10 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
 } {
   const fs = memFs();
   const store = createStateStore(fs, "state.json");
-  const trace: Trace = { delivered: [], ran: [], stopped: [], locks: { taken: 0, released: 0 }, built: 0, opened: 0, halts: [] };
+  const trace: Trace = { closed: [], ran: [], stopped: [], locks: { taken: 0, released: 0 }, built: 0, opened: 0, halts: [] };
   const { search: given, now: at, ...rest } = over;
   const the = given ?? search();
   const now = at ?? local(2026, 10, 14, 14);
-  let ids = 0;
   const deps: TopicSearchRunDeps = {
     loadSearch: async (id) => (id === the.id ? the : null),
     ran: async (_s, at) => void trace.ran.push(at),
@@ -228,8 +226,7 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
       return { status: "unsupported", detail: "test" } as unknown as BrowseOpen;
     },
     expandLink: async () => null,
-    deliver: async (item) => void trace.delivered.push({ id: item.id, cover: item.cover, resultFile: item.resultFile }),
-    newBoxItemId: () => `box-${++ids}`,
+    closed: async ({ searchId, kind, night, resultFile }) => void trace.closed.push({ searchId, kind, night, resultFile }),
     lane: (work) => work(),
     now: () => now,
     random: () => 0.5,
@@ -250,22 +247,22 @@ async function runTask(deps: TopicSearchRunDeps, input: { runId: string; brief: 
   }
 }
 
-test("a first run reads, builds, delivers a box item and lets the lock go", async () => {
+test("a first run reads, builds, hands its result to the brief and lets the lock go", async () => {
   const { deps, trace } = fakeDeps();
   const outcome = await runTask(deps, { runId: "r-1", brief: { searchId: "ts-0000aaaa", kind: "first", night: null } });
   expect(outcome.status).toBe("completed");
   const result = (outcome as { result: TopicSearchRunResult }).result;
-  expect(result).toMatchObject({ status: "delivered", itemCount: 3, boxItemId: "box-1" });
+  expect(result).toMatchObject({ status: "delivered", itemCount: 3 });
   expect(result.x?.status).toBe("unavailable");
   expect(trace.opened).toBe(1);
   expect(trace.built).toBe(1);
-  expect(trace.delivered).toEqual([{ id: "box-1", cover: "AI for science: first look", resultFile: "topic-search-ts-0000aaaa-2026-10-14.json" }]);
+  expect(trace.closed).toEqual([{ searchId: "ts-0000aaaa", kind: "first", night: null, resultFile: "topic-search-ts-0000aaaa-2026-10-14.json" }]);
   expect(trace.ran.length).toBe(1);
   expect(trace.locks).toEqual({ taken: 1, released: 1 });
   expect(trace.stopped).toEqual([]);
 });
 
-test("a once-only search stops after its first delivery; an empty daily run puts nothing in the box", async () => {
+test("a once-only search stops after its first delivery; an empty daily run hands the brief nothing", async () => {
   const once = fakeDeps({ search: search({ once: true }) });
   await runTask(once.deps, { runId: "r-2", brief: { searchId: "ts-0000aaaa", kind: "first", night: null } });
   expect(once.trace.stopped).toEqual(["ts-0000aaaa"]);
@@ -274,7 +271,7 @@ test("a once-only search stops after its first delivery; an empty daily run puts
   const daily = fakeDeps({ builder: () => empty, now: local(2026, 10, 14, 2) });
   const outcome = await runTask(daily.deps, { runId: "r-3", brief: { searchId: "ts-0000aaaa", kind: "daily", night: "2026-10-14" } });
   expect((outcome as { result: TopicSearchRunResult }).result.status).toBe("empty");
-  expect(daily.trace.delivered).toEqual([]);
+  expect(daily.trace.closed).toEqual([{ searchId: "ts-0000aaaa", kind: "daily", night: "2026-10-14", resultFile: null }]);
 });
 
 test("a daily run skips a gated night, a signed-out session and a night that is over, without opening X", async () => {

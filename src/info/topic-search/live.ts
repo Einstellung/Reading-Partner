@@ -4,7 +4,7 @@
 import type { AgentTool } from "../../legion/durable/contract";
 import { appClaims } from "../../legion/claim";
 import { listStatements, statementStore } from "../../memory";
-import { createTopic, listTopics } from "../../platform/app/topics";
+import { listTopics } from "../../platform/app/topics";
 import { applyTopicSearchProposal, type ApplyResult } from "./apply";
 import type { TopicSearchProposalCardData } from "./cards";
 import { buildConfirmTopicSearchTool, type ConfirmToolDeps } from "./confirm-tool";
@@ -76,8 +76,6 @@ export function applyTopicSearchCard(card: TopicSearchProposalCardData): Promise
     },
     load: () => loadTopicSearches(),
     put: (search) => putTopicSearch(search),
-    topicExists: async (id) => (await listTopics()).some((tp) => tp.id === id),
-    createTopic: (name) => createTopic(name),
     dispatchFirstRun,
     now: () => Date.now(),
   });

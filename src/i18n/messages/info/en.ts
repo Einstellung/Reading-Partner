@@ -227,8 +227,6 @@ export default {
   "tool.savedToTopic": "Saved to this topic",
   "tool.stoppingTopicSearch": "Stopping {name}",
   "tool.stoppedFollowing": "Stopped following",
-  "topicSearch.boxFirst": "{name}: first look",
-  "topicSearch.boxDaily": "{name}: {n} new",
   "topicSearch.haltSignedOut": "X reading stopped: signed out of X",
   "topicSearch.haltChallenge": "X reading stopped: X asked for verification",
   "topicSearch.haltRateLimited": "X reading stopped: X is limiting requests",

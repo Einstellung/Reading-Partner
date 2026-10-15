@@ -215,8 +215,6 @@ export default {
   "tool.savedToTopic": "이 주제에 기록했습니다",
   "tool.stoppingTopicSearch": "「{name}」 중지 중",
   "tool.stoppedFollowing": "팔로우를 중지했습니다",
-  "topicSearch.boxFirst": "{name}: 첫 개관",
-  "topicSearch.boxDaily": "{name}: 새 항목 {n}개",
   "topicSearch.haltSignedOut": "X 읽기 중단: X에서 로그아웃됨",
   "topicSearch.haltChallenge": "X 읽기 중단: X가 확인을 요구함",
   "topicSearch.haltRateLimited": "X 읽기 중단: X가 요청을 제한함",
