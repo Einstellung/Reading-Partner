@@ -28,6 +28,7 @@ import { infoBookId } from "./call";
 import { nativeConversation } from "../../soul/voice/conversation";
 import {
   createVoiceCall,
+  voiceOpeningKickoff,
   type VoiceCall,
 } from "../../soul/voice/voice-call";
 import { harnessLocale, traceModel, traceSource, voiceTrace } from "../../soul/voice/harness/trace";
@@ -168,6 +169,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     model: traceModel(front.model),
     transcript: front.transcript,
     front,
+    kickoff: voiceOpeningKickoff(locale),
   });
   const report = () => opts.onRunning?.(front.list().filter((row) => row.status === "running").length);
   const reporting = [call.subscribePhase(report), back.subscribe(report)];

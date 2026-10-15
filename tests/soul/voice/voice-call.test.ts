@@ -16,6 +16,7 @@ import type {
 import {
   KICKOFF_TURN,
   VOICE_OPENING_KICKOFF,
+  voiceOpeningKickoff,
   createVoiceCall,
   type VoiceCall,
   type VoiceCallModel,
@@ -236,6 +237,12 @@ test("the greeting is kicked once, however many state events arrive", async () =
   await h.open();
   await h.emit({ kind: "state", turn: 0, running: true, reason: "opened" });
   expect(h.asked).toHaveLength(1);
+});
+
+test("the greeting is asked for in the language the call listens in", () => {
+  expect(voiceOpeningKickoff("zh-CN")).toContain("Say it in 简体中文.");
+  expect(voiceOpeningKickoff("en-US")).toContain("Say it in English.");
+  expect(voiceOpeningKickoff("zh-CN").startsWith(VOICE_OPENING_KICKOFF.slice(0, -1))).toBe(true);
 });
 
 // --- a user's turn ----------------------------------------------------------
