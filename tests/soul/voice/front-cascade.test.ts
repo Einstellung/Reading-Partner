@@ -178,6 +178,16 @@ test("the trace hears each mark as it is set, the hand-off and the cue", async (
   expect(h.traced[4]!.data).toEqual({ turn: 1, kind: "thinking", played: true });
 });
 
+test("a task's note carries its failure reason into the trace", () => {
+  const h = setup(async () => {});
+  for (const fn of h.back.listeners) fn({ callId: "c", n: 1, task: "Find X", status: "done", cover: "X is Y." });
+  for (const fn of h.back.listeners) fn({ callId: "c", n: 2, task: "Find Z", status: "failed", reason: "Importing a module script failed." });
+  expect(h.traced.filter((t) => t.name === "front:note").map((t) => t.data)).toEqual([
+    { number: 1, status: "done" },
+    { number: 2, status: "failed", reason: "Importing a module script failed." },
+  ]);
+});
+
 test("a barge-in cuts the sentence but not the run it handed off", async () => {
   const stop = new AbortController();
   const h = setup(async (req) => {

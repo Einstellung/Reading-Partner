@@ -333,7 +333,11 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   };
 
   function onNote(note: CallNote): void {
-    trace("front:note", { number: note.n, status: note.status });
+    trace("front:note", {
+      number: note.n,
+      status: note.status,
+      ...(note.status === "failed" ? { reason: note.reason.slice(0, 200) } : {}),
+    });
     front.notify({
       number: note.n,
       task: note.task,
