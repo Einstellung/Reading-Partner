@@ -19,6 +19,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   DEFAULT_TURN_DETECT,
+  NEURAL_TURN_DETECT,
+  completeTurn,
   createTurnDetector,
   initialTurnDetectState,
   resolveTurnDetectConfig,
@@ -410,7 +412,11 @@ test("the config is all defaults, all overridable, and clamped where it can be w
     hangoverMs: 0,
     resumeGuardMs: 0,
     immunityMs: 0,
+    vad: "energy",
+    speechThreshold: 0.5,
+    pauseMs: null,
   });
+  expect(resolveTurnDetectConfig({ pauseMs: -1 }).pauseMs).toBe(0);
   expect(DEFAULT_TURN_DETECT).toEqual({
     startDb: -35,
     startFrames: 1,
@@ -419,6 +425,9 @@ test("the config is all defaults, all overridable, and clamped where it can be w
     hangoverMs: 1250,
     resumeGuardMs: 300,
     immunityMs: 2000,
+    vad: "energy",
+    speechThreshold: 0.5,
+    pauseMs: null,
   });
 });
 
@@ -466,7 +475,7 @@ test("the event sequence is always duck -> (resume | stop -> end)", () => {
       }
     }
   }
-  const sawEveryEvent = { duck: 0, stop: 0, resume: 0, end: 0 };
+  const sawEveryEvent = { duck: 0, stop: 0, resume: 0, end: 0, pause: 0 };
   for (const file of [VPIO_ON, VPIO_OFF]) {
     for (const stage of ["echo", "barge"]) {
       const frames = stageFrames(file, stage);
@@ -483,6 +492,8 @@ test("the event sequence is always duck -> (resume | stop -> end)", () => {
           } else if (event.type === "resume") {
             expect(phase).toBe("ducked");
             phase = "idle";
+          } else if (event.type === "pause") {
+            throw new Error("the energy defaults never pause");
           } else {
             expect(phase).toBe("speaking");
             phase = "idle";
@@ -699,4 +710,122 @@ test("opening the window mid-duck and mid-turn announces nothing", () => {
   expect(ducked.snapshot().phase).toBe("ducked");
   expect(ducked.step(-10, 400)).toEqual({ type: "stop" });
   expect(ducked.step(Number.NEGATIVE_INFINITY, 1700)).toEqual({ type: "end", silentMs: 1300 });
+});
+
+// ---------------------------------------------------------------------------
+// The neural path (docs/136): a VAD's probability per 32 ms frame, a pause that
+// asks the end-of-turn model, and the hangover as the fallback.
+
+const FRAME_MS = 32;
+const QUIET = Number.NEGATIVE_INFINITY;
+
+/** `ms` of frames from `fromMs`, every one at probability `p` and level `db`. */
+function frames(fromMs: number, ms: number, p: number, db = -30): { atMs: number; db: number; p: number }[] {
+  const out = [];
+  for (let at = fromMs; at < fromMs + ms; at += FRAME_MS) out.push({ atMs: at, db, p });
+  return out;
+}
+
+function feedNeural(
+  detector: ReturnType<typeof createTurnDetector>,
+  run: { atMs: number; db: number; p: number }[],
+): { atMs: number; event: TurnEvent }[] {
+  const out: { atMs: number; event: TurnEvent }[] = [];
+  for (const f of run) {
+    const event = detector.step(f.db, f.atMs, f.p);
+    if (event) out.push({ atMs: f.atMs, event });
+  }
+  return out;
+}
+
+test("the neural starting values are docs/136's", () => {
+  expect(resolveTurnDetectConfig(NEURAL_TURN_DETECT)).toEqual({
+    ...DEFAULT_TURN_DETECT,
+    vad: "neural",
+    pauseMs: 250,
+    hangoverMs: 2500,
+  });
+});
+
+test("neural: the probability is the voice, not the level", () => {
+  const detector = createTurnDetector(NEURAL_TURN_DETECT);
+  expect(detector.step(-10, 0, 0.2)).toBeNull();
+  expect(detector.step(-60, 32, 0.5)).toEqual({ type: "duck" });
+  // No probability at all is quiet: the timer's silent step.
+  expect(createTurnDetector(NEURAL_TURN_DETECT).step(-10, 0)).toBeNull();
+});
+
+test("neural: while the companion plays, speech also has to clear startDb", () => {
+  const detector = createTurnDetector(NEURAL_TURN_DETECT);
+  detector.playbackStarted(0);
+  // Past the immunity window, echo-level speech is held out...
+  expect(detector.step(-40, 2100, 0.9)).toBeNull();
+  // ...and the user's own voice over it ducks.
+  expect(detector.step(-30, 2132, 0.9)).toEqual({ type: "duck" });
+  // With the playback stopped the level no longer matters.
+  const quiet = createTurnDetector(NEURAL_TURN_DETECT);
+  quiet.playbackStarted(0);
+  quiet.playbackStopped(500);
+  expect(quiet.step(-40, 600, 0.9)).toEqual({ type: "duck" });
+});
+
+// 「等一下」 is about 0.35 s of speech. At frame resolution its last voiced
+// frame is past the confirm window, so it takes the turn.
+test("neural: a 0.35 s utterance stops, pauses at 250 ms, and a yes ends it", () => {
+  const detector = createTurnDetector(NEURAL_TURN_DETECT);
+  const log = feedNeural(detector, [...frames(0, 352, 0.9), ...frames(352, 600, 0.05, QUIET)]);
+  expect(log.map((e) => e.event.type)).toEqual(["duck", "stop", "pause"]);
+  const pause = log[2];
+  const lastVoice = 320;
+  expect(pause.atMs - lastVoice).toBeGreaterThanOrEqual(250);
+  expect(pause.event).toEqual({ type: "pause", silentMs: pause.atMs - lastVoice });
+  expect(detector.complete(pause.atMs, pause.atMs + 20)).toEqual({
+    type: "end",
+    silentMs: pause.atMs + 20 - lastVoice,
+  });
+  expect(detector.snapshot().phase).toBe("idle");
+  expect(detector.snapshot().pausedAtMs).toBeNull();
+});
+
+test("neural: one pause per silent run, and voice clears it for the next", () => {
+  const detector = createTurnDetector(NEURAL_TURN_DETECT);
+  const log = feedNeural(detector, [
+    ...frames(0, 640, 0.9),
+    ...frames(640, 800, 0.1),
+    ...frames(1440, 320, 0.9),
+    ...frames(1760, 400, 0.1),
+  ]);
+  expect(log.map((e) => e.event.type)).toEqual(["duck", "stop", "pause", "pause"]);
+  // The first pause is stale once the user went on talking.
+  expect(detector.complete(log[2].atMs, 2200)).toBeNull();
+  expect(detector.snapshot().phase).toBe("speaking");
+  expect(detector.complete(log[3].atMs, 2200)?.type).toBe("end");
+});
+
+test("neural: a no from the model leaves the hangover to end the turn", () => {
+  const detector = createTurnDetector(NEURAL_TURN_DETECT);
+  const log = feedNeural(detector, [...frames(0, 640, 0.9), ...frames(640, 3000, 0.1)]);
+  expect(log.map((e) => e.event.type)).toEqual(["duck", "stop", "pause", "end"]);
+  const end = log[3];
+  expect(end.event).toEqual({ type: "end", silentMs: end.atMs - 608 });
+  expect(end.atMs - 608).toBeGreaterThanOrEqual(2500);
+  // A yes after the fallback ended it announces nothing.
+  expect(detector.complete(log[2].atMs, end.atMs + 10)).toBeNull();
+});
+
+test("completeTurn answers nothing outside a standing pause", () => {
+  const idle = initialTurnDetectState();
+  expect(completeTurn(idle, 0, 10).event).toBeNull();
+  const speaking = { ...idle, phase: "speaking" as const, lastVoiceMs: 100, pausedAtMs: 400 };
+  expect(completeTurn(speaking, 399, 500).event).toBeNull();
+  expect(completeTurn({ ...speaking, pausedAtMs: null }, 400, 500).event).toBeNull();
+  const done = completeTurn(speaking, 400, 500);
+  expect(done.event).toEqual({ type: "end", silentMs: 400 });
+  expect(speaking.pausedAtMs).toBe(400);
+});
+
+test("the energy path is unchanged by a speech probability", () => {
+  const detector = createTurnDetector();
+  expect(detector.step(-60, 0, 1)).toBeNull();
+  expect(detector.step(-30, 100, 0)).toEqual({ type: "duck" });
 });

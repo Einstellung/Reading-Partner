@@ -98,6 +98,11 @@ jobs:
       - name: Copy pdfium.wasm
         run: bun run wasm
 
+      # The CoreML voice models (docs/136): pinned, sha256-checked, bundled by
+      # src-tauri/tauri.ios.conf.json. The build fails without them.
+      - name: Fetch the voice models
+        run: bun run voice-models
+
       # Write the .p8 where Tauri (APPLE_API_KEY_PATH) and altool (searches
       # ~/private_keys for AuthKey_<key id>.p8) both find it.
       - name: Install the App Store Connect API key

@@ -103,7 +103,7 @@ test("the played cases open the window where the recording says the playback beg
 
 test("the cases cover every event, both recordings and both stages", () => {
   const cases = turnReplayCases();
-  const seen = { duck: 0, stop: 0, resume: 0, end: 0 };
+  const seen = { duck: 0, stop: 0, resume: 0, end: 0, pause: 0 };
   for (const item of cases) {
     for (const event of item.expected) seen[event.type] += 1;
   }

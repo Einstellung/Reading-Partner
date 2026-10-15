@@ -251,6 +251,7 @@ pub(crate) async fn harness<R: Runtime>(
     wav: Option<String>,
     perf_ms: Option<f64>,
     data: Option<serde_json::Value>,
+    vad: Option<String>,
 ) -> Result<serde_json::Value> {
     use serde_json::json;
     if !cfg!(debug_assertions) {
@@ -288,7 +289,7 @@ pub(crate) async fn harness<R: Runtime>(
             crate::harness::arm(&dir)?;
             let native = app
                 .voice()
-                .harness(json!({ "op": "arm", "dir": dir.join("native") }))
+                .harness(json!({ "op": "arm", "dir": dir.join("native"), "vad": vad }))
                 .await;
             if let Err(e) = native {
                 crate::harness::disarm();

@@ -1,6 +1,6 @@
 // The dev server's side of the silent voice bench (docs/platform/560):
 //
-//   POST /__voice-harness/run?script=<name>  → sends `voice-harness:run` to the
+//   POST /__voice-harness/run?script=<name>[&vad=energy]  → sends `voice-harness:run` to the
 //        app over the HMR socket and answers {"id"}.
 //   POST /__voice-harness/cancel?id=<id>    → tells the app to end that run.
 //   POST /__voice-harness/status?id=<id>     ← the app's progress (JSON body).
@@ -28,8 +28,9 @@ export function voiceHarness(): Plugin {
           if (!script || !/^[\w.-]+$/.test(script)) return reply(400, { error: "script=<name>" });
           const id = `${Date.now()}-${++seq}`;
           const timeoutSec = Number(url.searchParams.get("timeout")) || undefined;
+          const vad = url.searchParams.get("vad") ?? undefined;
           status.set(id, { state: "sent", script });
-          server.ws.send({ type: "custom", event: "voice-harness:run", data: { script, id, timeoutSec } });
+          server.ws.send({ type: "custom", event: "voice-harness:run", data: { script, id, timeoutSec, vad } });
           return reply(200, { id });
         }
         if (req.method === "POST" && url.pathname === "/cancel") {

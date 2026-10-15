@@ -79,6 +79,11 @@ jobs:
       - name: Copy pdfium.wasm
         run: bun run wasm
 
+      # The CoreML voice models (docs/136): pinned, sha256-checked, bundled by
+      # src-tauri/tauri.ios.conf.json. The build fails without them.
+      - name: Fetch the voice models
+        run: bun run voice-models
+
       # src-tauri/gen/apple is gitignored; generate the Xcode project fresh.
       # --ci answers prompts with defaults. First run installs xcodegen (and
       # cocoapods if missing) via Homebrew.

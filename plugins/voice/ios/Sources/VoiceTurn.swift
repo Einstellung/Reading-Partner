@@ -56,7 +56,18 @@ enum VoiceTurnEvent: Equatable {
     /// The user stopped: `silentMs` is the measured gap since their last loud
     /// frame, which is >= hangoverMs and can be much larger if the tap stalled.
     /// Only ever follows a `stop` — a turn has to be taken before it can end.
+    /// `completeTurn` ends one early, with the gap measured at that moment.
     case end(silentMs: Double)
+    /// Mid-turn silence reached `pauseMs`: ask whether the user is done, and
+    /// hand `completeTurn` the stamp of the step that announced this. Once per
+    /// silent run; voice clears it. Never announced when `pauseMs` is nil.
+    case pause(silentMs: Double)
+}
+
+/// What counts as voice; `TurnDetectConfig.vad` over there.
+enum TurnVad {
+    case energy
+    case neural
 }
 
 struct TurnDetectConfig: Equatable {
@@ -115,6 +126,21 @@ struct TurnDetectConfig: Equatable {
     /// the first frame after it starts a fresh count rather than finishing one
     /// begun on leaked echo.
     let immunityMs: Double
+    /// What counts as voice. `energy`: the level at or above `startDb`.
+    /// `neural`: the speech probability at or above `speechThreshold`, and
+    /// while the companion's playback is on (between playbackStarted and
+    /// playbackStopped) the level has to clear `startDb` as well — the echo
+    /// VPIO leaves behind is speech to a VAD, and `startDb` is the line the
+    /// probe put above it.
+    let vad: TurnVad
+    /// Speech probability at or above this is voice, for `.neural`. Default
+    /// 0.5, Silero's own.
+    let speechThreshold: Double
+    /// Mid-turn silence this long announces a `pause`, for the end-of-turn
+    /// model to judge; `hangoverMs` is then the fallback that ends a turn the
+    /// model kept open. Nil announces nothing and the hangover alone ends the
+    /// turn, which is the energy path.
+    let pauseMs: Double?
 
     /// The defaults, and the clamping `resolveTurnDetectConfig` does over there.
     /// One initialiser covers both: calling it with nothing is
@@ -136,7 +162,10 @@ struct TurnDetectConfig: Equatable {
         resumeMs: Double = 300,
         hangoverMs: Double = 1250,
         resumeGuardMs: Double = 300,
-        immunityMs: Double = 2000
+        immunityMs: Double = 2000,
+        vad: TurnVad = .energy,
+        speechThreshold: Double = 0.5,
+        pauseMs: Double? = nil
     ) {
         self.startDb = startDb
         self.startFrames = max(1, startFrames)
@@ -145,7 +174,13 @@ struct TurnDetectConfig: Equatable {
         self.hangoverMs = max(0, hangoverMs)
         self.resumeGuardMs = max(0, resumeGuardMs)
         self.immunityMs = max(0, immunityMs)
+        self.vad = vad
+        self.speechThreshold = speechThreshold
+        self.pauseMs = pauseMs.map { max(0, $0) }
     }
+
+    /// `NEURAL_TURN_DETECT` over the defaults: docs/136's starting values.
+    static let neural = TurnDetectConfig(hangoverMs: 2500, vad: .neural, pauseMs: 250)
 }
 
 /// Where the machine is. `idle` is the companion talking unimpeded; `ducked` is
@@ -175,6 +210,9 @@ struct TurnDetectState: Equatable {
     /// `playbackStopped` and by a reset; the window expires by arithmetic, so
     /// the field stays set for the whole of a turn's playback.
     var playbackStartedMs: Double?
+    /// Stamp of the step that announced the current silent run's `pause`, or
+    /// nil when none is standing. Voice and the end of the turn clear it.
+    var pausedAtMs: Double?
 }
 
 /// The playback of one turn began: open the immunity window at `atMs`.
@@ -208,6 +246,10 @@ struct TurnDetectStep {
 /// -infinity both compare false against the threshold, so silence is quiet
 /// rather than an exception. Pure: same state and arguments, same answer.
 ///
+/// `speech` is the VAD's probability for one frame, read only when `vad` is
+/// `.neural`; there `db` is the level of the buffer the frame came from. NaN,
+/// the default, is not speech.
+///
 /// The caller may also drive time with no audio — `stepTurnDetect(state, cfg,
 /// -.infinity, now)` on a timer — which is how a turn still ends, and a stale
 /// duck still resumes, when the tap stops delivering buffers.
@@ -215,9 +257,18 @@ func stepTurnDetect(
     _ state: TurnDetectState,
     _ config: TurnDetectConfig,
     _ db: Double,
-    _ atMs: Double
+    _ atMs: Double,
+    _ speech: Double = .nan
 ) -> TurnDetectStep {
-    let loud = db >= config.startDb
+    let loud: Bool
+    switch config.vad {
+    case .energy:
+        loud = db >= config.startDb
+    case .neural:
+        loud =
+            speech >= config.speechThreshold
+            && (state.playbackStartedMs == nil || db >= config.startDb)
+    }
 
     if state.phase == .idle {
         // Inside the immunity window a loud buffer is the playback leaking
@@ -300,6 +351,7 @@ func stepTurnDetect(
         var next = state
         next.loudFrames = 0
         next.lastVoiceMs = atMs
+        next.pausedAtMs = nil
         return TurnDetectStep(state: next, event: nil)
     }
 
@@ -308,9 +360,33 @@ func stepTurnDetect(
         var next = state
         next.phase = .idle
         next.loudFrames = 0
+        next.pausedAtMs = nil
         return TurnDetectStep(state: next, event: .end(silentMs: silentMs))
     }
+    if let pauseMs = config.pauseMs, state.pausedAtMs == nil, silentMs >= pauseMs {
+        var next = state
+        next.pausedAtMs = atMs
+        return TurnDetectStep(state: next, event: .pause(silentMs: silentMs))
+    }
     return TurnDetectStep(state: state, event: nil)
+}
+
+/// The end-of-turn model said the user is done, about the `pause` announced
+/// at `pausedAtMs`. Ends the turn if that pause is still the one standing — no
+/// voice since, turn not already over — and announces nothing otherwise, so a
+/// verdict that arrives after the user went on talking is dropped.
+func completeTurn(
+    _ state: TurnDetectState,
+    _ pausedAtMs: Double,
+    _ atMs: Double
+) -> TurnDetectStep {
+    guard state.phase == .speaking, let standing = state.pausedAtMs, standing == pausedAtMs
+    else { return TurnDetectStep(state: state, event: nil) }
+    var next = state
+    next.phase = .idle
+    next.loudFrames = 0
+    next.pausedAtMs = nil
+    return TurnDetectStep(state: next, event: .end(silentMs: atMs - state.lastVoiceMs))
 }
 
 /// The stateful wrapper a call session holds, `createTurnDetector`'s shape as a
@@ -328,9 +404,17 @@ struct VoiceTurn {
         self.config = config
     }
 
-    /// Feed one buffer's level. Returns the event it produced, or nil.
-    mutating func step(db: Double, atMs: Double) -> VoiceTurnEvent? {
-        let next = stepTurnDetect(state, config, db, atMs)
+    /// Feed one buffer's level, or one VAD frame's probability with its
+    /// buffer's level. Returns the event it produced, or nil.
+    mutating func step(db: Double, atMs: Double, speech: Double = .nan) -> VoiceTurnEvent? {
+        let next = stepTurnDetect(state, config, db, atMs, speech)
+        state = next.state
+        return next.event
+    }
+
+    /// The end-of-turn model's yes for the pause announced at `pausedAtMs`.
+    mutating func complete(pausedAtMs: Double, atMs: Double) -> VoiceTurnEvent? {
+        let next = completeTurn(state, pausedAtMs, atMs)
         state = next.state
         return next.event
     }

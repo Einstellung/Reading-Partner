@@ -127,6 +127,10 @@ jobs:
           workspaces: src-tauri
           key: dev-mode
       - run: bun install --frozen-lockfile
+      # The CoreML voice models (docs/136): pinned, sha256-checked, bundled by
+      # src-tauri/tauri.ios.conf.json. The build fails without them.
+      - name: Fetch the voice models
+        run: bun run voice-models
       - name: Install the App Store Connect API key
         run: |
           mkdir -p ~/private_keys

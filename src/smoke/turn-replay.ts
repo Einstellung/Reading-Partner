@@ -95,7 +95,9 @@ async function replay(item: ReplayCase): Promise<DeviceReport> {
 function configDiff(item: ReplayCase, report: DeviceReport): string[] {
   const want = resolveTurnDetectConfig(item.config);
   const lines: string[] = [];
-  const check = (key: keyof TurnDetectConfig) => {
+  // The replay feeds levels only, so it runs the energy path; the neural
+  // fields are not in the device's report.
+  const check = (key: Exclude<keyof TurnDetectConfig, "vad" | "speechThreshold" | "pauseMs">) => {
     if (report[key] !== want[key]) lines.push(`config ${key} ${report[key]}, expected ${want[key]}`);
   };
   check("startDb");

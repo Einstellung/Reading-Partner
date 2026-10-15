@@ -30,6 +30,14 @@
 // over closures. `atMs` is a monotonic wall clock the caller passes in, never
 // a frame count times an assumed buffer length — the tap on device delivers at
 // 5.5-10 Hz and the same build measured different rates on different runs.
+//
+// Two ways to say "voice" (docs/136, the audio front). `energy` is the dB line
+// above, one step per tap buffer. `neural` is a VAD's speech probability, one
+// step per VAD frame (32 ms for Silero), with the buffer's dB riding along for
+// the playback rule in `vad`. The neural path also ends a turn differently: a
+// short silence announces a `pause`, the caller asks an end-of-turn model
+// whether the user is done, and `completeTurn` ends the turn on a yes; the
+// hangover is then only the fallback.
 
 /** What one step can announce. At most one per step. */
 export type TurnEvent =
@@ -51,7 +59,12 @@ export type TurnEvent =
   // The user stopped: `silentMs` is the measured gap since their last loud
   // frame, which is >= hangoverMs and can be much larger if the tap stalled.
   // Only ever follows a `stop` — a turn has to be taken before it can end.
-  | { type: "end"; silentMs: number };
+  // `completeTurn` ends one early, with the gap measured at that moment.
+  | { type: "end"; silentMs: number }
+  // Mid-turn silence reached `pauseMs`: ask whether the user is done, and
+  // hand `completeTurn` the stamp of the step that announced this. Once per
+  // silent run; voice clears it. Never announced when `pauseMs` is null.
+  | { type: "pause"; silentMs: number };
 
 export interface TurnDetectConfig {
   // A buffer at or above this dBFS counts as voice. Default -35: the most
@@ -108,6 +121,21 @@ export interface TurnDetectConfig {
   // first frame after it starts a fresh count rather than finishing one begun
   // on leaked echo.
   immunityMs: number;
+  // What counts as voice. `energy`: the level at or above `startDb`. `neural`:
+  // the speech probability at or above `speechThreshold`, and while the
+  // companion's playback is on (between playbackStarted and playbackStopped)
+  // the level has to clear `startDb` as well — the echo VPIO leaves behind is
+  // speech to a VAD, and `startDb` is the line the probe put above it.
+  vad: "energy" | "neural";
+  // Speech probability at or above this is voice, for `vad: "neural"`.
+  // Default 0.5, Silero's own.
+  speechThreshold: number;
+  // Mid-turn silence this long announces a `pause`, for the end-of-turn model
+  // to judge; `hangoverMs` is then the fallback that ends a turn the model
+  // kept open. Null announces nothing and the hangover alone ends the turn,
+  // which is the energy path. 250 for the neural path is docs/136's starting
+  // value (research: 200-300 ms, Pipecat 200).
+  pauseMs: number | null;
 }
 
 export const DEFAULT_TURN_DETECT: TurnDetectConfig = {
@@ -118,6 +146,20 @@ export const DEFAULT_TURN_DETECT: TurnDetectConfig = {
   hangoverMs: 1250,
   resumeGuardMs: 300,
   immunityMs: 2000,
+  vad: "energy",
+  speechThreshold: 0.5,
+  pauseMs: null,
+};
+
+/**
+ * The neural path's patch over the defaults (docs/136 starting values): a
+ * 250 ms pause asks the end-of-turn model, and 2500 ms of silence ends the turn
+ * whatever it said.
+ */
+export const NEURAL_TURN_DETECT: Partial<TurnDetectConfig> = {
+  vad: "neural",
+  pauseMs: 250,
+  hangoverMs: 2500,
 };
 
 /**
@@ -134,6 +176,9 @@ export function resolveTurnDetectConfig(patch?: Partial<TurnDetectConfig>): Turn
     hangoverMs: Math.max(0, c.hangoverMs),
     resumeGuardMs: Math.max(0, c.resumeGuardMs),
     immunityMs: Math.max(0, c.immunityMs),
+    vad: c.vad,
+    speechThreshold: c.speechThreshold,
+    pauseMs: c.pauseMs === null ? null : Math.max(0, c.pauseMs),
   };
 }
 
@@ -159,6 +204,9 @@ export interface TurnDetectState {
   // and by a reset; the window expires by arithmetic, so the field stays set
   // for the whole of a turn's playback.
   playbackStartedMs: number | null;
+  // Stamp of the step that announced the current silent run's `pause`, or
+  // null when none is standing. Voice and the end of the turn clear it.
+  pausedAtMs: number | null;
 }
 
 export function initialTurnDetectState(): TurnDetectState {
@@ -169,6 +217,7 @@ export function initialTurnDetectState(): TurnDetectState {
     duckedAtMs: 0,
     lastResumeMs: null,
     playbackStartedMs: null,
+    pausedAtMs: null,
   };
 }
 
@@ -204,6 +253,10 @@ export interface TurnDetectStep {
  * -Infinity both compare false against the threshold, so silence is quiet
  * rather than an exception. Pure: same state and arguments, same answer.
  *
+ * `speech` is the VAD's probability for one frame, read only when `vad` is
+ * `neural`; there `db` is the level of the buffer the frame came from. NaN, the
+ * default, is not speech.
+ *
  * The caller may also drive time with no audio — `step(state, cfg,
  * Number.NEGATIVE_INFINITY, now)` on a timer — which is how a turn still ends,
  * and a stale duck still resumes, when the tap stops delivering buffers.
@@ -213,8 +266,13 @@ export function stepTurnDetect(
   config: TurnDetectConfig,
   db: number,
   atMs: number,
+  speech = Number.NaN,
 ): TurnDetectStep {
-  const loud = db >= config.startDb;
+  const loud =
+    config.vad === "neural"
+      ? speech >= config.speechThreshold &&
+        (state.playbackStartedMs === null || db >= config.startDb)
+      : db >= config.startDb;
 
   if (state.phase === "idle") {
     // Inside the immunity window a loud buffer is the playback leaking back,
@@ -266,23 +324,54 @@ export function stepTurnDetect(
   // than chopping it in two. The cost of that choice is a late reply, and the
   // cost of the other one is cutting the user off over a dropped buffer.
   if (loud) {
-    return { state: { ...state, loudFrames: 0, lastVoiceMs: atMs }, event: null };
+    return {
+      state: { ...state, loudFrames: 0, lastVoiceMs: atMs, pausedAtMs: null },
+      event: null,
+    };
   }
 
   const silentMs = atMs - state.lastVoiceMs;
   if (silentMs >= config.hangoverMs) {
     return {
-      state: { ...state, phase: "idle", loudFrames: 0 },
+      state: { ...state, phase: "idle", loudFrames: 0, pausedAtMs: null },
       event: { type: "end", silentMs },
     };
+  }
+  if (config.pauseMs !== null && state.pausedAtMs === null && silentMs >= config.pauseMs) {
+    return { state: { ...state, pausedAtMs: atMs }, event: { type: "pause", silentMs } };
   }
   return { state, event: null };
 }
 
+/**
+ * The end-of-turn model said the user is done, about the `pause` announced at
+ * `pausedAtMs`. Ends the turn if that pause is still the one standing — no
+ * voice since, turn not already over — and announces nothing otherwise, so a
+ * verdict that arrives after the user went on talking is dropped.
+ */
+export function completeTurn(
+  state: TurnDetectState,
+  pausedAtMs: number,
+  atMs: number,
+): TurnDetectStep {
+  if (state.phase !== "speaking" || state.pausedAtMs === null || state.pausedAtMs !== pausedAtMs) {
+    return { state, event: null };
+  }
+  return {
+    state: { ...state, phase: "idle", loudFrames: 0, pausedAtMs: null },
+    event: { type: "end", silentMs: atMs - state.lastVoiceMs },
+  };
+}
+
 export interface TurnDetector {
   readonly config: TurnDetectConfig;
-  /** Feed one buffer's level. Returns the event it produced, or null. */
-  step(db: number, atMs: number): TurnEvent | null;
+  /**
+   * Feed one buffer's level, or one VAD frame's probability with its buffer's
+   * level. Returns the event it produced, or null.
+   */
+  step(db: number, atMs: number, speech?: number): TurnEvent | null;
+  /** The end-of-turn model's yes for the pause announced at `pausedAtMs`. */
+  complete(pausedAtMs: number, atMs: number): TurnEvent | null;
   /** The playback of one turn began. Opens the immunity window. Announces nothing. */
   playbackStarted(atMs: number): void;
   /**
@@ -304,8 +393,13 @@ export function createTurnDetector(patch?: Partial<TurnDetectConfig>): TurnDetec
   let state = initialTurnDetectState();
   return {
     config,
-    step(db: number, atMs: number): TurnEvent | null {
-      const next = stepTurnDetect(state, config, db, atMs);
+    step(db: number, atMs: number, speech?: number): TurnEvent | null {
+      const next = stepTurnDetect(state, config, db, atMs, speech);
+      state = next.state;
+      return next.event;
+    },
+    complete(pausedAtMs: number, atMs: number): TurnEvent | null {
+      const next = completeTurn(state, pausedAtMs, atMs);
       state = next.state;
       return next.event;
     },

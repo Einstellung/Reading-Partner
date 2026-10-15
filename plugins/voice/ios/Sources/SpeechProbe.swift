@@ -1230,6 +1230,9 @@ enum TurnReplay {
                 case .end(let silentMs):
                     events.append(
                         TurnReplayEvent(atMs: frame.atMs, type: "end", silentMs: silentMs))
+                case .pause(let silentMs):
+                    events.append(
+                        TurnReplayEvent(atMs: frame.atMs, type: "pause", silentMs: silentMs))
                 }
             }
             return TurnReplayReport(
