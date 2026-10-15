@@ -552,7 +552,6 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     version: TOPIC_SEARCH_RESULT_VERSION,
     id: resultId,
     searchId: topic.id,
-    topicId: topic.topicId,
     name: topic.name,
     kind,
     date: today,

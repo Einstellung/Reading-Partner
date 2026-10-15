@@ -1109,13 +1109,13 @@ export const PALACE = [
     match: fixed("info-topic-searches.json"),
     samples: ["info-topic-searches.json"],
     id: "fixed",
-    refs: [{ kind: "topics", via: "topicId", onDelete: "keep" }],
+    refs: [],
     sync: "data",
     merge: "records",
     shape: { kind: "array", container: "searches", idField: "id" },
     deleteWith: "never",
     retention: NEVER,
-    note: "the reader's topic searches (docs/info/88): drafted in conversation at the door, records-merged on the search id; a stopped search is kept, and a deleted topic leaves the search pointing at nothing until it is re-drafted",
+    note: "the reader's topic searches (docs/info/88): drafted in conversation at the door, records-merged on the search id; a stopped search is kept. Searches written before 2026-10-15 still carry a topicId nothing reads",
   },
   {
     kind: "info-topic-search-result",
@@ -1127,7 +1127,6 @@ export const PALACE = [
     id: "resultId",
     refs: [
       { kind: "info-topic-searches", via: "searchId", onDelete: "keep" },
-      { kind: "topics", via: "topicId", onDelete: "keep" },
     ],
     sync: "data",
     merge: "opaque",

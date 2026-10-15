@@ -3,7 +3,8 @@
 // order and the failure cases are tested without a disk.
 //
 // Apply: the concern first, because the config names it; then the config; then
-// the first run is handed off. A concern that could not be written leaves the
+// the first run is handed off. No reading topic is made: a search's results are
+// the nightly brief (info/issue), which sits on no reading shelf. A concern that could not be written leaves the
 // config with no concern rather than no config: the search is what the reader
 // asked for, and the concern can be pointed at later.
 
@@ -63,9 +64,6 @@ export interface ApplyPorts {
   concern: ConcernPorts;
   load(): Promise<TopicSearch[]>;
   put(search: TopicSearch): Promise<unknown>;
-  // The reading topics: an existing one by id, or one made under a name.
-  topicExists(id: string): Promise<boolean>;
-  createTopic(name: string): Promise<{ id: string }>;
   dispatchFirstRun(search: TopicSearch): Promise<void>;
   now(): number;
   random?(): number;
@@ -80,15 +78,6 @@ export async function applyTopicSearchProposal(
   if (card.phase === "applied") return { ok: false };
   const all = await ports.load();
   const before = card.searchId ? (all.find((s) => s.id === card.searchId) ?? null) : null;
-  let topicId: string;
-  try {
-    topicId =
-      card.topic.id && (await ports.topicExists(card.topic.id))
-        ? card.topic.id
-        : (await ports.createTopic(card.topic.name.trim() || card.name)).id;
-  } catch {
-    return { ok: false };
-  }
   // Re-following a stopped search hangs it back on its own concern unless the
   // draft pointed at another.
   const concernId = await linkConcern(
@@ -99,7 +88,6 @@ export async function applyTopicSearchProposal(
   const search: TopicSearch = {
     id: before?.id ?? newTopicSearchId(ports.random),
     name: card.name,
-    topicId,
     concernId,
     scope: card.scope,
     subtopics: card.subtopics,

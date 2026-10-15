@@ -40,7 +40,6 @@ const post = (handle: string) => POSTS.find((p) => p.handle === handle)!;
 const TOPIC: TopicSearch = {
   id: "ts-0a1b2c3d",
   name: "AI for science",
-  topicId: "topic-1",
   concernId: null,
   scope: "AI used to do science: discovery, materials, proteins, autonomous labs.",
   subtopics: [

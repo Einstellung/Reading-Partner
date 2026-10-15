@@ -32,7 +32,6 @@ function search(over: Partial<TopicSearch> = {}): TopicSearch {
   return {
     id: "ts-0000aaaa",
     name: "AI for science",
-    topicId: "t1",
     concernId: "s-1",
     scope: "AI used in science",
     subtopics: [

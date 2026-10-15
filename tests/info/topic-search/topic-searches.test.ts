@@ -30,7 +30,6 @@ function search(id: string, over: Partial<TopicSearch> = {}): TopicSearch {
   return {
     id,
     name: id,
-    topicId: "topic-1",
     concernId: null,
     scope: "AI used to do science",
     subtopics: [
@@ -181,7 +180,7 @@ test("the guidance lists searches and live concerns, and a lapsed concern only b
     ],
     topics: [{ id: "topic-1", name: "Science" }],
   });
-  expect(text).toContain('- ts-1 (id: ts-1, stopped, topic "Science")');
+  expect(text).toContain("- ts-1 (id: ts-1, stopped) —");
   expect(text).toContain("(id s-live, reader)");
   expect(text).toContain("(id s-back, reader, lapsed)");
   expect(text).not.toContain("s-gone");

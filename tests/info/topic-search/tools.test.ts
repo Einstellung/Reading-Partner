@@ -30,7 +30,6 @@ function search(id: string, over: Partial<TopicSearch> = {}): TopicSearch {
   return {
     id,
     name: id,
-    topicId: "topic-1",
     concernId: null,
     scope: "s",
     subtopics: [{ id: "st1", name: "Materials", picked: true }],
@@ -194,16 +193,10 @@ test("Apply writes the config with a new topic and the concern, then hands off t
   const store = statements();
   const file = memoryFile();
   const dispatched: string[] = [];
-  const made: string[] = [];
   const result = await applyTopicSearchProposal(card(), {
     concern: store,
     load: file.load,
     put: file.put,
-    topicExists: async () => false,
-    createTopic: async (name) => {
-      made.push(name);
-      return { id: "topic-new" };
-    },
     dispatchFirstRun: async (s) => {
       dispatched.push(s.id);
     },
@@ -212,9 +205,9 @@ test("Apply writes the config with a new topic and the concern, then hands off t
   });
   expect(result.ok).toBe(true);
   const [written] = file.all;
-  expect(`${written.id} ${written.topicId} ${written.status} ${written.revision}`).toBe("ts-00000000 topic-new active 1");
+  expect(`${written.id} ${written.status} ${written.revision}`).toBe("ts-00000000 active 1");
+  expect("topicId" in written).toBe(false);
   expect(written.answers).toEqual([{ asked: "Funding news?", answer: "No", at: OCT_14 }]);
-  expect(made).toEqual(["AI for science"]);
   expect(dispatched).toEqual(["ts-00000000"]);
   const concern = await store.getStatement(written.concernId!);
   expect(`${concern?.kind} ${concern?.author} ${concern?.text}`).toBe("concern reader Following AI for science");
@@ -245,8 +238,6 @@ test("stopping marks the search stopped and its concern lapsed; re-drafting it f
     concern: store,
     load: file.load,
     put: file.put,
-    topicExists: async () => true,
-    createTopic: async () => ({ id: "never" }),
     dispatchFirstRun: async () => {},
     now: () => OCT_14 + 1000,
   });
@@ -328,8 +319,6 @@ function door() {
         concern: store,
         load: file.load,
         put: file.put,
-        topicExists: async () => false,
-        createTopic: async () => ({ id: "topic-new" }),
         dispatchFirstRun: async (s) => {
           dispatched.push(s.id);
         },

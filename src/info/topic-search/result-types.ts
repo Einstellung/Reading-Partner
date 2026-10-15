@@ -152,7 +152,6 @@ export interface TopicSearchResult {
   /** The file name without ".json". */
   id: string;
   searchId: string;
-  topicId: string;
   name: string;
   kind: ResultRunKind;
   /** Local date of the run, YYYY-MM-DD. */
