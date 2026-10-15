@@ -120,7 +120,9 @@ describe("trace", () => {
 describe("script", () => {
   test("defaults and validation", () => {
     const s = parseScript({ name: "a", locale: "zh-CN", steps: [{ clip: "x.wav" }, { clip: "y.wav", start: "reply-start", expect: "interrupt", offsetMs: 2500 }] });
-    expect(s.steps[0]).toEqual({ clip: "x.wav", text: "", start: "reply-end", offsetMs: 800, timeoutMs: 90_000, expect: "turn" });
+    expect(s.steps[0]).toEqual({ clip: "x.wav", text: "", start: "reply-end", offsetMs: 800, timeoutMs: 90_000, expect: "turn", minChars: 50 });
+    expect(s.settleMs).toBe(60_000);
+    expect(s.quietMs).toBe(2000);
     expect(s.steps[1].offsetMs).toBe(2500);
     expect(s.finalReplies).toBe(1);
     expect(() => parseScript({ name: "a", locale: "zh-CN", steps: [{ clip: "x.mp3" }] })).toThrow("step 0");
@@ -155,6 +157,7 @@ describe("script", () => {
       name: "t",
       locale: "zh-CN",
       tailMs: 0,
+      quietMs: 5,
       steps: [
         { clip: "a.wav", offsetMs: 0, timeoutMs: 1000 },
         { clip: "b.wav", offsetMs: 0, timeoutMs: 1000 },
@@ -174,6 +177,7 @@ describe("script", () => {
         reactions[clip]?.();
       },
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      now: () => performance.now(),
       mark: (name, data) => {
         if (name === "step-timeout") log.push(`timeout:${String(data?.clip)}`);
       },
@@ -190,12 +194,154 @@ describe("script", () => {
         subscribe: () => () => {},
         feed: async () => {},
         sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        now: () => performance.now(),
         mark: (name) => marks.push(name),
       },
     );
     expect(outcomes[0].cued).toBe(false);
     expect(marks).toContain("step-timeout");
     expect(marks).toContain("final-timeout");
+  });
+});
+
+describe("driver timing", () => {
+  /** A call the test plays by hand: marks go in with `emit`, each fed clip is logged. */
+  function call() {
+    const listeners = new Set<(m: TraceMark) => void>();
+    const fed: string[] = [];
+    const marks: string[] = [];
+    const emit = (name: string, data?: Record<string, unknown>) => {
+      for (const cb of [...listeners]) cb({ name, perfMs: 0, ...(data ? { data } : {}) });
+    };
+    const deps = {
+      subscribe: (cb: (m: TraceMark) => void) => {
+        listeners.add(cb);
+        return () => listeners.delete(cb);
+      },
+      feed: async (clip: string) => {
+        fed.push(clip);
+      },
+      sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+      now: () => performance.now(),
+      mark: (name: string) => marks.push(name),
+    };
+    return { emit, fed, marks, deps };
+  }
+  const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+  /** A reply the webview speaks: begun, pushed, heard. */
+  const reply = (emit: (n: string, d?: Record<string, unknown>) => void, utterance: number, chars: number[]) => {
+    emit("speak-begun", { utterance });
+    chars.forEach((c, i) => emit(i === 0 ? "speak-push-first" : "speak-push", { chars: c }));
+    emit("speech:speaking", { value: 1 });
+  };
+
+  test("a question waits for a result notice to be said to its end", async () => {
+    const c = call();
+    const done = runScript(
+      parseScript({
+        name: "t",
+        locale: "zh-CN",
+        finalReplies: 0,
+        tailMs: 0,
+        quietMs: 30,
+        steps: [
+          { clip: "a.wav", start: "clip-end", offsetMs: 0 },
+          { clip: "b.wav", offsetMs: 0, timeoutMs: 2000 },
+        ],
+      }),
+      c.deps,
+    );
+    // The first clip settles on a quiet call: quietMs, then fed.
+    await tick(50);
+    expect(c.fed).toEqual(["a.wav"]);
+    c.emit("model-ask", { turn: 1 });
+    c.emit("model-done", { turn: 1 });
+    reply(c.emit, 1, [10]);
+    // The task comes back as the answer ends; the front tells it after a gap.
+    c.emit("front:note", { number: 1, status: "done" });
+    c.emit("conv:spoken", { utterance: 1, reason: "done" });
+    await tick(60);
+    expect(c.fed).toEqual(["a.wav"]);
+    c.emit("front:notify", { turn: -1, numbers: [1] });
+    c.emit("model-ask", { turn: -1 });
+    reply(c.emit, 2, [11, 15]);
+    c.emit("model-done", { turn: -1 });
+    // Ran dry and picks up again: not the end.
+    c.emit("conv:spoken", { utterance: 2, reason: "underrun" });
+    await tick(10);
+    c.emit("speech:speaking", { value: 1 });
+    await tick(60);
+    expect(c.fed).toEqual(["a.wav"]);
+    c.emit("conv:spoken", { utterance: 2, reason: "done" });
+    await done;
+    expect(c.fed).toEqual(["a.wav", "b.wav"]);
+    expect(c.marks).not.toContain("settle-timeout");
+  });
+
+  test("a mark from before the previous clip does not cue the reply after it", async () => {
+    const c = call();
+    const done = runScript(
+      parseScript({
+        name: "t",
+        locale: "zh-CN",
+        finalReplies: 0,
+        tailMs: 0,
+        settleMs: 0,
+        steps: [
+          { clip: "a.wav", start: "clip-end", offsetMs: 0 },
+          { clip: "b.wav", offsetMs: 0, timeoutMs: 2000 },
+          { clip: "c.wav", after: "front:notify", offsetMs: 0, timeoutMs: 2000 },
+        ],
+      }),
+      c.deps,
+    );
+    await tick();
+    c.emit("front:notify", { turn: -1, numbers: [1] });
+    c.emit("conv:spoken", { utterance: 1, reason: "done" });
+    await tick();
+    expect(c.fed).toEqual(["a.wav", "b.wav"]);
+    await tick(20);
+    // The reply to b has not ended yet.
+    expect(c.fed).toEqual(["a.wav", "b.wav"]);
+    c.emit("conv:spoken", { utterance: 2, reason: "done" });
+    await done;
+    expect(c.fed).toEqual(["a.wav", "b.wav", "c.wav"]);
+  });
+
+  test("a barge-in waits for a long reply to be heard, past a cue and a short answer", async () => {
+    const c = call();
+    const done = runScript(
+      parseScript({
+        name: "t",
+        locale: "zh-CN",
+        finalReplies: 0,
+        tailMs: 0,
+        settleMs: 0,
+        steps: [
+          { clip: "a.wav", start: "clip-end", offsetMs: 0 },
+          { clip: "uh.wav", start: "long-reply", minChars: 40, offsetMs: 10, timeoutMs: 2000, expect: "none" },
+          { clip: "wait.wav", start: "long-reply", minChars: 40, offsetMs: 10, timeoutMs: 2000, expect: "interrupt" },
+        ],
+      }),
+      c.deps,
+    );
+    await tick();
+    // The cue: heard, but nothing the webview began.
+    c.emit("speech:speaking", { value: 1 });
+    c.emit("conv:spoken", { utterance: 5, reason: "done" });
+    // A short answer.
+    reply(c.emit, 6, [12]);
+    c.emit("conv:spoken", { utterance: 6, reason: "done" });
+    await tick(30);
+    expect(c.fed).toEqual(["a.wav"]);
+    // Begun long, but not heard yet.
+    reply(c.emit, 7, [13, 13, 10, 18]);
+    c.emit("speech:speaking", { value: 0 });
+    c.emit("speech:speaking", { value: 1 });
+    await done;
+    expect(c.fed).toEqual(["a.wav", "uh.wav", "wait.wav"]);
+    expect(c.marks).not.toContain("step-timeout");
+    expect(c.marks).not.toContain("step-late");
   });
 });
 
@@ -227,6 +373,7 @@ describe("latency", () => {
     n(7100, "conv:speech-duck"),
     n(7400, "conv:speech-stop"),
     n(7450, "audible-end"),
+    n(7450, "conv:spoken", { reason: "interrupted", utterance: 1 }),
     n(7800, "clip-speech-end", { name: "b.wav" }),
     // A hard question: handed off, the cue plays, the result comes back later.
     j(8900, "step-feed", { clip: "c.wav", text: "check it", expect: "turn" }),
@@ -239,7 +386,14 @@ describe("latency", () => {
     n(11500, "tts-dry"),
     n(11700, "tts-resumed", { silentMs: 200 }),
     j(20000, "front:note", { number: 2, status: "done" }),
+    j(20500, "step-feed", { clip: "d.wav", text: "go on", expect: "turn" }),
+    n(20600, "clip-start", { name: "d.wav" }),
+    n(21000, "clip-speech-end", { name: "d.wav" }),
     j(22000, "front:notify", { turn: -1, numbers: [2] }),
+    j(22600, "front:first-byte", { turn: -1 }),
+    j(22605, "speak-begun", { utterance: 3 }),
+    j(22700, "model-done", { turn: -1 }),
+    n(22950, "tts-first", { utterance: 3, index: 0, req: 22610, firstAudio: 22900, handed: 22940 }),
     n(23000, "audible-start"),
   ];
 
@@ -254,7 +408,7 @@ describe("latency", () => {
 
   test("a turn is cut into its segments and an interruption is timed from its clip", () => {
     const turns = turnsOf(rows);
-    expect(turns).toHaveLength(3);
+    expect(turns).toHaveLength(4);
     const [a, b] = turns;
     expect(a.totalMs).toBe(4950);
     expect(a.segments["speechEnd→turnEnd"]).toBe(1300);
@@ -269,8 +423,10 @@ describe("latency", () => {
     expect(b.stopMs).toBe(400);
     expect(b.silencedMs).toBe(450);
     expect(b.interrupted).toBe(true);
+    expect(b.playing).toBe(true);
+    expect(b.verdict).toBe("pass");
     const stats = summarize(turns);
-    expect(stats[stats.length - 1]).toEqual({ segment: "TOTAL speechEnd→audible", n: 2, p50: 1100, p90: 4950 });
+    expect(stats[stats.length - 1]).toEqual({ segment: "TOTAL speechEnd→audible", n: 3, p50: 2000, p90: 4950 });
     expect(formatReport(turns)).toContain("TOTAL speechEnd→audible");
   });
 
@@ -288,6 +444,34 @@ describe("latency", () => {
     const report = formatReport(turnsOf(rows), tasks);
     expect(report).toContain("hard question→filler heard");
     expect(report).toContain("sent→back");
+    expect(report).toMatch(/task notify→heard \(own utterance\) +1 +1000 +1000/);
+    expect(report).toMatch(/barge-in interrupt: pass \/ fail \/ void +1 +1 \/ 0 \/ 0/);
+  });
+
+  test("a notice cut before it was heard borrows no later sound, and a failure keeps its reason", () => {
+    const cut: Row[] = [
+      j(1000, "front:delegate-sent", { turn: 1 }),
+      j(1010, "front:delegate-done", { turn: 1, out: "Handed over as task 1." }),
+      j(1020, "front:delegate-sent", { turn: 2 }),
+      j(1030, "front:delegate-done", { turn: 2, out: "Handed over as task 2." }),
+      j(5000, "front:note", { number: 1, status: "done" }),
+      j(6000, "front:notify", { turn: -1, numbers: [1] }),
+      j(7000, "front:first-byte", { turn: -1 }),
+      j(7005, "speak-begun", { utterance: 4 }),
+      j(7500, "speak-stop"),
+      j(7600, "model-done", { turn: -1, aborted: true }),
+      // The next thing heard is a cue for another question.
+      n(9000, "tts-first", { utterance: 5, index: 0 }),
+      n(9050, "audible-start"),
+      j(9500, "front:note", { number: 2, status: "failed", reason: "Importing a module script failed." }),
+    ];
+    const tasks = tasksOf(cut);
+    expect(tasks[0]).toMatchObject({ number: 1, status: "done", notifyMs: 1000, heardMs: null, totalMs: null });
+    expect(tasks[1]).toMatchObject({ number: 2, status: "failed", reason: "Importing a module script failed." });
+    const report = formatReport([], tasks);
+    expect(report).toContain("tasks 2: done 1, failed 1");
+    expect(report).toMatch(/task notify→heard \(own utterance\) +0 +- +-/);
+    expect(report).toContain("Importing a module script failed.");
   });
 
   test("every fixture script parses and its clips exist", () => {
@@ -311,6 +495,7 @@ describe("latency", () => {
       locale: "zh-CN",
       finalReplies: 0,
       tailMs: 0,
+      settleMs: 0,
       steps: [
         { clip: "a.wav", start: "clip-end", offsetMs: 0 },
         { clip: "b.wav", after: "front:notify", start: "reply-end", offsetMs: 0, timeoutMs: 1000 },
@@ -332,6 +517,7 @@ describe("latency", () => {
       },
       // Timeouts never fire here; the zero tail does.
       sleep: (ms) => (ms === 0 ? Promise.resolve() : new Promise<void>(() => {})),
+      now: () => 0,
       mark: () => {},
     });
     await new Promise((r) => setTimeout(r, 0));

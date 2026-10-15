@@ -94,9 +94,14 @@ export async function runVoiceHarness(scriptName: string, id: string): Promise<v
           await invoke(CMD, { op: "feed", name: clip });
         },
         sleep,
+        now: () => performance.now(),
         mark: (name, data) => {
           voiceTrace(name, data);
           if (name === "step-feed") void report(id, { state: "running", run, dir: armed.dir, step: data });
+          // A step fed on a timeout or after its moment passed: the run is worth less.
+          else if (name === "step-timeout" || name === "settle-timeout" || name === "step-late") {
+            void report(id, { state: "running", run, dir: armed.dir, warning: name, step: data });
+          }
         },
       });
     } catch (e) {

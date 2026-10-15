@@ -17,8 +17,11 @@ import type { TraceMark } from "./trace";
  *   finished, which is how "wait for the background result to be read out"
  *   is said: replies that were already under way when the step began do not
  *   count.
+ * - `long-reply`: a reply of at least `minChars` characters is playing, now or
+ *   later — for barge-in. A cue or a one-line answer is over before a clip fed
+ *   at its start + offset lands, so `reply-start` cannot aim at one.
  */
-export type StepStart = "reply-end" | "reply-start" | "clip-end" | "next-reply-end";
+export type StepStart = "reply-end" | "reply-start" | "clip-end" | "next-reply-end" | "long-reply";
 
 export interface ScriptStep {
   /** File name next to the script. */
@@ -38,6 +41,8 @@ export interface ScriptStep {
   timeoutMs: number;
   /** What the clip is meant to do: start a turn, interrupt, or nothing (a backchannel). */
   expect: "turn" | "interrupt" | "none";
+  /** `long-reply` only: how long the reply has to be, in characters pushed to speech. */
+  minChars: number;
 }
 
 export interface VoiceScript {
@@ -52,9 +57,16 @@ export interface VoiceScript {
   finalTimeoutMs: number;
   /** Then this long before hanging up. */
   tailMs: number;
+  /**
+   * Before a `turn` step whose cue came, wait up to this long for the call to
+   * go quiet (see `CallState.quiet`) and stay so for `quietMs`, so a question
+   * does not land on a result notice or on a reply that only paused. 0 is off.
+   */
+  settleMs: number;
+  quietMs: number;
 }
 
-const STARTS: StepStart[] = ["reply-end", "reply-start", "clip-end", "next-reply-end"];
+const STARTS: StepStart[] = ["reply-end", "reply-start", "clip-end", "next-reply-end", "long-reply"];
 const EXPECTS = ["turn", "interrupt", "none"] as const;
 
 function num(v: unknown, fallback: number): number {
@@ -88,6 +100,7 @@ export function parseScript(raw: unknown): VoiceScript {
       offsetMs: num(step.offsetMs, start === "reply-end" ? 800 : 0),
       timeoutMs: num(step.timeoutMs, 90_000),
       expect,
+      minChars: num(step.minChars, 50),
     };
   });
   return {
@@ -98,7 +111,88 @@ export function parseScript(raw: unknown): VoiceScript {
     ...(typeof o.finalAfter === "string" && o.finalAfter ? { finalAfter: o.finalAfter } : {}),
     finalTimeoutMs: num(o.finalTimeoutMs, 90_000),
     tailMs: num(o.tailMs, 1500),
+    settleMs: num(o.settleMs, 60_000),
+    quietMs: num(o.quietMs, 2000),
   };
+}
+
+/**
+ * What the call is doing, read off its marks: whether anything is being said
+ * or about to be, and how long the reply being said is.
+ */
+export class CallState {
+  speaking = false;
+  /** Model requests out, by turn. */
+  readonly asking = new Set<number>();
+  /** Utterances begun and not yet over. */
+  readonly open = new Set<number>();
+  /** Task results back that the front has not yet started to tell. */
+  readonly notes = new Set<number>();
+  /** The latest reply the webview began: its characters so far, whether heard yet, whether over. */
+  reply: { utterance: number; chars: number; heard: boolean; over: boolean } | null = null;
+  /** Bumped on every mark that can change whether the call is quiet. */
+  version = 0;
+
+  apply(m: TraceMark): void {
+    const d = m.data ?? {};
+    switch (m.name) {
+      case "speech:speaking":
+        this.speaking = d.value === 1;
+        if (this.speaking && this.reply && !this.reply.over) this.reply.heard = true;
+        this.version++;
+        break;
+      case "model-ask":
+        this.asking.add(Number(d.turn));
+        this.version++;
+        break;
+      case "model-done":
+      case "model-failed":
+        this.asking.delete(Number(d.turn));
+        this.version++;
+        break;
+      case "speak-begun":
+        this.open.add(Number(d.utterance));
+        this.reply = { utterance: Number(d.utterance), chars: 0, heard: false, over: false };
+        this.version++;
+        break;
+      case "speak-push-first":
+      case "speak-push":
+        if (this.reply && typeof d.chars === "number") this.reply.chars += d.chars;
+        break;
+      case "speak-stop":
+        this.open.clear();
+        if (this.reply) this.reply.over = true;
+        this.version++;
+        break;
+      case "conv:spoken":
+        // `underrun` can be a pause inside a reply that goes on: the reply is
+        // not over, and `quietMs` is what catches it starting again.
+        this.speaking = false;
+        this.open.delete(Number(d.utterance));
+        if (this.reply && d.reason !== "underrun" && this.reply.utterance === Number(d.utterance)) this.reply.over = true;
+        this.version++;
+        break;
+      case "front:note":
+        this.notes.add(Number(d.number));
+        this.version++;
+        break;
+      case "front:notify":
+        if (Array.isArray(d.numbers)) for (const n of d.numbers) this.notes.delete(Number(n));
+        this.version++;
+        break;
+    }
+  }
+
+  /** Nothing playing, nothing asked, nothing begun and unsaid, no result waiting to be told. */
+  quiet(): boolean {
+    return !this.speaking && this.asking.size === 0 && this.open.size === 0 && this.notes.size === 0;
+  }
+
+  /** A reply of at least `minChars` is being heard right now. */
+  longReplyPlaying(minChars: number): boolean {
+    const r = this.reply;
+    return Boolean(r && this.speaking && r.heard && !r.over && r.chars >= minChars);
+  }
 }
 
 export interface DriverDeps {
@@ -107,6 +201,8 @@ export interface DriverDeps {
   /** Play one clip into the call; resolves when its last sample is in. */
   feed(clip: string): Promise<void>;
   sleep(ms: number): Promise<void>;
+  /** Milliseconds on any steady clock; settling counts its deadline on it. */
+  now(): number;
   /** A driver row in the run's log. */
   mark(name: string, data?: Record<string, unknown>): void;
 }
@@ -128,9 +224,11 @@ const isReplyStart = (m: TraceMark) => m.name === "speech:speaking" && m.data?.v
  */
 export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<StepOutcome[]> {
   const seen: TraceMark[] = [];
+  const state = new CallState();
   const waiters = new Set<{ since: number; pred: (m: TraceMark) => boolean; done: () => void }>();
   const off = deps.subscribe((m) => {
     seen.push(m);
+    state.apply(m);
     const at = seen.length - 1;
     for (const w of [...waiters]) {
       if (at >= w.since && w.pred(m)) {
@@ -150,6 +248,26 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
         if (waiters.delete(w)) resolve(false);
       });
     });
+  };
+
+  /** Resolves true once `cond` holds, checked now and after every mark; false on timeout. */
+  const waitUntil = (cond: () => boolean, timeoutMs: number) =>
+    cond() ? Promise.resolve(true) : waitFor(() => cond(), seen.length, timeoutMs);
+
+  /**
+   * Quiet, and still quiet `quietMs` later with nothing having moved — a
+   * reply that ran dry and picks up again, a result that just came back, a
+   * request that just went out all start the wait over.
+   */
+  const settle = async (timeoutMs: number) => {
+    const deadline = deps.now() + timeoutMs;
+    for (;;) {
+      const left = deadline - deps.now();
+      if (left <= 0 || !(await waitUntil(() => state.quiet(), left))) return false;
+      const v = state.version;
+      await deps.sleep(script.quietMs);
+      if (state.quiet() && state.version === v) return true;
+    }
   };
 
   /** `next-reply-end`: a reply that started after `since`, then its end. */
@@ -177,7 +295,8 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
       if (step.after) {
         const past = await after(step.after, 0, step.timeoutMs);
         if (past === null) cued = false;
-        else from = past;
+        // A mark from long ago does not reach back past the previous clip.
+        else from = Math.max(past, cursor);
       }
       // A mark that never came leaves the step to be fed on timeout.
       if (cued) {
@@ -185,10 +304,23 @@ export async function runScript(script: VoiceScript, deps: DriverDeps): Promise<
         else if (step.start === "reply-start") cued = await waitFor(isReplyStart, from, step.timeoutMs);
         else if (step.start === "next-reply-end") {
           cued = await waitNextReply(step.after ? from : seen.length, step.timeoutMs);
+        } else if (step.start === "long-reply") {
+          cued = await waitUntil(() => state.longReplyPlaying(step.minChars), step.timeoutMs);
         }
       }
       if (!cued) deps.mark("step-timeout", { index, clip: step.clip });
-      if (step.offsetMs > 0) await deps.sleep(step.offsetMs);
+      if (cued && step.expect === "turn" && script.settleMs > 0) {
+        // Settled, then the offset, then still settled: a notice that starts in
+        // the offset would otherwise be cut by the clip.
+        let settled = await settle(script.settleMs);
+        if (step.offsetMs > 0) await deps.sleep(step.offsetMs);
+        if (settled && !state.quiet()) settled = await settle(script.settleMs);
+        if (!settled) deps.mark("settle-timeout", { index, clip: step.clip });
+      } else if (step.offsetMs > 0) await deps.sleep(step.offsetMs);
+      if (step.start === "long-reply" && cued && !state.longReplyPlaying(step.minChars)) {
+        // The reply ended in the offset: the clip lands in silence.
+        deps.mark("step-late", { index, clip: step.clip });
+      }
       deps.mark("step-feed", { index, clip: step.clip, text: step.text, expect: step.expect });
       await deps.feed(step.clip);
       cursor = seen.length;
