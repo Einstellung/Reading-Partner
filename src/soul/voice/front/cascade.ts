@@ -20,11 +20,34 @@ import { frontRequest } from "./context";
 import type { CallLine, FrontCall, FrontListRow, FrontNote, HeardUpTo, VoiceFront } from "./contract";
 import { ackLine, fillerLine, type FillerPort } from "./filler";
 import { frontMarks, monotonicNow, type MarkSink } from "./marks";
-import type { FrontModel } from "./model";
+import type { FrontModel, FrontModelRequest } from "./model";
+import { stallWatches, type StallWatch, type StallWatches } from "../../../legion/durable/stall";
 import { buildFrontTools, type FrontActions } from "./tools";
 
 /** The quiet before the front speaks up on its own (136 "回来"; a starting value). */
 export const FRONT_GAP_MS = 2000;
+
+/**
+ * How long the front's request may go before the first text or tool call. A
+ * request that never answers is cut here and fails the turn; the reading turn's
+ * 90 s window is far too long for a call. Real first bytes on device: p90
+ * about 4.8 s, the slowest about 10 s.
+ */
+export const FRONT_FIRST_BYTE_MS = 15_000;
+
+/** How long the request may say nothing once it has started answering. */
+export const FRONT_CHUNK_STALL_MS = 8_000;
+
+/** How often the stall clock is read: the limits are seconds, not minutes. */
+const FRONT_STALL_TICK_MS = 500;
+
+/** What a turn whose request was cut for silence fails with. */
+export class FrontStallError extends Error {
+  constructor(readonly waitedFor: "first-byte" | "chunk") {
+    super(waitedFor === "first-byte" ? "the front model never started answering" : "the front model stopped answering partway through");
+    this.name = "FrontStallError";
+  }
+}
 
 /** What the driver lets the front see and do. */
 export interface FrontFloor {
@@ -62,6 +85,8 @@ export interface CascadeFrontDeps {
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => () => void;
   gapMs?: number;
+  /** Where the request's stall watch runs: the app's shared registry unless a test hands its own. */
+  stall?: StallWatches;
 }
 
 type Program =
@@ -100,6 +125,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   const gap = deps.gapMs ?? FRONT_GAP_MS;
   const trace = deps.trace ?? (() => {});
   const marks = frontMarks(deps.marks, now, (turn, name) => trace(`front:${name}`, { turn }));
+  const watches = deps.stall ?? stallWatches();
 
   let floor: FrontFloor | null = null;
   let phase: SessionPhase = "idle";
@@ -206,6 +232,69 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   const tools = buildFrontTools(deps.backend.delegateTool(), actions);
   const byName = new Map(tools.map((t) => [t.name, t]));
 
+  // The model call under the stall limits: silent past FRONT_FIRST_BYTE_MS
+  // before it says anything, or past FRONT_CHUNK_STALL_MS once it has, and the
+  // request is aborted and the turn fails as a failed request does. Raced, so a
+  // stream that ignores the abort cannot hold the turn open, and whatever it
+  // sends afterwards is dropped.
+  async function request(turn: number, req: FrontModelRequest): Promise<void> {
+    const controller = new AbortController();
+    const cut = (): void => controller.abort();
+    if (req.signal.aborted) cut();
+    else req.signal.addEventListener("abort", cut, { once: true });
+    let fail: (e: FrontStallError) => void = () => {};
+    const stalled = new Promise<never>((_, reject) => {
+      fail = reject;
+    });
+    let dead = false;
+    const arm = (waitedFor: FrontStallError["waitedFor"]): StallWatch =>
+      watches.watch({
+        stallMs: waitedFor === "first-byte" ? FRONT_FIRST_BYTE_MS : FRONT_CHUNK_STALL_MS,
+        tickMs: FRONT_STALL_TICK_MS,
+        onStall: () => {
+          dead = true;
+          trace("front:stall", { turn, waitedFor });
+          controller.abort();
+          fail(new FrontStallError(waitedFor));
+        },
+      });
+    let watch = arm("first-byte");
+    let answering = false;
+    // Thinking and a tool call's streaming arguments are not the first byte;
+    // once something has been said they count as the stream being alive.
+    const said = (): void => {
+      if (answering) return watch.beat();
+      answering = true;
+      watch.stop();
+      watch = arm("chunk");
+    };
+    try {
+      await Promise.race([
+        deps.model({
+          ...req,
+          signal: controller.signal,
+          onText: (chunk) => {
+            if (dead) return;
+            said();
+            req.onText(chunk);
+          },
+          onToolCall: (call) => {
+            if (dead) return;
+            said();
+            req.onToolCall(call);
+          },
+          onProgress: () => {
+            if (answering && !dead) watch.beat();
+          },
+        }),
+        stalled,
+      ]);
+    } finally {
+      watch.stop();
+      req.signal.removeEventListener("abort", cut);
+    }
+  }
+
   async function readOut(program: Extract<Program, { kind: "read" }>, onDelta: (s: string) => void): Promise<void> {
     const text = await deps.backend.text(program.number);
     if (text) onDelta(text.slice(program.from));
@@ -223,7 +312,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
         `(Not said by the reader. ${about}. Tell the reader in one sentence, and for a ready one ask whether to read it ` +
         "out or show it. Do not say what it found.)",
     });
-    await deps.model({
+    await request(turn, {
       system,
       messages,
       tools: [],
@@ -246,7 +335,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     let handed = false;
     let calledBack = false;
     const calls: Promise<void>[] = [];
-    await deps.model({
+    await request(turn, {
       system,
       messages,
       tools,
