@@ -1249,6 +1249,10 @@ export default function App() {
             return;
           }
         }
+        // A brief or a topic volume is on no topic (docs/info/88): it opens
+        // straight from the library, as from the info shelf.
+        const entry = await getLibraryEntry(bookId).catch(() => null);
+        if (entry) await openIssueBook(bookId, entry.title);
       },
       goToPage: (page: number) => viewRef.current?.navigate({ pageIndex: page - 1 }),
       openThread: (bookId: string, threadId: string) => {
@@ -1295,7 +1299,7 @@ export default function App() {
         if (file) await openFile(file, doc.topicId);
       },
     }),
-    [topics, openFile, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
+    [topics, openFile, openIssueBook, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
   );
 
   // The same shelf lookup a receipt's book link needs. One way in, so a card and

@@ -33,7 +33,6 @@ import type { CallRow } from "../../../reading/turn/call-state";
 import { createPlaceSession, registerOpenSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
 import {
   appendMessage,
-  onThreadMessage,
   patchThreadMessage,
   setThreadTopic,
 } from "../../../platform/app/threads";
@@ -52,6 +51,7 @@ import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools } from "./door-tools";
 import { getOpenIssue, issueDoorTurn, noteOnLastLine, type IssueQuote } from "./issue-context";
+import { listenToThread, withArrivedRow } from "./door-arrivals";
 import { quotedQuestion } from "../chat/quoted-question";
 import { speakIssueOpening } from "../../../info/issue/opening";
 import {
@@ -175,6 +175,13 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       const origin = doorOrigin(date, id);
       setThreadId(id);
       setMessages(thread.messages.map(rehydrateMessage));
+      // Every append through the store is announced, this view's own and the
+      // runtime's landing included; a row already on screen under that role and
+      // timestamp is skipped. Heard from here on (door-arrivals.ts).
+      const unlisten = listenToThread(key, id, (message) => {
+        const row = rehydrateMessage(message);
+        setMessages((prev) => withArrivedRow(prev, row));
+      });
       const assemble = async (signal: AbortSignal): Promise<PlaceAssembled> => {
         const history = messagesRef.current.filter((m) => !m.streaming && !m.queued);
         // A message carrying links goes to the model with an app note that
@@ -263,6 +270,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       const closed = registerOpenSession(doorThreadKey(origin), session);
       const unwatchDoor = setDoorWatching((o) => o.date === date && o.threadId === id);
       unwatch = () => {
+        unlisten();
         closed();
         unwatchDoor();
       };
@@ -288,18 +296,6 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
-
-  // Every append through the store is announced, this view's own and the
-  // runtime's landing included; a row already on screen under that role and
-  // timestamp is skipped.
-  useEffect(() => {
-    if (!threadId) return;
-    return onThreadMessage((append) => {
-      if (append.key !== key || append.threadId !== threadId) return;
-      const row = rehydrateMessage(append.message);
-      setMessages((prev) => (prev.some((m) => m.ts === row.ts && m.role === row.role) ? prev : [...prev, row]));
-    });
-  }, [key, threadId, setMessages]);
 
   const note = useCallback(
     (text: string, role: "user" | "ai" = "user") => {
