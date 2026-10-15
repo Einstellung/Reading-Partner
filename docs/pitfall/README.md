@@ -312,6 +312,7 @@
 - [215-speechdetector-reports-no-results](./native-audio/215-speechdetector-reports-no-results.md) — iOS 26.6 上 `SpeechDetector` 挂得上、`reportResults` 传了 true、序列到点自己正常结束，71.7 秒里 `detectorEvents` 是 0，同一次运行的转写流一切正常；不抛错也没有任何诊断。Apple 自己的文档两处互相矛盾（`Result` 的摘要说只支持错误处理，构造器的摘要说它报告结果），实测站在前一句这边。VAD 的源因此定成 tap 里自算电平，不等它；探针要把 attached / reportResults / events / streamEnded 四个都记下来，少一个「零结果」就会被读成「没挂上」
 - [203-voice-processing-off-leaves-the-engine-with-no-output](./native-audio/203-voice-processing-off-leaves-the-engine-with-no-output.md) — `setVoiceProcessingEnabled(false)` 之后 `engine.outputNode.outputFormat(forBus:0)` 是 0 Hz：开 VPIO 那 450 ms 是 I/O 单元把采集和播放一起绑上硬件，关掉它只剩输入那半被 `inputNode` 拉起来。懒创建的 `mainMixerNode` 于是退回兜底的 44100 立体声，`play()` 抛 `player started when in a disconnected state`。`nodeOut=1 mixerOut=1` 和 `isRunning=1` 全是真的也没用——连接是声明出来的，渲染链里没有输出这一段；唯一的判据是输出格式的采样率为 0。同一轮里「拆栈重建 + VPIO 开」那条腿好好的，所以拆栈不是变量
 - [199-stopping-the-engine-first-does-not-make-detach-safe](./native-audio/199-stopping-the-engine-first-does-not-make-detach-safe.md) — 停了 engine 再 `detach` 照样 abort，`RemoveNode` 的前置条件从外面看不全，而它报错的方式是 ObjC 异常；解法是拆栈时根本不 detach，摘 tap、停 player、停 engine，然后让 engine 引用置空带走整张图。真机实测有效：同一处拆栈走完打出 `RP-DICT front closed`，没再 abort，崩的是它后面 1.3 秒的另一件事（坑 201）
+- [612-the-first-input-node-read-stops-a-running-engine](./native-audio/612-the-first-input-node-read-stops-a-running-engine.md) — 只放音的栈从没读过 `engine.inputNode`，engine 跑起来之后第一次读它（哪怕只是 DEBUG 日志的一个参数）会把 engine 静默停掉：没有异常、没有配置变更通知，下次 `start()` 才恢复。测试台上每句开场白都因此听不见；建栈之后不许第一次碰 `inputNode`
 
 ## WebKit / webview
 

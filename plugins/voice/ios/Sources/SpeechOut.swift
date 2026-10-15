@@ -465,18 +465,22 @@ final class SpeechOut {
                 // a stack trace cannot separate: the connect never took, it took
                 // and something later undid it, or the node hangs off a mixer
                 // that is itself connected to nothing.
+                //
+                // Nothing here reads `engine.inputNode`. The bench's stack has
+                // never read it, and the first read on a running engine stops
+                // the engine without a notification: this line once silenced
+                // every greeting on the bench (docs/pitfall/612).
                 #if DEBUG
                     let nodeOut = engine.outputConnectionPoints(for: node, outputBus: 0)
                     let mixerOut = engine.outputConnectionPoints(
                         for: engine.mainMixerNode, outputBus: 0)
                     NSLog(
                         "RP-SPEECH graph attached=%d nodeOut=%d mixerOut=%d running=%d "
-                            + "vpio=%d nodeFmt=%@ mixerFmt=%@ outIn=%@ outHw=%@ rate=%d",
+                            + "nodeFmt=%@ mixerFmt=%@ outIn=%@ outHw=%@ rate=%d",
                         engine.attachedNodes.contains(node) ? 1 : 0,
                         nodeOut.count,
                         mixerOut.count,
                         engine.isRunning ? 1 : 0,
-                        engine.inputNode.isVoiceProcessingEnabled ? 1 : 0,
                         describeFormat(node.outputFormat(forBus: 0)),
                         describeFormat(engine.mainMixerNode.outputFormat(forBus: 0)),
                         describeFormat(engine.outputNode.inputFormat(forBus: 0)),
