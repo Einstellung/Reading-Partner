@@ -42,6 +42,7 @@ export default {
   "door.close": "关闭",
   "door.expand": "放大",
   "door.shrink": "缩小",
+  "door.dropQuote": "移除引文",
   "door.empty": "想说点什么？",
   "door.placeholder": "和 Lumen 说点什么…",
   "door.failed": "这次回复没能开始。",

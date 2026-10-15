@@ -26,7 +26,13 @@
 // shell with it and the same button brings it back; the page under it never
 // moves.
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+
+import type { Fulltext } from "../../../fulltext/types";
+import type { Citation } from "../../../reading/prep/anchors";
+import { createQuoteCheck } from "../../../reading/session/citations";
+import { CitationContext, QuoteCheckContext } from "../markdown/Markdown";
+import { doorCitationJump, useOpenIssue, type IssueQuote } from "./issue-context";
 
 import { BOX_CARD_DISMISS_OP, BOX_CARD_FOLLOW_OP } from "../../../box/card";
 import type { BoxItem } from "../../../box/types";
@@ -72,6 +78,9 @@ export function DoorChat({
 	focus,
 	box,
 	onOpenDocument,
+	openedFor,
+	quote = null,
+	onQuoteDone,
 	onClose,
 }: {
 	form: "sheet" | "panel";
@@ -88,11 +97,50 @@ export function DoorChat({
 	/** The row to bring into view once the conversation is drawn (a box card's jump). Read once, at mount. */
 	focus?: DoorFocus;
 	onOpenDocument?: (doc: IntakeOpenDocument) => void;
+	/** The brief whose opening brought the conversation up; read once, at mount. */
+	openedFor?: string;
+	/** A passage asked about in the brief, shown above the composer and sent with the next line. */
+	quote?: IssueQuote | null;
+	/** The passage was sent or put away. */
+	onQuoteDone?: () => void;
 	onClose: () => void;
 }) {
 	const t = useT();
 	const shellKeyboard = useShellKeyboard();
-	const chat = useDoorChat({ ...(date ? { date } : {}), ...(onOpenDocument ? { onOpenDocument } : {}) });
+	const chat = useDoorChat({
+		...(date ? { date } : {}),
+		...(onOpenDocument ? { onOpenDocument } : {}),
+		...(openedFor ? { openedFor } : {}),
+	});
+
+	// With a brief open, Lumen's page citations are the brief's: checked against
+	// its text, and a tap puts the conversation away and takes the reader to the
+	// passage (issue-context.ts). Otherwise whatever the shell provides stands.
+	const issue = useOpenIssue();
+	const [issueText, setIssueText] = useState<Fulltext | null>(null);
+	useEffect(() => {
+		let live = true;
+		setIssueText(null);
+		void issue
+			?.fulltext()
+			.then((text) => {
+				if (live) setIssueText(text);
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, [issue]);
+	const verifyQuote = useMemo(() => createQuoteCheck(issueText), [issueText]);
+	const onCitation = useCallback(
+		(c: Citation) => {
+			const jump = doorCitationJump(c, issue !== null);
+			if (!jump || !issue) return;
+			onClose();
+			issue.jump(jump.pageIndex, jump.quote);
+		},
+		[issue, onClose],
+	);
 
 	// Today's conversation carries the box; an earlier day opened from a card
 	// is that day as it was.
@@ -226,10 +274,35 @@ export function DoorChat({
 		</div>
 	);
 
+	// The passage an Ask in the brief brought, above the composer until it is
+	// sent with the question or put away.
+	const quoteStrip = quote ? (
+		<div className="mb-2 flex items-start gap-1 rounded-xl border border-border-subtle bg-background py-1.5 pl-3 pr-1">
+			<p className="m-0 line-clamp-3 flex-1 py-1 text-[13px] italic leading-snug text-muted-foreground">
+				“{quote.text}”
+			</p>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				aria-label={t("shell.door.dropQuote")}
+				title={t("shell.door.dropQuote")}
+				onClick={onQuoteDone}
+				className="text-muted-foreground"
+			>
+				<IconClose size={14} />
+			</Button>
+		</div>
+	) : undefined;
+
 	const view = (
 		<CallView
 			messages={rows}
-			onSend={(text) => void chat.send(text)}
+			onSend={(text) => {
+				void chat.send(text, quote ?? undefined);
+				if (quote) onQuoteDone?.();
+			}}
+			footer={quoteStrip}
 			onHangUp={onClose}
 			streaming={chat.streaming}
 			onStop={chat.stop}
@@ -242,6 +315,13 @@ export function DoorChat({
 			stickKey={chat.stickKey}
 			header={header}
 		/>
+	);
+	const cited = issue ? (
+		<CitationContext.Provider value={onCitation}>
+			<QuoteCheckContext.Provider value={verifyQuote}>{view}</QuoteCheckContext.Provider>
+		</CitationContext.Provider>
+	) : (
+		view
 	);
 
 	if (form === "sheet") {
@@ -259,7 +339,7 @@ export function DoorChat({
 				>
 					<div ref={sheetRef} className="flex h-full flex-col bg-chat-surface p-safe">
 						<BottomSheetLayer />
-						{view}
+						{cited}
 					</div>
 				</div>
 			</OverlaySurface>
@@ -292,7 +372,7 @@ export function DoorChat({
 						if (event.key === "Escape") onClose();
 					}}
 				>
-					<ShellKeyboardContext.Provider value={inPanel}>{view}</ShellKeyboardContext.Provider>
+					<ShellKeyboardContext.Provider value={inPanel}>{cited}</ShellKeyboardContext.Provider>
 				</div>
 			</div>
 		</OverlaySurface>

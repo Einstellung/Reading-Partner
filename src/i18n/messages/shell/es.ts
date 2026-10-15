@@ -42,6 +42,7 @@ export default {
   "door.close": "Cerrar",
   "door.expand": "Ampliar",
   "door.shrink": "Reducir",
+  "door.dropQuote": "Quitar la cita",
   "door.empty": "¿Qué tienes en mente?",
   "door.placeholder": "Escribe a Lumen…",
   "door.failed": "No se pudo iniciar esta respuesta.",

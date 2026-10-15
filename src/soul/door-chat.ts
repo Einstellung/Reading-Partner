@@ -7,7 +7,7 @@
 // for "no model is set up" and the refusal belong to the surface showing them.
 
 import type { AgentTool } from "../legion/durable/contract";
-import type { DeskMessage } from "../desk";
+import type { DeskMessage, DeskRef } from "../desk";
 import type { TopicProposalSurface } from "../memory";
 import { loadSettings, toReasoning, type Settings } from "../platform/app/settings";
 import { modelIdFor } from "../ai/model-tier";
@@ -27,6 +27,8 @@ export interface DoorSendInput {
   topic?: TopicProposalSurface;
   /** What the surface tells the model beside its tools. */
   prompt?: string;
+  /** Material open beside the conversation (door.ts DoorTurnInput.desk). */
+  desk?: readonly DeskRef[];
 }
 
 export interface DoorSendDeps {
@@ -75,6 +77,7 @@ export async function prepareDoorTurn(
     ...(input.tools ? { tools: input.tools } : {}),
     ...(input.topic ? { topic: input.topic } : {}),
     ...(input.prompt ? { prompt: input.prompt } : {}),
+    ...(input.desk?.length ? { desk: input.desk } : {}),
   });
   if (!turn) return { kind: "aborted" };
   if (turn.refusal) return { kind: "refused", text: turn.refusal };

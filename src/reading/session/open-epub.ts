@@ -203,6 +203,8 @@ export function closePhoneBook(
 ): void {
   if (last) io.keepReadingPosition(book.bookId, last);
   io.release(book.bookId);
+  // A brief is on no topic (docs/info/88): nothing to mark it opened in.
+  if (!book.topicId) return;
   void io.markOpened(book.topicId, book.path).catch((e) => {
     console.warn("failed to mark the book as opened", e);
   });

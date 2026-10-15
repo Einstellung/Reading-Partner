@@ -57,6 +57,7 @@ export default {
   "door.close": "Close",
   "door.expand": "Larger",
   "door.shrink": "Smaller",
+  "door.dropQuote": "Remove the passage",
   "door.empty": "What's on your mind?",
   "door.placeholder": "Message Lumen…",
   "door.failed": "Couldn't start this reply.",

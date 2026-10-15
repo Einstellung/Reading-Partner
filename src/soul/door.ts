@@ -14,7 +14,7 @@
 // hold it: a bell that lands here (bell.ts), and the reader typing to Lumen from
 // its menu (door-chat.ts, ui/components/lumen/DoorChat.tsx).
 
-import { openDesk, type DeskEnv, type DeskMessage } from "../desk";
+import { openDesk, type DeskEnv, type DeskMessage, type DeskRef } from "../desk";
 import { type SourceUnit } from "../memory";
 import { resolvePalace } from "../palace";
 import { appData } from "../platform/app/appdata";
@@ -70,6 +70,12 @@ export interface DoorTurnInput {
   topic?: TopicProposalSurface;
   /** What the surface tells the model beside its tools (turn.ts). */
   prompt?: string;
+  /**
+   * Material the reader has open beside the conversation: the brief they are
+   * reading (docs/info/88). It is laid on the desk as material only; the
+   * conversation replayed is still this day's.
+   */
+  desk?: readonly DeskRef[];
 }
 
 /**
@@ -101,7 +107,12 @@ export async function openDoorTurn(input: DoorTurnInput): Promise<AssembledTurn 
     thread: { key, id: input.threadId },
     ...(input.signal ? { signal: input.signal } : {}),
   };
-  const desk = await openDesk([], env);
+  const desk = await openDesk(input.desk ?? [], env);
+  // The door replays its own conversation and nothing else: material laid
+  // here beside it is read, never talked over (docs/info/88).
+  if (desk.items.some((item) => item.history !== undefined)) {
+    throw new Error("soul: an item on the door's desk carries a conversation of its own");
+  }
   return assembleTurn({
     desk,
     messages: input.messages ?? [],

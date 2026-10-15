@@ -42,6 +42,7 @@ export default {
   "door.close": "Schließen",
   "door.expand": "Vergrößern",
   "door.shrink": "Verkleinern",
+  "door.dropQuote": "Zitat entfernen",
   "door.empty": "Was beschäftigt dich?",
   "door.placeholder": "Nachricht an Lumen…",
   "door.failed": "Diese Antwort konnte nicht starten.",

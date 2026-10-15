@@ -42,6 +42,7 @@ export default {
   "door.close": "Fermer",
   "door.expand": "Agrandir",
   "door.shrink": "Réduire",
+  "door.dropQuote": "Retirer la citation",
   "door.empty": "Qu'avez-vous en tête ?",
   "door.placeholder": "Écrire à Lumen…",
   "door.failed": "Impossible de lancer cette réponse.",

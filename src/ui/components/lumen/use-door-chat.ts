@@ -51,6 +51,9 @@ import {
 import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools } from "./door-tools";
+import { getOpenIssue, issueDoorTurn, noteOnLastLine, type IssueQuote } from "./issue-context";
+import { quotedQuestion } from "../chat/quoted-question";
+import { speakIssueOpening } from "../../../info/issue/opening";
 import { TOPIC_SEARCH_APPLY_OP, topicSearchAppliedNote } from "../../../info/topic-search/cards";
 import type { ApplyResult } from "../../../info/topic-search/apply";
 import { applyTopicSearchCard, loadTopicSearchGuidance } from "../../../info/topic-search/live";
@@ -69,7 +72,8 @@ export interface DoorChat {
   /** The day's thread is loaded and a line can be sent. */
   ready: boolean;
   streaming: boolean;
-  send(text: string): Promise<void>;
+  /** Say a line; with a quote, a question about that passage of the open brief. */
+  send(text: string, quote?: IssueQuote): Promise<void>;
   stop(): void;
   onCardAction(cardId: string, action: CardAction): void;
 }
@@ -82,6 +86,11 @@ export interface DoorChatOptions {
   date?: string;
   /** Open a document an intake card filed (its 「打开阅读」), in this shell's reader. */
   onOpenDocument?: (doc: IntakeOpenDocument) => void;
+  /**
+   * The brief whose opening brought the conversation up (docs/info/88): Lumen's
+   * first words about it go in once the day's conversation is loaded. Read once.
+   */
+  openedFor?: string;
 }
 
 const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
@@ -90,6 +99,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   // The day the chat was opened on. A conversation left open over midnight
   // stays in the day it began, the way a call does.
   const [date] = useState(() => options.date ?? doorDate());
+  const [openedFor] = useState(() => options.openedFor ?? null);
   const openDocumentRef = useRef(options.onOpenDocument);
   openDocumentRef.current = options.onOpenDocument;
   const key = doorKey(date);
@@ -161,12 +171,16 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           m.parts?.some((part) => part.type === "card" && part.card.kind === "link-intake"),
         );
         const topics = latestLinks.length > 0 ? await listTopics().catch(() => []) : [];
-        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) : "";
-        const sent = note && latest ? [...history.slice(0, -1), { ...latest, text: latest.text + note }] : history;
+        // With a brief open, the brief is on the desk and where the reader is
+        // in it rides the same note (issue-context.ts, docs/info/88).
+        const issue = await issueDoorTurn(getOpenIssue(), latest?.role === "user" ? latest.text : "");
+        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) + issue.note : "";
+        const sent = noteOnLastLine(history, note);
         const prepared = await prepareDoorTurn({
           threadId: id,
           date,
           history: replayableHistory(sent),
+          ...(issue.desk.length > 0 ? { desk: issue.desk } : {}),
           signal,
           // The door's own tools, beside the soul's (door-tools.ts).
           tools: doorTools({
@@ -235,6 +249,14 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
         unwatchDoor();
       };
       lookingRef.current = session.resume().catch((e: unknown) => console.warn("door turn could not be resumed", e));
+      // An issue just opened: Lumen speaks first about it (the next slice's, info/issue/opening.ts).
+      if (openedFor) {
+        void lookingRef.current.then(() =>
+          speakIssueOpening({ bookId: openedFor, date, threadId: id }).catch((e: unknown) =>
+            console.warn("the brief's opening could not be said", e),
+          ),
+        );
+      }
     });
     return () => {
       live = false;
@@ -269,8 +291,10 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   );
 
   const send = useCallback(
-    async (text: string) => {
-      if (!text.trim() || !threadId) return;
+    async (typed: string, quote?: IssueQuote) => {
+      if (!typed.trim() || !threadId) return;
+      // A question about a passage carries the passage above it (quoted-question.ts).
+      const text = quote ? quotedQuestion(quote.text, typed) : typed;
       await lookingRef.current;
       const session = sessionRef.current;
       if (!session) return;

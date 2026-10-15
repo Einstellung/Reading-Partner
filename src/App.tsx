@@ -42,7 +42,9 @@ import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
-import { displaySource, readLibraryBook, type BookFormat } from "./platform/app/library";
+import { displaySource, getLibraryEntry, readLibraryBook, type BookFormat } from "./platform/app/library";
+import { readerModeOf, type ReaderMode } from "./reading/issue";
+import { askLumen, publishOpenIssue } from "./ui/components/lumen/issue-context";
 import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -191,6 +193,9 @@ export default function App() {
   // Which document is on screen, as something that renders: the Outline lights
   // the row the reader is in. A ref cannot do that.
   const [docId, setDocId] = useState<string | null>(null);
+  // A brief opens without the lesson and the reader's own conversation; Lumen
+  // talks about it in the door (reading/issue.ts, docs/info/88).
+  const [readerMode, setReaderMode] = useState<ReaderMode>("book");
 
   // The current book's full text, extracted fire-and-forget on open. A call's
   // context assembly awaits this so the AI can see the page even if extraction
@@ -263,6 +268,9 @@ export default function App() {
   useEffect(() => setFingerSel(null), [embedDoc]);
 
   const [stats, setStats] = useState<ViewStats | null>(null);
+  // Where the reader is, for a turn at the door assembled between renders.
+  const statsRef = useRef<ViewStats | null>(null);
+  statsRef.current = stats;
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [pickedTool, setPickedTool] = useState<ToolType>("none");
@@ -642,6 +650,27 @@ export default function App() {
     await viewRef.current?.highlightQuote(pageIndex, { searchText, displayText: quote });
   }, []);
 
+  // The brief open in this reader, for Lumen's conversation (lumen/issue-context.ts):
+  // published while it is open, which also brings the conversation up.
+  const issueBookId = readerMode === "issue" && docId !== null ? bookIdRef.current : null;
+  useEffect(() => {
+    if (!issueBookId) return;
+    return publishOpenIssue({
+      bookId: issueBookId,
+      title: bookTitle,
+      where: () => {
+        const s = statsRef.current;
+        return { page: s ? s.pageIndex + 1 : null, pageCount: s?.pagesCount ?? null };
+      },
+      fulltext: () => currentFulltextRef.current ?? Promise.resolve(null),
+      marks: () => [...annsRef.current.values()],
+      jump: (pageIndex, quote) => {
+        if (quote) void jumpToQuote(pageIndex, quote);
+        else viewRef.current?.navigate({ pageIndex });
+      },
+    });
+  }, [issueBookId, bookTitle, jumpToQuote, annsRef]);
+
   // A clicked citation chip in a chat reply. Survey pages jump the reader (and
   // un-cover it when chat is full-window); paper citations open that paper's
   // note in the prep panel (v1: the note, not the paper PDF).
@@ -789,6 +818,7 @@ export default function App() {
         setDocId(null);
         setSupplements([]);
         setBookTitle("");
+        setReaderMode("book");
         viewRef.current = null;
         pageDwellRef.current = null;
       },
@@ -854,6 +884,7 @@ export default function App() {
     async (bookId: string, name: string, bytes: Uint8Array) => {
       setBookTitle(name);
       setSupplements([]);
+      setReaderMode(readerModeOf(await getLibraryEntry(bookId).catch(() => null)));
       await openBook(readerShell, { bookId, name, bytes });
       await refreshSupplements();
     },
@@ -1424,6 +1455,7 @@ export default function App() {
             lumenShown={lumenShown}
             onToggleLumen={toggleLumen}
             onOpenBookThread={openBookThread}
+            mode={readerMode}
             onOpenSettings={openSettings}
             settingsAlert={syncReport.alert !== "none"}
           />
@@ -1535,6 +1567,13 @@ export default function App() {
               onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
               onHighlight={highlightSelection}
               onAsk={() => {
+                // In a brief the passage goes to Lumen's conversation (docs/info/88).
+                if (readerMode === "issue") {
+                  askLumen({ text: fingerSel.selection.text });
+                  viewRef.current?.clearSelection();
+                  setFingerSel(null);
+                  return;
+                }
                 // Inside a side conversation no new one opens: the AI pen's rule
                 // (reading/turn/call-state.ts), said the way the rack says it.
                 if (gate.aiPen !== null) {
