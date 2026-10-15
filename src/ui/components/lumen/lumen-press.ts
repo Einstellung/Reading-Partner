@@ -8,10 +8,11 @@
 // the charge off) and a long press is just a press, which opens the
 // conversation like a tap.
 //
-// The tap is the body's click, not a pointer release: a keyboard's Enter is the
-// same click with no press before it. A press that was dragged or that fired
-// swallows the click its release brings, so a drag never opens the
-// conversation and neither does the hold that started a call.
+// The tap is the release of a press that neither travelled past the drag's
+// slop nor reached full charge, and not the click that follows it: a touch held
+// long on iOS may bring no click at all, and where the hold is off a long press
+// has to be a tap. The click a release brings is swallowed; a click with no
+// press before it is a keyboard's Enter, and that opens the conversation too.
 //
 // The desktop's right-click is the hold, without the charge.
 //
@@ -79,7 +80,10 @@ export function lumenPressStep(state: LumenPressState, input: LumenPressInput): 
     case "up": {
       const press = state.press;
       if (!press) return still(state);
-      return still({ press: null, swallowClick: press.dragged || press.fired });
+      // A press that neither travelled nor fired is the tap, on its release.
+      // The click the release brings is swallowed either way.
+      const tap = !press.dragged && !press.fired;
+      return { state: { press: null, swallowClick: true }, effect: tap ? "open-door" : null };
     }
     case "cancel":
       // No click follows a cancelled press.

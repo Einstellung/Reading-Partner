@@ -34,6 +34,11 @@ test("a tap opens the conversation", () => {
   expect(run([{ kind: "down" }, { kind: "up" }, { kind: "click" }]).effects).toEqual(["open-door"]);
 });
 
+test("the tap is the release: a long touch that brings no click still opens it, once", () => {
+  expect(run([{ kind: "down" }, { kind: "up" }]).effects).toEqual(["open-door"]);
+  expect(run([{ kind: "down" }, { kind: "up" }, { kind: "click" }]).effects).toEqual(["open-door"]);
+});
+
 test("a keyboard's click, with no press before it, opens the conversation", () => {
   expect(run([{ kind: "click" }]).effects).toEqual(["open-door"]);
 });
