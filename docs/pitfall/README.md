@@ -279,6 +279,7 @@
 - [567-dev-reinstall-asks-for-local-network-again](./ios-build/567-dev-reinstall-asks-for-local-network-again.md) — 每次重装 .dev 都要重新给本地网络权限，不给就整页报 `did you grant local network permissions?`、Linux 上收不到一条连接；装完先 `dvt launch` + `dvt screenshot` 看弹窗
 - [601-sim-smoke-dispatches-cancel-each-other](./ios-build/601-sim-smoke-dispatches-cancel-each-other.md) — `ios-simulator-smoke.yml` 的 concurrency group 不带 ref，别的分支一 dispatch 就把你正在跑的 smoke 取消成 `cancelled`、没有报错；group 改成按 ref
 - [602-dev-cert-limit-breaks-cloud-signing](./ios-build/602-dev-cert-limit-breaks-cloud-signing.md) — 云签名每次在全新 runner 上新建 Apple Development 证书，满额后 `ios-linux-loop.yml` 的 .dev 包和 WDA 都报 `maximum number of certificates`；账号持有人去网页吊销旧证书再重跑
+- [613-install-hangs-while-the-dev-app-is-running](./ios-build/613-install-hangs-while-the-dev-app-is-running.md) — .dev 应用的进程还活着时 `pymobiledevice3 apps install` 停在 `bundle id: ...` 0% 不返回，重插 USB 不稳定；装之前先 `dvt proclist` 找 .dev 的 pid、`dvt kill` 掉，别杀 TestFlight 版
 
 ## Android 构建与签名
 
