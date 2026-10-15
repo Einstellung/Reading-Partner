@@ -102,7 +102,12 @@ export interface TurnLatency {
   duckMs?: number | null;
   stopMs?: number | null;
   silencedMs?: number | null;
+  /** The reply that was playing when the clip started was cut (`conv:spoken` interrupted). */
   interrupted?: boolean;
+  /** Whether any reply could be heard when the clip started: without one the step tested nothing. */
+  playing?: boolean;
+  /** `none` must not cut the reply, `interrupt` must; `void` when nothing was playing. */
+  verdict?: "pass" | "fail" | "void";
   /** Tool calls in the window, by name, with their durations. */
   tools: { name: string; ms: number | null }[];
   /** A turn that handed work off: user stopped → delegate sent, and → the first thing heard. */
@@ -119,12 +124,14 @@ export interface TurnLatency {
 export interface TaskLatency {
   number: number;
   status: string;
+  /** Why it failed, as the note said. */
+  reason?: string;
   sent: number;
   /** Delegate sent → the result is back (the CallNote). */
   backMs: number | null;
   /** Back → the front's notice turn starts. */
   notifyMs: number | null;
-  /** Notice turn start → audible. */
+  /** Notice turn start → audible, for the notice's own utterance: null when it was cut before it was heard. */
   heardMs: number | null;
   /** Delegate sent → audible notice. */
   totalMs: number | null;
@@ -192,10 +199,14 @@ export function turnsOf(raw: Row[]): TurnLatency[] {
       const duck = first(rows, from, until, (r) => r.src === "native" && r.ev === "conv:speech-duck");
       const stop = first(rows, from, until, (r) => r.src === "native" && r.ev === "conv:speech-stop");
       const silenced = first(rows, from, until, (r) => r.src === "native" && r.ev === "audible-end");
+      const cut = first(rows, from, until, (r) => r.src === "native" && r.ev === "conv:spoken" && r.reason === "interrupted");
+      const audio = rows.filter((r) => r.src === "native" && (r.ev === "audible-start" || r.ev === "audible-end") && r.t <= from);
       turn.duckMs = duck ? duck.t - from : null;
       turn.stopMs = stop ? stop.t - from : null;
       turn.silencedMs = silenced ? silenced.t - from : null;
-      turn.interrupted = Boolean(stop);
+      turn.interrupted = Boolean(cut);
+      turn.playing = audio[audio.length - 1]?.ev === "audible-start";
+      turn.verdict = !turn.playing ? "void" : turn.interrupted === (expect === "interrupt") ? "pass" : "fail";
     }
     for (const s of rows.filter((r) => r.t >= end.t && r.t < until && r.src === "js" && r.ev === "tool-start")) {
       const back = first(rows, s.t, Number.POSITIVE_INFINITY, (r) => r.src === "js" && r.ev === "tool-end" && r.name === s.name);
@@ -205,6 +216,27 @@ export function turnsOf(raw: Row[]): TurnLatency[] {
     void i;
   });
   return turns;
+}
+
+/**
+ * When the notice itself became audible: its turn's first text begins an
+ * utterance, and that utterance's first sentence is scheduled and heard. A
+ * notice cut before any of it played has none, rather than borrowing whatever
+ * was heard next.
+ */
+function noticeHeard(rows: Row[], notify: Row): Row | undefined {
+  const turn = notify.turn;
+  const end = first(rows, notify.t, Number.POSITIVE_INFINITY, (r) => r.src === "js" && (r.ev === "model-done" || r.ev === "model-failed") && r.turn === turn);
+  const until = end ? end.t + 1 : Number.POSITIVE_INFINITY;
+  const text = first(rows, notify.t, until, (r) => r.src === "js" && r.ev === "front:first-byte" && r.turn === turn);
+  if (!text) return undefined;
+  const begun = first(rows, text.t, until, (r) => r.src === "js" && r.ev === "speak-begun");
+  if (!begun) return undefined;
+  const utterance = begun.utterance;
+  const piece = first(rows, begun.t, Number.POSITIVE_INFINITY, (r) => r.src === "native" && r.ev === "tts-first" && r.utterance === utterance);
+  if (!piece) return undefined;
+  const over = first(rows, begun.t, Number.POSITIVE_INFINITY, (r) => r.src === "native" && r.ev === "conv:spoken" && r.utterance === utterance);
+  return first(rows, piece.t, over ? over.t : Number.POSITIVE_INFINITY, (r) => r.src === "native" && r.ev === "audible-start");
 }
 
 /** Every handed-off task in a run, matched by its number from the delegate's answer. */
@@ -220,10 +252,11 @@ export function tasksOf(raw: Row[]): TaskLatency[] {
     const notify = note
       ? first(rows, note.t, Number.POSITIVE_INFINITY, (r) => r.src === "js" && r.ev === "front:notify" && Array.isArray(r.numbers) && r.numbers.includes(n))
       : undefined;
-    const heard = notify ? first(rows, notify.t, Number.POSITIVE_INFINITY, (r) => r.src === "native" && r.ev === "audible-start") : undefined;
+    const heard = notify ? noticeHeard(rows, notify) : undefined;
     out.push({
       number: n,
       status: String(note?.status ?? "running"),
+      ...(typeof note?.reason === "string" ? { reason: note.reason } : {}),
       sent: from,
       backMs: note ? note.t - from : null,
       notifyMs: note && notify ? notify.t - note.t : null,
@@ -274,13 +307,19 @@ export function summarize(turns: TurnLatency[]): SegmentStat[] {
 
 const fmt = (v: number | null | undefined) => (v === null || v === undefined ? "-" : Math.round(v).toString());
 
+/** One "name  n  p50  p90" line over the values that exist. */
+function statLine(name: string, values: (number | null | undefined)[]): string {
+  const v = values.filter((x): x is number => typeof x === "number");
+  return `${name.padEnd(38)} ${String(v.length).padStart(3)} ${fmt(percentile(v, 50)).padStart(7)} ${fmt(percentile(v, 90)).padStart(7)}`;
+}
+
 export function formatReport(turns: TurnLatency[], tasks: TaskLatency[] = []): string {
   const lines: string[] = [];
   lines.push("turn  expect     total  clip / text");
   turns.forEach((t, i) => {
     let extra = "";
     if (t.expect !== "turn") {
-      extra = `  duck ${fmt(t.duckMs)} stop ${fmt(t.stopMs)} silenced ${fmt(t.silencedMs)} interrupted=${t.interrupted}`;
+      extra = `  ${(t.verdict ?? "void").toUpperCase()} playing=${t.playing} interrupted=${t.interrupted} duck ${fmt(t.duckMs)} stop ${fmt(t.stopMs)} silenced ${fmt(t.silencedMs)}`;
     }
     const tools = t.tools.length ? `  tools ${t.tools.map((x) => `${x.name}:${fmt(x.ms)}`).join(",")}` : "";
     const handed =
@@ -293,18 +332,41 @@ export function formatReport(turns: TurnLatency[], tasks: TaskLatency[] = []): s
   for (const s of summarize(turns)) {
     lines.push(`${s.segment.padEnd(38)} ${String(s.n).padStart(3)} ${fmt(s.p50).padStart(7)} ${fmt(s.p90).padStart(7)}`);
   }
-  const handed = turns.map((t) => t.fillerMs).filter((v): v is number => typeof v === "number");
+  const handed = turns.filter((t) => t.delegateMs !== undefined);
   if (handed.length) {
-    lines.push(`${"hard question→filler heard".padEnd(38)} ${String(handed.length).padStart(3)} ${fmt(percentile(handed, 50)).padStart(7)} ${fmt(percentile(handed, 90)).padStart(7)}`);
+    lines.push(statLine("hard question→delegate sent", handed.map((t) => t.delegateMs)));
+    lines.push(statLine("hard question→filler heard", handed.map((t) => t.fillerMs)));
+    const cues = handed.filter((t) => t.cue).length;
+    lines.push(`${"  of which the cue".padEnd(38)} ${String(cues).padStart(3)} / ${handed.length}`);
+  }
+  const barge = turns.filter((t) => t.expect !== "turn");
+  if (barge.length) {
+    for (const expect of ["none", "interrupt"]) {
+      const of = barge.filter((t) => t.expect === expect);
+      if (!of.length) continue;
+      const count = (v: string) => of.filter((t) => t.verdict === v).length;
+      lines.push(`${`barge-in ${expect}: pass / fail / void`.padEnd(38)} ${String(of.length).padStart(3)}   ${count("pass")} / ${count("fail")} / ${count("void")}`);
+    }
+    const tested = barge.filter((t) => t.playing);
+    lines.push(statLine("barge-in clip→duck (while playing)", tested.map((t) => t.duckMs)));
+    lines.push(statLine("barge-in clip→silenced (interrupt)", tested.filter((t) => t.expect === "interrupt").map((t) => t.silencedMs)));
   }
   if (tasks.length) {
     lines.push("");
     lines.push("task  status    sent→back  back→notify  notify→heard   total");
     for (const k of tasks) {
       lines.push(
-        `${String(k.number).padStart(4)}  ${k.status.padEnd(8)} ${fmt(k.backMs).padStart(10)} ${fmt(k.notifyMs).padStart(12)} ${fmt(k.heardMs).padStart(13)} ${fmt(k.totalMs).padStart(7)}`,
+        `${String(k.number).padStart(4)}  ${k.status.padEnd(8)} ${fmt(k.backMs).padStart(10)} ${fmt(k.notifyMs).padStart(12)} ${fmt(k.heardMs).padStart(13)} ${fmt(k.totalMs).padStart(7)}${k.reason ? `  ${k.reason}` : ""}`,
       );
     }
+    lines.push("");
+    const statuses = [...new Set(tasks.map((k) => k.status))].map((st) => `${st} ${tasks.filter((k) => k.status === st).length}`);
+    lines.push(`tasks ${tasks.length}: ${statuses.join(", ")}`);
+    lines.push("segment                                  n     p50     p90");
+    lines.push(statLine("task sent→back", tasks.map((k) => k.backMs)));
+    lines.push(statLine("task back→notify", tasks.map((k) => k.notifyMs)));
+    lines.push(statLine("task notify→heard (own utterance)", tasks.map((k) => k.heardMs)));
+    lines.push(statLine("task sent→notice heard", tasks.map((k) => k.totalMs)));
   }
   return lines.join("\n");
 }
