@@ -10,7 +10,8 @@ export const FRONT_TOOL_NAMES = ["delegate", "cancel", "read_out", "show"] as co
 
 /** What the tools do, by list number. The cascade front implements it. */
 export interface FrontActions {
-  cancel(number: number): Promise<string>;
+  /** `said` is the reader's words that dropped it, kept for the trace. */
+  cancel(number: number, said: string): Promise<string>;
   readOut(number: number): Promise<string>;
   show(number: number): Promise<string>;
 }
@@ -32,9 +33,15 @@ export function buildFrontTools(delegate: AgentTool, actions: FrontActions): Age
       label: () => "Calling it back",
       effect: "write",
       gate: "instruction",
-      description: "Call back a run the reader no longer wants. It is dropped without landing anywhere.",
-      parameters: Type.Object({ number: numberParam("run to call back") }),
-      execute: async (args) => actions.cancel(num(args.number, "cancel")),
+      description:
+        "Only when the reader says they no longer want that one request (\"forget the weather\"): call it back. " +
+        "It is dropped without landing anywhere. Thanks, goodbye, \"that's all\" or hanging up drops nothing: " +
+        "what is out still lands in the box. A changed request is delegate with replaces, not cancel.",
+      parameters: Type.Object({
+        number: numberParam("run to call back"),
+        said: Type.String({ description: "The reader's words that drop this request, as they said them." }),
+      }),
+      execute: async (args) => actions.cancel(num(args.number, "cancel"), String(args.said ?? "")),
     },
     {
       name: "read_out",

@@ -7,7 +7,8 @@
 //
 // A reply can carry a sentence and a delegate together. The sentence is spoken
 // as it streams, the call is carried out as soon as it arrives, nothing is fed
-// back, and the turn ends. A reply that only hands off gets the filler line.
+// back, and the turn ends. A reply that only hands off gets the filler line; one
+// that only calls a run back gets a short acknowledgement.
 
 import type { ConversationEvent } from "../conversation";
 import type { SessionEffect, SessionPhase, VoiceTurn } from "../voice-session";
@@ -17,7 +18,7 @@ import type { CallNote } from "../../think/contract";
 import type { CallBack } from "./backend";
 import { frontRequest } from "./context";
 import type { CallLine, FrontCall, FrontListRow, FrontNote, HeardUpTo, VoiceFront } from "./contract";
-import { fillerLine, type FillerPort } from "./filler";
+import { ackLine, fillerLine, type FillerPort } from "./filler";
 import { frontMarks, monotonicNow, type MarkSink } from "./marks";
 import type { FrontModel } from "./model";
 import { buildFrontTools, type FrontActions } from "./tools";
@@ -183,8 +184,9 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   }
 
   const actions: FrontActions = {
-    async cancel(n) {
+    async cancel(n, said) {
       const r = await deps.backend.cancel(n);
+      trace("front:cancel", { number: n, said: said.slice(0, 120), cancelled: r.ok, ...(r.ok ? {} : { reason: r.reason }) });
       return r.ok ? `#${n} called back.` : `#${n} not called back: ${r.reason ?? "unknown"}`;
     },
     async readOut(n) {
@@ -242,6 +244,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     if (messages[messages.length - 1]?.role !== "user") messages.push({ role: "user", text: req.text });
     let said = false;
     let handed = false;
+    let calledBack = false;
     const calls: Promise<void>[] = [];
     await deps.model({
       system,
@@ -258,6 +261,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
         const tool = byName.get(name);
         if (!tool) return;
         if (name === "delegate") marks.mark(turn, "delegate-sent");
+        if (name === "cancel") calledBack = true;
         req.onActivity({ kind: "tool", name, phase: "start" });
         // Carried out whatever happens to the sentence: a barge-in cuts what
         // the front is saying, not what it handed off (136 一期).
@@ -283,7 +287,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
       const played = await deps.filler.play("thinking", deps.locale);
       trace("front:cue", { turn, kind: "thinking", played });
       if (!played) req.onDelta(fillerLine("thinking", deps.locale));
-    }
+    } else if (calledBack && !said && !req.signal.aborted) req.onDelta(ackLine(deps.locale));
   }
 
   const model: VoiceCallModel = {

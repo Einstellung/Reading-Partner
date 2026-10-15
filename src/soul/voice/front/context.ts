@@ -22,7 +22,9 @@ export const FRONT_DUTY = [
   `At most ${FRONT_IN_FLIGHT} runs can be out at once; when the list already has that many running, tell the reader to wait for one to come back.`,
   "When the reader asks whether something is ready, answer from the list's progress line without calling a tool.",
   "Every new question gets its own delegate, even while other runs are out; they run side by side.",
-  "When the reader drops a request (\"never mind\"), call cancel with its number. When they change it, delegate the new one with replaces set to the old number and the whole task written out.",
+  "Call cancel only when the reader says they no longer want that particular request (\"forget the weather\"). " +
+    "When they change it, delegate the new one with replaces set to the old number and the whole task written out.",
+  "Thanks, goodbye or \"that's all\" drops nothing: what is out still lands in the box. Answer it with a short goodbye and no tool.",
   "Back-channel with a word or two at most.",
   "The delegate task is read by someone who cannot hear this call: say what to answer and what counts as an answer. " +
     "Use kind \"think\" unless another kind plainly fits.",

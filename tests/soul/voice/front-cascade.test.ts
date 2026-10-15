@@ -12,6 +12,7 @@ import {
   frontRequest,
 } from "../../../src/soul/voice/front/context";
 import type { FillerPort } from "../../../src/soul/voice/front/filler";
+import { buildFrontTools } from "../../../src/soul/voice/front/tools";
 import type { FrontTurnMarks } from "../../../src/soul/voice/front/marks";
 import type { FrontModel, FrontModelRequest } from "../../../src/soul/voice/front/model";
 import { frontReasoning } from "../../../src/soul/voice/front/model";
@@ -38,7 +39,13 @@ class Back {
       },
     };
   }
-  cancel = async () => ({ ok: true });
+  cancel = async (n: number) => {
+    const task = this.list.find((t) => t.n === n);
+    if (!task) return { ok: false, reason: `There is no task ${n} on this call.` };
+    if (task.state !== "running") return { ok: false, reason: `Task ${n} is already ${task.state}.` };
+    task.state = "cancelled";
+    return { ok: true };
+  };
   tasks = () => this.list;
   text = async (n: number) => this.texts.get(n) ?? null;
   subscribe = (fn: (note: CallNote) => void) => {
@@ -186,6 +193,49 @@ test("a task's note carries its failure reason into the trace", () => {
     { number: 1, status: "done" },
     { number: 2, status: "failed", reason: "Importing a module script failed." },
   ]);
+});
+
+test("a reply that only calls a run back still says something, and the trace has the number and outcome", async () => {
+  const h = setup(async (req) => {
+    req.onToolCall({ name: "cancel", args: { number: 1, said: "天气那个不用查了" } });
+  });
+  h.back.list.push({ n: 1, runId: "r1", kind: "think", task: "Weather", state: "running", told: false });
+  const r = await ask(h.front, 2, "天气那个不用查了");
+  expect(r.said).toBe("好的。");
+  expect(h.back.list[0]!.state).toBe("cancelled");
+  expect(h.traced.find((t) => t.name === "front:cancel")!.data).toEqual({
+    number: 1,
+    said: "天气那个不用查了",
+    cancelled: true,
+  });
+});
+
+test("a cancel that finds the run already back says why in the trace", async () => {
+  const h = setup(async (req) => {
+    req.onText("好，那就这样。");
+    req.onToolCall({ name: "cancel", args: { number: 1, said: "算了" } });
+  });
+  h.back.list.push({ n: 1, runId: "r1", kind: "think", task: "Weather", state: "done", told: false });
+  const r = await ask(h.front, 2, "算了");
+  expect(r.said).toBe("好，那就这样。");
+  expect(h.traced.find((t) => t.name === "front:cancel")!.data).toEqual({
+    number: 1,
+    said: "算了",
+    cancelled: false,
+    reason: "Task 1 is already done.",
+  });
+});
+
+test("the prompt says a wrap-up drops nothing and cancel asks for the reader's words", () => {
+  expect(FRONT_DUTY).toContain("Call cancel only when the reader says they no longer want that particular request");
+  expect(FRONT_DUTY).toContain("Thanks, goodbye or \"that's all\" drops nothing");
+  const cancel = buildFrontTools(new Back().delegateTool(), {
+    cancel: async () => "",
+    readOut: async () => "",
+    show: async () => "",
+  }).find((t) => t.name === "cancel")!;
+  expect(cancel.description).toContain("Thanks, goodbye");
+  expect(JSON.stringify(cancel.parameters)).toContain('"said"');
 });
 
 test("a barge-in cuts the sentence but not the run it handed off", async () => {

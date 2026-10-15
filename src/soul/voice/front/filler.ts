@@ -64,3 +64,8 @@ export function fillerLine(kind: FillerKind, locale: string): string {
   void kind;
   return cueLang(locale) === "zh" ? "我去想想。" : "Let me think about that.";
 }
+
+/** What the front says when its reply only called a run back. True whether or not the run was still out. */
+export function ackLine(locale: string): string {
+  return cueLang(locale) === "zh" ? "好的。" : "Okay.";
+}
