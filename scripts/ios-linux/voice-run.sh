@@ -3,6 +3,7 @@
 # (docs/platform/560, 静默语音测试).
 #
 #   scripts/ios-linux/voice-run.sh <script> [timeout-seconds]
+#   VAD=energy scripts/ios-linux/voice-run.sh <script>   # docs/136 A/B: the old dB line
 #   scripts/ios-linux/voice-run.sh pull <run> <device-dir>   # pull a run again
 #
 # <script> is a name under tests/fixtures/voice-scripts/ without .json. Needs:
@@ -46,7 +47,7 @@ SCRIPT=${1:?usage: voice-run.sh <script> [timeout-seconds]}
 TIMEOUT=${2:-900}
 [[ -f "$REPO/tests/fixtures/voice-scripts/$SCRIPT.json" ]] || { echo "no script $SCRIPT" >&2; exit 2; }
 
-sent=$(curl -fsS -X POST "$BASE/run?script=$SCRIPT&timeout=$TIMEOUT")
+sent=$(curl -fsS -X POST "$BASE/run?script=$SCRIPT&timeout=$TIMEOUT${VAD:+&vad=$VAD}")
 id=$(field "$sent" id)
 echo "sent $SCRIPT ($id)"
 

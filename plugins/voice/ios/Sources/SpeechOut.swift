@@ -96,6 +96,11 @@ struct TurnVerdict {
     /// For a `.stop`: the token `userTurnEnded(_:)` has to hand back to lift
     /// the refusal of new turns this stop began. Zero otherwise.
     let refusal: UInt64
+    /// The machine's own stamp on the step that announced this. For a
+    /// `.pause`, the token `completeTurn(pausedAtMs:atMs:)` hands back.
+    let atMs: Double
+    /// For an `.end`: Smart Turn ended it, not the hangover.
+    let completed: Bool
 }
 
 /// One sentence's row in the measurement record. Written on the completion
@@ -723,16 +728,35 @@ final class SpeechOut {
     /// the audio thread; the step itself runs on `queue`, with the stamp the tap
     /// took, so the machine's clock is the delivery time and not the queue's.
     /// A buffer that arrives with no detector installed is dropped.
-    func stepTurn(db: Double, atMs: Double, audioMs: Double) {
+    ///
+    /// On the neural path (NeuralFront.swift) this is one VAD frame rather
+    /// than one buffer, with the frame's probability in `speech`.
+    func stepTurn(db: Double, atMs: Double, audioMs: Double, speech: Double = .nan) {
         queue.async { [weak self] in
-            self?.stepLocked(db: db, atMs: atMs, audioMs: audioMs)
+            self?.stepLocked(db: db, atMs: atMs, audioMs: audioMs, speech: speech)
         }
     }
 
-    private func stepLocked(db: Double, atMs: Double, audioMs: Double) {
+    /// Smart Turn said the user is done, about the pause the machine announced
+    /// at `pausedAtMs`. Ends the turn if that pause still stands; a verdict the
+    /// user has already talked over changes nothing.
+    func completeTurn(pausedAtMs: Double, atMs: Double) {
+        queue.async { [weak self] in
+            guard let self = self,
+                let event = self.turn?.complete(pausedAtMs: pausedAtMs, atMs: atMs)
+            else { return }
+            self.actLocked(event, atMs: atMs, audioMs: self.lastAudioMs, completed: true)
+        }
+    }
+
+    private func stepLocked(db: Double, atMs: Double, audioMs: Double, speech: Double = .nan) {
         lastStepMs = atMs
         lastAudioMs = audioMs
-        guard let event = turn?.step(db: db, atMs: atMs) else { return }
+        guard let event = turn?.step(db: db, atMs: atMs, speech: speech) else { return }
+        actLocked(event, atMs: atMs, audioMs: audioMs, completed: false)
+    }
+
+    private func actLocked(_ event: VoiceTurnEvent, atMs: Double, audioMs: Double, completed: Bool) {
         var cut: SpeechPosition? = nil
         var token: UInt64 = 0
         switch event {
@@ -757,10 +781,13 @@ final class SpeechOut {
             token = refusal
             ducked = false
             applyVolumeLocked()
-        case .end:
+        case .end, .pause:
             break
         }
-        onVerdict?(TurnVerdict(event: event, cut: cut, audioMs: audioMs, refusal: token))
+        onVerdict?(
+            TurnVerdict(
+                event: event, cut: cut, audioMs: audioMs, refusal: token, atMs: atMs,
+                completed: completed))
         if let cut = cut {
             onSpoken?(cut.utterance, "interrupted")
         }

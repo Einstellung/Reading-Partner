@@ -398,7 +398,7 @@ class VoicePlugin: Plugin {
                 do {
                     // Whatever stack is standing was built for the microphone.
                     AudioFront.shared.close()
-                    try VoiceHarness.shared.arm(dir: dir)
+                    try VoiceHarness.shared.arm(dir: dir, vad: args.vad)
                     invoke.resolve(HarnessAck(dir: dir, t: HarnessClock.nowMs()))
                 } catch {
                     invoke.reject(DictationError.describe(error))

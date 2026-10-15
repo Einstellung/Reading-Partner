@@ -118,6 +118,28 @@ export interface TurnLatency {
   /** Times the speaker ran dry inside a sentence, and the silence that cost. */
   dry: number;
   drySilentMs: number;
+  /**
+   * How the turn was called over (docs/136). `endBy` is the native `turn-end`
+   * row's: `smart-turn`, `fallback` (Smart Turn kept it open until the
+   * hangover) or `hangover` (the energy path). `pauseMs` is user stopped → the
+   * VAD's first pause; `smartTurns` every verdict from there to the turn end;
+   * `earlyEnds` turn ends while the clip was still speaking, i.e. the user cut
+   * off mid-sentence.
+   */
+  endBy?: string;
+  pauseMs?: number | null;
+  smartTurns: SmartTurnVerdict[];
+  earlyEnds: number;
+}
+
+export interface SmartTurnVerdict {
+  /** Null when the model was not loaded or failed. */
+  probability: number | null;
+  complete: boolean;
+  /** The prediction alone. */
+  ms: number;
+  /** User stopped → the verdict landed. */
+  atMs: number;
 }
 
 /** One handed-off task: delegate sent → came back → the front says so → heard. */
@@ -179,7 +201,28 @@ export function turnsOf(raw: Row[]): TurnLatency[] {
       tools: [],
       dry: 0,
       drySilentMs: 0,
+      smartTurns: [],
+      earlyEnds: 0,
     };
+    const endsAt = at.turnEnd ?? until;
+    const endRow = first(rows, end.t, until, (r) => r.src === "native" && r.ev === "turn-end");
+    if (typeof endRow?.by === "string") turn.endBy = endRow.by;
+    const pause = first(rows, end.t, endsAt + 1, (r) => r.src === "native" && r.ev === "vad-pause");
+    if (pause || turn.endBy) turn.pauseMs = pause ? pause.t - end.t : null;
+    for (const r of rows) {
+      if (r.src !== "native" || r.ev !== "smart-turn" || r.t < end.t || r.t > endsAt) continue;
+      turn.smartTurns.push({
+        probability: typeof r.probability === "number" ? r.probability : null,
+        complete: r.complete === true,
+        ms: typeof r.ms === "number" ? r.ms : 0,
+        atMs: r.t - end.t,
+      });
+    }
+    if (start) {
+      turn.earlyEnds = rows.filter(
+        (r) => r.src === "native" && r.ev === "turn-end" && r.t >= start.t && r.t < end.t,
+      ).length;
+    }
     const inTurn = (r: Row) => r.t >= end.t && r.t < until;
     for (const r of rows) {
       if (!inTurn(r) || r.src !== "native") continue;
@@ -325,12 +368,34 @@ export function formatReport(turns: TurnLatency[], tasks: TaskLatency[] = []): s
     const handed =
       t.delegateMs !== undefined ? `  delegate ${fmt(t.delegateMs)} filler ${fmt(t.fillerMs)}${t.cue ? " (cue)" : ""}` : "";
     const dry = t.dry ? `  dry ${t.dry}x ${fmt(t.drySilentMs)}ms` : "";
-    lines.push(`${String(i).padStart(4)}  ${t.expect.padEnd(9)} ${fmt(t.totalMs).padStart(6)}  ${t.clip} ${t.text}${extra}${tools}${handed}${dry}`);
+    const verdicts = t.smartTurns
+      .map((v) => `${v.probability === null ? "n/a" : v.probability.toFixed(2)}${v.complete ? "!" : ""}@${fmt(v.atMs)}`)
+      .join(",");
+    const ended =
+      t.endBy !== undefined
+        ? `  end ${t.endBy} ${fmt(t.at.turnEnd !== undefined ? t.at.turnEnd - t.speechEnd : null)}${verdicts ? ` st ${verdicts}` : ""}`
+        : "";
+    const early = t.earlyEnds ? `  CUT EARLY ${t.earlyEnds}x` : "";
+    lines.push(
+      `${String(i).padStart(4)}  ${t.expect.padEnd(9)} ${fmt(t.totalMs).padStart(6)}  ${t.clip} ${t.text}${extra}${tools}${handed}${dry}${ended}${early}`,
+    );
   });
   lines.push("");
   lines.push("segment                                  n     p50     p90");
   for (const s of summarize(turns)) {
     lines.push(`${s.segment.padEnd(38)} ${String(s.n).padStart(3)} ${fmt(s.p50).padStart(7)} ${fmt(s.p90).padStart(7)}`);
+  }
+  const judged = turns.filter((t) => t.endBy !== undefined);
+  if (judged.length) {
+    const by = (v: string) => judged.filter((t) => t.endBy === v).length;
+    lines.push(
+      `${"turn end smart-turn/fallback/hangover".padEnd(38)} ${String(judged.length).padStart(3)}   ${by("smart-turn")} / ${by("fallback")} / ${by("hangover")}`,
+    );
+    lines.push(statLine("speechEnd→vadPause", judged.map((t) => t.pauseMs)));
+    const ran = judged.flatMap((t) => t.smartTurns.filter((v) => v.probability !== null));
+    lines.push(statLine("smart turn model ms", ran.map((v) => v.ms)));
+    const early = turns.reduce((n, t) => n + t.earlyEnds, 0);
+    lines.push(`${"turn ends inside the clip (cut off)".padEnd(38)} ${String(early).padStart(3)}`);
   }
   const handed = turns.filter((t) => t.delegateMs !== undefined);
   if (handed.length) {

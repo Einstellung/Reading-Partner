@@ -184,6 +184,10 @@ final class ConversationRun {
     /// Where the most recent duck fell on the audio timeline. A turn's window
     /// opens there, not at the stop that confirms it 300 ms later.
     private var lastDuckMs: Double = 0
+    /// The neural VAD and Smart Turn (NeuralFront.swift), or nil on the energy
+    /// path. Set before the microphone opens and never cleared, so the tap
+    /// reads it without a lock.
+    private var neural: NeuralFront?
 
     // MARK: Lifecycle
 
@@ -217,6 +221,9 @@ final class ConversationRun {
     /// Brings the recogniser up first and opens the microphone last, the turn
     /// probe's order: a call has no press to lose the head of, and a buffer that
     /// arrives before the converter is there is dropped rather than held.
+    ///
+    /// The VAD is the neural one unless an armed bench asked for `energy`
+    /// (docs/136's A/B, `VAD=energy scripts/ios-linux/voice-run.sh`).
     func start(locale requested: String?, contextualStrings: [String]) async throws {
         NSLog(
             "RP-CALL start locale=%@ contextualStrings=%d", requested ?? "auto",
@@ -259,6 +266,26 @@ final class ConversationRun {
             throw DictationError("The recognizer would not start: \(DictationError.describe(error))")
         }
 
+        // Before the microphone opens: the tap reads `neural` from its first
+        // buffer. A VAD that will not load leaves the call on the energy path.
+        var turnConfig = TurnDetectConfig()
+        if VoiceHarness.shared.vad != "energy" {
+            do {
+                let made = try NeuralFront { db, atMs, audioMs, speech in
+                    SpeechOut.shared.stepTurn(db: db, atMs: atMs, audioMs: audioMs, speech: speech)
+                }
+                made.loadSmartTurn()
+                neural = made
+                turnConfig = .neural
+            } catch {
+                NSLog("RP-CALL the VAD would not load: %@", DictationError.describe(error))
+            }
+        }
+        let vadKind = neural == nil ? "energy" : "neural"
+        NSLog("RP-CALL vad=%@", vadKind)
+        VoiceHarness.shared.log(
+            "vad", ["kind": vadKind, "pauseMs": turnConfig.pauseMs ?? -1, "hangoverMs": turnConfig.hangoverMs])
+
         observe()
         let front = try AudioFront.shared.open(
             pressedAt: CFAbsoluteTimeGetCurrent(), timing: TimingLog(), needsPlayer: true
@@ -284,7 +311,7 @@ final class ConversationRun {
         // player. Defaults throughout; the immunity window is live from the
         // next `speak_begin`.
         SpeechOut.shared.setConversation(
-            VoiceTurn(),
+            VoiceTurn(config: turnConfig),
             verdict: { [weak self] verdict in self?.verdict(verdict) },
             spoken: { [weak self] utterance, reason in
                 self?.spoken(utterance: utterance, reason: reason)
@@ -479,7 +506,11 @@ final class ConversationRun {
         // The end of this buffer on the analyzer's timeline, which is what a
         // result's range is measured on.
         let audioMs = tapSampleRate > 0 ? Double(framesFed) / tapSampleRate * 1000 : 0
-        SpeechOut.shared.stepTurn(db: db, atMs: now * 1000, audioMs: audioMs)
+        if let neural = neural {
+            neural.push(buffer, db: db, atMs: now * 1000, audioMs: audioMs)
+        } else {
+            SpeechOut.shared.stepTurn(db: db, atMs: now * 1000, audioMs: audioMs)
+        }
 
         guard now - lastLevelAt >= Self.levelInterval else { return }
         lastLevelAt = now
@@ -579,7 +610,8 @@ final class ConversationRun {
             open = window
             stateLock.unlock()
             let number = window.number
-            VoiceHarness.shared.log("turn-end", ["turn": number, "silentMs": silentMs])
+            let by = verdict.completed ? "smart-turn" : neural == nil ? "hangover" : "fallback"
+            VoiceHarness.shared.log("turn-end", ["turn": number, "silentMs": silentMs, "by": by])
             Task { [weak self] in
                 guard let self = self else { return }
                 await self.forceFinal()
@@ -590,6 +622,34 @@ final class ConversationRun {
                 }
                 self.stateLock.unlock()
                 if let settled = settled { self.deliver(settled) }
+            }
+
+        case .pause(let silentMs):
+            // Ask Smart Turn about the turn so far. A yes goes back to the
+            // machine with this pause's stamp, which ends the turn only if the
+            // user has not spoken since; a no leaves it to the fallback.
+            stateLock.lock()
+            let window = open
+            stateLock.unlock()
+            guard let window = window, let neural = neural else { return }
+            let number = window.number
+            let pausedAtMs = verdict.atMs
+            VoiceHarness.shared.log("vad-pause", ["turn": number, "silentMs": silentMs])
+            neural.judgeTurn(fromAudioMs: window.startMs) { judged in
+                let complete = (judged.probability ?? 0) > SmartTurn.threshold
+                NSLog(
+                    "RP-CALL smart turn %d p=%.2f %.0fms over %.0fms of audio", number,
+                    judged.probability ?? -1, judged.ms, judged.audioMs)
+                var row: [String: Any] = [
+                    "turn": number, "complete": complete, "ms": judged.ms,
+                    "audioMs": judged.audioMs, "silentMs": silentMs,
+                ]
+                if let probability = judged.probability { row["probability"] = probability }
+                VoiceHarness.shared.log("smart-turn", row)
+                if complete {
+                    SpeechOut.shared.completeTurn(
+                        pausedAtMs: pausedAtMs, atMs: CFAbsoluteTimeGetCurrent() * 1000)
+                }
             }
         }
     }

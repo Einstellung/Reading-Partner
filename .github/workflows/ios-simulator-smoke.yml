@@ -68,6 +68,11 @@ jobs:
       - name: Copy pdfium.wasm
         run: bun run wasm
 
+      # The CoreML voice models (docs/136): pinned, sha256-checked, bundled by
+      # src-tauri/tauri.ios.conf.json. The build fails without them.
+      - name: Fetch the voice models
+        run: bun run voice-models
+
       # src-tauri/gen/apple is gitignored; generate the Xcode project fresh.
       # --ci answers prompts with defaults. First run installs xcodegen (and
       # cocoapods if missing) via Homebrew.
@@ -108,6 +113,13 @@ jobs:
             echo "::error::no .app produced"; find src-tauri/gen/apple/build -maxdepth 3 -name '*.app' || true; exit 1
           fi
           echo "app: $APP"
+          # Tauri puts bundle.resources under assets/ on iOS, where
+          # NeuralFront.swift looks for the models.
+          for m in silero-vad smart-turn; do
+            [ -f "$APP/assets/voice-models/$m.mlmodelc/model.mil" ] \
+              || { echo "::error::$m.mlmodelc is not in the app"; find "$APP" -maxdepth 3 | head -50; exit 1; }
+          done
+          ls -R "$APP/assets/voice-models" | head -20
 
           UDID=$(xcrun simctl list devices available -j \
             | jq -r '.devices | to_entries[] | .value[] | select(.name|test("iPad")) | .udid' | head -1)

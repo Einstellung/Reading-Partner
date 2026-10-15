@@ -54,7 +54,14 @@ const DEADLINE_MARGIN_S = 15;
 // A call that has not opened by then is not going to.
 const CALL_UP_MS = 20_000;
 
-export async function runVoiceHarness(scriptName: string, id: string, timeoutSec?: number): Promise<void> {
+// `vad` is docs/136's A/B: "energy" runs the call on the old dB line, anything
+// else (or nothing) on the neural VAD and Smart Turn.
+export async function runVoiceHarness(
+  scriptName: string,
+  id: string,
+  timeoutSec?: number,
+  vad?: string,
+): Promise<void> {
   const deadlineMs = timeoutSec && timeoutSec > 2 * DEADLINE_MARGIN_S ? (timeoutSec - DEADLINE_MARGIN_S) * 1000 : undefined;
   // Throws, and so reports `failed` under this id, when another run holds the gate.
   const signal = gate.begin(id, deadlineMs);
@@ -74,7 +81,7 @@ export async function runVoiceHarness(scriptName: string, id: string, timeoutSec
     await hangUp(host, sleep);
 
     run = `${script.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-    armed = await invoke<{ dir: string }>(CMD, { op: "arm", run });
+    armed = await invoke<{ dir: string }>(CMD, { op: "arm", run, vad });
 
     // Twenty round trips; the analysis keeps the tightest.
     for (let i = 0; i < 20; i++) {
@@ -137,8 +144,8 @@ export async function runVoiceHarness(scriptName: string, id: string, timeoutSec
 }
 
 if (import.meta.hot) {
-  import.meta.hot.on("voice-harness:run", (d: { script: string; id: string; timeoutSec?: number }) => {
-    void runVoiceHarness(d.script, d.id, d.timeoutSec).catch((e: unknown) => report(d.id, endState(e)));
+  import.meta.hot.on("voice-harness:run", (d: { script: string; id: string; timeoutSec?: number; vad?: string }) => {
+    void runVoiceHarness(d.script, d.id, d.timeoutSec, d.vad).catch((e: unknown) => report(d.id, endState(e)));
   });
   import.meta.hot.on("voice-harness:cancel", (d: { id: string }) => {
     gate.cancel(d.id, "The run was cancelled from the Linux side.");

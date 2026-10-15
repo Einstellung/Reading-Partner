@@ -35,6 +35,9 @@ struct HarnessArgs: Decodable {
     let dir: String?
     let path: String?
     let name: String?
+    /// For `arm`: the VAD the next call runs, `energy` or `neural`, over
+    /// whatever the webview asked for. Absent leaves it to the webview.
+    let vad: String?
 }
 
 struct HarnessAck: Encodable {
@@ -167,7 +170,16 @@ final class VoiceHarness {
 
     // MARK: - Arm and disarm
 
-    func arm(dir path: String) throws {
+    /// The VAD an armed bench asked for, nil when it did not or when nothing
+    /// is armed.
+    var vad: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return dir == nil ? nil : armedVad
+    }
+    private var armedVad: String?
+
+    func arm(dir path: String, vad: String? = nil) throws {
         let url = URL(fileURLWithPath: path, isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         let logPath = url.appendingPathComponent("native.jsonl").path
@@ -186,10 +198,11 @@ final class VoiceHarness {
         }
         lock.lock()
         dir = url
+        armedVad = vad
         lock.unlock()
         // Read again when the stack is built: the category changes both.
         outputLatencyMs = (session.outputLatency + session.ioBufferDuration) * 1000
-        log("armed", ["dir": url.path])
+        log("armed", ["dir": url.path, "vad": vad ?? "default"])
     }
 
     func disarm() -> String? {

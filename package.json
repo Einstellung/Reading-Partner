@@ -9,6 +9,7 @@
     "dev": "vite",
     "dev:capped": "bash scripts/dev.sh",
     "wasm": "bash scripts/copy-pdfium-wasm.sh",
+    "voice-models": "bash scripts/fetch-voice-models.sh",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
     "build": "bun run typecheck && vite build",
     "preview": "vite preview",
