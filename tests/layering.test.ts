@@ -373,6 +373,7 @@ const LAYER: Record<string, Layer> = {
 
   "main.tsx": "entry",
   "dev-faux.ts": "entry",
+  "dev-reload.ts": "entry",
   smoke: "entry",
 };
 
