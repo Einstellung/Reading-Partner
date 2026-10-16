@@ -51,6 +51,7 @@ import {
 import { INDICATOR_FADE_AFTER_MS, thumbMetrics } from "./scroll-indicator";
 import { IDLE, LONG_PRESS_MS, pressStep, type PressEvent, type PressState } from "./press";
 import type { PagedGestureCtx } from "./context";
+import { notePutAway } from "./put-away";
 
 // Where nothing under the router reads a hold (ctx.textSelect is null: the
 // phone's paged column, which runs its own press reducer), a finger that dwells
@@ -712,10 +713,14 @@ export function attachTouchRouter(
     // whether the engine may watch it move at all.
     const plan = planPointer(tool, kind);
     // A selection is up from an earlier hold: any press puts it away (docs/82).
-    // A finger's does nothing else; a stylus or a mouse goes on as it would.
+    // A finger's does nothing else; a stylus or a mouse goes on as it would,
+    // the press marked for a view that reads it (put-away.ts).
     const ts = ctx.current.textSelect;
     const putsAway = selecting === null && ts !== null && ts.active();
-    if (putsAway) ts.clear();
+    if (putsAway) {
+      ts.clear();
+      notePutAway(e);
+    }
     if (!routesAsContact(tool, kind)) {
       if (kind === "pen") onPenDown();
       return;

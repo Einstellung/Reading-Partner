@@ -69,7 +69,7 @@ import PrepPanel from "./ui/components/reader/PrepPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
 import { escapeTarget } from "./ui/components/reader/escape";
-import { readerTool } from "./ui/components/reader/reader-tool";
+import { mouseSelectsText, readerTool } from "./ui/components/reader/reader-tool";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/call/CallBubble";
 import CallView from "./ui/components/chat/call/CallView";
@@ -1579,6 +1579,7 @@ export default function App() {
               onSetAnnotationPopup={onSetAnnotationPopup}
               onQuoteHighlightChange={setQuoteHlActive}
               onSelection={onFingerSelection}
+              mouseSelects={mouseSelectsText(readerMode)}
             />
           )}
           {embedDoc && fingerSel && (
