@@ -18,11 +18,13 @@
 
 3. 待验证：用户登录 X 后，停手记录（`info-topic-search-state.json` 里的 `halt.kind=signed-out`）会不会自己清掉，夜跑读 X 前的会话检查（`runs-live.ts` 的 `xSessionState`）是否据此放行。代码里只看到「不带停手的读取会清掉记录」，没有验证登录一次后的行为。
 
-4. 查询梯子、全景窗口 1 年、按需读深度的实现在分支 `wip/topic-search-ladder`（若已合进 main 则以 main 为准）。验收点：
+4. 查询梯子、全景窗口 365 天、按需读深度已合进 main（150fd784）。验收点：
    - 5 条 empty 的 arXiv 查询在梯子下能命中。
-   - 源健康区分四种：直接命中、放宽后命中、放宽到底仍空、请求失败。
-   - 读深度申请每个主题第一次 run 最多 5 篇、每天增量最多 2 篇（命名常量）。docs/info/88 写成「每个主题」，实现要说明是单次 run 还是每晚合计。
+   - 源健康区分 `direct`、`widened`、`exhausted`、`rate_limited`、`failed`。
+   - 读深申请每个主题第一次 run 最多 5 篇、每天增量最多 2 篇（`DEEP_READS`），上限是每次 run 的。
    - 每条结果带 `depth`，没读到的部分写进 `unknown`。
+
+   验收只剩两件：用真实的第一次 run 或夜跑检查那 5 条原本为空的 arXiv 查询能命中；信息源页还没显示梯子结果（要改 `SourcesPage.tsx`）。
 
 5. 统一账户位置见 [accounts](./accounts.md)，不在这份里重复。
 
