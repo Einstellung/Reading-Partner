@@ -28,6 +28,14 @@ export function rackOmits(touchInput: boolean, mode: ReaderMode = "book"): reado
   return omit;
 }
 
+// A brief has no AI pen, so on a desktop the mouse with no tool in hand selects
+// words, and the selection's Ask takes the passage to Lumen as a finger's does
+// (epub/paged/mouse-select.ts). A book keeps the AI pen as the mouse's way to
+// ask, and its mouse drag turns the page.
+export function mouseSelectsText(mode: ReaderMode): boolean {
+  return mode === "issue";
+}
+
 export function hasTouchInput(win: Pick<Window, "matchMedia"> | undefined): boolean {
   return win?.matchMedia?.("(any-pointer: coarse)").matches ?? false;
 }

@@ -11,7 +11,9 @@
 //
 // A finger marks only by a hold (docs/82): the touch router times it and hands
 // this layer the words (textSelect), which stay selected after the lift until
-// the shell saves them as a mark or the next press puts them away.
+// the shell saves them as a mark or the next press puts them away. Where the
+// shell lets it (a brief, mouse-select.ts), a mouse with no tool drags out the
+// same selection.
 //
 // Every coordinate that leaves this file for the shell is a viewport
 // coordinate, and every coordinate inside it is a page coordinate
@@ -26,6 +28,7 @@ import type {
   Tool,
 } from "../../../platform/app/reader-contract";
 import type { GestureTextSelect } from "../../engine/gesture/context";
+import { wasPutAway } from "../../engine/gesture/put-away";
 import { pointerKindOf, routePointer, toolKindOf, type ToolKind } from "../../engine/gesture/touch-routing";
 import {
   DEFAULT_MARK_COLOR,
@@ -37,6 +40,7 @@ import {
 import { caretAtPoint, rangeBetween, type CaretPoint } from "../caret";
 import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "../mark-draw";
 import type { PageCard } from "./page-card";
+import { mousePress, mouseSelectBegins } from "./mouse-select";
 import { PAGE_HEIGHT, PAGE_WIDTH } from "../page-geometry";
 import {
   HIT_PAD,
@@ -121,6 +125,16 @@ type Drag =
       card: PageCard;
       color: string;
       points: PagePoint[];
+    }
+  | {
+      // A mouse press the selection took (mouse-select.ts): it selects once it moves.
+      kind: "mouse";
+      pointerId: number;
+      x: number;
+      y: number;
+      selects: boolean;
+      swallowsClick: boolean;
+      began: boolean;
     };
 
 export interface MarkLayer {
@@ -130,6 +144,8 @@ export interface MarkLayer {
   unsetAnnotations(ids: readonly string[]): void;
   selectAnnotations(ids: readonly string[]): void;
   setTool(tool?: Tool): void;
+  /** Whether a mouse with no tool selects words (a brief, mouse-select.ts). */
+  setMouseSelects(on: boolean): void;
   /** Paint one card, which is showing this page. */
   paint(card: PageCard, pageIndex: number): void;
   /** The page a mark sits on, or null when this book has no such mark. */
@@ -139,6 +155,7 @@ export interface MarkLayer {
   isDrawing(): boolean;
   pointerDown(e: PointerEvent): boolean;
   pointerMove(e: PointerEvent): void;
+  /** False hands the up back to the pane as a click. */
   pointerUp(e: PointerEvent): boolean;
   pointerCancel(): void;
   /** A press that was not a drag: open the mark under it, if there is one. */
@@ -156,6 +173,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
   const selected = new Set<string>();
   let toolId: string | null = null;
   let toolColor = DEFAULT_MARK_COLOR;
+  let mouseSelects = false;
   let drag: Drag | null = null;
   let sel: Selecting | null = null;
   // Between the hold and the lift.
@@ -289,7 +307,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
   }
 
   function paintDraft(): void {
-    if (!drag) return;
+    if (!drag || drag.kind === "mouse") return;
     const layer = draftLayer(drag.card);
     if (!layer) return;
     layer.replaceChildren();
@@ -390,6 +408,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
   function pointerDown(e: PointerEvent): boolean {
     if (drag) return false;
     const tool = activeToolKind();
+    if (tool === "none") return mouseDown(e);
     if (tool !== "annotate") return false;
     if (routePointer(tool, pointerKindOf(e.pointerType)) !== "draw") return false;
     const card = host.cardAt(e.clientX, e.clientY);
@@ -414,8 +433,33 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     return true;
   }
 
+  function mouseDown(e: PointerEvent): boolean {
+    const press = mousePress({
+      enabled: mouseSelects,
+      tool: "none",
+      pointer: pointerKindOf(e.pointerType),
+      putAway: wasPutAway(e),
+      onWords: mouseSelects && wordsAt(e.clientX, e.clientY),
+    });
+    if (!press) return false;
+    drag = { kind: "mouse", pointerId: e.pointerId, x: e.clientX, y: e.clientY, ...press, began: false };
+    return true;
+  }
+
   function pointerMove(e: PointerEvent): void {
     if (!drag || drag.pointerId !== e.pointerId) return;
+    if (drag.kind === "mouse") {
+      if (!drag.began) {
+        if (!drag.selects || !mouseSelectBegins(e.clientX - drag.x, e.clientY - drag.y)) return;
+        drag.began = textSelect.begin(drag.x, drag.y);
+        if (!drag.began) {
+          drag.selects = false;
+          return;
+        }
+      }
+      textSelect.extend(e.clientX, e.clientY);
+      return;
+    }
     if (drag.kind === "ink") {
       const p = clampPoint(drag.card.fromViewport({ x: e.clientX, y: e.clientY }));
       if (!shouldAppendInkPoint(drag.points[drag.points.length - 1], p, INK_MIN_STEP)) return;
@@ -433,8 +477,17 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
 
   function pointerUp(e: PointerEvent): boolean {
     const d = drag;
-    if (!d || d.pointerId !== e.pointerId) return false;
+    // A pointer this layer took is spent here even when its stroke was
+    // dropped on the way (a tool change); only an unmoved mouse press is
+    // handed back to the pane as a click.
+    if (!d || d.pointerId !== e.pointerId) return true;
     drag = null;
+    // A press that never moved is a click unless it put a selection away.
+    if (d.kind === "mouse") {
+      if (!d.began) return d.swallowsClick;
+      textSelect.commit();
+      return true;
+    }
     clearDraft(d.card);
     const wrote = d.kind === "ink" ? commitInk(d) : commitText(d);
     // A pen that drew nothing is a press: the mark under it opens, exactly as
@@ -445,7 +498,11 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
 
   function pointerCancel(): void {
     if (!drag) return;
-    clearDraft(drag.card);
+    if (drag.kind === "mouse") {
+      if (drag.began) textSelect.cancel();
+    } else {
+      clearDraft(drag.card);
+    }
     drag = null;
   }
 
@@ -640,6 +697,10 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
       if (activeToolKind() !== "annotate") pointerCancel();
       // Nothing selects under the navigation lock.
       if (activeToolKind() === "navlock") textSelect.clear();
+    },
+    setMouseSelects(on) {
+      mouseSelects = on;
+      if (!on && drag?.kind === "mouse") pointerCancel();
     },
 
     paint,
