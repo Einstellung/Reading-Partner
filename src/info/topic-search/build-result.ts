@@ -158,8 +158,14 @@ export interface BuildResultDeps {
   files: ResultFiles;
   /** The reader's profile statements (docs/soul/48), text only. */
   profile(): Promise<string[]>;
-  /** The output language instruction; "" to let the model follow the material. */
+  /** The output language instruction for what is only compared and extracted; "" to let the model follow the material. */
   language(): Promise<string>;
+  /**
+   * The language of what ends up in the brief book: the write-up and the
+   * questions the ranking raises (book-language.ts, never empty on the real
+   * host). Absent: `language`.
+   */
+  bookLanguage?(): Promise<string>;
   now(): number;
   /** Local date, YYYY-MM-DD. */
   today(): string;
@@ -317,7 +323,11 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
 
   const history = await loadHistory(deps, topic.id);
   const recent = history.filter((r) => r.date >= addDays(today, -HISTORY_DAYS));
-  const [profile, language] = await Promise.all([deps.profile(), deps.language()]);
+  const [profile, language, bookLanguage] = await Promise.all([
+    deps.profile(),
+    deps.language(),
+    deps.bookLanguage ? deps.bookLanguage() : deps.language(),
+  ]);
 
   // arXiv beside X (88 「取材 / arXiv」).
   const arxiv: ArxivFound[] = [];
@@ -338,7 +348,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   let answers = new Map<string, RerankAnswer>();
   let reranked = false;
   if (numbered.length) {
-    const prompt = rerankPrompt(topic, numbered, profile, language);
+    const prompt = rerankPrompt(topic, numbered, profile, bookLanguage);
     try {
       answers = parseRerank(await call({ site: "rerank", ...prompt, signal }), numbered, topic);
       reranked = answers.size > 0;
@@ -545,7 +555,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         registry,
         profile,
         questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })),
-        language,
+        language: bookLanguage,
         earlier: earlierLines(recent),
       },
       deps.model,

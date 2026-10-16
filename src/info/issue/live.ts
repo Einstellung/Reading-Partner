@@ -16,13 +16,13 @@ import { appBox, randomBoxItemId } from "../../box/store";
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { importBook, type ImportMeta } from "../../platform/app/library";
-import { languageInstruction } from "../../platform/app/settings";
 import { addSupplement, type SupplementRef } from "../../platform/app/supplements";
 import { fetchWithRetry, interactiveRetry } from "../../platform/http/throttled-fetch";
 import { bind, type FetchBytes } from "../../workshop/bindery";
 import { buildSectionedEpub } from "../../workshop/bindery/build-article";
 import { infoFetch } from "../../workshop/extract/http";
 import type { RegisteredMaterial } from "../dossier/registry";
+import { bookLocale } from "../topic-search/book-language";
 import { nightEndAt } from "../topic-search/nightly";
 import { loadTopicSearches } from "../topic-search/store";
 import { localDay } from "../topic-search/x-progress";
@@ -82,7 +82,7 @@ const deps: IssueDeps = {
   // The everyday tier, as the result builder writes with (topic-search/build-live.ts).
   writeOpening: ({ system, user }) =>
     callModel("prep", "plan", system, user, { signal: new AbortController().signal, onProgress: () => {} }, { spend: { caller: "info" } }),
-  language: async () => languageInstruction((await resolveModel("prep")).aiLanguage),
+  locale: async () => bookLocale((await resolveModel("prep")).aiLanguage),
   nightEndAt,
   now: () => Date.now(),
   today: () => localDay(Date.now()),

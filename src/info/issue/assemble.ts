@@ -18,6 +18,8 @@
 // imports topic-search's types, never the other way round, and nothing of
 // reading.
 
+import type { Locale } from "../../i18n/locale";
+import { languageInstruction } from "../../platform/app/settings";
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
 import { parseResultFile, type TopicSearchResult } from "../topic-search/result-types";
@@ -142,8 +144,8 @@ export interface IssueDeps {
    * or a throw leaves the program's line alone. Absent: no model is asked.
    */
   writeOpening?(prompt: { system: string; user: string }): Promise<string | null>;
-  /** The reader's language instruction for the model. */
-  language?(): Promise<string>;
+  /** The language the issue is written in (topic-search/book-language.ts); English when absent. */
+  locale?(): Promise<Locale>;
   /** The night's end, epoch ms. */
   nightEndAt(night: string): number;
   now(): number;
@@ -183,9 +185,10 @@ export function supplementCandidates(plan: IssuePlan, results: readonly TopicSea
 export async function assembleIssue(deps: IssueDeps, key: string, date: string, files: readonly string[]): Promise<AssembleOutcome> {
   const shelf = parseShelf(await deps.files.read(INFO_SHELF_FILE));
   const existing = shelf.issues.find((i) => i.key === key);
+  const locale = deps.locale ? await deps.locale() : "en";
   if (existing) {
     // Filed before a crash: the box item may not be there yet; putting it again is a no-op.
-    await deps.putBox(boxItem(existing));
+    await deps.putBox(boxItem(existing, locale));
     return { key, issue: existing, supplements: 0 };
   }
   const results: TopicSearchResult[] = [];
@@ -195,7 +198,7 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
   }
   const plan = planIssue(results, await deps.topics());
   if (!plan) return { key, issue: null, supplements: 0 };
-  const meta = { number: nextIssueNumber(shelf), date };
+  const meta = { number: nextIssueNumber(shelf), date, locale };
   const bytes = await deps.buildEpub(issueEpubInput(plan, meta));
   const { hash } = await deps.importBook(bytes, issueFileName(meta), {
     kind: "issue",
@@ -203,7 +206,7 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
     // The library takes this as the entry's title: a name, not "….epub".
     filename: issueBookName(meta),
   });
-  const opening = await writeOpening(deps, plan, results);
+  const opening = await writeOpening(deps, plan, results, locale);
   let supplements = 0;
   for (const m of supplementCandidates(plan, results)) {
     try {
@@ -227,7 +230,7 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
   // Read again: a volume may have been written meanwhile.
   const latest = parseShelf(await deps.files.read(INFO_SHELF_FILE));
   await deps.files.write(INFO_SHELF_FILE, `${JSON.stringify({ ...latest, issues: [...latest.issues, issue] }, null, 2)}\n`);
-  await deps.putBox(boxItem(issue));
+  await deps.putBox(boxItem(issue, locale));
   return { key, issue, supplements };
 }
 
@@ -236,7 +239,7 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
  * wait in their queue again. A model that fails or is absent leaves the text
  * null: the program's line and the questions are said all the same.
  */
-async function writeOpening(deps: IssueDeps, plan: IssuePlan, results: readonly TopicSearchResult[]): Promise<IssueOpeningRecord> {
+async function writeOpening(deps: IssueDeps, plan: IssuePlan, results: readonly TopicSearchResult[], locale: Locale): Promise<IssueOpeningRecord> {
   const used = results.filter((r) => plan.results.includes(r.id));
   const names = new Map(plan.topics.map((t) => [t.searchId, t.name]));
   const { asked, left } = pickIssueQuestions(used, (id, fallback) => names.get(id) ?? fallback);
@@ -251,8 +254,8 @@ async function writeOpening(deps: IssueDeps, plan: IssuePlan, results: readonly 
   let reply: string | null = null;
   if (deps.writeOpening) {
     try {
-      const language = deps.language ? await deps.language() : "";
-      reply = await deps.writeOpening(openingPrompt(plan, asked, language));
+      // The book's language, so the opening and the book agree (docs/pitfall/647).
+      reply = await deps.writeOpening(openingPrompt(plan, asked, languageInstruction(locale)));
     } catch (e) {
       console.warn("Lumen's opening for the brief could not be written", e);
     }
@@ -260,12 +263,12 @@ async function writeOpening(deps: IssueDeps, plan: IssuePlan, results: readonly 
   return openingRecord(plan, asked, reply);
 }
 
-function boxItem(issue: IssueEntry) {
+function boxItem(issue: IssueEntry, locale: Locale) {
   return {
     id: issue.boxItemId,
     boxId: `issue:${issue.key}`,
     kind: ISSUE_BOX_KIND,
-    cover: issueCoverLine(issue.date, issue.items),
+    cover: issueCoverLine(issue.date, issue.items, locale),
     body: issue.bookId,
     origin: { place: "door" as const, date: issue.date },
   };

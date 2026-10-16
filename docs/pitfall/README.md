@@ -445,7 +445,7 @@
 - [560-durable-turns-send-session-id-to-every-provider](./ai/560-durable-turns-send-session-id-to-every-provider.md) — durable 回合不走 `streamChat`，call-setup 的表管不到；pi-durable 每次请求都带对话的 `sessionId`，pi-ai 按它出 OpenCode 头、亲和头、Codex 的 `session-id` 和 `prompt_cache_key`；要改得在 `durable-models.ts` 的 `appProvider` 里改
 - [563-codex-sse-body-is-zstd](./ai/563-codex-sse-body-is-zstd.md) — Codex 走 SSE 时请求体 zstd 压缩（`content-encoding: zstd`），假 fetch 直接 `JSON.parse` 会抛，被当成 provider 错误；先 `Bun.zstdDecompressSync`
 - [568-codex-web-search-has-no-citations](./ai/568-codex-web-search-has-no-citations.md) — Codex 端点的 hosted `web_search` 不给 url_citation、completed 的 output 为空，来源只有搜索候选；让模型写行内链接，从回答里抽出来排在前面
-- [647-an-auto-language-prompt-with-no-reader-words-picks-any-language](./ai/647-an-auto-language-prompt-with-no-reader-words-picks-any-language.md) — 语言设成 auto 时 `languageInstruction` 返回空串，主题搜索的结果和卢明开场话没有语言指令：同样的英文材料一次写成英文书、一次写成中文书（夹着英文的程序标签），开场话另挑一次。开场话改成跟这期条目的语言走；书在 auto 下用什么语言待定
+- [647-an-auto-language-prompt-with-no-reader-words-picks-any-language](./ai/647-an-auto-language-prompt-with-no-reader-words-picks-any-language.md) — 语言设成 auto 时 `languageInstruction` 返回空串，主题搜索的结果和卢明开场话没有语言指令：同样的英文材料一次写成英文书、一次写成中文书（夹着英文的程序标签），开场话另挑一次。10-16 定：书、开场话、程序标签统一用界面语言（设置具体语言优先，auto 取系统语言），始终带明确的语言指令
 
 ## 开发环境
 

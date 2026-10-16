@@ -137,7 +137,7 @@ test("the plan keeps MAIN_POSTS entries for post items when papers outscore them
 });
 
 test("the document: contents lines, entries, Notes with separators, the Annex; the cover line", () => {
-  const input = issueEpubInput(planIssue(nightResults(), TOPICS)!, { number: 3, date: "2026-10-15" });
+  const input = issueEpubInput(planIssue(nightResults(), TOPICS)!, { number: 3, date: "2026-10-15", locale: "en" });
   expect(input.sections.map((s) => s.heading)).toEqual(["Contents", "A tool for E1 at 90", "A tool for E1 at 70", "Notes", "Annex: AI for engineering"]);
   const contents = input.sections[0].html;
   expect(contents).toContain('<a href="section-002.xhtml">AI for science / Proteins</a>: Conclusion of E1.');
@@ -150,12 +150,12 @@ test("the document: contents lines, entries, Notes with separators, the Annex; t
   expect(entry).toContain("<strong>Post and original differ.</strong>");
   expect(input.sections[3].html.split("<p>* * *</p>").length).toBe(3);
   expect(input.sections[4].html).toContain("see [1] and [2].");
-  expect(input.title).toBe("Daily Brief No. 3, Thursday, 15 October 2026");
-  expect(issueBookName({ number: 7, date: "2026-10-15" })).toBe("Daily Brief No. 7 · Oct 15");
+  expect(input.title).toBe("Daily Brief No. 3, Thursday, October 15, 2026");
+  expect(issueBookName({ number: 7, date: "2026-10-15", locale: "en" })).toBe("Daily Brief No. 7 · Oct 15");
   expect(input.cover?.svg).toContain("No. 3");
-  expect(longDate("2026-10-15")).toBe("Thursday, 15 October 2026");
-  expect(issueCoverLine("2026-10-15", 4)).toBe("Oct 15 brief · 4 items");
-  expect(issueCoverLine("2026-10-05", 1)).toBe("Oct 5 brief · 1 item");
+  expect(longDate("2026-10-15", "en")).toBe("Thursday, October 15, 2026");
+  expect(issueCoverLine("2026-10-15", 4, "en")).toBe("Oct 15 brief · 4 items");
+  expect(issueCoverLine("2026-10-05", 1, "en")).toBe("Oct 5 brief · 1 item");
 });
 
 test("a night is due when every active search's run closed, or at its end with what closed", () => {
