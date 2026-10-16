@@ -9,6 +9,7 @@
 
 import type { InfoItem } from "../sources/item";
 import { normalizeArxivId } from "../sources/plugins/arxiv-client";
+import type { ArxivLadder } from "./arxiv-ladder";
 import { xEngagement } from "../rank/engagement";
 import { arxivEventKey, eventKeyOfUrl, mergeIntoEvents, xEventKey, type EventCluster, type EventMember } from "../rank/events";
 import { weightedRrf, type Stream } from "../rank/fusion";
@@ -73,6 +74,8 @@ export interface ArxivFound {
   query: string;
   items: InfoItem[];
   error: string | null;
+  /** How the query's ladder went (arxiv-ladder.ts), for the source health. */
+  ladder?: ArxivLadder;
 }
 
 /** "q1|x", "q1|arxiv": a (query, source) stream. */

@@ -10,15 +10,24 @@
 // second answer fails too. The fallback has no model sentence at all: the
 // page shows the topic's name, a line that the write-up did not come out, and
 // each item's title, facts line and links, all of which the file already has.
+//
+// How much of a paper was read is said per item, and the sentences may only
+// stand on that. The first call may instead ask to read some papers in full
+// (`deeper`): the program reads up to the run's cap, refuses the rest saying the
+// reads are used up, and asks for the write-up again with the whole papers in.
+// That round happens once and is not one of the two tries at the write-up.
 
-import type { MaterialRegistry } from "../dossier/registry";
+import type { MaterialRegistry, RegisteredMaterial } from "../dossier/registry";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE, type TopicModel } from "./model-io";
 import { topicBlock } from "./rank-pool";
-import type { ResultFacts, ResultRunKind, TopicSearchResultItem } from "./result-types";
+import type { PaperDepth, ResultFacts, ResultRunKind, TopicSearchResultItem } from "./result-types";
 import type { TopicSearch } from "./types";
+import { PAPER_FULL_CHARS } from "./verify";
 
 /** Characters of an item's materials the write-up sees. */
 const ITEM_MATERIAL_CHARS = 2400;
+/** Characters of an item's materials the write-up sees once its paper was read in full: the whole read, the abstract beside it. */
+const ITEM_FULL_CHARS = PAPER_FULL_CHARS + 4000;
 
 /** One item's entry as the model wrote it. */
 export interface WrittenItem {
@@ -47,6 +56,46 @@ export interface Written {
   repeats: Set<string>;
 }
 
+/** The deeper reads the write-up may ask for (88 「看原文」). */
+export interface DeeperReads {
+  /** Papers this run may still read in full. */
+  left: number;
+  /** The run's cap, for the refusal. */
+  cap: number;
+  /** Read item E<n>'s paper in full; the item's materials and facts change in place. */
+  read(itemId: string, signal: AbortSignal): Promise<{ ok: true } | { ok: false; reason: string }>;
+}
+
+/** What came of the deeper reads the write-up asked for, by item. */
+export interface DeeperReport {
+  read: string[];
+  failed: string[];
+  refused: string[];
+}
+
+/** The arXiv material of an item that is not yet read in full; what a deeper read reads. */
+export function deepenableMaterial(item: TopicSearchResultItem, registry: MaterialRegistry): RegisteredMaterial | null {
+  if (item.continuing) return null;
+  for (const id of item.materials) {
+    const m = registry.get(id);
+    if (m?.reader === "arxiv" && typeof m.facts.arxivId === "string" && m.facts.depth !== "full") return m;
+  }
+  return null;
+}
+
+/** How much of an item's paper was read; null for an item with no paper. */
+export function paperDepth(item: TopicSearchResultItem, registry: MaterialRegistry): PaperDepth | null {
+  const depths = item.materials.map((id) => registry.get(id)).filter((m) => m?.reader === "arxiv").map((m) => m!.facts.depth);
+  for (const d of ["full", "head", "abstract"] as const) if (depths.includes(d)) return d;
+  return item.facts.kind === "paper" ? (item.facts.depth ?? "abstract") : null;
+}
+
+const DEPTH_LINE: Record<PaperDepth, string> = {
+  abstract: "Paper read: the abstract only.",
+  head: "Paper read: the abstract and the start of the body; excerpts below.",
+  full: "Paper read: the whole paper, below.",
+};
+
 export interface ComposeInput {
   topic: TopicSearch;
   kind: ResultRunKind;
@@ -58,6 +107,8 @@ export interface ComposeInput {
   language: string;
   /** What earlier issues already said on this topic, newest first. */
   earlier?: readonly EarlierLine[];
+  /** Deeper reads the model may ask for; absent or none left: it is not offered. */
+  deeper?: DeeperReads;
 }
 
 /**
@@ -97,6 +148,7 @@ function itemSources(item: TopicSearchResultItem, registry: MaterialRegistry, ea
 
 export function composePrompt(input: ComposeInput): { system: string; user: string } {
   const first = input.kind === "first";
+  const offer = input.deeper && input.deeper.left > 0 ? input.items.filter((i) => deepenableMaterial(i, input.registry)).map((i) => i.id) : [];
   const system = [
     first
       ? "Write the panorama of a topic search's first run: what has been happening in this field lately, from the items below."
@@ -114,6 +166,12 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     "- repeats: the numbers of candidate questions (Q1 …) that ask something the reader already answered; usually none.",
     "Rules: skip promotion, event hype and engagement bait; tell a thread as one piece; tell a quoting post together with what it quotes; where an item lists a discrepancy, say what the original actually shows, not what the post claimed.",
     "Every number and date you write must appear in the materials, posts or facts of the items you cite. Never derive one (no sums, no differences, no rounding).",
+    "A paper item says how much of the paper was read. Conclude only from the part read: what its method does or what its results show beyond that is not known to you, so say so in unknown and never guess it.",
+    ...(offer.length
+      ? [
+          `Before writing, you may ask to read up to ${input.deeper!.left} of these papers in full: ${offer.join(", ")}. Ask only where what was read is too little to say what the paper did or found. To ask, answer only {"deeper": ["E2"]}; the program reads them and asks you to write again. Otherwise write the answer below.`,
+        ]
+      : []),
     'Answer with JSON only: {"overview": {"text": "…", "cites": ["E1", "M3"]}, "items": [{"e": "E1", "conclusion": "…", "body": ["…", "…"], "unknown": "…", "cites": ["M3.§2"]}], "doubts": [{"text": "…", "e": "E2"}], "repeats": ["Q1"]}.',
     UNTRUSTED_RULE,
     input.language,
@@ -130,16 +188,19 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
       lines.push(`Since the last report: likes ${b.likes ?? 0} -> ${a.likes ?? 0}, reposts ${b.reposts ?? 0} -> ${a.reposts ?? 0}`);
     }
     if (item.verify.status === "unread") lines.push(`The original was not read: ${item.verify.reason ?? ""}`);
+    const depth = paperDepth(item, input.registry);
+    if (depth) lines.push(DEPTH_LINE[depth]);
     for (const d of item.verify.discrepancies) {
       lines.push(d.verdict === "mismatch" ? `Discrepancy: the post says "${d.says}"; ${d.difference} (${d.evidence})` : `Not in the original: "${d.says}"`);
     }
     for (const p of item.links.posts.slice(0, 3)) lines.push(`Post @${p.handle}: ${cut(p.text, 400)}`);
-    let left = ITEM_MATERIAL_CHARS;
+    const whole = depth === "full";
+    let left = whole ? ITEM_FULL_CHARS : ITEM_MATERIAL_CHARS;
     for (const id of item.materials) {
       const m = input.registry.get(id);
       for (const s of input.registry.sections(id)) {
         if (left <= 0) break;
-        const text = cut(s.text, Math.min(left, 1200));
+        const text = cut(s.text, whole ? left : Math.min(left, 1200));
         left -= text.length;
         lines.push(`${s.id}${s.heading ? ` (${s.heading})` : ""}${m?.title ? ` of "${m.title}"` : ""}: ${text}`);
       }
@@ -226,19 +287,67 @@ export function checkWritten(text: string, input: ComposeInput): { written: Writ
   return { written: { overview: { text: overviewText, cites }, items: entries, doubts, repeats }, problems };
 }
 
+/** The items a reply asks to read in full, those that can be; empty when it asks for none. */
+export function askedDeeper(text: string, input: ComposeInput): string[] {
+  let raw: unknown;
+  try {
+    raw = parseJsonReply(text);
+  } catch {
+    return [];
+  }
+  const list = (raw as { deeper?: unknown } | null)?.deeper;
+  if (!Array.isArray(list)) return [];
+  const byId = new Map(input.items.map((i) => [i.id, i]));
+  const ids = list.filter((x): x is string => typeof x === "string").map((x) => x.trim());
+  return [...new Set(ids)].filter((id) => {
+    const item = byId.get(id);
+    return !!item && deepenableMaterial(item, input.registry) !== null;
+  });
+}
+
+/** Read what was asked, up to what is left; the line the next prompt carries says what came of each. */
+async function readDeeper(asked: string[], deeper: DeeperReads, signal: AbortSignal, report: DeeperReport): Promise<string> {
+  const granted = asked.slice(0, Math.max(0, deeper.left));
+  report.refused.push(...asked.slice(granted.length));
+  const failed: string[] = [];
+  for (const id of granted) {
+    const got = await deeper.read(id, signal);
+    if (got.ok) report.read.push(id);
+    else {
+      report.failed.push(id);
+      failed.push(`${id} (${got.reason})`);
+    }
+  }
+  return [
+    "Deeper reads:",
+    ...(report.read.length ? [`- Read in full: ${report.read.join(", ")}. Their items above now hold the whole paper.`] : []),
+    ...(failed.length ? [`- Could not be read: ${failed.join("; ")}. Write them from what was read.`] : []),
+    ...(report.refused.length
+      ? [`- Refused: ${report.refused.join(", ")}. This run's deeper reads are used up (${deeper.cap} of ${deeper.cap}); write them from what was read.`]
+      : []),
+    "No more deeper reads: write the answer now.",
+  ].join("\n");
+}
+
 /**
  * Write, check, write again once with the problems, else null (the fallback).
- * A failed call counts as a failed answer. Answers the calls it made.
+ * A failed call counts as a failed answer. When the first answer asks for deeper
+ * reads (and a call is left for the write-up after them), the papers are read
+ * and the write-up asked for again; that round is not one of the two tries.
+ * Answers the calls it made and what came of the deeper reads.
  */
 export async function composeResult(
   input: ComposeInput,
   model: TopicModel,
   signal: AbortSignal,
   maxCalls: number,
-): Promise<{ written: Written | null; calls: number }> {
-  const prompt = composePrompt(input);
+): Promise<{ written: Written | null; calls: number; deeper: DeeperReport }> {
+  let prompt = composePrompt(input);
+  let note = "";
   let user = prompt.user;
   let calls = 0;
+  let offered = !!input.deeper && input.deeper.left > 0;
+  const deeper: DeeperReport = { read: [], failed: [], refused: [] };
   for (let attempt = 0; attempt < 2 && calls < maxCalls; attempt++) {
     calls++;
     let text: string;
@@ -248,9 +357,20 @@ export async function composeResult(
       if (signal.aborted) throw e;
       continue;
     }
+    if (offered) {
+      offered = false;
+      const asked = askedDeeper(text, input);
+      if (asked.length && calls < maxCalls) {
+        note = await readDeeper(asked, input.deeper!, signal, deeper);
+        prompt = composePrompt({ ...input, deeper: undefined });
+        user = `${prompt.user}\n\n${note}`;
+        attempt--;
+        continue;
+      }
+    }
     const { written, problems } = checkWritten(text, input);
-    if (written) return { written, calls };
-    user = `${prompt.user}\n\nYour previous answer had these problems; write it again:\n${problems.map((p) => `- ${p}`).join("\n")}`;
+    if (written) return { written, calls, deeper };
+    user = `${prompt.user}\n\n${note ? `${note}\n\n` : ""}Your previous answer had these problems; write it again:\n${problems.map((p) => `- ${p}`).join("\n")}`;
   }
-  return { written: null, calls };
+  return { written: null, calls, deeper };
 }

@@ -21,7 +21,8 @@ import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
 import type { InfoItem } from "../sources/item";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
-import { composeResult, EARLIER_LINES, type EarlierLine } from "./compose";
+import { runArxivLadder, type ArxivLadder } from "./arxiv-ladder";
+import { composeResult, deepenableMaterial, EARLIER_LINES, type DeeperReads, type EarlierLine } from "./compose";
 import { parseJsonReply, type TopicModel } from "./model-io";
 import { enqueue, loadQueue, metricQuestions, pickQuestions, questionCap, saveQueue, waiting, type NewQuestion } from "./questions";
 import {
@@ -55,11 +56,25 @@ import {
 } from "./result-types";
 import { selectItems, shortlist, type SelectView } from "./select";
 import type { TopicSearch } from "./types";
-import { claimsPrompt, countsOf, parseClaims, readSource, SOURCES_PER_ITEM, type FetchText, type OpenLink, type Target } from "./verify";
+import {
+  claimsPrompt,
+  countsOf,
+  parseClaims,
+  readPaperFull,
+  readSource,
+  SOURCES_PER_ITEM,
+  type FetchText,
+  type OpenLink,
+  type SourceDeps,
+  type Target,
+} from "./verify";
+import { addDays, arxivWindow } from "./windows";
 import type { XReadResult } from "./x-reader";
 
 /** Items a result lists: a first run's, and a day's (88 「打分」 7). */
 export const RESULT_ITEMS = { first: 15, daily: 8 } as const;
+/** Papers the write-up may have read in full, per run: a first run's, and a day's (initial values). */
+export const DEEP_READS = { first: 5, daily: 2 } as const;
 /** How far back the topic's results count as already reported. */
 export const HISTORY_DAYS = 30;
 /** 88 延续: a seen post is listed again when its engagement doubled and it gained this many likes. */
@@ -130,6 +145,8 @@ export interface SourceHealthEntry {
   read: number;
   fresh: number;
   passedFloor: number;
+  /** arXiv only: how the query ladder ended and the steps it took. */
+  ladder?: ArxivLadder;
 }
 
 export interface SourceHealthFile {
@@ -153,6 +170,8 @@ export interface BuildResultDeps {
   searchArxiv(text: string, window: { since: string; until: string }, signal: AbortSignal): Promise<InfoItem[]>;
   fetchText: FetchText;
   openLink: OpenLink;
+  /** A PDF's text layer, for a deeper read of a paper arXiv has no HTML for; absent: such a paper is not read deeper. */
+  readPdfText?: SourceDeps["readPdfText"];
   /** A fresh counted GitHub lookup for one run (github-lookup.ts RepoLookups). */
   repoLookups(): { lookup(fullName: string): Promise<RepoLookup>; quotaLeft(): number | null };
   files: ResultFiles;
@@ -169,17 +188,6 @@ export interface BuildResultDeps {
   now(): number;
   /** Local date, YYYY-MM-DD. */
   today(): string;
-}
-
-function localDay(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function addDays(date: string, n: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
 }
 
 function total(c: PostCounts): number {
@@ -329,17 +337,14 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     deps.bookLanguage ? deps.bookLanguage() : deps.language(),
   ]);
 
-  // arXiv beside X (88 「取材 / arXiv」).
+  // arXiv beside X (88 「取材 / arXiv」): each query's ladder in turn, never two at once.
   const arxiv: ArxivFound[] = [];
+  const arxivSpan = arxivWindow(kind, since, today);
   for (const q of topic.queries) {
     if (!q.arxiv) continue;
     throwIfAborted(signal);
-    try {
-      arxiv.push({ query: q.id, items: await deps.searchArxiv(q.arxiv, { since: localDay(since), until: today }, signal), error: null });
-    } catch (e) {
-      if (signal.aborted) throw e;
-      arxiv.push({ query: q.id, items: [], error: e instanceof Error ? e.message : String(e) });
-    }
+    const { items, error, outcome, steps } = await runArxivLadder(q.arxiv, arxivSpan, kind, deps.searchArxiv, signal);
+    arxiv.push({ query: q.id, items, error, ladder: { outcome, steps } });
   }
 
   // Rank (88 「打分」 1-6).
@@ -412,7 +417,13 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     if (isXPage(url) && !(await xPages.take())) return { ok: false, reason: X_PAGES_USED_UP };
     return deps.openLink(url, s);
   };
-  const sourceDeps = { fetchText: deps.fetchText, openLink, lookupRepo: (n: string) => lookups.lookup(n), repoQuotaLeft: () => lookups.quotaLeft() };
+  const sourceDeps: SourceDeps = {
+    fetchText: deps.fetchText,
+    openLink,
+    lookupRepo: (n: string) => lookups.lookup(n),
+    repoQuotaLeft: () => lookups.quotaLeft(),
+    ...(deps.readPdfText ? { readPdfText: deps.readPdfText } : {}),
+  };
   const items: TopicSearchResultItem[] = [];
   for (const [i, d] of chosen.entries()) {
     throwIfAborted(signal);
@@ -461,7 +472,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     if (facts === null) {
       const paper = d.members.find((m) => m.cand.paper)?.cand.paper;
       facts = paper
-        ? { kind: "paper", arxivId: paper.id, authors: paper.authors, publishedAt: paper.publishedAt }
+        ? { kind: "paper", arxivId: paper.id, authors: paper.authors, publishedAt: paper.publishedAt, depth: "abstract" }
         : { kind: "post", handle: leadPost!.handle, name: leadPost!.name, postedAt: leadPost!.postedAt, counts: countsOf(leadPost!) };
       title = paper?.title ?? null;
     }
@@ -544,10 +555,35 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   let writeup: TopicSearchResult["writeup"] = "none";
   let overview: TopicSearchResult["overview"] = null;
   let repeats = new Set<string>();
+  // A paper the write-up asks to read in full (compose.ts): read, registered
+  // apart, and put in place of the shorter read of it.
+  const deeper: DeeperReads = {
+    left: DEEP_READS[kind],
+    cap: DEEP_READS[kind],
+    read: async (itemId, s) => {
+      const item = items.find((i) => i.id === itemId);
+      const m = item ? deepenableMaterial(item, registry) : null;
+      if (!item || !m) return { ok: false, reason: "nothing to read deeper" };
+      const arxivId = String(m.facts.arxivId);
+      const paperFacts = item.facts.kind === "paper" && item.facts.arxivId === arxivId ? item.facts : null;
+      const known = {
+        title: m.title,
+        authors: paperFacts?.authors ?? (m.author ? m.author.split(", ") : []),
+        publishedAt: m.publishedAt,
+        abstract: registry.sections(m.id).find((x) => x.heading === "Abstract")?.text ?? null,
+      };
+      const read = await readPaperFull(arxivId, known, sourceDeps, s);
+      if (!read.ok) return { ok: false, reason: read.reason };
+      const full = await registry.register(read.input);
+      item.materials = item.materials.map((id) => (id === m.id ? full.id : id));
+      if (paperFacts) item.facts = { ...paperFacts, depth: "full" };
+      return { ok: true };
+    },
+  };
   if (!empty) {
     const offered = waiting(queue).slice(0, 6);
     const label = new Map(offered.map((q, i) => [`Q${i + 1}`, q.id]));
-    const { written, calls } = await composeResult(
+    const { written, calls, deeper: deepReads } = await composeResult(
       {
         topic,
         kind,
@@ -557,12 +593,14 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })),
         language: bookLanguage,
         earlier: earlierLines(recent),
+        deeper,
       },
       deps.model,
       signal,
       Math.max(0, callsLeft()),
     );
     modelCalls += calls;
+    if (deepReads.read.length + deepReads.failed.length + deepReads.refused.length) stats.deepReads = deepReads;
     if (written) {
       writeup = "model";
       overview = written.overview;
@@ -698,11 +736,12 @@ export function sourceHealth(
       query: q.id,
       source: "arxiv",
       status: a.error ? "failed" : freshA > 0 ? "ok" : "empty",
-      why: a.error,
+      why: a.error ?? (a.ladder?.steps.length === 0 ? "the query has no searchable word" : null),
       fetchedAt: a.error ? null : now,
       read: sa.read.length,
       fresh: freshA,
       passedFloor: sa.kept.length,
+      ...(a.ladder ? { ladder: a.ladder } : {}),
     });
   }
   return { version: 1, searchId: topic.id, kind, at: now, entries };

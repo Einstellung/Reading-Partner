@@ -38,9 +38,22 @@ export interface ResultPost {
   truncated: boolean;
 }
 
+export type PaperDepth = "abstract" | "head" | "full";
+
 /** The facts line of an item, by kind; rendered by the page, written by the program. */
 export type ResultFacts =
-  | { kind: "paper"; arxivId: string; authors: string[]; publishedAt: string | null }
+  | {
+      kind: "paper";
+      arxivId: string;
+      authors: string[];
+      publishedAt: string | null;
+      /**
+       * How much of the paper was read: the abstract, the abstract and the start
+       * of the body (verify.ts PAPER_BODY_CHARS), or the whole paper (a deeper
+       * read the write-up asked for). Absent in files written before 2026-10-16.
+       */
+      depth?: PaperDepth;
+    }
   | {
       kind: "repo";
       fullName: string;
@@ -153,6 +166,8 @@ export interface ResultStats {
   /** Items per subtopic id ("" for the whole topic). */
   subtopicItems: Record<string, number>;
   modelCalls: number;
+  /** Papers the write-up asked to read in full: read, unreadable, refused for the run's cap. Absent before 2026-10-16. */
+  deepReads?: { read: string[]; failed: string[]; refused: string[] };
 }
 
 export interface TopicSearchResult {

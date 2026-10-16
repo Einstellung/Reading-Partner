@@ -31,6 +31,7 @@ import type { XHalt } from "../x/search-page";
 import type { BuildTopicSearchResult, BuildTopicSearchResultOutput, XPageBudget } from "./build-result";
 import { lastNightAnchor, nightEndAt } from "./nightly";
 import type { TopicSearch } from "./types";
+import { FIRST_LOOK_BACK_MS } from "./windows";
 import { localDay, replay, type XProgressLog, type XReaderStore, type XRunStatus } from "./x-progress";
 import { readXSearch, X_FIRST_RUN_LIMITS, type XReadLimits, type XReadLine, type XReadResult } from "./x-reader";
 
@@ -39,8 +40,6 @@ export type BuiltTopicSearchResult = BuildTopicSearchResultOutput;
 export const TOPIC_SEARCH_KIND = "topic-search";
 export const TOPIC_SEARCH_TASK = "rp.topicsearch";
 export const TOPIC_SEARCH_HALT_BOX_KIND = "topic-search-halt";
-/** How far back the first run looks (88: initial value). */
-export const FIRST_LOOK_BACK_MS = 30 * 24 * 60 * 60_000;
 export const NO_BUILDER = "no topic-search result builder is registered on this device";
 
 export type TopicSearchRunKind = "first" | "daily";

@@ -626,6 +626,15 @@ export interface TopicSearchLineHealth {
   read: number;
   fresh: number;
   passedFloor: number;
+  /**
+   * arXiv only: how the query ladder ended (topic-search/arxiv-ladder.ts) —
+   * found at once, found after widening, nothing even when widened to the end,
+   * refused for the rate limit, or failed — and each step it took.
+   */
+  ladder?: {
+    outcome: "direct" | "widened" | "exhausted" | "rate_limited" | "failed";
+    steps: { terms: string[]; since: string; until: string; hits: number | null }[];
+  };
 }
 
 // Run every enabled descriptor with per-source isolation: one source throwing

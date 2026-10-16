@@ -97,7 +97,11 @@ export function draftAnswers(raw: unknown): { asked: string; answer: string }[] 
 export const QUERY_SCHEMA = Type.Object({
   subtopic: Type.String({ description: "The subtopic's name or id; empty for a query over the whole topic." }),
   x: Type.String({ description: "Keywords as X posts on this would put them. No time words, no 'news'/'updates'." }),
-  arxiv: Type.String({ description: "Keywords as arXiv titles would put them; empty when papers do not fit." }),
+  arxiv: Type.String({
+    description:
+      "2-4 short keywords as arXiv titles would put them, the most specific first, never a sentence " +
+      "(every word must appear in the paper); empty when papers do not fit.",
+  }),
   ranking: Type.String({ description: "One plain question a good result answers, for reranking." }),
 });
 

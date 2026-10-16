@@ -188,6 +188,8 @@ test("the guidance lists searches and live concerns, and a lapsed concern only b
   expect(text).toContain("keyword trap");
   expect(text).toContain("confirm_topic_search");
   expect(text).toContain("propose with once");
+  expect(text).toContain("Write 2 to 4 short\n  keywords, the most specific first");
+  expect(text).toContain("never a sentence");
   expect(text).not.toContain("X reading on this device");
 });
 
