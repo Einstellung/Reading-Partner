@@ -1,5 +1,5 @@
 // The one card for every provider that takes a pasted key: pick the provider,
-// paste, save. All 26 are on the card at once, as chips, rather than behind a
+// paste, save. All 27 are on the card at once, as chips, rather than behind a
 // dropdown — a list this long is scrolled past rather than read, and the
 // regional variants (Moonshot AI / Moonshot AI CN, the three Xiaomi token plans)
 // are exactly the rows that need to be seen next to each other.

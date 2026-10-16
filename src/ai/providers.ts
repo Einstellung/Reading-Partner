@@ -4,7 +4,7 @@
 // Claude Code headers, for OpenAI (Codex backend) pi decodes the account id out
 // of the token and sets the chatgpt-account-id header. Every other provider
 // takes an API key and reaches its endpoint over pi's openai-completions (or,
-// for MiniMax, anthropic-messages) API.
+// for MiniMax and Claude on a Console key, anthropic-messages) API.
 //
 // The factories are imported one file at a time. pi ships a
 // providers/all barrel, but it statically imports the AWS SDK and other
@@ -13,6 +13,8 @@
 // implementation.
 
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
+import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
+import { createProvider } from "@earendil-works/pi-ai/models";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import { opencodeProvider } from "@earendil-works/pi-ai/providers/opencode";
@@ -169,12 +171,31 @@ export interface StreamChatOptions {
 // Codex backend, so the settings label stays what it was.
 const openaiCodex: Provider = { ...openaiCodexProvider(), name: "OpenAI Codex" };
 
+const anthropic = anthropicProvider();
+
+// Claude on an Anthropic Console API key: the subscription provider's models
+// and api under an id of its own. The durable runtime dispatches a request by
+// its model's `provider` field (durable-models.ts), so if these models still
+// said "anthropic", a key user's turns would resolve the OAuth credential, or
+// an OAuth user's the key. pi's anthropic-messages api reads the auth off the
+// key itself: an sk-ant-oat token goes as Bearer with the Claude Code headers,
+// anything else as x-api-key, which is what a pasted Console key is.
+const anthropicApiKey: Provider = createProvider({
+	id: "anthropic-api",
+	name: "Anthropic API",
+	baseUrl: anthropic.baseUrl,
+	auth: { apiKey: anthropic.auth.apiKey },
+	models: anthropic.getModels().map((m) => ({ ...m, provider: "anthropic-api" })),
+	api: anthropicMessagesApi(),
+});
+
 // Exported so the agent turn (src/legion/durable) reuses the exact same provider
 // instances, model lookup, and OAuth/api-key resolution as streamChat. The keys
 // are this app's ids, not pi's: our "openai" is pi's openai-codex.
 export const providers: Record<ProviderId, Provider> = {
-	anthropic: anthropicProvider(),
+	anthropic,
 	openai: openaiCodex,
+	"anthropic-api": anthropicApiKey,
 	deepseek: deepseekProvider(),
 	opencode: opencodeProvider(),
 	"opencode-go": opencodeGoProvider(),

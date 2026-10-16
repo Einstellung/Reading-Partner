@@ -43,6 +43,7 @@ const codexToken = `x.${btoa(JSON.stringify({ "https://api.openai.com/auth": { c
 test("the channel follows the provider and its model's api", () => {
   const m = (api: string, id = "x") => ({ api, id });
   expect(searchChannel("anthropic", m("anthropic-messages"))).toBe("anthropic");
+  expect(searchChannel("anthropic-api", m("anthropic-messages"))).toBe("anthropic-key");
   expect(searchChannel("openai", m("openai-codex-responses"))).toBe("codex");
   expect(searchChannel("deepseek", m("openai-completions"))).toBe("deepseek");
   expect(searchChannel("xai", m("openai-responses", "grok-4.6"))).toBe("grok");
@@ -86,6 +87,25 @@ test("Anthropic OAuth carries the Claude Code headers, system prompt and the sea
     { type: "web_search_20260209", name: "web_search", max_uses: ANTHROPIC_MAX_USES, allowed_callers: ["direct"] },
   ]);
   expect(ANTHROPIC_MAX_USES).toBe(5);
+});
+
+test("an Anthropic Console key searches with x-api-key and no Claude Code identity", () => {
+  const req = buildSearchRequest(call({ channel: "anthropic-key", apiKey: "sk-ant-api03-KEY" }), "q");
+  expect(req.url).toBe("https://api.anthropic.com/v1/messages");
+  expect(req.headers["x-api-key"]).toBe("sk-ant-api03-KEY");
+  expect(req.headers.Authorization).toBeUndefined();
+  expect(req.headers["anthropic-beta"]).toBeUndefined();
+  expect(req.headers["x-app"]).toBeUndefined();
+  expect(req.body.system).toBeUndefined();
+  expect(req.body.tools).toEqual([
+    { type: "web_search_20260209", name: "web_search", max_uses: ANTHROPIC_MAX_USES, allowed_callers: ["direct"] },
+  ]);
+  const sonnet = providers["anthropic-api"].getModels()[0].id;
+  expect(webSearchTarget({ defaultProviderId: "anthropic-api", defaultModelId: sonnet, everydayModelId: null })).toEqual({
+    providerId: "anthropic-api",
+    modelId: sonnet,
+    channel: "anthropic-key",
+  });
 });
 
 test("DeepSeek goes to its /anthropic route with an API key and no Claude Code prompt", () => {

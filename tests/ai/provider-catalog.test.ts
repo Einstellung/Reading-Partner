@@ -32,7 +32,7 @@ test("only anthropic and openai authenticate by OAuth; the rest take a key", () 
 	expect(oauth).toEqual(["anthropic", "openai"]);
 	expect(API_KEY_PROVIDER_IDS).toEqual(PROVIDER_IDS.filter((id) => isApiKeyProvider(id)));
 	// The card the key list drives is worth having.
-	expect(API_KEY_PROVIDER_IDS.length).toBe(26);
+	expect(API_KEY_PROVIDER_IDS.length).toBe(27);
 });
 
 test("every provider offers at least one model and a default to land on", () => {

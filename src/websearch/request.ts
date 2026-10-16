@@ -4,7 +4,7 @@
 // Portions adapted from pi-web-search by ttttmr (https://www.npmjs.com/package/pi-web-search),
 // MIT License; see LICENSE.pi-web-search in this directory.
 
-import type { SearchChannel } from "./channel";
+import { isMessagesChannel, type SearchChannel } from "./channel";
 import { applyIndexCitations, cleanSources, pushUniqueSource, titleFromUrl, type SearchOutcome, type Source } from "./results";
 import { readSseEvents } from "./sse";
 
@@ -88,7 +88,7 @@ export function codexAccountId(token: string): string {
 }
 
 export function buildSearchRequest(call: SearchCall, query: string): SearchRequest {
-  if (call.channel === "anthropic" || call.channel === "deepseek") return anthropicRequest(call, query);
+  if (isMessagesChannel(call.channel)) return anthropicRequest(call, query);
   return responsesRequest(call, query);
 }
 
@@ -167,6 +167,7 @@ function responsesRequest(call: SearchCall, query: string): SearchRequest {
 
 const PROVIDER_NAME: Record<SearchChannel, string> = {
   anthropic: "Anthropic",
+  "anthropic-key": "Anthropic",
   deepseek: "DeepSeek",
   codex: "OpenAI",
   responses: "OpenAI",
@@ -190,7 +191,7 @@ export async function runSearch(
   if (!response.ok) {
     throw new Error(`${PROVIDER_NAME[call.channel]} API error (${response.status}): ${await response.text()}`);
   }
-  if (call.channel === "anthropic" || call.channel === "deepseek") {
+  if (isMessagesChannel(call.channel)) {
     return readAnthropicStream(response, call.channel, signal);
   }
   return readResponsesStream(response, call.channel, signal);

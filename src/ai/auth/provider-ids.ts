@@ -11,7 +11,10 @@ const AUTH_KIND_TABLE = {
 	// Subscription OAuth (Claude Pro/Max, ChatGPT Plus/Pro).
 	anthropic: "oauth",
 	openai: "oauth",
-	// Everything else: paste a key, save, done.
+	// Everything else: paste a key, save, done. "anthropic-api" is Claude on an
+	// Anthropic Console key: pi's anthropic models under an id of their own, so
+	// the key sits beside the subscription sign-in rather than replacing it.
+	"anthropic-api": "apiKey",
 	deepseek: "apiKey",
 	opencode: "apiKey",
 	"opencode-go": "apiKey",

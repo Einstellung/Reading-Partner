@@ -38,6 +38,7 @@ test("the chips are ordered by the card's own list, not the provider table's", (
   expect(keyProviderChips().map((c) => c.label)).toEqual([
     "OpenCode Zen",
     "OpenRouter",
+    "Anthropic API",
     "DeepSeek",
     "Vercel AI Gateway",
     "Moonshot AI",

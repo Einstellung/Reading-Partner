@@ -21,6 +21,7 @@ export interface ProviderChip {
 const CHIP_ORDER: ApiKeyProviderId[] = [
   "opencode",
   "openrouter",
+  "anthropic-api",
   "deepseek",
   "vercel-ai-gateway",
   "moonshotai",
