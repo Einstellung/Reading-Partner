@@ -134,5 +134,6 @@ export class PipeHost implements BrowseHost {
 
 function shorten(value: unknown): unknown {
 	const s = JSON.stringify(value);
+	if (s === undefined) return value;
 	return s.length > 4000 ? `${s.slice(0, 4000)}…` : value;
 }
