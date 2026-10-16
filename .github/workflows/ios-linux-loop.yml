@@ -11,7 +11,11 @@
 #
 # Signing is the App Store Connect API key path of ios-testflight.yml
 # (-allowProvisioningUpdates + -authenticationKey*). Nothing here registers a
-# device: a development profile covers the devices already on the team.
+# device: a development profile covers the devices already on the team. Both
+# signed jobs first import one fixed Apple Development certificate
+# (IOS_DEV_CERT_P12_BASE64) so Xcode reuses it rather than creating a new
+# certificate per run until the team hits its limit (pitfall 602), and check
+# afterwards that the app was signed with it.
 #
 # Never builds the shipping bundle id; devbuild refuses to upload anything that
 # is not .dev, since installing it would replace the TestFlight app.
@@ -71,6 +75,11 @@ jobs:
           mkdir -p ~/private_keys
           echo "${{ secrets.APPLE_API_KEY_P8_BASE64 }}" | base64 --decode > ~/private_keys/AuthKey_${APPLE_API_KEY}.p8
           echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey_${APPLE_API_KEY}.p8" >> "$GITHUB_ENV"
+      - name: Import the CI development certificate
+        env:
+          IOS_DEV_CERT_P12_BASE64: ${{ secrets.IOS_DEV_CERT_P12_BASE64 }}
+          IOS_DEV_CERT_PASSWORD: ${{ secrets.IOS_DEV_CERT_PASSWORD }}
+        run: scripts/ios-linux/import-dev-cert.sh
       - name: Fetch WebDriverAgent
         run: git clone --quiet --depth 1 --branch "$WDA_REF" https://github.com/appium/WebDriverAgent "$RUNNER_TEMP/wda-src"
       - name: Build WebDriverAgentRunner for devices (signed)
@@ -97,6 +106,7 @@ jobs:
           [ -d "$APP" ] || { find "$RUNNER_TEMP/wda-dd/Build/Products" -maxdepth 2; exit 1; }
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
           codesign -dv "$APP" 2>&1 | grep -E 'Identifier|TeamIdentifier|Authority' || true
+          scripts/ios-linux/check-dev-cert.sh "$APP"
           security cms -D -i "$APP/embedded.mobileprovision" > "$RUNNER_TEMP/wda.mobileprovision.plist"
           for k in Name ExpirationDate Entitlements:application-identifier Entitlements:get-task-allow; do
             printf '%s: ' "$k"; /usr/libexec/PlistBuddy -c "Print :$k" "$RUNNER_TEMP/wda.mobileprovision.plist"
@@ -136,6 +146,11 @@ jobs:
           mkdir -p ~/private_keys
           echo "${{ secrets.APPLE_API_KEY_P8_BASE64 }}" | base64 --decode > ~/private_keys/AuthKey_${APPLE_API_KEY}.p8
           echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey_${APPLE_API_KEY}.p8" >> "$GITHUB_ENV"
+      - name: Import the CI development certificate
+        env:
+          IOS_DEV_CERT_P12_BASE64: ${{ secrets.IOS_DEV_CERT_P12_BASE64 }}
+          IOS_DEV_CERT_PASSWORD: ${{ secrets.IOS_DEV_CERT_PASSWORD }}
+        run: scripts/ios-linux/import-dev-cert.sh
 
       # The identifier can only be changed through the CLI's config merge
       # (gen/apple is regenerated from tauri.conf.json). The dev server lives on
@@ -231,6 +246,7 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$APP/Info.plist"
           EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
           ls -la "$APP/$EXE"
+          scripts/ios-linux/check-dev-cert.sh "$APP"
           # To a file first: `strings | grep -q` dies of SIGPIPE under pipefail.
           strings "$APP/$EXE" > "$RUNNER_TEMP/strings.txt"
           grep -q "http://${DEV_HOST}:${DEV_PORT}" "$RUNNER_TEMP/strings.txt" || { echo "::error::devUrl ${DEV_HOST}:${DEV_PORT} not in the binary"; exit 1; }
