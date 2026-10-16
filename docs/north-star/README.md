@@ -29,3 +29,4 @@
 webview 渲染管子（隐藏 WebviewWindow 当渲染引擎）已经落地并随彭博社源发货，不再是北极星方向；现状和剩下的缺口（SPA 站发现层）记在 [17](../info/17-信息源系统.md)。
 - [interactive-explainers](./interactive-explainers.md) — 交互式讲解图：难点处后台生成可拨弄的小模型加 Lumen 讲解，放盒子卡片；慢、贵、要沙盒；参考 anatomy skill；开工前先做手机上的小实验
 - [accounts](./accounts.md) — 统一的账户登录位置：浏览器会话（X、Bloomberg）和 API 凭据（GitHub 设备流等）集中管理，不再散在信息源页；位置待定
+- [topic-search-followups](./topic-search-followups.md) — 主题搜索第一次 run 之后的待办：重跑第一次全景（只补失败项）、门口补重跑动作并让卢明说准话、signed-out 停手记录能否自清、查询梯子与按需读深度的验收点
