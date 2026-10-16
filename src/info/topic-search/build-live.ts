@@ -9,6 +9,7 @@ import { callModel, resolveModel } from "../../ai/model-call";
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { languageInstruction } from "../../platform/app/settings";
+import { bookLanguageInstruction } from "./book-language";
 import { fetchWithRetry, interactiveRetry } from "../../platform/http/throttled-fetch";
 import type { FetchBytes } from "../../workshop/bindery";
 import { manuscriptText } from "../../workshop/bindery/manuscript";
@@ -105,6 +106,7 @@ export const liveResultDeps: BuildResultDeps = {
   profile: async () =>
     (await listStatements()).filter((s) => s.kind === "profile" && !s.supersededBy).map((s) => s.text),
   language: async () => languageInstruction((await resolveModel("prep")).aiLanguage),
+  bookLanguage: async () => bookLanguageInstruction((await resolveModel("prep")).aiLanguage),
   now: () => Date.now(),
   today: () => localDay(Date.now()),
 };

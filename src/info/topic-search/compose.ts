@@ -60,7 +60,11 @@ export interface ComposeInput {
   earlier?: readonly EarlierLine[];
 }
 
-/** The facts line as text, for the prompt and for the number check. */
+/**
+ * The facts line as text, in full, for the prompt and for the number check: the
+ * book prints the compact `factsLine` (facts-line.ts), which holds no number
+ * this one lacks, so a sentence that passes the check can say any of them.
+ */
 export function factsText(f: ResultFacts): string {
   switch (f.kind) {
     case "paper":
@@ -113,6 +117,8 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     'Answer with JSON only: {"overview": {"text": "…", "cites": ["E1", "M3"]}, "items": [{"e": "E1", "conclusion": "…", "body": ["…", "…"], "unknown": "…", "cites": ["M3.§2"]}], "doubts": [{"text": "…", "e": "E2"}], "repeats": ["Q1"]}.',
     UNTRUSTED_RULE,
     input.language,
+    // The sentences are in the book's language; what the materials call things stays as they call it.
+    "Titles of papers, posts and repositories, and names you quote, stay in their original language; write everything else in the language above.",
   ]
     .filter(Boolean)
     .join("\n");

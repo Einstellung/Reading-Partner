@@ -83,11 +83,10 @@ test("an issue asks at most three questions, a topic at a time; the rest wait ag
   expect(pickIssueQuestions([night()[1]], (_id, name) => name).asked.map((a) => a.id)).toEqual(["q-b1"]);
 });
 
-test("the prompt names a language: the reader's when set, the items' own under auto", () => {
+test("the prompt carries the language it is given, and no fallback of its own", () => {
   const plan = planIssue(night(), TOPICS)!;
   expect(openingPrompt(plan, [], "Respond in Deutsch.").system).toContain("Respond in Deutsch.");
   expect(openingPrompt(plan, [], "Respond in Deutsch.").system).not.toContain("the language the items");
-  expect(openingPrompt(plan, [], "").system).toContain("Write in the language the items below are written in.");
 });
 
 test("the record: the model's numbers past the items dropped, quick answers kept for its own questions only", () => {
@@ -118,7 +117,7 @@ function world(model: IssueDeps["writeOpening"]) {
     putBox: async () => {},
     newBoxItemId: () => "box-1",
     ...(model ? { writeOpening: model } : {}),
-    language: async () => "Write in English.",
+    locale: async () => "en" as const,
     nightEndAt: () => Number.MAX_SAFE_INTEGER,
     now: () => 5,
     today: () => "2026-10-15",
@@ -144,6 +143,26 @@ describe("assembling an issue writes its opening onto the shelf row", () => {
     expect(row.opening?.questions.map((x) => `${x.id} ${x.quick.join("/")}`)).toEqual(["q-a1 Yes/No", "q-b1 ", "q-a2 "]);
     expect(out.issue?.opening).toEqual(row.opening);
     expect(parseQuestionsFile(w.files.get(QUESTIONS_FILE) ?? null).topics["ts-0000aaaa"].questions[0].askedIn).toBeNull();
+  });
+
+  test("the book and the opening are in one language: the locale the deps give", async () => {
+    let system = "";
+    const w = world(async (p) => {
+      system = p.system;
+      return "{}";
+    });
+    const names: string[] = [];
+    w.deps.locale = async () => "zh-CN";
+    w.deps.importBook = async (_bytes, _file, meta) => {
+      names.push(meta.filename);
+      return { hash: "h0123456789" };
+    };
+    const boxed: string[] = [];
+    w.deps.putBox = async (item) => void boxed.push(item.cover);
+    await assembleIssue(w.deps, "night:2026-10-15", "2026-10-15", night().map((r) => `${r.id}.json`));
+    expect(system).toContain("简体中文");
+    expect(names).toEqual(["每日简报第 1 期 · 10月15日"]);
+    expect(boxed).toEqual(["10月15日简报 · 3 条"]);
   });
 
   test("a model that fails leaves the program's line and the questions", async () => {

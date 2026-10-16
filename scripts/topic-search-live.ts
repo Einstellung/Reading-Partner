@@ -44,7 +44,7 @@ import { localDay } from "../src/info/topic-search/x-progress";
 import { nightEndAt } from "../src/info/topic-search/nightly";
 import { runClosed, type IssueDeps } from "../src/info/issue/assemble";
 import { appData, type AppDataFs } from "../src/platform/app/appdata";
-import { languageInstruction } from "../src/platform/app/settings";
+import { bookLocale } from "../src/info/topic-search/book-language";
 import { fetchWithRetry, interactiveRetry } from "../src/platform/http/throttled-fetch";
 import { bind, type FetchBytes } from "../src/workshop/bindery";
 import { buildSectionedEpub } from "../src/workshop/bindery/build-article";
@@ -353,7 +353,7 @@ async function issue(resultFile: string): Promise<void> {
     putBox: async (item) => appendFileSync(join(OUT, "box.jsonl"), JSON.stringify(item) + "\n"),
     newBoxItemId: () => `bx-${createHash("sha256").update(String(Date.now())).digest("hex").slice(0, 8)}`,
     writeOpening: countedModel("opening"),
-    language: async () => languageInstruction((await resolveModel("prep")).aiLanguage),
+    locale: async () => bookLocale((await resolveModel("prep")).aiLanguage),
     nightEndAt,
     now: () => Date.now(),
     today: () => localDay(Date.now()),

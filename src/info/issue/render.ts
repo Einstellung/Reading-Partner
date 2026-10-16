@@ -4,18 +4,19 @@
 // buildSectionedEpub gives the same bytes and a rebuilt issue is the same
 // library entry.
 //
-// Every label here is the program's, in English. Only the conclusions,
-// paragraphs, unknowns and panoramas are a model's, and the result files have
-// already checked their numbers.
+// Every label here is the program's, in the book's language (the locale the
+// issue was assembled under, fixed in the EPUB: an issue is immutable). Only
+// the conclusions, paragraphs, unknowns and panoramas are a model's, and the
+// result files have already checked their numbers.
 
 import { typographicCover } from "../../workshop/bindery/cover-svg";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
-import { factsText } from "../topic-search/compose";
+import type { Locale } from "../../i18n/locale";
+import { translate, type Params } from "../../i18n/translate";
+import { factsLine } from "../topic-search/facts-line";
 import type { TopicSearchResultItem } from "../topic-search/result-types";
 import { itemLabel, type IssuePlan, type PlannedAnnex, type PlannedItem } from "./plan";
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 /** Characters of a title kept as an entry's heading. */
 const HEADING_CHARS = 100;
 
@@ -23,37 +24,40 @@ export interface IssueMeta {
   number: number;
   /** YYYY-MM-DD. */
   date: string;
+  /** The book's language: every label, date and count line is drawn in it. */
+  locale: Locale;
 }
 
-function parts(date: string): { y: number; m: number; d: number; weekday: number } {
+function dateIn(date: string, locale: Locale, options: Intl.DateTimeFormatOptions): string {
   const [y, m, d] = date.split("-").map(Number);
-  return { y, m, d, weekday: new Date(Date.UTC(y, m - 1, d)).getUTCDay() };
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
 }
 
-/** "Thursday, 15 October 2026". */
-export function longDate(date: string): string {
-  const p = parts(date);
-  return `${DAYS[p.weekday]}, ${p.d} ${MONTHS[p.m - 1]} ${p.y}`;
+/** "Thursday, October 15, 2026" in English, the locale's own long form elsewhere. */
+export function longDate(date: string, locale: Locale): string {
+  return dateIn(date, locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+}
+
+function shortDate(date: string, locale: Locale): string {
+  return dateIn(date, locale, { month: "short", day: "numeric" });
 }
 
 /** The box item's line (88 「简报的对话」): "Oct 15 brief · 4 items". */
-export function issueCoverLine(date: string, items: number): string {
-  const p = parts(date);
-  return `${MONTHS[p.m - 1].slice(0, 3)} ${p.d} brief · ${items} ${items === 1 ? "item" : "items"}`;
+export function issueCoverLine(date: string, items: number, locale: Locale): string {
+  return translate(locale, "info.issue.book.coverLine", { date: shortDate(date, locale), count: items });
 }
 
 export function issueTitle(meta: IssueMeta): string {
-  return `Daily Brief No. ${meta.number}, ${longDate(meta.date)}`;
+  return translate(meta.locale, "info.issue.book.title", { number: meta.number, date: longDate(meta.date, meta.locale) });
 }
 
 /** The name the shelf and the reader show: "Daily Brief No. 7 · Oct 15". */
 export function issueBookName(meta: IssueMeta): string {
-  const p = parts(meta.date);
-  return `Daily Brief No. ${meta.number} · ${MONTHS[p.m - 1].slice(0, 3)} ${p.d}`;
+  return translate(meta.locale, "info.issue.book.name", { number: meta.number, date: shortDate(meta.date, meta.locale) });
 }
 
-/** The file name the library entry is filed under. */
-export function issueFileName(meta: IssueMeta): string {
+/** The file name the library entry is filed under (not shown; one spelling in every language). */
+export function issueFileName(meta: Pick<IssueMeta, "number" | "date">): string {
   return `Daily Brief ${meta.date} No. ${meta.number}.epub`;
 }
 
@@ -70,36 +74,57 @@ function link(url: string, text: string): string {
   return `<a href="${esc(url)}">${esc(text)}</a>`;
 }
 
+/**
+ * A catalog message as HTML: its text escaped, with `slots` (ready-made markup,
+ * a link) put in where the message has {name}. The markup goes in after the
+ * escaping, so a translation cannot reorder it into something broken.
+ */
+function fill(locale: Locale, key: string, params: Params = {}, slots: Record<string, string> = {}): string {
+  const marks = Object.fromEntries(Object.keys(slots).map((k) => [k, `\u0001${k}\u0002`]));
+  let out = esc(translate(locale, key, { ...params, ...marks }));
+  for (const [k, html] of Object.entries(slots)) out = out.replace(`\u0001${k}\u0002`, () => html);
+  return out;
+}
+
 // Spine documents are text/section-NNN.xhtml, one per section, in order (bindery).
 function sectionHref(index: number): string {
   return `section-${String(index + 1).padStart(3, "0")}.xhtml`;
 }
 
-function linksLine(item: TopicSearchResultItem): string {
+function linksLine(item: TopicSearchResultItem, locale: Locale): string {
   const out: string[] = [];
-  if (item.links.original) out.push(`Original: ${link(item.links.original, item.title)}`);
+  if (item.links.original) out.push(fill(locale, "info.issue.book.original", {}, { link: link(item.links.original, item.title) }));
   const posts = item.links.posts.slice(0, 3).map((p) => link(p.url, `@${p.handle}`));
-  if (posts.length) out.push(`${item.links.original ? "Via" : "Post"}: ${posts.join(", ")}`);
+  if (posts.length) out.push(fill(locale, item.links.original ? "info.issue.book.via" : "info.issue.book.post", {}, { links: posts.join(", ") }));
   return out.length ? `<p><small>${out.join(" · ")}</small></p>` : "";
 }
 
-function verifyLines(item: TopicSearchResultItem): string[] {
+function verifyLines(item: TopicSearchResultItem, locale: Locale): string[] {
   const out: string[] = [];
   for (const d of item.verify.discrepancies) {
     out.push(
       d.verdict === "mismatch"
-        ? `<p><strong>Post and original differ.</strong> The post says ${esc(d.says)}. ${esc(d.difference ?? "")}</p>`
-        : `<p><strong>Not in the original.</strong> The post says ${esc(d.says)}.</p>`,
+        ? `<p><strong>${fill(locale, "info.issue.book.differHead")}</strong> ${fill(locale, "info.issue.book.differBody", { says: d.says, difference: d.difference ?? "" }).trim()}</p>`
+        : `<p><strong>${fill(locale, "info.issue.book.absentHead")}</strong> ${fill(locale, "info.issue.book.absentBody", { says: d.says })}</p>`,
     );
   }
-  if (item.verify.status === "unread") out.push(`<p><small>The original was not read: ${esc(item.verify.reason ?? "unknown reason")}.</small></p>`);
+  if (item.verify.status === "unread") {
+    const reason = item.verify.reason ?? translate(locale, "info.issue.book.unreadUnknown");
+    out.push(`<p><small>${fill(locale, "info.issue.book.unread", { reason })}</small></p>`);
+  }
   return out;
 }
 
-function continuingLine(item: TopicSearchResultItem): string {
+function continuingLine(item: TopicSearchResultItem, locale: Locale): string {
   const c = item.continuing;
   if (!c) return "";
-  return `<p><small>Still drawing attention: likes ${c.before.likes ?? 0} → ${c.after.likes ?? 0}, reposts ${c.before.reposts ?? 0} → ${c.after.reposts ?? 0}.</small></p>`;
+  const text = fill(locale, "info.issue.book.stillAttention", {
+    likesBefore: c.before.likes ?? 0,
+    likesAfter: c.after.likes ?? 0,
+    repostsBefore: c.before.reposts ?? 0,
+    repostsAfter: c.after.reposts ?? 0,
+  });
+  return `<p><small>${text}</small></p>`;
 }
 
 /** The words an item stands under in the book: its section's heading, or the start of its Note. */
@@ -107,30 +132,30 @@ export function itemHeading(item: Pick<TopicSearchResultItem, "title">): string 
   return cut(item.title, HEADING_CHARS);
 }
 
-function entryHtml(p: PlannedItem): string {
+function entryHtml(p: PlannedItem, locale: Locale): string {
   const { item } = p;
   return [
     `<p><small>${esc(itemLabel(p))}</small></p>`,
     item.summary ? `<p><em>${esc(item.summary)}</em></p>` : "",
     ...(item.body ?? []).map((para) => `<p>${esc(para)}</p>`),
-    item.unknown ? `<p><strong>Not yet known.</strong> ${esc(item.unknown)}</p>` : "",
-    `<p><small>${esc(factsText(item.facts))}</small></p>`,
-    continuingLine(item),
-    ...verifyLines(item),
-    linksLine(item),
+    item.unknown ? `<p><strong>${fill(locale, "info.issue.book.unknown")}</strong> ${esc(item.unknown)}</p>` : "",
+    `<p><small>${esc(factsLine(item.facts, locale))}</small></p>`,
+    continuingLine(item, locale),
+    ...verifyLines(item, locale),
+    linksLine(item, locale),
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-function noteHtml(p: PlannedItem): string {
+function noteHtml(p: PlannedItem, locale: Locale): string {
   const { item } = p;
   return [
-    `<p><strong>${esc(itemLabel(p))}: ${esc(cut(item.title, HEADING_CHARS))}</strong></p>`,
+    `<p><strong>${fill(locale, "info.issue.book.noteHead", { label: itemLabel(p), title: cut(item.title, HEADING_CHARS) })}</strong></p>`,
     item.summary ? `<p>${esc(item.summary)}</p>` : "",
-    `<p><small>${esc(factsText(item.facts))}</small></p>`,
-    continuingLine(item),
-    linksLine(item),
+    `<p><small>${esc(factsLine(item.facts, locale))}</small></p>`,
+    continuingLine(item, locale),
+    linksLine(item, locale),
   ]
     .filter(Boolean)
     .join("\n");
@@ -155,27 +180,33 @@ function annexHtml(a: PlannedAnnex): string {
 
 /** The document for buildSectionedEpub: contents, entries, Notes, Annex, in that order. */
 export function issueEpubInput(plan: IssuePlan, meta: IssueMeta): SectionedEpubInput {
+  const locale = meta.locale;
   const entryStart = 1;
   const notesAt = entryStart + plan.entries.length;
   const annexAt = notesAt + (plan.notes.length ? 1 : 0);
+  const notesHeading = translate(locale, "info.issue.book.notes");
+  const annexHeading = (topic: string) => translate(locale, "info.issue.book.annex", { topic });
   const contents: string[] = [];
   contents.push(
     `<ol>${plan.entries
-      .map((p, i) => `<li>${link(sectionHref(entryStart + i), itemLabel(p))}: ${esc(p.item.summary ?? p.item.title)}</li>`)
+      .map(
+        (p, i) =>
+          `<li>${fill(locale, "info.issue.book.entryLine", { summary: p.item.summary ?? p.item.title }, { link: link(sectionHref(entryStart + i), itemLabel(p)) })}</li>`,
+      )
       .join("\n")}</ol>`,
   );
   if (plan.notes.length) {
-    const titles = plan.notes.map((p) => `${itemLabel(p)}: ${cut(p.item.title, 60)}`);
-    contents.push(`<p>${link(sectionHref(notesAt), "Notes")}: ${esc(titles.join("; "))}</p>`);
+    const titles = plan.notes.map((p) => translate(locale, "info.issue.book.noteHead", { label: itemLabel(p), title: cut(p.item.title, 60) }));
+    contents.push(`<p>${fill(locale, "info.issue.book.notesLine", { titles: titles.join("; ") }, { link: link(sectionHref(notesAt), notesHeading) })}</p>`);
   }
   plan.annex.forEach((a, i) => {
-    contents.push(`<p>${link(sectionHref(annexAt + i), `Annex: ${a.topic}`)}, the panorama of this topic's first look.</p>`);
+    contents.push(`<p>${fill(locale, "info.issue.book.annexLine", {}, { link: link(sectionHref(annexAt + i), annexHeading(a.topic)) })}</p>`);
   });
   const sections: SectionedEpubInput["sections"] = [
-    { heading: "Contents", html: contents.join("\n") },
-    ...plan.entries.map((p) => ({ heading: cut(p.item.title, HEADING_CHARS), html: entryHtml(p) })),
-    ...(plan.notes.length ? [{ heading: "Notes", html: plan.notes.map(noteHtml).join("\n<p>* * *</p>\n") }] : []),
-    ...plan.annex.map((a) => ({ heading: `Annex: ${a.topic}`, html: annexHtml(a) })),
+    { heading: translate(locale, "info.issue.book.contents"), html: contents.join("\n") },
+    ...plan.entries.map((p) => ({ heading: cut(p.item.title, HEADING_CHARS), html: entryHtml(p, locale) })),
+    ...(plan.notes.length ? [{ heading: notesHeading, html: plan.notes.map((p) => noteHtml(p, locale)).join("\n<p>* * *</p>\n") }] : []),
+    ...plan.annex.map((a) => ({ heading: annexHeading(a.topic), html: annexHtml(a) })),
   ];
   const names = plan.topics.map((t) => t.name);
   return {
@@ -183,11 +214,16 @@ export function issueEpubInput(plan: IssuePlan, meta: IssueMeta): SectionedEpubI
     byline: names.join(", "),
     sourceUrl: "",
     publishedAt: meta.date,
-    language: "en",
+    language: locale,
     sections,
     images: [],
     cover: {
-      svg: typographicCover({ kicker: "Lumen Daily Brief", date: `No. ${meta.number}`, title: longDate(meta.date), footer: names }),
+      svg: typographicCover({
+        kicker: translate(locale, "info.issue.book.coverKicker"),
+        date: translate(locale, "info.issue.book.coverNumber", { number: meta.number }),
+        title: longDate(meta.date, locale),
+        footer: names,
+      }),
     },
   };
 }
