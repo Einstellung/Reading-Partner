@@ -53,6 +53,7 @@ import {
   type TopicSearchResult,
   type TopicSearchResultItem,
 } from "./result-types";
+import { selectItems, shortlist, type SelectView } from "./select";
 import type { TopicSearch } from "./types";
 import { claimsPrompt, countsOf, parseClaims, readSource, SOURCES_PER_ITEM, type FetchText, type OpenLink, type Target } from "./verify";
 import type { XReadResult } from "./x-reader";
@@ -225,6 +226,21 @@ function draftOf(cluster: EventCluster<Scored>): Draft {
   return { cluster, members, posts, keys, headline, score: cluster.score, continuing: null, previous: null };
 }
 
+function subtopicOf(draft: Draft): string | null {
+  return draft.members.find((m) => m.subtopic)?.subtopic ?? null;
+}
+
+/** How the selection sees a draft; a continuing item fills neither reservation. */
+const DRAFT_VIEW: SelectView<Draft> = {
+  score: (d) => d.score,
+  postScore: (d) => {
+    if (d.continuing) return null;
+    const scores = d.members.filter((m) => m.cand.post).map((m) => m.score);
+    return scores.length ? Math.max(...scores) : null;
+  },
+  subtopic: (d) => (d.continuing ? null : subtopicOf(d)),
+};
+
 /** The originals to read for an item: its main thing, then one more pointing at the same story. */
 function targetsOf(draft: Draft): Target[] {
   const targets: Target[] = [];
@@ -340,7 +356,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const lastCounts = new Map<string, { result: string; counts: PostCounts; item: TopicSearchResultItem }>();
   for (const { result, item } of pastItems) for (const p of item.links.posts) lastCounts.set(p.statusId, { result: result.id, counts: p.counts, item });
   const headlines: Headline[] = pastItems.map((p) => ({ id: `${p.result.id}#${p.item.id}`, headline: p.item.title, keys: p.item.keys }));
-  const drafts = clusters.slice(0, want * 3).map(draftOf);
+  const pickedSubtopics = topic.subtopics.filter((s) => s.picked).map((s) => s.id);
+  const drafts = shortlist(clusters.map(draftOf), want * 3, pickedSubtopics, DRAFT_VIEW);
   const verdicts = dedupeBatch(
     drafts.map((d, i) => ({ id: `d${i + 1}`, headline: d.headline, keys: d.keys, draft: d })),
     headlines,
@@ -374,7 +391,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       if (signal.aborted) throw e;
     }
   }
-  const chosen = kept.slice(0, want);
+  // By score, with slots kept for post items and for each picked subtopic (select.ts).
+  const chosen = selectItems(kept, want, pickedSubtopics, DRAFT_VIEW);
 
   // Verify (88 「看原文」) and the items.
   const registry = new MaterialRegistry(runDir, { write: (path, content) => deps.files.write(path, content) });
@@ -390,7 +408,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     throwIfAborted(signal);
     const id = `E${i + 1}`;
     const lead = d.cluster.lead;
-    const subtopic = d.members.find((m) => m.subtopic)?.subtopic ?? null;
+    const subtopic = subtopicOf(d);
     if (d.continuing && d.previous) {
       const prev = d.previous;
       items.push({

@@ -119,6 +119,23 @@ test("the plan: entries by score, low scores and continuing items to Notes, a fi
   expect(low.entries.map((p) => p.item.id)).toEqual(["E2"]);
 });
 
+test("the plan keeps MAIN_POSTS entries for post items when papers outscore them all (the 2026-10-15 shape)", () => {
+  const withPost = (id: string, score: number) =>
+    item(id, score, {
+      kind: "post",
+      links: { original: null, posts: [{ statusId: id, handle: "lab", name: "Lab", url: `https://x.com/lab/status/${id}`, postedAt: 0, counts: { likes: 1, reposts: 0, replies: 0, quotes: 0, views: null }, text: "", truncated: false }] },
+    });
+  const papers = Array.from({ length: 8 }, (_, i) => item(`E${i + 1}`, 80 - i));
+  const posts = [withPost("E9", 66), withPost("E10", 50), withPost("E11", 47), withPost("E12", 44)];
+  const plan = planIssue([result("ts-0000aaaa", "x", "2026-10-15", "first", [...papers, ...posts])], TOPICS)!;
+  // Four papers by score, then the two best posts at or above NOTE_BELOW; E12 is under it.
+  expect(plan.entries.map((p) => p.item.id)).toEqual(["E1", "E2", "E3", "E4", "E9", "E10"]);
+  expect(plan.notes.map((p) => p.item.id)).toEqual(["E5", "E6", "E7", "E8", "E11", "E12"]);
+  // Posts already in the top six by score take no extra place.
+  const mixed = planIssue([result("ts-0000aaaa", "x", "2026-10-15", "daily", [withPost("E1", 90), ...papers.slice(1)])], TOPICS)!;
+  expect(mixed.entries.map((p) => p.item.id)).toEqual(["E1", "E2", "E3", "E4", "E5", "E6"]);
+});
+
 test("the document: contents lines, entries, Notes with separators, the Annex; the cover line", () => {
   const input = issueEpubInput(planIssue(nightResults(), TOPICS)!, { number: 3, date: "2026-10-15" });
   expect(input.sections.map((s) => s.heading)).toEqual(["Contents", "A tool for E1 at 90", "A tool for E1 at 70", "Notes", "Annex: AI for engineering"]);
