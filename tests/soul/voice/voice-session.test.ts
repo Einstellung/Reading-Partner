@@ -728,3 +728,77 @@ test("a stop with no position still stops", async () => {
   expect(h.ai(1)?.interrupted).toBe(true);
   expect(h.wasAborted(1)).toBe(true);
 });
+
+// --- a pause the end-of-turn model called complete --------------------------
+
+test("going on before the reply is audible folds into the same turn", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "这篇论文的结论站得住吗？");
+  await h.delta(1, "我看");
+  await h.event({ kind: "speech-stop", turn: 2, cut: { ...CUT, sentence: 0 } });
+  await h.userSaid(2, "方法上有没有问题？");
+
+  expect(h.wasAborted(1)).toBe(true);
+  const asks = h.of("ask");
+  expect(asks[asks.length - 1]).toEqual({
+    type: "ask",
+    turn: 1,
+    text: "这篇论文的结论站得住吗？方法上有没有问题？",
+  });
+  expect(h.transcript.filter((t) => t.role === "user")).toEqual([
+    { role: "user", turn: 1, text: "这篇论文的结论站得住吗？方法上有没有问题？", interrupted: false },
+  ]);
+  expect(h.session.snapshot().asked).toBe(1);
+
+  await h.stream(1, "我去查一下。");
+  await h.done(1);
+  expect(h.calls.filter((c) => c.args?.text).map((c) => c.args?.text)).toEqual(["我去查一下。"]);
+});
+
+test("a turn cut into three folds back into one, and a late final lands on it", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "这篇论文的结论站得住吗？");
+  await h.event({ kind: "speech-stop", turn: 2, cut: { ...CUT, sentence: 0 } });
+  await h.userSaid(2, "方法上有没有问题？");
+  await h.event({ kind: "speech-stop", turn: 3, cut: { ...CUT, sentence: 0 } });
+  await h.userSaid(3, "你帮我");
+  await h.event({ kind: "final", turn: 3, text: "仔细查一下。", range: { startMs: 0, endMs: 1 } } as ConversationEvent);
+
+  const asks = h.of("ask");
+  expect(asks.map((a) => a.turn)).toEqual([1, 1, 1]);
+  expect(asks[2].text).toBe("这篇论文的结论站得住吗？方法上有没有问题？你帮我");
+  expect(h.transcript.filter((t) => t.role === "user")).toEqual([
+    {
+      role: "user",
+      turn: 1,
+      text: "这篇论文的结论站得住吗？方法上有没有问题？你帮我仔细查一下。",
+      interrupted: false,
+    },
+  ]);
+});
+
+test("a reply that was already audible is talked over, not folded", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.stream(1, REPLY);
+  await h.event({ kind: "speech-stop", turn: 2, cut: CUT });
+  await h.userSaid(2, "第二个问题");
+
+  const asks = h.of("ask");
+  expect(asks[asks.length - 1]).toEqual({ type: "ask", turn: 2, text: "第二个问题" });
+  expect(h.transcript.filter((t) => t.role === "user").map((t) => t.turn)).toEqual([1, 2]);
+});
+
+test("the greeting is never folded into the reader's first words", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(0, "(the call opened)");
+  await h.event({ kind: "speech-stop", turn: 1, cut: { ...CUT, sentence: 0 } });
+  await h.userSaid(1, "你好");
+
+  const asks = h.of("ask");
+  expect(asks[asks.length - 1]).toEqual({ type: "ask", turn: 1, text: "你好" });
+});
