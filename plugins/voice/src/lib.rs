@@ -45,6 +45,8 @@ pub mod tts;
 /// On-device Kokoro TTS: download, tokenizer, voices; the engine and bench
 /// with the `kokoro` feature.
 pub mod kokoro;
+/// Text to Kokoro-82M-v1.1-zh phonemes, matching Python misaki 0.9.4 (zh + en).
+pub mod kokoro_g2p;
 
 pub use error::{Error, Result};
 pub use session::SpeechSession;

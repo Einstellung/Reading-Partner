@@ -40,6 +40,7 @@
 | 裁 TTS 的头尾静音、按句拼接 | 原生音频与语音 |
 | 把整段跑的纯函数搬进流式、切句 | 原生音频与语音 |
 | 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
+| 导出或裁剪 Kokoro 文本前端的词表、改英文词性规则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
 | 画光晕、阴影、模糊之类的装饰效果 | WebKit / webview |
@@ -321,6 +322,8 @@
 - [652-a-neural-frame-gated-on-the-buffer-it-finished-in](./native-audio/652-a-neural-frame-gated-on-the-buffer-it-finished-in.md) — 播放期间神经帧要过 -35 dBFS，电平取的是帧落进的那个 100 ms tap buffer；「等一下」最后三个语音帧落进一个大半是静音的 buffer（-38 dB），确认窗差 12 ms 没够着，只 duck 不 stop。电平改成截止到帧末尾的 100 ms（`trailingLevelDb`）。测试台上「嗯」不打断是因为落在免疫窗里，不是区分出来的
 - [655-kokoro-fp16-onnx-gives-all-nan-on-cpu](./native-audio/655-kokoro-fp16-onnx-gives-all-nan-on-cpu.md) — Kokoro v1.1-zh 的 `model_fp16.onnx` 在 x86 CPU provider 上样本数对、样本全是 NaN，不报错；端侧测速报 `nonFinite`，iPad 的数出来前 fp16 不算候选
 - [656-kokoro-int8-onnx-is-slower-than-fp32-on-cpu](./native-audio/656-kokoro-int8-onnx-is-slower-than-fp32-on-cpu.md) — 动态量化的 `model_int8.onnx` 在 x86 CPU 上 RTF 1.2，fp32 是 0.21，`ConvInteger` 没有优化内核；音质和时长也偏，选型以 iPad 实测为准
+- [653-pruning-pypinyin-phrases-changes-readings-through-segmentation](./native-audio/653-pruning-pypinyin-phrases-changes-readings-through-segmentation.md) — 删掉首读音和逐字默认一样的 pypinyin 词组，jieba 词条里 6813 个读音变了：词组表也是 mmseg 正向最大匹配的前缀集合，删长词组会改切分。导出脚本按删前删后的 mmseg 对比把用到的词组放回去，裁表必须重跑这遍对比
+- [654-misaki-reads-english-fragments-by-spacy-tag](./native-audio/654-misaki-reads-english-fragments-by-spacy-tag.md) — 中文句子里的英文片段被 spaCy 单独当一句标词性，词性决定 misaki 查词典的路：AWS 标 NNS 读成 `ˈɔz`，GPU 标 NNP 拼字母；Wi-Fi 的连字符标 HYPH 才合成一个词。Rust 移植用规则近似，剩余差异在多音词词性上，列在 `gold_tests::KNOWN_DIFFS`
 
 ## WebKit / webview
 

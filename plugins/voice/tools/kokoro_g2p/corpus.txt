@@ -1,0 +1,443 @@
+# Golden corpus for the Kokoro G2P frontend (plugins/voice/src/kokoro_g2p).
+# One sentence per line. Plain lines go through misaki's zh pipeline (KPipeline lang 'z');
+# lines prefixed with "a|" go through the English pipeline (lang 'a').
+# ---- probe set from the first listening round (scratchpad kokoro-zh/out/manifest.json)
+你好，我是卢明。今天想读点什么？
+刚才没连上，你再说一遍。
+好的，我去查一下，查完告诉你。
+这一章讲的是 Transformer 里的 attention 机制，核心是 query、key 和 value 三个矩阵。
+我们用 GPT 和 Claude 做了对比，结果放在 Red Box 里了。
+2026年10月17日，第3.5章，大约要读45分钟。
+这家银行的行长说，重新称一下这批货的重量。
+他长大以后，成了乐队里最会弹琴的人，大家都很快乐。
+嗯，这个问题有点难，我让后台好好想一想。
+哈利·波特第一次走进对角巷的时候，整条街都在冒着热气，他简直看呆了。猫头鹰在笼子里扑腾，店门口挂着闪闪发光的坩埚。
+Hi, I'm Lumen. What would you like to read today?
+a|The attention mechanism lets the model weigh every token against every other token in the sequence.
+a|Sorry, I lost you for a second. Could you say that again?
+# ---- reading companion, plain Chinese
+这本书的第一部分讲的是人类认知革命。
+作者认为，语言的出现让人类可以讨论虚构的事物。
+你可以先把这一节读完，再回来和我聊聊。
+我把刚才那段话总结成三个要点。
+第一，农业革命并没有让个人的生活变得更轻松。
+第二，帝国和货币把陌生人连接在了一起。
+第三，科学革命的核心是承认自己的无知。
+这个观点有点反直觉，你怎么看？
+如果你觉得太难，我们可以放慢一点。
+这一段的论证其实有一个漏洞。
+他用了很多历史上的例子来支持自己的看法。
+我们明天接着读第五章，好吗？
+今天读得不错，休息一下吧。
+你刚才划的那句话，我觉得很有意思。
+这里的“想象的共同体”是什么意思？
+书里提到的那个实验，结果其实有争议。
+请把你的问题再说得具体一点。
+我没有听清楚，能再说一次吗？
+这个词在不同的语境里意思不一样。
+好，那我们换个角度来看这个问题。
+先别急着下结论，看看后面怎么说。
+这一章比上一章难一些，但很关键。
+你记得上次我们讨论过的那个概念吗？
+这本小说的开头写得非常吸引人。
+主人公在第三章做出了一个艰难的选择。
+作者的文笔很朴素，但是读起来很有力量。
+我们来复习一下昨天的内容。
+你可以用自己的话把这个理论讲一遍。
+讲得很好，只是有一个地方需要补充。
+这里有两种解释，我先说第一种。
+这段历史我不太熟悉，我去查一查资料。
+后台还在整理，稍等一会儿。
+我已经把笔记存好了，随时可以打开。
+你想听我读一遍原文吗？
+这个比喻用得很妙。
+其实这个问题没有标准答案。
+读书不是为了记住所有细节。
+重要的是理解作者的思路。
+慢慢来，不着急。
+我们今天先读到这里。
+晚安，明天见。
+早上好，昨晚睡得好吗？
+这篇文章大概需要二十分钟读完。
+文章的结构很清楚，分成四个部分。
+我觉得第二部分写得最精彩。
+最后一段有点仓促，像是没写完。
+你同意作者的观点吗？
+我有一点不同的看法。
+这件事说起来话长。
+这个故事发生在一个小镇上。
+那天下着大雨，街上几乎没有人。
+她推开门，发现屋里一片漆黑。
+老人坐在门口，慢悠悠地抽着烟。
+孩子们在院子里跑来跑去。
+窗外的树叶被风吹得沙沙作响。
+他把信放进抽屉，再也没有打开过。
+这个结局让很多读者感到意外。
+我们可以从三个方面来分析这个人物。
+他的性格里有矛盾的地方。
+这种写法在当时是很少见的。
+你注意到作者反复提到的那个意象了吗？
+这首诗的节奏很特别。
+古人写诗讲究平仄和对仗。
+这句话出自《论语》。
+学而时习之，不亦说乎。
+三人行，必有我师焉。
+知之为知之，不知为不知，是知也。
+床前明月光，疑是地上霜。
+海内存知己，天涯若比邻。
+经济学研究的是稀缺资源的配置。
+供给和需求决定了市场价格。
+通货膨胀会让手里的钱越来越不值钱。
+利率上升的时候，借钱的成本也会上升。
+心理学家发现，人们往往高估自己的判断。
+记忆并不像录像机，它会不断被重新构建。
+睡眠对学习新知识非常重要。
+这项研究的样本量比较小。
+相关性并不等于因果关系。
+我们需要更多的证据。
+# ---- mixed Chinese and English: terms, people, products
+这一节介绍了 BERT 和 GPT 的区别。
+我用 Python 写了一个小脚本来统计词频。
+你可以在 GitHub 上找到这个项目。
+苹果发布了新的 iPad，屏幕更大了。
+这篇论文是 Google 的团队写的。
+Kokoro 是一个很小的语音合成模型。
+我们在 iPhone 上测试了 Whisper 的识别效果。
+这本书的作者是 Yuval Noah Harari。
+他在 Stanford 读的博士。
+OpenAI 的模型和 Anthropic 的模型各有长处。
+这个功能在 macOS 和 Windows 上都能用。
+请打开 Settings，然后选 Accounts。
+我把文件存成了 PDF 格式。
+这个 bug 已经修好了。
+我们下周发布新的 release。
+这段代码用到了 async 和 await。
+数据库用的是 SQLite。
+前端框架是 React，样式用 Tailwind。
+模型的 loss 一直在下降。
+你听说过 Attention Is All You Need 这篇论文吗？
+深度学习里最常用的优化器是 Adam。
+这个模型有八千二百万个参数。
+我们先在 CPU 上跑，再换到 GPU。
+他的 email 地址我发给你了。
+今天的 meeting 改到下午了。
+这个 deadline 有点紧。
+你可以用 ChatGPT 帮你润色一下。
+马斯克说 Tesla 明年会推出新车型。
+乔布斯在 Stanford 的演讲非常有名。
+我最近在看 Netflix 上的一部纪录片。
+这款 app 在 App Store 上评分很高。
+请用 English 再解释一遍。
+这个 API 返回的是 JSON 格式。
+把 token 的数量控制在五百以内。
+Transformer 的核心是 self attention。
+我们用 RAG 的方法来检索资料。
+这个 prompt 写得不够清楚。
+我在 YouTube 上看到一个讲 Kokoro 的视频。
+他是 Microsoft 的工程师。
+这家公司刚完成了 B 轮融资。
+请帮我把这段话翻译成 English。
+NASA 发射了一颗新的卫星。
+我们约在 Starbucks 见面吧。
+他的偶像是 Michael Jordan。
+这部电影改编自 Stephen King 的小说。
+我在读 The Great Gatsby 的中文版。
+这个词的英文是 serendipity。
+数学里的 gradient descent 就是梯度下降。
+用 Rust 重写之后，速度快了很多。
+我们的服务器放在 AWS 上。
+这个 CEO 很会讲故事。
+Linux 是一个开源的操作系统。
+我把 Wi-Fi 密码贴在冰箱上了。
+你用过 Notion 吗？
+这个 PPT 还需要再改改。
+苹果的 Siri 和亚马逊的 Alexa 都是语音助手。
+他在 Twitter 上发了一条很长的帖子。
+这本书叫 Thinking Fast and Slow。
+费曼的物理学讲义写得很好懂。
+我们用 Zoom 开了一个小时的会。
+# ---- numbers, dates, decimals, percent, phone numbers
+今天是2026年10月17日。
+会议定在3月5日下午两点。
+这本书一共有386页。
+我已经读了百分之六十了。
+进度是65%，还剩一点。
+增长率是3.5%。
+气温降到了-5度。
+价格是12.8元。
+他的电话是13812345678。
+请拨打010-62345678。
+这个房间号是1203。
+一共来了1000个人。
+全国人口大约是14亿。
+公元前221年，秦统一了六国。
+第二次世界大战在1945年结束。
+她今年25岁。
+比分是3比2。
+我睡了7个小时。
+这台电脑有16GB内存。
+请在5分钟之内回复。
+这个数字是0.618。
+圆周率约等于3.14159。
+三分之二的人同意这个方案。
+2/3的人投了赞成票。
+今天最高气温是28℃。
+这条路长约3-5公里。
+他跑了100米，用了10.5秒。
+我们在2025年9月搬了家。
+这本书出版于1999年。
+第1章和第2章是导论。
+页码从第10页到第20页。
+他考了98分。
+一年有365天。
+我等了你两个小时。
+这件衣服两百块。
+二〇二六年是马年吗？
+预算超了20万。
+这辆车开了5万公里。
+我们小组有7个人。
+时间是早上8点30分。
+# ---- polyphonic characters
+这家银行的行长很年轻。
+他走路的样子很奇怪，一行一行地数。
+我们重新开始吧，这次要重视细节。
+这个箱子很重，你小心一点。
+你们长得真像，是双胞胎吗？
+他的头发长了，该剪了。
+音乐让人快乐。
+这首曲子的旋律很优美。
+他会弹钢琴，也会弹吉他。
+子弹打中了目标。
+他们在背后议论你。
+请把这篇课文背下来。
+这个地方的人都很好客。
+他得了第一名。
+你得早点出发。
+我觉得这个想法不错。
+他睡觉的时候总是觉得冷。
+都是我的错，我都告诉他了。
+这是一个很好的机会。
+他好奇地看着窗外。
+请你给我一杯水。
+我们要供给前线足够的粮食。
+这个字的发音我总是读错。
+他发了一笔小财。
+大家一起去看电影吧。
+我还没有还你钱。
+他的还原能力很强。
+这道题的答案是什么？
+他答应明天来。
+你应该早点睡。
+这首歌我听了很多遍。
+差不多该出发了。
+他出差去了上海。
+这两个版本差别不大。
+我们参加了这次活动。
+人参是一种名贵的药材。
+他在教室里教数学。
+这座山很高，空气很新鲜。
+空闲的时候我喜欢看书。
+他把东西藏在了西藏。
+中午我们一起吃饭。
+他射中了靶心。
+着急也没用，你先坐着。
+我着凉了，有点发烧。
+# ---- yi and bu in various positions
+一个人一辈子总要读几本好书。
+一天，一年，一月，一起，一样。
+看一看，想一想，试一试。
+第一，第一次，第一名。
+一，二，三，四。
+一共有十一个人。
+他一边走一边唱歌。
+这件事一下子就解决了。
+我一点也不累。
+这是唯一的办法。
+不对，不是这样的。
+不会，不要，不去，不来。
+好不好？行不行？
+我不知道他去不去。
+他说不定明天就回来了。
+这个问题不难，也不简单。
+差不多就行了。
+对不起，我来晚了。
+了不起！
+不管怎样，我们都要试试。
+统一，万一，划一，同一。
+一模一样，一心一意，一五一十。
+不三不四，不知不觉。
+这道菜一般般。
+他一口气读完了整本书。
+你一定要来。
+一切都会好起来的。
+不得不说，这本书写得很好。
+我不太确定。
+不好意思，打扰一下。
+# ---- reduplication, neutral tone, erhua, third-tone chains
+他慢慢地走了过来。
+你好好休息，别想太多。
+妈妈给我买了一个新书包。
+天上的星星一闪一闪的。
+宝宝在床上睡着了。
+我们去公园走走吧。
+你尝尝这个菜。
+他看看我，又看看你。
+高高兴兴上学去，平平安安回家来。
+清清楚楚，明明白白。
+花儿开了，鸟儿在唱歌。
+我们去胡同儿里转转。
+这孩子小嘴儿真甜。
+老王的女儿考上了大学。
+你有空儿来坐坐。
+我想买五把雨伞。
+我很好，你呢？
+展览馆里有很多老古董。
+请把你的手表给我。
+我也想买一本小说。
+小李买了两斤水果。
+这个东西是什么？
+我的朋友在等我。
+你们要去哪里呀？
+他们说的是真的吗？
+桌子上放着一本书。
+孩子们都回家了。
+天快黑了，我们走吧。
+他笑着说了一句话。
+我吃过饭了。
+# ---- punctuation and mixed symbols
+你说什么？我没听见！
+注意：这里有三个问题；第一个最重要。
+他问：“你去过北京吗？”
+《红楼梦》是中国古典小说的巅峰。
+「这是什么？」她问。
+我们（包括我自己）都没想到。
+等等……让我想想。
+这个方案——说实话——不太可行。
+苹果、香蕉、橘子都可以。
+好吧。
+嗯。
+啊，原来是这样！
+哦，我明白了。
+哈哈，你说得对。
+唉，又下雨了。
+# ---- English long sentences (English pipeline)
+a|This chapter argues that the agricultural revolution was history's biggest fraud.
+a|Could you read the next paragraph aloud for me?
+a|I think the author is making a much broader point about cooperation.
+a|Let's take a short break and come back to this section later.
+a|The experiment was repeated three times, and the results were consistent.
+a|She opened the door and found the room completely dark.
+a|What do you think the main argument of this essay is?
+a|In 1945, the war finally came to an end.
+a|The book has 386 pages, and I've read about half of it.
+a|He lives in a small town near the coast.
+a|We record every session so that you can listen again.
+a|The record shows that the policy failed twice.
+a|I read that book last year, and I'll read it again next month.
+a|The weather today is cold, but it should warm up by the weekend.
+a|Good morning! Did you sleep well last night?
+a|This is a difficult question, and there is no single right answer.
+a|The scientists couldn't explain why the signal disappeared.
+a|Please summarize the key ideas in three sentences.
+a|Memory is not a recording; it is rebuilt every time we remember.
+a|The price rose by 25 percent in just two years.
+a|It's the most important idea in the whole book.
+a|They didn't expect the story to end like that.
+a|Learning a new language takes patience and practice.
+a|The old man sat by the window and watched the rain.
+a|Economics is the study of how people use scarce resources.
+a|If you have any questions, just ask me.
+a|The model was trained on a large collection of public documents.
+a|Neural networks learn by adjusting millions of small weights.
+a|We'll continue with chapter five tomorrow evening.
+a|Thank you for reading with me today.
+a|Correlation does not imply causation.
+a|The author was born in Israel and studied at Oxford.
+a|There are two ways to interpret this passage.
+a|Her argument is clear, concise, and convincing.
+a|Do you want me to explain it again in simpler words?
+# ---- English through the zh pipeline (en_callable inside a zh sentence)
+Hello, how are you today?
+OK，我们开始吧。
+Thank you，今天就到这里。
+Good night，明天见。
+# ---- held-out: written after the port matched everything above, not used to tune it
+a|She wants to record a new song before the concert starts.
+a|The record shows that prices rose by 4.5 percent last year.
+a|We will present the results at the meeting on Monday.
+a|Please close the door when you leave the room.
+a|He lives close to the station, so he walks to work.
+a|They object to the new rules about remote work.
+a|Can you lead the discussion for the second chapter?
+a|The pipes were made of lead in the old house.
+a|I don't know why the build failed again this morning.
+a|It's 7:30 in the morning and the coffee is ready.
+a|The author was born in 1984 and moved to London in 2010.
+a|Her talk lasted about 45 minutes, including questions.
+a|This costs $12.50, which is cheaper than last time.
+a|The 3rd edition of the book has 12 new chapters.
+a|Dr. Smith said the U.S. economy grew faster than expected.
+a|We need to update the app before Friday.
+a|The update fixed a bug in the reading view.
+a|Machine learning models can't explain their own decisions.
+a|What does the author mean by the word progress?
+a|Most people underestimate how long it takes to read a long book.
+a|The wind was so strong that we couldn't wind the kite string.
+a|The children were reading quietly in the library.
+a|He tears the paper into small pieces, and his eyes fill with tears.
+a|Our team uses Python and Rust for most of the backend.
+a|The CPU usage jumped to 90% during the test.
+a|I'd like to read the summary first, then the full report.
+a|They've already finished the first draft of the paper.
+a|Is this the right way to the museum?
+a|My phone number used to be different.
+a|The meeting is at 3 pm, not at 4.
+# held-out zh and mixed
+今天的天气预报说下午有雷阵雨，出门记得带伞。
+这一章主要讲的是农业革命如何改变了人类的生活方式。
+作者认为，八卦是人类合作的基础之一。
+我们把会议改到下周三上午十点吧。
+请把第12页到第15页再读一遍。
+这台电脑的内存是16GB，硬盘是512GB。
+他在2019年5月加入了这家公司。
+这个月的电费比上个月多了23.5元。
+温度降到了零下5度，路面开始结冰。
+你能用简单的话解释一下什么是神经网络吗？
+朝阳区的朝阳公园今天人特别多。
+他的长处是做事很有条理，但说话不太好听。
+这本书我还没看完，只看了一半。
+银行的行长今天亲自来到了我们这一行。
+他重新调整了一下重量，又重重地放下了。
+我们一起去看看那个展览吧，听说挺好玩儿的。
+这个问题我想了想，还是不太明白。
+她一边听音乐，一边写作业。
+不管怎么说，我们都不能不做准备。
+他一下子就把这一大碗饭吃光了。
+这个App的设计很简洁，用起来很顺手。
+我用ChatGPT帮我翻译了一段话。
+请打开Settings，然后点General。
+这个bug在iOS上能复现，在Android上不能。
+我们周末去Costco买点东西吧。
+他是Google的工程师，之前在Meta工作。
+这段代码用了React和TypeScript。
+你可以把PDF文件拖到这里来。
+我刚刚收到一封email，说快递明天到。
+她最喜欢的乐队是Coldplay。
+我在看一本叫Sapiens的书。
+今天的会议由CEO亲自主持。
+这家店的Wi-Fi很快，适合办公。
+据统计，全国有超过3000万人参加了这项活动。
+这场比赛的比分是3比2。
+他的电话是13912345678，有事可以打给他。
+我们约在早上8点半见面。
+这件衣服打八折以后是240元。
+小明考了98.5分，全班第一。
+大约有1/4的人选择了第二个选项。
+这里距离市中心大约15公里。
+我们要在3到5天内完成这个任务。
+这个项目的预算增加了百分之二十。
+他慢慢地抬起头，看着远处的山。
+妈妈让我早点儿回家。
+这件事儿你别管了。
+你说的这个事情我得好好想一想。
+老师说，读书要一字一句地读。

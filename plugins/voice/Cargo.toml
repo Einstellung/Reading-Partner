@@ -41,6 +41,9 @@ async-trait = "0.1"
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls"], optional = true }
 # The downloader's check of every model file against the manifest.
 sha2 = "0.10"
+# Decodes the Kokoro frontend's embedded tables (src/kokoro_g2p/data). BSD-3-Clause/MIT, already in the
+# app's graph through tauri's asset compression.
+brotli-decompressor = "5"
 
 [features]
 kokoro = ["dep:ort"]
