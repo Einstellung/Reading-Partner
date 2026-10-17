@@ -10,8 +10,10 @@
 // else runs there in order: the VAD per frame, the ring of the last 8 s, and
 // Smart Turn. Each frame goes to the turn machine stamped with its own time,
 // worked back from the buffer's stamp, so speech starts and stops at 32 ms
-// resolution rather than at the tap's 100-200 ms: a 0.35 s 「等一下」 spans
-// the 300 ms confirm window frame by frame, where two buffers did not.
+// resolution rather than at the tap's 100-200 ms, and with the level of the
+// 100 ms of audio ending at it rather than the level of the buffer it finished
+// in: a 0.35 s 「等一下」 spans the 300 ms confirm window only if its last
+// voiced frames are not gated on a buffer that is mostly silence (pitfall 652).
 
 import AVFoundation
 import CoreML
@@ -137,9 +139,9 @@ final class SmartTurn {
 }
 
 final class NeuralFront {
-    /// One frame's verdict for the turn machine: the level of the buffer it
-    /// came from, its own wall-clock and audio-timeline stamps, and the VAD's
-    /// probability (NaN when the model failed on it).
+    /// One frame's verdict for the turn machine: the level of the 100 ms of
+    /// audio ending at it, its own wall-clock and audio-timeline stamps, and
+    /// the VAD's probability (NaN when the model failed on it).
     typealias Step = (_ db: Double, _ atMs: Double, _ audioMs: Double, _ speech: Double) -> Void
 
     /// What Smart Turn said about one pause. `probability` is nil when the
@@ -154,6 +156,10 @@ final class NeuralFront {
     /// Audio from before the duck that still belongs to the turn: the first
     /// syllable starts under the VAD's line.
     private static let prerollMs: Double = 200
+    /// The span a frame's level is measured over: the tap buffer's length
+    /// (pitfall 161), so the playback rule's -35 dBFS means what the probe
+    /// that set it measured. turn-detect.ts `NEURAL_LEVEL_WINDOW_MS`.
+    private static let levelSamples = Int(NeuralFront.rate / 10)
 
     private let queue = DispatchQueue(label: "rp.voice.neural", qos: .userInitiated)
     private let vad: VoiceActivityModel
@@ -201,12 +207,12 @@ final class NeuralFront {
 
     // MARK: - The tap
 
-    /// One tap buffer, on the tap's thread, with its level and the two stamps
-    /// the tap took for its last sample. The frames are judged on `queue`.
-    func push(_ buffer: AVAudioPCMBuffer, db: Double, atMs: Double, audioMs: Double) {
+    /// One tap buffer, on the tap's thread, with the two stamps the tap took
+    /// for its last sample. The frames are judged on `queue`.
+    func push(_ buffer: AVAudioPCMBuffer, atMs: Double, audioMs: Double) {
         guard let samples = resample(buffer) else { return }
         queue.async { [weak self] in
-            self?.judge(samples, db: db, atMs: atMs, audioMs: audioMs)
+            self?.judge(samples, atMs: atMs, audioMs: audioMs)
         }
     }
 
@@ -252,7 +258,7 @@ final class NeuralFront {
 
     // MARK: - The queue
 
-    private func judge(_ samples: [Float], db: Double, atMs: Double, audioMs: Double) {
+    private func judge(_ samples: [Float], atMs: Double, audioMs: Double) {
         remember(samples, endAudioMs: audioMs)
         pending.append(contentsOf: samples)
         let size = vad.frameSamples
@@ -260,7 +266,8 @@ final class NeuralFront {
         while pending.count - used >= size {
             let end = used + size
             // How far this frame's last sample is behind the buffer's.
-            let behindMs = Double(pending.count - end) / Self.rate * 1000
+            let behind = pending.count - end
+            let behindMs = Double(behind) / Self.rate * 1000
             var speech = Double.nan
             do {
                 speech = try pending.withUnsafeBufferPointer { all in
@@ -272,7 +279,7 @@ final class NeuralFront {
                     NSLog("RP-CALL the VAD failed on a frame: %@", DictationError.describe(error))
                 }
             }
-            step(db, atMs - behindMs, audioMs - behindMs, speech)
+            step(trailingLevelDb(behind: behind), atMs - behindMs, audioMs - behindMs, speech)
             used = end
         }
         pending.removeFirst(used)
@@ -285,6 +292,24 @@ final class NeuralFront {
         }
         ringFilled = min(ring.count, ringFilled + samples.count)
         ringEndAudioMs = endAudioMs
+    }
+
+    /// RMS dBFS of the `levelSamples` heard up to `behind` samples before the
+    /// newest one, fewer at the start of the call. turn-detect.ts
+    /// `trailingLevelDb`.
+    private func trailingLevelDb(behind: Int) -> Double {
+        let n = min(Self.levelSamples, ringFilled - behind)
+        guard n > 0 else { return -Double.infinity }
+        var i = (ringNext - behind) % ring.count
+        if i < 0 { i += ring.count }
+        var sum: Double = 0
+        for _ in 0..<n {
+            i -= 1
+            if i < 0 { i += ring.count }
+            let sample = Double(ring[i])
+            sum += sample * sample
+        }
+        return 10 * log10(sum / Double(n))
     }
 
     /// The last `count` samples heard, oldest first.

@@ -33,8 +33,9 @@
 //
 // Two ways to say "voice" (docs/136, the audio front). `energy` is the dB line
 // above, one step per tap buffer. `neural` is a VAD's speech probability, one
-// step per VAD frame (32 ms for Silero), with the buffer's dB riding along for
-// the playback rule in `vad`. The neural path also ends a turn differently: a
+// step per VAD frame (32 ms for Silero), with the level of the 100 ms of audio
+// ending at that frame riding along for the playback rule in `vad`
+// (`trailingLevelDb`). The neural path also ends a turn differently: a
 // short silence announces a `pause`, the caller asks an end-of-turn model
 // whether the user is done, and `completeTurn` ends the turn on a yes; the
 // hangover is then only the fallback.
@@ -254,7 +255,7 @@ export interface TurnDetectStep {
  * rather than an exception. Pure: same state and arguments, same answer.
  *
  * `speech` is the VAD's probability for one frame, read only when `vad` is
- * `neural`; there `db` is the level of the buffer the frame came from. NaN, the
+ * `neural`; there `db` is `trailingLevelDb` at the frame's end. NaN, the
  * default, is not speech.
  *
  * The caller may also drive time with no audio — `step(state, cfg,
@@ -361,6 +362,34 @@ export function completeTurn(
     state: { ...state, phase: "idle", loudFrames: 0, pausedAtMs: null },
     event: { type: "end", silentMs: atMs - state.lastVoiceMs },
   };
+}
+
+/**
+ * How much audio the neural path's level covers: the tap buffer's length
+ * (pitfall 161), so the playback rule's `startDb` means what the probe that set
+ * it measured.
+ */
+export const NEURAL_LEVEL_WINDOW_MS = 100;
+
+/**
+ * RMS dBFS of the `count` samples ending just before `end`, fewer at the very
+ * start. The level a neural frame is gated on while the companion plays; the
+ * Swift side (NeuralFront) computes the same over its 16 kHz ring.
+ *
+ * Not the level of the tap buffer the frame completed in. A frame finishes in
+ * whichever buffer delivers its last sample, so the tail of a short word is
+ * tagged with the next buffer, mostly silence: 「等一下」's last three voiced
+ * frames came out at -38 dB, under the -35 line, and the barge-in never
+ * reached `confirmMs` (docs/pitfall 652). Measured over the frame's own last
+ * 100 ms, the same frames are at -23 to -35.
+ */
+export function trailingLevelDb(samples: ArrayLike<number>, end: number, count: number): number {
+  const to = Math.min(Math.max(0, Math.floor(end)), samples.length);
+  const from = Math.max(0, to - Math.max(0, Math.floor(count)));
+  if (to <= from) return Number.NEGATIVE_INFINITY;
+  let sum = 0;
+  for (let i = from; i < to; i++) sum += samples[i] * samples[i];
+  return 10 * Math.log10(sum / (to - from));
 }
 
 export interface TurnDetector {

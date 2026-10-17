@@ -309,15 +309,18 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
         },
       })
       .then(
+        // Not live: the abort already closed this round's tools, and the turn
+        // may have been asked again since (a folded turn, voice-session.ts),
+        // whose tools are not this round's to close.
         () => {
-          closeTurn(turn);
           if (!live()) return;
+          closeTurn(turn);
           asks.delete(turn);
           feed(() => session.done(turn));
         },
         (e) => {
-          closeTurn(turn);
           if (!live()) return;
+          closeTurn(turn);
           asks.delete(turn);
           console.error("voice call model turn failed", e);
           feed(() => session.failed(turn));

@@ -547,7 +547,9 @@ test("a turn cut mid-tool still closes what it opened", async () => {
   });
   await h.userSaid(2, "算了");
 
-  expect(h.aborted(1)).toBe(true);
+  // Nothing of the reply was audible, so 「算了」 folds into turn 1: the round
+  // with the tool out is aborted and the whole is asked again.
+  expect(h.asked[h.asked.length - 1]).toEqual({ turn: 1, text: "查一下这个算了" });
   expect(h.activity).toEqual([
     { kind: "tool", name: "fetch_page", phase: "start" },
     { kind: "tool", name: "fetch_page", phase: "end" },

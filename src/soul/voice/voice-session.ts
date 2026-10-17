@@ -157,6 +157,12 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
   // can be joined onto it rather than replacing it. One entry per turn of the
   // call; a call is minutes long, not hours.
   const heard = new Map<number, string>();
+  // Native turns folded into an earlier one: the user went on talking before
+  // the reply to what they had said was audible, so to them it was one turn
+  // with a pause in it, and it is asked again as one (see `speech-end`).
+  // Everything that arrives for the later turn lands on the earlier one.
+  const folded = new Map<number, number>();
+  const home = (t: number): number => folded.get(t) ?? t;
 
   // The companion's turn being assembled. `splitter` holds the raw text as well
   // as the sentences, which is what the truncation is cut out of.
@@ -315,16 +321,16 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
     if (drained) finish(out);
   }
 
-  function ask(text: string, out: SessionEffect[]): void {
-    heard.set(turn, text);
-    out.push({ type: "record", entry: { role: "user", turn, text, interrupted: false } });
-    asked = turn;
-    speakingTurn = turn;
+  function ask(text: string, out: SessionEffect[], as: number = turn): void {
+    heard.set(as, text);
+    out.push({ type: "record", entry: { role: "user", turn: as, text, interrupted: false } });
+    asked = as;
+    speakingTurn = as;
     splitter = createSourcedSplitter();
     spoken = [];
     began = false;
     closed = false;
-    out.push({ type: "ask", turn, text });
+    out.push({ type: "ask", turn: as, text });
     go("thinking", out);
   }
 
@@ -423,6 +429,22 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
             go("listening", out);
             return out;
           }
+          // The user went on before a word of the reply to their last turn was
+          // audible: the stop held that reply back, and now there are words.
+          // To them nothing was answered, so this is the same turn after a
+          // pause, not a new one. The end-of-turn model calls a pause after a
+          // finished clause complete (docs/pitfall 651), so this happens
+          // whenever someone thinks between two sentences. The held reply is
+          // aborted and the whole is asked again under the earlier turn, which
+          // replaces its line in the transcript instead of adding a second.
+          const before = asked !== null && asked > 0 && pendingCut && !began ? heard.get(asked) : undefined;
+          if (before && asked !== null) {
+            const into = asked;
+            cut(null, out);
+            folded.set(turn, into);
+            ask(joinSpeech(before, text), out, into);
+            return out;
+          }
           if (asked !== null || began) cut(null, out);
           ask(text, out);
           return out;
@@ -434,19 +456,20 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
           // answered, the version without it, and a second question would be an
           // answer to a sentence the user never said twice.
           const text = (speechText(e.text) ?? "").trim();
-          const said = heard.get(e.turn);
+          const at = home(e.turn);
+          const said = heard.get(at);
           if (!text || said === undefined) return out;
           const whole = joinSpeech(said, text);
-          heard.set(e.turn, whole);
+          heard.set(at, whole);
           // Unless the turn was never sent, because there was nothing to send
           // when it ended. Then this is not a repair, it is the question.
-          if (said === "" && e.turn === turn && asked === null && !began) {
-            ask(whole, out);
+          if (said === "" && at === home(turn) && asked === null && !began) {
+            ask(whole, out, at);
             return out;
           }
           out.push({
             type: "record",
-            entry: { role: "user", turn: e.turn, text: whole, interrupted: false },
+            entry: { role: "user", turn: at, text: whole, interrupted: false },
           });
           return out;
         }
