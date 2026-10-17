@@ -15,7 +15,8 @@ import {
   loadSources,
   saveSiteSessions,
 } from "../sources/source-store";
-import { allSignInSites, applySessionCheck } from "../sources/site-session";
+import { applySessionCheck } from "../sources/site-session";
+import { accountSites } from "../sources/accounts";
 import { hasTopicSearches } from "../topic-search/store";
 import { liveWebviewFetch } from "../sources/source-live";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
@@ -94,13 +95,14 @@ export async function labCompanionContext(
 // store per call rather than captured when the chat opened, so a source added a
 // few turns ago is signed in to without reopening the conversation.
 //
-// The check writes the same sidecar the sources page reads, so the row there
-// says what the chat just said (the page reloads it on entry).
+// The sites are the Accounts page's rows (info/sources/accounts.ts), and the
+// check writes the same sidecar that page reads, so its row says what the chat
+// just said (the page reloads it on entry).
 function liveSiteSignIn(): SiteSignInDeps {
   return {
     signInSites: async () => {
       const [sources, topicSearch] = await Promise.all([loadSources(), hasTopicSearches()]);
-      return allSignInSites(sources, topicSearch);
+      return accountSites(sources, topicSearch);
     },
     openSignIn: (site) => openSiteSignIn(site.signInUrl),
     checkSession: async (site) => {

@@ -63,7 +63,7 @@ test("a lesson is an entry like any other and back leaves it", () => {
 test("goTo pushes a destination that is not on the stack", () => {
   const s = goTo(INITIAL_STACK, screen("briefing"));
   expect(kinds(s)).toEqual(["home", "briefing"]);
-  expect(kinds(goTo(s, screen("sources")))).toEqual(["home", "briefing", "sources"]);
+  expect(kinds(goTo(s, screen("article")))).toEqual(["home", "briefing", "article"]);
 });
 
 test("goTo unwinds to a destination already on the stack instead of stacking it", () => {

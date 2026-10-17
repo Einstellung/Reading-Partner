@@ -50,8 +50,6 @@ export default {
 
   "briefingPage.dismiss": "Ignorer",
   "briefingPage.notForMe": "Pas pour moi",
-  "briefingPage.sources": "Sources",
-  "briefingPage.manageSources": "Gérer les sources",
   "briefingPage.ask": "Demander",
   "briefingPage.askAboutBriefing": "Poser une question sur ce point",
   "briefingPage.worthYourTime": "À lire",
@@ -310,7 +308,6 @@ export default {
   "ask.aboutWeekday": "Poser une question sur {weekday}",
   "ask.aboutThisWeek": "Poser une question sur cette semaine",
 
-  "removeSourceFailed": "Impossible de supprimer la source",
   "errors.noProvider": "Aucun fournisseur d'IA configuré (Réglages).",
   "errors.extractorFailed": "Impossible de charger l'extracteur d'articles. Réessayez.",
 } satisfies Translation<typeof en>;

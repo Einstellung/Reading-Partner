@@ -34,7 +34,6 @@ import {
 } from "../../../src/info/topic-search/run-state";
 import { recordHalt, xGate } from "../../../src/info/topic-search/halt";
 import { foldTopicSearchHealth, parseSourceHealthFile } from "../../../src/info/topic-search/source-health";
-import { topicSearchHealthRows } from "../../../src/ui/components/info/sources-page";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import type { BrowseEval, BrowseLoad, BrowseSession } from "../../../src/workshop/extract/webview-browse";
 import { openTestRuntime } from "../../legion/durable/support/runtime";
@@ -307,9 +306,12 @@ describe("a first run, then the next night", () => {
     expect(state.night).toBeNull();
   });
 
-  test("the source health is on the collector's state file, the way the source page reads it", () => {
+  test("the source health is on the collector's state file", () => {
     const health = JSON.parse(w.fs.files.get(HEALTH_FILE)!) as Record<string, SourceHealth>;
-    const rows = topicSearchHealthRows(health);
+    // The topic search's lines, by query, X before arXiv.
+    const rows = Object.entries(health)
+      .flatMap(([key, h]) => (h.topicSearch ? [{ key, health: h, line: h.topicSearch }] : []))
+      .sort((a, b) => a.line.query.localeCompare(b.line.query) || (a.line.source === b.line.source ? 0 : a.line.source === "x" ? -1 : 1));
     expect(rows.map((r) => [r.key, r.line.status])).toEqual([
       ["topic-search:ts-0a1b2c3d:q1:x", "ok"],
       ["topic-search:ts-0a1b2c3d:q1:arxiv", "empty"],

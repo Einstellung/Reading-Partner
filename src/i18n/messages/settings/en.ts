@@ -1,10 +1,11 @@
-// Settings: the dialog and page frame, and the three tabs under
+// Settings: the dialog and page frame, and the four tabs under
 // ui/components/settings. The source every other locale is typed against.
 
 export default {
   title: "Settings",
   done: "Done",
-  "tab.account": "Account",
+  "tab.account": "AI & sync",
+  "tab.accounts": "Accounts",
   "tab.features": "Features",
   "tab.optional": "Optional",
   connected: "Connected",

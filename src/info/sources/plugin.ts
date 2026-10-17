@@ -44,7 +44,7 @@ export interface PluginDeps {
 export interface SourcePlugin {
   // The `provider` string an index descriptor names.
   id: string;
-  // Display name for the sources page ("arXiv", "GitHub").
+  // Display name ("arXiv", "GitHub").
   name: string;
   // Hostnames the provider talks to, for health notes and caveats.
   hosts: string[];
@@ -53,7 +53,7 @@ export interface SourcePlugin {
   // Null when the query is well formed; otherwise one line saying what is wrong.
   // Pure: the descriptor validator calls it with no network.
   validateQuery(query: IndexQuery): string | null;
-  // One line a person reads on the sources page: "arXiv cs.RO · last 2 days".
+  // One line a person reads: "arXiv cs.RO · last 2 days".
   describeQuery(query: IndexQuery): string;
   // Run the query. Headlines with signals, in the order the library returned
   // them; never a body. Throws on a failed request (collectAll records it as
@@ -112,7 +112,7 @@ export function resetSourcePluginsForTests(): void {
 
 // A descriptor's plugin and query, when it is an index source with a
 // registered plugin; undefined otherwise. The one lookup the engine, the probe
-// and the sources page share.
+// and the add-source cards share.
 export function pluginOf(
   desc: SourceDescriptor,
 ): { provider: SourcePlugin; query: IndexQuery } | undefined {

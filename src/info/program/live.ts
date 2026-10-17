@@ -92,7 +92,7 @@ import { registerSchedule } from "../../legion/schedule";
 import { subscribeSyncStatus } from "../../platform/sync";
 import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
-import { allSignInSites } from "../sources/site-session";
+import { accountSites } from "../sources/accounts";
 import { hasTopicSearches } from "../topic-search/store";
 import {
   loadPool,
@@ -226,7 +226,7 @@ async function screen(
 // empty). Each source is handed to the pipeline as it settles so the run's
 // checkpoint advances one source at a time, and into the pool at the same time,
 // so a run's own requests stock it exactly as a background poll does. Health is
-// recorded for the source-list UI.
+// recorded for the companion and the collector's status file.
 //
 // A source the background collector polled recently is not polled again here: it
 // settles with nothing new, and the pool supplies its items. `force` — the user
@@ -732,7 +732,7 @@ function collectorView(): BriefingView {
     },
     // This machine is the one collecting; whatever went wrong is already in the
     // snapshot's error, on the screen of the person who can act on it, and the
-    // sign-in rows on its source list are the real ones.
+    // rows in its own Settings › Accounts are the real ones.
     notices: () => [],
     collectorSites: () => null,
     async article(itemId: string): Promise<ArticleState> {
@@ -814,7 +814,7 @@ async function siteStates(): Promise<Record<string, boolean>> {
       hasTopicSearches(),
     ]);
     const out: Record<string, boolean> = {};
-    for (const site of allSignInSites(sources, topicSearch)) {
+    for (const site of accountSites(sources, topicSearch)) {
       const state = sessions[site.host];
       out[site.host] = !!state && !state.unknown && state.signedIn;
     }

@@ -1,7 +1,8 @@
 // Settings: a page of the content area, with the sidebar still beside it and
-// the Settings row at its foot lit (docs/51). What each of the three tabs holds
-// is argued in settings/AccountPanel, settings/FeaturesPanel and
-// settings/OptionalPanel; this file is the page, the sub-nav, and the footer.
+// the Settings row at its foot lit (docs/51). What each of the four tabs holds
+// is argued in settings/AccountPanel, settings/AccountsPanel,
+// settings/FeaturesPanel and settings/OptionalPanel; this file is the page, the
+// sub-nav, and the footer.
 //
 // The page is a screen like Today and the briefing: `absolute inset-0` over the
 // column beside the sidebar, one scroller, nothing fixed. Escape and the
@@ -14,7 +15,7 @@
 //
 // The sub-nav is breakpoints, not two components: a 200px column of rows from
 // `lg` up, a scrollable row of chips below it, and both shapes are the same
-// three triggers. Radix's `orientation` is a prop and cannot follow a media
+// four triggers. Radix's `orientation` is a prop and cannot follow a media
 // query, so it stays vertical — that decides which arrow keys walk the strip,
 // and the wide shape is the one with a keyboard on it.
 
@@ -25,6 +26,7 @@ import { type Settings } from "../../platform/app/settings";
 import { type DeviceSettings } from "../../platform/app/device";
 import { useT } from "../../i18n";
 import AccountPanel from "./settings/AccountPanel";
+import AccountsPanel from "./settings/AccountsPanel";
 import FeaturesPanel from "./settings/FeaturesPanel";
 import OptionalPanel from "./settings/OptionalPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
@@ -55,7 +57,7 @@ const SUBNAV =
 
 // A row of that column, or a chip of that strip. `flex-none` displaces the
 // primitive's `flex-1`, which in a column would divide the sub-nav's height
-// between the three of them and in the strip would stretch the chips instead of
+// between the four of them and in the strip would stretch the chips instead of
 // letting them scroll. The active one takes the neutral chip fill the sidebar
 // and the reader's panels use, so every list of destinations in the app reads
 // alike.
@@ -64,7 +66,7 @@ const SUBNAV_ROW =
   "data-[state=active]:bg-secondary data-[state=active]:font-medium " +
   "data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none";
 
-const TABS = ["account", "features", "optional"] as const;
+const TABS = ["account", "accounts", "features", "optional"] as const;
 
 export default function SettingsView(props: SettingsBodyProps) {
   const t = useT();
@@ -108,6 +110,9 @@ export function SettingsBody({
       <div className="min-w-0 max-w-[720px] flex-1">
         <TabsContent value="account">
           <AccountPanel settings={settings} onSettingsChange={onSettingsChange} />
+        </TabsContent>
+        <TabsContent value="accounts">
+          <AccountsPanel role={device?.role ?? null} />
         </TabsContent>
         <TabsContent value="features">
           <FeaturesPanel

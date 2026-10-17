@@ -7,9 +7,10 @@
 // cookie jar (seven Bloomberg sections, one bloomberg.com), so the sign-in is
 // per site, not per source, and this is where sources are folded into sites.
 //
-// Pure: the descriptors go in, the rows the sources page draws come out. What
-// the state means and where it is stored is below; the calls that change it are
-// in workshop/extract/webview-session.ts.
+// Pure: the descriptors go in, the sites come out. Settings › Accounts lists
+// them through info/sources/accounts.ts. What the state means and where it is
+// stored is below; the calls that change it are in
+// workshop/extract/webview-session.ts.
 
 import type { SourceDescriptor } from "./descriptor";
 import { X_SEARCH_SOURCE } from "./x-search";
@@ -38,6 +39,12 @@ export interface SiteSessionState {
 	checkedAt: number;
 	/** Set when the check could not tell (a wall, a timeout, no webview). */
 	unknown?: string;
+	/**
+	 * Signed out by the site rather than by the reader: a check found no session
+	 * where an earlier one had found one. Signing out here forgets the site, so
+	 * this never follows the reader's own sign-out.
+	 */
+	expired?: boolean;
 }
 
 export type SiteSessions = Record<string, SiteSessionState>;
@@ -94,8 +101,8 @@ export function signInSites(sources: SourceDescriptor[]): SignInSite[] {
  * sites, then X when the reader has a topic search (`hasTopicSearches`, active
  * or stopped). X search is not a subscription; the topic search reads it in the
  * browse window (x-search.ts), and a reader with no topic search has no use for
- * an X session. What the sources page, the companion and the collector's status
- * file all list.
+ * an X session. What the companion and the collector's status file list; the
+ * Accounts page lists every account in its registry besides (accounts.ts).
  */
 export function allSignInSites(subscribed: SourceDescriptor[], topicSearch: boolean): SignInSite[] {
 	return signInSites(topicSearch ? [...subscribed, X_SEARCH_SOURCE] : subscribed);
@@ -132,11 +139,12 @@ export function resolveSignInSite(sites: SignInSite[], identifier: string): Sign
 	return null;
 }
 
-/** What the sources page prints for a site that nothing is happening to. */
+/** What a site's row prints for a site that nothing is happening to. */
 export function sessionLabel(state: SiteSessionState | undefined): string {
 	if (!state) return t("sources.session.notChecked");
 	if (state.unknown) return t("sources.session.couldNotTell");
-	return state.signedIn ? t("sources.session.signedIn") : t("sources.session.notSignedIn");
+	if (state.signedIn) return t("sources.session.signedIn");
+	return state.expired ? t("sources.session.expired") : t("sources.session.notSignedIn");
 }
 
 /**
@@ -175,25 +183,6 @@ export function sessionWorkLabel(work: SessionWork): string {
 	}
 }
 
-/**
- * The second line of a site's row: what is being done to it right now, or —
- * when nothing is — the last thing known about it and what reads through it.
- * The sources drop out while work is running; the line is one truncating row,
- * and what the reader has to do next is worth more than the count.
- */
-export function sessionRowLine(
-	site: SignInSite,
-	state: SiteSessionState | undefined,
-	work: SessionWork | null,
-): string {
-	if (work) return sessionWorkLabel(work);
-	const sources =
-		site.sourceNames.length === 1
-			? site.sourceNames[0]
-			: t("sources.session.sourcesCount", { count: site.sourceNames.length });
-	return `${sessionLabel(state)} · ${sources}`;
-}
-
 /** The work under way on `host`, or null when that site is idle. */
 export function sessionWorkFor(
 	busy: SessionBusy | null | undefined,
@@ -207,6 +196,10 @@ export function sessionWorkFor(
  * answered, the load timed out, there is no webview here) records that it could
  * not tell rather than overwriting a real answer with "signed out" — being
  * blocked says nothing about whether the reader has an account.
+ *
+ * A real "signed out" after a "signed in" is an expiry: the reader did not sign
+ * out (that forgets the site), so the site did. It stays expired through later
+ * checks until one finds a session again.
  */
 export function applySessionCheck(
 	sessions: SiteSessions,
@@ -215,18 +208,23 @@ export function applySessionCheck(
 	now: number,
 ): SiteSessions {
 	const conclusive = check.status === "ok" || check.status === "empty";
+	const prior = sessions[host];
 	if (!conclusive) {
-		const prior = sessions[host];
 		return {
 			...sessions,
 			[host]: {
 				signedIn: prior?.signedIn ?? false,
 				checkedAt: now,
 				unknown: check.detail || check.status,
+				...(prior?.expired ? { expired: true } : {}),
 			},
 		};
 	}
-	return { ...sessions, [host]: { signedIn: check.signedIn, checkedAt: now } };
+	const expired = !check.signedIn && !!prior && (prior.signedIn || !!prior.expired);
+	return {
+		...sessions,
+		[host]: { signedIn: check.signedIn, checkedAt: now, ...(expired ? { expired: true } : {}) },
+	};
 }
 
 /** Forget a site's state, after signing out of it. */
@@ -254,6 +252,7 @@ export function parseSiteSessions(text: string): SiteSessions {
 			signedIn: v.signedIn,
 			checkedAt: v.checkedAt,
 			...(typeof v.unknown === "string" ? { unknown: v.unknown } : {}),
+			...(v.expired === true ? { expired: true } : {}),
 		};
 	}
 	return out;

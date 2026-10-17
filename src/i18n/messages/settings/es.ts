@@ -4,7 +4,8 @@ import type en from "./en";
 export default {
   title: "Ajustes",
   done: "Listo",
-  "tab.account": "Cuenta",
+  "tab.account": "IA y sincronización",
+  "tab.accounts": "Cuentas",
   "tab.features": "Funciones",
   "tab.optional": "Opcional",
   connected: "Conectado",

@@ -50,8 +50,6 @@ export default {
 
   "briefingPage.dismiss": "Dispensar",
   "briefingPage.notForMe": "Não é para mim",
-  "briefingPage.sources": "Fontes",
-  "briefingPage.manageSources": "Gerenciar fontes",
   "briefingPage.ask": "Perguntar",
   "briefingPage.askAboutBriefing": "Perguntar sobre este resumo",
   "briefingPage.worthYourTime": "Vale a pena",
@@ -310,7 +308,6 @@ export default {
   "ask.aboutWeekday": "Perguntar sobre {weekday}",
   "ask.aboutThisWeek": "Perguntar sobre esta semana",
 
-  "removeSourceFailed": "Não foi possível remover a fonte",
   "errors.noProvider": "Nenhum provedor de IA configurado (Ajustes).",
   "errors.extractorFailed": "Não foi possível carregar o extrator de artigos. Tente novamente.",
 } satisfies Translation<typeof en>;

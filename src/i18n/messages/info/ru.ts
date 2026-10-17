@@ -50,8 +50,6 @@ export default {
 
   "briefingPage.dismiss": "Скрыть",
   "briefingPage.notForMe": "Не интересно",
-  "briefingPage.sources": "Источники",
-  "briefingPage.manageSources": "Управление источниками",
   "briefingPage.ask": "Спросить",
   "briefingPage.askAboutBriefing": "Спросить об этой сводке",
   "briefingPage.worthYourTime": "Стоит прочитать",
@@ -310,7 +308,6 @@ export default {
   "ask.aboutWeekday": "Спросить о {weekday}",
   "ask.aboutThisWeek": "Спросить об этой неделе",
 
-  "removeSourceFailed": "Не удалось удалить источник",
   "errors.noProvider": "Провайдер ИИ не настроен (Настройки).",
   "errors.extractorFailed": "Не удалось загрузить модуль извлечения статей. Попробуйте снова.",
 } satisfies Translation<typeof en>;

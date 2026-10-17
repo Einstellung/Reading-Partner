@@ -4,7 +4,8 @@ import type en from "./en";
 export default {
   title: "设置",
   done: "完成",
-  "tab.account": "账户",
+  "tab.account": "AI 与同步",
+  "tab.accounts": "账户",
   "tab.features": "功能",
   "tab.optional": "可选",
   connected: "已连接",

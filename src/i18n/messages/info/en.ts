@@ -1,8 +1,7 @@
 // Info: the briefing home (Today), the briefing page, an opened article, the
 // info-companion chat and its cards, the anchors it opens on, and the two
-// user-visible pipeline errors. Excludes SourcesPage.tsx and meals/ (their own
-// areas) and everything voice/orb. The source every other locale is typed
-// against.
+// user-visible pipeline errors. Excludes meals/ (its own area) and everything
+// voice/orb. The source every other locale is typed against.
 
 export default {
   // --- Today (Vestibule.tsx) --------------------------------------------------
@@ -57,8 +56,6 @@ export default {
   // --- Briefing page (BriefingPage.tsx) ---------------------------------------
   "briefingPage.dismiss": "Dismiss",
   "briefingPage.notForMe": "Not for me",
-  "briefingPage.sources": "Sources",
-  "briefingPage.manageSources": "Manage sources",
   "briefingPage.ask": "Ask",
   "briefingPage.askAboutBriefing": "Ask about this briefing",
   "briefingPage.worthYourTime": "Worth your time",
@@ -328,7 +325,6 @@ export default {
   "ask.aboutThisWeek": "Ask about this week",
 
   // --- Misc (use-info-home.ts) -------------------------------------------------
-  "removeSourceFailed": "Could not remove the source",
   "errors.noProvider": "No AI provider configured (Settings).",
   "errors.extractorFailed": "The article extractor could not be loaded. Try again.",
 } as const;

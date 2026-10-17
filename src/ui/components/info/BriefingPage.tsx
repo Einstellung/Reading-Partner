@@ -46,7 +46,6 @@ export interface BriefingPageProps {
   onDismiss: (itemId: string, meta: BriefingItemMeta, category?: string) => void;
   onAskBriefing: () => void;
   onAskArticle: (itemId: string) => void;
-  onOpenSources: () => void;
 }
 
 export function BriefingPage(props: BriefingPageProps) {
@@ -63,9 +62,6 @@ export function BriefingPage(props: BriefingPageProps) {
             the phone back is the edge swipe and the system button (docs/22). */}
         <span className="text-[13px] text-faint-foreground">{b.date}</span>
         <span className="flex-1" />
-        <Button variant="subtle" size="chip" onClick={props.onOpenSources} title={t("info.briefingPage.manageSources")}>
-          {t("info.briefingPage.sources")}
-        </Button>
         <Button variant="secondary" size="chip" onClick={props.onAskBriefing} title={t("info.briefingPage.askAboutBriefing")}>
           <IconSparkle size={14} /> {t("info.briefingPage.ask")}
         </Button>

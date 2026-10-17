@@ -42,8 +42,8 @@ export interface SiteSignInDeps {
   // when they close it, which is the only completion signal there is.
   openSignIn(site: SignInSite): Promise<SignInOutcome>;
   // Load the site's front page in the hidden window and report whether it still
-  // offers a sign-in. The host also records the answer where the sources page
-  // reads it.
+  // offers a sign-in. The host also records the answer where Settings ›
+  // Accounts reads it.
   checkSession(site: SignInSite): Promise<SessionStatus>;
 }
 
@@ -262,7 +262,7 @@ export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
         return (
           `The sign-in window for ${site.label} could not be opened: ` +
           `${errMsg(e)}. Tell the user; they can also sign in ` +
-          `from the sources page.`
+          `from Settings › Accounts.`
         );
       }
       if (!outcome.closed) {

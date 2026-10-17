@@ -50,8 +50,6 @@ export default {
 
   "briefingPage.dismiss": "닫기",
   "briefingPage.notForMe": "관심 없음",
-  "briefingPage.sources": "정보원",
-  "briefingPage.manageSources": "정보원 관리",
   "briefingPage.ask": "질문",
   "briefingPage.askAboutBriefing": "이 브리핑에 대해 질문",
   "briefingPage.worthYourTime": "읽을 가치",
@@ -310,7 +308,6 @@ export default {
   "ask.aboutWeekday": "{weekday}에 대해 질문",
   "ask.aboutThisWeek": "이번 주에 대해 질문",
 
-  "removeSourceFailed": "정보원을 제거하지 못했습니다",
   "errors.noProvider": "AI 제공자가 설정되지 않았습니다 (설정에서 확인).",
   "errors.extractorFailed": "기사 추출기를 불러오지 못했습니다. 다시 시도하세요.",
 } satisfies Translation<typeof en>;

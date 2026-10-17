@@ -50,8 +50,6 @@ export default {
 
   "briefingPage.dismiss": "忽略",
   "briefingPage.notForMe": "不感兴趣",
-  "briefingPage.sources": "信息源",
-  "briefingPage.manageSources": "管理信息源",
   "briefingPage.ask": "提问",
   "briefingPage.askAboutBriefing": "就这份简报提问",
   "briefingPage.worthYourTime": "值得一读",
@@ -310,7 +308,6 @@ export default {
   "ask.aboutWeekday": "就{weekday}提问",
   "ask.aboutThisWeek": "就本周提问",
 
-  "removeSourceFailed": "未能移除这个信息源",
   "errors.noProvider": "未配置 AI 服务商（请在设置中配置）。",
   "errors.extractorFailed": "无法加载文章提取器，请重试。",
 } satisfies Translation<typeof en>;

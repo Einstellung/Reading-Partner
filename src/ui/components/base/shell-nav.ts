@@ -20,7 +20,6 @@ export type HomeScreen =
   // (docs/info/88).
   | "briefs"
   | "article"
-  | "sources"
   | "meals"
   | "meals-shopping"
   | "meals-day"
@@ -79,9 +78,9 @@ export function screenForNav(id: ShellNavId): HomeScreen {
   }
 }
 
-// Which item is lit. The briefing's two side rooms — the source list and an
-// opened article — are still the briefing: they are reached from it and go back
-// to it, and an unlit sidebar would say the reader had left the app's map.
+// Which item is lit. The briefing's side room — an opened article — is still
+// the briefing: it is reached from it and goes back to it, and an unlit sidebar
+// would say the reader had left the app's map.
 // Null while the reader is open, where the sidebar is not drawn at all.
 export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
   switch (screen) {
@@ -89,12 +88,11 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
       return "today";
     case "briefing":
     case "article":
-    case "sources":
       return "briefing";
     case "briefs":
       return "briefs";
     // The shopping trip and one day are rooms of the meals page: reached from
-    // it, going back to it, the same as the briefing's two above.
+    // it, going back to it, the same as the briefing's article above.
     case "meals":
     case "meals-shopping":
     case "meals-day":

@@ -50,8 +50,6 @@ export default {
 
   "briefingPage.dismiss": "却下",
   "briefingPage.notForMe": "興味なし",
-  "briefingPage.sources": "情報源",
-  "briefingPage.manageSources": "情報源を管理",
   "briefingPage.ask": "質問",
   "briefingPage.askAboutBriefing": "このブリーフィングについて質問",
   "briefingPage.worthYourTime": "読む価値あり",
@@ -310,7 +308,6 @@ export default {
   "ask.aboutWeekday": "{weekday}について質問",
   "ask.aboutThisWeek": "今週について質問",
 
-  "removeSourceFailed": "情報源を削除できませんでした",
   "errors.noProvider": "AI プロバイダーが設定されていません（設定を確認してください）。",
   "errors.extractorFailed": "記事抽出機能を読み込めませんでした。もう一度お試しください。",
 } satisfies Translation<typeof en>;

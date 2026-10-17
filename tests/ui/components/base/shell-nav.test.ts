@@ -47,11 +47,10 @@ test("what an item opens lights that item", () => {
   }
 });
 
-// The source list and an opened article are reached from the briefing and go
-// back to it, so they are still the briefing as far as the sidebar is concerned.
-test("the briefing's side rooms keep Briefing lit", () => {
+// An opened article is reached from the briefing and goes back to it, so it is
+// still the briefing as far as the sidebar is concerned.
+test("the briefing's side room keeps Briefing lit", () => {
   expect(activeNavFor("article")).toBe("briefing");
-  expect(activeNavFor("sources")).toBe("briefing");
 });
 
 test("no screen is left without an item, and the reader has none", () => {
@@ -60,7 +59,6 @@ test("no screen is left without an item, and the reader has none", () => {
     "library",
     "briefing",
     "article",
-    "sources",
     "meals",
     "settings",
   ];

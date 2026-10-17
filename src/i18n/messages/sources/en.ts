@@ -1,7 +1,6 @@
-// Sources: the source-list page (ui/components/info/SourcesPage.tsx), the
-// site sign-in state it draws (info/sources/site-session.ts), the pipe-type
-// phrase shared by the page and the add-source chat cards (info/sources/
-// probe.ts), the add-source AI tools' progress labels and receipts
+// Sources: the accounts and their sign-in state (info/sources/accounts.ts,
+// info/sources/site-session.ts, drawn by ui/components/settings/AccountsPanel),
+// the pipe-type phrase on the add-source chat cards (info/sources/probe.ts), the add-source AI tools' progress labels and receipts
 // (info/sources/source-tools.ts), the tasking sub-agent's progress labels
 // (info/tasking/), the page-reading tool's label (info/sources/
 // read-page-tool.ts), and the errors a source plugin can surface into a
@@ -9,48 +8,28 @@
 // typed against.
 
 export default {
-  backToBriefing: "‹ Briefing",
-  title: "Sources",
-  addHint:
-    "To add a source, tell the AI about it — say the site or feed you want followed and it checks the source works before it goes on this list.",
-  signedInSites: "Signed-in sites",
   collectorSignedIn: "Signed in on {device}",
-  collectorNeedsSignIn: "Needs signing in on {device} for the full text",
+  collectorNeedsSignIn: "Needs signing in on {device}",
   signInNote:
     "Signing in opens the site's own page in a window. Close it when you are done — your password never reaches this app, and only the site's cookie stays behind.",
-  empty: "No sources yet.",
-  healthAriaLabel: "Source health",
-  lastSuccess: "Last success: {time}",
-  noSuccessYet: "No successful run yet.",
-  errorLine: "{time}: {error}",
-  topicSearches: "Topic searches",
-  topicSearchCounts: "Read {read} · new {fresh} · past the floor {passedFloor}",
-  topicSearchNothingNew: "Nothing new · read {read}",
-  topicSearchNotRead: "Not read: {why}",
   checkTitle: "Load the site in the background and see whether it still asks you to sign in",
   check: "Check",
   signOut: "Sign out",
   signIn: "Sign in",
-  enableAriaLabel: "Enable {name}",
-  remove: "Remove",
-  removeAriaLabel: "Remove source",
-  removeConfirmTitle: "Remove “{name}”?",
-  removeConfirmDescription: "Nothing more is collected from it. To follow it again, tell the AI about it.",
-
-  "time.secondsAgo": { one: "{count} second ago", other: "{count} seconds ago" },
-  "time.minutesAgo": { one: "{count} minute ago", other: "{count} minutes ago" },
-  "time.hoursAgo": { one: "{count} hour ago", other: "{count} hours ago" },
-  "time.daysAgo": { one: "{count} day ago", other: "{count} days ago" },
+  "account.benefitX": "Topic searches read X's search as you.",
+  "account.benefitBloomberg": "Whole Bloomberg articles in the briefing instead of the ~500-character preview.",
+  "account.usedBy": "Used by {names}",
+  "account.signInOnCollector": "Sign in on the computer that collects your sources",
 
   "session.notChecked": "Not checked",
   "session.couldNotTell": "Could not tell",
   "session.signedIn": "Signed in",
   "session.notSignedIn": "Not signed in",
+  "session.expired": "Expired",
   "session.workSigningIn": "Finish in the sign-in window, then close it",
   "session.workConfirming": "Confirming your sign-in…",
   "session.workChecking": "Checking the site…",
   "session.workSigningOut": "Signing out…",
-  "session.sourcesCount": { one: "{count} source", other: "{count} sources" },
 
   "pipe.apiFullArticles": "API with full articles",
   "pipe.apiHeadlinesOnly": "API, headlines only",

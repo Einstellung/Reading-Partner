@@ -48,7 +48,6 @@ function launch(over: {
       configured={false}
       onOpenSettings={() => {}}
       onTopicsChanged={() => {}}
-      onSay={() => {}}
       onContinue={() => {}}
       {...over}
     />

@@ -84,8 +84,6 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
       return "briefing";
     case "article":
       return "article";
-    case "sources":
-      return "sources";
     case "meals":
       return "meals";
     case "meals-shopping":
@@ -384,7 +382,6 @@ export default function PhoneApp({
             launchReady={bootstrapped}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshSavedArticles}
-            onSay={(line) => pushToast("error", line)}
             onOverlayChange={onOverlayChange}
             // Pull down on the briefing or on an article to open the chat about
             // it. Only those two: home and the kept list have nothing to talk

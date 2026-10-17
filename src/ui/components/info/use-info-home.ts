@@ -1,12 +1,12 @@
 // The state behind the info home screens (docs/16, docs/17): the briefing view
-// and its snapshot, the source list and its sign-in sessions, which article is
-// open and what can be shown for it, what has been opened / dismissed / kept,
-// and which conversation is up.
+// and its snapshot, whether there are sources and research rooms, which article
+// is open and what can be shown for it, what has been opened / dismissed / kept,
+// and which conversation is up. Site sign-ins live in Settings › Accounts
+// (ui/components/settings/use-accounts.ts).
 //
 // It sits in the ui layer because it holds React state and drives effects. The
 // decidable parts are one layer down and tested there: the anchors an Ask
-// assembles (info/briefer/anchors.ts) and the site-session sequencing
-// (info/sources/session-flow.ts). The one sequence that cannot go down is
+// assembles (info/briefer/anchors.ts). The one sequence that cannot go down is
 // keeping an article — it maps info's shapes onto reading's, and ui is the only
 // layer allowed to touch both (saveArticle.ts) — so it is a plain exported
 // function over ports rather than a closure inside the hook.
@@ -48,43 +48,13 @@ import {
   onboardingAnchor,
   type InfoCallAnchor,
 } from "../../../info/briefer/anchors";
-import {
-  hasSources,
-  loadSources,
-  loadSourceHealth,
-  loadSiteSessions,
-  removeSource,
-  saveSiteSessions,
-  setSourceEnabled,
-} from "../../../info/sources/source-store";
-import type { SourceDescriptor } from "../../../info/sources/descriptor";
+import { hasSources, loadSources } from "../../../info/sources/source-store";
 import { loadLabs } from "../../../info/labs/store";
 import { hasTopicSearches } from "../../../info/topic-search/store";
 import type { Lab } from "../../../info/labs/types";
-import type { SourceHealth } from "../../../info/sources/engine";
-import {
-  runSessionCheck,
-  runSignIn,
-  runSignOut,
-  type SessionFlowPorts,
-} from "../../../info/sources/session-flow";
-import type {
-  SessionBusy,
-  SessionWork,
-  SignInSite,
-  SiteSessions,
-} from "../../../info/sources/site-session";
-import {
-  checkSiteSession,
-  clearSiteCookies,
-  openSiteSignIn,
-} from "../../../workshop/extract/webview-session";
 import { hasWebviewSignIn } from "../../../platform/app/platform";
-import type { CollectorSites } from "../../../info/briefer/reader";
 import type { ComposerVoice } from "../chat/composer-voice";
 import type { HomeScreen } from "./InfoHome";
-import { settleDelete } from "../common/settle-delete";
-import { t } from "../../../i18n";
 
 export interface KeepArticlePorts {
   // Read the item's body when the screen has not already got it.
@@ -134,8 +104,6 @@ export interface InfoHomeOptions {
   // Called with a way to close the info call whenever one opens, and with null
   // when it closes.
   onOverlayChange?: (dismiss: (() => void) | null) => void;
-  // A failure the reader has to hear about, such as a removal that did not happen.
-  onSay: (line: string) => void;
 }
 
 export interface InfoHomeController {
@@ -145,20 +113,11 @@ export interface InfoHomeController {
   collecting: boolean;
   canSignIn: boolean;
   notices: string[];
-  collectorSites: CollectorSites | null;
-  // Sources page state.
   hasSources: boolean | null;
-  sources: SourceDescriptor[];
-  // Whether the reader has a topic search, which puts X on the sign-in list.
-  topicSearch: boolean;
-  sourceHealth: Record<string, SourceHealth>;
-  // The research rooms, so the source list can say which of them read each
-  // source (docs/63) and the launch card can say when there are none open.
-  // Null until the file has been read: an empty list is the answer "no room is
-  // open", and the card acts on it.
+  // The research rooms, so the launch card can say when there are none open
+  // (docs/63). Null until the file has been read: an empty list is the answer
+  // "no room is open", and the card acts on it.
   labs: Lab[] | null;
-  siteSessions: SiteSessions;
-  sessionBusy: SessionBusy | null;
   // The open article and what can be shown for it.
   openArticleId: string | null;
   articleState: ArticleState | null;
@@ -171,13 +130,7 @@ export interface InfoHomeController {
   infoVoice: ComposerVoice;
   stopBriefing: () => void;
   refreshSources: () => Promise<void>;
-  checkSession: (site: SignInSite, work?: SessionWork) => Promise<void>;
-  signInToSite: (site: SignInSite) => Promise<void>;
-  signOutOfSite: (site: SignInSite) => Promise<void>;
   openOnboarding: () => void;
-  openSourcesPage: () => void;
-  toggleSource: (id: string, enabled: boolean) => void;
-  removeSourceById: (id: string) => void;
   openArticle: (itemId: string) => Promise<void>;
   keepArticle: (itemId: string) => Promise<void>;
   dismissItem: (itemId: string, meta: BriefingItemMeta, category?: string) => void;
@@ -190,19 +143,11 @@ export interface InfoHomeController {
 }
 
 export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
-  const { role, onNavigate, onTopicsChanged, onOverlayChange, onSay } = opts;
+  const { role, onNavigate, onTopicsChanged, onOverlayChange } = opts;
   const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
-  // Whether the user has any source configured (drives onboarding), plus the
-  // source list + health for the source-list page (docs/17).
+  // Whether the user has any source configured (drives onboarding, docs/17).
   const [hasSourcesState, setHasSourcesState] = useState<boolean | null>(null);
-  const [sourcesList, setSourcesList] = useState<SourceDescriptor[]>([]);
-  const [topicSearch, setTopicSearch] = useState(false);
-  const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
   const [labs, setLabs] = useState<Lab[] | null>(null);
-  // Last known sign-in state per site, and which site is being worked on. Both
-  // only mean anything where there is a webview to sign in with.
-  const [siteSessions, setSiteSessions] = useState<SiteSessions>({});
-  const [sessionBusy, setSessionBusy] = useState<SessionBusy | null>(null);
   const viewRef = useRef<BriefingView | null>(null);
   const [openArticleId, setOpenArticleId] = useState<string | null>(null);
   // What can be shown for the open article: its body, or why there is none
@@ -231,8 +176,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
 
   useEffect(() => {
     hasSources().then(setHasSourcesState).catch(() => {});
-    // The rooms are read here and not only when the source list is opened: with
-    // none of them open nothing collects at all (docs/63), and the launch card
+    // With no room open nothing collects at all (docs/63), and the launch card
     // is where that is said.
     loadLabs().then(setLabs).catch(() => {});
     loadSavedArticles()
@@ -269,8 +213,6 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
   // Recomputed with the snapshot: all of it comes from the same read.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const notices = useMemo(() => viewRef.current?.notices() ?? [], [infoSnap]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const collectorSites = useMemo(() => viewRef.current?.collectorSites() ?? null, [infoSnap]);
 
   // Report the open call upward, and take the report back on unmount. Nothing
   // else changes with it: the call is still owned and closed here.
@@ -293,51 +235,12 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     viewRef.current?.stop();
   }, []);
 
-  // Reload the source list + health (source-list page) and the hasSources flag.
+  // Reload the hasSources flag and the rooms, after the chat changed either.
   const refreshSources = useCallback(async () => {
-    const [list, health, sessions, rooms, searches] = await Promise.all([
-      loadSources(),
-      loadSourceHealth(),
-      loadSiteSessions(),
-      loadLabs(),
-      hasTopicSearches(),
-    ]);
-    setSourcesList(list);
-    setTopicSearch(searches);
-    setSourceHealth(health);
-    setSiteSessions(sessions);
+    const [list, rooms] = await Promise.all([loadSources(), loadLabs()]);
     setLabs(rooms);
     setHasSourcesState(list.length > 0);
   }, []);
-
-  // The live wiring behind the three session gestures; the order they happen in
-  // is info/sources/session-flow.ts.
-  const sessionPorts: SessionFlowPorts = useMemo(
-    () => ({
-      check: checkSiteSession,
-      openSignIn: openSiteSignIn,
-      clearCookies: clearSiteCookies,
-      loadSessions: loadSiteSessions,
-      saveSessions: saveSiteSessions,
-      now: Date.now,
-      setBusy: setSessionBusy,
-      setSessions: setSiteSessions,
-    }),
-    [],
-  );
-
-  const checkSession = useCallback(
-    (site: SignInSite, work: SessionWork = "checking") => runSessionCheck(sessionPorts, site, work),
-    [sessionPorts],
-  );
-  const signInToSite = useCallback(
-    (site: SignInSite) => runSignIn(sessionPorts, site),
-    [sessionPorts],
-  );
-  const signOutOfSite = useCallback(
-    (site: SignInSite) => runSignOut(sessionPorts, site),
-    [sessionPorts],
-  );
 
   // Open the first-run / add-source chat: the info call in add-source mode.
   const openOnboarding = useCallback(() => {
@@ -346,33 +249,6 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
       setInfoCall(onboardingAnchor(aiLanguage));
     })();
   }, []);
-
-  const openSourcesPage = useCallback(() => {
-    void refreshSources();
-    onNavigate("sources");
-  }, [refreshSources, onNavigate]);
-
-  const toggleSource = useCallback(
-    (id: string, enabled: boolean) => {
-      void (async () => {
-        await setSourceEnabled(id, enabled);
-        await refreshSources();
-      })();
-    },
-    [refreshSources],
-  );
-
-  const removeSourceById = useCallback(
-    (id: string) => {
-      void settleDelete({
-        act: () => removeSource(id),
-        refresh: refreshSources,
-        failed: t("info.removeSourceFailed"),
-        onFail: onSay,
-      });
-    },
-    [refreshSources, onSay],
-  );
 
   const openArticle = useCallback(
     async (itemId: string) => {
@@ -497,14 +373,8 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     collecting,
     canSignIn,
     notices,
-    collectorSites,
     hasSources: hasSourcesState,
-    sources: sourcesList,
-    topicSearch,
-    sourceHealth,
     labs,
-    siteSessions,
-    sessionBusy,
     openArticleId,
     articleState,
     openedItemIds,
@@ -515,13 +385,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     infoVoice,
     stopBriefing,
     refreshSources,
-    checkSession,
-    signInToSite,
-    signOutOfSite,
     openOnboarding,
-    openSourcesPage,
-    toggleSource,
-    removeSourceById,
     openArticle,
     keepArticle,
     dismissItem,

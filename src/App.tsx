@@ -1635,7 +1635,6 @@ export default function App() {
             launchReady={bootstrapped}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshTopics}
-            onSay={(line) => pushToast("error", line)}
           />
 
           {!inReader && settingsShowing && (

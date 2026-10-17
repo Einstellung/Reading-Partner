@@ -600,7 +600,7 @@ async function fetchViaWebview(
   return item;
 }
 
-// Per-source health, surfaced to the source-list UI later. Derived (not synced).
+// Per-source health, kept for the collector's status file. Derived (not synced).
 export interface SourceHealth {
   lastSuccess?: number;
   lastError?: string;

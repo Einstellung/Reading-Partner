@@ -4,7 +4,8 @@ import type en from "./en";
 export default {
   title: "Einstellungen",
   done: "Fertig",
-  "tab.account": "Konto",
+  "tab.account": "KI & Sync",
+  "tab.accounts": "Konten",
   "tab.features": "Funktionen",
   "tab.optional": "Optional",
   connected: "Verbunden",
