@@ -340,6 +340,8 @@ pub(crate) async fn start_conversation<R: Runtime>(
     locale: Option<String>,
     contextual_strings: Option<Vec<String>>,
 ) -> Result<()> {
+    // The on-device model loads while the user says the first thing.
+    app.state::<SpeechSession>().warm();
     app.voice()
         .start_conversation(locale, contextual_strings)
         .await
@@ -358,8 +360,9 @@ pub(crate) async fn set_speech_volume<R: Runtime>(app: AppHandle<R>, value: f64)
     app.voice().set_speech_volume(value).await
 }
 
-// On-device Kokoro (src/kokoro). Not on the speaking path yet: these fetch the
-// weights, say what is on disk, and bench the engine on the device.
+// On-device Kokoro (src/kokoro), iOS's only voice (session.rs). These fetch the
+// weights, say what is on disk, and bench the engine on the device; speaking
+// goes through the `speak_*` commands like any voice.
 
 /// What of the pinned Kokoro revision is on disk, and how a running download
 /// is getting on. Cheap: file sizes only, no hashing.

@@ -109,18 +109,23 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             #[cfg(not(target_os = "ios"))]
             let voice = fallback::init(app, api)?;
             app.manage(voice);
-            app.manage(kokoro::KokoroModels(Arc::new(kokoro::download::Downloader::new(
+            let models = Arc::new(kokoro::download::Downloader::new(
                 &app.path().app_local_data_dir()?,
-            ))));
+            ));
+            app.manage(kokoro::KokoroModels(models.clone()));
             // Not split by target_os, and deliberately: the session is Rust all
             // the way down — a relay and a vendor — and the one thing on it that
             // needs a phone is where the audio ends up. `DevicePlayer` already
             // handles that by asking `Voice`, which off iOS answers every
             // enqueue with a sentence saying so (fallback.rs). A second copy of
             // "this host cannot speak" here would say the same thing twice.
-            app.manage(session::SpeechSession::from_env(Arc::new(
-                speaker::DeviceSpeakers::new(app.clone()),
-            )));
+            //
+            // Which voice it speaks with is decided in one place:
+            // `session::on_device_voice` (Kokoro on iOS, MiMo elsewhere).
+            app.manage(session::SpeechSession::from_env(
+                Arc::new(speaker::DeviceSpeakers::new(app.clone())),
+                &models,
+            ));
             Ok(())
         })
         .build()

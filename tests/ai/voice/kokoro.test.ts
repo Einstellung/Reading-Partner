@@ -91,10 +91,11 @@ describe("downloadState", () => {
 });
 
 describe("speakingEngine", () => {
-  test("MiMo until the variant is verified, and when the status is unknown", () => {
-    expect(speakingEngine(null, "int8")).toBe("mimo");
-    expect(speakingEngine(status({ running: true }), "int8")).toBe("mimo");
-    expect(speakingEngine(status({ ready: ["fp32"] }), "int8")).toBe("mimo");
+  test("nothing until the variant is verified, and when the status is unknown", () => {
+    expect(speakingEngine(null)).toBe("none");
+    expect(speakingEngine(status({ running: true }))).toBe("none");
+    expect(speakingEngine(status({ ready: ["int8"] }))).toBe("none");
+    expect(speakingEngine(status({ ready: ["fp32"] }))).toBe("kokoro");
     expect(speakingEngine(status({ ready: ["int8"] }), "int8")).toBe("kokoro");
   });
 });

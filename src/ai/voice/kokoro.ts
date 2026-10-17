@@ -1,6 +1,9 @@
 // On-device Kokoro TTS (plugins/voice/src/kokoro, docs/companion/136): the
-// weights download and the device bench. Not on the speaking path yet; until
-// the chosen variant is downloaded and verified, speech stays on MiMo.
+// weights download and the device bench. On iOS Kokoro is the only voice
+// (plugins/voice/src/session.rs `on_device_voice`): MiMo is parked there while
+// Kokoro is evaluated on device, and until the fp32 files are downloaded and
+// verified a turn is refused with a message pointing at Settings. Desktop and
+// Android speak with MiMo.
 //
 // The plugin downloads in the background and answers every question from the
 // files on disk, so the webview polls `kokoroStatus` rather than listening for
@@ -15,6 +18,10 @@ export const KOKORO_COMMANDS = {
 } as const;
 
 export type KokoroVariant = "fp32" | "fp16" | "int8";
+
+// The variant that speaks (plugins/voice/src/tts/kokoro.rs VARIANT): fp16 gives
+// NaN on iOS and int8 is out.
+export const KOKORO_SPEAKING_VARIANT: KokoroVariant = "fp32";
 
 export interface KokoroFileStatus {
   path: string;
@@ -84,11 +91,12 @@ export function downloadState(s: KokoroStatus, variant: KokoroVariant): KokoroDo
   return { kind: "idle" };
 }
 
-// Which engine speaks: Kokoro only once the variant is fully downloaded and
-// verified; MiMo before that, and whenever the status cannot be read.
+// What speaks on iOS: Kokoro once the variant is fully downloaded and verified,
+// nothing before that (there is no fallback to MiMo), and nothing when the
+// status cannot be read.
 export function speakingEngine(
   s: KokoroStatus | null,
-  variant: KokoroVariant,
-): "kokoro" | "mimo" {
-  return s?.ready.includes(variant) ? "kokoro" : "mimo";
+  variant: KokoroVariant = KOKORO_SPEAKING_VARIANT,
+): "kokoro" | "none" {
+  return s?.ready.includes(variant) ? "kokoro" : "none";
 }

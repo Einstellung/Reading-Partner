@@ -23,7 +23,9 @@ use tokio::sync::{mpsc, Mutex};
 use crate::models::SpeechStopped;
 use crate::speaker::Speakers;
 use crate::tts::cues::{self, CueStore};
-use crate::tts::{Heard, OpeningKey, Player, RelayConfig, SpeechRelay, SpeechRequest, TtsBackend};
+use crate::tts::{
+    Heard, OnDeviceVoice, OpeningKey, Player, RelayConfig, SpeechRelay, SpeechRequest, TtsBackend,
+};
 use crate::{Error, Result};
 
 /// The vendor key's fallback source: the process environment. A bench launch is
@@ -36,6 +38,28 @@ pub(crate) const KEY_VAR: &str = "MIMO_API_KEY";
 /// neither key nor source: it is shown to the user, and the fix is the same
 /// either way.
 const NO_VOICE: &str = "There is no voice to speak with: set the speech API key in Settings.";
+
+/// Which voice speaks on this host: the one switch between the two engines.
+///
+/// With the `kokoro` feature, which src-tauri turns on for iOS only, it is
+/// on-device Kokoro and nothing else. MiMo is parked on iOS while Kokoro is
+/// evaluated on device: its code and the key in Settings stay as they are, it
+/// is just never asked, not even as a fallback before the download. Returning
+/// `None` here brings it back. Desktop and Android build without the feature
+/// and speak with MiMo exactly as before.
+fn on_device_voice(
+    models: &Arc<crate::kokoro::download::Downloader>,
+) -> Option<Arc<dyn OnDeviceVoice>> {
+    #[cfg(feature = "kokoro")]
+    {
+        Some(Arc::new(crate::tts::kokoro::KokoroVoice::on_disk(models.clone())))
+    }
+    #[cfg(not(feature = "kokoro"))]
+    {
+        let _ = models;
+        None
+    }
+}
 
 /// The key to build the vendor from, in priority order: the one saved in
 /// Settings and handed over by the webview, then `MIMO_API_KEY` from the
@@ -95,6 +119,10 @@ pub struct SpeechSession {
     /// signs requests with. A turn already speaking keeps its own `Arc` and is
     /// not disturbed by a replacement.
     backend: StdMutex<Option<Arc<dyn TtsBackend>>>,
+    /// The voice on this device, when this host speaks with one
+    /// (`on_device_voice`). Present means it is the only voice: `backend`
+    /// above is kept up to date and never asked.
+    on_device: Option<Arc<dyn OnDeviceVoice>>,
     speakers: Arc<dyn Speakers>,
     config: RelayConfig,
     /// The one turn, and the lock that serialises the four commands against
@@ -120,6 +148,7 @@ impl SpeechSession {
     ) -> Self {
         Self {
             backend: StdMutex::new(backend),
+            on_device: None,
             speakers,
             config,
             turn: Mutex::new(None),
@@ -128,19 +157,33 @@ impl SpeechSession {
         }
     }
 
+    /// Speak with this on-device voice and nothing else.
+    pub fn with_on_device(mut self, voice: Arc<dyn OnDeviceVoice>) -> Self {
+        self.on_device = Some(voice);
+        self
+    }
+
     /// Build the session this plugin runs with: a player per turn on whatever
-    /// host this is, and Mimo if the process was launched with a key. The key
-    /// saved in Settings is not readable from here — it is in the webview's
-    /// credential store — so it arrives afterwards through `use_key`.
-    pub fn from_env(speakers: Arc<dyn Speakers>) -> Self {
-        let session = Self::new(None, speakers, RelayConfig::default());
+    /// host this is, the on-device voice where this host has one
+    /// (`on_device_voice`), and otherwise Mimo if the process was launched
+    /// with a key. The key saved in Settings is not readable from here — it is
+    /// in the webview's credential store — so it arrives afterwards through
+    /// `use_key`.
+    pub fn from_env(
+        speakers: Arc<dyn Speakers>,
+        models: &Arc<crate::kokoro::download::Downloader>,
+    ) -> Self {
+        let mut session = Self::new(None, speakers, RelayConfig::default());
+        session.on_device = on_device_voice(models);
         session.use_key(None);
         session
     }
 
     /// Take the key saved in Settings and rebuild the vendor around it. `None`
     /// or blank clears it, after which `MIMO_API_KEY` is used again if the run
-    /// was launched with one. Answers whether there is a voice afterwards.
+    /// was launched with one. Answers whether there is a voice afterwards; with
+    /// an on-device voice that is whether its files are on disk, whatever the
+    /// key.
     ///
     /// Called once when the app starts and again on every save, rather than
     /// per turn: the key belongs to the process, and carrying it on
@@ -159,17 +202,40 @@ impl SpeechSession {
         let speaking = backend.is_some();
         *self.backend.lock().expect("speech backend lock") = backend;
         self.cues.clear();
-        speaking
+        match &self.on_device {
+            // Not `backend()`: that would load the model, and this runs at
+            // startup whether or not a call ever opens.
+            Some(voice) => voice.ready(),
+            None => speaking,
+        }
     }
 
     /// The vendor to open a turn with, or the rejection to answer with. Not
     /// async on purpose: the lock is never held across an await.
+    ///
+    /// With an on-device voice there is no fallback: until its files are on
+    /// disk the answer is the rejection telling the user to download them, and
+    /// it is asked again on every turn, so a download that finishes during the
+    /// session speaks from the next turn on.
     fn vendor(&self) -> Result<Arc<dyn TtsBackend>> {
+        if let Some(voice) = &self.on_device {
+            return voice.backend().map_err(Error::Speech);
+        }
         self.backend
             .lock()
             .expect("speech backend lock")
             .clone()
             .ok_or_else(|| Error::Speech(NO_VOICE.to_string()))
+    }
+
+    /// Get the voice ready for a call that is opening: an on-device model is
+    /// loaded in the background, so the first answer does not wait for it.
+    /// Nothing for a vendor, and nothing when there is no voice yet; the turn
+    /// will say so.
+    pub fn warm(&self) {
+        if self.on_device.is_some() {
+            let _ = self.vendor();
+        }
     }
 
     /// Open a turn and answer with its number.
@@ -204,7 +270,11 @@ impl SpeechSession {
         // The silent bench (src/harness.rs) is the one reader it has.
         let (events, timeline) = mpsc::unbounded_channel();
         crate::harness::watch_relay(timeline);
-        let relay = SpeechRelay::start(backend, player.clone(), self.config.clone(), events);
+        let mut config = self.config.clone();
+        if let Some(most) = backend.max_in_flight() {
+            config.concurrency = config.concurrency.min(most.max(1));
+        }
+        let relay = SpeechRelay::start(backend, player.clone(), config, events);
         *turn = Some(Turn {
             utterance,
             relay,
@@ -362,7 +432,7 @@ mod tests {
     use crate::tts::{
         AudioFormat, Heard, PlaybackState, Player, SentenceAudio, SpeechRequest, TtsError,
     };
-    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::{AtomicBool, AtomicUsize};
     use std::sync::Mutex as StdMutex;
     use std::time::Duration;
 
@@ -384,6 +454,8 @@ mod tests {
         /// Syntheses whose future was dropped before it finished, which is what
         /// a cancelled request looks like from in here.
         cancelled: Arc<AtomicUsize>,
+        /// Answers `max_in_flight` with one, the way an on-device engine does.
+        serial: bool,
     }
 
     struct Cancelled(Arc<AtomicUsize>, bool);
@@ -409,6 +481,9 @@ mod tests {
         }
         fn default_voice(&self) -> &str {
             "fake"
+        }
+        fn max_in_flight(&self) -> Option<usize> {
+            self.serial.then_some(1)
         }
         async fn synthesize(
             &self,
@@ -936,5 +1011,110 @@ mod tests {
         assert!(session.cues.has("en/think", &key));
         session.use_key_with(None, None);
         assert!(!session.cues.has("en/think", &key));
+    }
+    /// An on-device voice whose files appear when the test says so.
+    struct Local {
+        ready: AtomicBool,
+        backend: Arc<Fake>,
+        /// Times `backend` was asked for, which is also times it was warmed.
+        asked: AtomicUsize,
+    }
+
+    const NOT_HERE: &str = "download the on-device voice";
+
+    impl OnDeviceVoice for Local {
+        fn ready(&self) -> bool {
+            self.ready.load(Ordering::SeqCst)
+        }
+        fn backend(&self) -> std::result::Result<Arc<dyn TtsBackend>, String> {
+            self.asked.fetch_add(1, Ordering::SeqCst);
+            if self.ready() {
+                Ok(self.backend.clone())
+            } else {
+                Err(NOT_HERE.to_string())
+            }
+        }
+    }
+
+    fn local(ready: bool) -> Arc<Local> {
+        Arc::new(Local {
+            ready: AtomicBool::new(ready),
+            backend: Arc::new(Fake { serial: true, ..Default::default() }),
+            asked: AtomicUsize::new(0),
+        })
+    }
+
+    /// A MiMo key in hand changes nothing: until the files are there the turn
+    /// is refused with the download message, and the vendor is never asked.
+    #[tokio::test]
+    async fn an_on_device_voice_not_downloaded_yet_refuses_and_never_falls_back() {
+        let mimo = Arc::new(Fake::default());
+        let started = mimo.started.clone();
+        let voice = local(false);
+        let session = session_with(Arc::new(Stage::default()), mimo).with_on_device(voice.clone());
+
+        assert!(!session.use_key_with(Some("handed-over-not-real"), None));
+        let refused = session.begin().await;
+        let Err(Error::Speech(message)) = refused else {
+            panic!("{refused:?}");
+        };
+        assert_eq!(message, NOT_HERE);
+        assert!(session.prime_cues("zh").await.is_err());
+        assert!(session.speak_cue("zh/think").await.is_err());
+        assert_eq!(started.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn a_download_that_finishes_mid_session_speaks_from_the_next_turn() {
+        let stage = Arc::new(Stage::default());
+        let mimo = Arc::new(Fake::default());
+        let mimo_started = mimo.started.clone();
+        let voice = local(false);
+        let session = session_with(stage.clone(), mimo).with_on_device(voice.clone());
+        assert!(session.begin().await.is_err());
+
+        voice.ready.store(true, Ordering::SeqCst);
+        assert!(session.use_key_with(None, None));
+        let utterance = session.begin().await.unwrap();
+        session.push("a".to_string()).await.unwrap();
+        session.close().await.unwrap();
+        let player = stage.player_for(utterance);
+        assert!(until(|| player.sentences().len() == 1).await);
+        assert_eq!(voice.backend.started.load(Ordering::SeqCst), 1);
+        assert_eq!(mimo_started.load(Ordering::SeqCst), 0);
+    }
+
+    /// `use_key` runs at startup and must not load a model; a call opening
+    /// does, through `backend`.
+    #[tokio::test]
+    async fn warming_asks_the_on_device_voice_and_the_key_does_not() {
+        let voice = local(true);
+        let session = SpeechSession::new(None, Arc::new(Stage::default()), RelayConfig::default())
+            .with_on_device(voice.clone());
+        assert!(session.use_key_with(None, None));
+        assert_eq!(voice.asked.load(Ordering::SeqCst), 0);
+        session.warm();
+        assert_eq!(voice.asked.load(Ordering::SeqCst), 1);
+        // Without one there is nothing to warm and nothing to fail.
+        session_with(Arc::new(Stage::default()), Arc::new(Fake::default())).warm();
+    }
+
+    /// A backend that runs one sentence at a time gets one at a time: the
+    /// second sentence is not even asked for while the first is out, so it
+    /// cannot overtake it for the CPU.
+    #[tokio::test]
+    async fn a_serial_backend_has_one_sentence_in_flight() {
+        let stage = Arc::new(Stage::default());
+        let backend = Arc::new(Fake { serial: true, ..Default::default() });
+        let started = backend.started.clone();
+        let session = session_with(stage.clone(), backend);
+
+        let utterance = session.begin().await.unwrap();
+        session.push("slow one".to_string()).await.unwrap();
+        session.push("bb".to_string()).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(started.load(Ordering::SeqCst), 1);
+        session.stop().await.unwrap();
+        assert!(stage.player_for(utterance).sentences().is_empty());
     }
 }
