@@ -44,6 +44,7 @@ export default {
   "home.tellTheCompanion": "어시스턴트에게 말하기",
   "home.waitingCollecting": "정보원 전문을 읽어 당신의 프로필에 맞춰 선별하고 있습니다. 오늘의 브리핑이 곧 도착합니다.",
   "home.waitingReader": "오늘의 브리핑은 정보원을 수집하는 기기에서 생성됩니다.",
+  "home.waitingPaused": "매일 브리핑은 일시 중지되어 자동으로 만들어지지 않습니다. 필요할 때 어시스턴트에게 요청하세요.",
   "home.buildFailed": "오늘의 브리핑을 생성하지 못했습니다.",
   "home.askTheCompanion": "어시스턴트에게 묻기",
   "home.configureProvider": "먼저 제공자를 설정하세요",

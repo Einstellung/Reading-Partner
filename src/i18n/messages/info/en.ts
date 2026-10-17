@@ -49,6 +49,7 @@ export default {
   "home.tellTheCompanion": "Tell the companion",
   "home.waitingCollecting": "Your sources, read in full and triaged against your profile. Today's is on its way.",
   "home.waitingReader": "Today's briefing is built on the computer that collects your sources.",
+  "home.waitingPaused": "The daily briefing is paused and is not built on its own. Ask the companion for one when you want it.",
   "home.buildFailed": "Today's briefing could not be built.",
   "home.askTheCompanion": "Ask the companion",
   "home.configureProvider": "Configure a provider to begin",

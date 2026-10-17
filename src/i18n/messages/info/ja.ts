@@ -44,6 +44,7 @@ export default {
   "home.tellTheCompanion": "アシスタントに伝える",
   "home.waitingCollecting": "情報源を全文読み込み、あなたのプロファイルに合わせて選別しています。今日の分はもうすぐです。",
   "home.waitingReader": "今日のブリーフィングは情報源を収集する端末で作成されます。",
+  "home.waitingPaused": "毎日のブリーフィングは一時停止中で、自動では作成されません。必要なときはアシスタントに頼んでください。",
   "home.buildFailed": "今日のブリーフィングを作成できませんでした。",
   "home.askTheCompanion": "アシスタントに聞く",
   "home.configureProvider": "まずプロバイダーを設定してください",

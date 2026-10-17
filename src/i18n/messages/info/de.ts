@@ -44,6 +44,7 @@ export default {
   "home.tellTheCompanion": "Dem Assistenten sagen",
   "home.waitingCollecting": "Deine Quellen werden vollständig gelesen und nach deinem Profil gefiltert. Das heutige Briefing ist unterwegs.",
   "home.waitingReader": "Das heutige Briefing wird auf dem Rechner erstellt, der deine Quellen sammelt.",
+  "home.waitingPaused": "Das tägliche Briefing ist pausiert und wird nicht mehr von selbst erstellt. Bitte den Assistenten um eines, wenn du es brauchst.",
   "home.buildFailed": "Das heutige Briefing konnte nicht erstellt werden.",
   "home.askTheCompanion": "Den Assistenten fragen",
   "home.configureProvider": "Zuerst einen Anbieter einrichten",

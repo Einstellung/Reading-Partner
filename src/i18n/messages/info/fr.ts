@@ -44,6 +44,7 @@ export default {
   "home.tellTheCompanion": "Le dire à l'assistant",
   "home.waitingCollecting": "Vos sources sont lues intégralement et triées selon votre profil. Le point du jour arrive bientôt.",
   "home.waitingReader": "Le point du jour est généré sur l'ordinateur qui collecte vos sources.",
+  "home.waitingPaused": "Le point du jour est en pause et ne se génère plus tout seul. Demandez-en un à l'assistant quand vous le voulez.",
   "home.buildFailed": "Impossible de générer le point du jour.",
   "home.askTheCompanion": "Demander à l'assistant",
   "home.configureProvider": "Configurez un fournisseur pour commencer",

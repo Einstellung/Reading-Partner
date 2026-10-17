@@ -44,6 +44,7 @@ export default {
   "home.tellTheCompanion": "告诉助手",
   "home.waitingCollecting": "你的信息源正在被完整读取并按你的画像筛选。今天的简报马上就到。",
   "home.waitingReader": "今日简报由负责收集信息源的那台电脑生成。",
+  "home.waitingPaused": "每日简报已暂停，不会自动生成。想看时问助手要一份。",
   "home.buildFailed": "今日简报未能生成。",
   "home.askTheCompanion": "询问助手",
   "home.configureProvider": "先配置一个服务商",

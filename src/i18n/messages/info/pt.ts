@@ -44,6 +44,7 @@ export default {
   "home.tellTheCompanion": "Contar ao assistente",
   "home.waitingCollecting": "Suas fontes, lidas na íntegra e filtradas conforme seu perfil. O resumo de hoje está a caminho.",
   "home.waitingReader": "O resumo de hoje é gerado no computador que coleta suas fontes.",
+  "home.waitingPaused": "O resumo diário está pausado e não é gerado sozinho. Peça um ao assistente quando quiser.",
   "home.buildFailed": "Não foi possível gerar o resumo de hoje.",
   "home.askTheCompanion": "Perguntar ao assistente",
   "home.configureProvider": "Configure um provedor para começar",
