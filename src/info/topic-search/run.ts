@@ -5,12 +5,17 @@
 //
 //   open     the search is still followed, the night is not over, X may be
 //            read (halt.ts) and the session is real; take the keep-awake lock
-//   read     the X lines (x-reader.ts), in the X lane, inside the lock; what
-//            came back is written to the run directory before moving on
+//   read     the X lines (x-reader.ts), in the X lane, inside the lock, and
+//            beside them the arXiv queries (arxiv-read.ts): plain HTTP that
+//            touches neither the screen nor the X session, so it does not wait
+//            in the lane or for X. Neither half's failure stops the other; the
+//            run's signal stops both. Each writes what it got to the run
+//            directory (`x-read.json`, `arxiv-read.json`), and the phase moves
+//            on once both have settled
 //   build    the result, by the builder the caller injected (not built here),
-//            opening X pages only from what is left of the day's allowance and
-//            the run's ceiling; then the source health it wrote goes into the
-//            collector's state file
+//            from both files, opening X pages only from what is left of the
+//            day's allowance and the run's ceiling; then the source health it
+//            wrote goes into the collector's state file
 //   deliver  the search's last run time; a search the reader wanted to see
 //            only once stops after its first
 //   wrap     the lock let go, and the run told closed (`closed`): the nightly
@@ -29,6 +34,8 @@ import { StoppedError } from "../../legion/stop";
 import type { KeepAwakeLock } from "../../platform/app/keep-awake";
 import type { BrowseOpen } from "../../workshop/extract/webview-browse";
 import type { XHalt } from "../x/search-page";
+import type { ArxivSearch } from "./arxiv-ladder";
+import { arxivProgressLine, readArxiv, type ArxivRead } from "./arxiv-read";
 import type { BuildTopicSearchResult, BuildTopicSearchResultOutput, XPageBudget } from "./build-result";
 import { lastNightAnchor, nightEndAt } from "./nightly";
 import type { TopicSearch } from "./types";
@@ -161,6 +168,10 @@ export interface TopicSearchRunDeps {
   progress(dir: string): XProgressLog;
   saveRead(dir: string, x: XReadResult): Promise<void>;
   loadRead(dir: string): Promise<XReadResult | null>;
+  /** The arXiv plugin's search slot, spaced per host (build-live.ts searchArxivLive). */
+  searchArxiv: ArxivSearch;
+  saveArxiv(dir: string, read: ArxivRead): Promise<void>;
+  loadArxiv(dir: string): Promise<ArxivRead | null>;
   memory: XReaderStore;
   /** What is left of the night's ceiling, and spending it. */
   nightLimits(night: string): Promise<XReadLimits>;
@@ -245,8 +256,9 @@ export function topicSearchTask(
     window: Window,
     dir: string,
     signal: AbortSignal,
+    note: (text: string) => void,
   ): Promise<XReadResult> => {
-    const { brief, runId } = input;
+    const { brief } = input;
     const look = lookOf(brief.kind);
     const limits = look === "first" ? X_FIRST_RUN_LIMITS : await deps.nightLimits(window.night);
     const deadline = brief.kind === "daily" ? nightEndAt(window.night) : null;
@@ -263,7 +275,7 @@ export function topicSearchTask(
       append: async (step) => {
         await log.append(step);
         tally.add(step);
-        say(runId, `reading X: ${tally.line()}`);
+        note(`reading X: ${tally.line()}`);
       },
     };
     const sleep = async (ms: number) => {
@@ -279,7 +291,7 @@ export function topicSearchTask(
           progress: watched,
           memory: deps.memory,
           expandLink: (tco) => deps.expandLink(tco),
-          onHalt: (halt) => deps.halted(halt, { searchId: search.id, runId, night: window.night }),
+          onHalt: (halt) => deps.halted(halt, { searchId: search.id, runId: input.runId, night: window.night }),
           sleep,
           now: () => deps.now(),
           random: () => deps.random(),
@@ -297,6 +309,22 @@ export function topicSearchTask(
       return readFromSteps(steps, "limit", why);
     }
   };
+
+  // The run's arXiv queries, those not yet on file in its directory.
+  const readArxivOf = (
+    search: TopicSearch,
+    brief: TopicSearchBrief,
+    window: Window,
+    dir: string,
+    signal: AbortSignal,
+    onChange?: (read: ArxivRead) => void,
+  ) =>
+    readArxiv(
+      search,
+      { kind: lookOf(brief.kind), since: window.since, today: localDay(deps.now()), only: window.retry?.arxiv ?? null },
+      { search: deps.searchArxiv, load: () => deps.loadArxiv(dir), save: (read) => deps.saveArxiv(dir, read), onChange },
+      signal,
+    );
 
   return defineTask<TopicSearchTaskInput, Checkpoint, TopicSearchRunResult>({
     name: TOPIC_SEARCH_TASK,
@@ -328,7 +356,7 @@ export function topicSearchTask(
         if (blocked && (brief.kind === "daily" || (retry && retry.arxiv.length === 0))) return skip(runtime, blocked, context);
         if (!blocked) await hold(runId);
         const since = brief.kind === "daily" ? (search.lastRunAt ?? now - FIRST_LOOK_BACK_MS) : now - FIRST_LOOK_BACK_MS;
-        say(runId, blocked ? `not reading X: ${blocked}` : "reading X");
+        say(runId, `${blocked ? `not reading X: ${blocked}` : "waiting to read X"}; arXiv: starting`);
         await next(runtime, { phase: "read", blocked, startedAt: now, since, night, retry }, context);
       }),
       read: guarded<Extract<Checkpoint, { phase: "read" }>>(async (task, runtime, context) => {
@@ -336,24 +364,51 @@ export function topicSearchTask(
         const cp = task.state.checkpoint;
         const window: Window = { startedAt: cp.startedAt, since: cp.since, night: cp.night, retry: cp.retry ?? null };
         const dir = await deps.runDir(runId);
-        let x = await deps.loadRead(dir);
-        if (!x) {
-          if (cp.blocked) x = unread("unavailable", cp.blocked);
-          else {
-            const search = await deps.loadSearch(brief.searchId);
-            if (!search) return skip(runtime, "the topic search is gone", context);
-            await hold(runId);
-            x = await deps.lane(() => readX(task.input, search, window, dir, runtime.signal));
+        const search = await deps.loadSearch(brief.searchId);
+        if (!search) return skip(runtime, "the topic search is gone", context);
+        // The run's line says where each half is: "reading X: ...; arXiv done: ...".
+        const line = { x: cp.blocked ? `not reading X: ${cp.blocked}` : "waiting to read X", arxiv: "arXiv: starting" };
+        const tell = () => say(runId, `${line.x}; ${line.arxiv}`);
+        const arxivWork = readArxivOf(search, brief, window, dir, runtime.signal, (read) => {
+          line.arxiv = arxivProgressLine(read);
+          tell();
+        });
+        const xWork = (async () => {
+          let read = await deps.loadRead(dir);
+          if (!read) {
+            if (cp.blocked) read = unread("unavailable", cp.blocked);
+            else {
+              await hold(runId);
+              read = await deps.lane(() => {
+                line.x = "reading X";
+                tell();
+                return readX(task.input, search, window, dir, runtime.signal, (text) => {
+                  line.x = text;
+                  tell();
+                });
+              });
+            }
+            await deps.saveRead(dir, read);
           }
-          await deps.saveRead(dir, x);
-        }
+          if (!cp.blocked) {
+            line.x = `X read: ${read.posts.length} posts (${read.status})`;
+            tell();
+          }
+          return read;
+        })();
+        // Both run to the end whatever the other does; a failure is raised once both have settled.
+        const [xDone, arxivDone] = await Promise.allSettled([xWork, arxivWork]);
+        if (xDone.status === "rejected") throw xDone.reason;
+        if (arxivDone.status === "rejected") throw arxivDone.reason;
+        const x = xDone.value;
+        const papers = arxivDone.value.found.reduce((n, f) => n + f.items.length, 0);
         if (brief.kind === "daily" && !(await runtime.memo<boolean>("night-spent", context))) {
           await deps.spendNight(window.night, x);
           await runtime.memo("night-spent", true, context);
         }
         if (!cp.blocked && x.status !== "halted" && x.status !== "unavailable") await deps.readClean();
         await release(runId);
-        say(runId, `read ${x.posts.length} posts (${x.status}); building the result`);
+        say(runId, `read ${x.posts.length} posts (${x.status}) and ${papers} arXiv papers; building the result`);
         await next(runtime, { phase: "build", ...window }, context);
       }),
       build: guarded<Extract<Checkpoint, { phase: "build" }>>(async (task, runtime, context) => {
@@ -371,7 +426,9 @@ export function topicSearchTask(
           const look = lookOf(brief.kind);
           const xPages = deps.xPages({ kind: look, night: window.night, x });
           const retry = window.retry ? { runId, x: window.retry.x, arxiv: window.retry.arxiv } : null;
-          const made = await build({ topic: search, kind: look, x, since: window.since, runDir: dir, xPages, signal: runtime.signal, retry });
+          // On file since the read phase; a run whose read phase came before arXiv moved there searches it here.
+          const arxiv = (await readArxivOf(search, brief, window, dir, runtime.signal)).found;
+          const made = await build({ topic: search, kind: look, x, arxiv, since: window.since, runDir: dir, xPages, signal: runtime.signal, retry });
           built = await runtime.memo("built", { resultFile: made.resultFile, itemCount: made.itemCount, empty: made.empty }, context);
         }
         if (!(await runtime.memo<boolean>("health-folded", context))) {

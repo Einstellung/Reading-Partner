@@ -3,7 +3,8 @@
 // AppData, the reader's profile statements. Apart from build-result.ts so that
 // file stays testable: everything here reaches the host.
 //
-// The run pipeline (run.ts) injects `buildTopicSearchResult`.
+// The run pipeline (run.ts) injects `buildTopicSearchResult`, and searches
+// arXiv in its read phase with `searchArxivLive`.
 //
 // Every request here goes through `spacedFetch`: fetchWithRetry takes an
 // injected fetchFn for a fake and skips its per-host spacing (pitfall 497), so
@@ -23,6 +24,7 @@ import { listStatements } from "../../memory/live/statements";
 import { LinkSession } from "../links/session";
 import { arxivPlugin } from "../sources/plugins/arxiv";
 import { RepoLookups } from "../sources/plugins/github-lookup";
+import type { ArxivSearch } from "./arxiv-ladder";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResult } from "./build-result";
 import type { OpenedLink } from "./verify";
 import { localDay } from "./windows";
@@ -87,16 +89,18 @@ async function writeUnder(path: string, content: string): Promise<void> {
   await writeTextAtomic(path, content);
 }
 
+/** The arXiv plugin's search slot, spaced per host; `since` and `until` are local days, inclusive. */
+export const searchArxivLive: ArxivSearch = (text, window, signal) =>
+  arxivPlugin.search!(text, { since: window.since, until: window.until, limit: ARXIV_LIMIT }, {
+    fetchFn: spacedFetch,
+    signal,
+    now: () => Date.now(),
+    today: () => localDay(Date.now()),
+  });
+
 export const liveResultDeps: BuildResultDeps = {
   model: ({ system, user, signal }) =>
     callModel("prep", "plan", system, user, { signal, onProgress: () => {} }, { spend: { caller: "info" } }),
-  searchArxiv: (text, window, signal) =>
-    arxivPlugin.search!(text, { since: window.since, until: window.until, limit: ARXIV_LIMIT }, {
-      fetchFn: spacedFetch,
-      signal,
-      now: () => Date.now(),
-      today: () => localDay(Date.now()),
-    }),
   fetchText: async (url, signal) => {
     const res = await fetchWithRetry(url, { signal }, interactiveRetry(spacedFetch));
     return { status: res.status, text: await res.text() };

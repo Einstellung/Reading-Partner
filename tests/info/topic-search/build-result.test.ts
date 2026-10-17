@@ -12,7 +12,9 @@ import { MaterialRegistry } from "../../../src/info/dossier/registry";
 import type { InfoItem } from "../../../src/info/sources/item";
 import type { RepoLookup } from "../../../src/info/sources/plugins/github-lookup";
 import { parseSearchRead, SEARCH_PAGE_SCRIPT, type XSearchPost } from "../../../src/info/x/search-page";
-import { makeResultBuilder, SOURCE_HEALTH_FILE, type BuildResultDeps, type SourceHealthFile } from "../../../src/info/topic-search/build-result";
+import { makeResultBuilder as makeBuilder, SOURCE_HEALTH_FILE, type BuildResultDeps, type BuildTopicSearchResultArgs, type SourceHealthFile } from "../../../src/info/topic-search/build-result";
+import type { ArxivSearch } from "../../../src/info/topic-search/arxiv-ladder";
+import { readArxiv } from "../../../src/info/topic-search/arxiv-read";
 import { missingNumbers, numbersIn, type TopicModelCall } from "../../../src/info/topic-search/model-io";
 import { QUESTIONS_FILE, enqueue, metricQuestions, pickQuestions, questionCap, type PendingQuestion } from "../../../src/info/topic-search/questions";
 import { numberPool, parseRerank, type Candidate } from "../../../src/info/topic-search/rank-pool";
@@ -181,6 +183,19 @@ function memoryFiles(seed: Record<string, string> = {}) {
   };
 }
 
+/** The build's deps, and the arXiv search the run's read phase would have sent. */
+type TestDeps = BuildResultDeps & { searchArxiv: ArxivSearch };
+
+/** The builder after an arXiv read over the scripted search, as the run hands it what its read phase found. */
+function makeResultBuilder(d: TestDeps) {
+  const build = makeBuilder(d);
+  return async (args: Omit<BuildTopicSearchResultArgs, "arxiv">) => {
+    const plan = { kind: args.kind, since: args.since, today: d.today(), only: args.retry?.arxiv ?? null };
+    const read = await readArxiv(args.topic, plan, { search: d.searchArxiv, load: async () => null, save: async () => {} }, args.signal);
+    return build({ ...args, arxiv: read.found });
+  };
+}
+
 function deps(over: {
   files: ReturnType<typeof memoryFiles>;
   log: TopicModelCall[];
@@ -188,7 +203,7 @@ function deps(over: {
   writeFails?: number;
   arxiv?: Record<string, InfoItem[]>;
   opened?: string[];
-}): BuildResultDeps {
+}): TestDeps {
   const now = Date.parse(`${over.today}T12:00:00Z`);
   return {
     model: scriptedModel(over.log, { writeFails: over.writeFails }),
@@ -385,6 +400,33 @@ test("a rerank that fails ranks by relevance instead", async () => {
   const result = parseResultFile(files.files.get(out.resultFile!)!)!;
   expect(result.stats.reranked).toBe(false);
   expect(result.items.length).toBeGreaterThan(0);
+});
+
+test("the build takes arXiv from what the read phase found and sends no arXiv request", async () => {
+  const files = memoryFiles();
+  let searched = 0;
+  const d = { ...deps({ files, log: [], today: "2026-10-14" }), searchArxiv: async () => (searched++, []) };
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  const step = { terms: ["science"], since: "2025-10-14", until: "2026-10-14" };
+  const out = await makeBuilder(d)({
+    topic: TOPIC,
+    kind: "first",
+    x: xRead(POSTS),
+    arxiv: [
+      { query: "q1", items: [AGENTIC], error: null, ladder: { outcome: "widened", steps: [{ ...step, hits: 1 }] } },
+      { query: "q2", items: [], error: "rate limited (HTTP 429)", ladder: { outcome: "rate_limited", steps: [{ ...step, terms: ["materials", "discovery"], hits: null }] } },
+    ],
+    since: now - 30 * 86_400_000,
+    runDir: RUN_DIR,
+    xPages: ANY_PAGES,
+    signal: new AbortController().signal,
+  });
+  expect(searched).toBe(0);
+  const result = parseResultFile(files.files.get(out.resultFile!)!)!;
+  expect(result.items.some((i) => i.key === "arxiv:2609.31562")).toBe(true);
+  const health = JSON.parse(files.files.get(`${RUN_DIR}/${SOURCE_HEALTH_FILE}`)!) as SourceHealthFile;
+  expect(health.entries.find((e) => e.query === "q1" && e.source === "arxiv")).toMatchObject({ status: "ok", ladder: { outcome: "widened" } });
+  expect(health.entries.find((e) => e.query === "q2" && e.source === "arxiv")).toMatchObject({ status: "failed", why: "rate limited (HTTP 429)", ladder: { outcome: "rate_limited" } });
 });
 
 describe("pieces", () => {

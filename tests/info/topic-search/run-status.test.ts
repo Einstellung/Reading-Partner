@@ -5,6 +5,7 @@ import { expect, test } from "bun:test";
 import { backgroundStatusText, type StatusInput } from "../../../src/legion/status/describe";
 import type { DeviceClaim } from "../../../src/legion/claim";
 import type { Run } from "../../../src/legion/run";
+import type { ArxivRead } from "../../../src/info/topic-search/arxiv-read";
 import type { SourceHealthFile } from "../../../src/info/topic-search/build-result";
 import type { TopicSearchResult } from "../../../src/info/topic-search/result-types";
 import { encodeBrief, TOPIC_SEARCH_KIND, type TopicSearchBrief } from "../../../src/info/topic-search/run";
@@ -123,6 +124,10 @@ function deps(over: Partial<TopicSearchStatusDeps> = {}) {
       asked.push(`steps:${id}`);
       return STEPS;
     },
+    arxivRead: async (id) => {
+      asked.push(`arxiv:${id}`);
+      return null;
+    },
     runHealth: async (id) => {
       asked.push(`health:${id}`);
       return null;
@@ -170,11 +175,37 @@ test("on the collector, a running retry reports its own X progress and that arXi
   expect(text).toContain('- topic search "Mechanism discovery": retry #1 of the first look [topic-search]');
   expect(text).toContain("running on this device (kestrel), started 4 min ago (today 10:42)");
   expect(text).toContain("X: query 2 of 2, 3 screens read, 4 distinct posts found so far.");
-  expect(text).toContain("arXiv: read while the result is built, after X; no outcome yet.");
+  expect(text).toContain("arXiv: searched beside X while X is read; nothing on file yet.");
   expect(text).toContain("Result: nothing added yet");
   expect(text).toContain("Brief issue: not yet");
   expect(text).toContain("X on this device: signed in, not paused.");
   expect(text).not.toContain("cannot see");
+});
+
+test("on the collector, arXiv done while X is still being read says so, query by query", async () => {
+  const step = { terms: ["autonomous", "experiment"], since: "2025-10-17", until: "2026-10-17" };
+  const done: ArxivRead = {
+    version: 1,
+    window: { since: "2025-10-17", until: "2026-10-17" },
+    planned: ["q1"],
+    found: [{ query: "q1", items: [{ id: "a" }, { id: "b" }] as never, error: null, ladder: { outcome: "widened", steps: [{ ...step, hits: 2 }] } }],
+    done: true,
+  };
+  const { d } = deps({ arxivRead: async () => done });
+  const text = await backgroundStatusText(input([tsRun(FIRST)], d), { about: "Mechanism discovery" });
+  expect(text).toContain("X: query 2 of 2, 3 screens read, 4 distinct posts found so far.");
+  expect(text).toContain("arXiv done: 1 query searched (1 widened), 2 papers; the result is built once X has been read.");
+  expect(text).toContain('arXiv per query: "autonomous experiment" widened, 2 papers.');
+
+  const limited: ArxivRead = {
+    ...done,
+    planned: ["q1", "q3"],
+    found: [{ query: "q1", items: [], error: "rate limited (HTTP 429 from export.arxiv.org)", ladder: { outcome: "rate_limited", steps: [{ ...step, hits: null }] } }],
+    done: false,
+  };
+  const half = await backgroundStatusText(input([tsRun(FIRST)], deps({ arxivRead: async () => limited }).d), { about: "Mechanism discovery" });
+  expect(half).toContain("arXiv: 1 of 2 queries searched (1 rate limited), 0 papers.");
+  expect(half).toContain('arXiv per query: "autonomous experiment" failed (rate limited (HTTP 429 from export.arxiv.org)).');
 });
 
 test("on the collector, a done run gives its per-query outcomes, result growth and issue", async () => {

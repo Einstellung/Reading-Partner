@@ -1,5 +1,6 @@
 // From what a topic search run read to its result file (docs/info/88, the
-// run's rank, verify and write phases): arXiv searched beside X, candidates
+// run's rank, verify and write phases): what X and arXiv found (both read in
+// the run's read phase, arxiv-read.ts; the build searches nothing), candidates
 // scored and reranked and merged into events, the topic's 30-day history taken
 // out, each item's originals read and compared, the sentences written and
 // checked, questions saved up and picked, and the file written.
@@ -19,9 +20,8 @@ import { dedupeBatch, type Headline } from "../rank/dedupe";
 import { eventKeyOfUrl, type EventCluster } from "../rank/events";
 import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
-import type { InfoItem } from "../sources/item";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
-import { runArxivLadder, type ArxivLadder } from "./arxiv-ladder";
+import type { ArxivLadder } from "./arxiv-ladder";
 import { composeResult, deepenableMaterial, EARLIER_LINES, type DeeperReads, type EarlierLine } from "./compose";
 import { parseJsonReply, type TopicModel } from "./model-io";
 import { enqueue, loadQueue, metricQuestions, pickQuestions, questionCap, saveQueue, waiting, type NewQuestion } from "./questions";
@@ -70,7 +70,7 @@ import {
   type SourceDeps,
   type Target,
 } from "./verify";
-import { addDays, arxivWindow } from "./windows";
+import { addDays } from "./windows";
 import type { XReadResult } from "./x-reader";
 
 /** Items a result lists: a first run's, and a day's (88 「打分」 7). */
@@ -93,6 +93,8 @@ export interface BuildTopicSearchResultArgs {
   topic: TopicSearch;
   kind: "first" | "daily";
   x: XReadResult;
+  /** What the run's arXiv read found, query by query (arxiv-read.ts). */
+  arxiv: readonly ArxivFound[];
   /** Start of this run's window, epoch ms. */
   since: number;
   runDir: string;
@@ -174,8 +176,6 @@ export interface ResultFiles {
 
 export interface BuildResultDeps {
   model: TopicModel;
-  /** The arXiv plugin's search slot; `since` and `until` are local days, inclusive. */
-  searchArxiv(text: string, window: { since: string; until: string }, signal: AbortSignal): Promise<InfoItem[]>;
   fetchText: FetchText;
   openLink: OpenLink;
   /** A PDF's text layer, for a deeper read of a paper arXiv has no HTML for; absent: such a paper is not read deeper. */
@@ -326,7 +326,7 @@ async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<Top
 }
 
 async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs): Promise<BuildTopicSearchResultOutput> {
-  const { topic, kind, x, since, runDir, xPages, signal } = args;
+  const { topic, kind, x, arxiv, since, runDir, xPages, signal } = args;
   const retry = args.retry ?? null;
   throwIfAborted(signal);
   const now = deps.now();
@@ -348,16 +348,6 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     deps.language(),
     deps.bookLanguage ? deps.bookLanguage() : deps.language(),
   ]);
-
-  // arXiv beside X (88 「取材 / arXiv」): each query's ladder in turn, never two at once.
-  const arxiv: ArxivFound[] = [];
-  const arxivSpan = arxivWindow(kind, since, today);
-  for (const q of topic.queries) {
-    if (!q.arxiv || (retry && !retry.arxiv.includes(q.id))) continue;
-    throwIfAborted(signal);
-    const { items, error, outcome, steps } = await runArxivLadder(q.arxiv, arxivSpan, kind, deps.searchArxiv, signal);
-    arxiv.push({ query: q.id, items, error, ladder: { outcome, steps } });
-  }
 
   // Rank (88 「打分」 1-6).
   const gathered = gatherCandidates(topic, x, arxiv, since);

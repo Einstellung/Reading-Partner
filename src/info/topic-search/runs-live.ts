@@ -29,7 +29,7 @@ import { stopFollowing } from "./apply";
 import { SOURCE_HEALTH_FILE, type BuildTopicSearchResult } from "./build-result";
 import { parseResultFile, RESULT_FILE_PREFIX, type TopicSearchResult } from "./result-types";
 import { topicSearchDescriber, type ShelfIssue, type TopicSearchStatusDeps } from "./run-status";
-import { buildTopicSearchResult } from "./build-live";
+import { buildTopicSearchResult, searchArxivLive } from "./build-live";
 import { registerFirstRunDispatcher } from "./first-run";
 import { clearSignedOut, recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
 import type { XResume } from "./resume-tool";
@@ -44,11 +44,13 @@ import {
 } from "./run";
 import {
   createStateStore,
+  loadArxivRead,
   loadRead,
   nightLimits,
   permalinkBudget,
   progressLog,
   runDirOf,
+  saveArxivRead,
   saveRead,
   spendNight,
 } from "./run-state";
@@ -153,6 +155,9 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
     progress: (dir) => progressLog(appData, dir),
     saveRead: (dir, x) => saveRead(appData, dir, x),
     loadRead: (dir) => loadRead(appData, dir),
+    searchArxiv: searchArxivLive,
+    saveArxiv: (dir, read) => saveArxivRead(appData, dir, read),
+    loadArxiv: (dir) => loadArxivRead(appData, dir),
     memory: state.reader,
     nightLimits: async (night) => nightLimits((await state.load()).night, night),
     spendNight: async (night, x) => {
@@ -210,6 +215,7 @@ const statusDeps: TopicSearchStatusDeps = {
     const steps = await progressLog(appData, runDirOf(runId)).load();
     return steps.length ? steps : null;
   },
+  arxivRead: (runId) => loadArxivRead(appData, runDirOf(runId)),
   runHealth: async (runId) => {
     const path = `${runDirOf(runId)}/${SOURCE_HEALTH_FILE}`;
     return (await appData.exists(path)) ? parseSourceHealthFile(await appData.readText(path)) : null;

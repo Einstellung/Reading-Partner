@@ -24,7 +24,9 @@ import { parseResultFile } from "../../../src/info/topic-search/result-types";
 import { topicSearchTask, type TopicSearchRunDeps, type TopicSearchRunResult } from "../../../src/info/topic-search/run";
 import {
   createStateStore,
+  loadArxivRead,
   loadRead,
+  saveArxivRead,
   nightLimits,
   permalinkBudget,
   progressLog,
@@ -167,10 +169,6 @@ function world() {
   };
   const buildDeps: BuildResultDeps = {
     model: model(modelLog),
-    searchArxiv: async () => {
-      arxivCalls++;
-      return [];
-    },
     fetchText: async () => ({ status: 404, text: "" }),
     openLink: async (url) => {
       opened.push(url);
@@ -206,6 +204,12 @@ function world() {
     progress: (dir) => progressLog(fs, dir),
     saveRead: (dir, x) => saveRead(fs, dir, x),
     loadRead: (dir) => loadRead(fs, dir),
+    searchArxiv: async () => {
+      arxivCalls++;
+      return [];
+    },
+    saveArxiv: (dir, read) => saveArxivRead(fs, dir, read),
+    loadArxiv: (dir) => loadArxivRead(fs, dir),
     memory: store.reader,
     nightLimits: async (night) => nightLimits((await store.load()).night, night),
     spendNight: async (night, x) => void (await store.update((s) => ({ ...s, night: spendNight(s.night, night, x) }))),

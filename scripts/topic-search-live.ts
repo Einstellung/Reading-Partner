@@ -33,7 +33,8 @@ import { callModel, resolveModel } from "../src/ai/model-call";
 import { registerSourceSiteAdapters } from "../src/info/sources/plugins/all";
 import { registerXLinkReader } from "../src/info/x/live";
 import { tcoTarget } from "../src/info/x/outbound";
-import { liveResultDeps } from "../src/info/topic-search/build-live";
+import { readArxiv } from "../src/info/topic-search/arxiv-read";
+import { liveResultDeps, searchArxivLive } from "../src/info/topic-search/build-live";
 import { makeResultBuilder, type BuildResultDeps } from "../src/info/topic-search/build-result";
 import { searchLines } from "../src/info/topic-search/run";
 import { FIRST_LOOK_BACK_MS } from "../src/info/topic-search/windows";
@@ -299,10 +300,18 @@ async function build(x: XReadResult): Promise<string | null> {
   let permalinksLeft = Math.max(0, LIMITS.permalinkPages - x.pages.permalink);
   const deps: BuildResultDeps = { ...liveResultDeps, model: countedModel("build"), profile: statements };
   const started = Date.now();
+  const signal = new AbortController().signal;
+  const arxiv = await readArxiv(
+    TOPIC,
+    { kind: "first", since: SINCE, today: localDay(Date.now()), only: null },
+    { search: searchArxivLive, load: async () => null, save: async () => {} },
+    signal,
+  );
   const made = await makeResultBuilder(deps)({
     topic: TOPIC,
     kind: "first",
     x,
+    arxiv: arxiv.found,
     since: SINCE,
     runDir: "topic-search-runs/live-first",
     xPages: {
@@ -312,7 +321,7 @@ async function build(x: XReadResult): Promise<string | null> {
         return true;
       },
     },
-    signal: new AbortController().signal,
+    signal,
   });
   timings.buildMs = Date.now() - started;
   log(`build: ${JSON.stringify(made)} in ${(timings.buildMs / 60_000).toFixed(1)} min`);

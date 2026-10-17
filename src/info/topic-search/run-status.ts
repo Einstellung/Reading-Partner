@@ -2,7 +2,7 @@
 // the generic entry is legion/status). Counts and outcomes only, worked out by
 // the program: never a post's text, never a raw log.
 //
-// Where each piece is: the X progress file and the run's source health are in
+// Where each piece is: the X progress file, the arXiv read and the run's source health are in
 // the run directory, on the computer that ran it only (run-state.ts); this
 // device's halt and X session are its own. The result files and the info shelf
 // sync. The collector's claim carries its source health, whether it has an X
@@ -15,6 +15,7 @@ import type { Run } from "../../legion/run";
 import type { RunAbout, RunDescriber, RunView } from "../../legion/status/registry";
 import type { SourceHealth } from "../sources/engine";
 import { X_SIGN_IN_URL } from "../sources/x-search";
+import { arxivProgressLine, type ArxivRead } from "./arxiv-read";
 import type { SourceHealthEntry, SourceHealthFile } from "./build-result";
 import type { XHaltRecord } from "./halt";
 import type { TopicSearchResult } from "./result-types";
@@ -40,6 +41,8 @@ export interface TopicSearchStatusDeps {
   searches(): Promise<readonly TopicSearch[]>;
   /** The run's X progress steps, or null when this device has no progress file for it. */
   steps(runId: string): Promise<XStep[] | null>;
+  /** What the run's arXiv read has on file (arxiv-read.ts), or null when this device has none for it. */
+  arxivRead(runId: string): Promise<ArxivRead | null>;
   /** The run directory's source health, or null when this device has none for it. */
   runHealth(runId: string): Promise<SourceHealthFile | null>;
   /** The search's result files on this device. */
@@ -93,6 +96,24 @@ export function healthLines(entries: readonly (Pick<SourceHealthEntry, "query" |
     out.push(`${source === "x" ? "X" : "arXiv"} per query: ${mine.map((e) => `${queryLabel(search, e.query, source)} ${outcome(e)}`).join("; ")}.`);
   }
   return out;
+}
+
+/**
+ * The run's arXiv read before the build has written the source health: how far
+ * it got, and each searched query's ladder outcome and papers. arXiv runs beside
+ * X, so it is usually done while X is still being read.
+ */
+export function arxivLines(read: ArxivRead, search: TopicSearch | undefined, open: boolean): string[] {
+  const head = arxivProgressLine(read);
+  const lines = [read.done && open && read.planned.length ? `${head}; the result is built once X has been read.` : `${head}.`];
+  if (read.found.length) {
+    const each = read.found.map((f) => {
+      const papers = `${f.items.length} paper${f.items.length === 1 ? "" : "s"}`;
+      return `${queryLabel(search, f.query, "arxiv")} ${f.error ? `failed (${f.error})` : `${f.ladder?.outcome ?? "searched"}, ${papers}`}`;
+    });
+    lines.push(`arXiv per query: ${each.join("; ")}.`);
+  }
+  return lines;
 }
 
 /** The claim's source health lines of one search, as the generic entry's (search, query, source) records. */
@@ -180,7 +201,11 @@ export function topicSearchDescriber(deps: TopicSearchStatusDeps): RunDescriber 
         else if (run.state === "running") lines.push("X: nothing read yet on this device.");
         const health = await deps.runHealth(run.id);
         if (health) lines.push(...healthLines(health.entries, search));
-        else if (open) lines.push("arXiv: read while the result is built, after X; no outcome yet.");
+        else {
+          const arxiv = await deps.arxivRead(run.id);
+          if (arxiv) lines.push(...arxivLines(arxiv, search, open));
+          else if (open) lines.push("arXiv: searched beside X while X is read; nothing on file yet.");
+        }
       } else if (run.claimant) {
         const name = view.claimant?.deviceName ? `"${view.claimant.deviceName}"` : "the computer running it";
         if (open) {

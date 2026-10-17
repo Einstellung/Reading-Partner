@@ -20,11 +20,27 @@ import {
   type TopicSearchRunResult,
 } from "../../../src/info/topic-search/run";
 import type { BuildTopicSearchResult, BuildTopicSearchResultArgs } from "../../../src/info/topic-search/build-result";
-import { createStateStore, nightLimits, permalinkBudget, progressLog, spendNight, takePermalink, emptyState, type StateFs } from "../../../src/info/topic-search/run-state";
+import {
+  createStateStore,
+  emptyState,
+  loadArxivRead,
+  nightLimits,
+  permalinkBudget,
+  progressLog,
+  saveArxivRead,
+  spendNight,
+  takePermalink,
+  type StateFs,
+} from "../../../src/info/topic-search/run-state";
 import { createNightTick, topicSearchWorker } from "../../../src/info/topic-search/run-worker";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import { unread } from "../../../src/info/topic-search/run";
 import type { BrowseOpen } from "../../../src/workshop/extract/webview-browse";
+import type { ArxivRead } from "../../../src/info/topic-search/arxiv-read";
+import type { XReadResult } from "../../../src/info/topic-search/x-reader";
+import type { InfoItem } from "../../../src/info/sources/item";
+import { AbortError } from "../../../src/platform/app/abort";
+import { HttpStatusError } from "../../../src/platform/http/throttled-fetch";
 import { openTestRuntime } from "../../legion/durable/support/runtime";
 
 const local = (y: number, mo: number, d: number, h: number, mi = 0) => new Date(y, mo - 1, d, h, mi).getTime();
@@ -194,6 +210,7 @@ interface Trace {
 function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: TopicSearch; now?: number } = {}): {
   deps: TopicSearchRunDeps;
   trace: Trace;
+  fs: ReturnType<typeof memFs>;
 } {
   const fs = memFs();
   const store = createStateStore(fs, "state.json");
@@ -215,6 +232,9 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
     progress: (dir) => progressLog(fs, dir),
     saveRead: async (dir, x) => void fs.files.set(`${dir}/x-read.json`, JSON.stringify(x)),
     loadRead: async (dir) => (fs.files.has(`${dir}/x-read.json`) ? JSON.parse(fs.files.get(`${dir}/x-read.json`)!) : null),
+    searchArxiv: async () => [],
+    saveArxiv: (dir, read) => saveArxivRead(fs, dir, read),
+    loadArxiv: (dir) => loadArxivRead(fs, dir),
     memory: store.reader,
     nightLimits: async (night) => nightLimits((await store.load()).night, night),
     spendNight: async (night, x) => void (await store.update((s) => ({ ...s, night: spendNight(s.night, night, x) }))),
@@ -240,15 +260,15 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
     sleep: async () => {},
     ...rest,
   };
-  return { deps, trace };
+  return { deps, trace, fs };
 }
 
-async function runTask(deps: TopicSearchRunDeps, input: { runId: string; brief: TopicSearchBrief }) {
+async function runTask(deps: TopicSearchRunDeps, input: { runId: string; brief: TopicSearchBrief }, signal?: AbortSignal) {
   const task = topicSearchTask(deps);
   const off = registerProgramTask(task);
   const t = await openTestRuntime({ root: mkdtempSync(join(tmpdir(), "ts-run-")), responses: [] });
   try {
-    return await runProgramTask<TopicSearchRunResult>(t.runtime, { task, key: input.runId, name: "topic-search", input });
+    return await runProgramTask<TopicSearchRunResult>(t.runtime, { task, key: input.runId, name: "topic-search", input, signal });
   } finally {
     off();
   }
@@ -340,6 +360,221 @@ test("a retry reads X only for what it reads again, and skips when X is signed o
   expect((d as { result: TopicSearchRunResult }).result.status).toBe("delivered");
   expect(once.trace.opened).toBe(1);
   expect(once.trace.stopped).toEqual([]);
+});
+
+// --- arXiv beside X --------------------------------------------------------------
+
+function withArxiv(over: Partial<TopicSearch> = {}): TopicSearch {
+  return search({
+    queries: [
+      { id: "q1", subtopic: null, x: "AI for science", arxiv: "protein design", ranking: "", weight: 1 },
+      { id: "q2", subtopic: "st1", x: "AI materials discovery", arxiv: "materials discovery", ranking: "", weight: 0.7 },
+    ],
+    ...over,
+  });
+}
+
+const FIRST_LOOK: TopicSearchBrief = { searchId: "ts-0000aaaa", kind: "first", night: null };
+
+const paper = (id: string): InfoItem => ({ id: `arxiv-${id}`, source: "arxiv", sourceName: "arXiv", title: `Paper ${id}`, url: `https://arxiv.org/abs/${id}`, publishedAt: "" });
+/** Three papers a request, so every ladder stops at its first step. */
+const three = (text: string) => [1, 2, 3].map((i) => paper(`${text.replace(/\W/g, "")}.${i}`));
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+function capturing() {
+  const seen: BuildTopicSearchResultArgs[] = [];
+  const builder: BuildTopicSearchResult = async (args) => {
+    seen.push(args);
+    return { resultFile: "topic-search-ts-0000aaaa-2026-10-14.json", itemCount: 2, empty: false };
+  };
+  return { seen, builder };
+}
+
+async function until(check: () => boolean) {
+  for (let i = 0; i < 2000 && !check(); i++) await new Promise((r) => setTimeout(r, 1));
+  expect(check()).toBe(true);
+}
+
+const arxivOnFile = (fs: { files: Map<string, string> }, runId: string): ArxivRead | null =>
+  JSON.parse(fs.files.get(`runs/${runId}/arxiv-read.json`) ?? "null") as ArxivRead | null;
+
+test("arXiv is searched while X still waits in the lane, and the run's line says so", async () => {
+  const gate = deferred();
+  let entered = false;
+  const said: string[] = [];
+  const searched: string[] = [];
+  const { seen, builder } = capturing();
+  const { deps, trace, fs } = fakeDeps({
+    search: withArxiv(),
+    builder: () => builder,
+    searchArxiv: async (text) => (searched.push(text), three(text)),
+    lane: async (work) => {
+      await gate.promise;
+      entered = true;
+      return work();
+    },
+    report: (_id, text) => void said.push(text),
+  });
+  const running = runTask(deps, { runId: "r-a1", brief: FIRST_LOOK });
+  await until(() => arxivOnFile(fs, "r-a1")?.done === true);
+  expect(entered).toBe(false);
+  expect(trace.opened).toBe(0);
+  expect(seen.length).toBe(0);
+  expect(searched).toEqual(["protein design", "materials discovery"]);
+  expect(said[said.length - 1]).toBe("waiting to read X; arXiv done: 2 queries searched (2 direct), 6 papers");
+
+  gate.resolve();
+  const outcome = await running;
+  expect(outcome.status).toBe("completed");
+  expect(trace.opened).toBe(1);
+  expect(seen[0].arxiv.map((f) => [f.query, f.ladder?.outcome, f.items.length])).toEqual([
+    ["q1", "direct", 3],
+    ["q2", "direct", 3],
+  ]);
+  // The build searched nothing.
+  expect(searched.length).toBe(2);
+});
+
+test("an X read that halts early waits for arXiv, and the build has both", async () => {
+  const release = deferred();
+  let cleaned = 0;
+  const { seen, builder } = capturing();
+  const halted: XReadResult = { ...unread("halted", "X said stop"), halt: { kind: "rate-limited", detail: "Rate limit exceeded" } };
+  const { deps, fs } = fakeDeps({
+    search: withArxiv(),
+    builder: () => builder,
+    searchArxiv: async (text) => {
+      await release.promise;
+      return three(text);
+    },
+    lane: async () => halted as never,
+    readClean: async () => void cleaned++,
+  });
+  const running = runTask(deps, { runId: "r-b1", brief: FIRST_LOOK });
+  await until(() => fs.files.has("runs/r-b1/x-read.json"));
+  expect(arxivOnFile(fs, "r-b1")).toMatchObject({ done: false, found: [] });
+  expect(seen.length).toBe(0);
+
+  release.resolve();
+  expect((await running).status).toBe("completed");
+  expect(seen[0].x.status).toBe("halted");
+  expect(seen[0].arxiv.map((f) => f.query)).toEqual(["q1", "q2"]);
+  expect(cleaned).toBe(0);
+});
+
+test("arXiv refused for its rate limit does not stop X, and sends one request per query", async () => {
+  let requests = 0;
+  const { seen, builder } = capturing();
+  const { deps, trace } = fakeDeps({
+    search: withArxiv(),
+    builder: () => builder,
+    searchArxiv: async () => {
+      requests++;
+      throw new HttpStatusError(429, "export.arxiv.org");
+    },
+  });
+  const outcome = await runTask(deps, { runId: "r-c1", brief: FIRST_LOOK });
+  expect((outcome as { result: TopicSearchRunResult }).result.status).toBe("delivered");
+  // X went its own way: the browse window was opened (the fake has none, so it reads as unavailable).
+  expect(trace.opened).toBe(1);
+  expect(seen[0].arxiv.map((f) => f.ladder?.outcome)).toEqual(["rate_limited", "rate_limited"]);
+  expect(seen[0].arxiv[0].error).toContain("rate limited");
+  expect(requests).toBe(2);
+});
+
+test("a half that throws lets the other finish and save before the run fails", async () => {
+  const brokenArxiv = fakeDeps({
+    search: withArxiv(),
+    saveArxiv: async () => {
+      throw new Error("disk full");
+    },
+  });
+  const a = await runTask(brokenArxiv.deps, { runId: "r-d1", brief: FIRST_LOOK });
+  expect(a).toMatchObject({ status: "failed", error: { message: "disk full" } });
+  expect(brokenArxiv.trace.opened).toBe(1);
+  expect(brokenArxiv.fs.files.has("runs/r-d1/x-read.json")).toBe(true);
+  expect(brokenArxiv.trace.built).toBe(0);
+  expect(brokenArxiv.trace.locks).toEqual({ taken: 1, released: 1 });
+
+  const brokenX = fakeDeps({
+    search: withArxiv(),
+    searchArxiv: async (text) => three(text),
+    lane: async () => {
+      throw new Error("the browse window crashed");
+    },
+  });
+  const b = await runTask(brokenX.deps, { runId: "r-d2", brief: FIRST_LOOK });
+  expect(b).toMatchObject({ status: "failed", error: { message: "the browse window crashed" } });
+  expect(arxivOnFile(brokenX.fs, "r-d2")).toMatchObject({ done: true, planned: ["q1", "q2"] });
+});
+
+test("the run's signal stops arXiv too, and the run asked again searches only what is not on file", async () => {
+  const stop = new AbortController();
+  const searched: string[] = [];
+  const { deps, trace, fs } = fakeDeps({
+    search: withArxiv(),
+    searchArxiv: (text, _window, signal) => {
+      searched.push(text);
+      if (text === "protein design") return Promise.resolve(three(text));
+      // The second query is still out when the run is stopped.
+      return new Promise((_, reject) => signal.addEventListener("abort", () => reject(new AbortError()), { once: true }));
+    },
+  });
+  const running = runTask(deps, { runId: "r-e1", brief: FIRST_LOOK }, stop.signal);
+  await until(() => searched.length === 2 && fs.files.has("runs/r-e1/x-read.json"));
+  stop.abort();
+  expect((await running).status).toBe("aborted");
+  expect(arxivOnFile(fs, "r-e1")).toMatchObject({ done: false, found: [{ query: "q1" }] });
+
+  deps.searchArxiv = async (text) => (searched.push(text), three(text));
+  const again = await runTask(deps, { runId: "r-e1", brief: FIRST_LOOK });
+  expect((again as { result: TopicSearchRunResult }).result.status).toBe("delivered");
+  expect(searched).toEqual(["protein design", "materials discovery", "materials discovery"]);
+  // X is on file too: not opened again.
+  expect(trace.opened).toBe(1);
+});
+
+test("arXiv runs when X is not read: a signed-out first look, and a retry with only arXiv to redo", async () => {
+  const signedOut = capturing();
+  const searchedA: string[] = [];
+  const a = fakeDeps({
+    search: withArxiv(),
+    builder: () => signedOut.builder,
+    checkSession: async () => "signed-out",
+    searchArxiv: async (text) => (searchedA.push(text), three(text)),
+  });
+  expect(((await runTask(a.deps, { runId: "r-f1", brief: FIRST_LOOK })) as { result: TopicSearchRunResult }).result.status).toBe("delivered");
+  expect(a.trace.opened).toBe(0);
+  expect(searchedA).toEqual(["protein design", "materials discovery"]);
+  expect(signedOut.seen[0].x.status).toBe("unavailable");
+
+  const retried = capturing();
+  const searchedB: string[] = [];
+  const b = fakeDeps({
+    search: withArxiv(),
+    builder: () => retried.builder,
+    retryPlan: async () => ({ x: [], arxiv: ["q2"] }),
+    searchArxiv: async (text) => (searchedB.push(text), three(text)),
+  });
+  const brief: TopicSearchBrief = { searchId: "ts-0000aaaa", kind: "retry", night: null, n: 1 };
+  expect(((await runTask(b.deps, { runId: "r-f2", brief })) as { result: TopicSearchRunResult }).result.status).toBe("delivered");
+  expect(b.trace.opened).toBe(0);
+  expect(searchedB).toEqual(["materials discovery"]);
+  expect(retried.seen[0].arxiv.map((f) => f.query)).toEqual(["q2"]);
+  expect(retried.seen[0].retry).toMatchObject({ arxiv: ["q2"] });
+  // A retry reads a year back, as the first look does.
+  expect(arxivOnFile(b.fs, "r-f2")?.window).toEqual({ since: "2025-10-14", until: "2026-10-14" });
+});
+
+test("a night's run searches arXiv from the search's last run", async () => {
+  const { deps, fs } = fakeDeps({ search: withArxiv({ lastRunAt: local(2026, 10, 13, 2) }), now: local(2026, 10, 14, 2) });
+  await runTask(deps, { runId: "r-g1", brief: { searchId: "ts-0000aaaa", kind: "daily", night: "2026-10-14" } });
+  expect(arxivOnFile(fs, "r-g1")).toMatchObject({ done: true, window: { since: "2026-10-13", until: "2026-10-14" } });
 });
 
 test("with no builder the task fails and the worker gives up", async () => {
