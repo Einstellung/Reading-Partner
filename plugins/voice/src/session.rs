@@ -879,11 +879,11 @@ mod tests {
         let started = backend.started.clone();
         let session = session_with(stage.clone(), backend);
 
-        assert_eq!(session.prime_cues("zh").await.unwrap(), 3);
-        assert_eq!(started.load(Ordering::SeqCst), 3);
+        assert_eq!(session.prime_cues("zh").await.unwrap(), 4);
+        assert_eq!(started.load(Ordering::SeqCst), 4);
         // Priming again makes nothing new.
-        assert_eq!(session.prime_cues("zh").await.unwrap(), 3);
-        assert_eq!(started.load(Ordering::SeqCst), 3);
+        assert_eq!(session.prime_cues("zh").await.unwrap(), 4);
+        assert_eq!(started.load(Ordering::SeqCst), 4);
 
         for _ in 0..2 {
             let utterance = session.speak_cue("zh/think").await.unwrap();
@@ -893,7 +893,7 @@ mod tests {
             assert_eq!(id, 0);
             assert!(near(ms, spoken_ms("我去想想。")), "{ms} ms");
         }
-        assert_eq!(started.load(Ordering::SeqCst), 3);
+        assert_eq!(started.load(Ordering::SeqCst), 4);
     }
 
     #[tokio::test]
