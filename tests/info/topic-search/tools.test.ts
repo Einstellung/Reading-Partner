@@ -413,7 +413,9 @@ test("resume_x_reading answers by what was held on this device", async () => {
   expect(receiptOf(none)).toBeNull();
   expect(textOf(none)).toContain("not paused on this device");
   const signedOut = await run({ lifted: false, halt: { ...HALT, kind: "signed-out", strikes: 0, paused: false } });
-  expect(textOf(signedOut)).toContain("signs in to X again");
+  expect(textOf(signedOut)).toContain("signs in to X on the sources page");
+  expect(textOf(signedOut)).toContain("retry_topic_search_first_run");
+  expect(textOf(signedOut)).not.toContain("tonight");
   const skipped = await run({ lifted: false, halt: { ...HALT, strikes: 1, paused: false } });
   expect(textOf(skipped)).toContain("only the next night is skipped");
 });

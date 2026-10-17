@@ -291,6 +291,8 @@ export default {
   "tool.confirmedTopicSearch": "开始关注",
   "tool.resumingXReading": "正在恢复 X 读取",
   "tool.resumedXReading": "X 读取已恢复",
+  "tool.retryingFirstRun": "正在请求重跑「{name}」的第一次搜索",
+  "tool.retriedFirstRun": "已请求重跑",
   "tool.proposedCloseLabel": "已提议关闭研究室",
 
   "noLabs.notice":

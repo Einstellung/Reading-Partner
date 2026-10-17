@@ -42,6 +42,8 @@ import { runClosed, type IssueDeps } from "../../../src/info/issue/assemble";
 import { INFO_SHELF_FILE, ISSUE_BOX_KIND, parseShelf } from "../../../src/info/issue/types";
 import { buildSectionedEpub } from "../../../src/workshop/bindery/build-article";
 import { nightEndAt } from "../../../src/info/topic-search/nightly";
+import { planRetry } from "../../../src/info/topic-search/retry";
+import type { TopicSearchBrief } from "../../../src/info/topic-search/run";
 
 const FIXTURE = readFileSync(join(import.meta.dir, "../x/fixtures/search-live-ai-for-science.html"), "utf8");
 
@@ -159,13 +161,17 @@ function world() {
   const box: { id: string; kind: string; cover: string; body: string; date: string }[] = [];
   const library = new Map<string, { fileName: string; bytes: Uint8Array }>();
   let ids = 0;
+  let arxivCalls = 0;
   const day = () => {
     const d = new Date(now);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
   const buildDeps: BuildResultDeps = {
     model: model(modelLog),
-    searchArxiv: async () => [],
+    searchArxiv: async () => {
+      arxivCalls++;
+      return [];
+    },
     fetchText: async () => ({ status: 404, text: "" }),
     openLink: async (url) => {
       opened.push(url);
@@ -207,6 +213,8 @@ function world() {
     gate: async (night) => xGate((await store.load()).halt, night),
     readClean: async () => void (await store.update((s) => ({ ...s, halt: null }))),
     checkSession: async () => "ok",
+    // As runs-live.ts does it, over this test's health file.
+    retryPlan: async (s) => planRetry(s, JSON.parse(fs.files.get(HEALTH_FILE) ?? "{}") as Record<string, SourceHealth>),
     halted: async (halt, about) => void (await store.update((s) => ({ ...s, halt: recordHalt(s.halt, halt, now, about.night) }))),
     keepAwake: async () => ({ held: true, detail: null, release: async () => {} }),
     open: async () => ({ status: "ok", session: fakeSession(screen, browse) }),
@@ -246,10 +254,11 @@ function world() {
     at: (ms: number) => void (now = ms),
     show: (s: unknown) => void (screen = s),
     search: () => search,
+    arxivCalls: () => arxivCalls,
   };
 }
 
-async function run(w: ReturnType<typeof world>, runId: string, brief: { searchId: string; kind: "first" | "daily"; night: string | null }) {
+async function run(w: ReturnType<typeof world>, runId: string, brief: TopicSearchBrief) {
   const task = topicSearchTask(w.deps);
   const off = registerProgramTask(task);
   const t = await openTestRuntime({ root: mkdtempSync(join(tmpdir(), "ts-run-build-")), responses: [] });
@@ -347,6 +356,60 @@ describe("a first run, then the next night", () => {
     expect(health["topic-search:ts-0a1b2c3d:q1:x"].topicSearch?.read).toBe(SCREEN.posts.length - OLDER.posts.length);
     const questions = parseQuestionsFile(w.fs.files.get(QUESTIONS_FILE) ?? null).topics[SEARCH.id]?.questions ?? [];
     expect(questions.map((q) => q.text)).toEqual(expect.arrayContaining(DOUBTS));
+  });
+});
+
+describe("a first run signed out of X, then a retry after signing in", () => {
+  const w = world();
+  const firstFile = "topic-search-ts-0a1b2c3d-2026-10-14.json";
+  const health = () => JSON.parse(w.fs.files.get(HEALTH_FILE)!) as Record<string, SourceHealth>;
+
+  test("the first run reads no X, finds nothing on arXiv, and leaves X failed and arXiv empty after its ladder", async () => {
+    w.deps.checkSession = async () => "signed-out";
+    const result = await run(w, "r-first", { searchId: SEARCH.id, kind: "first", night: null });
+    expect(result.status).toBe("empty");
+    expect(result.x?.status).toBe("unavailable");
+    expect(w.fs.files.has(firstFile)).toBe(true);
+    expect(health()["topic-search:ts-0a1b2c3d:q1:x"]?.topicSearch?.status).toBe("failed");
+    expect(health()["topic-search:ts-0a1b2c3d:q1:arxiv"]?.topicSearch?.status).toBe("empty");
+    expect(planRetry(w.search(), health())).toEqual({ x: ["q1"], arxiv: [] });
+    expect((await w.store.load()).halt?.kind).toBe("signed-out");
+  });
+
+  test("the retry reads X alone, adds to the first look's file, and its own issue goes in the box", async () => {
+    w.deps.checkSession = async () => "ok";
+    const arxivBefore = w.arxivCalls();
+    const arxivHealth = health()["topic-search:ts-0a1b2c3d:q1:arxiv"];
+    const result = await run(w, "r-retry", { searchId: SEARCH.id, kind: "retry", night: null, n: 1 });
+    expect(result.status).toBe("delivered");
+    expect(result.x?.status).toBe("done");
+    expect(result.resultFile).toBe(firstFile);
+    expect(w.arxivCalls()).toBe(arxivBefore);
+
+    const file = parseResultFile(w.fs.files.get(firstFile)!)!;
+    expect(file.kind).toBe("first");
+    expect(file.runDir).toBe("topic-search-runs/r-first");
+    expect(file.items.length).toBe(result.itemCount);
+    expect(file.retries?.map((r) => [r.runId, r.items.length])).toEqual([["r-retry", file.items.length]]);
+    expect(new Set(file.materials.map((m) => m.id)).size).toBe(file.materials.length);
+    // Material bodies go where the file says they are.
+    for (const m of file.materials) expect(w.fs.files.has(`${file.runDir}/${m.body}`)).toBe(true);
+    // No second file for the day.
+    expect([...w.fs.files.keys()].filter((k) => k.startsWith("topic-search-ts-0a1b2c3d-"))).toEqual([firstFile]);
+
+    expect(health()["topic-search:ts-0a1b2c3d:q1:x"]?.topicSearch?.status).toBe("ok");
+    expect(health()["topic-search:ts-0a1b2c3d:q1:arxiv"]).toEqual(arxivHealth);
+    expect((await w.store.load()).halt).toBeNull();
+
+    const shelf = parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null);
+    expect(shelf.issues.map((i) => i.key)).toEqual([`first:${SEARCH.id}#r-retry`]);
+    expect(w.box.length).toBe(1);
+  });
+
+  test("with nothing left to read again, a second retry is skipped", async () => {
+    expect(planRetry(w.search(), health())).toEqual({ x: [], arxiv: [] });
+    const result = await run(w, "r-retry-2", { searchId: SEARCH.id, kind: "retry", night: null, n: 2 });
+    expect(result).toMatchObject({ status: "skipped", why: "nothing the first look missed is left to read again" });
   });
 });
 

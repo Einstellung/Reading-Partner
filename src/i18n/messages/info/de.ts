@@ -291,6 +291,8 @@ export default {
   "tool.confirmedTopicSearch": "Wird verfolgt",
   "tool.resumingXReading": "X-Lesen wird fortgesetzt",
   "tool.resumedXReading": "X-Lesen fortgesetzt",
+  "tool.retryingFirstRun": "Erneuter erster Durchlauf für {name} wird angefragt",
+  "tool.retriedFirstRun": "Erneuter Durchlauf angefragt",
   "tool.proposedCloseLabel": "Laborschließung vorgeschlagen",
 
   "noLabs.notice":

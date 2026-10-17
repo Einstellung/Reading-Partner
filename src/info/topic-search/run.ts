@@ -1,6 +1,7 @@
-// A topic-search run (docs/info/88 「两种 run」): the first look at a topic and
-// each night's increment, as the pi-durable task `rp.topicsearch` the legion
-// worker of kind `topic-search` runs (run-worker.ts). Phases:
+// A topic-search run (docs/info/88 「两种 run」): the first look at a topic,
+// each night's increment, and a retry of what the first look missed (retry.ts,
+// 「重跑第一次」), as the pi-durable task `rp.topicsearch` the legion worker of
+// kind `topic-search` runs (run-worker.ts). Phases:
 //
 //   open     the search is still followed, the night is not over, X may be
 //            read (halt.ts) and the session is real; take the keep-awake lock
@@ -31,6 +32,7 @@ import type { XHalt } from "../x/search-page";
 import type { BuildTopicSearchResult, BuildTopicSearchResultOutput, XPageBudget } from "./build-result";
 import { lastNightAnchor, nightEndAt } from "./nightly";
 import type { TopicSearch } from "./types";
+import { isEmptyPlan, readQueries, type RetryPlan } from "./retry";
 import { FIRST_LOOK_BACK_MS } from "./windows";
 import { localDay, replay, type XProgressLog, type XReaderStore, type XRunStatus } from "./x-progress";
 import { readXSearch, X_FIRST_RUN_LIMITS, type XReadLimits, type XReadLine, type XReadResult } from "./x-reader";
@@ -42,18 +44,26 @@ export const TOPIC_SEARCH_TASK = "rp.topicsearch";
 export const TOPIC_SEARCH_HALT_BOX_KIND = "topic-search-halt";
 export const NO_BUILDER = "no topic-search result builder is registered on this device";
 
-export type TopicSearchRunKind = "first" | "daily";
+/** The first look, a night's increment, or reading again what the first look missed (retry.ts). */
+export type TopicSearchRunKind = "first" | "daily" | "retry";
 
-/** What a run is asked to do. `night` is the anchor date of a daily run. */
+/** How a run reads: a retry reads the way the first look does. */
+export function lookOf(kind: TopicSearchRunKind): "first" | "daily" {
+  return kind === "daily" ? "daily" : "first";
+}
+
+/** What a run is asked to do. `night` is the anchor date of a daily run; `n` numbers a search's retries. */
 export interface TopicSearchBrief {
   searchId: string;
   kind: TopicSearchRunKind;
   night: string | null;
+  n?: number;
 }
 
-/** 88: `topic-search:<id>:first`, or `topic-search:<id>:<anchor date>`. */
+/** 88: `topic-search:<id>:first`, `topic-search:<id>:<anchor date>`, or `topic-search:<id>:retry:<n>`. */
 export function topicSearchRunKey(brief: TopicSearchBrief): string {
-  return `topic-search:${brief.searchId}:${brief.kind === "first" ? "first" : brief.night}`;
+  const tail = brief.kind === "first" ? "first" : brief.kind === "retry" ? `retry:${brief.n ?? 1}` : brief.night;
+  return `topic-search:${brief.searchId}:${tail}`;
 }
 
 export function encodeBrief(brief: TopicSearchBrief): string {
@@ -66,17 +76,19 @@ export function parseBrief(text: string): TopicSearchBrief | null {
     if (typeof raw.searchId !== "string" || !raw.searchId) return null;
     if (raw.kind === "first") return { searchId: raw.searchId, kind: "first", night: null };
     if (raw.kind === "daily" && typeof raw.night === "string") return { searchId: raw.searchId, kind: "daily", night: raw.night };
+    if (raw.kind === "retry" && Number.isInteger(raw.n) && (raw.n as number) > 0) {
+      return { searchId: raw.searchId, kind: "retry", night: null, n: raw.n };
+    }
     return null;
   } catch {
     return null;
   }
 }
 
-/** The X lines of a run: one per query of a picked subtopic or the whole topic. */
-export function searchLines(search: TopicSearch, kind: TopicSearchRunKind, since: number): XReadLine[] {
-  const picked = new Set(search.subtopics.filter((s) => s.picked).map((s) => s.id));
-  return search.queries
-    .filter((q) => q.subtopic === null || picked.has(q.subtopic))
+/** The X lines of a run: one per query of a picked subtopic or the whole topic; a retry's, only those it reads again. */
+export function searchLines(search: TopicSearch, kind: "first" | "daily", since: number, only?: readonly string[]): XReadLine[] {
+  return readQueries(search)
+    .filter((q) => !only || only.includes(q.id))
     .map((q) => ({
       key: `${search.id}:${q.id}`,
       query: q.x,
@@ -114,6 +126,8 @@ interface Window {
   startedAt: number;
   since: number;
   night: string;
+  /** A retry's: what it reads again. Absent on the other kinds (and in checkpoints written before retries). */
+  retry?: RetryPlan | null;
 }
 
 type Checkpoint =
@@ -139,7 +153,7 @@ export interface TopicSearchRunDeps {
   stopOnce(search: TopicSearch): Promise<void>;
   builder(): BuildTopicSearchResult | null;
   /** The X pages the build may open after a read that used `x` (the daily allowance, the run's or night's ceiling). */
-  xPages(about: { kind: TopicSearchRunKind; night: string; x: XReadResult }): XPageBudget;
+  xPages(about: { kind: "first" | "daily"; night: string; x: XReadResult }): XPageBudget;
   /** Fold the run's `<dir>/topic-search-source-health.json` into the collector's state file. */
   foldSourceHealth(dir: string, search: TopicSearch): Promise<void>;
   /** The run's directory, made if missing. */
@@ -156,6 +170,8 @@ export interface TopicSearchRunDeps {
   /** A read that ended without a halt: forget the last one. */
   readClean(): Promise<void>;
   checkSession(): Promise<"ok" | "signed-out" | "unknown">;
+  /** What a retry reads again (retry.ts planRetry over the collector's source health). */
+  retryPlan(search: TopicSearch): Promise<RetryPlan>;
   /** X said stop: the state file, the collector's state file and the box. */
   halted(halt: XHalt, about: { searchId: string; runId: string; night: string }): Promise<void>;
   keepAwake(reason: string): Promise<KeepAwakeLock>;
@@ -231,7 +247,8 @@ export function topicSearchTask(
     signal: AbortSignal,
   ): Promise<XReadResult> => {
     const { brief, runId } = input;
-    const limits = brief.kind === "first" ? X_FIRST_RUN_LIMITS : await deps.nightLimits(window.night);
+    const look = lookOf(brief.kind);
+    const limits = look === "first" ? X_FIRST_RUN_LIMITS : await deps.nightLimits(window.night);
     const deadline = brief.kind === "daily" ? nightEndAt(window.night) : null;
     const log = deps.progress(dir);
     const sleep = async (ms: number) => {
@@ -241,7 +258,7 @@ export function topicSearchTask(
     };
     try {
       return await readXSearch(
-        { lines: searchLines(search, brief.kind, window.since), limits },
+        { lines: searchLines(search, look, window.since, window.retry?.x), limits },
         {
           open: (viewport) => deps.open(viewport),
           progress: log,
@@ -277,9 +294,13 @@ export function topicSearchTask(
         const night = brief.night ?? lastNightAnchor(now);
         const search = await deps.loadSearch(brief.searchId);
         if (!search) return skip(runtime, "the topic search is gone", context);
-        if (search.status !== "active") return skip(runtime, "the topic search was stopped", context);
+        // A one-look search stops itself after its first run; reading again what that run missed is still its first look.
+        const open = search.status === "active" || (brief.kind === "retry" && search.once === true);
+        if (!open) return skip(runtime, "the topic search was stopped", context);
         if (brief.kind === "daily" && now >= nightEndAt(night)) return skip(runtime, "the night is over", context);
-        let blocked = await deps.gate(night);
+        const retry = brief.kind === "retry" ? await deps.retryPlan(search) : null;
+        if (retry && isEmptyPlan(retry)) return skip(runtime, "nothing the first look missed is left to read again", context);
+        let blocked = retry && retry.x.length === 0 ? "no X query to read again" : await deps.gate(night);
         if (!blocked) {
           const session = await deps.checkSession();
           if (session === "signed-out") {
@@ -287,17 +308,18 @@ export function topicSearchTask(
             blocked = "signed out of X";
           }
         }
-        // A night's increment is X alone; the first look still builds from what else it has.
-        if (blocked && brief.kind === "daily") return skip(runtime, blocked, context);
+        // A night's increment is X alone, and so is a retry with no arXiv query to read again;
+        // the first look still builds from what else it has.
+        if (blocked && (brief.kind === "daily" || (retry && retry.arxiv.length === 0))) return skip(runtime, blocked, context);
         if (!blocked) await hold(runId);
-        const since = brief.kind === "first" ? now - FIRST_LOOK_BACK_MS : (search.lastRunAt ?? now - FIRST_LOOK_BACK_MS);
+        const since = brief.kind === "daily" ? (search.lastRunAt ?? now - FIRST_LOOK_BACK_MS) : now - FIRST_LOOK_BACK_MS;
         say(runId, blocked ? `not reading X: ${blocked}` : "reading X");
-        await next(runtime, { phase: "read", blocked, startedAt: now, since, night }, context);
+        await next(runtime, { phase: "read", blocked, startedAt: now, since, night, retry }, context);
       }),
       read: guarded<Extract<Checkpoint, { phase: "read" }>>(async (task, runtime, context) => {
         const { brief, runId } = task.input;
         const cp = task.state.checkpoint;
-        const window: Window = { startedAt: cp.startedAt, since: cp.since, night: cp.night };
+        const window: Window = { startedAt: cp.startedAt, since: cp.since, night: cp.night, retry: cp.retry ?? null };
         const dir = await deps.runDir(runId);
         let x = await deps.loadRead(dir);
         if (!x) {
@@ -322,7 +344,7 @@ export function topicSearchTask(
       build: guarded<Extract<Checkpoint, { phase: "build" }>>(async (task, runtime, context) => {
         const { brief, runId } = task.input;
         const cp = task.state.checkpoint;
-        const window: Window = { startedAt: cp.startedAt, since: cp.since, night: cp.night };
+        const window: Window = { startedAt: cp.startedAt, since: cp.since, night: cp.night, retry: cp.retry ?? null };
         const build = deps.builder();
         if (!build) throw new Error(NO_BUILDER);
         const search = await deps.loadSearch(brief.searchId);
@@ -331,8 +353,10 @@ export function topicSearchTask(
         const x = (await deps.loadRead(dir)) ?? unread("unavailable", "what was read is missing");
         let built = await runtime.memo<BuiltTopicSearchResult>("built", context);
         if (!built) {
-          const xPages = deps.xPages({ kind: brief.kind, night: window.night, x });
-          const made = await build({ topic: search, kind: brief.kind, x, since: window.since, runDir: dir, xPages, signal: runtime.signal });
+          const look = lookOf(brief.kind);
+          const xPages = deps.xPages({ kind: look, night: window.night, x });
+          const retry = window.retry ? { runId, x: window.retry.x, arxiv: window.retry.arxiv } : null;
+          const made = await build({ topic: search, kind: look, x, since: window.since, runDir: dir, xPages, signal: runtime.signal, retry });
           built = await runtime.memo("built", { resultFile: made.resultFile, itemCount: made.itemCount, empty: made.empty }, context);
         }
         if (!(await runtime.memo<boolean>("health-folded", context))) {

@@ -196,8 +196,92 @@ export interface TopicSearchResult {
   /** Questions for you, at the end of the page. */
   questions: ResultQuestion[];
   stats: ResultStats;
-  /** Where this run's cached material bodies are. */
+  /** Where this run's cached material bodies are (a retry's bodies go here too). */
   runDir: string;
+  /** First look only: what each retry added to this file (retry.ts). Absent until one did. */
+  retries?: ResultRetry[];
+}
+
+/** What one retry of a first look added to its file: its items, its write-up and questions, its own counts. */
+export interface ResultRetry {
+  runId: string;
+  at: number;
+  /** Item ids it added, in the file's numbering. */
+  items: string[];
+  overview: TopicSearchResult["overview"];
+  writeup: TopicSearchResult["writeup"];
+  /** Question ids it asked. */
+  questions: string[];
+  stats: ResultStats;
+}
+
+/** The highest number among ids like "E7" or "M12"; 0 when there is none. */
+export function highestNumber(ids: readonly string[]): number {
+  return ids.reduce((most, id) => Math.max(most, Number(/^[A-Z](\d+)$/.exec(id)?.[1] ?? 0)), 0);
+}
+
+/** Groups in the order their subtopic first appears, items in file order. */
+function regroup(groups: readonly TopicSearchResult["groups"][number][]): TopicSearchResult["groups"] {
+  const out: TopicSearchResult["groups"] = [];
+  for (const g of groups) {
+    const same = out.find((o) => o.subtopic === g.subtopic);
+    if (same) same.items.push(...g.items);
+    else out.push({ subtopic: g.subtopic, items: [...g.items] });
+  }
+  return out;
+}
+
+/**
+ * The first look's file with a retry's part added (docs/info/88 「重跑第一次」):
+ * what was there stays as it was, the part's items, materials and questions
+ * follow (already numbered after the file's), and the retry is recorded. The
+ * first look's overview stands; a file that had none takes the retry's. Pure.
+ */
+export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, runId: string): TopicSearchResult {
+  const record: ResultRetry = {
+    runId,
+    at: part.createdAt,
+    items: part.items.map((i) => i.id),
+    overview: part.overview,
+    writeup: part.writeup,
+    questions: part.questions.map((q) => q.id),
+    stats: part.stats,
+  };
+  const items = [...target.items, ...part.items];
+  return {
+    ...target,
+    empty: items.length === 0,
+    writeup: target.writeup === "none" ? part.writeup : target.writeup,
+    overview: target.overview ?? part.overview,
+    groups: regroup([...target.groups, ...part.groups]),
+    items,
+    materials: [...target.materials, ...part.materials],
+    questions: [...target.questions, ...part.questions],
+    retries: [...(target.retries ?? []).filter((r) => r.runId !== runId), record],
+  };
+}
+
+/** What a retry added to a first look's file, as a result of its own (its brief issue); null when it added nothing. */
+export function retryPart(result: TopicSearchResult, runId: string): TopicSearchResult | null {
+  const record = result.retries?.find((r) => r.runId === runId);
+  if (!record || record.items.length === 0) return null;
+  const items = result.items.filter((i) => record.items.includes(i.id));
+  const used = new Set(items.flatMap((i) => i.materials));
+  return {
+    ...result,
+    createdAt: record.at,
+    empty: items.length === 0,
+    writeup: record.writeup,
+    overview: record.overview,
+    groups: result.groups
+      .map((g) => ({ subtopic: g.subtopic, items: g.items.filter((id) => record.items.includes(id)) }))
+      .filter((g) => g.items.length > 0),
+    items,
+    materials: result.materials.filter((m) => used.has(m.id)),
+    questions: result.questions.filter((q) => record.questions.includes(q.id)),
+    stats: record.stats,
+    retries: undefined,
+  };
 }
 
 /** `topic-search-<id>-<date>.json`, `-2`, `-3` … for a second run the same day. */

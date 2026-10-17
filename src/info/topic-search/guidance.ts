@@ -8,6 +8,7 @@
 // search hangs on one, so following it again can find it.
 
 import type { Statement } from "../../memory";
+import { X_READ_RULE } from "./retry";
 import type { TopicSearch } from "./types";
 
 const SCOPE_CHARS = 160;
@@ -76,6 +77,10 @@ export function topicSearchGuidance({ searches, statements, xPaused = null }: Gu
       "where it went: \"Saved to this topic\" or \"Saved to your profile\", in their language.",
       "When they say they no longer care about a topic search, call stop_topic_search.",
       "When X reading is paused and they say to read X again, call resume_x_reading.",
+      X_READ_RULE,
+      "When they ask to search again after signing in to X, or to redo a search's first look, call",
+      "retry_topic_search_first_run: it reads again only what the first run missed. Say only what a",
+      "tool told you; never promise when X will be read or a result will come.",
     ].join("\n"),
   ]
     .filter((b) => b !== "")

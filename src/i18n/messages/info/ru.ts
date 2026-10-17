@@ -291,6 +291,8 @@ export default {
   "tool.confirmedTopicSearch": "Отслеживается",
   "tool.resumingXReading": "Возобновляю чтение X",
   "tool.resumedXReading": "Чтение X возобновлено",
+  "tool.retryingFirstRun": "Прошу повторить первый поиск «{name}»",
+  "tool.retriedFirstRun": "Повтор запрошен",
   "tool.proposedCloseLabel": "Предложено закрыть лабораторию",
 
   "noLabs.notice":

@@ -27,16 +27,25 @@ export function parseSourceHealthFile(text: string): SourceHealthFile | null {
   }
 }
 
-/** The health map with this run's lines in; lines of the search no longer queried go. */
+/**
+ * The health map with this run's lines in; lines of the search no longer
+ * queried go. A line this run did not read (a retry reads only what failed)
+ * keeps what the last run that read it found.
+ */
 export function foldTopicSearchHealth(
   health: Record<string, SourceHealth>,
   file: SourceHealthFile,
   search: TopicSearch,
 ): Record<string, SourceHealth> {
   const mine = `${TOPIC_SEARCH_HEALTH_PREFIX}${file.searchId}:`;
+  const queried = new Set(
+    search.queries.flatMap((q) => [
+      topicSearchHealthKey(file.searchId, q.id, "x"),
+      ...(q.arxiv ? [topicSearchHealthKey(file.searchId, q.id, "arxiv")] : []),
+    ]),
+  );
   const out: Record<string, SourceHealth> = {};
-  const fresh = new Set(file.entries.map((e) => topicSearchHealthKey(file.searchId, e.query, e.source)));
-  for (const [key, h] of Object.entries(health)) if (!key.startsWith(mine) || fresh.has(key)) out[key] = h;
+  for (const [key, h] of Object.entries(health)) if (!key.startsWith(mine) || queried.has(key)) out[key] = h;
   for (const e of file.entries) {
     const key = topicSearchHealthKey(file.searchId, e.query, e.source);
     const q = search.queries.find((x) => x.id === e.query);

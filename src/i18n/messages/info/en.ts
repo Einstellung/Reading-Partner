@@ -305,6 +305,8 @@ export default {
   "tool.confirmedTopicSearch": "Following",
   "tool.resumingXReading": "Resuming X reading",
   "tool.resumedXReading": "X reading resumed",
+  "tool.retryingFirstRun": "Asking to retry {name}'s first look",
+  "tool.retriedFirstRun": "Retry asked",
   "tool.proposedCloseLabel": "Proposed closing a lab",
 
   // --- No open lab (no-labs.ts) ------------------------------------------------

@@ -2,7 +2,8 @@
 // deciding when. Each topic-search run tells this file it has closed; a night's
 // issue is assembled once every active search's run of that night has closed,
 // or at the night's end (04:40) from whatever closed by then. A first look
-// (kind "first") gets an issue of its own as soon as it closes. A night where
+// (kind "first") gets an issue of its own as soon as it closes, and so does what
+// a retry of it added (keyed `first:<search>#<run>`). A night where
 // nothing is new gets no issue.
 //
 // Assembly: the plan (plan.ts), the document (render.ts), the EPUB, the
@@ -22,7 +23,7 @@ import type { Locale } from "../../i18n/locale";
 import { languageInstruction } from "../../platform/app/settings";
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
-import { parseResultFile, type TopicSearchResult } from "../topic-search/result-types";
+import { parseResultFile, retryPart, type TopicSearchResult } from "../topic-search/result-types";
 import { QUESTIONS_FILE, parseQuestionsFile } from "../topic-search/questions";
 import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type IssueOpeningRecord } from "./opening-record";
 import { planIssue, type IssuePlan, type IssueTopic, type PlannedItem } from "./plan";
@@ -67,16 +68,25 @@ export function parseIssueState(text: string | null): IssueState {
 
 export interface ClosedRun {
   searchId: string;
-  kind: "first" | "daily";
+  /** "retry": what a retry added to a first look's file (topic-search/retry.ts), an issue of its own. */
+  kind: "first" | "daily" | "retry";
   /** The night's anchor date, for a daily run. */
   night: string | null;
   /** The result file, relative to AppData; null when the run left none. */
   resultFile: string | null;
+  /** The run's id; a retry's issue is keyed by it. */
+  runId?: string;
 }
+
+const RETRY_MARK = "#";
 
 /** The ledger with one more run closed. Pure. */
 export function noteClosed(state: IssueState, run: ClosedRun): IssueState {
   if (run.kind === "first") return { ...state, firsts: { ...state.firsts, [run.searchId]: run.resultFile } };
+  // Keyed `first:<search>#<run>`: the first look's own key is long done.
+  if (run.kind === "retry") {
+    return { ...state, firsts: { ...state.firsts, [`${run.searchId}${RETRY_MARK}${run.runId ?? ""}`]: run.resultFile } };
+  }
   // A run that closes after its night was assembled has nothing left to join.
   if (!run.night || state.done.includes(nightKey(run.night))) return state;
   return { ...state, nights: { ...state.nights, [run.night]: { ...state.nights[run.night], [run.searchId]: run.resultFile } } };
@@ -191,10 +201,13 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
     await deps.putBox(boxItem(existing, locale));
     return { key, issue: existing, supplements: 0 };
   }
+  // A retry's issue carries only what the retry added to the first look's file.
+  const retryOf = key.startsWith("first:") && key.includes(RETRY_MARK) ? key.slice(key.indexOf(RETRY_MARK) + 1) : null;
   const results: TopicSearchResult[] = [];
   for (const f of files) {
     const r = parseResultFile((await deps.files.read(f)) ?? "");
-    if (r) results.push(r);
+    const part = r && retryOf !== null && r.retries?.some((x) => x.runId === retryOf) ? retryPart(r, retryOf) : r;
+    if (part) results.push(part);
   }
   const plan = planIssue(results, await deps.topics());
   if (!plan) return { key, issue: null, supplements: 0 };

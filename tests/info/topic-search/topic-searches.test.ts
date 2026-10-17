@@ -201,4 +201,7 @@ test("the guidance says when X reading is held on this device", () => {
   });
   expect(text).toContain("X reading on this device: X reading is paused after a second challenge");
   expect(text).toContain("resume_x_reading");
+  // The door says what it cannot do: X is read only by the runs.
+  expect(text).toContain("This conversation cannot read X");
+  expect(text).toContain("retry_topic_search_first_run");
 });

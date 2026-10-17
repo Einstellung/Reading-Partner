@@ -12,7 +12,8 @@ import { dispatchFirstRun } from "./first-run";
 import { topicSearchGuidance } from "./guidance";
 import { buildProposeTopicSearchTool, type ReaderLine } from "./propose-tool";
 import { buildResumeXReadingTool } from "./resume-tool";
-import { resumeXReading, xReadingPaused } from "./runs-live";
+import { buildRetryFirstRunTool } from "./retry-tool";
+import { resumeXReading, retryDeps, xReadingPaused } from "./runs-live";
 import { changeTopicSearch, knownTopicSearches, loadTopicSearches, putTopicSearch } from "./store";
 
 const editDeps: EditToolDeps = {
@@ -33,7 +34,7 @@ export interface TopicSearchDoorPorts {
   applyCard: ConfirmToolDeps["apply"];
 }
 
-/** propose, confirm, update and stop a topic search, then resume_x_reading. */
+/** propose, confirm, update and stop a topic search, then resume_x_reading and retry_topic_search_first_run. */
 export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
   // Read now, so the lines of update and stop can name the search by the time
   // the model calls them (edit-tools.ts known).
@@ -52,6 +53,7 @@ export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
     buildUpdateTopicSearchTool(editDeps),
     buildStopTopicSearchTool(editDeps),
     buildResumeXReadingTool({ resume: resumeXReading }),
+    buildRetryFirstRunTool({ searches: editDeps.searches, known: editDeps.known, ...retryDeps }),
   ];
 }
 

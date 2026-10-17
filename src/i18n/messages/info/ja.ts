@@ -291,6 +291,8 @@ export default {
   "tool.confirmedTopicSearch": "フォロー中",
   "tool.resumingXReading": "X の読み取りを再開中",
   "tool.resumedXReading": "X の読み取りを再開しました",
+  "tool.retryingFirstRun": "「{name}」の初回検索のやり直しを依頼中",
+  "tool.retriedFirstRun": "やり直しを依頼しました",
   "tool.proposedCloseLabel": "ラボの閉鎖を提案しました",
 
   "noLabs.notice":

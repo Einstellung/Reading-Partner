@@ -28,8 +28,9 @@ function notLifted(halt: XHaltRecord | null): string {
   }
   if (halt.kind === "signed-out") {
     return (
-      "X reading stopped because X signed this device out; resuming does not change that. The " +
-      "reader signs in to X again on the sources page, and the next night reads X."
+      "X signed this device out and no check since found it signed in; resuming does not change " +
+      "that. The reader signs in to X on the sources page. After that, X is read by the nightly run " +
+      "from 01:00, or now by retry_topic_search_first_run for what a first run missed."
     );
   }
   return (

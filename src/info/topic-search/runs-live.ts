@@ -28,8 +28,10 @@ import { stopFollowing } from "./apply";
 import { SOURCE_HEALTH_FILE, type BuildTopicSearchResult } from "./build-result";
 import { buildTopicSearchResult } from "./build-live";
 import { registerFirstRunDispatcher } from "./first-run";
-import { recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
+import { clearSignedOut, recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
 import type { XResume } from "./resume-tool";
+import { planRetry } from "./retry";
+import type { RetryToolDeps } from "./retry-tool";
 import { lastNightAnchor, type NightConditions } from "./nightly";
 import {
   TOPIC_SEARCH_HALT_BOX_KIND,
@@ -47,7 +49,7 @@ import {
   saveRead,
   spendNight,
 } from "./run-state";
-import { createNightTick, firstRunDispatcher, topicSearchWorker } from "./run-worker";
+import { askRetryRun, createNightTick, firstRunDispatcher, topicSearchWorker } from "./run-worker";
 import { foldTopicSearchHealth, parseSourceHealthFile } from "./source-health";
 import { changeTopicSearch, loadTopicSearches } from "./store";
 import { localDay } from "./x-progress";
@@ -87,7 +89,18 @@ async function xSessionState(): Promise<"ok" | "signed-out" | "unknown"> {
   const status = await checkSiteSession(site.checkUrl);
   await saveSiteSessions(applySessionCheck(await loadSiteSessions(), site.host, status, Date.now()));
   if (status.status !== "ok" && status.status !== "empty") return "unknown";
+  // Signed in again: a signed-out record from before is over (halt.ts clearSignedOut).
+  if (status.signedIn) await state.update((s) => (s.halt?.kind === "signed-out" ? { ...s, halt: null } : s));
   return status.signedIn ? "ok" : "signed-out";
+}
+
+/** The halt record with a signed-out one dropped once the session sidecar says signed in since. */
+async function liftSignedOut(): Promise<void> {
+  const session = (await loadSiteSessions())[X_HOST];
+  await state.update((s) => {
+    const halt = clearSignedOut(s.halt, session);
+    return halt === s.halt ? s : { ...s, halt };
+  });
 }
 
 function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
@@ -147,6 +160,7 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
       await state.update((s) => (s.halt ? { ...s, halt: null } : s));
     },
     checkSession: xSessionState,
+    retryPlan: async (search) => planRetry(search, await loadSourceHealth()),
     halted,
     keepAwake: (reason) => keepAwake(reason),
     open: (viewport) => openBrowse({ idleTimeoutMs: BROWSE_IDLE_MS, viewport }),
@@ -229,6 +243,7 @@ export async function checkTopicSearchNight(collecting: () => Promise<boolean>):
 
 /** The reader said to read X again after a second challenge or limit (resume-tool.ts). */
 export async function resumeXReading(): Promise<XResume> {
+  await liftSignedOut();
   let lifted = false;
   const after = await state.update((s) => {
     const resumed = resumeHalt(s.halt);
@@ -237,6 +252,20 @@ export async function resumeXReading(): Promise<XResume> {
   });
   return { lifted, halt: after.halt };
 }
+
+/** The retry tool's live side (retry-tool.ts): the plan and the session on this device, and the ask. */
+export const retryDeps: Omit<RetryToolDeps, "searches" | "known"> = {
+  plan: async (search) => planRetry(search, await loadSourceHealth()),
+  xSignedIn: async () => {
+    await liftSignedOut();
+    const session = (await loadSiteSessions())[X_HOST];
+    return !session || session.unknown ? null : session.signedIn;
+  },
+  ask: (searchId) => {
+    const runner = appRunner();
+    return askRetryRun(searchId, { runs: () => runner.list({ kind: TOPIC_SEARCH_KIND }), delegate: (input) => runner.delegate(input) });
+  },
+};
 
 /** Why X is not read on this device tonight, or null. */
 export async function xReadingPaused(): Promise<string | null> {

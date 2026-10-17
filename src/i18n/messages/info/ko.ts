@@ -291,6 +291,8 @@ export default {
   "tool.confirmedTopicSearch": "팔로우 중",
   "tool.resumingXReading": "X 읽기 재개 중",
   "tool.resumedXReading": "X 읽기 재개됨",
+  "tool.retryingFirstRun": "「{name}」 첫 검색 다시 요청 중",
+  "tool.retriedFirstRun": "다시 검색 요청됨",
   "tool.proposedCloseLabel": "랩 닫기를 제안했습니다",
 
   "noLabs.notice":

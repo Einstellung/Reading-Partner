@@ -229,6 +229,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
       "update_topic_search",
       "stop_topic_search",
       "resume_x_reading",
+      "retry_topic_search_first_run",
     ],
   },
 ];

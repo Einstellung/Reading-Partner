@@ -15,10 +15,11 @@ import {
   searchLines,
   topicSearchRunKey,
   topicSearchTask,
+  type TopicSearchBrief,
   type TopicSearchRunDeps,
   type TopicSearchRunResult,
 } from "../../../src/info/topic-search/run";
-import type { BuildTopicSearchResult } from "../../../src/info/topic-search/build-result";
+import type { BuildTopicSearchResult, BuildTopicSearchResultArgs } from "../../../src/info/topic-search/build-result";
 import { createStateStore, nightLimits, permalinkBudget, progressLog, spendNight, takePermalink, emptyState, type StateFs } from "../../../src/info/topic-search/run-state";
 import { createNightTick, topicSearchWorker } from "../../../src/info/topic-search/run-worker";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
@@ -166,6 +167,11 @@ test("briefs, keys and lines", () => {
   expect(topicSearchRunKey({ searchId: "ts-1", kind: "daily", night: "2026-10-14" })).toBe("topic-search:ts-1:2026-10-14");
   expect(parseBrief(encodeBrief(first))).toEqual(first);
   expect(parseBrief('{"searchId":"ts-1","kind":"daily"}')).toBeNull();
+  const retry = { searchId: "ts-1", kind: "retry" as const, night: null, n: 2 };
+  expect(topicSearchRunKey(retry)).toBe("topic-search:ts-1:retry:2");
+  expect(parseBrief(encodeBrief(retry))).toEqual(retry);
+  expect(parseBrief('{"searchId":"ts-1","kind":"retry"}')).toBeNull();
+  expect(searchLines(search(), "first", 0, ["q2"]).map((l) => l.key)).toEqual(["ts-0000aaaa:q2"]);
   const lines = searchLines(search(), "first", local(2026, 9, 14, 12));
   // The unpicked subtopic's query is not read.
   expect(lines.map((l) => l.key)).toEqual(["ts-0000aaaa:q1", "ts-0000aaaa:q2"]);
@@ -215,6 +221,7 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
     gate: async () => null,
     readClean: async () => {},
     checkSession: async () => "ok",
+    retryPlan: async () => ({ x: [], arxiv: [] }),
     halted: async (halt) => void trace.halts.push(halt.kind),
     keepAwake: async () => {
       trace.locks.taken++;
@@ -236,7 +243,7 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
   return { deps, trace };
 }
 
-async function runTask(deps: TopicSearchRunDeps, input: { runId: string; brief: { searchId: string; kind: "first" | "daily"; night: string | null } }) {
+async function runTask(deps: TopicSearchRunDeps, input: { runId: string; brief: TopicSearchBrief }) {
   const task = topicSearchTask(deps);
   const off = registerProgramTask(task);
   const t = await openTestRuntime({ root: mkdtempSync(join(tmpdir(), "ts-run-")), responses: [] });
@@ -288,6 +295,42 @@ test("a daily run skips a gated night, a signed-out session and a night that is 
   const late = fakeDeps({ now: local(2026, 10, 14, 5) });
   const c = await runTask(late.deps, { runId: "r-6", brief: { searchId: "ts-0000aaaa", kind: "daily", night: "2026-10-14" } });
   expect((c as { result: TopicSearchRunResult }).result.why).toBe("the night is over");
+});
+
+test("a retry reads X only for what it reads again, and skips when X is signed out and arXiv has nothing to redo", async () => {
+  const seen: BuildTopicSearchResultArgs[] = [];
+  const builder: BuildTopicSearchResult = async (args) => {
+    seen.push(args);
+    return { resultFile: "topic-search-ts-0000aaaa-2026-10-14.json", itemCount: 2, empty: false };
+  };
+  const retry = { searchId: "ts-0000aaaa", kind: "retry" as const, night: null, n: 1 };
+
+  // Only arXiv to redo: X is not opened, the build is told which queries.
+  const arxiv = fakeDeps({ builder: () => builder, retryPlan: async () => ({ x: [], arxiv: ["q2"] }) });
+  const a = await runTask(arxiv.deps, { runId: "r-r1", brief: retry });
+  expect((a as { result: TopicSearchRunResult }).result.status).toBe("delivered");
+  expect(arxiv.trace.opened + arxiv.trace.locks.taken).toBe(0);
+  expect(seen[0]).toMatchObject({ kind: "first", retry: { runId: "r-r1", x: [], arxiv: ["q2"] } });
+  expect(arxiv.trace.closed).toEqual([{ searchId: "ts-0000aaaa", kind: "retry", night: null, resultFile: "topic-search-ts-0000aaaa-2026-10-14.json" }]);
+
+  // Only X to redo and X is still signed out: nothing to build from.
+  const out = fakeDeps({ builder: () => builder, checkSession: async () => "signed-out", retryPlan: async () => ({ x: ["q1"], arxiv: [] }) });
+  const b = await runTask(out.deps, { runId: "r-r2", brief: retry });
+  expect((b as { result: TopicSearchRunResult }).result).toMatchObject({ status: "skipped", why: "signed out of X" });
+  expect(out.trace.halts).toEqual(["signed-out"]);
+  expect(seen.length).toBe(1);
+
+  // Nothing to redo.
+  const none = fakeDeps({ builder: () => builder });
+  const c = await runTask(none.deps, { runId: "r-r3", brief: retry });
+  expect((c as { result: TopicSearchRunResult }).result.why).toBe("nothing the first look missed is left to read again");
+
+  // A one-look search stopped itself after its first run; its retry still runs, and does not stop it again.
+  const once = fakeDeps({ search: search({ once: true, status: "stopped" }), builder: () => builder, retryPlan: async () => ({ x: ["q1"], arxiv: [] }) });
+  const d = await runTask(once.deps, { runId: "r-r4", brief: retry });
+  expect((d as { result: TopicSearchRunResult }).result.status).toBe("delivered");
+  expect(once.trace.opened).toBe(1);
+  expect(once.trace.stopped).toEqual([]);
 });
 
 test("with no builder the task fails and the worker gives up", async () => {

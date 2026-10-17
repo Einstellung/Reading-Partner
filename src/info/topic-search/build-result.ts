@@ -41,6 +41,8 @@ import {
   type Scored,
 } from "./rank-pool";
 import {
+  highestNumber,
+  mergeRetry,
   parseResultFile,
   parseResultFileName,
   RESULT_FILE_PREFIX,
@@ -97,6 +99,12 @@ export interface BuildTopicSearchResultArgs {
   /** The X pages this build may still open. */
   xPages: XPageBudget;
   signal: AbortSignal;
+  /**
+   * A retry of the first look (retry.ts): only these queries (ids) were read on
+   * X and are searched on arXiv, and what is found is added to the first look's
+   * file rather than written as a new one. Absent or null on the other runs.
+   */
+  retry?: { runId: string; x: readonly string[]; arxiv: readonly string[] } | null;
 }
 
 /**
@@ -319,6 +327,7 @@ async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<Top
 
 async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs): Promise<BuildTopicSearchResultOutput> {
   const { topic, kind, x, since, runDir, xPages, signal } = args;
+  const retry = args.retry ?? null;
   throwIfAborted(signal);
   const now = deps.now();
   const today = deps.today();
@@ -331,6 +340,9 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
 
   const history = await loadHistory(deps, topic.id);
   const recent = history.filter((r) => r.date >= addDays(today, -HISTORY_DAYS));
+  // A retry adds to the first look's file; its items and materials are numbered after the file's.
+  const target = retry ? ([...history].reverse().find((r) => r.kind === "first") ?? null) : null;
+  const itemsBefore = target ? highestNumber(target.items.map((i) => i.id)) : 0;
   const [profile, language, bookLanguage] = await Promise.all([
     deps.profile(),
     deps.language(),
@@ -341,7 +353,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const arxiv: ArxivFound[] = [];
   const arxivSpan = arxivWindow(kind, since, today);
   for (const q of topic.queries) {
-    if (!q.arxiv) continue;
+    if (!q.arxiv || (retry && !retry.arxiv.includes(q.id))) continue;
     throwIfAborted(signal);
     const { items, error, outcome, steps } = await runArxivLadder(q.arxiv, arxivSpan, kind, deps.searchArxiv, signal);
     arxiv.push({ query: q.id, items, error, ladder: { outcome, steps } });
@@ -410,7 +422,11 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const chosen = selectItems(kept, want, pickedSubtopics, DRAFT_VIEW);
 
   // Verify (88 「看原文」) and the items.
-  const registry = new MaterialRegistry(runDir, { write: (path, content) => deps.files.write(path, content) });
+  const registry = new MaterialRegistry(
+    target?.runDir ?? runDir,
+    { write: (path, content) => deps.files.write(path, content) },
+    target ? highestNumber(target.materials.map((m) => m.id)) : 0,
+  );
   const lookups = deps.repoLookups();
   // A page on X opens only while the budget lasts; past it a cut-short post stays cut.
   const openLink: OpenLink = async (url, s) => {
@@ -427,7 +443,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const items: TopicSearchResultItem[] = [];
   for (const [i, d] of chosen.entries()) {
     throwIfAborted(signal);
-    const id = `E${i + 1}`;
+    const id = `E${itemsBefore + i + 1}`;
     const lead = d.cluster.lead;
     const subtopic = subtopicOf(d);
     if (d.continuing && d.previous) {
@@ -543,7 +559,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   };
 
   const sameDay = history.filter((r) => r.date === today).length;
-  const name = resultFileName(topic.id, today, sameDay + 1);
+  const name = target ? `${target.id}.json` : resultFileName(topic.id, today, sameDay + 1);
   const resultId = name.replace(/\.json$/, "");
   const empty = items.length === 0;
   const doubts: NewQuestion[] = scored
@@ -653,12 +669,13 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     runDir,
   };
   throwIfAborted(signal);
-  await deps.files.write(name, `${JSON.stringify(result, null, 2)}\n`);
+  const written = target ? mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId) : result;
+  await deps.files.write(name, `${JSON.stringify(written, null, 2)}\n`);
   await saveQueue(deps.files, topic.id, picked.queue);
-  await deps.files.write(
-    `${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`,
-    `${JSON.stringify(sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now), null, 2)}\n`,
-  );
+  const health = sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now);
+  // A retry speaks only for what it read again; the other lines keep what the first look found.
+  if (retry) health.entries = health.entries.filter((e) => (e.source === "x" ? retry.x : retry.arxiv).includes(e.query));
+  await deps.files.write(`${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`, `${JSON.stringify(health, null, 2)}\n`);
   return { resultFile: name, itemCount: items.length, empty };
 }
 
