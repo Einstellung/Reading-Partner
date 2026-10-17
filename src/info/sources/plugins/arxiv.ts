@@ -5,8 +5,10 @@
 //
 // Recency is a submittedDate range inside search_query, never a sortBy: the
 // export API does not answer sortBy=submittedDate and its limiter is strict
-// (docs/pitfall/72). One request per run, through fetchWithRetry's per-host
-// spacing; a terminal failure throws so collectAll records source health.
+// (docs/pitfall/72). One request per run, through the host gate in the
+// transport (one arXiv request per three seconds for the whole app, and a
+// cooldown after a rate limit, pitfall 502); a terminal failure throws so
+// collectAll records source health, a cooldown as "no request sent".
 //
 // The plugin also reads a pasted arXiv link as the paper itself, through the
 // bindery's site-adapter registry (docs/85): the PDF whole, with its real title.

@@ -197,8 +197,8 @@ export function arxivTopicSearchUrl(query: string, opts: ArxivTopicOptions = {})
 // status or exhausted retries (a terminal 429 is a RateLimitError), so the caller
 // can report which library did not answer instead of showing an empty result as
 // "no such research exists". arXiv's limiter is strict — six requests in a row
-// were enough to earn a 429 — so this goes through fetchWithRetry's per-host
-// spacing and backoff like every other call here.
+// were enough to earn a 429 — so the live transports hold every arXiv request to
+// the host gate's spacing and cooldown (platform/http/host-gate.ts).
 export async function searchArxivTopic(
   query: string,
   opts: ArxivTopicOptions = {},

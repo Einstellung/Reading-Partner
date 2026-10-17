@@ -6,16 +6,17 @@
 // The run pipeline (run.ts) injects `buildTopicSearchResult`, and searches
 // arXiv in its read phase with `searchArxivLive`.
 //
-// Every request here goes through `spacedFetch`: fetchWithRetry takes an
-// injected fetchFn for a fake and skips its per-host spacing (pitfall 497), so
-// passing `infoFetch` alone would send arXiv's ladder steps back to back.
+// Every request here goes through `infoFetch`, whose host gate spaces arXiv to
+// one request per three seconds for the whole process and holds off after a
+// rate limit (platform/http/host-gate.ts, pitfall 502). arXiv page reads are
+// memoized for the run's deeper reads (fetch-memo.ts).
 
 import { callModel, resolveModel } from "../../ai/model-call";
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { languageInstruction } from "../../platform/app/settings";
 import { bookLanguageInstruction } from "./book-language";
-import { createThrottle, fetchWithRetry, HOST_MIN_INTERVAL_MS, interactiveRetry, type FetchFn } from "../../platform/http/throttled-fetch";
+import { fetchWithRetry, interactiveRetry } from "../../platform/http/throttled-fetch";
 import type { FetchBytes } from "../../workshop/bindery";
 import { manuscriptText } from "../../workshop/bindery/manuscript";
 import { isPdfBytes } from "../../workshop/bindery/pdf";
@@ -25,22 +26,15 @@ import { LinkSession } from "../links/session";
 import { arxivPlugin } from "../sources/plugins/arxiv";
 import { RepoLookups } from "../sources/plugins/github-lookup";
 import type { ArxivSearch } from "./arxiv-ladder";
+import { memoArxivFetchText } from "./fetch-memo";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResult } from "./build-result";
 import type { OpenedLink } from "./verify";
 import { localDay } from "./windows";
 
 const ARXIV_LIMIT = 20;
 
-/** The per-host spacing of the topic search's requests (arXiv: one per three seconds), every attempt included. */
-const hostGate = createThrottle(HOST_MIN_INTERVAL_MS);
-
-const spacedFetch: FetchFn = async (url, init) => {
-  await hostGate(new URL(url).hostname);
-  return infoFetch(url, init);
-};
-
 const fetchBytes: FetchBytes = async (url) => {
-  const res = await fetchWithRetry(url, undefined, interactiveRetry(spacedFetch));
+  const res = await fetchWithRetry(url, undefined, interactiveRetry(infoFetch));
   const bytes = res.ok ? new Uint8Array(await res.arrayBuffer()) : new Uint8Array();
   return { ok: res.ok, status: res.status, bytes, contentType: res.headers.get("content-type"), url: res.url || url };
 };
@@ -89,10 +83,10 @@ async function writeUnder(path: string, content: string): Promise<void> {
   await writeTextAtomic(path, content);
 }
 
-/** The arXiv plugin's search slot, spaced per host; `since` and `until` are local days, inclusive. */
+/** The arXiv plugin's search slot, through the host gate; `since` and `until` are local days, inclusive. */
 export const searchArxivLive: ArxivSearch = (text, window, signal) =>
   arxivPlugin.search!(text, { since: window.since, until: window.until, limit: ARXIV_LIMIT }, {
-    fetchFn: spacedFetch,
+    fetchFn: infoFetch,
     signal,
     now: () => Date.now(),
     today: () => localDay(Date.now()),
@@ -101,10 +95,10 @@ export const searchArxivLive: ArxivSearch = (text, window, signal) =>
 export const liveResultDeps: BuildResultDeps = {
   model: ({ system, user, signal }) =>
     callModel("prep", "plan", system, user, { signal, onProgress: () => {} }, { spend: { caller: "info" } }),
-  fetchText: async (url, signal) => {
-    const res = await fetchWithRetry(url, { signal }, interactiveRetry(spacedFetch));
+  fetchText: memoArxivFetchText(async (url, signal) => {
+    const res = await fetchWithRetry(url, { signal }, interactiveRetry(infoFetch));
     return { status: res.status, text: await res.text() };
-  },
+  }),
   readPdfText: async (url) => {
     const got = await fetchBytes(url);
     if (!got.ok || !isPdfBytes(got.bytes)) return null;

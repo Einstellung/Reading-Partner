@@ -11,3 +11,5 @@
 ## 解法
 
 主题搜索的宿主接线（`topic-search/build-live.ts`）把 `infoFetch` 包成 `spacedFetch`：每次请求（含重试）先过一个按 `HOST_MIN_INTERVAL_MS` 建的 `createThrottle` 闸，arXiv 的查询梯子、看原文的 `fetchText` 和读 PDF 都走它。别处传 `infoFetch` 的调用也没有限速，要限速时照这个包一层，或传 `throttle`。
+
+2026-10-17 起被坑 502 取代：限速挪进 `readingFetch`、`infoFetch` 两条传输（`platform/http/host-gate.ts`），`fetchWithRetry` 不再限速，`spacedFetch` 和 `throttle` 选项都删了。

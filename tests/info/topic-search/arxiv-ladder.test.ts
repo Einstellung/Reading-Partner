@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { SourceHealth } from "../../../src/info/sources/engine";
 import type { InfoItem } from "../../../src/info/sources/item";
-import { HttpStatusError, RateLimitError } from "../../../src/platform/http/throttled-fetch";
+import { HostCoolingDownError, HttpStatusError, RateLimitError } from "../../../src/platform/http/throttled-fetch";
 import {
   ARXIV_ENOUGH,
   ARXIV_LADDER_MAX_REQUESTS,
@@ -105,6 +105,16 @@ test("a rate limit is told apart from a failure, and what was found before it is
   const broken = fake({ "protein design diffusion": new HttpStatusError(500, "export.arxiv.org") });
   const c = await runArxivLadder("protein design diffusion", WINDOW, "first", broken.search, signal);
   expect(c).toMatchObject({ outcome: "failed", error: "HTTP 500 from export.arxiv.org" });
+});
+
+test("a step refused by the host's cooldown ends the ladder as cooling_down, apart from a rate limit", async () => {
+  const cooling = new HostCoolingDownError("export.arxiv.org", Date.parse("2026-10-17T10:20:00Z"), Date.parse("2026-10-17T10:10:00Z"));
+  const held = fake({ "protein design diffusion": cooling });
+  const a = await runArxivLadder("protein design diffusion", WINDOW, "first", held.search, signal);
+  expect(a.outcome).toBe("cooling_down");
+  expect(a.error).toBe("export.arxiv.org is cooling down after a rate limit (10 min left); no request sent");
+  expect(a.steps.map((s) => s.hits)).toEqual([null]);
+  expect(held.calls.length).toBe(1);
 });
 
 test("arXiv reads a year on the first run and from the last run on a day; X's first window stays 30 days", () => {

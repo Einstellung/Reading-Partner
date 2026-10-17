@@ -632,7 +632,7 @@ export interface TopicSearchLineHealth {
    * refused for the rate limit, or failed — and each step it took.
    */
   ladder?: {
-    outcome: "direct" | "widened" | "exhausted" | "rate_limited" | "failed";
+    outcome: "direct" | "widened" | "exhausted" | "rate_limited" | "cooling_down" | "failed";
     steps: { terms: string[]; since: string; until: string; hits: number | null }[];
   };
 }

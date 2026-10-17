@@ -19,13 +19,14 @@
 //
 // It stops at the first step whose papers, together with the earlier steps',
 // reach ARXIV_ENOUGH, and never sends more than ARXIV_LADDER_MAX_REQUESTS. The
-// steps run one after another: arXiv rate-limits hard, and the caller's search
-// keeps the per-host spacing. Papers are kept in the order found, so the ones the
+// steps run one after another: arXiv rate-limits hard, and the host gate under
+// the caller's search keeps the spacing and the cooldown after a rate limit. Papers are kept in the order found, so the ones the
 // narrower words found rank first. A failed request ends the ladder; what the
 // earlier steps found is kept, and the outcome tells a rate limit apart from
-// any other failure and from a search that found nothing.
+// a cooldown that sent nothing, from any other failure and from a search that
+// found nothing.
 
-import { HttpStatusError, isRateLimitError } from "../../platform/http/throttled-fetch";
+import { HttpStatusError, isHostCoolingDown, isRateLimitError } from "../../platform/http/throttled-fetch";
 import type { InfoItem } from "../sources/item";
 import { arxivQueryTerms } from "../sources/plugins/arxiv-client";
 import { addDays } from "./windows";
@@ -45,9 +46,10 @@ export const ARXIV_LADDER_MAX_REQUESTS = 3;
  * How a query's ladder ended. direct: the first step found enough; widened:
  * something was found after at least one widening; exhausted: every step ran
  * and found nothing; rate_limited / failed: a request was refused for the rate
- * limit, or failed otherwise.
+ * limit, or failed otherwise; cooling_down: arXiv was still cooling down from an
+ * earlier rate limit, so the step sent no request.
  */
-export type ArxivOutcome = "direct" | "widened" | "exhausted" | "rate_limited" | "failed";
+export type ArxivOutcome = "direct" | "widened" | "exhausted" | "rate_limited" | "cooling_down" | "failed";
 
 export interface ArxivStepPlan {
   terms: string[];
@@ -67,7 +69,7 @@ export interface ArxivLadder {
 
 export interface ArxivLadderResult extends ArxivLadder {
   items: InfoItem[];
-  /** Why the ladder failed; null unless the outcome is rate_limited or failed. */
+  /** Why the ladder failed; null unless the outcome is rate_limited, cooling_down or failed. */
   error: string | null;
 }
 
@@ -123,6 +125,7 @@ export async function runArxivLadder(
       if (signal.aborted) throw e;
       steps.push({ ...step, hits: null });
       const why = e instanceof Error ? e.message : String(e);
+      if (isHostCoolingDown(e)) return { outcome: "cooling_down", steps, items, error: why };
       return isArxivRateLimit(e)
         ? { outcome: "rate_limited", steps, items, error: `rate limited (${why})` }
         : { outcome: "failed", steps, items, error: why };
