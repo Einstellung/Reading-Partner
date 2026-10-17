@@ -37,7 +37,7 @@ export function askedText(name: string, plan: RetryPlan, xSignedIn: boolean | nu
   const signedOut =
     plan.x.length && xSignedIn === false
       ? " The last check on this device found X signed out: unless the reader has signed in to X " +
-        "on the sources page since, X fails again and only arXiv is read."
+        "in Settings > Accounts since, X fails again and only arXiv is read."
       : "";
   return (
     `Asked to read again what the first look of "${name}" missed: ${reads.join(", ")} (as this ` +

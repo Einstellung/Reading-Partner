@@ -117,7 +117,7 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
       kind: TOPIC_SEARCH_HALT_BOX_KIND,
       runId: about.runId,
       cover: t(HALT_COVER[halt.kind]),
-      // Opened onto the sources page, at X's sign-in row.
+      // Sign-in lives in Settings > Accounts.
       body: `sources:${X_HOST}`,
       origin: { place: "door", date: localDay(now) },
       needsDecision: haltNeedsReader(halt.kind),
