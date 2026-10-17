@@ -1,6 +1,6 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call.
+Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call, and fetch, inspect and bench the on-device Kokoro voice.
 
 #### This default permission set includes the following:
 
@@ -26,6 +26,9 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-register-listener`
 - `allow-remove-listener`
 - `allow-harness`
+- `allow-kokoro-status`
+- `allow-kokoro-download`
+- `allow-kokoro-bench`
 
 ## Permission Table
 
@@ -84,6 +87,84 @@ Enables the harness command without any pre-configured scope.
 <td>
 
 Denies the harness command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-kokoro-bench`
+
+</td>
+<td>
+
+Enables the kokoro_bench command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-kokoro-bench`
+
+</td>
+<td>
+
+Denies the kokoro_bench command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-kokoro-download`
+
+</td>
+<td>
+
+Enables the kokoro_download command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-kokoro-download`
+
+</td>
+<td>
+
+Denies the kokoro_download command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-kokoro-status`
+
+</td>
+<td>
+
+Enables the kokoro_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-kokoro-status`
+
+</td>
+<td>
+
+Denies the kokoro_status command without any pre-configured scope.
 
 </td>
 </tr>

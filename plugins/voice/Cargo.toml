@@ -31,6 +31,19 @@ libc = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "json"] }
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 async-trait = "0.1"
+# On-device Kokoro TTS (src/kokoro), behind the `kokoro` feature so hosts that
+# never run it never link it. ONNX Runtime (MIT) through `ort` (MIT/Apache):
+# `download-binaries` makes ort-sys's build script fetch pyke's prebuilt static
+# ONNX Runtime 1.28 for the target (aarch64-apple-ios and -ios-sim included)
+# and check it against the sha256 in its own dist table, so the runtime is
+# linked into the app binary. Pinned exactly: the dist table and the C API
+# version move with every release candidate.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls"], optional = true }
+# The downloader's check of every model file against the manifest.
+sha2 = "0.10"
+
+[features]
+kokoro = ["dep:ort"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }

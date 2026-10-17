@@ -53,6 +53,11 @@ impl<R: Runtime> Voice<R> {
 
     /// Silence: there is no player to set a level on, and the webview sends
     /// this on every duck and resume.
+    /// No backup service to keep anything out of.
+    pub async fn exclude_from_backup(&self, _path: String) -> crate::Result<()> {
+        Ok(())
+    }
+
     pub async fn set_speech_volume(&self, _value: f64) -> crate::Result<()> {
         Ok(())
     }

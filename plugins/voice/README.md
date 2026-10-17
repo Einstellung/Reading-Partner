@@ -486,3 +486,35 @@ Nothing here is emitted before `start_conversation`'s response reaches the
 webview, and nothing after `state { running: false }`: the gate shuts before
 that event goes out, so a final the results task is delivering at that moment
 finds it closed.
+
+## On-device Kokoro (`src/kokoro`)
+
+Kokoro-82M-v1.1-zh on the CPU through ONNX Runtime: misaki phonemes (the exact
+string `kokoro.KPipeline` feeds the model, produced by the text front end) and
+a voice in, 24 kHz mono float samples out, one sentence per call. Not on the
+speaking path yet; MiMo speaks until a variant is downloaded and chosen.
+
+- Weights: `onnx-community/Kokoro-82M-v1.1-zh-ONNX` at revision
+  `6cc0f0d2ebe369a68b0df87c2b65c1af8c0ac3e3` (Apache-2.0), files and sha256 in
+  `src/kokoro/manifest.rs`. Fetched in the app, never bundled, into
+  `<app local data>/voice-models/kokoro-v1.1-zh/<revision>/`, which is excluded
+  from backup (`exclude_from_backup`, Swift) before the first byte lands.
+- Runtime: `ort` 2.0.0-rc.13 behind the `kokoro` feature, which src-tauri turns
+  on for iOS only. Its build script downloads pyke's prebuilt static ONNX
+  Runtime 1.28 for the target and checks its sha256, so nothing is vendored.
+- `Engine::load(model, threads)` then `Engine::synthesize(phonemes, &voice,
+  speed)`. The style row is `voice[len(phonemes) - 1]` counted in chars;
+  `voice::zh_speed` is the Chinese sample's speed rule.
+
+Commands: `kokoro_status` (what is on disk, sizes only), `kokoro_download
+{ variants: ["fp32" | "fp16" | "int8"] }` (background, resumes `.part` files
+with `Range`, renames only after the sha256 matches; poll `kokoro_status`),
+and `kokoro_bench { args }` (debug builds, iOS): for every downloaded variant
+and thread count it reports load time, cold first call, per-sentence time to
+audio, RTF and non-finite samples. From the Linux side:
+
+    scripts/macos/webview-eval.py aeval 'const i = window.__TAURI_INTERNALS__.invoke;
+      return await i("plugin:voice|kokoro_bench", { args: {
+        phonemes: ["ㄋㄧ2ㄏㄠ3, 我3/ㄕ十4/ㄌㄨ2ㄇ应2."], threads: [1, 2, 4] } });' 900
+
+The Linux comparison with PyTorch is the ignored test `kokoro::engine::tests::linux_compare`.

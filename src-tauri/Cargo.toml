@@ -77,6 +77,11 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 # session (docs/68). The mirror image of autostart below: a motor exists only on
 # a phone, so the crate is a dependency only there and the desktop build never
 # sees it.
+# On-device Kokoro TTS (plugins/voice/src/kokoro) is linked on iOS only: the
+# ONNX Runtime static library is fetched by ort-sys's build script.
+[target.'cfg(target_os = "ios")'.dependencies]
+tauri-plugin-voice = { path = "../plugins/voice", features = ["kokoro"] }
+
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-haptics = "2"
 

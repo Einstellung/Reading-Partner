@@ -35,6 +35,7 @@
 | 神经 VAD、Smart Turn 判停、打断的确认窗 | 原生音频与语音 |
 | 解流式 TTS 的音频分片、按字节数算时长 | 原生音频与语音 |
 | 选 TTS 音色、量首字出声延迟 | 原生音频与语音 |
+| 端侧 TTS（Kokoro/ONNX Runtime）选精度、量 RTF | 原生音频与语音 |
 | 判读 TTS 读音、往语音文本预处理的词表里加行 | 原生音频与语音 |
 | 裁 TTS 的头尾静音、按句拼接 | 原生音频与语音 |
 | 把整段跑的纯函数搬进流式、切句 | 原生音频与语音 |
@@ -318,6 +319,8 @@
 - [614-a-new-call-hears-the-old-native-call-released](./native-audio/614-a-new-call-hears-the-old-native-call-released.md) — webview 重载后原生通话还开着；新页面开通话时原生先以 `released` 停掉旧的，这条事件带着旧 turn 先到新通话的监听，被当成自己的结束把刚开的通话关了。`opened` 之前到的 `running=false` 一律丢掉
 - [651-smart-turn-calls-a-pause-after-a-whole-sentence-complete](./native-audio/651-smart-turn-calls-a-pause-after-a-whole-sentence-complete.md) — 测试台 clip 句间 0.8–0.9 s 的停顿，Smart Turn 给 0.97–0.99 的「完成」，一句话被切成三四轮。上游 ONNX 参考实现对同一窗口给出同样的分，不是输入错：停顿前是完整的问句。阈值和 `pauseMs` 都分不开，`voice-session.ts` 把「回复还没出声用户就接着说」并回上一轮重新问
 - [652-a-neural-frame-gated-on-the-buffer-it-finished-in](./native-audio/652-a-neural-frame-gated-on-the-buffer-it-finished-in.md) — 播放期间神经帧要过 -35 dBFS，电平取的是帧落进的那个 100 ms tap buffer；「等一下」最后三个语音帧落进一个大半是静音的 buffer（-38 dB），确认窗差 12 ms 没够着，只 duck 不 stop。电平改成截止到帧末尾的 100 ms（`trailingLevelDb`）。测试台上「嗯」不打断是因为落在免疫窗里，不是区分出来的
+- [655-kokoro-fp16-onnx-gives-all-nan-on-cpu](./native-audio/655-kokoro-fp16-onnx-gives-all-nan-on-cpu.md) — Kokoro v1.1-zh 的 `model_fp16.onnx` 在 x86 CPU provider 上样本数对、样本全是 NaN，不报错；端侧测速报 `nonFinite`，iPad 的数出来前 fp16 不算候选
+- [656-kokoro-int8-onnx-is-slower-than-fp32-on-cpu](./native-audio/656-kokoro-int8-onnx-is-slower-than-fp32-on-cpu.md) — 动态量化的 `model_int8.onnx` 在 x86 CPU 上 RTF 1.2，fp32 是 0.21，`ConvInteger` 没有优化内核；音质和时长也偏，选型以 iPad 实测为准
 
 ## WebKit / webview
 

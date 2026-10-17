@@ -42,6 +42,9 @@ mod speaker;
 /// real requests on the desktop, which is where it is measured. See the
 /// README's "Speaking" for the contract between the two halves.
 pub mod tts;
+/// On-device Kokoro TTS: download, tokenizer, voices; the engine and bench
+/// with the `kokoro` feature.
+pub mod kokoro;
 
 pub use error::{Error, Result};
 pub use session::SpeechSession;
@@ -93,7 +96,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::set_speech_volume,
             commands::register_listener,
             commands::remove_listener,
-            commands::harness
+            commands::harness,
+            commands::kokoro_status,
+            commands::kokoro_download,
+            commands::kokoro_bench
         ])
         .setup(|app, api| {
             #[cfg(target_os = "ios")]
@@ -101,6 +107,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             #[cfg(not(target_os = "ios"))]
             let voice = fallback::init(app, api)?;
             app.manage(voice);
+            app.manage(kokoro::KokoroModels(Arc::new(kokoro::download::Downloader::new(
+                &app.path().app_local_data_dir()?,
+            ))));
             // Not split by target_os, and deliberately: the session is Rust all
             // the way down — a relay and a vendor — and the one thing on it that
             // needs a phone is where the audio ends up. `DevicePlayer` already

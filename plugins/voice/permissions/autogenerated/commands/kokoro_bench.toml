@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-kokoro-bench"
+description = "Enables the kokoro_bench command without any pre-configured scope."
+commands.allow = ["kokoro_bench"]
+
+[[permission]]
+identifier = "deny-kokoro-bench"
+description = "Denies the kokoro_bench command without any pre-configured scope."
+commands.deny = ["kokoro_bench"]

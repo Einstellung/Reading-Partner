@@ -357,3 +357,61 @@ pub(crate) async fn stop_conversation<R: Runtime>(app: AppHandle<R>) -> Result<(
 pub(crate) async fn set_speech_volume<R: Runtime>(app: AppHandle<R>, value: f64) -> Result<()> {
     app.voice().set_speech_volume(value).await
 }
+
+// On-device Kokoro (src/kokoro). Not on the speaking path yet: these fetch the
+// weights, say what is on disk, and bench the engine on the device.
+
+/// What of the pinned Kokoro revision is on disk, and how a running download
+/// is getting on. Cheap: file sizes only, no hashing.
+#[command]
+pub(crate) async fn kokoro_status<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<crate::kokoro::download::ModelStatus> {
+    Ok(app.state::<crate::kokoro::KokoroModels>().0.status())
+}
+
+/// Start fetching these variants (`"fp32"`, `"fp16"`, `"int8"`) and the
+/// voices, in the background, resuming whatever an earlier attempt left. A
+/// call while one runs changes nothing. Answers with the status right after
+/// starting; poll `kokoro_status` for progress.
+#[command]
+pub(crate) async fn kokoro_download<R: Runtime>(
+    app: AppHandle<R>,
+    variants: Vec<crate::kokoro::manifest::Variant>,
+) -> Result<crate::kokoro::download::ModelStatus> {
+    let models = app.state::<crate::kokoro::KokoroModels>().0.clone();
+    let root = models.prepare_root()?.to_path_buf();
+    app.voice().exclude_from_backup(root.display().to_string()).await?;
+    models.start(variants);
+    Ok(models.status())
+}
+
+/// The device bench (src/kokoro/bench.rs): load each downloaded variant at
+/// each thread count and time every sentence. Debug builds with the engine
+/// only (iOS). Takes minutes for the full grid.
+#[command]
+pub(crate) async fn kokoro_bench<R: Runtime>(
+    app: AppHandle<R>,
+    args: serde_json::Value,
+) -> Result<serde_json::Value> {
+    #[cfg(all(debug_assertions, feature = "kokoro"))]
+    {
+        let args: crate::kokoro::bench::BenchArgs = serde_json::from_value(args)
+            .map_err(|e| crate::Error::Speech(format!("Bench arguments: {e}")))?;
+        let root = app.state::<crate::kokoro::KokoroModels>().0.root().to_path_buf();
+        let report = tauri::async_runtime::spawn_blocking(move || {
+            crate::kokoro::bench::run(&root, &args)
+        })
+        .await
+        .map_err(|e| crate::Error::Speech(e.to_string()))?
+        .map_err(crate::Error::Speech)?;
+        serde_json::to_value(report).map_err(|e| crate::Error::Speech(e.to_string()))
+    }
+    #[cfg(not(all(debug_assertions, feature = "kokoro")))]
+    {
+        let _ = (app, args);
+        Err(crate::Error::Speech(
+            "The Kokoro bench is in debug builds with the on-device engine only.".to_string(),
+        ))
+    }
+}
