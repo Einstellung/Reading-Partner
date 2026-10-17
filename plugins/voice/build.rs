@@ -32,6 +32,9 @@ const COMMANDS: &[&str] = &[
     "register_listener",
     "remove_listener",
     "harness",
+    "kokoro_status",
+    "kokoro_download",
+    "kokoro_bench",
 ];
 
 fn main() {

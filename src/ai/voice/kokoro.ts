@@ -1,0 +1,94 @@
+// On-device Kokoro TTS (plugins/voice/src/kokoro, docs/companion/136): the
+// weights download and the device bench. Not on the speaking path yet; until
+// the chosen variant is downloaded and verified, speech stays on MiMo.
+//
+// The plugin downloads in the background and answers every question from the
+// files on disk, so the webview polls `kokoroStatus` rather than listening for
+// progress events.
+
+// The commands, checked by a test against plugins/voice/build.rs: a typo is
+// silent until a device build rejects the invoke.
+export const KOKORO_COMMANDS = {
+  status: "plugin:voice|kokoro_status",
+  download: "plugin:voice|kokoro_download",
+  bench: "plugin:voice|kokoro_bench",
+} as const;
+
+export type KokoroVariant = "fp32" | "fp16" | "int8";
+
+export interface KokoroFileStatus {
+  path: string;
+  size: number;
+  have: number;
+  ready: boolean;
+}
+
+// plugins/voice/src/kokoro/download.rs ModelStatus, camelCased.
+export interface KokoroStatus {
+  repo: string;
+  revision: string;
+  root: string;
+  running: boolean;
+  current: string | null;
+  error: string | null;
+  ready: KokoroVariant[];
+  requested: KokoroVariant[];
+  haveBytes: number;
+  totalBytes: number;
+  files: KokoroFileStatus[];
+}
+
+export interface KokoroBenchArgs {
+  phonemes: string[];
+  voice?: string;
+  variants?: KokoroVariant[];
+  threads?: number[];
+  speed?: number;
+  reps?: number;
+}
+
+// The one invoke, as a parameter so all of this runs under bun.
+export interface KokoroBridge {
+  invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
+}
+
+export function kokoroStatus(bridge: KokoroBridge): Promise<KokoroStatus> {
+  return bridge.invoke<KokoroStatus>(KOKORO_COMMANDS.status);
+}
+
+export function startKokoroDownload(
+  bridge: KokoroBridge,
+  variants: KokoroVariant[],
+): Promise<KokoroStatus> {
+  return bridge.invoke<KokoroStatus>(KOKORO_COMMANDS.download, { variants });
+}
+
+// Debug builds only; resolves with the plugin's BenchReport after minutes.
+export function runKokoroBench(bridge: KokoroBridge, args: KokoroBenchArgs): Promise<unknown> {
+  return bridge.invoke(KOKORO_COMMANDS.bench, { args });
+}
+
+export type KokoroDownloadState =
+  | { kind: "idle" }
+  | { kind: "downloading"; fraction: number; current: string | null }
+  | { kind: "failed"; error: string; fraction: number }
+  | { kind: "ready" };
+
+// What a settings row would say about the requested variant. `fraction` is
+// over the requested files only; a resumed download starts above zero.
+export function downloadState(s: KokoroStatus, variant: KokoroVariant): KokoroDownloadState {
+  if (s.ready.includes(variant)) return { kind: "ready" };
+  const fraction = s.totalBytes > 0 ? Math.min(1, s.haveBytes / s.totalBytes) : 0;
+  if (s.running) return { kind: "downloading", fraction, current: s.current };
+  if (s.error) return { kind: "failed", error: s.error, fraction };
+  return { kind: "idle" };
+}
+
+// Which engine speaks: Kokoro only once the variant is fully downloaded and
+// verified; MiMo before that, and whenever the status cannot be read.
+export function speakingEngine(
+  s: KokoroStatus | null,
+  variant: KokoroVariant,
+): "kokoro" | "mimo" {
+  return s?.ready.includes(variant) ? "kokoro" : "mimo";
+}

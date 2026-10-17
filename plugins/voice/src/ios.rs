@@ -44,6 +44,12 @@ struct SetSpeechVolumeArgs {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ExcludeFromBackupArgs {
+    path: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct IndicatorProbeArgs {
     stage: String,
 }
@@ -104,6 +110,16 @@ impl<R: Runtime> Voice<R> {
     pub async fn stop_conversation(&self) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async("stop_conversation", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Keep a directory (the downloaded Kokoro weights) out of iCloud and
+    /// computer backups: `isExcludedFromBackup` on the URL, which covers what
+    /// is put in it later too.
+    pub async fn exclude_from_backup(&self, path: String) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("exclude_from_backup", ExcludeFromBackupArgs { path })
             .await
             .map_err(Into::into)
     }

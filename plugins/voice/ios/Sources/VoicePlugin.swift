@@ -82,6 +82,11 @@ class SpeechVolumeArgs: Decodable {
     let value: Double
 }
 
+/// Arguments of `exclude_from_backup`: a directory under Application Support.
+class ExcludeFromBackupArgs: Decodable {
+    let path: String
+}
+
 class VoicePlugin: Plugin {
     /// The live run, if any. Touched from the IPC dispatch queue and from the
     /// Tasks the commands spawn, so every access goes through the lock.
@@ -350,6 +355,22 @@ class VoicePlugin: Plugin {
 
     /// The playback level, 0..1. The native side ducks and restores on its own
     /// at the verdict; this is the webview naming the two levels (SpeechOut).
+    /// Keep a directory out of iCloud and computer backups: the downloaded
+    /// Kokoro weights, hundreds of MB that can always be fetched again.
+    @objc(exclude_from_backup:)
+    public func excludeFromBackup(_ invoke: Invoke) {
+        do {
+            let args = try invoke.parseArgs(ExcludeFromBackupArgs.self)
+            var url = URL(fileURLWithPath: args.path, isDirectory: true)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try url.setResourceValues(values)
+            invoke.resolve()
+        } catch {
+            invoke.reject("Could not keep that directory out of backups: \(error.localizedDescription)")
+        }
+    }
+
     @objc(set_speech_volume:)
     public func setSpeechVolume(_ invoke: Invoke) {
         let args: SpeechVolumeArgs

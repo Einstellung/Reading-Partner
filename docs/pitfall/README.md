@@ -34,6 +34,7 @@
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 解流式 TTS 的音频分片、按字节数算时长 | 原生音频与语音 |
 | 选 TTS 音色、量首字出声延迟 | 原生音频与语音 |
+| 端侧 TTS（Kokoro/ONNX Runtime）选精度、量 RTF | 原生音频与语音 |
 | 判读 TTS 读音、往语音文本预处理的词表里加行 | 原生音频与语音 |
 | 裁 TTS 的头尾静音、按句拼接 | 原生音频与语音 |
 | 把整段跑的纯函数搬进流式、切句 | 原生音频与语音 |
@@ -315,6 +316,8 @@
 - [199-stopping-the-engine-first-does-not-make-detach-safe](./native-audio/199-stopping-the-engine-first-does-not-make-detach-safe.md) — 停了 engine 再 `detach` 照样 abort，`RemoveNode` 的前置条件从外面看不全，而它报错的方式是 ObjC 异常；解法是拆栈时根本不 detach，摘 tap、停 player、停 engine，然后让 engine 引用置空带走整张图。真机实测有效：同一处拆栈走完打出 `RP-DICT front closed`，没再 abort，崩的是它后面 1.3 秒的另一件事（坑 201）
 - [612-the-first-input-node-read-stops-a-running-engine](./native-audio/612-the-first-input-node-read-stops-a-running-engine.md) — 只放音的栈从没读过 `engine.inputNode`，engine 跑起来之后第一次读它（哪怕只是 DEBUG 日志的一个参数）会把 engine 静默停掉：没有异常、没有配置变更通知，下次 `start()` 才恢复。测试台上每句开场白都因此听不见；建栈之后不许第一次碰 `inputNode`
 - [614-a-new-call-hears-the-old-native-call-released](./native-audio/614-a-new-call-hears-the-old-native-call-released.md) — webview 重载后原生通话还开着；新页面开通话时原生先以 `released` 停掉旧的，这条事件带着旧 turn 先到新通话的监听，被当成自己的结束把刚开的通话关了。`opened` 之前到的 `running=false` 一律丢掉
+- [655-kokoro-fp16-onnx-gives-all-nan-on-cpu](./native-audio/655-kokoro-fp16-onnx-gives-all-nan-on-cpu.md) — Kokoro v1.1-zh 的 `model_fp16.onnx` 在 x86 CPU provider 上样本数对、样本全是 NaN，不报错；端侧测速报 `nonFinite`，iPad 的数出来前 fp16 不算候选
+- [656-kokoro-int8-onnx-is-slower-than-fp32-on-cpu](./native-audio/656-kokoro-int8-onnx-is-slower-than-fp32-on-cpu.md) — 动态量化的 `model_int8.onnx` 在 x86 CPU 上 RTF 1.2，fp32 是 0.21，`ConvInteger` 没有优化内核；音质和时长也偏，选型以 iPad 实测为准
 
 ## WebKit / webview
 
