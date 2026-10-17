@@ -40,6 +40,9 @@ pub enum TtsError {
     /// with no player, an engine that is not running, a sample rate the node is
     /// not wired for. Never retried — the same bytes would be refused again.
     Player(String),
+    /// The on-device engine could not load its files or run a sentence
+    /// (tts/kokoro.rs). Never retried: the same files give the same answer.
+    Engine(String),
     /// The session was stopped: barge-in, or the turn was abandoned.
     Cancelled,
     /// The player would not take the sentence yet because it is still speaking
@@ -95,6 +98,7 @@ impl fmt::Display for TtsError {
             // Verbatim: what the player rejects with is already a sentence
             // (VoicePlugin rejects with one), and a prefix would say it twice.
             TtsError::Player(what) => write!(f, "{what}"),
+            TtsError::Engine(what) => write!(f, "the on-device voice failed: {what}"),
             TtsError::Cancelled => write!(f, "speaking was stopped"),
         }
     }

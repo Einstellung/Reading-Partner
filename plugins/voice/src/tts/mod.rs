@@ -10,7 +10,8 @@
 // The pieces, in the order a sentence passes through them:
 //
 //   backend  what a vendor has to look like
-//   mimo     the one vendor implemented
+//   mimo     the vendor over the network (desktop and Android)
+//   kokoro   on-device Kokoro, the only voice on iOS
 //   sse      the frame parser under it
 //   trim     the head and tail silence that would otherwise stack up between
 //            sentences
@@ -23,6 +24,7 @@ mod backend;
 pub mod cues;
 mod error;
 mod format;
+pub mod kokoro;
 pub mod mimo;
 mod opening;
 mod player;
@@ -30,7 +32,7 @@ mod relay;
 mod sse;
 mod trim;
 
-pub use backend::{SpeechRequest, TtsBackend};
+pub use backend::{OnDeviceVoice, SpeechRequest, TtsBackend};
 pub use error::TtsError;
 pub use format::AudioFormat;
 pub use opening::{OpeningCache, OpeningKey, PrimedOpening, DEFAULT_TTL};

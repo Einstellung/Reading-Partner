@@ -111,8 +111,9 @@ beside it saying why.
 
 ## Speaking
 
-The other half, and the newer one: `src/tts` turns a sentence into PCM. Mimo's
-`mimo-v2.5-tts` over SSE, base64 inside `choices[0].delta.audio.data`,
+The other half, and the newer one: `src/tts` turns a sentence into PCM. On iOS
+that is on-device Kokoro and nothing else (see "On-device Kokoro" below); on
+desktop and Android it is Mimo's `mimo-v2.5-tts` over SSE, base64 inside `choices[0].delta.audio.data`,
 24 kHz / 16-bit / mono, the text to speak in an **assistant** message — a user
 message would be read as a style instruction and never spoken (docs/33).
 
@@ -124,8 +125,9 @@ is iOS-only. It compiles and makes real requests on the Linux desktop, which is
 the only place any of it can be measured, and everything below was.
 
 ```
-TtsBackend        one vendor. MimoBackend is the only one; qwen3-tts-flash is
-                  the named alternate and fits the same shape.
+TtsBackend        one vendor. MimoBackend over the network, KokoroBackend on
+                  the device (tts/kokoro.rs); qwen3-tts-flash is the named
+                  alternate and fits the same shape.
 SilenceTrimmer    streaming head and tail trim, pushed bytes in, playable bytes
                   out.
 SpeechRelay       sentences in, trimmed audio to the player in order, working
@@ -491,8 +493,33 @@ finds it closed.
 
 Kokoro-82M-v1.1-zh on the CPU through ONNX Runtime: misaki phonemes (the exact
 string `kokoro.KPipeline` feeds the model, produced by the text front end) and
-a voice in, 24 kHz mono float samples out, one sentence per call. Not on the
-speaking path yet; MiMo speaks until a variant is downloaded and chosen.
+a voice in, 24 kHz mono float samples out, one sentence per call.
+
+On iOS it is the only voice. `session::on_device_voice` is the one switch:
+with the `kokoro` feature (iOS only) the session speaks through
+`tts::kokoro::KokoroBackend` and never asks MiMo, which is parked there while
+Kokoro is evaluated on device; without it (desktop, Android) nothing changes.
+
+- fp32 only, 4 intra-op threads, voice `zf_001` (`af_maple` for a sentence
+  with no Chinese in it), all constants in `tts/kokoro.rs`. Text with any
+  Chinese goes through `phonemize_zh`, English-only through `phonemize_en`.
+  The floats are converted to the 16-bit PCM every backend hands the relay.
+- Until the fp32 files are on disk every turn, cue and priming is refused with
+  "download it in Settings → Optional → Voice output". Readiness is the
+  downloader's size check (files only get their final name after the sha256
+  matched), asked again per turn until it passes and then never again, so a
+  download that finishes mid-session speaks from the next turn.
+- The model loads once per process and stays (0.5-0.7 s, about 1 GB on an
+  A16). It is warmed on a thread of its own when a call opens
+  (`start_conversation`) and whenever a turn or cue asks for the backend, so the
+  first sentence finds it loaded; `set_speech_key` at startup does not load it.
+- Each model call runs on a blocking thread. `max_in_flight` is 1, so the relay
+  has one sentence out at a time and the next one is synthesised while the one
+  before plays; a barge-in wastes at most the chunk being computed.
+- The first sentence of a turn is already short: the webview's splitter cuts it
+  at the first soft boundary (`SOFT_MIN_FIRST` in
+  src/soul/voice/speech/split.ts), which on an A16 is about a second of
+  compute for seven characters.
 
 - Weights: `onnx-community/Kokoro-82M-v1.1-zh-ONNX` at revision
   `6cc0f0d2ebe369a68b0df87c2b65c1af8c0ac3e3` (Apache-2.0), files and sha256 in
@@ -517,4 +544,7 @@ audio, RTF and non-finite samples. From the Linux side:
       return await i("plugin:voice|kokoro_bench", { args: {
         phonemes: ["ㄋㄧ2ㄏㄠ3, 我3/ㄕ十4/ㄌㄨ2ㄇ应2."], threads: [1, 2, 4] } });' 900
 
-The Linux comparison with PyTorch is the ignored test `kokoro::engine::tests::linux_compare`.
+The Linux comparison with PyTorch is the ignored test `kokoro::engine::tests::linux_compare`;
+the whole speaking path (text, phonemes, engine, PCM, a WAV per sentence, never
+played) is `tts::kokoro::tests::end_to_end`, with `KOKORO_MODELS` and
+`KOKORO_OUT`.

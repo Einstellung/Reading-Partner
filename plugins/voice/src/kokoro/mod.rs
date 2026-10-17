@@ -9,7 +9,8 @@
 // The weights are not in the app. `download` fetches a pinned Hugging Face
 // revision into local app data, resuming where a broken transfer stopped and
 // checking every file's sha256 before it counts as present. Until that has
-// happened the spoken half keeps using MiMo, which this module does not touch.
+// happened iOS has no voice (tts/kokoro.rs speaks with this module; MiMo is
+// parked there, session.rs `on_device_voice`).
 //
 // What compiles where: the manifest, the downloader, the tokenizer and the
 // voice tables are plain Rust and build everywhere. The engine and the bench

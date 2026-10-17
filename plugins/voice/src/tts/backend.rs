@@ -40,6 +40,16 @@ pub trait TtsBackend: Send + Sync + 'static {
     /// The voice used when the caller names none.
     fn default_voice(&self) -> &str;
 
+    /// How many sentences this backend can usefully work on at once, when that
+    /// is fewer than the relay would otherwise send. A vendor over the network
+    /// answers `None`: its requests overlap. An engine on this device's CPU
+    /// runs one sentence at a time, and a second request in flight would only
+    /// race the first for it and could win, putting the first sentence of a
+    /// turn behind the second.
+    fn max_in_flight(&self) -> Option<usize> {
+        None
+    }
+
     /// Synthesise one sentence, sending raw PCM to `out` as it arrives.
     ///
     /// Contract: every byte sent is playable PCM in `format()` — container
@@ -57,4 +67,16 @@ pub trait TtsBackend: Send + Sync + 'static {
         request: &SpeechRequest,
         out: mpsc::Sender<Vec<u8>>,
     ) -> Result<(), TtsError>;
+}
+
+/// A voice that runs on this device from downloaded files, which may not be on
+/// disk yet. When the session has one it is the only voice (session.rs).
+pub trait OnDeviceVoice: Send + Sync + 'static {
+    /// Whether the files are on disk and verified. Cheap: no hashing, no load.
+    fn ready(&self) -> bool;
+
+    /// The backend, once `ready`, and the model loading in the background if
+    /// it is not in memory yet, so the sentence after this does not wait for
+    /// it. Otherwise the reason there is none, worded for the user.
+    fn backend(&self) -> Result<std::sync::Arc<dyn TtsBackend>, String>;
 }
