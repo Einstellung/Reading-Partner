@@ -43,7 +43,8 @@ export function askedText(name: string, plan: RetryPlan, xSignedIn: boolean | nu
     `Asked to read again what the first look of "${name}" missed: ${reads.join(", ")} (as this ` +
     "device last saw it; the run checks again). It runs on the desktop collector when that is on; " +
     "what it finds is added to the first look's result, and a brief issue of its own comes when " +
-    `it is done.${signedOut} Tell the reader in one line. Do not say when it will finish.`
+    `it is done.${signedOut} Tell the reader in one line. Do not say when it will finish. When ` +
+    "they later ask how it is going or whether it came back, call background_status first."
   );
 }
 
@@ -88,7 +89,8 @@ export function buildRetryFirstRunTool(deps: RetryToolDeps): AgentTool {
         return {
           text:
             `The ${asked.what === "first" ? "first run" : "earlier retry"} of "${search.name}" has not ` +
-            "finished yet, so no other was asked. What it finds comes as a brief issue when it is done.",
+            "finished yet, so no other was asked. What it finds comes as a brief issue when it is done. " +
+            "Call background_status to see how far it has got.",
           receipt: null,
         };
       }

@@ -36,6 +36,7 @@ export default {
   "delegate.handingToKind": "Confié à un agent {kind}",
   "delegate.handingOver": "Confié à un agent",
   "delegate.sentOffWork": "Travail {kind} envoyé",
+  "backgroundStatus.checking": "Vérification du travail en arrière-plan",
 
   "places.goingTo": "Direction {place}",
   "places.goingSomewhere": "Déplacement dans l’app",

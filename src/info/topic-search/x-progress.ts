@@ -189,3 +189,73 @@ export function replay(steps: readonly XStep[]): XReplay {
   }
   return out;
 }
+
+/** A running count of a run's X progress file, fed one step at a time. */
+export interface XTally {
+  add(step: XStep): void;
+  /** "query 2 of 3, 14 screens read, 23 distinct posts found so far". */
+  line(): string;
+  steps(): number;
+}
+
+export function xTally(): XTally {
+  let order: string[] | null = null;
+  let current: string | null = null;
+  const ended = new Set<string>();
+  const posts = new Set<string>();
+  let screens = 0;
+  let permalinks = 0;
+  let halt: string | null = null;
+  let end: { status: XRunStatus; why: string | null } | null = null;
+  let count = 0;
+  return {
+    add(step) {
+      count++;
+      switch (step.kind) {
+        case "start":
+          order = step.order;
+          break;
+        case "open":
+          current = step.line;
+          break;
+        case "read":
+          screens++;
+          for (const p of step.fresh) posts.add(p.id);
+          break;
+        case "line-end":
+          ended.add(step.line);
+          break;
+        case "permalink":
+          permalinks++;
+          break;
+        case "halt":
+          halt = step.halt.kind;
+          break;
+        case "end":
+          end = { status: step.status, why: step.why };
+          break;
+      }
+    },
+    line() {
+      const total = order?.length ?? null;
+      const at = current && order ? order.indexOf(current) + 1 : 0;
+      const counts =
+        `${screens} screen${screens === 1 ? "" : "s"} read, ${posts.size} distinct post${posts.size === 1 ? "" : "s"} found` +
+        (permalinks ? `, ${permalinks} post page${permalinks === 1 ? "" : "s"} opened` : "");
+      const stopped = halt ? `; X stopped it (${halt})` : "";
+      if (end) {
+        const queries = total !== null ? `${ended.size} of ${total} queries read to their end, ` : "";
+        return `finished (${end.status}${end.why ? `: ${end.why}` : ""}): ${queries}${counts}${stopped}`;
+      }
+      const where = total ? (at > 0 ? `query ${at} of ${total}` : `${total} queries to read`) : "starting";
+      return `${where}, ${counts} so far${stopped}`;
+    },
+    steps: () => count,
+  };
+}
+
+export function tallySteps(steps: readonly XStep[]): XTally {
+  const t = xTally();
+  for (const s of steps) t.add(s);
+  return t;
+}

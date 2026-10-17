@@ -41,6 +41,7 @@ import { subagentTool } from "../../src/legion/subagent/tool";
 import { buildTakeLinkTool } from "../../src/reading/ingest/take-link-tool";
 import { buildMealsCatalogTools } from "../../src/info/meals/tools";
 import { topicSearchDoorTools } from "../../src/info/topic-search/live";
+import { buildBackgroundStatusTool } from "../../src/legion/status/tool";
 import { normalizeToolResult, toolLabel } from "../../src/legion/durable/tool-result";
 import type { AgentTool } from "../../src/legion/durable/contract";
 
@@ -231,6 +232,11 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
       "resume_x_reading",
       "retry_topic_search_first_run",
     ],
+  },
+  {
+    where: "legion/status",
+    tools: [buildBackgroundStatusTool(any({}))],
+    names: ["background_status"], safe: ["background_status"],
   },
 ];
 

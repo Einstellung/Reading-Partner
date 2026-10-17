@@ -269,6 +269,15 @@ test("a first run reads, builds, hands its result to the brief and lets the lock
   expect(trace.stopped).toEqual([]);
 });
 
+test("while it reads X a run reports counts off its progress file, so the synced run record says how far it got", async () => {
+  const said: string[] = [];
+  const { deps } = fakeDeps({ report: (_id, text) => void said.push(text) });
+  await runTask(deps, { runId: "r-rep", brief: { searchId: "ts-0000aaaa", kind: "first", night: null } });
+  const reading = said.filter((s) => s.startsWith("reading X: "));
+  expect(reading.length).toBeGreaterThan(0);
+  expect(reading[reading.length - 1]).toContain("0 screens read, 0 distinct posts found");
+});
+
 test("a once-only search stops after its first delivery; an empty daily run hands the brief nothing", async () => {
   const once = fakeDeps({ search: search({ once: true }) });
   await runTask(once.deps, { runId: "r-2", brief: { searchId: "ts-0000aaaa", kind: "first", night: null } });

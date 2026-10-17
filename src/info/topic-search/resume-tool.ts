@@ -53,7 +53,9 @@ export function buildResumeXReadingTool(deps: ResumeToolDeps): AgentTool {
       const result = await deps.resume();
       if (!result.lifted) return { text: notLifted(result.halt), receipt: null };
       return {
-        text: "X reading is resumed on this device; the next night reads X again. Tell the reader in one line.",
+        text:
+          "X reading is resumed on this device; the next night reads X again. Tell the reader in one line. " +
+          "When they later ask how a run is going, call background_status.",
         receipt: { label: t("info.tool.resumedXReading"), summary: "x.com" },
       };
     },

@@ -36,6 +36,7 @@ export default {
   "delegate.handingToKind": "正在交给一个{kind}工作者",
   "delegate.handingOver": "正在把这件事交出去",
   "delegate.sentOffWork": "已交出{kind}工作",
+  "backgroundStatus.checking": "正在查看后台工作进度",
 
   "places.goingTo": "正在前往{place}",
   "places.goingSomewhere": "正在应用内移动",

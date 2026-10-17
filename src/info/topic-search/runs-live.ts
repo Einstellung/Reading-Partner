@@ -12,6 +12,7 @@ import { deviceRuntime } from "../../legion/durable/background";
 import { registerProgramTask } from "../../legion/durable/program-task";
 import { appRunner } from "../../legion/runner/runner";
 import { registerWorker } from "../../legion/runner/worker";
+import { registerRunDescriber } from "../../legion/status/registry";
 import { statementStore } from "../../memory";
 import { appData } from "../../platform/app/appdata";
 import { currentDeviceId } from "../../platform/app/device";
@@ -26,6 +27,8 @@ import type { XHalt } from "../x/search-page";
 import { resolveRedirect } from "../x/live";
 import { stopFollowing } from "./apply";
 import { SOURCE_HEALTH_FILE, type BuildTopicSearchResult } from "./build-result";
+import { parseResultFile, RESULT_FILE_PREFIX, type TopicSearchResult } from "./result-types";
+import { topicSearchDescriber, type ShelfIssue, type TopicSearchStatusDeps } from "./run-status";
 import { buildTopicSearchResult } from "./build-live";
 import { registerFirstRunDispatcher } from "./first-run";
 import { clearSignedOut, recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
@@ -188,6 +191,49 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
   };
 }
 
+/** The shelf file info/issue writes (info/issue/types.ts INFO_SHELF_FILE); read here without importing that domain. */
+const SHELF_FILE = "info-shelf.json";
+
+async function readJson(path: string): Promise<unknown> {
+  if (!(await appData.exists(path))) return null;
+  try {
+    return JSON.parse(await appData.readText(path));
+  } catch {
+    return null;
+  }
+}
+
+/** What background_status reads about a topic-search run on this device (run-status.ts). */
+const statusDeps: TopicSearchStatusDeps = {
+  searches: () => loadTopicSearches(),
+  steps: async (runId) => {
+    const steps = await progressLog(appData, runDirOf(runId)).load();
+    return steps.length ? steps : null;
+  },
+  runHealth: async (runId) => {
+    const path = `${runDirOf(runId)}/${SOURCE_HEALTH_FILE}`;
+    return (await appData.exists(path)) ? parseSourceHealthFile(await appData.readText(path)) : null;
+  },
+  results: async (searchId) => {
+    const names = (await appData.readDir("")).filter((e) => e.isFile && e.name.startsWith(`${RESULT_FILE_PREFIX}${searchId}-`));
+    const out: TopicSearchResult[] = [];
+    for (const e of names) {
+      const parsed = parseResultFile(await appData.readText(e.name));
+      if (parsed?.searchId === searchId) out.push(parsed);
+    }
+    return out;
+  },
+  issues: async () => {
+    const shelf = (await readJson(SHELF_FILE)) as { issues?: ShelfIssue[] } | null;
+    return Array.isArray(shelf?.issues) ? shelf.issues : [];
+  },
+  localX: async () => {
+    await liftSignedOut();
+    const session = (await loadSiteSessions())[X_HOST];
+    return { halt: (await state.load()).halt, signedIn: !session || session.unknown ? null : session.signedIn };
+  },
+};
+
 let nightTick: (() => Promise<string[]>) | null = null;
 
 /** The worker, the `rp.topicsearch` task and the first-run dispatch. Once, at startup, on every device. */
@@ -207,6 +253,7 @@ export function registerTopicSearchRuns(ports: TopicSearchRunPorts): void {
       clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
     }),
   });
+  registerRunDescriber(topicSearchDescriber(statusDeps));
   const delegate = appRunner().delegate;
   registerFirstRunDispatcher(firstRunDispatcher((input) => delegate(input)));
   nightTick = createNightTick({

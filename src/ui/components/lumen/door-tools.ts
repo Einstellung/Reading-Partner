@@ -16,6 +16,7 @@ import { liveWebSearchTools } from "../../../websearch/tool";
 import { buildReadPageTool } from "../../../info/sources/read-page-tool";
 import { infoFetch } from "../../../workshop/extract/http";
 import { topicSearchDoorTools, type TopicSearchDoorPorts } from "../../../info/topic-search/live";
+import { liveBackgroundStatusTool } from "../../../legion/status/live";
 
 export interface DoorToolPorts {
   /** The day's conversation and the day it is filed under. */
@@ -57,5 +58,7 @@ export function doorTools(ports: DoorToolPorts): AgentTool[] {
       latestCard: ports.latestTopicSearchCard,
       applyCard: ports.applyTopicSearchCard,
     }),
+    // How background work is getting on: queued, running, finished, on which device (legion/status).
+    liveBackgroundStatusTool(),
   ];
 }

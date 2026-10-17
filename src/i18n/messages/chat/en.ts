@@ -38,6 +38,7 @@ export default {
   "delegate.handingToKind": "Handing this to a {kind} worker",
   "delegate.handingOver": "Handing this over to a worker",
   "delegate.sentOffWork": "Sent off {kind} work",
+  "backgroundStatus.checking": "Checking background work",
 
   "places.goingTo": "Going to {place}",
   "places.goingSomewhere": "Going somewhere in the app",

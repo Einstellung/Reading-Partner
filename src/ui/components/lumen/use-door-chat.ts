@@ -65,6 +65,7 @@ import { headingPage } from "../../../reading/issue";
 import { TOPIC_SEARCH_APPLY_OP, topicSearchAppliedNote } from "../../../info/topic-search/cards";
 import type { ApplyResult } from "../../../info/topic-search/apply";
 import { applyTopicSearchCard, loadTopicSearchGuidance } from "../../../info/topic-search/live";
+import { BACKGROUND_STATUS_RULE } from "../../../legion/status/tool";
 import {
   INTAKE_CHOOSE_OP,
   INTAKE_NEW_TOPIC_OP,
@@ -226,8 +227,8 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
             applyTopicSearchCard: (cardId) => applyTopicSearchRef.current(cardId),
           }),
           topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
-          // How a topic search is drafted, and the ones the reader has (docs/info/88).
-          prompt: await loadTopicSearchGuidance(),
+          // How a topic search is drafted, and the ones the reader has (docs/info/88); asking how background work is going.
+          prompt: `${await loadTopicSearchGuidance()}\n\n${BACKGROUND_STATUS_RULE}`,
         });
         if (prepared.kind === "no-provider") return { kind: "failed", message: t("info.errors.noProvider") };
         if (prepared.kind === "refused") return { kind: "refused", message: prepared.text };

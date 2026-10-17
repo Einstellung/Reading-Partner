@@ -34,7 +34,7 @@ import { lastNightAnchor, nightEndAt } from "./nightly";
 import type { TopicSearch } from "./types";
 import { isEmptyPlan, readQueries, type RetryPlan } from "./retry";
 import { FIRST_LOOK_BACK_MS } from "./windows";
-import { localDay, replay, type XProgressLog, type XReaderStore, type XRunStatus } from "./x-progress";
+import { localDay, replay, xTally, type XProgressLog, type XReaderStore, type XRunStatus } from "./x-progress";
 import { readXSearch, X_FIRST_RUN_LIMITS, type XReadLimits, type XReadLine, type XReadResult } from "./x-reader";
 
 export type BuiltTopicSearchResult = BuildTopicSearchResultOutput;
@@ -251,6 +251,21 @@ export function topicSearchTask(
     const limits = look === "first" ? X_FIRST_RUN_LIMITS : await deps.nightLimits(window.night);
     const deadline = brief.kind === "daily" ? nightEndAt(window.night) : null;
     const log = deps.progress(dir);
+    // What the run reports while it reads: counts off the progress file, so the
+    // run record (which syncs) says how far X has got (background_status).
+    const tally = xTally();
+    const watched: XProgressLog = {
+      load: async () => {
+        const steps = await log.load();
+        for (const step of steps) tally.add(step);
+        return steps;
+      },
+      append: async (step) => {
+        await log.append(step);
+        tally.add(step);
+        say(runId, `reading X: ${tally.line()}`);
+      },
+    };
     const sleep = async (ms: number) => {
       if (signal.aborted) throw new StoppedError();
       if (deadline !== null && deps.now() + ms >= deadline) throw new PastDeadline();
@@ -261,7 +276,7 @@ export function topicSearchTask(
         { lines: searchLines(search, look, window.since, window.retry?.x), limits },
         {
           open: (viewport) => deps.open(viewport),
-          progress: log,
+          progress: watched,
           memory: deps.memory,
           expandLink: (tco) => deps.expandLink(tco),
           onHalt: (halt) => deps.halted(halt, { searchId: search.id, runId, night: window.night }),

@@ -81,6 +81,10 @@ export function topicSearchGuidance({ searches, statements, xPaused = null }: Gu
       "When they ask to search again after signing in to X, or to redo a search's first look, call",
       "retry_topic_search_first_run: it reads again only what the first run missed. Say only what a",
       "tool told you; never promise when X will be read or a result will come.",
+      "When they ask whether a search's first look, a retry or a night's run has started, come back or",
+      "finished, call background_status (about: the search's name or id) first: it says the run's state,",
+      "elapsed time, X and arXiv progress, result and brief issue. Conversation search is not a source",
+      "for run state.",
     ].join("\n"),
   ]
     .filter((b) => b !== "")
