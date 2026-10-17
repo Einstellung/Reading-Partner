@@ -848,6 +848,26 @@ test("fetchBook brings one book down under the phone policy", async () => {
   expect(dec(store.get("h")!)).toBe("EPUB");
 });
 
+test("fetchBook hands the shelf's progress listener to the backend", async () => {
+  const be = makeBackend();
+  const heard: [number, number][] = [];
+  be.backend.downloadBook = async (_hash, onProgress) => {
+    onProgress?.(2, 4);
+    onProgress?.(4, 4);
+    return enc("EPUB");
+  };
+  const { books, store } = makeBooks();
+  const { engine } = makeEngine({ backend: be.backend, books, booksPolicy: "off", snapshot: {} });
+
+  await engine.fetchBook("h", (received, total) => heard.push([received, total]));
+
+  expect(dec(store.get("h")!)).toBe("EPUB");
+  expect(heard).toEqual([
+    [2, 4],
+    [4, 4],
+  ]);
+});
+
 test("pushBook sends one book up under the phone policy", async () => {
   const be = makeBackend();
   const { books } = makeBooks({ h: "EPUB" });

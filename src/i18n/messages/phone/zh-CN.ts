@@ -65,6 +65,7 @@ export default {
   "shelf.nothingFiled": "这里还没有收录任何内容。",
   "shelf.lessonBadge": "课程",
   "shelf.downloadFailed": "这本书未能下载",
+  "shelf.downloadNetworkFailed": "网络中断，下载没有完成。再点一下这本书，会从中断的地方接着下载。",
   "shelf.importFailed": "这本书未能导入",
 
   "shelfList.notConfigured": "这个构建没有配置 Google 账户，无法下载这本书",
@@ -72,6 +73,7 @@ export default {
   "shelfList.notImported": "桌面端还没有导入这个文件，所以没有可取的内容",
   "shelfList.notFiledYet": "这本书还没有同步完成到这台设备",
   "shelfList.downloading": "正在下载…",
+  "shelfList.downloadingPercent": "正在下载… {percent}%",
   "shelfList.notImportedShort": "未导入",
   "shelfList.inCloud": "在云端",
   "shelfList.notSyncedYet": "尚未同步",

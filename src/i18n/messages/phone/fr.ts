@@ -69,6 +69,7 @@ export default {
   "shelf.nothingFiled": "Rien de classé ici pour l'instant.",
   "shelf.lessonBadge": "Leçon",
   "shelf.downloadFailed": "Ce livre n'a pas pu être téléchargé",
+  "shelf.downloadNetworkFailed": "La connexion a été interrompue pendant le téléchargement. Touchez à nouveau le livre pour reprendre là où il s'est arrêté.",
   "shelf.importFailed": "Ce livre n'a pas pu être importé",
 
   "shelfList.notConfigured":
@@ -77,6 +78,7 @@ export default {
   "shelfList.notImported": "Le bureau n'a pas encore importé ce fichier, il n'y a donc rien à récupérer",
   "shelfList.notFiledYet": "Ce livre n'a pas encore fini de se synchroniser sur cet appareil",
   "shelfList.downloading": "Téléchargement…",
+  "shelfList.downloadingPercent": "Téléchargement… {percent} %",
   "shelfList.notImportedShort": "Non importé",
   "shelfList.inCloud": "Dans le cloud",
   "shelfList.notSyncedYet": "Pas encore synchronisé",

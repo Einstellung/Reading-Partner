@@ -65,6 +65,7 @@ export default {
   "shelf.nothingFiled": "아직 여기에 정리된 것이 없습니다.",
   "shelf.lessonBadge": "레슨",
   "shelf.downloadFailed": "이 책을 다운로드하지 못했습니다",
+  "shelf.downloadNetworkFailed": "네트워크 문제로 다운로드가 멈췄습니다. 이 책을 다시 탭하면 멈춘 곳부터 이어서 받습니다.",
   "shelf.importFailed": "이 책을 가져오지 못했습니다",
 
   "shelfList.notConfigured": "이 빌드에는 Google 계정이 설정되어 있지 않아 책을 다운로드할 수 없습니다",
@@ -72,6 +73,7 @@ export default {
   "shelfList.notImported": "데스크에서 아직 이 파일을 가져오지 않아 받아올 것이 없습니다",
   "shelfList.notFiledYet": "이 책은 아직 이 기기로 동기화가 끝나지 않았습니다",
   "shelfList.downloading": "다운로드 중…",
+  "shelfList.downloadingPercent": "다운로드 중… {percent}%",
   "shelfList.notImportedShort": "가져오지 않음",
   "shelfList.inCloud": "클라우드에 있음",
   "shelfList.notSyncedYet": "아직 동기화되지 않음",

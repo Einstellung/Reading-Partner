@@ -157,7 +157,11 @@ export interface SyncBackend {
   hasBook(hash: string): Promise<boolean>;
   uploadBook(hash: string, bytes: Uint8Array): Promise<void>;
   // Throws RemoteGoneError when the blob is not in the remote any more.
-  downloadBook(hash: string): Promise<Uint8Array>;
+  // `onProgress` hears bytes received against the book's size as they land.
+  downloadBook(hash: string, onProgress?: (received: number, total: number) => void): Promise<Uint8Array>;
+  // Forget any half-finished download held for `hash` (a backend that resumes
+  // one, driveBackend.ts): the book was deleted and nothing will ask for it.
+  dropPartialBook?(hash: string): void;
   // Take a book's blob out of the remote for good, for a book the reader deleted
   // (platform/app/deleted-books.ts). Without it the blob outlives every device's
   // copy of the book, and the next device to sign in on a clean snapshot pulls

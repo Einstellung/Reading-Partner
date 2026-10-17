@@ -950,10 +950,16 @@ export class SyncEngine {
    * docs/pitfall/54). It queues behind a pass that is already running, and a
    * pass that would start while it runs stands down instead.
    *
-   * A book this device already has is not fetched again.
+   * A book this device already has is not fetched again. `onProgress` hears
+   * bytes received against the book's size; a download that gave up partway
+   * continues from where it stopped when it is asked for again
+   * (driveBackend.ts rangedBook).
    */
-  async fetchBook(hash: string): Promise<void> {
-    await this.onBooksChannel(() => this.downloadOneBook(hash));
+  async fetchBook(
+    hash: string,
+    onProgress?: (received: number, total: number) => void,
+  ): Promise<void> {
+    await this.onBooksChannel(() => this.downloadOneBook(hash, onProgress));
   }
 
   /**
@@ -993,10 +999,13 @@ export class SyncEngine {
     }
   }
 
-  private async downloadOneBook(hash: string): Promise<void> {
+  private async downloadOneBook(
+    hash: string,
+    onProgress?: (received: number, total: number) => void,
+  ): Promise<void> {
     if (await this.d.books.has(hash)) return;
     try {
-      await this.d.books.write(hash, await this.d.backend.downloadBook(hash));
+      await this.d.books.write(hash, await this.d.backend.downloadBook(hash, onProgress));
     } catch (e) {
       if (isAuthFailure(e)) this.d.onSignedOut?.();
       throw e;
@@ -1011,6 +1020,9 @@ export class SyncEngine {
   // multiplies whatever that peak is, and the device that needs this channel
   // most is the one with the least memory to lose.
   private async syncBooks(failures: PassFailures, dead: ReadonlySet<string>): Promise<void> {
+    // Whatever the policy: a half-finished download of a deleted book is
+    // memory nothing will ask for again.
+    for (const hash of dead) this.d.backend.dropPartialBook?.(hash);
     // Before listHashes, not inside the loop: under "off" the channel does not
     // exist, so it does not read library.json either — nor does it delete
     // anything from the remote, since a shell that never mirrors a book has no

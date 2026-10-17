@@ -68,6 +68,7 @@ export default {
   "shelf.nothingFiled": "Ainda nada arquivado aqui.",
   "shelf.lessonBadge": "Aula",
   "shelf.downloadFailed": "Não foi possível baixar este livro",
+  "shelf.downloadNetworkFailed": "A conexão caiu durante o download. Toque no livro de novo para continuar de onde parou.",
   "shelf.importFailed": "Não foi possível importar este livro",
 
   "shelfList.notConfigured": "Esta versão não tem uma conta do Google configurada, então não pode baixar o livro",
@@ -75,6 +76,7 @@ export default {
   "shelfList.notImported": "O desktop ainda não importou este arquivo, então não há nada para buscar",
   "shelfList.notFiledYet": "Este livro ainda não terminou de sincronizar com este dispositivo",
   "shelfList.downloading": "Baixando…",
+  "shelfList.downloadingPercent": "Baixando… {percent}%",
   "shelfList.notImportedShort": "Não importado",
   "shelfList.inCloud": "Na nuvem",
   "shelfList.notSyncedYet": "Ainda não sincronizado",

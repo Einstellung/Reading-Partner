@@ -52,10 +52,12 @@ import { visibleItems, type HoldSubject } from "./hold-menu";
 import NewTopicSheet from "./NewTopicSheet";
 import { useHoldDelete, type HoldDeleteControl, type NoticeKind } from "./use-hold-delete";
 import {
+  downloadFailureLine,
   lessonNote,
   materialNote,
   materialTap,
   shelfMaterials,
+  type DownloadProgress,
   type FetchAbility,
   type ShelfMaterial,
 } from "./shelf-list";
@@ -332,6 +334,7 @@ function TopicShelf(props: {
   const [onDevice, setOnDevice] = useState<ReadonlySet<string> | null>(null);
   const [can, setCan] = useState<FetchAbility>({ configured: false, signedIn: false });
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [importing, setImporting] = useState(false);
   // Bumped when a download puts a book's bytes here: the cover of a book that
   // was in the cloud could not be rendered before, and nothing about the files
@@ -427,20 +430,22 @@ function TopicShelf(props: {
       if (action.kind === "open") return props.onOpenBook(opened);
       if (action.kind === "lesson") return props.onOpenLesson(opened);
       setDownloading(action.bookId);
+      setProgress(null);
       try {
-        await fetchBook(action.bookId);
+        await fetchBook(action.bookId, (received, total) => setProgress({ received, total }));
         await readOnDevice();
         setCoverRevision((n) => n + 1);
         const door = action.then === "lesson" ? props.onOpenLesson : props.onOpenBook;
         door({ ...opened, bookId: action.bookId });
       } catch (e) {
         console.warn("failed to download the book", e);
-        props.onSay(e instanceof Error ? e.message : t("phone.shelf.downloadFailed"));
+        props.onSay(downloadFailureLine(e));
       } finally {
         setDownloading(null);
+        setProgress(null);
       }
     },
-    [can, onDevice, props, readOnDevice, t, topic.id],
+    [can, onDevice, props, readOnDevice, topic.id],
   );
 
   const importBook = useCallback(async (): Promise<void> => {
@@ -512,7 +517,7 @@ function TopicShelf(props: {
                           </span>
                         )}
                         <span className="truncate">
-                          {materialNote(m, downloading === m.bookId) ??
+                          {materialNote(m, downloading === m.bookId, progress) ??
                             (m.format === "pdf" ? (lessonNotes[m.bookId as string] ?? "") : "")}
                         </span>
                       </span>
@@ -528,7 +533,7 @@ function TopicShelf(props: {
                     <button className={ROW_NAME} onClick={() => void tap(m)}>
                       <span className="min-w-0 flex-1 truncate">{m.title}</span>
                       <span className="flex-none text-[12px] text-faint-foreground">
-                        {materialNote(m, downloading === m.bookId) ?? m.line}
+                        {materialNote(m, downloading === m.bookId, progress) ?? m.line}
                       </span>
                     </button>
                   </li>

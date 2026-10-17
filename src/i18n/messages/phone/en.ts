@@ -78,6 +78,7 @@ export default {
   "shelf.nothingFiled": "Nothing filed here yet.",
   "shelf.lessonBadge": "Lesson",
   "shelf.downloadFailed": "This book could not be downloaded",
+  "shelf.downloadNetworkFailed": "The network dropped during the download. Tap the book again to continue where it stopped.",
   "shelf.importFailed": "This book could not be imported",
 
   // ---- shelf-list.ts: what a card says about where its bytes are.
@@ -86,6 +87,7 @@ export default {
   "shelfList.notImported": "The desk has not imported this file yet, so there is nothing to get",
   "shelfList.notFiledYet": "This book has not finished syncing to this device yet",
   "shelfList.downloading": "Downloading…",
+  "shelfList.downloadingPercent": "Downloading… {percent}%",
   "shelfList.notImportedShort": "Not imported",
   "shelfList.inCloud": "In the cloud",
   "shelfList.notSyncedYet": "Not synced yet",

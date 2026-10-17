@@ -69,6 +69,7 @@ export default {
   "shelf.nothingFiled": "Hier ist noch nichts abgelegt.",
   "shelf.lessonBadge": "Lektion",
   "shelf.downloadFailed": "Dieses Buch konnte nicht heruntergeladen werden",
+  "shelf.downloadNetworkFailed": "Beim Herunterladen ist die Verbindung abgebrochen. Tippe noch einmal auf das Buch, um dort weiterzumachen, wo es aufgehört hat.",
   "shelf.importFailed": "Dieses Buch konnte nicht importiert werden",
 
   "shelfList.notConfigured": "Für diesen Build ist kein Google-Konto eingerichtet, das Buch kann nicht heruntergeladen werden",
@@ -76,6 +77,7 @@ export default {
   "shelfList.notImported": "Der Desktop hat diese Datei noch nicht importiert, es gibt also nichts zu holen",
   "shelfList.notFiledYet": "Dieses Buch ist noch nicht fertig mit diesem Gerät synchronisiert",
   "shelfList.downloading": "Wird heruntergeladen…",
+  "shelfList.downloadingPercent": "Wird heruntergeladen… {percent} %",
   "shelfList.notImportedShort": "Nicht importiert",
   "shelfList.inCloud": "In der Cloud",
   "shelfList.notSyncedYet": "Noch nicht synchronisiert",

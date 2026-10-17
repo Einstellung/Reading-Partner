@@ -369,14 +369,19 @@ export const NO_ACCOUNT_FOR_BOOK = "Sign in to your account to download this boo
  * The phone's books channel is off, so nothing mirrors a book onto it; this is
  * how the one book the reader tapped gets here. Through the engine, which
  * serialises it against a pass: the channel carries one blob at a time.
+ * `onProgress` hears bytes received against the book's size. A download that
+ * gives up partway is held in memory, and asking again continues it.
  */
-export async function fetchBook(hash: string): Promise<void> {
+export async function fetchBook(
+  hash: string,
+  onProgress?: (received: number, total: number) => void,
+): Promise<void> {
   if (!signedIn || !isGoogleConfigured()) throw new Error(NO_ACCOUNT_FOR_BOOK);
   // A deleted book is not brought back by asking for it: the blob may still be
   // in Drive for a while after the deletion, and a copy pulled now would be an
   // orphan the next pass cannot see (docs/50).
   if (isDeleted(await readDeletions(), "book", hash)) throw new Error(DELETED_BOOK);
-  await ensureEngine().fetchBook(hash);
+  await ensureEngine().fetchBook(hash, onProgress);
 }
 
 export const DELETED_BOOK = "This book was deleted";

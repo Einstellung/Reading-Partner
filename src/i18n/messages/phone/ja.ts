@@ -65,6 +65,7 @@ export default {
   "shelf.nothingFiled": "ここにはまだ何もありません。",
   "shelf.lessonBadge": "レッスン",
   "shelf.downloadFailed": "この本をダウンロードできませんでした",
+  "shelf.downloadNetworkFailed": "ネットワークが途切れ、ダウンロードが止まりました。もう一度この本をタップすると、止まったところから再開します。",
   "shelf.importFailed": "この本をインポートできませんでした",
 
   "shelfList.notConfigured": "このビルドにはGoogleアカウントが設定されていないため、本をダウンロードできません",
@@ -72,6 +73,7 @@ export default {
   "shelfList.notImported": "デスクでこのファイルがまだインポートされていないため、取得できるものがありません",
   "shelfList.notFiledYet": "この本はまだこのデバイスへの同期が完了していません",
   "shelfList.downloading": "ダウンロード中…",
+  "shelfList.downloadingPercent": "ダウンロード中… {percent}%",
   "shelfList.notImportedShort": "未インポート",
   "shelfList.inCloud": "クラウド上",
   "shelfList.notSyncedYet": "未同期",

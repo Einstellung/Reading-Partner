@@ -84,6 +84,7 @@ export default {
   "shelf.nothingFiled": "Здесь пока ничего нет.",
   "shelf.lessonBadge": "Урок",
   "shelf.downloadFailed": "Не удалось скачать эту книгу",
+  "shelf.downloadNetworkFailed": "Соединение прервалось во время загрузки. Нажмите на книгу ещё раз, чтобы продолжить с того же места.",
   "shelf.importFailed": "Не удалось импортировать эту книгу",
 
   "shelfList.notConfigured": "В этой сборке не настроен аккаунт Google, поэтому книгу нельзя скачать",
@@ -91,6 +92,7 @@ export default {
   "shelfList.notImported": "Компьютер ещё не импортировал этот файл, поэтому брать пока нечего",
   "shelfList.notFiledYet": "Эта книга ещё не завершила синхронизацию с этим устройством",
   "shelfList.downloading": "Скачивание…",
+  "shelfList.downloadingPercent": "Скачивание… {percent}%",
   "shelfList.notImportedShort": "Не импортировано",
   "shelfList.inCloud": "В облаке",
   "shelfList.notSyncedYet": "Ещё не синхронизировано",
