@@ -14,6 +14,7 @@
 //     entry is promoted, so an issue never opens on Notes alone;
 //   - a topic's first look (kind "first") puts its panorama in the Annex.
 
+import { SOURCE_NAME } from "../topic-search/pace";
 import type { TopicSearchResult, TopicSearchResultItem } from "../topic-search/result-types";
 
 /** Entries in the body of one issue (initial value). */
@@ -53,6 +54,8 @@ export interface IssuePlan {
   annex: PlannedAnnex[];
   topics: { searchId: string; name: string }[];
   results: string[];
+  /** A split first look's first part (topic-search/pace.ts): the slow sources still being read, by topic. */
+  awaiting: { searchId: string; topic: string; sources: string[] }[];
 }
 
 function written(item: TopicSearchResultItem): boolean {
@@ -130,5 +133,8 @@ export function planIssue(results: readonly TopicSearchResult[], topics: readonl
   const topicList = usable
     .filter((r) => !seen.has(r.searchId) && seen.add(r.searchId))
     .map((r) => ({ searchId: r.searchId, name: topicOf.get(r.searchId)?.name ?? r.name }));
-  return { entries, notes, annex, topics: topicList, results: usable.map((r) => r.id) };
+  const awaiting = usable
+    .filter((r) => r.awaiting?.length)
+    .map((r) => ({ searchId: r.searchId, topic: topicOf.get(r.searchId)?.name ?? r.name, sources: r.awaiting!.map((s) => SOURCE_NAME[s] ?? s) }));
+  return { entries, notes, annex, topics: topicList, results: usable.map((r) => r.id), awaiting };
 }

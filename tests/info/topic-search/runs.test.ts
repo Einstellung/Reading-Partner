@@ -12,6 +12,7 @@ import {
   encodeBrief,
   NO_BUILDER,
   parseBrief,
+  READ_LATER,
   searchLines,
   topicSearchRunKey,
   topicSearchTask,
@@ -24,10 +25,12 @@ import {
   createStateStore,
   emptyState,
   loadArxivRead,
+  loadFirstPart,
   nightLimits,
   permalinkBudget,
   progressLog,
   saveArxivRead,
+  saveFirstPart,
   spendNight,
   takePermalink,
   type StateFs,
@@ -235,6 +238,8 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
     searchArxiv: async () => [],
     saveArxiv: (dir, read) => saveArxivRead(fs, dir, read),
     loadArxiv: (dir) => loadArxivRead(fs, dir),
+    saveFirstPart: (dir, part) => saveFirstPart(fs, dir, part),
+    loadFirstPart: (dir) => loadFirstPart(fs, dir),
     memory: store.reader,
     nightLimits: async (night) => nightLimits((await store.load()).night, night),
     spendNight: async (night, x) => void (await store.update((s) => ({ ...s, night: spendNight(s.night, night, x) }))),
@@ -274,16 +279,22 @@ async function runTask(deps: TopicSearchRunDeps, input: { runId: string; brief: 
   }
 }
 
-test("a first run reads, builds, hands its result to the brief and lets the lock go", async () => {
+test("a first run delivers its first part, then reads X and adds to it: the brief is told twice, the lock taken once", async () => {
   const { deps, trace } = fakeDeps();
   const outcome = await runTask(deps, { runId: "r-1", brief: { searchId: "ts-0000aaaa", kind: "first", night: null } });
   expect(outcome.status).toBe("completed");
   const result = (outcome as { result: TopicSearchRunResult }).result;
-  expect(result).toMatchObject({ status: "delivered", itemCount: 3 });
+  // Both parts' items: the run's outcome is the whole file.
+  expect(result).toMatchObject({ status: "delivered", itemCount: 6 });
   expect(result.x?.status).toBe("unavailable");
   expect(trace.opened).toBe(1);
-  expect(trace.built).toBe(1);
-  expect(trace.closed).toEqual([{ searchId: "ts-0000aaaa", kind: "first", night: null, resultFile: "topic-search-ts-0000aaaa-2026-10-14.json" }]);
+  expect(trace.built).toBe(2);
+  const file = "topic-search-ts-0000aaaa-2026-10-14.json";
+  expect(trace.closed).toEqual([
+    { searchId: "ts-0000aaaa", kind: "first", night: null, resultFile: file },
+    // The slow part is told as what a retry adds: an issue of its own, `first:<id>#<runId>`.
+    { searchId: "ts-0000aaaa", kind: "retry", night: null, resultFile: file },
+  ]);
   expect(trace.ran.length).toBe(1);
   expect(trace.locks).toEqual({ taken: 1, released: 1 });
   expect(trace.stopped).toEqual([]);
@@ -293,7 +304,7 @@ test("while it reads X a run reports counts off its progress file, so the synced
   const said: string[] = [];
   const { deps } = fakeDeps({ report: (_id, text) => void said.push(text) });
   await runTask(deps, { runId: "r-rep", brief: { searchId: "ts-0000aaaa", kind: "first", night: null } });
-  const reading = said.filter((s) => s.startsWith("reading X: "));
+  const reading = said.filter((s) => s.startsWith("first part delivered; reading X: "));
   expect(reading.length).toBeGreaterThan(0);
   expect(reading[reading.length - 1]).toContain("0 screens read, 0 distinct posts found");
 });
@@ -375,6 +386,9 @@ function withArxiv(over: Partial<TopicSearch> = {}): TopicSearch {
 }
 
 const FIRST_LOOK: TopicSearchBrief = { searchId: "ts-0000aaaa", kind: "first", night: null };
+/** A run that reads X and arXiv side by side: a retry of both (a first look reads arXiv first, pace.ts). */
+const BOTH: TopicSearchBrief = { searchId: "ts-0000aaaa", kind: "retry", night: null, n: 1 };
+const READ_BOTH = { retryPlan: async () => ({ x: ["q1", "q2"], arxiv: ["q1", "q2"] }) };
 
 const paper = (id: string): InfoItem => ({ id: `arxiv-${id}`, source: "arxiv", sourceName: "arXiv", title: `Paper ${id}`, url: `https://arxiv.org/abs/${id}`, publishedAt: "" });
 /** Three papers a request, so every ladder stops at its first step. */
@@ -410,6 +424,7 @@ test("arXiv is searched while X still waits in the lane, and the run's line says
   const searched: string[] = [];
   const { seen, builder } = capturing();
   const { deps, trace, fs } = fakeDeps({
+    ...READ_BOTH,
     search: withArxiv(),
     builder: () => builder,
     searchArxiv: async (text) => (searched.push(text), three(text)),
@@ -420,7 +435,7 @@ test("arXiv is searched while X still waits in the lane, and the run's line says
     },
     report: (_id, text) => void said.push(text),
   });
-  const running = runTask(deps, { runId: "r-a1", brief: FIRST_LOOK });
+  const running = runTask(deps, { runId: "r-a1", brief: BOTH });
   await until(() => arxivOnFile(fs, "r-a1")?.done === true);
   expect(entered).toBe(false);
   expect(trace.opened).toBe(0);
@@ -446,6 +461,7 @@ test("an X read that halts early waits for arXiv, and the build has both", async
   const { seen, builder } = capturing();
   const halted: XReadResult = { ...unread("halted", "X said stop"), halt: { kind: "rate-limited", detail: "Rate limit exceeded" } };
   const { deps, fs } = fakeDeps({
+    ...READ_BOTH,
     search: withArxiv(),
     builder: () => builder,
     searchArxiv: async (text) => {
@@ -455,7 +471,7 @@ test("an X read that halts early waits for arXiv, and the build has both", async
     lane: async () => halted as never,
     readClean: async () => void cleaned++,
   });
-  const running = runTask(deps, { runId: "r-b1", brief: FIRST_LOOK });
+  const running = runTask(deps, { runId: "r-b1", brief: BOTH });
   await until(() => fs.files.has("runs/r-b1/x-read.json"));
   expect(arxivOnFile(fs, "r-b1")).toMatchObject({ done: false, found: [] });
   expect(seen.length).toBe(0);
@@ -489,12 +505,13 @@ test("arXiv refused for its rate limit does not stop X, and sends one request pe
 
 test("a half that throws lets the other finish and save before the run fails", async () => {
   const brokenArxiv = fakeDeps({
+    ...READ_BOTH,
     search: withArxiv(),
     saveArxiv: async () => {
       throw new Error("disk full");
     },
   });
-  const a = await runTask(brokenArxiv.deps, { runId: "r-d1", brief: FIRST_LOOK });
+  const a = await runTask(brokenArxiv.deps, { runId: "r-d1", brief: BOTH });
   expect(a).toMatchObject({ status: "failed", error: { message: "disk full" } });
   expect(brokenArxiv.trace.opened).toBe(1);
   expect(brokenArxiv.fs.files.has("runs/r-d1/x-read.json")).toBe(true);
@@ -502,13 +519,14 @@ test("a half that throws lets the other finish and save before the run fails", a
   expect(brokenArxiv.trace.locks).toEqual({ taken: 1, released: 1 });
 
   const brokenX = fakeDeps({
+    ...READ_BOTH,
     search: withArxiv(),
     searchArxiv: async (text) => three(text),
     lane: async () => {
       throw new Error("the browse window crashed");
     },
   });
-  const b = await runTask(brokenX.deps, { runId: "r-d2", brief: FIRST_LOOK });
+  const b = await runTask(brokenX.deps, { runId: "r-d2", brief: BOTH });
   expect(b).toMatchObject({ status: "failed", error: { message: "the browse window crashed" } });
   expect(arxivOnFile(brokenX.fs, "r-d2")).toMatchObject({ done: true, planned: ["q1", "q2"] });
 });
@@ -517,6 +535,7 @@ test("the run's signal stops arXiv too, and the run asked again searches only wh
   const stop = new AbortController();
   const searched: string[] = [];
   const { deps, trace, fs } = fakeDeps({
+    ...READ_BOTH,
     search: withArxiv(),
     searchArxiv: (text, _window, signal) => {
       searched.push(text);
@@ -525,14 +544,14 @@ test("the run's signal stops arXiv too, and the run asked again searches only wh
       return new Promise((_, reject) => signal.addEventListener("abort", () => reject(new AbortError()), { once: true }));
     },
   });
-  const running = runTask(deps, { runId: "r-e1", brief: FIRST_LOOK }, stop.signal);
+  const running = runTask(deps, { runId: "r-e1", brief: BOTH }, stop.signal);
   await until(() => searched.length === 2 && fs.files.has("runs/r-e1/x-read.json"));
   stop.abort();
   expect((await running).status).toBe("aborted");
   expect(arxivOnFile(fs, "r-e1")).toMatchObject({ done: false, found: [{ query: "q1" }] });
 
   deps.searchArxiv = async (text) => (searched.push(text), three(text));
-  const again = await runTask(deps, { runId: "r-e1", brief: FIRST_LOOK });
+  const again = await runTask(deps, { runId: "r-e1", brief: BOTH });
   expect((again as { result: TopicSearchRunResult }).result.status).toBe("delivered");
   expect(searched).toEqual(["protein design", "materials discovery", "materials discovery"]);
   // X is on file too: not opened again.
@@ -569,6 +588,111 @@ test("arXiv runs when X is not read: a signed-out first look, and a retry with o
   expect(retried.seen[0].retry).toMatchObject({ arxiv: ["q2"] });
   // A retry reads a year back, as the first look does.
   expect(arxivOnFile(b.fs, "r-f2")?.window).toEqual({ since: "2025-10-14", until: "2026-10-14" });
+});
+
+// --- a first look in two parts (pace.ts) ----------------------------------------
+
+test("a first look builds and delivers arXiv before X is even in the lane, then adds X to the same file", async () => {
+  const gate = deferred();
+  let entered = false;
+  const said: string[] = [];
+  const searched: string[] = [];
+  const { seen, builder } = capturing();
+  const { deps, trace, fs } = fakeDeps({
+    search: withArxiv(),
+    builder: () => builder,
+    searchArxiv: async (text) => (searched.push(text), three(text)),
+    lane: async (work) => {
+      entered = true;
+      await gate.promise;
+      return work();
+    },
+    report: (_id, text) => void said.push(text),
+  });
+  const running = runTask(deps, { runId: "r-s1", brief: FIRST_LOOK });
+  await until(() => entered);
+  // X still waits; the first part is built, delivered and told to the brief.
+  const file = "topic-search-ts-0000aaaa-2026-10-14.json";
+  expect(trace.closed).toEqual([{ searchId: "ts-0000aaaa", kind: "first", night: null, resultFile: file }]);
+  expect(trace.opened).toBe(0);
+  expect(seen.length).toBe(1);
+  expect(seen[0]).toMatchObject({ kind: "first", later: ["x"], retry: null });
+  expect(seen[0].x).toMatchObject({ status: "unavailable", why: READ_LATER, posts: [] });
+  expect(seen[0].arxiv.map((f) => f.query)).toEqual(["q1", "q2"]);
+  expect(await loadFirstPart(fs, "runs/r-s1")).toMatchObject({ status: "delivered", resultFile: file, itemCount: 2 });
+  expect(said).toContain("arXiv done: 2 queries searched (2 direct), 6 papers; X: read after the first part");
+  expect(said[said.length - 1]).toBe("first part delivered; waiting to read X");
+
+  gate.resolve();
+  const outcome = await running;
+  expect((outcome as { result: TopicSearchRunResult }).result).toMatchObject({ status: "delivered", resultFile: file, itemCount: 4 });
+  // The slow part: X alone, merged the way a retry merges, over every query it read.
+  expect(seen[1]).toMatchObject({ kind: "first", retry: { runId: "r-s1", x: ["q1", "q2"], arxiv: [], part: "slow" } });
+  expect(seen[1].arxiv).toEqual([]);
+  expect(seen[1].later).toBeUndefined();
+  expect(trace.closed[1]).toEqual({ searchId: "ts-0000aaaa", kind: "retry", night: null, resultFile: file });
+  expect(trace.opened).toBe(1);
+  expect(searched.length).toBe(2);
+  expect(trace.ran.length).toBe(1);
+});
+
+test("X signed out when its part starts: the first part stands, the slow part reads nothing and still builds", async () => {
+  const { seen, builder } = capturing();
+  const { deps, trace } = fakeDeps({ search: withArxiv(), builder: () => builder, searchArxiv: async (text) => three(text), checkSession: async () => "signed-out" });
+  const outcome = await runTask(deps, { runId: "r-s2", brief: FIRST_LOOK });
+  expect((outcome as { result: TopicSearchRunResult }).result).toMatchObject({ status: "delivered", x: { status: "unavailable", why: "signed out of X" } });
+  expect(trace.halts).toEqual(["signed-out"]);
+  expect(trace.opened + trace.locks.taken).toBe(0);
+  // Built anyway, so the file stops awaiting X and the source health says X failed (retry.ts plans it again).
+  expect(seen.map((s) => s.retry?.part ?? null)).toEqual([null, "slow"]);
+  expect(seen[1].x).toMatchObject({ status: "unavailable", why: "signed out of X" });
+  expect(trace.closed.map((c) => c.kind)).toEqual(["first", "retry"]);
+});
+
+test("a first look tried again after X failed goes straight on to X: nothing built or told twice", async () => {
+  const searched: string[] = [];
+  const { seen, builder } = capturing();
+  const { deps, trace } = fakeDeps({
+    search: withArxiv(),
+    builder: () => builder,
+    searchArxiv: async (text) => (searched.push(text), three(text)),
+    lane: async () => {
+      throw new Error("the browse window crashed");
+    },
+  });
+  const failed = await runTask(deps, { runId: "r-s3", brief: FIRST_LOOK });
+  expect(failed).toMatchObject({ status: "failed", error: { message: "the browse window crashed" } });
+  expect(trace.closed.map((c) => c.kind)).toEqual(["first"]);
+  expect(seen.length).toBe(1);
+
+  // The runner tries a failed run again: a new task under the same run id, from `open`.
+  deps.lane = (work) => work();
+  const again = await runTask(deps, { runId: "r-s3", brief: FIRST_LOOK });
+  expect((again as { result: TopicSearchRunResult }).result).toMatchObject({ status: "delivered", itemCount: 4 });
+  expect(trace.closed.map((c) => c.kind)).toEqual(["first", "retry"]);
+  expect(seen.map((s) => s.retry?.part ?? null)).toEqual([null, "slow"]);
+  expect(searched.length).toBe(2);
+  expect(trace.ran.length).toBe(1);
+});
+
+test("a once-only search stopped after its first part still has X read", async () => {
+  const { seen, builder } = capturing();
+  let the = search({ once: true });
+  const { deps, trace } = fakeDeps({
+    builder: () => builder,
+    loadSearch: async () => the,
+    stopOnce: async () => void (the = { ...the, status: "stopped" }),
+    lane: async () => {
+      throw new Error("the browse window crashed");
+    },
+  });
+  await runTask(deps, { runId: "r-s4", brief: FIRST_LOOK });
+  expect(the.status).toBe("stopped");
+  deps.lane = (work) => work();
+  const again = await runTask(deps, { runId: "r-s4", brief: FIRST_LOOK });
+  expect((again as { result: TopicSearchRunResult }).result.status).toBe("delivered");
+  expect(seen.map((s) => s.retry?.part ?? null)).toEqual([null, "slow"]);
+  expect(trace.opened).toBe(1);
 });
 
 test("a night's run searches arXiv from the search's last run", async () => {

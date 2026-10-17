@@ -25,8 +25,10 @@ import { topicSearchTask, type TopicSearchRunDeps, type TopicSearchRunResult } f
 import {
   createStateStore,
   loadArxivRead,
+  loadFirstPart,
   loadRead,
   saveArxivRead,
+  saveFirstPart,
   nightLimits,
   permalinkBudget,
   progressLog,
@@ -45,6 +47,8 @@ import { buildSectionedEpub } from "../../../src/workshop/bindery/build-article"
 import { nightEndAt } from "../../../src/info/topic-search/nightly";
 import { planRetry } from "../../../src/info/topic-search/retry";
 import type { TopicSearchBrief } from "../../../src/info/topic-search/run";
+import type { InfoItem } from "../../../src/info/sources/item";
+import { assembleIssue } from "../../../src/info/issue/assemble";
 
 const FIXTURE = readFileSync(join(import.meta.dir, "../x/fixtures/search-live-ai-for-science.html"), "utf8");
 
@@ -150,7 +154,7 @@ const SEARCH: TopicSearch = {
 
 const HEALTH_FILE = "info-source-health.json";
 
-function world() {
+function world(opts: { papers?: InfoItem[] } = {}) {
   const fs = memFs();
   const store = createStateStore(fs, "state.json");
   let now = local(2026, 10, 14, 14);
@@ -206,10 +210,12 @@ function world() {
     loadRead: (dir) => loadRead(fs, dir),
     searchArxiv: async () => {
       arxivCalls++;
-      return [];
+      return opts.papers ?? [];
     },
     saveArxiv: (dir, read) => saveArxivRead(fs, dir, read),
     loadArxiv: (dir) => loadArxivRead(fs, dir),
+    saveFirstPart: (dir, part) => saveFirstPart(fs, dir, part),
+    loadFirstPart: (dir) => loadFirstPart(fs, dir),
     memory: store.reader,
     nightLimits: async (night) => nightLimits((await store.load()).night, night),
     spendNight: async (night, x) => void (await store.update((s) => ({ ...s, night: spendNight(s.night, night, x) }))),
@@ -249,6 +255,7 @@ function world() {
     fs,
     store,
     deps,
+    issueDeps,
     box,
     library,
     opened,
@@ -279,7 +286,7 @@ const xOpens = (urls: string[]) => urls.filter((u) => new URL(u).hostname === "x
 describe("a first run, then the next night", () => {
   const w = world();
 
-  test("the first run reads X, builds, writes the result and its own brief issue goes in the box", async () => {
+  test("the first run reads X after an empty arXiv part, builds, writes the result and X's issue goes in the box", async () => {
     const result = await run(w, "r-first", { searchId: SEARCH.id, kind: "first", night: null });
     expect(result.status).toBe("delivered");
     expect(result.x?.status).toBe("done");
@@ -291,11 +298,14 @@ describe("a first run, then the next night", () => {
     expect(file.items.length).toBe(result.itemCount);
     expect(file.items.length).toBeGreaterThan(0);
     expect(file.runDir).toBe("topic-search-runs/r-first");
+    // arXiv found nothing, so the first part had no issue; everything came from X, the slow part.
+    expect(file.awaiting).toBeUndefined();
+    expect(file.retries?.map((r) => [r.runId, r.part, r.items.length])).toEqual([["r-first", "slow", file.items.length]]);
     expect(w.box).toEqual([{ id: "box-1", kind: ISSUE_BOX_KIND, cover: `Oct 14 brief · ${file.items.length} items`, body: "book-1", date: "2026-10-14" }]);
     expect(w.library.get("book-1")?.fileName).toBe("Daily Brief 2026-10-14 No. 1.epub");
     const shelf = parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null);
     expect(shelf.issues.map((i) => `${i.key} ${i.number} ${i.bookId} ${i.results.join(",")}`)).toEqual([
-      `first:${SEARCH.id} 1 book-1 ${file.id}`,
+      `first:${SEARCH.id}#r-first 1 book-1 ${file.id}`,
     ]);
     expect(w.search().lastRunAt).toBe(local(2026, 10, 14, 14));
   });
@@ -346,7 +356,7 @@ describe("a first run, then the next night", () => {
     expect(w.box.map((b) => b.id)).toEqual(["box-1", "box-2"]);
     expect(w.box[1].cover).toMatch(/^Oct 15 brief · \d+ items?$/);
     expect(parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null).issues.map((i) => `${i.key} ${i.number}`)).toEqual([
-      `first:${SEARCH.id} 1`,
+      `first:${SEARCH.id}#r-first 1`,
       "night:2026-10-15 2",
     ]);
 
@@ -396,7 +406,11 @@ describe("a first run signed out of X, then a retry after signing in", () => {
     expect(file.kind).toBe("first");
     expect(file.runDir).toBe("topic-search-runs/r-first");
     expect(file.items.length).toBe(result.itemCount);
-    expect(file.retries?.map((r) => [r.runId, r.items.length])).toEqual([["r-retry", file.items.length]]);
+    // The first run's X part read nothing (signed out) and added nothing; the retry added everything.
+    expect(file.retries?.map((r) => [r.runId, r.items.length])).toEqual([
+      ["r-first", 0],
+      ["r-retry", file.items.length],
+    ]);
     expect(new Set(file.materials.map((m) => m.id)).size).toBe(file.materials.length);
     // Material bodies go where the file says they are.
     for (const m of file.materials) expect(w.fs.files.has(`${file.runDir}/${m.body}`)).toBe(true);
@@ -416,6 +430,72 @@ describe("a first run signed out of X, then a retry after signing in", () => {
     expect(planRetry(w.search(), health())).toEqual({ x: [], arxiv: [] });
     const result = await run(w, "r-retry-2", { searchId: SEARCH.id, kind: "retry", night: null, n: 2 });
     expect(result).toMatchObject({ status: "skipped", why: "nothing the first look missed is left to read again" });
+  });
+});
+
+describe("a first look in two parts: arXiv first, then X", () => {
+  const paper = (id: string, title: string): InfoItem => ({
+    id: `arxiv-${id}`,
+    source: "arxiv",
+    sourceName: "arXiv",
+    sourceKey: id,
+    title,
+    url: `https://arxiv.org/abs/${id}`,
+    publishedAt: "2026-10-10",
+    summary: `${title}. We show how AI speeds up science in the lab.`,
+    authors: ["A. Author"],
+  });
+  const w = world({ papers: [paper("2610.00001", "AI for science in an autonomous materials lab"), paper("2610.00002", "Protein science with diffusion models")] });
+  const firstFile = "topic-search-ts-0a1b2c3d-2026-10-14.json";
+  const shelfKeys = () => parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null).issues.map((i) => i.key);
+  let atLane: { shelf: string[]; awaiting: unknown; items: number; box: number } | null = null;
+  w.deps.lane = async (work) => {
+    const file = parseResultFile(w.fs.files.get(firstFile) ?? "");
+    atLane = { shelf: shelfKeys(), awaiting: file?.awaiting, items: file?.items.length ?? 0, box: w.box.length };
+    return work();
+  };
+  let result: TopicSearchRunResult;
+
+  test("the first part is filed, says X is still being read, and its issue is out before X is opened", async () => {
+    result = await run(w, "r-first", { searchId: SEARCH.id, kind: "first", night: null });
+    expect(atLane).not.toBeNull();
+    expect(atLane!.shelf).toEqual([`first:${SEARCH.id}`]);
+    expect(atLane!.awaiting).toEqual(["x"]);
+    expect(atLane!.items).toBeGreaterThan(0);
+    expect(atLane!.box).toBe(1);
+  });
+
+  test("X's part is added to the same file, with an issue of its own holding only what it added", async () => {
+    expect(result.status).toBe("delivered");
+    expect(result.resultFile).toBe(firstFile);
+    const file = parseResultFile(w.fs.files.get(firstFile)!)!;
+    expect(file.awaiting).toBeUndefined();
+    const slow = file.retries?.find((r) => r.runId === "r-first");
+    expect(slow?.part).toBe("slow");
+    expect(slow!.items.length).toBeGreaterThan(0);
+    expect(file.items.length).toBe(atLane!.items + slow!.items.length);
+    expect(result.itemCount).toBe(file.items.length);
+    // Numbered after the first part's.
+    expect(slow!.items[0]).toBe(`E${atLane!.items + 1}`);
+    expect([...w.fs.files.keys()].filter((k) => k.startsWith("topic-search-ts-0a1b2c3d-"))).toEqual([firstFile]);
+    const shelf = parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null);
+    expect(shelf.issues.map((i) => [i.key, i.items])).toEqual([
+      [`first:${SEARCH.id}`, atLane!.items],
+      [`first:${SEARCH.id}#r-first`, slow!.items.length],
+    ]);
+    expect(w.box.length).toBe(2);
+    // Both sources' health is on the collector's state file.
+    const health = JSON.parse(w.fs.files.get(HEALTH_FILE)!) as Record<string, SourceHealth>;
+    expect(health["topic-search:ts-0a1b2c3d:q1:x"]?.topicSearch?.status).toBe("ok");
+    expect(health["topic-search:ts-0a1b2c3d:q1:arxiv"]?.topicSearch?.status).toBe("ok");
+  });
+
+  test("the first look's issue assembled after the merge still holds only the first part", async () => {
+    const shelfBefore = w.fs.files.get(INFO_SHELF_FILE);
+    w.fs.files.set(INFO_SHELF_FILE, JSON.stringify({ ...parseShelf(shelfBefore ?? null), issues: [] }));
+    const made = await assembleIssue(w.issueDeps, `first:${SEARCH.id}`, "2026-10-14", [firstFile]);
+    expect(made.issue?.items).toBe(atLane!.items);
+    w.fs.files.set(INFO_SHELF_FILE, shelfBefore!);
   });
 });
 

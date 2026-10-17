@@ -194,7 +194,7 @@ test("on the collector, arXiv done while X is still being read says so, query by
   const { d } = deps({ arxivRead: async () => done });
   const text = await backgroundStatusText(input([tsRun(FIRST)], d), { about: "Mechanism discovery" });
   expect(text).toContain("X: query 2 of 2, 3 screens read, 4 distinct posts found so far.");
-  expect(text).toContain("arXiv done: 1 query searched (1 widened), 2 papers; the result is built once X has been read.");
+  expect(text).toContain("arXiv done: 1 query searched (1 widened), 2 papers; the first part is built from it without waiting for X.");
   expect(text).toContain('arXiv per query: "autonomous experiment" widened, 2 papers.');
 
   const limited: ArxivRead = {
@@ -250,7 +250,28 @@ test("on a phone, a done run gives the outcomes the computer's claim last carrie
   expect(text).toContain('as "kestrel" last reported 20 min ago (from the last run that read each query)');
   expect(text).toContain('arXiv per query: "autonomous experiment" widened, 12 read, 5 new.');
   expect(text).toContain("Result: 2 items.");
-  expect(text).toContain("Brief issue: not on this device's shelf yet");
+  expect(text).toContain("Brief issue: none for the first part on this device's shelf (nothing new in it, or not synced yet); X's part is not on this device's shelf yet.");
+});
+
+test("a first look in two parts: the result says what X has yet to add, then what it added", () => {
+  const done = tsRun(FIRST, { id: "r-first", state: "done" });
+  const awaiting = result({ awaiting: ["x"], createdAt: NOW - MIN });
+  expect(resultLine(done, FIRST, [awaiting])).toContain("the run ended before X was added");
+  const running = tsRun(FIRST, { id: "r-first" });
+  expect(resultLine(running, FIRST, [awaiting])).toContain("first part delivered with 2 items; X is still being read");
+  const merged = result({
+    createdAt: NOW - MIN,
+    items: [{ id: "E1" }, { id: "E2" }, { id: "E3" }] as never,
+    retries: [{ runId: "r-first", part: "slow", at: NOW, items: ["E3"], overview: null, writeup: "model", questions: [], stats: {} as never }],
+  });
+  expect(resultLine(done, FIRST, [merged])).toContain("2 items in the first part, 1 more added once X was read");
+  const issues: ShelfIssue[] = [
+    { key: `first:${SEARCH.id}`, number: 12, date: "2026-10-16", topics: [{ searchId: SEARCH.id }] },
+    { key: `first:${SEARCH.id}#r-first`, number: 13, date: "2026-10-17", topics: [{ searchId: SEARCH.id }] },
+  ];
+  const line = issueLine(done, FIRST, issues, [merged]);
+  expect(line).toContain("No. 12");
+  expect(line).toContain("No. 13");
 });
 
 test("a queued run with no collector up says so, and X state comes from the last claim that said", async () => {

@@ -202,6 +202,10 @@ export function issueEpubInput(plan: IssuePlan, meta: IssueMeta): SectionedEpubI
   plan.annex.forEach((a, i) => {
     contents.push(`<p>${fill(locale, "info.issue.book.annexLine", {}, { link: link(sectionHref(annexAt + i), annexHeading(a.topic)) })}</p>`);
   });
+  // A first look's first part: the slow sources follow in an issue of their own.
+  for (const a of plan.awaiting) {
+    contents.push(`<p><small>${fill(locale, "info.issue.book.awaiting", { topic: a.topic, sources: a.sources.join(", ") })}</small></p>`);
+  }
   const sections: SectionedEpubInput["sections"] = [
     { heading: translate(locale, "info.issue.book.contents"), html: contents.join("\n") },
     ...plan.entries.map((p) => ({ heading: cut(p.item.title, HEADING_CHARS), html: entryHtml(p, locale) })),

@@ -45,12 +45,14 @@ import {
 import {
   createStateStore,
   loadArxivRead,
+  loadFirstPart,
   loadRead,
   nightLimits,
   permalinkBudget,
   progressLog,
   runDirOf,
   saveArxivRead,
+  saveFirstPart,
   saveRead,
   spendNight,
 } from "./run-state";
@@ -158,6 +160,8 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
     searchArxiv: searchArxivLive,
     saveArxiv: (dir, read) => saveArxivRead(appData, dir, read),
     loadArxiv: (dir) => loadArxivRead(appData, dir),
+    saveFirstPart: (dir, part) => saveFirstPart(appData, dir, part),
+    loadFirstPart: (dir) => loadFirstPart(appData, dir),
     memory: state.reader,
     nightLimits: async (night) => nightLimits((await state.load()).night, night),
     spendNight: async (night, x) => {

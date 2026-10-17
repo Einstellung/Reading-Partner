@@ -3,7 +3,9 @@
 // issue is assembled once every active search's run of that night has closed,
 // or at the night's end (04:40) from whatever closed by then. A first look
 // (kind "first") gets an issue of its own as soon as it closes, and so does what
-// a retry of it added (keyed `first:<search>#<run>`). A night where
+// a retry of it, or its own slow part, added (keyed `first:<search>#<run>`). A
+// split first look closes its first part early; that issue says which slow
+// sources are still being read (the file's `awaiting`). A night where
 // nothing is new gets no issue.
 //
 // Assembly: the plan (plan.ts), the document (render.ts), the EPUB, the
@@ -23,7 +25,7 @@ import type { Locale } from "../../i18n/locale";
 import { languageInstruction } from "../../platform/app/settings";
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
-import { parseResultFile, retryPart, type TopicSearchResult } from "../topic-search/result-types";
+import { firstPart, parseResultFile, retryPart, type TopicSearchResult } from "../topic-search/result-types";
 import { QUESTIONS_FILE, parseQuestionsFile } from "../topic-search/questions";
 import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type IssueOpeningRecord } from "./opening-record";
 import { planIssue, type IssuePlan, type IssueTopic, type PlannedItem } from "./plan";
@@ -68,7 +70,11 @@ export function parseIssueState(text: string | null): IssueState {
 
 export interface ClosedRun {
   searchId: string;
-  /** "retry": what a retry added to a first look's file (topic-search/retry.ts), an issue of its own. */
+  /**
+   * "retry": what was added to a first look's file afterwards, an issue of its
+   * own: a retry's (topic-search/retry.ts), or the first look's slow part
+   * (topic-search/pace.ts), under the first run's id.
+   */
   kind: "first" | "daily" | "retry";
   /** The night's anchor date, for a daily run. */
   night: string | null;
@@ -201,12 +207,14 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
     await deps.putBox(boxItem(existing, locale));
     return { key, issue: existing, supplements: 0 };
   }
-  // A retry's issue carries only what the retry added to the first look's file.
+  // A retry's issue carries only what the retry (or the first look's slow part) added to the first look's file;
+  // the first look's own issue only what it had before anything was added.
   const retryOf = key.startsWith("first:") && key.includes(RETRY_MARK) ? key.slice(key.indexOf(RETRY_MARK) + 1) : null;
+  const firstOnly = key.startsWith("first:") && retryOf === null;
   const results: TopicSearchResult[] = [];
   for (const f of files) {
     const r = parseResultFile((await deps.files.read(f)) ?? "");
-    const part = r && retryOf !== null && r.retries?.some((x) => x.runId === retryOf) ? retryPart(r, retryOf) : r;
+    const part = r && retryOf !== null && r.retries?.some((x) => x.runId === retryOf) ? retryPart(r, retryOf) : r && firstOnly ? firstPart(r) : r;
     if (part) results.push(part);
   }
   const plan = planIssue(results, await deps.topics());

@@ -129,6 +129,7 @@ export default {
   "cards.topicSearchJudgments": "How I read it",
   "cards.topicSearchEtaSoon": "A computer is on: first results in about half an hour.",
   "cards.topicSearchEtaTonight": "First results when a computer is on, by tonight at the latest.",
+  "cards.topicSearchSlowSources": "arXiv comes first. X is read slowly, the way a person browses, often for an hour or more; what it finds follows in a second brief.",
   "cards.topicSearchOnce": "Just this once: one first look, then it stops.",
 
   // --- The info shelf (InfoShelf.tsx, docs/info/88) ------------------------------
@@ -261,6 +262,7 @@ export default {
   "issue.book.annex": "Annex: {topic}",
   "issue.book.annexLine": "{link}, the panorama of this topic's first look.",
   "issue.book.notesLine": "{link}: {titles}",
+  "issue.book.awaiting": "{topic}: {sources} is still being read; what it finds comes in an issue of its own.",
   "issue.book.entryLine": "{link}: {summary}",
   "issue.book.noteHead": "{label}: {title}",
   "issue.book.unknown": "Not yet known.",

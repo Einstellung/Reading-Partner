@@ -16,6 +16,7 @@ import type { RunAbout, RunDescriber, RunView } from "../../legion/status/regist
 import type { SourceHealth } from "../sources/engine";
 import { X_SIGN_IN_URL } from "../sources/x-search";
 import { arxivProgressLine, type ArxivRead } from "./arxiv-read";
+import { sourceNames, sourcesOfPace, splitsFirstLook } from "./pace";
 import type { SourceHealthEntry, SourceHealthFile } from "./build-result";
 import type { XHaltRecord } from "./halt";
 import type { TopicSearchResult } from "./result-types";
@@ -103,9 +104,10 @@ export function healthLines(entries: readonly (Pick<SourceHealthEntry, "query" |
  * it got, and each searched query's ladder outcome and papers. arXiv runs beside
  * X, so it is usually done while X is still being read.
  */
-export function arxivLines(read: ArxivRead, search: TopicSearch | undefined, open: boolean): string[] {
+export function arxivLines(read: ArxivRead, search: TopicSearch | undefined, open: boolean, split = false): string[] {
   const head = arxivProgressLine(read);
-  const lines = [read.done && open && read.planned.length ? `${head}; the result is built once X has been read.` : `${head}.`];
+  const after = split ? "the first part is built from it without waiting for X" : "the result is built once X has been read";
+  const lines = [read.done && open && read.planned.length ? `${head}; ${after}.` : `${head}.`];
   if (read.found.length) {
     const each = read.found.map((f) => {
       const papers = `${f.items.length} paper${f.items.length === 1 ? "" : "s"}`;
@@ -142,15 +144,51 @@ export function resultLine(run: Run, brief: TopicSearchBrief, results: readonly 
   const mine = results
     .filter((r) => r.kind === brief.kind && (file ? r.id === file : r.createdAt >= startOf(run)))
     .sort((a, b) => b.createdAt - a.createdAt)[0];
-  if (!mine) return open ? "Result: not written yet; it is written when the build finishes." : "Result: no result file on this device (yet).";
-  if (mine.empty || mine.items.length === 0) return "Result: written, nothing new in it.";
-  const fromRetries = (mine.retries ?? []).reduce((n, r) => n + r.items.length, 0);
-  const own = mine.items.length - fromRetries;
-  return `Result: ${own} item${own === 1 ? "" : "s"}${fromRetries ? ` (and ${fromRetries} more added by retries)` : ""}.`;
+  const split = splitsFirstLook(brief.kind);
+  if (!mine) {
+    if (!open) return "Result: no result file on this device (yet).";
+    return split
+      ? `Result: not written yet; the first part (${sourceNames(sourcesOfPace("fast"))}) is written when its build finishes, before X is read.`
+      : "Result: not written yet; it is written when the build finishes.";
+  }
+  const items = (n: number) => `${n} item${n === 1 ? "" : "s"}`;
+  const slow = (mine.retries ?? []).find((r) => r.part === "slow" && r.runId === run.id);
+  const fromRetries = (mine.retries ?? []).filter((r) => r !== slow).reduce((n, r) => n + r.items.length, 0);
+  const own = mine.items.length - fromRetries - (slow?.items.length ?? 0);
+  const retried = fromRetries ? ` (and ${fromRetries} more added by retries)` : "";
+  if (mine.awaiting?.length) {
+    const what = sourceNames(mine.awaiting);
+    return open
+      ? `Result: first part delivered with ${items(own)}; ${what} is still being read, and what it finds is added to the same file.`
+      : `Result: first part delivered with ${items(own)}; the run ended before ${what} was added.`;
+  }
+  if (mine.empty || mine.items.length === 0) return slow ? "Result: written, nothing new in it, from either part." : "Result: written, nothing new in it.";
+  if (slow) return `Result: ${items(own)} in the first part, ${slow.items.length} more added once X was read${retried}.`;
+  return `Result: ${items(own)}${retried}.`;
 }
 
 export function issueLine(run: Run, brief: TopicSearchBrief, issues: readonly ShelfIssue[], results: readonly TopicSearchResult[]): string {
   const open = unfinished(run);
+  if (splitsFirstLook(brief.kind)) {
+    // Two issues: the first part's, and what the slow part added (keyed like a retry's).
+    const first = issues.find((i) => i.key === `first:${brief.searchId}`);
+    const later = issues.find((i) => i.key === `first:${brief.searchId}#${run.id}`);
+    const slow = sourceNames(sourcesOfPace("slow"));
+    const record = results.flatMap((r) => r.retries ?? []).find((x) => x.runId === run.id && x.part === "slow");
+    const head = first
+      ? `the first part is No. ${first.number} (${first.date}) on the shelf`
+      : open
+        ? "the first part's is made as soon as its build finishes"
+        : "none for the first part on this device's shelf (nothing new in it, or not synced yet)";
+    const tail = later
+      ? `${slow}'s part is No. ${later.number} (${later.date})`
+      : record && record.items.length === 0
+        ? `${slow}'s part added nothing, so it has none`
+        : open
+          ? `${slow}'s part gets one of its own once ${slow} has been read`
+          : `${slow}'s part is not on this device's shelf yet`;
+    return `Brief issue: ${head}; ${tail}.`;
+  }
   const key = brief.kind === "first" ? `first:${brief.searchId}` : brief.kind === "retry" ? `first:${brief.searchId}#${run.id}` : `night:${brief.night}`;
   const issue = issues.find((i) => i.key === key);
   if (issue) {
@@ -195,17 +233,17 @@ export function topicSearchDescriber(deps: TopicSearchStatusDeps): RunDescriber 
       const search = (await deps.searches()).find((s) => s.id === brief.searchId);
       const open = unfinished(run);
       const lines: string[] = [];
+      const split = splitsFirstLook(brief.kind);
       if (view.here) {
         const steps = await deps.steps(run.id);
         if (steps?.length) lines.push(`X: ${tallySteps(steps).line()}.`);
-        else if (run.state === "running") lines.push("X: nothing read yet on this device.");
+        else if (run.state === "running") lines.push(split ? "X: not started; it is read after the first part is delivered." : "X: nothing read yet on this device.");
         const health = await deps.runHealth(run.id);
+        // A split first look's slow part rewrites the run's health with X alone; arXiv's is then on its read file.
+        const arxiv = !health || !health.entries.some((e) => e.source === "arxiv") ? await deps.arxivRead(run.id) : null;
         if (health) lines.push(...healthLines(health.entries, search));
-        else {
-          const arxiv = await deps.arxivRead(run.id);
-          if (arxiv) lines.push(...arxivLines(arxiv, search, open));
-          else if (open) lines.push("arXiv: searched beside X while X is read; nothing on file yet.");
-        }
+        if (arxiv) lines.push(...arxivLines(arxiv, search, open && !health, split));
+        else if (!health && open) lines.push(split ? "arXiv: searched first; nothing on file yet." : "arXiv: searched beside X while X is read; nothing on file yet.");
       } else if (run.claimant) {
         const name = view.claimant?.deviceName ? `"${view.claimant.deviceName}"` : "the computer running it";
         if (open) {

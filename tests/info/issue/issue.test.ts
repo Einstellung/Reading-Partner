@@ -21,7 +21,7 @@ import { MAIN_MAX, planIssue } from "../../../src/info/issue/plan";
 import { issueBookName, issueCoverLine, issueEpubInput, longDate } from "../../../src/info/issue/render";
 import { INFO_SHELF_FILE, ISSUE_BOX_KIND, issueBookOfItem, parseShelf } from "../../../src/info/issue/types";
 import type { RegisteredMaterial } from "../../../src/info/dossier/registry";
-import type { TopicSearchResult, TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
+import { firstPart, mergeRetry, retryPart, type TopicSearchResult, type TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
 
 function material(id: string, url: string, reader: RegisteredMaterial["reader"]): RegisteredMaterial {
   return { id, url, canonicalUrl: url, title: `Original ${id}`, author: null, publishedAt: null, reader, facts: {}, hash: id, sections: [], body: `materials/${id}.json` };
@@ -246,5 +246,35 @@ describe("two topics' results become one issue", () => {
     const empty = result("ts-0000aaaa", "AI for science", "2026-10-16", "daily", []);
     w.files.set("empty.json", JSON.stringify(empty));
     expect((await assembleIssue(w.deps, "night:2026-10-16", "2026-10-16", ["empty.json"])).issue).toBeNull();
+  });
+});
+
+describe("a first look in two parts (topic-search/pace.ts)", () => {
+  const first = () =>
+    result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [item("E1", 80), item("E2", 70)], { awaiting: ["x"] });
+
+  test("the first part's issue says X is still being read and comes in an issue of its own", () => {
+    const plan = planIssue([first()], TOPICS)!;
+    expect(plan.awaiting).toEqual([{ searchId: "ts-0000aaaa", topic: "AI for science", sources: ["X"] }]);
+    const contents = issueEpubInput(plan, { number: 3, date: "2026-10-15", locale: "en" }).sections[0].html;
+    expect(contents).toContain("AI for science: X is still being read; what it finds comes in an issue of its own.");
+    const zh = issueEpubInput(plan, { number: 3, date: "2026-10-15", locale: "zh-CN" }).sections[0].html;
+    expect(zh).toContain("AI for science：X 还在读，读到的另出一期。");
+    expect(planIssue([result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [item("E1", 80)])], TOPICS)!.awaiting).toEqual([]);
+  });
+
+  test("the slow part merges like a retry and settles what the file awaits; each issue holds only its own part", () => {
+    const slow = result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [item("E3", 90)], { createdAt: 9 });
+    const merged = mergeRetry(first(), slow, "r-first", true);
+    expect(merged.awaiting).toBeUndefined();
+    expect(merged.retries).toEqual([expect.objectContaining({ runId: "r-first", part: "slow", items: ["E3"] })]);
+    expect(merged.items.map((i) => i.id)).toEqual(["E1", "E2", "E3"]);
+    expect(firstPart(merged).items.map((i) => i.id)).toEqual(["E1", "E2"]);
+    expect(retryPart(merged, "r-first")!.items.map((i) => i.id)).toEqual(["E3"]);
+    // A retry leaves a file still awaiting X as it was.
+    expect(mergeRetry(first(), slow, "r-retry").awaiting).toEqual(["x"]);
+    // The slow part closes as what a retry adds, keyed by the first run's id.
+    const state = noteClosed(emptyIssueState(), { searchId: "ts-0000aaaa", kind: "retry", night: null, resultFile: "f.json", runId: "r-first" });
+    expect(dueIssues(state, [], 0, () => 0)).toEqual([{ key: "first:ts-0000aaaa#r-first", date: null, files: ["f.json"] }]);
   });
 });

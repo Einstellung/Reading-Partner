@@ -24,6 +24,7 @@ import type { RepoLookup } from "../sources/plugins/github-lookup";
 import type { ArxivLadder } from "./arxiv-ladder";
 import { composeResult, deepenableMaterial, EARLIER_LINES, type DeeperReads, type EarlierLine } from "./compose";
 import { parseJsonReply, type TopicModel } from "./model-io";
+import type { RunSource } from "./pace";
 import { enqueue, loadQueue, metricQuestions, pickQuestions, questionCap, saveQueue, waiting, type NewQuestion } from "./questions";
 import {
   fusePool,
@@ -106,7 +107,13 @@ export interface BuildTopicSearchResultArgs {
    * X and are searched on arXiv, and what is found is added to the first look's
    * file rather than written as a new one. Absent or null on the other runs.
    */
-  retry?: { runId: string; x: readonly string[]; arxiv: readonly string[] } | null;
+  retry?: { runId: string; x: readonly string[]; arxiv: readonly string[]; part?: "slow" } | null;
+  /**
+   * A split first look's first part (pace.ts): the slow sources read after it.
+   * The file records them as awaiting and the source health leaves them out;
+   * their part comes back as `retry` with `part: "slow"`.
+   */
+  later?: readonly RunSource[];
 }
 
 /**
@@ -328,6 +335,7 @@ async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<Top
 async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs): Promise<BuildTopicSearchResultOutput> {
   const { topic, kind, x, arxiv, since, runDir, xPages, signal } = args;
   const retry = args.retry ?? null;
+  const later = args.later?.length ? [...args.later] : null;
   throwIfAborted(signal);
   const now = deps.now();
   const today = deps.today();
@@ -657,14 +665,17 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     questions: picked.asked.map((q) => ({ id: q.id, text: q.text, source: q.source, template: q.template })),
     stats,
     runDir,
+    ...(later ? { awaiting: later } : {}),
   };
   throwIfAborted(signal);
-  const written = target ? mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId) : result;
+  const written = target ? mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId, retry!.part === "slow") : result;
   await deps.files.write(name, `${JSON.stringify(written, null, 2)}\n`);
   await saveQueue(deps.files, topic.id, picked.queue);
   const health = sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now);
   // A retry speaks only for what it read again; the other lines keep what the first look found.
   if (retry) health.entries = health.entries.filter((e) => (e.source === "x" ? retry.x : retry.arxiv).includes(e.query));
+  // A first part speaks only for its fast sources; the slow part writes the rest.
+  if (later) health.entries = health.entries.filter((e) => !later.includes(e.source));
   await deps.files.write(`${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`, `${JSON.stringify(health, null, 2)}\n`);
   return { resultFile: name, itemCount: items.length, empty };
 }

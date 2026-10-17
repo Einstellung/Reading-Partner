@@ -66,7 +66,8 @@ export function TopicSearchProposalCard({ payload, dispatch }: CardComponentProp
       )}
       {!applied && (
         <div className="mt-1 text-[12px] leading-snug text-faint-foreground">
-          {payload.eta === "soon" ? t("info.cards.topicSearchEtaSoon") : t("info.cards.topicSearchEtaTonight")}
+          {payload.eta === "soon" ? t("info.cards.topicSearchEtaSoon") : t("info.cards.topicSearchEtaTonight")}{" "}
+          {t("info.cards.topicSearchSlowSources")}
         </div>
       )}
       <div className="mt-3.5 flex items-center justify-end gap-2">

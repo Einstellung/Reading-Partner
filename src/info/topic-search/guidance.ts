@@ -8,10 +8,19 @@
 // search hangs on one, so following it again can find it.
 
 import type { Statement } from "../../memory";
+import { sourceNames, sourcesOfPace, SPLIT_FIRST_LOOK } from "./pace";
 import { X_READ_RULE } from "./retry";
 import type { TopicSearch } from "./types";
 
 const SCOPE_CHARS = 160;
+
+/** How a first look arrives (pace.ts), said the same way by the guidance and the confirm tool; "" when it is not split. */
+export const FIRST_LOOK_IN_TWO_PARTS = SPLIT_FIRST_LOOK
+  ? `A first look comes in two parts: what the fast sources (${sourceNames(sourcesOfPace("fast"))}) find is built and delivered ` +
+    `first, as a brief issue of its own; ${sourceNames(sourcesOfPace("slow"))} is read slowly, the way a person browses (often ` +
+    "an hour or more), and what it finds follows as a second issue. More social media may be added as sources later, and " +
+    "they will be slow too. Never promise when the second part will come."
+  : "";
 
 function line(s: string): string {
   const first = s.trim().split("\n")[0]?.trim() ?? "";
@@ -69,6 +78,9 @@ export function topicSearchGuidance({ searches, statements, xPaused = null }: Gu
       "  confirm_topic_search: it does what the card's Follow button does.",
       "- When they want one look only, not a daily follow (\"just this once\", \"只看这一次\"),",
       "  propose with once: the first overview comes, then it stops by itself.",
+      ...(FIRST_LOOK_IN_TWO_PARTS
+        ? [`- ${FIRST_LOOK_IN_TWO_PARTS} Say so in a line when you propose a search and when its first run starts.`]
+        : []),
       "- Name an existing concern above that says the same thing as existingConcern, and a stopped",
       "  search they want back as searchId.",
       "When they answer a question, write it where it holds: only for this topic, with",
@@ -83,8 +95,8 @@ export function topicSearchGuidance({ searches, statements, xPaused = null }: Gu
       "tool told you; never promise when X will be read or a result will come.",
       "When they ask whether a search's first look, a retry or a night's run has started, come back or",
       "finished, call background_status (about: the search's name or id) first: it says the run's state,",
-      "elapsed time, X and arXiv progress, result and brief issue. Conversation search is not a source",
-      "for run state.",
+      "elapsed time, X and arXiv progress, result and brief issue (for a first look, whether its first part",
+      "is out and X is still being read). Conversation search is not a source for run state.",
     ].join("\n"),
   ]
     .filter((b) => b !== "")

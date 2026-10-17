@@ -9,6 +9,7 @@
 // check (numbers.ts) against the materials they cite.
 
 import type { RegisteredMaterial } from "../dossier/registry";
+import type { RunSource } from "./pace";
 
 export const TOPIC_SEARCH_RESULT_VERSION = 1;
 export const RESULT_FILE_PREFIX = "topic-search-";
@@ -198,13 +199,21 @@ export interface TopicSearchResult {
   stats: ResultStats;
   /** Where this run's cached material bodies are (a retry's bodies go here too). */
   runDir: string;
-  /** First look only: what each retry added to this file (retry.ts). Absent until one did. */
+  /** First look only: what each retry added to this file (retry.ts), and its slow part (pace.ts). Absent until one did. */
   retries?: ResultRetry[];
+  /**
+   * First look only (pace.ts): the slow sources its first part was built
+   * without, still being read by the same run. Cleared when their part is
+   * merged; left set when that run failed before it was. Absent otherwise.
+   */
+  awaiting?: RunSource[];
 }
 
-/** What one retry of a first look added to its file: its items, its write-up and questions, its own counts. */
+/** What one retry of a first look, or its slow part, added to its file: its items, its write-up and questions, its own counts. */
 export interface ResultRetry {
   runId: string;
+  /** "slow": the first look's own slow part (pace.ts), under the first run's id. Absent on a retry. */
+  part?: "slow";
   at: number;
   /** Item ids it added, in the file's numbering. */
   items: string[];
@@ -235,11 +244,14 @@ function regroup(groups: readonly TopicSearchResult["groups"][number][]): TopicS
  * The first look's file with a retry's part added (docs/info/88 「重跑第一次」):
  * what was there stays as it was, the part's items, materials and questions
  * follow (already numbered after the file's), and the retry is recorded. The
- * first look's overview stands; a file that had none takes the retry's. Pure.
+ * first look's overview stands; a file that had none takes the retry's. The
+ * first look's slow part (`slow`) merges the same way and settles what the
+ * file was awaiting. Pure.
  */
-export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, runId: string): TopicSearchResult {
+export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, runId: string, slow = false): TopicSearchResult {
   const record: ResultRetry = {
     runId,
+    ...(slow ? { part: "slow" as const } : {}),
     at: part.createdAt,
     items: part.items.map((i) => i.id),
     overview: part.overview,
@@ -248,8 +260,10 @@ export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, r
     stats: part.stats,
   };
   const items = [...target.items, ...part.items];
+  const { awaiting, ...rest } = target;
   return {
-    ...target,
+    ...rest,
+    ...(awaiting && !slow ? { awaiting } : {}),
     empty: items.length === 0,
     writeup: target.writeup === "none" ? part.writeup : target.writeup,
     overview: target.overview ?? part.overview,
@@ -281,6 +295,30 @@ export function retryPart(result: TopicSearchResult, runId: string): TopicSearch
     questions: result.questions.filter((q) => record.questions.includes(q.id)),
     stats: record.stats,
     retries: undefined,
+    awaiting: undefined,
+  };
+}
+
+/**
+ * The first look's own items, without what retries or its slow part added
+ * later: what the issue `first:<id>` carries, even when it is assembled after
+ * those were merged (a crash, the collector's tick). Pure.
+ */
+export function firstPart(result: TopicSearchResult): TopicSearchResult {
+  const added = new Set((result.retries ?? []).flatMap((r) => r.items));
+  const addedQuestions = new Set((result.retries ?? []).flatMap((r) => r.questions));
+  if (added.size === 0 && addedQuestions.size === 0) return result;
+  const items = result.items.filter((i) => !added.has(i.id));
+  const used = new Set(items.flatMap((i) => i.materials));
+  return {
+    ...result,
+    empty: items.length === 0,
+    groups: result.groups
+      .map((g) => ({ subtopic: g.subtopic, items: g.items.filter((id) => !added.has(id)) }))
+      .filter((g) => g.items.length > 0),
+    items,
+    materials: result.materials.filter((m) => used.has(m.id)),
+    questions: result.questions.filter((q) => !addedQuestions.has(q.id)),
   };
 }
 
