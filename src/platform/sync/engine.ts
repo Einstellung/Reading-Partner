@@ -947,13 +947,14 @@ export class SyncEngine {
    * the shelf asking for the one the reader tapped. It goes through the engine
    * rather than straight to the backend so it keeps the rule the mirror is
    * built around: one book blob on the wire at a time (syncBooks above,
-   * docs/pitfall/54). It queues behind a pass that is already running, and a
-   * pass that would start while it runs stands down instead.
+   * docs/pitfall/54). The backend may fetch that one book's chunks in
+   * parallel; it is still one book. It queues behind a pass that is already
+   * running, and a pass that would start while it runs stands down instead.
    *
    * A book this device already has is not fetched again. `onProgress` hears
-   * bytes received against the book's size; a download that gave up partway
-   * continues from where it stopped when it is asked for again
-   * (driveBackend.ts rangedBook).
+   * bytes received against the book's size, never going back; a download that
+   * gave up partway fetches only the chunks it is missing when it is asked for
+   * again (driveBackend.ts rangedBook).
    */
   async fetchBook(
     hash: string,
