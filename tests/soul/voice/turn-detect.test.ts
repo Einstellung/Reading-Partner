@@ -25,6 +25,7 @@ import {
   initialTurnDetectState,
   resolveTurnDetectConfig,
   stepTurnDetect,
+  trailingLevelDb,
   type TurnDetectConfig,
   type TurnEvent,
 } from "../../../src/soul/voice/turn-detect";
@@ -828,4 +829,47 @@ test("the energy path is unchanged by a speech probability", () => {
   const detector = createTurnDetector();
   expect(detector.step(-60, 0, 1)).toBeNull();
   expect(detector.step(-30, 100, 0)).toEqual({ type: "duck" });
+});
+
+// The bench's 「等一下」 and 「嗯」 clips (scripts/ios-linux/voice-fixtures.py)
+// as Silero v6 (ONNX, same weights as the CoreML model) saw them, fed the way
+// the bench feeds them: 100 ms buffers at 48 kHz over -75 dBFS room tone, the
+// clip starting at 0. Per frame: its end in ms from the clip's start, the
+// speech probability, the level of the tap buffer it completed in (what the
+// frames were gated on before pitfall 652), and `trailingLevelDb` over the
+// 100 ms ending at it.
+const WAIT: [number, number, number, number][] = [[-84, 0.0, -75, -80], [-52, 0.0, -75, -80], [-20, 0.0, -75, -80], [12, 0.0, -75, -80], [44, 0.0, -75, -80], [76, 0.0, -75, -80], [108, 0.0, -25, -80], [140, 0.0, -25, -80], [172, 0.43, -25, -34], [204, 0.84, -25, -25], [236, 0.9, -25, -24], [268, 0.9, -25, -23], [300, 0.93, -25, -25], [332, 0.93, -25, -24], [364, 0.94, -25, -25], [396, 0.95, -25, -25], [428, 0.96, -22, -24], [460, 0.97, -22, -22], [492, 0.97, -22, -22], [524, 0.95, -38, -23], [556, 0.89, -38, -29], [588, 0.61, -38, -35], [620, 0.22, -75, -44], [652, 0.12, -75, -70], [684, 0.07, -75, -80], [716, 0.05, -75, -80], [748, 0.04, -75, -80], [780, 0.03, -75, -80], [812, 0.03, -75, -80], [844, 0.02, -75, -80], [876, 0.02, -75, -80], [908, 0.02, -75, -80], [940, 0.02, -75, -80], [972, 0.02, -75, -80]];
+const UH_HUH: [number, number, number, number][] = [[-84, 0.0, -75, -80], [-52, 0.0, -75, -80], [-20, 0.0, -75, -80], [12, 0.0, -75, -80], [44, 0.0, -75, -80], [76, 0.0, -75, -80], [108, 0.0, -31, -80], [140, 0.0, -31, -80], [172, 0.31, -31, -39], [204, 0.81, -23, -30], [236, 0.87, -23, -26], [268, 0.86, -23, -24], [300, 0.83, -23, -23], [332, 0.77, -24, -23], [364, 0.74, -24, -23], [396, 0.78, -24, -23], [428, 0.83, -75, -25], [460, 0.44, -75, -30], [492, 0.19, -75, -51], [524, 0.1, -75, -80], [556, 0.06, -75, -80], [588, 0.04, -75, -80], [620, 0.03, -75, -80], [652, 0.02, -75, -80], [684, 0.02, -75, -80], [716, 0.02, -75, -80], [748, 0.02, -75, -80], [780, 0.01, -75, -80], [812, 0.01, -75, -80], [844, 0.01, -75, -80], [876, 0.01, -75, -80], [908, 0.01, -75, -80], [940, 0.01, -75, -80], [972, 0.01, -75, -80]];
+
+/** A clip spoken over the companion, well past its immunity window. */
+function overPlayback(clip: [number, number, number, number][], level: "buffer" | "frame"): string[] {
+  const detector = createTurnDetector(NEURAL_TURN_DETECT);
+  detector.playbackStarted(-10_000);
+  const run = clip.map(([at, p, buffer, frame]) => ({ atMs: at, p, db: level === "buffer" ? buffer : frame }));
+  return feedNeural(detector, run).map((e) => e.event.type);
+}
+
+test("neural: 「等一下」 gated on its tap buffer's level never confirms", () => {
+  // Its last three voiced frames finish in a buffer that is mostly silence.
+  expect(overPlayback(WAIT, "buffer")).toEqual(["duck", "resume"]);
+});
+
+test("neural: 「等一下」 gated on its own last 100 ms stops the companion", () => {
+  expect(overPlayback(WAIT, "frame")).toEqual(["duck", "stop", "pause"]);
+});
+
+test("neural: 「嗯」 over the companion ducks and resumes, never stops", () => {
+  expect(overPlayback(UH_HUH, "frame")).toEqual(["duck", "resume"]);
+  expect(overPlayback(UH_HUH, "buffer")).toEqual(["duck", "resume"]);
+});
+
+test("trailingLevelDb is the RMS of the window ending at the frame", () => {
+  const samples = new Float32Array(3200);
+  samples.fill(0.1, 1600, 3200);
+  expect(trailingLevelDb(samples, 3200, 1600)).toBeCloseTo(-20, 5);
+  expect(trailingLevelDb(samples, 2400, 1600)).toBeCloseTo(-23.0103, 3);
+  expect(trailingLevelDb(samples, 1600, 1600)).toBe(Number.NEGATIVE_INFINITY);
+  // Fewer than `count` at the start of the stream: what there is.
+  expect(trailingLevelDb(samples.subarray(1600), 800, 1600)).toBeCloseTo(-20, 5);
+  expect(trailingLevelDb(samples, 0, 1600)).toBe(Number.NEGATIVE_INFINITY);
 });

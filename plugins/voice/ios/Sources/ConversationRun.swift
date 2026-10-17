@@ -507,7 +507,7 @@ final class ConversationRun {
         // result's range is measured on.
         let audioMs = tapSampleRate > 0 ? Double(framesFed) / tapSampleRate * 1000 : 0
         if let neural = neural {
-            neural.push(buffer, db: db, atMs: now * 1000, audioMs: audioMs)
+            neural.push(buffer, atMs: now * 1000, audioMs: audioMs)
         } else {
             SpeechOut.shared.stepTurn(db: db, atMs: now * 1000, audioMs: audioMs)
         }

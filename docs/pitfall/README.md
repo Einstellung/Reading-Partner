@@ -32,6 +32,7 @@
 | 在模拟器上验分享进 app、文件选择器、文档类型打开、share extension 和 App Group | iOS 构建与签名 |
 | 真机无人值守跑、判 app 还活着没有、手机上发网络请求 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
+| 神经 VAD、Smart Turn 判停、打断的确认窗 | 原生音频与语音 |
 | 解流式 TTS 的音频分片、按字节数算时长 | 原生音频与语音 |
 | 选 TTS 音色、量首字出声延迟 | 原生音频与语音 |
 | 判读 TTS 读音、往语音文本预处理的词表里加行 | 原生音频与语音 |
@@ -315,6 +316,8 @@
 - [199-stopping-the-engine-first-does-not-make-detach-safe](./native-audio/199-stopping-the-engine-first-does-not-make-detach-safe.md) — 停了 engine 再 `detach` 照样 abort，`RemoveNode` 的前置条件从外面看不全，而它报错的方式是 ObjC 异常；解法是拆栈时根本不 detach，摘 tap、停 player、停 engine，然后让 engine 引用置空带走整张图。真机实测有效：同一处拆栈走完打出 `RP-DICT front closed`，没再 abort，崩的是它后面 1.3 秒的另一件事（坑 201）
 - [612-the-first-input-node-read-stops-a-running-engine](./native-audio/612-the-first-input-node-read-stops-a-running-engine.md) — 只放音的栈从没读过 `engine.inputNode`，engine 跑起来之后第一次读它（哪怕只是 DEBUG 日志的一个参数）会把 engine 静默停掉：没有异常、没有配置变更通知，下次 `start()` 才恢复。测试台上每句开场白都因此听不见；建栈之后不许第一次碰 `inputNode`
 - [614-a-new-call-hears-the-old-native-call-released](./native-audio/614-a-new-call-hears-the-old-native-call-released.md) — webview 重载后原生通话还开着；新页面开通话时原生先以 `released` 停掉旧的，这条事件带着旧 turn 先到新通话的监听，被当成自己的结束把刚开的通话关了。`opened` 之前到的 `running=false` 一律丢掉
+- [651-smart-turn-calls-a-pause-after-a-whole-sentence-complete](./native-audio/651-smart-turn-calls-a-pause-after-a-whole-sentence-complete.md) — 测试台 clip 句间 0.8–0.9 s 的停顿，Smart Turn 给 0.97–0.99 的「完成」，一句话被切成三四轮。上游 ONNX 参考实现对同一窗口给出同样的分，不是输入错：停顿前是完整的问句。阈值和 `pauseMs` 都分不开，`voice-session.ts` 把「回复还没出声用户就接着说」并回上一轮重新问
+- [652-a-neural-frame-gated-on-the-buffer-it-finished-in](./native-audio/652-a-neural-frame-gated-on-the-buffer-it-finished-in.md) — 播放期间神经帧要过 -35 dBFS，电平取的是帧落进的那个 100 ms tap buffer；「等一下」最后三个语音帧落进一个大半是静音的 buffer（-38 dB），确认窗差 12 ms 没够着，只 duck 不 stop。电平改成截止到帧末尾的 100 ms（`trailingLevelDb`）。测试台上「嗯」不打断是因为落在免疫窗里，不是区分出来的
 
 ## WebKit / webview
 
