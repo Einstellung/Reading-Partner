@@ -42,6 +42,8 @@ mod speaker;
 /// real requests on the desktop, which is where it is measured. See the
 /// README's "Speaking" for the contract between the two halves.
 pub mod tts;
+/// Text to Kokoro-82M-v1.1-zh phonemes, matching Python misaki 0.9.4 (zh + en).
+pub mod kokoro_g2p;
 
 pub use error::{Error, Result};
 pub use session::SpeechSession;

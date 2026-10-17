@@ -38,6 +38,7 @@
 | 裁 TTS 的头尾静音、按句拼接 | 原生音频与语音 |
 | 把整段跑的纯函数搬进流式、切句 | 原生音频与语音 |
 | 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
+| 导出或裁剪 Kokoro 文本前端的词表、改英文词性规则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
 | 画光晕、阴影、模糊之类的装饰效果 | WebKit / webview |
@@ -315,6 +316,8 @@
 - [199-stopping-the-engine-first-does-not-make-detach-safe](./native-audio/199-stopping-the-engine-first-does-not-make-detach-safe.md) — 停了 engine 再 `detach` 照样 abort，`RemoveNode` 的前置条件从外面看不全，而它报错的方式是 ObjC 异常；解法是拆栈时根本不 detach，摘 tap、停 player、停 engine，然后让 engine 引用置空带走整张图。真机实测有效：同一处拆栈走完打出 `RP-DICT front closed`，没再 abort，崩的是它后面 1.3 秒的另一件事（坑 201）
 - [612-the-first-input-node-read-stops-a-running-engine](./native-audio/612-the-first-input-node-read-stops-a-running-engine.md) — 只放音的栈从没读过 `engine.inputNode`，engine 跑起来之后第一次读它（哪怕只是 DEBUG 日志的一个参数）会把 engine 静默停掉：没有异常、没有配置变更通知，下次 `start()` 才恢复。测试台上每句开场白都因此听不见；建栈之后不许第一次碰 `inputNode`
 - [614-a-new-call-hears-the-old-native-call-released](./native-audio/614-a-new-call-hears-the-old-native-call-released.md) — webview 重载后原生通话还开着；新页面开通话时原生先以 `released` 停掉旧的，这条事件带着旧 turn 先到新通话的监听，被当成自己的结束把刚开的通话关了。`opened` 之前到的 `running=false` 一律丢掉
+- [653-pruning-pypinyin-phrases-changes-readings-through-segmentation](./native-audio/653-pruning-pypinyin-phrases-changes-readings-through-segmentation.md) — 删掉首读音和逐字默认一样的 pypinyin 词组，jieba 词条里 6813 个读音变了：词组表也是 mmseg 正向最大匹配的前缀集合，删长词组会改切分。导出脚本按删前删后的 mmseg 对比把用到的词组放回去，裁表必须重跑这遍对比
+- [654-misaki-reads-english-fragments-by-spacy-tag](./native-audio/654-misaki-reads-english-fragments-by-spacy-tag.md) — 中文句子里的英文片段被 spaCy 单独当一句标词性，词性决定 misaki 查词典的路：AWS 标 NNS 读成 `ˈɔz`，GPU 标 NNP 拼字母；Wi-Fi 的连字符标 HYPH 才合成一个词。Rust 移植用规则近似，剩余差异在多音词词性上，列在 `gold_tests::KNOWN_DIFFS`
 
 ## WebKit / webview
 
