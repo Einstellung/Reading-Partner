@@ -3,11 +3,13 @@
 // STT, streamChat for cleanup); the pure pieces stay in their own modules for
 // unit testing.
 
+import { invoke } from "@tauri-apps/api/core";
 import { streamChat } from "../providers";
 import { newRunId } from "../../platform/app/cache-telemetry";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import type { CleanupRunner } from "./cleanup";
 import type { SttFetch } from "./stt";
+import type { KokoroBridge } from "./kokoro";
 
 export {
   DEFAULT_STT_BASE,
@@ -121,3 +123,7 @@ export const chatCleanupRunner: CleanupRunner = (model, systemPrompt, userText, 
       onError: (m) => reject(new Error(m)),
     });
   });
+
+// The on-device voice's commands over the real IPC (ai/voice/kokoro.ts takes
+// the bridge as a parameter so it runs under bun).
+export const kokoroBridge: KokoroBridge = { invoke };
