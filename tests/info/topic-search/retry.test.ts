@@ -7,7 +7,8 @@ import { expect, test } from "bun:test";
 import type { SourceHealth, TopicSearchLineHealth } from "../../../src/info/sources/engine";
 import { noteClosed, emptyIssueState } from "../../../src/info/issue/assemble";
 import { clearSignedOut, type XHaltRecord } from "../../../src/info/topic-search/halt";
-import { mergeRetry, retryPart, type TopicSearchResult, type TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
+import { planIssue } from "../../../src/info/issue/plan";
+import { firstPart, mergeRetry, retryPart, type TopicSearchResult, type TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
 import { nextRetryNumber, planRetry } from "../../../src/info/topic-search/retry";
 import { askedText, buildRetryFirstRunTool, type RetryToolDeps } from "../../../src/info/topic-search/retry-tool";
 import { askRetryRun } from "../../../src/info/topic-search/run-worker";
@@ -122,7 +123,8 @@ function item(id: string, materials: string[], subtopic: string | null = null): 
   };
 }
 
-const STATS = { candidates: { x: 0, arxiv: 1 }, passedFloor: 1, pooled: 1, reranked: true, anchorMiss: 0, avoidBlocked: {}, subtopicItems: {}, modelCalls: 2 };
+const STATS = { candidates: { x: 0, arxiv: 1 }, passedFloor: 1, pooled: 1, reranked: true, anchorMiss: 0, avoidBlocked: {}, subtopicItems: { "": 1 }, modelCalls: 2 };
+const PART_STATS = { candidates: { x: 40, arxiv: 0 }, passedFloor: 12, pooled: 10, reranked: true, anchorMiss: 0.25, avoidBlocked: { hype: 2 }, subtopicItems: { s1: 1 }, modelCalls: 4 };
 
 function result(over: Partial<TopicSearchResult>): TopicSearchResult {
   return {
@@ -152,7 +154,7 @@ test("a retry's part is added to the first look's file and read back as its own 
   const target = result({});
   const part = result({
     createdAt: 200,
-    overview: { text: "What the retry found.", cites: ["E2"] },
+    overview: { text: "E1 is now joined by what the retry found in E2.", cites: ["E1", "E2"] },
     groups: [
       { subtopic: "s1", items: ["E2"] },
       { subtopic: null, items: ["E3"] },
@@ -160,28 +162,78 @@ test("a retry's part is added to the first look's file and read back as its own 
     items: [item("E2", ["M2"], "s1"), item("E3", ["M3"])],
     materials: [{ id: "M2" }, { id: "M3" }] as TopicSearchResult["materials"],
     questions: [{ id: "qb", text: "Second?", source: "model", template: null }],
+    stats: PART_STATS,
     runDir: "topic-search-runs/r-retry",
   });
   const merged = mergeRetry(target, part, "r-retry");
   expect(merged.items.map((i) => i.id)).toEqual(["E1", "E2", "E3"]);
+  // Every item is grouped; picked subtopics first, the whole topic last.
   expect(merged.groups).toEqual([
-    { subtopic: null, items: ["E1", "E3"] },
     { subtopic: "s1", items: ["E2"] },
+    { subtopic: null, items: ["E1", "E3"] },
   ]);
-  expect(merged.overview?.text).toBe("The first look.");
+  // The file speaks for the merged whole: the retry's overview was written over all of it.
+  expect(merged.overview).toEqual(part.overview);
+  expect(merged.stats).toEqual({
+    candidates: { x: 40, arxiv: 1 },
+    passedFloor: 13,
+    pooled: 11,
+    reranked: true,
+    anchorMiss: 3 / 13,
+    avoidBlocked: { hype: 2 },
+    subtopicItems: { "": 1, s1: 1 },
+    modelCalls: 6,
+  });
   expect(merged.runDir).toBe("topic-search-runs/r-first");
-  expect(merged.retries).toEqual([{ runId: "r-retry", at: 200, items: ["E2", "E3"], overview: part.overview, writeup: "model", questions: ["qb"], stats: STATS }]);
+  expect(merged.retries).toEqual([{ runId: "r-retry", at: 200, items: ["E2", "E3"], overview: part.overview, writeup: "model", questions: ["qb"], stats: PART_STATS }]);
+  // The first look's own part is kept, and the first issue is assembled from it alone.
+  expect(merged.firstLook).toEqual({ overview: target.overview, writeup: "model", stats: STATS });
+  const first = firstPart(merged);
+  expect(first.items.map((i) => i.id)).toEqual(["E1"]);
+  expect(first.overview?.text).toBe("The first look.");
+  expect(first.stats).toEqual(STATS);
+  expect(first.groups).toEqual([{ subtopic: null, items: ["E1"] }]);
+  expect(first.materials.map((m) => m.id)).toEqual(["M1"]);
+  expect(first.questions.map((q) => q.id)).toEqual(["qa"]);
 
   const own = retryPart(merged, "r-retry")!;
   expect(own.items.map((i) => i.id)).toEqual(["E2", "E3"]);
   expect(own.materials.map((m) => m.id)).toEqual(["M2", "M3"]);
-  expect(own.overview?.text).toBe("What the retry found.");
+  expect(own.overview).toEqual(part.overview);
+  expect(own.stats).toEqual(PART_STATS);
   expect(own.questions.map((q) => q.id)).toEqual(["qb"]);
   expect(retryPart(merged, "r-other")).toBeNull();
+  // The retry's issue footnotes the first look's item its overview names, by title.
+  const plan = planIssue([own], [{ searchId: SEARCH.id, name: SEARCH.name, subtopics: [] }])!;
+  expect(plan.annex[0].cites).toEqual([
+    { id: "E1", title: "E1" },
+    { id: "E2", title: "E2" },
+  ]);
+  expect(planIssue([first], [{ searchId: SEARCH.id, name: SEARCH.name, subtopics: [] }])!.annex[0].text).toBe("The first look.");
 
   // A first look that found nothing takes the retry's overview.
   const fromEmpty = mergeRetry(result({ empty: true, writeup: "none", overview: null, groups: [], items: [], materials: [], questions: [] }), part, "r-retry");
   expect(fromEmpty).toMatchObject({ empty: false, writeup: "model", overview: part.overview });
+});
+
+test("a second part adds up over the first look and every part, and the first look stays as it was", () => {
+  const once = mergeRetry(result({}), result({ createdAt: 200, items: [item("E2", ["M2"], "s1")], groups: [{ subtopic: "s1", items: ["E2"] }], stats: PART_STATS, overview: { text: "Whole, once.", cites: ["E2"] } }), "r-slow", true);
+  // A write-up that fell back has no overview of the whole: none stands rather than the first look's stale one.
+  const twice = mergeRetry(once, result({ createdAt: 300, items: [item("E3", ["M3"])], groups: [{ subtopic: null, items: ["E3"] }], stats: STATS, overview: null, writeup: "fallback" }), "r-retry");
+  expect(twice.overview).toBeNull();
+  expect(twice.stats.candidates).toEqual({ x: 40, arxiv: 2 });
+  expect(twice.stats.modelCalls).toBe(8);
+  expect(twice.firstLook).toEqual({ overview: { text: "The first look.", cites: ["E1"] }, writeup: "model", stats: STATS });
+  expect(firstPart(twice).items.map((i) => i.id)).toEqual(["E1"]);
+  expect(firstPart(twice).overview?.text).toBe("The first look.");
+  // The same retry merged again replaces its record and its counts, never adds them twice.
+  const again = mergeRetry(once, result({ createdAt: 200, items: [], groups: [], stats: PART_STATS, overview: null, questions: [] }), "r-slow", true);
+  expect(again.stats).toEqual(mergeRetry(result({}), result({ items: [], stats: PART_STATS, questions: [] }), "r-slow", true).stats);
+  // A part that added nothing leaves the file's overview standing.
+  expect(again.overview?.text).toBe("Whole, once.");
+  // A file merged before firstLook existed: its top-level overview was the first look's own.
+  const { firstLook: _, ...old } = { ...once, overview: { text: "The first look.", cites: ["E1"] }, stats: STATS };
+  expect(mergeRetry(old, result({ items: [item("E4", [])], stats: STATS }), "r-new").firstLook?.overview?.text).toBe("The first look.");
 });
 
 test("a retry closing is an issue of its own, keyed by its run", () => {

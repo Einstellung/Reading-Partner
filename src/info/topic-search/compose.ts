@@ -109,6 +109,13 @@ export interface ComposeInput {
   earlier?: readonly EarlierLine[];
   /** Deeper reads the model may ask for; absent or none left: it is not offered. */
   deeper?: DeeperReads;
+  /**
+   * Items already in the same result file, written up earlier (a retry, or the
+   * first look's slow part, adding to the first look's file): the overview
+   * covers them beside `items`, so it speaks for the whole file; they get no
+   * entry. Absent on a run that writes its own file.
+   */
+  alongside?: readonly TopicSearchResultItem[];
 }
 
 /**
@@ -131,6 +138,11 @@ export function factsText(f: ResultFacts): string {
       return `@${f.handle}; ${new Date(f.postedAt).toISOString()}; ${c.likes ?? 0} likes, ${c.reposts ?? 0} reposts, ${c.replies ?? 0} replies`;
     }
   }
+}
+
+/** What an item already in the file offers the overview's number check: what the prompt shows of it. */
+function alongsideSources(item: TopicSearchResultItem): string[] {
+  return [item.title, factsText(item.facts), item.summary ?? ""];
 }
 
 /** Everything an item's sentences may take a number from. */
@@ -164,6 +176,11 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     "- Earlier issues: when an item continues something listed under \"Said in earlier issues\", write only what is new and carry the rest with words like yesterday, still, again. Never restate what was said there.",
     "- doubts: questions for the reader where you could not tell whether they want this kind of thing; usually none.",
     "- repeats: the numbers of candidate questions (Q1 …) that ask something the reader already answered; usually none.",
+    ...(input.alongside?.length
+      ? [
+          'Items listed under "Already in this result" were written up earlier in the same result. The overview covers them together with the new items and may name them by number; write no entries for them.',
+        ]
+      : []),
     "Rules: skip promotion, event hype and engagement bait; tell a thread as one piece; tell a quoting post together with what it quotes; where an item lists a discrepancy, say what the original actually shows, not what the post claimed.",
     "Every number and date you write must appear in the materials, posts or facts of the items you cite. Never derive one (no sums, no differences, no rounding).",
     "A paper item says how much of the paper was read. Conclude only from the part read: what its method does or what its results show beyond that is not known to you, so say so in unknown and never guess it.",
@@ -210,6 +227,17 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
   const questions = input.questions.map((q) => `${q.id}: ${q.text}`);
   const answered = input.topic.answers.map((a) => `- Asked "${a.asked}", answered "${a.answer}"`);
   const earlier = (input.earlier ?? []).map((e) => `- ${e.date} · ${e.title}: ${e.summary}`);
+  const alongside = (input.alongside ?? []).map((item) =>
+    material(
+      item.id,
+      [
+        `${item.id} · ${item.kind}${item.subtopic ? ` · subtopic ${item.subtopic}` : ""}`,
+        `Title: ${item.title}`,
+        `Facts: ${factsText(item.facts)}`,
+        ...(item.summary ? [`Conclusion: ${item.summary}`] : []),
+      ].join("\n"),
+    ),
+  );
   const user = [
     topicBlock(input.topic, input.profile),
     "",
@@ -217,6 +245,7 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     ...blocks,
     ...(questions.length ? ["", "Candidate questions:", ...questions] : []),
     ...(answered.length ? ["", "The reader's earlier answers:", ...answered] : []),
+    ...(alongside.length ? ["", "Already in this result (no entries):", ...alongside] : []),
     ...(earlier.length ? ["", "Said in earlier issues (newest first):", ...earlier] : []),
   ].join("\n");
   return { system, user };
@@ -233,7 +262,8 @@ export function checkWritten(text: string, input: ComposeInput): { written: Writ
   const o = (raw ?? {}) as Record<string, unknown>;
   const problems: string[] = [];
   const byId = new Map(input.items.map((i) => [i.id, i]));
-  const refOk = (r: string) => byId.has(r) || input.registry.has(r);
+  const already = new Map((input.alongside ?? []).map((i) => [i.id, i]));
+  const refOk = (r: string) => byId.has(r) || already.has(r) || input.registry.has(r);
   const earlier = input.earlier ?? [];
 
   const ov = (o.overview ?? {}) as Record<string, unknown>;
@@ -242,12 +272,18 @@ export function checkWritten(text: string, input: ComposeInput): { written: Writ
   if (!overviewText) problems.push("The overview is missing.");
   const badCites = cites.filter((c) => !refOk(c));
   if (badCites.length) problems.push(`The overview cites numbers that do not exist: ${badCites.join(", ")}.`);
-  const named = [...new Set([...cites, ...(overviewText.match(/\bE\d+\b/g) ?? [])])].filter((c) => byId.has(c));
-  const citedMaterials = cites.filter((c) => !byId.has(c) && input.registry.has(c));
+  const mentioned = [...new Set([...cites, ...(overviewText.match(/\bE\d+\b/g) ?? [])])];
+  const named = mentioned.filter((c) => byId.has(c));
+  const namedAlready = mentioned.filter((c) => already.has(c));
+  const citedMaterials = cites.filter((c) => !byId.has(c) && !already.has(c) && input.registry.has(c));
   const overviewSources =
-    named.length || citedMaterials.length
-      ? [...named.flatMap((e) => itemSources(byId.get(e)!, input.registry, earlier)), ...citedMaterials.map((m) => input.registry.text(m) ?? "")]
-      : input.items.flatMap((i) => itemSources(i, input.registry, earlier));
+    named.length || namedAlready.length || citedMaterials.length
+      ? [
+          ...named.flatMap((e) => itemSources(byId.get(e)!, input.registry, earlier)),
+          ...namedAlready.flatMap((e) => alongsideSources(already.get(e)!)),
+          ...citedMaterials.map((m) => input.registry.text(m) ?? ""),
+        ]
+      : [...input.items.flatMap((i) => itemSources(i, input.registry, earlier)), ...[...already.values()].flatMap(alongsideSources)];
   const overviewMissing = missingNumbers(overviewText, overviewSources);
   if (overviewMissing.length) problems.push(`The overview has numbers its cited items do not hold: ${overviewMissing.join(", ")}.`);
 

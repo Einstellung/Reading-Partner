@@ -18,7 +18,8 @@ import { readArxiv } from "../../../src/info/topic-search/arxiv-read";
 import { missingNumbers, numbersIn, type TopicModelCall } from "../../../src/info/topic-search/model-io";
 import { QUESTIONS_FILE, enqueue, metricQuestions, pickQuestions, questionCap, type PendingQuestion } from "../../../src/info/topic-search/questions";
 import { numberPool, parseRerank, type Candidate } from "../../../src/info/topic-search/rank-pool";
-import { parseResultFile, type ResultStats, type TopicSearchResult } from "../../../src/info/topic-search/result-types";
+import { firstPart, parseResultFile, type ResultStats, type TopicSearchResult } from "../../../src/info/topic-search/result-types";
+import { ITEM_FLOOR } from "../../../src/info/topic-search/select";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import type { XReadResult } from "../../../src/info/topic-search/x-reader";
 
@@ -376,6 +377,49 @@ describe("a first run, then a day, then a quiet day", () => {
     expect(day.writeup).toBe("none");
     expect(log.some((c) => c.site === "write")).toBe(false);
   });
+});
+
+test("the slow part merged into the first part's file: the overview and counts speak for the whole, the first part stays its own", async () => {
+  const files = memoryFiles();
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  const since = now - 30 * 86_400_000;
+  const noX: XReadResult = { status: "done", why: null, halt: null, posts: [], lines: [], pages: { search: 0, permalink: 0 }, activeMs: 0 };
+  const fastOut = await makeResultBuilder(deps({ files, log: [], today: "2026-10-14" }))({
+    topic: TOPIC, kind: "first", x: noX, since, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal, later: ["x"],
+  });
+  const fast = parseResultFile(files.files.get(fastOut.resultFile!)!)!;
+  expect(fast.items.every((i) => i.kind === "paper")).toBe(true);
+  expect(fast.stats.candidates.x).toBe(0);
+
+  const log: TopicModelCall[] = [];
+  const slowOut = await makeResultBuilder(deps({ files, log, today: "2026-10-14" }))({
+    topic: TOPIC, kind: "first", x: xRead(POSTS), since, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal,
+    retry: { runId: "r-first", x: ["q1", "q3"], arxiv: [], part: "slow" },
+  });
+  expect(slowOut.resultFile).toBe(fastOut.resultFile);
+  const merged = parseResultFile(files.files.get(slowOut.resultFile!)!)!;
+  const added = merged.retries![0].items;
+  expect(added.length).toBeGreaterThan(0);
+
+  // The write-up saw the first part's items beside its own and wrote the overview over both.
+  const write = log.find((c) => c.site === "write")!;
+  expect(write.user).toContain("Already in this result (no entries):");
+  for (const i of fast.items) expect(write.user).toContain(`<material id="${i.id}">\n${i.id} · paper`);
+  expect(merged.overview).toEqual(merged.retries![0].overview);
+  expect(merged.overview!.cites.some((c) => fast.items.some((i) => i.id === c))).toBe(true);
+
+  // Counts add up; every item is in a group; the first part keeps its own.
+  expect(merged.stats.candidates).toEqual({ x: merged.retries![0].stats.candidates.x, arxiv: fast.stats.candidates.arxiv });
+  expect(merged.stats.candidates.x).toBeGreaterThan(0);
+  expect(merged.groups.flatMap((g) => g.items).sort()).toEqual(merged.items.map((i) => i.id).sort());
+  expect(merged.firstLook).toEqual({ overview: fast.overview, writeup: fast.writeup, stats: fast.stats });
+  const first = firstPart(merged);
+  expect(first.items).toEqual(fast.items);
+  expect(first.overview).toEqual(fast.overview);
+  expect(first.stats).toEqual(fast.stats);
+
+  // Nothing under the item floor is listed (select.test.ts has the small-pool case).
+  expect(merged.items.every((i) => i.score >= ITEM_FLOOR)).toBe(true);
 });
 
 test("a write-up that fails twice falls back to the program's version", async () => {

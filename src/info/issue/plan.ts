@@ -120,7 +120,8 @@ export function planIssue(results: readonly TopicSearchResult[], topics: readonl
   const annex: PlannedAnnex[] = usable
     .filter((r) => r.kind === "first" && r.overview?.text)
     .map((r) => {
-      const byId = new Map(r.items.map((i) => [i.id, i.title]));
+      // A retry's overview speaks for its whole file: it may name items told in an earlier issue.
+      const byId = new Map([...(r.citable ?? []), ...r.items].map((i) => [i.id, i.title]));
       const cited = [...new Set([...r.overview!.cites, ...(r.overview!.text.match(/\bE\d+\b/g) ?? [])])];
       return {
         searchId: r.searchId,

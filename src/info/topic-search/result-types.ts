@@ -202,6 +202,17 @@ export interface TopicSearchResult {
   /** First look only: what each retry added to this file (retry.ts), and its slow part (pace.ts). Absent until one did. */
   retries?: ResultRetry[];
   /**
+   * First look only: the first look's own overview, write-up and counts, kept
+   * once a retry or the slow part made the file's speak for the merged whole
+   * (`firstPart` reads them back). Absent until one did.
+   */
+  firstLook?: ResultFirstLook;
+  /**
+   * Not in the file: items of the same file told in another issue, which the
+   * overview may name (`retryPart` sets it, so the annex can still footnote them).
+   */
+  citable?: { id: string; title: string }[];
+  /**
    * First look only (pace.ts): the slow sources its first part was built
    * without, still being read by the same run. Cleared when their part is
    * merged; left set when that run failed before it was. Absent otherwise.
@@ -224,12 +235,47 @@ export interface ResultRetry {
   stats: ResultStats;
 }
 
+/** The first look's own part of a file retries were merged into. */
+export interface ResultFirstLook {
+  overview: TopicSearchResult["overview"];
+  writeup: TopicSearchResult["writeup"];
+  stats: ResultStats;
+}
+
+function addCounts(into: Record<string, number>, from: Record<string, number>): Record<string, number> {
+  for (const [k, n] of Object.entries(from)) into[k] = (into[k] ?? 0) + n;
+  return into;
+}
+
+/**
+ * The counts of runs that wrote one file, added up: candidates, the floor, the
+ * pool, items per subtopic, avoid blocks and model calls summed; the anchor
+ * miss share weighted by what passed the floor; reranked when any part was.
+ */
+export function sumStats(parts: readonly ResultStats[]): ResultStats {
+  const passed = parts.reduce((n, p) => n + p.passedFloor, 0);
+  const deep = parts.filter((p) => p.deepReads).map((p) => p.deepReads!);
+  return {
+    candidates: { x: parts.reduce((n, p) => n + p.candidates.x, 0), arxiv: parts.reduce((n, p) => n + p.candidates.arxiv, 0) },
+    passedFloor: passed,
+    pooled: parts.reduce((n, p) => n + p.pooled, 0),
+    reranked: parts.some((p) => p.reranked),
+    anchorMiss: passed ? parts.reduce((n, p) => n + p.anchorMiss * p.passedFloor, 0) / passed : 0,
+    avoidBlocked: parts.reduce((acc, p) => addCounts(acc, p.avoidBlocked), {} as Record<string, number>),
+    subtopicItems: parts.reduce((acc, p) => addCounts(acc, p.subtopicItems), {} as Record<string, number>),
+    modelCalls: parts.reduce((n, p) => n + p.modelCalls, 0),
+    ...(deep.length
+      ? { deepReads: { read: deep.flatMap((d) => d.read), failed: deep.flatMap((d) => d.failed), refused: deep.flatMap((d) => d.refused) } }
+      : {}),
+  };
+}
+
 /** The highest number among ids like "E7" or "M12"; 0 when there is none. */
 export function highestNumber(ids: readonly string[]): number {
   return ids.reduce((most, id) => Math.max(most, Number(/^[A-Z](\d+)$/.exec(id)?.[1] ?? 0)), 0);
 }
 
-/** Groups in the order their subtopic first appears, items in file order. */
+/** Groups in the order their subtopic first appears, the whole topic's last, items in file order. */
 function regroup(groups: readonly TopicSearchResult["groups"][number][]): TopicSearchResult["groups"] {
   const out: TopicSearchResult["groups"] = [];
   for (const g of groups) {
@@ -237,16 +283,20 @@ function regroup(groups: readonly TopicSearchResult["groups"][number][]): TopicS
     if (same) same.items.push(...g.items);
     else out.push({ subtopic: g.subtopic, items: [...g.items] });
   }
-  return out;
+  return [...out.filter((g) => g.subtopic !== null), ...out.filter((g) => g.subtopic === null)];
 }
 
 /**
  * The first look's file with a retry's part added (docs/info/88 「重跑第一次」):
- * what was there stays as it was, the part's items, materials and questions
+ * the items, materials and questions there stay as they were, the part's
  * follow (already numbered after the file's), and the retry is recorded. The
- * first look's overview stands; a file that had none takes the retry's. The
- * first look's slow part (`slow`) merges the same way and settles what the
- * file was awaiting. Pure.
+ * file's overview, groups and counts then speak for the merged whole: the
+ * part's overview was written over every item in the file (build-result.ts
+ * hands the write-up the file's items beside its own), so it replaces the
+ * file's; a part whose write-up fell back leaves none. The counts are the
+ * first look's and every part's added up. What the first look had of its own
+ * is kept in `firstLook`. The first look's slow part (`slow`) merges the same
+ * way and settles what the file was awaiting. Pure.
  */
 export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, runId: string, slow = false): TopicSearchResult {
   const record: ResultRetry = {
@@ -260,18 +310,29 @@ export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, r
     stats: part.stats,
   };
   const items = [...target.items, ...part.items];
+  const retries = [...(target.retries ?? []).filter((r) => r.runId !== runId), record];
+  // A file merged before `firstLook` existed still has the first look's own overview on top,
+  // unless the first look had none and an earlier retry's was taken in its place.
+  const firstLook: ResultFirstLook = target.firstLook ?? {
+    overview: target.retries?.some((r) => r.overview && r.overview.text === target.overview?.text) ? null : target.overview,
+    writeup: target.writeup,
+    stats: target.stats,
+  };
   const { awaiting, ...rest } = target;
   return {
     ...rest,
     ...(awaiting && !slow ? { awaiting } : {}),
     empty: items.length === 0,
     writeup: target.writeup === "none" ? part.writeup : target.writeup,
-    overview: target.overview ?? part.overview,
+    // A part that added nothing wrote nothing: the file's overview still holds.
+    overview: part.items.length ? part.overview : target.overview,
     groups: regroup([...target.groups, ...part.groups]),
     items,
     materials: [...target.materials, ...part.materials],
     questions: [...target.questions, ...part.questions],
-    retries: [...(target.retries ?? []).filter((r) => r.runId !== runId), record],
+    stats: sumStats([firstLook.stats, ...retries.map((r) => r.stats)]),
+    retries,
+    firstLook,
   };
 }
 
@@ -283,6 +344,7 @@ export function retryPart(result: TopicSearchResult, runId: string): TopicSearch
   const used = new Set(items.flatMap((i) => i.materials));
   return {
     ...result,
+    citable: result.items.filter((i) => !record.items.includes(i.id)).map((i) => ({ id: i.id, title: i.title })),
     createdAt: record.at,
     empty: items.length === 0,
     writeup: record.writeup,
@@ -296,22 +358,25 @@ export function retryPart(result: TopicSearchResult, runId: string): TopicSearch
     stats: record.stats,
     retries: undefined,
     awaiting: undefined,
+    firstLook: undefined,
   };
 }
 
 /**
- * The first look's own items, without what retries or its slow part added
- * later: what the issue `first:<id>` carries, even when it is assembled after
- * those were merged (a crash, the collector's tick). Pure.
+ * The first look's own items, overview, write-up and counts, without what
+ * retries or its slow part added later: what the issue `first:<id>` carries,
+ * even when it is assembled after those were merged (a crash, the collector's
+ * tick). Pure.
  */
 export function firstPart(result: TopicSearchResult): TopicSearchResult {
   const added = new Set((result.retries ?? []).flatMap((r) => r.items));
   const addedQuestions = new Set((result.retries ?? []).flatMap((r) => r.questions));
-  if (added.size === 0 && addedQuestions.size === 0) return result;
+  if (added.size === 0 && addedQuestions.size === 0 && !result.firstLook) return result;
   const items = result.items.filter((i) => !added.has(i.id));
   const used = new Set(items.flatMap((i) => i.materials));
   return {
     ...result,
+    ...(result.firstLook ? { overview: result.firstLook.overview, writeup: result.firstLook.writeup, stats: result.firstLook.stats } : {}),
     empty: items.length === 0,
     groups: result.groups
       .map((g) => ({ subtopic: g.subtopic, items: g.items.filter((id) => !added.has(id)) }))

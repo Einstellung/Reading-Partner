@@ -3,7 +3,7 @@
 
 import { expect, test } from "bun:test";
 import { fusePool, POOL_RESERVE, type Candidate } from "../../../src/info/topic-search/rank-pool";
-import { POST_QUOTA, RESERVE_FLOOR, selectItems, shortlist, type SelectView } from "../../../src/info/topic-search/select";
+import { ITEM_FLOOR, POST_QUOTA, RESERVE_FLOOR, selectItems, shortlist, type SelectView } from "../../../src/info/topic-search/select";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 
 interface E {
@@ -55,6 +55,13 @@ test("a picked subtopic with only low-ranked but qualifying events still gets on
   const chosen = selectItems(ranked, 8, ["weather", "materials", "proteins", "dna"], VIEW);
   expect(ids(chosen)).toEqual(["w1", "w2", "w3", "w4", "w5", "w6", "m1", "pr1"]);
   // dna's only event is under the floor; math is not picked.
+});
+
+test("a small pool (a retry, 2026-10-17) leaves slots empty rather than listing what is under the item floor", () => {
+  const ranked = [post("x1", 62), paper("p1", 35), post("x2", ITEM_FLOOR), post("promo", 0), post("reply", 0), paper("weak", ITEM_FLOOR - 1)];
+  expect(ids(selectItems(ranked, 15, [], VIEW))).toEqual(["x1", "p1", "x2"]);
+  // A picked subtopic's reservation still needs RESERVE_FLOOR, so it never reaches under the item floor.
+  expect(ids(selectItems([paper("s", 5, "sub")], 15, ["sub"], VIEW))).toEqual([]);
 });
 
 test("the shortlist keeps the top and whatever a reservation could still take", () => {

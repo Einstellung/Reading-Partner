@@ -6,7 +6,11 @@
 //
 //   - up to POST_QUOTA items are post items when that many pass RESERVE_FLOOR;
 //   - every picked subtopic with an event at or above RESERVE_FLOOR gets one;
-//   - the remaining slots go by score, and the list stays in score order.
+//   - the remaining slots go by score, and the list stays in score order;
+//   - nothing under ITEM_FLOOR is listed, so a small pool (a retry, the slow
+//     part of a first look) leaves slots empty rather than topping them up with
+//     what the rerank called promotion or off-topic (2026-10-17: three items
+//     at score 0 in a retry).
 //
 // A post item is an event cluster with a post among its members whose own final
 // score passes the floor. A post merged into the event of the paper (repo,
@@ -23,6 +27,13 @@ export const POST_QUOTA = 3;
  * the cliff, times 0.3) stay well below.
  */
 export const RESERVE_FLOOR = 40;
+/**
+ * Final score an event must reach to be listed at all. The rerank's cliff
+ * (score under 20, times 0.3) and a missed anchor (less 20) put promotion,
+ * one-line replies and off-topic posts under it, mostly at 0; a paper the
+ * rerank put at 25 or more with an anchor named stays above it (initial value).
+ */
+export const ITEM_FLOOR = 20;
 
 export interface SelectView<T> {
   score(t: T): number;
@@ -34,7 +45,7 @@ export interface SelectView<T> {
 /**
  * The `want` items to list from `ranked` (best first), in `ranked` order:
  * reserved post items, then each picked subtopic's best qualifying item, then
- * by score.
+ * by score down to ITEM_FLOOR; fewer than `want` when the rest is under it.
  */
 export function selectItems<T>(ranked: readonly T[], want: number, picked: readonly string[], view: SelectView<T>): T[] {
   const chosen = new Set<number>();
@@ -53,9 +64,9 @@ export function selectItems<T>(ranked: readonly T[], want: number, picked: reado
     const i = ranked.findIndex((t) => view.subtopic(t) === s && view.score(t) >= RESERVE_FLOOR);
     if (i >= 0) chosen.add(i);
   }
-  for (const i of ranked.keys()) {
+  for (const [i, t] of ranked.entries()) {
     if (chosen.size >= want) break;
-    chosen.add(i);
+    if (view.score(t) >= ITEM_FLOOR) chosen.add(i);
   }
   return [...chosen].sort((a, b) => a - b).map((i) => ranked[i]);
 }

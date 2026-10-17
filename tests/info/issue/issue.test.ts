@@ -67,7 +67,7 @@ function result(searchId: string, name: string, date: string, kind: "first" | "d
     items,
     materials: [],
     questions: [],
-    stats: {} as TopicSearchResult["stats"],
+    stats: { candidates: { x: 0, arxiv: 0 }, passedFloor: 0, pooled: 0, reranked: true, anchorMiss: 0, avoidBlocked: {}, subtopicItems: {}, modelCalls: 0 },
     runDir: "topic-search-runs/r",
     ...over,
   };

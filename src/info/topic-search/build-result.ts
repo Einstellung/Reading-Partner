@@ -606,7 +606,10 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         profile,
         questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })),
         language: bookLanguage,
-        earlier: earlierLines(recent),
+        // A retry's overview replaces the file's (mergeRetry), so it is written over the file's items too;
+        // those are shown beside the new ones rather than again as earlier lines.
+        earlier: earlierLines(target ? recent.filter((r) => r.id !== target.id) : recent),
+        ...(target ? { alongside: target.items } : {}),
         deeper,
       },
       deps.model,
