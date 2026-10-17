@@ -5,13 +5,14 @@
 // owns that file; it imports this directory, not the other way round). The
 // result builder is build-live.ts's unless the caller hands in another.
 
-import { appBox, randomBoxItemId } from "../../box/store";
+import { appBox } from "../../box/store";
 import { t } from "../../i18n";
 import { WEBVIEW_FETCH } from "../../legion/claim";
 import { deviceRuntime } from "../../legion/durable/background";
 import { registerProgramTask } from "../../legion/durable/program-task";
 import { appRunner } from "../../legion/runner/runner";
 import { registerWorker } from "../../legion/runner/worker";
+import { registerRunDescriber } from "../../legion/status/registry";
 import { statementStore } from "../../memory";
 import { appData } from "../../platform/app/appdata";
 import { currentDeviceId } from "../../platform/app/device";
@@ -26,13 +27,16 @@ import type { XHalt } from "../x/search-page";
 import { resolveRedirect } from "../x/live";
 import { stopFollowing } from "./apply";
 import { SOURCE_HEALTH_FILE, type BuildTopicSearchResult } from "./build-result";
-import { buildTopicSearchResult } from "./build-live";
+import { parseResultFile, RESULT_FILE_PREFIX, type TopicSearchResult } from "./result-types";
+import { topicSearchDescriber, type ShelfIssue, type TopicSearchStatusDeps } from "./run-status";
+import { buildTopicSearchResult, searchArxivLive } from "./build-live";
 import { registerFirstRunDispatcher } from "./first-run";
-import { recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
+import { clearSignedOut, recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
 import type { XResume } from "./resume-tool";
+import { planRetry } from "./retry";
+import type { RetryToolDeps } from "./retry-tool";
 import { lastNightAnchor, type NightConditions } from "./nightly";
 import {
-  TOPIC_SEARCH_BOX_KIND,
   TOPIC_SEARCH_HALT_BOX_KIND,
   TOPIC_SEARCH_KIND,
   topicSearchTask,
@@ -40,15 +44,19 @@ import {
 } from "./run";
 import {
   createStateStore,
+  loadArxivRead,
+  loadFirstPart,
   loadRead,
   nightLimits,
   permalinkBudget,
   progressLog,
   runDirOf,
+  saveArxivRead,
+  saveFirstPart,
   saveRead,
   spendNight,
 } from "./run-state";
-import { createNightTick, firstRunDispatcher, topicSearchWorker } from "./run-worker";
+import { askRetryRun, createNightTick, firstRunDispatcher, topicSearchWorker } from "./run-worker";
 import { foldTopicSearchHealth, parseSourceHealthFile } from "./source-health";
 import { changeTopicSearch, loadTopicSearches } from "./store";
 import { localDay } from "./x-progress";
@@ -69,6 +77,8 @@ export function setTopicSearchResultBuilder(build: BuildTopicSearchResult | null
 
 export interface TopicSearchRunPorts {
   build?: BuildTopicSearchResult;
+  /** A run closed: the nightly brief (info/issue/live.ts issueRunClosed) takes it from here. */
+  closed?: TopicSearchRunDeps["closed"];
   /** Put the halt line on this machine's collector state file (docs/info/36 `halt`). */
   noteHalt(text: string): Promise<void>;
 }
@@ -86,7 +96,18 @@ async function xSessionState(): Promise<"ok" | "signed-out" | "unknown"> {
   const status = await checkSiteSession(site.checkUrl);
   await saveSiteSessions(applySessionCheck(await loadSiteSessions(), site.host, status, Date.now()));
   if (status.status !== "ok" && status.status !== "empty") return "unknown";
+  // Signed in again: a signed-out record from before is over (halt.ts clearSignedOut).
+  if (status.signedIn) await state.update((s) => (s.halt?.kind === "signed-out" ? { ...s, halt: null } : s));
   return status.signedIn ? "ok" : "signed-out";
+}
+
+/** The halt record with a signed-out one dropped once the session sidecar says signed in since. */
+async function liftSignedOut(): Promise<void> {
+  const session = (await loadSiteSessions())[X_HOST];
+  await state.update((s) => {
+    const halt = clearSignedOut(s.halt, session);
+    return halt === s.halt ? s : { ...s, halt };
+  });
 }
 
 function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
@@ -103,7 +124,7 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
       kind: TOPIC_SEARCH_HALT_BOX_KIND,
       runId: about.runId,
       cover: t(HALT_COVER[halt.kind]),
-      // Opened onto the sources page, at X's sign-in row.
+      // Sign-in lives in Settings > Accounts.
       body: `sources:${X_HOST}`,
       origin: { place: "door", date: localDay(now) },
       needsDecision: haltNeedsReader(halt.kind),
@@ -136,6 +157,11 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
     progress: (dir) => progressLog(appData, dir),
     saveRead: (dir, x) => saveRead(appData, dir, x),
     loadRead: (dir) => loadRead(appData, dir),
+    searchArxiv: searchArxivLive,
+    saveArxiv: (dir, read) => saveArxivRead(appData, dir, read),
+    loadArxiv: (dir) => loadArxivRead(appData, dir),
+    saveFirstPart: (dir, part) => saveFirstPart(appData, dir, part),
+    loadFirstPart: (dir) => loadFirstPart(appData, dir),
     memory: state.reader,
     nightLimits: async (night) => nightLimits((await state.load()).night, night),
     spendNight: async (night, x) => {
@@ -146,23 +172,14 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
       await state.update((s) => (s.halt ? { ...s, halt: null } : s));
     },
     checkSession: xSessionState,
+    retryPlan: async (search) => planRetry(search, await loadSourceHealth()),
     halted,
     keepAwake: (reason) => keepAwake(reason),
     open: (viewport) => openBrowse({ idleTimeoutMs: BROWSE_IDLE_MS, viewport }),
     expandLink: (tco) => resolveRedirect(tco),
-    deliver: async (item) => {
-      await appBox().put({
-        id: item.id,
-        boxId: item.runId,
-        source: "run",
-        kind: TOPIC_SEARCH_BOX_KIND,
-        runId: item.runId,
-        cover: item.cover,
-        body: item.resultFile,
-        origin: { place: "door", date: item.date },
-      });
+    closed: async (run) => {
+      await ports.closed?.(run);
     },
-    newBoxItemId: randomBoxItemId,
     lane: inXLane,
     report: (runId, text) => reporters.get(runId)?.(text),
     now: () => Date.now(),
@@ -183,6 +200,50 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
   };
 }
 
+/** The shelf file info/issue writes (info/issue/types.ts INFO_SHELF_FILE); read here without importing that domain. */
+const SHELF_FILE = "info-shelf.json";
+
+async function readJson(path: string): Promise<unknown> {
+  if (!(await appData.exists(path))) return null;
+  try {
+    return JSON.parse(await appData.readText(path));
+  } catch {
+    return null;
+  }
+}
+
+/** What background_status reads about a topic-search run on this device (run-status.ts). */
+const statusDeps: TopicSearchStatusDeps = {
+  searches: () => loadTopicSearches(),
+  steps: async (runId) => {
+    const steps = await progressLog(appData, runDirOf(runId)).load();
+    return steps.length ? steps : null;
+  },
+  arxivRead: (runId) => loadArxivRead(appData, runDirOf(runId)),
+  runHealth: async (runId) => {
+    const path = `${runDirOf(runId)}/${SOURCE_HEALTH_FILE}`;
+    return (await appData.exists(path)) ? parseSourceHealthFile(await appData.readText(path)) : null;
+  },
+  results: async (searchId) => {
+    const names = (await appData.readDir("")).filter((e) => e.isFile && e.name.startsWith(`${RESULT_FILE_PREFIX}${searchId}-`));
+    const out: TopicSearchResult[] = [];
+    for (const e of names) {
+      const parsed = parseResultFile(await appData.readText(e.name));
+      if (parsed?.searchId === searchId) out.push(parsed);
+    }
+    return out;
+  },
+  issues: async () => {
+    const shelf = (await readJson(SHELF_FILE)) as { issues?: ShelfIssue[] } | null;
+    return Array.isArray(shelf?.issues) ? shelf.issues : [];
+  },
+  localX: async () => {
+    await liftSignedOut();
+    const session = (await loadSiteSessions())[X_HOST];
+    return { halt: (await state.load()).halt, signedIn: !session || session.unknown ? null : session.signedIn };
+  },
+};
+
 let nightTick: (() => Promise<string[]>) | null = null;
 
 /** The worker, the `rp.topicsearch` task and the first-run dispatch. Once, at startup, on every device. */
@@ -202,6 +263,7 @@ export function registerTopicSearchRuns(ports: TopicSearchRunPorts): void {
       clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
     }),
   });
+  registerRunDescriber(topicSearchDescriber(statusDeps));
   const delegate = appRunner().delegate;
   registerFirstRunDispatcher(firstRunDispatcher((input) => delegate(input)));
   nightTick = createNightTick({
@@ -238,6 +300,7 @@ export async function checkTopicSearchNight(collecting: () => Promise<boolean>):
 
 /** The reader said to read X again after a second challenge or limit (resume-tool.ts). */
 export async function resumeXReading(): Promise<XResume> {
+  await liftSignedOut();
   let lifted = false;
   const after = await state.update((s) => {
     const resumed = resumeHalt(s.halt);
@@ -246,6 +309,20 @@ export async function resumeXReading(): Promise<XResume> {
   });
   return { lifted, halt: after.halt };
 }
+
+/** The retry tool's live side (retry-tool.ts): the plan and the session on this device, and the ask. */
+export const retryDeps: Omit<RetryToolDeps, "searches" | "known"> = {
+  plan: async (search) => planRetry(search, await loadSourceHealth()),
+  xSignedIn: async () => {
+    await liftSignedOut();
+    const session = (await loadSiteSessions())[X_HOST];
+    return !session || session.unknown ? null : session.signedIn;
+  },
+  ask: (searchId) => {
+    const runner = appRunner();
+    return askRetryRun(searchId, { runs: () => runner.list({ kind: TOPIC_SEARCH_KIND }), delegate: (input) => runner.delegate(input) });
+  },
+};
 
 /** Why X is not read on this device tonight, or null. */
 export async function xReadingPaused(): Promise<string | null> {

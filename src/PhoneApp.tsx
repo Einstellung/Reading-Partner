@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType }
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID, listTopics, onFiledElsewhere, type Topic } from "./platform/app/topics";
 import { libraryHas, listLibraryEntries, type LibraryEntry } from "./platform/app/library";
+import { readerModeOf } from "./reading/issue";
 import {
   libraryFilePath,
   openIn,
@@ -35,6 +36,7 @@ import { registerPlaces } from "./desk";
 import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
+import InfoShelf from "./ui/components/info/InfoShelf";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
 import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
@@ -82,8 +84,6 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
       return "briefing";
     case "article":
       return "article";
-    case "sources":
-      return "sources";
     case "meals":
       return "meals";
     case "meals-shopping":
@@ -382,7 +382,6 @@ export default function PhoneApp({
             launchReady={bootstrapped}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshSavedArticles}
-            onSay={(line) => pushToast("error", line)}
             onOverlayChange={onOverlayChange}
             // Pull down on the briefing or on an article to open the chat about
             // it. Only those two: home and the kept list have nothing to talk
@@ -413,6 +412,7 @@ export default function PhoneApp({
                 launch={launch}
                 savedCount={savedArticles?.length ?? null}
                 onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
+                onOpenBriefs={() => setStack((s) => push(s, screen("briefs")))}
                 continueBook={topics === null ? undefined : continueReading(topics, entries)}
                 onContinue={(book) => openReader({ ...book, name: book.title })}
                 onOpenLibrary={() => setStack((s) => push(s, screen("library")))}
@@ -436,6 +436,19 @@ export default function PhoneApp({
                 await refreshShelf();
               }}
               onNotice={pushToast}
+            />
+          )}
+
+          {base.kind === "briefs" && (
+            <InfoShelf
+              // An issue or a volume is on no topic: the reader opens it from
+              // the library alone.
+              onOpenBook={(bookId, name) => openReader({ bookId, name, topicId: "", path: "" })}
+              onBack={goBack}
+              sheet
+              onTell={(line) => pushToast("info", line)}
+              onSay={(line) => pushToast("error", line)}
+              onTopicsChanged={refreshShelf}
             />
           )}
 
@@ -492,6 +505,7 @@ export default function PhoneApp({
               onOverlayChange={onOverlayChange}
               onBack={goBack}
               {...(openedBook.threadId ? { threadId: openedBook.threadId } : {})}
+              mode={readerModeOf(entries[openedBook.bookId])}
             />
           )}
           </ComposerSlotContext.Provider>
@@ -544,6 +558,11 @@ export default function PhoneApp({
         // would stand, so Lumen stands down for that screen (docs/74).
         stoodDown={base.kind === "lesson"}
         targets={{
+          // A brief (docs/info/88): on no topic, opened straight in the reader.
+          openBook: (bookId) => {
+            const entry = entries[bookId];
+            if (entry) openReader({ bookId, name: entry.title, topicId: "", path: "" });
+          },
           goToBriefing: () => onNavigate("briefing"),
           goToMeals: () => onNavigate("meals"),
           // A book's conversation: a paper's lesson, or an EPUB's thread over its page.

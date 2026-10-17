@@ -26,6 +26,9 @@
 // (live.ts).
 
 import { localDateString } from "../collect/store";
+import { COLLECT_KIND } from "../briefer/handoff";
+import { registerSchedule } from "../../legion/schedule";
+import { NIGHTLY_COLLECT_ENABLED } from "./nightly-collect";
 
 // Five in the morning: late enough that the overnight feeds have published,
 // early enough to be there before the reader is. Not a setting — a briefing has
@@ -53,4 +56,27 @@ export function lastAnchorDate(now: number): string {
   const at = new Date(now);
   if (at.getHours() < DAILY_ANCHOR_HOUR) at.setDate(at.getDate() - 1);
   return localDateString(at);
+}
+
+// The round as a schedule (docs/55): the hour is declared once, here, and which
+// machine acts on it is the election for `collect`. What legion does about the
+// hour is ring a wake bell, so that the soul knows the night is being worked; the
+// round itself is a run the tick in live.ts delegates.
+export const DAILY_ROUND_SCHEDULE = "info-daily-round";
+
+/**
+ * Register the round's schedule, unless the nightly collection is switched off
+ * (nightly-collect.ts): the bell's brief says a collect run has been delegated,
+ * which would be untrue with the round not running.
+ */
+export function registerMorningRound(enabled: boolean = NIGHTLY_COLLECT_ENABLED): boolean {
+  if (!enabled) return false;
+  registerSchedule({
+    id: DAILY_ROUND_SCHEDULE,
+    kind: COLLECT_KIND,
+    at: { daily: { hour: DAILY_ANCHOR_HOUR } },
+    brief:
+      "The morning briefing round is due. The collect run for it has been delegated by the daily tick on this device and will report when it settles; say something to the reader only if there is something worth saying.",
+  });
+  return true;
 }

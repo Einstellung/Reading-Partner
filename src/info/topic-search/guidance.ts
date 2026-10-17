@@ -8,9 +8,19 @@
 // search hangs on one, so following it again can find it.
 
 import type { Statement } from "../../memory";
+import { sourceNames, sourcesOfPace, SPLIT_FIRST_LOOK } from "./pace";
+import { X_READ_RULE } from "./retry";
 import type { TopicSearch } from "./types";
 
 const SCOPE_CHARS = 160;
+
+/** How a first look arrives (pace.ts), said the same way by the guidance and the confirm tool; "" when it is not split. */
+export const FIRST_LOOK_IN_TWO_PARTS = SPLIT_FIRST_LOOK
+  ? `A first look comes in two parts: what the fast sources (${sourceNames(sourcesOfPace("fast"))}) find is built and delivered ` +
+    `first, as a brief issue of its own; ${sourceNames(sourcesOfPace("slow"))} is read slowly, the way a person browses (often ` +
+    "an hour or more), and what it finds follows as a second issue. More social media may be added as sources later, and " +
+    "they will be slow too. Never promise when the second part will come."
+  : "";
 
 function line(s: string): string {
   const first = s.trim().split("\n")[0]?.trim() ?? "";
@@ -20,12 +30,11 @@ function line(s: string): string {
 export interface GuidanceInput {
   searches: readonly TopicSearch[];
   statements: readonly Statement[];
-  topics: readonly { id: string; name: string }[];
   /** Why X is not read on this device tonight (runs-live.ts xReadingPaused), or null. */
   xPaused?: string | null;
 }
 
-export function topicSearchGuidance({ searches, statements, topics, xPaused = null }: GuidanceInput): string {
+export function topicSearchGuidance({ searches, statements, xPaused = null }: GuidanceInput): string {
   const stoppedConcerns = new Set(
     searches.filter((s) => s.status === "stopped" && s.concernId).map((s) => s.concernId as string),
   );
@@ -33,8 +42,7 @@ export function topicSearchGuidance({ searches, statements, topics, xPaused = nu
     (s) => s.kind === "concern" && !s.supersededBy && s.text.trim() !== "" && (!s.lapsed || stoppedConcerns.has(s.id)),
   );
   const roster = searches.map((s) => {
-    const topic = topics.find((tp) => tp.id === s.topicId)?.name ?? s.topicId;
-    return `- ${s.name} (id: ${s.id}, ${s.status}, topic "${topic}") — ${line(s.scope)}`;
+    return `- ${s.name} (id: ${s.id}, ${s.status}) — ${line(s.scope)}`;
   });
   return [
     "TOPIC SEARCHES",
@@ -44,9 +52,6 @@ export function topicSearchGuidance({ searches, statements, topics, xPaused = nu
           "What they are keeping an eye on (concerns, by id):",
           ...concerns.map((s) => `- ${s.text.trim()} (id ${s.id}, ${s.author}${s.lapsed ? ", lapsed" : ""})`),
         ].join("\n")
-      : "",
-    topics.length
-      ? ["Their reading topics:", ...topics.map((tp) => `- ${tp.name} (id: ${tp.id})`)].join("\n")
       : "",
     xPaused ? `X reading on this device: ${xPaused}.` : "",
     [
@@ -63,20 +68,35 @@ export function topicSearchGuidance({ searches, statements, topics, xPaused = nu
       "- Ask before drafting when their words fall into a keyword trap: shopping-for-a-crowd",
       "  phrasing, a number that collides with other things, tutorial wording, one generic noun,",
       "  or non-Latin script.",
+      "- A query's arxiv words are ANDed: every word must be in the paper. Write 2 to 4 short",
+      "  keywords, the most specific first (\"protein design diffusion\", not \"how diffusion models",
+      "  design proteins\"); never a sentence, no two-letter words (\"AI\" is dropped). Within the",
+      "  query counts, two short queries beat one long one.",
       "- Settle scope, subtopics, what they want and what they don't. Then propose. The card",
       "  files nothing until they apply it; if they correct it in words, propose again.",
       "- When they say yes to the card in words (\"ok\", \"好\", \"go ahead\"), call",
       "  confirm_topic_search: it does what the card's Follow button does.",
       "- When they want one look only, not a daily follow (\"just this once\", \"只看这一次\"),",
       "  propose with once: the first overview comes, then it stops by itself.",
+      ...(FIRST_LOOK_IN_TWO_PARTS
+        ? [`- ${FIRST_LOOK_IN_TWO_PARTS} Say so in a line when you propose a search and when its first run starts.`]
+        : []),
       "- Name an existing concern above that says the same thing as existingConcern, and a stopped",
-      "  search they want back as searchId. File into an existing topic by id where one fits.",
+      "  search they want back as searchId.",
       "When they answer a question, write it where it holds: only for this topic, with",
       "update_topic_search; for them in general, whatever the topic (\"I only read English",
       "originals\"), with statement_write as a profile; both when it is both. Then say in one line",
       "where it went: \"Saved to this topic\" or \"Saved to your profile\", in their language.",
       "When they say they no longer care about a topic search, call stop_topic_search.",
       "When X reading is paused and they say to read X again, call resume_x_reading.",
+      X_READ_RULE,
+      "When they ask to search again after signing in to X, or to redo a search's first look, call",
+      "retry_topic_search_first_run: it reads again only what the first run missed. Say only what a",
+      "tool told you; never promise when X will be read or a result will come.",
+      "When they ask whether a search's first look, a retry or a night's run has started, come back or",
+      "finished, call background_status (about: the search's name or id) first: it says the run's state,",
+      "elapsed time, X and arXiv progress, result and brief issue (for a first look, whether its first part",
+      "is out and X is still being read). Conversation search is not a source for run state.",
     ].join("\n"),
   ]
     .filter((b) => b !== "")

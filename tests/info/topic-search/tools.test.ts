@@ -13,7 +13,6 @@ import { buildStopTopicSearchTool, buildUpdateTopicSearchTool, type EditToolDeps
 import {
   buildProposeTopicSearchTool,
   openingAnchor,
-  resolveFiledTopic,
 } from "../../../src/info/topic-search/propose-tool";
 import { buildConfirmTopicSearchTool } from "../../../src/info/topic-search/confirm-tool";
 import { resumeHalt, type XHaltRecord } from "../../../src/info/topic-search/halt";
@@ -30,7 +29,6 @@ function search(id: string, over: Partial<TopicSearch> = {}): TopicSearch {
   return {
     id,
     name: id,
-    topicId: "topic-1",
     concernId: null,
     scope: "s",
     subtopics: [{ id: "st1", name: "Materials", picked: true }],
@@ -77,7 +75,6 @@ function card(over: Partial<TopicSearchProposalCardData> = {}): TopicSearchPropo
     want: [],
     avoid: [],
     judgments: ["AI chip design counts as engineering"],
-    topic: { id: null, name: "AI for science" },
     eta: "tonight",
     anchors: ["AI for science"],
     queries: [{ id: "q1", subtopic: null, x: "AI for science", arxiv: null, ranking: "", weight: 1 }],
@@ -116,9 +113,6 @@ test("the opening message is the latest line holding the quote, or the latest li
   expect(openingAnchor(lines, "ai for science", "th")).toBe("th:1");
   expect(openingAnchor(lines, "not said", "th")).toBe("t-abc@th:2");
   expect(openingAnchor([], "x", "th")).toBeNull();
-  expect(resolveFiledTopic("Science", [{ id: "tp", name: "science" }], "x")).toEqual({ id: "tp", name: "science" });
-  expect(resolveFiledTopic("", [{ id: "tp", name: "AI" }], "AI")).toEqual({ id: "tp", name: "AI" });
-  expect(resolveFiledTopic("", [], "AI")).toEqual({ id: null, name: "AI" });
 });
 
 test("propose draws a card and writes nothing; a taken name is refused", async () => {
@@ -127,7 +121,6 @@ test("propose draws a card and writes nothing; a taken name is refused", async (
     threadId: "thread-1",
     readerLines: () => [{ ts: OCT_14, text: "帮我整理 AI for science 的资料" }],
     searches: async () => [search("ts-1", { name: "Chips" })],
-    topics: async () => [],
     statements: async () => [],
     claims: async () => [],
     now: () => OCT_14,
@@ -147,7 +140,6 @@ test("propose draws a card and writes nothing; a taken name is refused", async (
       { subtopic: "Weather", x: "AI weather", arxiv: "", ranking: "" },
     ],
     answers: [],
-    topic: "",
     concern: "Following AI for science",
     opening: "AI for science",
   };
@@ -156,7 +148,6 @@ test("propose draws a card and writes nothing; a taken name is refused", async (
   expect(cards).toHaveLength(1);
   expect(cards[0].queries.map((q) => q.x)).toEqual(["AI for science"]);
   expect(cards[0].concern.evidence).toBe(`thread-1:${OCT_14}`);
-  expect(cards[0].topic).toEqual({ id: null, name: "AI for science" });
   expect(cards[0].eta).toBe("tonight");
 
   const refused = await tool.execute({ ...args, name: "chips" });
@@ -194,16 +185,10 @@ test("Apply writes the config with a new topic and the concern, then hands off t
   const store = statements();
   const file = memoryFile();
   const dispatched: string[] = [];
-  const made: string[] = [];
   const result = await applyTopicSearchProposal(card(), {
     concern: store,
     load: file.load,
     put: file.put,
-    topicExists: async () => false,
-    createTopic: async (name) => {
-      made.push(name);
-      return { id: "topic-new" };
-    },
     dispatchFirstRun: async (s) => {
       dispatched.push(s.id);
     },
@@ -212,9 +197,9 @@ test("Apply writes the config with a new topic and the concern, then hands off t
   });
   expect(result.ok).toBe(true);
   const [written] = file.all;
-  expect(`${written.id} ${written.topicId} ${written.status} ${written.revision}`).toBe("ts-00000000 topic-new active 1");
+  expect(`${written.id} ${written.status} ${written.revision}`).toBe("ts-00000000 active 1");
+  expect("topicId" in written).toBe(false);
   expect(written.answers).toEqual([{ asked: "Funding news?", answer: "No", at: OCT_14 }]);
-  expect(made).toEqual(["AI for science"]);
   expect(dispatched).toEqual(["ts-00000000"]);
   const concern = await store.getStatement(written.concernId!);
   expect(`${concern?.kind} ${concern?.author} ${concern?.text}`).toBe("concern reader Following AI for science");
@@ -233,7 +218,13 @@ test("stopping marks the search stopped and its concern lapsed; re-drafting it f
   });
   const file = memoryFile();
   await file.put(search("ts-1", { concernId: concern.id }));
-  const deps: EditToolDeps = { searches: file.load, change: file.change, setLapsed: store.setLapsed, now: () => OCT_14 };
+  const deps: EditToolDeps = {
+    searches: file.load,
+    known: () => file.all,
+    change: file.change,
+    setLapsed: store.setLapsed,
+    now: () => OCT_14,
+  };
 
   const stop = buildStopTopicSearchTool(deps);
   await stop.execute({ searchId: "ts-1" });
@@ -245,8 +236,6 @@ test("stopping marks the search stopped and its concern lapsed; re-drafting it f
     concern: store,
     load: file.load,
     put: file.put,
-    topicExists: async () => true,
-    createTopic: async () => ({ id: "never" }),
     dispatchFirstRun: async () => {},
     now: () => OCT_14 + 1000,
   });
@@ -260,11 +249,27 @@ test("stopping marks the search stopped and its concern lapsed; re-drafting it f
   expect(back.evidence).toHaveLength(2);
 });
 
+test("the line a running update or stop shows names the topic; an id nobody knows stands as said", () => {
+  const deps: EditToolDeps = {
+    searches: async () => [],
+    known: () => [search("ts-1", { name: "Chips" })],
+    change: async () => null,
+    setLapsed: async () => null,
+    now: () => OCT_14,
+  };
+  const update = buildUpdateTopicSearchTool(deps);
+  expect(update.label({ searchId: "ts-1" })).toBe("Updating Chips");
+  expect(update.label({ searchId: "chips" })).toBe("Updating Chips");
+  expect(update.label({ searchId: "ts-9" })).toBe("Updating ts-9");
+  expect(buildStopTopicSearchTool(deps).label({ searchId: "ts-1" })).toContain("Chips");
+});
+
 test("update writes the change at once with a 'saved to this topic' receipt", async () => {
   const file = memoryFile();
   await file.put(search("ts-1"));
   const tool = buildUpdateTopicSearchTool({
     searches: file.load,
+    known: () => file.all,
     change: file.change,
     setLapsed: async () => null,
     now: () => OCT_14,
@@ -298,7 +303,6 @@ const PROPOSE_ARGS = {
   anchors: ["AI for science"],
   queries: [{ subtopic: "", x: "AI for science", arxiv: "", ranking: "" }],
   answers: [],
-  topic: "",
   concern: "Following AI for science",
   opening: "AI for science",
 };
@@ -314,7 +318,6 @@ function door() {
     threadId: "thread-1",
     readerLines: () => [{ ts: OCT_14, text: "帮我整理 AI for science 的资料" }],
     searches: file.load,
-    topics: async () => [],
     statements: async () => [],
     claims: async () => [],
     now: () => OCT_14,
@@ -328,8 +331,6 @@ function door() {
         concern: store,
         load: file.load,
         put: file.put,
-        topicExists: async () => false,
-        createTopic: async () => ({ id: "topic-new" }),
         dispatchFirstRun: async (s) => {
           dispatched.push(s.id);
         },
@@ -412,7 +413,9 @@ test("resume_x_reading answers by what was held on this device", async () => {
   expect(receiptOf(none)).toBeNull();
   expect(textOf(none)).toContain("not paused on this device");
   const signedOut = await run({ lifted: false, halt: { ...HALT, kind: "signed-out", strikes: 0, paused: false } });
-  expect(textOf(signedOut)).toContain("signs in to X again");
+  expect(textOf(signedOut)).toContain("signs in to X in Settings > Accounts");
+  expect(textOf(signedOut)).toContain("retry_topic_search_first_run");
+  expect(textOf(signedOut)).not.toContain("tonight");
   const skipped = await run({ lifted: false, halt: { ...HALT, strikes: 1, paused: false } });
   expect(textOf(skipped)).toContain("only the next night is skipped");
 });

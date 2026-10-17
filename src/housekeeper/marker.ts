@@ -18,7 +18,14 @@ export type MarkAction =
   /** The file keeps its last `keepLines` lines. Local kinds only. */
   | "truncate-tail"
   /** Moved to a local, unsynced cold layer. Defined; nothing implements it yet. */
-  | "demote-local";
+  | "demote-local"
+  /**
+   * The marker's own flow carries it out (GarbageMarker.carryOut): a deletion
+   * that is more than one file, such as a book with its threads and marks. The
+   * path is the file whose palace row names the marker; `subject` says which
+   * thing in it goes.
+   */
+  | "flow";
 
 export interface Mark {
   /** AppData-relative, forward slashes. A file, never a directory. */
@@ -26,6 +33,8 @@ export interface Mark {
   action: MarkAction;
   /** Set for truncate-tail: how many lines stay. */
   keepLines?: number;
+  /** Set for flow: what in the file the flow is about (an id). */
+  subject?: string;
   /** One line a person reading the housekeeper log can check against the disk. */
   reason: string;
 }
@@ -60,6 +69,19 @@ export interface GarbageMarker {
   /** The name palace rows use in `{ rule: "marker", marker }`. */
   name: string;
   mark(ctx: MarkContext): Promise<readonly Mark[]>;
+  /**
+   * Carry out one of this marker's "flow" marks. The marker's domain hands it
+   * in, so the housekeeper reaches the domain's deletion without importing it.
+   * Throws on failure; the mark is logged failed and comes back the next night.
+   */
+  carryOut?(mark: Mark): Promise<void>;
+}
+
+/** The flows of the markers that have one, by marker name. */
+export function markerFlows(markers: readonly GarbageMarker[]): Map<string, (mark: Mark) => Promise<void>> {
+  const flows = new Map<string, (mark: Mark) => Promise<void>>();
+  for (const m of markers) if (m.carryOut) flows.set(m.name, m.carryOut.bind(m));
+  return flows;
 }
 
 const markers = new Map<string, GarbageMarker>();

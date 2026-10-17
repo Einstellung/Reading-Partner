@@ -14,17 +14,18 @@ import {
 } from "../../../../src/ui/components/base/shell-nav";
 
 test("the sidebar's items are in the order a day uses them", () => {
-  expect(SHELL_NAV_ITEMS.map((i) => i.id)).toEqual(["today", "briefing", "meals", "topics"]);
-  expect(SHELL_NAV_ITEMS.map((i) => translate("en", i.labelKey))).toEqual(["Today", "Briefing", "Meals", "Topics"]);
+  expect(SHELL_NAV_ITEMS.map((i) => i.id)).toEqual(["today", "briefing", "briefs", "meals", "topics"]);
+  expect(SHELL_NAV_ITEMS.map((i) => translate("en", i.labelKey))).toEqual(["Today", "Briefing", "Briefs", "Meals", "Topics"]);
 });
 
 // Meals is opt-in (settings.meals, docs/73), and off it is not in the column
 // at all — the reader having said no is not a reason to show them a row.
 test("Meals is drawn only when it is switched on, in its own place", () => {
-  expect(shellNavItems({ meals: false }).map((i) => i.id)).toEqual(["today", "briefing", "topics"]);
+  expect(shellNavItems({ meals: false }).map((i) => i.id)).toEqual(["today", "briefing", "briefs", "topics"]);
   expect(shellNavItems({ meals: true }).map((i) => i.id)).toEqual([
     "today",
     "briefing",
+    "briefs",
     "meals",
     "topics",
   ]);
@@ -33,6 +34,7 @@ test("Meals is drawn only when it is switched on, in its own place", () => {
 test("each item opens its screen", () => {
   expect(screenForNav("today")).toBe("vestibule");
   expect(screenForNav("briefing")).toBe("briefing");
+  expect(screenForNav("briefs")).toBe("briefs");
   expect(screenForNav("meals")).toBe("meals");
   expect(screenForNav("topics")).toBe("library");
 });
@@ -45,11 +47,10 @@ test("what an item opens lights that item", () => {
   }
 });
 
-// The source list and an opened article are reached from the briefing and go
-// back to it, so they are still the briefing as far as the sidebar is concerned.
-test("the briefing's side rooms keep Briefing lit", () => {
+// An opened article is reached from the briefing and goes back to it, so it is
+// still the briefing as far as the sidebar is concerned.
+test("the briefing's side room keeps Briefing lit", () => {
   expect(activeNavFor("article")).toBe("briefing");
-  expect(activeNavFor("sources")).toBe("briefing");
 });
 
 test("no screen is left without an item, and the reader has none", () => {
@@ -58,7 +59,6 @@ test("no screen is left without an item, and the reader has none", () => {
     "library",
     "briefing",
     "article",
-    "sources",
     "meals",
     "settings",
   ];

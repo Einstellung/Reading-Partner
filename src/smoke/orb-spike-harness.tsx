@@ -103,7 +103,6 @@ function Harness() {
           onDismiss={noop}
           onAskBriefing={noop}
           onAskArticle={noop}
-          onOpenSources={noop}
         />
       </div>
       {pip && (

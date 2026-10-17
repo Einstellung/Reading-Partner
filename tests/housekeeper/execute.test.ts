@@ -101,6 +101,43 @@ test("a mark on a path its row does not hand to that marker is refused", async (
   expect(d.log.map((l) => l.outcome)).toEqual(Array(6).fill("refused"));
 });
 
+test("a flow mark runs its marker's own flow, once per subject, only on a row naming that marker", async () => {
+  const d = memDisk({ "shared-1": { text: "x", mtimeMs: 1 }, "keep-1": { text: "x", mtimeMs: 1 } });
+  const ran: string[] = [];
+  const flow = (mark: { subject?: string }) => {
+    if (mark.subject === "bad") return Promise.reject(new Error("would not go"));
+    ran.push(mark.subject ?? "");
+    return Promise.resolve();
+  };
+  const fl = (path: string, subject: string, marker = "caches"): MarkedBy => ({
+    path,
+    action: "flow",
+    subject,
+    reason: "test",
+    marker,
+  });
+  const res = await executeMarks(
+    [fl("shared-1", "a"), fl("shared-1", "a"), fl("shared-1", "b"), fl("shared-1", "bad"), fl("keep-1", "c"), fl("shared-1", "d", "other")],
+    d.exec,
+    { now: NOW, remoteBudget: 0, rows: ROWS, flows: new Map([["caches", flow]]) },
+  );
+  expect(ran).toEqual(["a", "b"]);
+  expect(res).toMatchObject({ done: 2, failed: 1, refused: 2, purged: 0 });
+  // The file the marks name is never touched by the executor itself.
+  expect(d.calls).toEqual([]);
+  expect(d.log.map((l) => l.subject)).toEqual(["a", "b", "bad", "c", "d"]);
+});
+
+test("a flow mark from a marker with no flow is refused", async () => {
+  const d = memDisk({ "cache-1": { text: "x", mtimeMs: 1 } });
+  const res = await executeMarks(
+    [{ path: "cache-1", action: "flow", subject: "a", reason: "test", marker: "caches" }],
+    d.exec,
+    { now: NOW, remoteBudget: 10, rows: ROWS },
+  );
+  expect(res).toMatchObject({ done: 0, refused: 1 });
+});
+
 test("truncate-tail rewrites a local file and refuses a synced one", async () => {
   const d = memDisk({
     "locallog-1": { text: "a\nb\nc\n", mtimeMs: 1 },

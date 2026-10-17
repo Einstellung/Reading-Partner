@@ -3,7 +3,8 @@
 // sources/builtins.ts); the shared default User-Agent lives here, next to the
 // http wrapper that forces it onto every request a descriptor doesn't override.
 
-// A plain desktop-browser UA. Feeds/APIs reject the polite bot UA the prep
-// pipeline uses (arxiv/openalex), so this path presents as an ordinary browser.
+// A plain desktop-browser UA. Feeds reject a bot UA, so this path presents as
+// an ordinary browser; the literature APIs, which ask for a descriptive UA, get
+// POLITE_USER_AGENT instead (http.ts).
 export const INFO_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";

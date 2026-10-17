@@ -1,34 +1,17 @@
-// Unit tests for the prep HTTP layer: per-host throttle spacing, Retry-After
-// handling, and terminal-429 -> RateLimitError. All fake clocks/fetches — no
+// Unit tests for the retry loop: Retry-After handling, terminal-429 ->
+// RateLimitError, and a cooling-down host ending the loop. Spacing and cooldown
+// themselves are host-gate.test.ts. All fake clocks/fetches — no
 // real timers, no network. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { MAX_RETRY_WAIT_MS } from "../../../src/platform/http/retry-after";
+import { createHostGate, memoryStore } from "../../../src/platform/http/host-gate";
 import {
-  createThrottle,
   fetchWithRetry,
+  isHostCoolingDown,
   isRateLimitError,
   RateLimitError,
 } from "../../../src/platform/http/throttled-fetch";
-
-test("createThrottle spaces same-host requests and passes untracked hosts through", async () => {
-  let t = 0;
-  const sleeps: number[] = [];
-  const clock = {
-    now: () => t,
-    sleep: async (ms: number) => {
-      sleeps.push(ms);
-      t += ms;
-    },
-  };
-  const throttle = createThrottle({ "api.semanticscholar.org": 1500 }, clock);
-  await throttle("api.semanticscholar.org"); // first: no wait
-  await throttle("api.semanticscholar.org"); // one interval
-  await throttle("api.semanticscholar.org"); // one interval
-  expect(sleeps).toEqual([1500, 1500]);
-  await throttle("example.com"); // untracked host: no spacing
-  expect(sleeps).toEqual([1500, 1500]);
-});
 
 test("fetchWithRetry honours Retry-After once, not on top of the backoff", async () => {
   let calls = 0;
@@ -113,4 +96,46 @@ test("429 backoff uses a higher base than 5xx/network", async () => {
   }).catch(() => {});
   expect(sleeps).toHaveLength(1);
   expect(sleeps[0]).toBeGreaterThanOrEqual(5000);
+});
+
+test("a 429 from a host now cooling down ends the loop without a retry or a wait", async () => {
+  let t = 0;
+  const gate = createHostGate({ clock: { now: () => t, sleep: async (ms) => void (t += ms) }, store: memoryStore() });
+  let calls = 0;
+  const sleeps: number[] = [];
+  const fetchFn = async () => {
+    calls++;
+    const res = new Response("", { status: 429 });
+    await gate.observe("export.arxiv.org", res);
+    return res;
+  };
+  const err = await fetchWithRetry("https://export.arxiv.org/api/query?x", undefined, {
+    fetchFn,
+    gate,
+    retries: 3,
+    sleep: async (ms) => void sleeps.push(ms),
+  }).catch((e) => e);
+  expect(isHostCoolingDown(err)).toBe(true);
+  expect(isRateLimitError(err)).toBe(true);
+  expect(calls).toBe(1);
+  expect(sleeps).toEqual([]);
+});
+
+test("a cooldown thrown by the transport is not retried", async () => {
+  const gate = createHostGate({ store: memoryStore() });
+  await gate.observe("export.arxiv.org", new Response("", { status: 429 }));
+  let calls = 0;
+  const fetchFn = async (url: string) => {
+    calls++;
+    const cooling = gate.coolingDown(new URL(url).hostname);
+    if (cooling) throw cooling;
+    return new Response("ok");
+  };
+  const err = await fetchWithRetry("https://arxiv.org/html/2401.00001", undefined, {
+    fetchFn,
+    retries: 3,
+    sleep: async () => {},
+  }).catch((e) => e);
+  expect(isHostCoolingDown(err)).toBe(true);
+  expect(calls).toBe(1);
 });

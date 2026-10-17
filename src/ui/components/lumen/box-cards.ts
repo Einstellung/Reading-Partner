@@ -1,42 +1,13 @@
-// The column that rises from the corner (docs/68): which items are in it, in
-// what order, how many of them are on screen, and the line under each cover.
+// The box as the corner and the conversation see it (docs/68): which items this
+// device shows, the count on the badge, and the line under each cover.
 //
 // Here and not in LumenCorner.tsx because all of it is arithmetic and strings,
-// and none of it needs React to be read.
+// and none of it needs React to be read. Where the cards stand in the
+// conversation is box-timeline.ts.
 
 import { t } from "../../../i18n";
 import type { BoxItem, BoxOrigin } from "../../../box/types";
 import { intakeIdOfItem } from "../../../reading/ingest/intake-box";
-
-// Five, and the sixth scrolls. Past five the column is a page, and a page in a
-// corner is a screen that opened itself.
-export const MAX_VISIBLE_CARDS = 5;
-
-// One card is a cover line over an origin line, which is the 64px the column's
-// height is counted in; the gap is the column's own `gap-2`.
-export const CARD_PX = 64;
-export const CARD_GAP_PX = 8;
-
-export function visibleCardCount(total: number): number {
-  return Math.min(Math.max(total, 0), MAX_VISIBLE_CARDS);
-}
-
-/** How tall the column may get before it scrolls inside itself. */
-export function columnMaxPx(): number {
-  return MAX_VISIBLE_CARDS * CARD_PX + (MAX_VISIBLE_CARDS - 1) * CARD_GAP_PX;
-}
-
-/**
- * The order of the column. The store hands items back newest first; the ones
- * the reader has to decide something about come up out of that order and keep
- * it among themselves.
- *
- * A copy: the array the store returns is the caller's, and a sort in place
- * would reorder whatever else is holding it.
- */
-export function sortBoxCards(items: readonly BoxItem[]): BoxItem[] {
-  return [...items].sort((a, b) => Number(b.needsDecision) - Number(a.needsDecision));
-}
 
 /**
  * Whether the case stands in the corner. Anything open at all and it does;
@@ -80,7 +51,7 @@ export function originLabel(origin: BoxOrigin, title: string | null): string {
   }
 }
 
-/** Every book an open column has to know the name of. */
+/** Every book the cards have to know the name of. */
 export function bookIdsIn(items: readonly BoxItem[]): string[] {
   const ids = new Set<string>();
   for (const item of items) {
@@ -89,25 +60,20 @@ export function bookIdsIn(items: readonly BoxItem[]): string[] {
   return [...ids];
 }
 
-/** What a reader hears on the case, which is the only control in the corner. */
+/** What a reader hears on the case, which opens the conversation like the body does. */
 export function caseLabel(openCount: number): string {
   const n = badgeCount(openCount);
   return n === null ? t("shell.box.label") : t("shell.box.waiting", { count: n });
 }
 
-/** The one line an empty column says. */
-export function emptyBoxLine(): string {
-  return t("shell.box.empty");
-}
-
 // How far sideways a finger has to travel for a card to count as pressed away.
-// 64px rather than a fraction of the card: the column is one width everywhere,
-// and a shorter throw collides with the scroll the column does inside itself.
+// 64px rather than a fraction of the card: the panel is narrow and the sheet is
+// wide, and a shorter throw collides with the conversation's own scroll.
 export const SWIPE_DISMISS_PX = 64;
 
 /**
  * Whether a drag was a dismiss. Sideways further than it went up or down, so a
- * finger scrolling the column never presses a card away on its way past.
+ * finger scrolling the conversation never presses a card away on its way past.
  */
 export function isDismissSwipe(dx: number, dy: number): boolean {
   return Math.abs(dx) >= SWIPE_DISMISS_PX && Math.abs(dx) > Math.abs(dy);
@@ -117,7 +83,7 @@ export function isDismissSwipe(dx: number, dy: number): boolean {
  * The open items this device shows. Box items sync and intake records do not
  * (link-intakes/ is machine-local), so a link intake's card is shown only on
  * the device that has its record, the one the topic can be picked on; another
- * device neither lists nor counts it. Where one is shown, anything else of the
+ * device neither draws nor counts it. Where one is shown, anything else of the
  * same delivery (the run's bell, about the same link) is left out under it.
  */
 export async function cardsHere(

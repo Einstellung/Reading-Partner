@@ -27,3 +27,6 @@
 - [architecture-audit](./architecture-audit.md) — [37](../platform/37-结构与架构优化.md) 架构审计 C 组长期债：App.tsx 与 ui/components 越线目录、流式驱动三份收拢到两份、docs/38 安全审阅未入库
 
 webview 渲染管子（隐藏 WebviewWindow 当渲染引擎）已经落地并随彭博社源发货，不再是北极星方向；现状和剩下的缺口（SPA 站发现层）记在 [17](../info/17-信息源系统.md)。
+- [interactive-explainers](./interactive-explainers.md) — 交互式讲解图：难点处后台生成可拨弄的小模型加 Lumen 讲解，放盒子卡片；慢、贵、要沙盒；参考 anatomy skill；开工前先做手机上的小实验
+- [accounts](./accounts.md) — 账户登录统一放在设置的 Accounts 页（2026-10-17 落地，X、Bloomberg 两个浏览器会话）；信息源页已从界面去掉；以后加 Instagram/微博或 GitHub 等 API 凭据各是注册表一项
+- [topic-search-followups](./topic-search-followups.md) — 主题搜索第一次 run 之后的待办：重跑第一次全景（只补失败项）、门口补重跑动作并让卢明说准话、signed-out 停手记录能否自清、查询梯子与按需读深度的验收点

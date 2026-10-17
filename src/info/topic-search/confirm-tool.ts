@@ -10,6 +10,7 @@ import { asString } from "../../platform/std/json";
 import { t } from "../../i18n";
 import type { ApplyResult } from "./apply";
 import type { TopicSearchProposalCardData } from "./cards";
+import { FIRST_LOOK_IN_TWO_PARTS } from "./guidance";
 
 export interface ConfirmToolDeps {
   /** The newest drafting card in this conversation, or null when it has none. */
@@ -62,7 +63,7 @@ export function buildConfirmTopicSearchTool(deps: ConfirmToolDeps): AgentTool {
         text:
           `Applied "${result.search.name}" (id: ${result.search.id}); its first run is sent.` +
           `${result.search.once ? " Just this once: it stops after the first result." : ""} ` +
-          "Tell the reader in one line.",
+          `${FIRST_LOOK_IN_TWO_PARTS} Tell the reader in one or two lines, this included.`,
         receipt: { label: t("info.tool.confirmedTopicSearch"), summary: result.search.name },
       };
     },

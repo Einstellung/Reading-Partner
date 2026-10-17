@@ -52,6 +52,20 @@ export function resumeHalt(record: XHaltRecord | null): { record: XHaltRecord | 
   return record?.paused ? { record: null, lifted: true } : { record, lifted: false };
 }
 
+/**
+ * A signed-out record once a session check after it found the reader signed
+ * in again: gone. Only a conclusive check counts (site-session.ts writes
+ * `unknown` beside the old answer when a check learned nothing). Every other
+ * record stays: a read that ends without a halt is what clears those.
+ */
+export function clearSignedOut(
+  record: XHaltRecord | null,
+  session: { signedIn: boolean; checkedAt: number; unknown?: string } | null | undefined,
+): XHaltRecord | null {
+  if (record?.kind !== "signed-out" || !session?.signedIn || session.unknown) return record;
+  return session.checkedAt > record.at ? null : record;
+}
+
 /** Whether a halt waits on the reader: everything but a changed page. */
 export function haltNeedsReader(kind: XHaltKind): boolean {
   return kind !== "structure";

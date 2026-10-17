@@ -4,7 +4,8 @@ import type en from "./en";
 export default {
   title: "設定",
   done: "完了",
-  "tab.account": "アカウント",
+  "tab.account": "AI と同期",
+  "tab.accounts": "アカウント",
   "tab.features": "機能",
   "tab.optional": "オプション",
   connected: "接続済み",

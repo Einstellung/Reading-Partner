@@ -11,12 +11,12 @@
 import type { Place } from "../../../desk";
 import type { HomeScreen } from "./shell-nav";
 
-export const PLACE_IDS = ["today", "briefing", "topics", "sources", "settings"] as const;
+export const PLACE_IDS = ["today", "briefing", "topics", "settings"] as const;
 export type PlaceId = (typeof PLACE_IDS)[number];
 
 // The phone has no shelf: nothing on its home screen leads to the library, so
 // there is nowhere for a place named "topics" to go.
-export const PHONE_PLACES: readonly PlaceId[] = ["today", "briefing", "sources", "settings"];
+export const PHONE_PLACES: readonly PlaceId[] = ["today", "briefing", "settings"];
 
 // One sentence each, written for the reader rather than for the model: these
 // are what the soul reads out when it shows somebody around.
@@ -24,8 +24,8 @@ export const PLACE_ABOUT: Record<PlaceId, string> = {
   today: "Where the reader lands when the app opens: what is open now, and where to carry on.",
   briefing: "Today's briefing: what came in overnight from the sources the reader follows.",
   topics: "The shelf: the reader's topics and the books kept in each of them.",
-  sources: "Where the briefing comes from: the list of sources it is drawn from.",
-  settings: "The settings: the providers and model behind you, and how this device behaves.",
+  settings:
+    "The settings: the providers and model behind you, the accounts the reader signs in to (X, Bloomberg), and how this device behaves.",
 };
 
 export function screenForPlace(id: PlaceId): HomeScreen {
@@ -36,8 +36,6 @@ export function screenForPlace(id: PlaceId): HomeScreen {
       return "briefing";
     case "topics":
       return "library";
-    case "sources":
-      return "sources";
     case "settings":
       return "settings";
   }

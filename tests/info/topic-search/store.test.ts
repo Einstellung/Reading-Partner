@@ -10,7 +10,6 @@ function search(id: string, over: Partial<TopicSearch> = {}): TopicSearch {
   return {
     id,
     name: id,
-    topicId: "topic-1",
     concernId: null,
     scope: "AI used to do science",
     subtopics: [{ id: "st1", name: "Materials", picked: true }],

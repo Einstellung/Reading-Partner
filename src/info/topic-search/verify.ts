@@ -3,7 +3,9 @@
 //
 // What is read, by what the item is: a paper's abstract and the first 8000
 // characters of its arXiv HTML (pitfall 377: an HTML page is real only when it
-// is a 200 with real text and a real title); a repository's README and top-level
+// is a 200 with real text and a real title), or the whole paper when the
+// write-up asks to read it deeper (readPaperFull: the whole HTML, else the PDF's
+// text layer, capped at PAPER_FULL_CHARS); a repository's README and top-level
 // listing, with its facts from the counted GitHub lookup; any other link through
 // 86's `open` route (readers, site adapters, the generic page and PDF read),
 // injected as `openLink`; a post that is its own content is the original, read
@@ -16,7 +18,7 @@
 
 import { htmlToText } from "../../workshop/extract/sanitize";
 import { htmlSections, markdownSections, type MaterialInput, type MaterialReader, type MaterialRegistry } from "../dossier/registry";
-import { arxivIdUrl, parseArxivAtom } from "../sources/plugins/arxiv-client";
+import { arxivIdUrl, arxivPdfUrl, parseArxivAtom } from "../sources/plugins/arxiv-client";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
 import type { XSearchPost } from "../x/search-page";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
@@ -25,6 +27,10 @@ import type { Discrepancy, ResultFacts, ResultPost, ResultVerify } from "./resul
 
 /** Characters of a paper's body read after its abstract (88). */
 export const PAPER_BODY_CHARS = 8000;
+/** Characters of a paper's body a deeper read takes at most. */
+export const PAPER_FULL_CHARS = 48000;
+/** Characters of one section of a PDF's text layer, which has no headings to cut at. */
+const PDF_PART_CHARS = 4000;
 /** Originals read per item at most (88). */
 export const SOURCES_PER_ITEM = 2;
 /** Characters of one material the comparison sees. */
@@ -66,6 +72,8 @@ export interface SourceDeps {
   lookupRepo(fullName: string): Promise<RepoLookup>;
   /** GitHub's requests left this hour as last seen; null before any request. */
   repoQuotaLeft(): number | null;
+  /** A PDF's text layer, or null when it has none; absent where PDFs cannot be read. Only a deeper read uses it. */
+  readPdfText?(url: string, signal: AbortSignal): Promise<string | null>;
 }
 
 export type Target =
@@ -105,6 +113,90 @@ function bodyOfArxivHtml(html: string): string {
   return article.replace(/<(nav|header|footer)\b[\s\S]*?<\/\1>/gi, " ");
 }
 
+/** The body sections of a paper's arXiv HTML, or null when arXiv has no real HTML for it (pitfall 377). */
+async function arxivHtmlSections(id: string, deps: SourceDeps, signal: AbortSignal): Promise<{ heading: string | null; text: string }[] | null> {
+  try {
+    const res = await deps.fetchText(`https://arxiv.org/html/${id}`, signal);
+    const title = /<title>([\s\S]*?)<\/title>/i.exec(res.text)?.[1]?.trim() ?? "";
+    const html = bodyOfArxivHtml(res.text);
+    if (res.status === 200 && !/^untitled document$/i.test(title) && htmlToText(html).length > ARXIV_HTML_MIN_CHARS) {
+      return htmlSections(html, htmlToText).filter((s) => !/^abstract$/i.test(s.heading ?? ""));
+    }
+  } catch (e) {
+    if (signal.aborted) throw e;
+  }
+  return null;
+}
+
+/** Back matter a deeper read leaves out: it says nothing about the paper's method or results. */
+const BACK_MATTER = /^[\d.\s]*(?:references|bibliography|acknowledge?ments?)\b/i;
+
+/** Plain text cut into parts of about PDF_PART_CHARS at paragraph breaks. */
+function pdfParts(text: string): { heading: string | null; text: string }[] {
+  const out: { heading: string | null; text: string }[] = [];
+  let part = "";
+  for (const para of text.split(/\n\s*\n/)) {
+    if (part && part.length + para.length > PDF_PART_CHARS) {
+      out.push({ heading: `PDF part ${out.length + 1}`, text: part });
+      part = "";
+    }
+    part = part ? `${part}\n\n${para}` : para;
+  }
+  if (part.trim()) out.push({ heading: `PDF part ${out.length + 1}`, text: part });
+  return out;
+}
+
+/** What a paper's earlier read already knows, for the deeper read to carry over. */
+export interface KnownPaper {
+  title: string | null;
+  authors: string[];
+  publishedAt: string | null;
+  abstract: string | null;
+}
+
+/**
+ * Read a whole paper for the write-up (docs/info/88 「看原文」, a deeper read):
+ * its arXiv HTML without the opening cut and without the back matter; without
+ * HTML, its PDF's text layer through `readPdfText`. Both capped at
+ * PAPER_FULL_CHARS. The caller registers it apart from the earlier read, under
+ * the URL it was read from.
+ */
+export async function readPaperFull(id: string, known: KnownPaper, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
+  let url = `https://arxiv.org/html/${id}`;
+  let via = "HTML";
+  let body = (await arxivHtmlSections(id, deps, signal))?.filter((s) => !BACK_MATTER.test(s.heading ?? "")) ?? null;
+  if (!body && deps.readPdfText) {
+    url = arxivPdfUrl(id);
+    via = "PDF";
+    try {
+      const text = await deps.readPdfText(url, signal);
+      if (text?.trim()) {
+        const backAt = text.search(/\n\s*(?:references|bibliography)\s*\n/i);
+        body = pdfParts(backAt > 0 ? text.slice(0, backAt) : text);
+      }
+    } catch (e) {
+      if (signal.aborted) throw e;
+    }
+  }
+  if (!body?.length) return { ok: false, reason: `neither arXiv HTML nor a PDF text layer could be read for ${id}` };
+  const capped = capChars(body, PAPER_FULL_CHARS);
+  const chars = (xs: { text: string }[]) => xs.reduce((n, x) => n + x.text.length, 0);
+  const cutShort = chars(capped) < chars(body);
+  return {
+    ok: true,
+    input: {
+      url,
+      title: known.title,
+      author: known.authors.join(", ") || null,
+      publishedAt: known.publishedAt,
+      reader: "arxiv",
+      facts: { arxivId: id, depth: "full", body: `whole ${via}${cutShort ? `, cut at ${PAPER_FULL_CHARS} characters` : ""}` },
+      sections: [...(known.abstract ? [{ heading: "Abstract", text: known.abstract }] : []), ...capped],
+    },
+    facts: { kind: "paper", arxivId: id, authors: known.authors, publishedAt: known.publishedAt, depth: "full" },
+  };
+}
+
 async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   let paper = t.known;
   if (!paper) {
@@ -125,20 +217,9 @@ async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps
       if (signal.aborted) throw e;
     }
   }
-  let body: { heading: string | null; text: string }[] = [];
-  try {
-    const res = await deps.fetchText(`https://arxiv.org/html/${t.id}`, signal);
-    const title = /<title>([\s\S]*?)<\/title>/i.exec(res.text)?.[1]?.trim() ?? "";
-    const html = bodyOfArxivHtml(res.text);
-    if (res.status === 200 && !/^untitled document$/i.test(title) && htmlToText(html).length > ARXIV_HTML_MIN_CHARS) {
-      body = capChars(
-        htmlSections(html, htmlToText).filter((s) => !/^abstract$/i.test(s.heading ?? "")),
-        PAPER_BODY_CHARS,
-      );
-    }
-  } catch (e) {
-    if (signal.aborted) throw e;
-  }
+  const html = await arxivHtmlSections(t.id, deps, signal);
+  const body = html ? capChars(html, PAPER_BODY_CHARS) : [];
+  const depth = body.length ? "head" : "abstract";
   if (!paper && body.length === 0) return { ok: false, reason: `arXiv answered nothing readable for ${t.id}` };
   const sections = [...(paper?.abstract ? [{ heading: "Abstract", text: paper.abstract }] : []), ...body];
   return {
@@ -149,10 +230,10 @@ async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps
       author: paper?.authors.join(", ") || null,
       publishedAt: paper?.publishedAt ?? null,
       reader: "arxiv",
-      facts: { arxivId: t.id, body: body.length ? "abstract and HTML" : "abstract only" },
+      facts: { arxivId: t.id, depth, body: body.length ? "abstract and HTML" : "abstract only" },
       sections,
     },
-    facts: { kind: "paper", arxivId: t.id, authors: paper?.authors ?? [], publishedAt: paper?.publishedAt ?? null },
+    facts: { kind: "paper", arxivId: t.id, authors: paper?.authors ?? [], publishedAt: paper?.publishedAt ?? null, depth },
   };
 }
 

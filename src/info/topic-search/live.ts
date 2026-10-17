@@ -4,7 +4,6 @@
 import type { AgentTool } from "../../legion/durable/contract";
 import { appClaims } from "../../legion/claim";
 import { listStatements, statementStore } from "../../memory";
-import { createTopic, listTopics } from "../../platform/app/topics";
 import { applyTopicSearchProposal, type ApplyResult } from "./apply";
 import type { TopicSearchProposalCardData } from "./cards";
 import { buildConfirmTopicSearchTool, type ConfirmToolDeps } from "./confirm-tool";
@@ -13,11 +12,13 @@ import { dispatchFirstRun } from "./first-run";
 import { topicSearchGuidance } from "./guidance";
 import { buildProposeTopicSearchTool, type ReaderLine } from "./propose-tool";
 import { buildResumeXReadingTool } from "./resume-tool";
-import { resumeXReading, xReadingPaused } from "./runs-live";
-import { changeTopicSearch, loadTopicSearches, putTopicSearch } from "./store";
+import { buildRetryFirstRunTool } from "./retry-tool";
+import { resumeXReading, retryDeps, xReadingPaused } from "./runs-live";
+import { changeTopicSearch, knownTopicSearches, loadTopicSearches, putTopicSearch } from "./store";
 
 const editDeps: EditToolDeps = {
   searches: () => loadTopicSearches(),
+  known: knownTopicSearches,
   change: (id, change) => changeTopicSearch(id, change),
   setLapsed: (id, lapsed) => statementStore.setLapsed(id, lapsed),
   now: () => Date.now(),
@@ -33,14 +34,16 @@ export interface TopicSearchDoorPorts {
   applyCard: ConfirmToolDeps["apply"];
 }
 
-/** propose, confirm, update and stop a topic search, then resume_x_reading. */
+/** propose, confirm, update and stop a topic search, then resume_x_reading and retry_topic_search_first_run. */
 export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
+  // Read now, so the lines of update and stop can name the search by the time
+  // the model calls them (edit-tools.ts known).
+  void loadTopicSearches().catch(() => {});
   return [
     buildProposeTopicSearchTool({
       threadId: ports.threadId,
       readerLines: ports.readerLines,
       searches: () => loadTopicSearches(),
-      topics: () => listTopics(),
       statements: () => listStatements(),
       claims: () => appClaims().readAll(),
       now: () => Date.now(),
@@ -50,18 +53,18 @@ export function topicSearchDoorTools(ports: TopicSearchDoorPorts): AgentTool[] {
     buildUpdateTopicSearchTool(editDeps),
     buildStopTopicSearchTool(editDeps),
     buildResumeXReadingTool({ resume: resumeXReading }),
+    buildRetryFirstRunTool({ searches: editDeps.searches, known: editDeps.known, ...retryDeps }),
   ];
 }
 
 /** The drafting rules and roster for the door's system prompt. */
 export async function loadTopicSearchGuidance(): Promise<string> {
-  const [searches, statements, topics, xPaused] = await Promise.all([
+  const [searches, statements, xPaused] = await Promise.all([
     loadTopicSearches().catch(() => []),
     listStatements().catch(() => []),
-    listTopics().catch(() => []),
     xReadingPaused().catch(() => null),
   ]);
-  return topicSearchGuidance({ searches, statements, topics, xPaused });
+  return topicSearchGuidance({ searches, statements, xPaused });
 }
 
 /** The card's Apply on this device. */
@@ -76,8 +79,6 @@ export function applyTopicSearchCard(card: TopicSearchProposalCardData): Promise
     },
     load: () => loadTopicSearches(),
     put: (search) => putTopicSearch(search),
-    topicExists: async (id) => (await listTopics()).some((tp) => tp.id === id),
-    createTopic: (name) => createTopic(name),
     dispatchFirstRun,
     now: () => Date.now(),
   });

@@ -36,6 +36,7 @@ export default {
   "delegate.handingToKind": "Передаёт задачу работнику «{kind}»",
   "delegate.handingOver": "Передаёт задачу работнику",
   "delegate.sentOffWork": "Задача «{kind}» отправлена",
+  "backgroundStatus.checking": "Проверяю фоновую работу",
 
   "places.goingTo": "Переходит в {place}",
   "places.goingSomewhere": "Перемещается по приложению",
@@ -44,6 +45,8 @@ export default {
   "statements.writingSelf": "Записывает, что вы сказали о себе",
   "statements.wroteKind": "Записано: {kind}",
   "statements.rewroteKind": "Переписано: {kind}",
+  "statements.wroteAboutYou": "Записано о вас",
+  "statements.rewroteAboutYou": "Переписано то, что я о вас знаю",
 
   "filing.proposingUnder": "Предлагает отнести это к «{topic}»",
   "filing.proposingWhere": "Предлагает, куда это отнести",

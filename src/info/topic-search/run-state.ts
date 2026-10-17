@@ -8,12 +8,16 @@
 //                                  the night's ceiling; the last halt.
 //   topic-search-runs/<run id>/    one directory per run: the X progress file
 //                                  (one step a line, what a cut-off run resumes
-//                                  from) and what the read handed the build.
+//                                  from), what the X read handed the build,
+//                                  what the arXiv read found (arxiv-read.ts),
+//                                  and a split first look's delivered first
+//                                  part (`first-part.json`, pace.ts).
 //
 // Losing the state file costs a night of re-reading posts already seen, so it
 // is read leniently; writes are chained so two writers never interleave
 // (docs/pitfall/484).
 
+import type { ArxivRead } from "./arxiv-read";
 import type { XPageBudget } from "./build-result";
 import { X_DAILY_ALLOWANCE, X_FIRST_RUN_LIMITS, X_NIGHTLY_LIMITS, type XReadLimits, type XReadResult } from "./x-reader";
 import type { XHaltRecord } from "./halt";
@@ -23,6 +27,7 @@ export const TOPIC_SEARCH_STATE_FILE = "info-topic-search-state.json";
 export const TOPIC_SEARCH_RUNS_DIR = "topic-search-runs";
 export const X_PROGRESS_FILE = "x-progress.jsonl";
 export const X_READ_FILE = "x-read.json";
+export const ARXIV_READ_FILE = "arxiv-read.json";
 
 /** What the night's runs have used of its ceiling, every topic together. */
 export interface NightUse {
@@ -212,6 +217,54 @@ export async function loadRead(fs: StateFs, dir: string): Promise<XReadResult | 
   if (!(await fs.exists(path))) return null;
   try {
     return JSON.parse(await fs.readText(path)) as XReadResult;
+  } catch {
+    return null;
+  }
+}
+
+/** What the arXiv read has found so far, rewritten after each query. */
+export async function saveArxivRead(fs: StateFs, dir: string, read: ArxivRead): Promise<void> {
+  await fs.writeAtomic(`${dir}/${ARXIV_READ_FILE}`, JSON.stringify(read));
+}
+
+export const FIRST_PART_FILE = "first-part.json";
+
+/**
+ * A split first look's first part, delivered and told to the brief. On file in
+ * the run directory, because a run that fails later is tried again as a new
+ * task from `open`, without the old one's memos: it goes straight on to X.
+ */
+export type FirstPartOnFile = {
+  version: 1;
+  startedAt: number;
+  since: number;
+  night: string;
+  status: "delivered" | "empty";
+  resultFile: string | null;
+  itemCount: number;
+};
+
+export async function saveFirstPart(fs: StateFs, dir: string, part: FirstPartOnFile): Promise<void> {
+  await fs.writeAtomic(`${dir}/${FIRST_PART_FILE}`, JSON.stringify(part));
+}
+
+export async function loadFirstPart(fs: StateFs, dir: string): Promise<FirstPartOnFile | null> {
+  const path = `${dir}/${FIRST_PART_FILE}`;
+  if (!(await fs.exists(path))) return null;
+  try {
+    const raw = JSON.parse(await fs.readText(path)) as FirstPartOnFile;
+    return raw && raw.version === 1 && typeof raw.startedAt === "number" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadArxivRead(fs: StateFs, dir: string): Promise<ArxivRead | null> {
+  const path = `${dir}/${ARXIV_READ_FILE}`;
+  if (!(await fs.exists(path))) return null;
+  try {
+    const raw = JSON.parse(await fs.readText(path)) as ArxivRead;
+    return raw && raw.version === 1 && Array.isArray(raw.planned) && Array.isArray(raw.found) ? raw : null;
   } catch {
     return null;
   }

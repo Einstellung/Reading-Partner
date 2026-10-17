@@ -120,6 +120,9 @@ const LAYER: Record<string, Layer> = {
   "legion/run": "capability",
   // The legion runner: claims due runs and hands each to its kind's worker.
   "legion/runner": "capability",
+  // background_status: what the door says about runs, from the run records, the
+  // claims and the describers domains register (registry.ts), like workers.
+  "legion/status": "capability",
   "legion/subagent": "capability",
   // The turn runtime on pi-durable (docs/soul/87): the device's Harness, our
   // extension, the tool adapter, turns and recovery. Imports platform/app, ai,
@@ -257,6 +260,11 @@ const LAYER: Record<string, Layer> = {
   // The material registry of topic searches and dossiers (docs/info/88 材料登记):
   // M<n> numbers, sections, the cached bodies. Reads info/rank's canonical URL.
   "info/dossier": "domain",
+  // The nightly brief (docs/info/88 「简报书」): the night's topic-search results
+  // planned and rendered as one EPUB, filed, attached, indexed on the info shelf
+  // and handed to the box. Reads topic-search's result types; topic-search
+  // never imports it (the runs reach it through a port the shell hands in).
+  "info/issue": "domain",
   reading: "domain",
   "reading/chapters": "domain",
   // A reading turn's own corner: the desk assembly's tool set and history

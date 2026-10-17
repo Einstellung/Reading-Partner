@@ -4,6 +4,7 @@
 import { HIGHLIGHT_COLOR } from "../../../platform/app/annotations";
 import type { Tool } from "../../../platform/app/reader-contract";
 import { AI_PEN_COLOR } from "../../../reading/session/use-marks";
+import type { ReaderMode } from "../../../reading/issue";
 import type { ToolType } from "./types";
 
 export function readerTool(toolType: ToolType): Tool {
@@ -18,8 +19,21 @@ export function readerTool(toolType: ToolType): Tool {
 // hand and moves the page with the wheel, so the desktop rack leaves it out.
 // Read off the pointers the device has, not its operating system: an iPad with
 // a trackpad still has its touch screen, and a touch laptop keeps the lock.
-export function rackOmits(touchInput: boolean): readonly ToolType[] {
-  return touchInput ? [] : ["navlock"];
+//
+// A brief (docs/info/88) has no conversation of the reader's own to start, so
+// its rack has no AI pen either; the highlighter stays.
+export function rackOmits(touchInput: boolean, mode: ReaderMode = "book"): readonly ToolType[] {
+  const omit: ToolType[] = touchInput ? [] : ["navlock"];
+  if (mode === "issue") omit.push("ai");
+  return omit;
+}
+
+// A brief has no AI pen, so on a desktop the mouse with no tool in hand selects
+// words, and the selection's Ask takes the passage to Lumen as a finger's does
+// (epub/paged/mouse-select.ts). A book keeps the AI pen as the mouse's way to
+// ask, and its mouse drag turns the page.
+export function mouseSelectsText(mode: ReaderMode): boolean {
+  return mode === "issue";
 }
 
 export function hasTouchInput(win: Pick<Window, "matchMedia"> | undefined): boolean {

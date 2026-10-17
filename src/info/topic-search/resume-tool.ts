@@ -28,8 +28,9 @@ function notLifted(halt: XHaltRecord | null): string {
   }
   if (halt.kind === "signed-out") {
     return (
-      "X reading stopped because X signed this device out; resuming does not change that. The " +
-      "reader signs in to X again on the sources page, and the next night reads X."
+      "X signed this device out and no check since found it signed in; resuming does not change " +
+      "that. The reader signs in to X in Settings > Accounts. After that, X is read by the nightly run " +
+      "from 01:00, or now by retry_topic_search_first_run for what a first run missed."
     );
   }
   return (
@@ -52,7 +53,9 @@ export function buildResumeXReadingTool(deps: ResumeToolDeps): AgentTool {
       const result = await deps.resume();
       if (!result.lifted) return { text: notLifted(result.halt), receipt: null };
       return {
-        text: "X reading is resumed on this device; the next night reads X again. Tell the reader in one line.",
+        text:
+          "X reading is resumed on this device; the next night reads X again. Tell the reader in one line. " +
+          "When they later ask how a run is going, call background_status.",
         receipt: { label: t("info.tool.resumedXReading"), summary: "x.com" },
       };
     },

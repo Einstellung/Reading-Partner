@@ -20,9 +20,17 @@ import type { TopicSearch } from "./types";
 
 export interface EditToolDeps {
   searches(): Promise<TopicSearch[]>;
+  /** The searches as last seen, without waiting: the running line is made in one step. */
+  known(): readonly TopicSearch[];
   change(id: string, change: (s: TopicSearch) => TopicSearch): Promise<TopicSearch | null>;
   setLapsed(id: string, lapsed: boolean): Promise<Statement | null>;
   now(): number;
+}
+
+/** What a running line calls the search the model named: its name, or what was said when it is not known. */
+export function searchLabelName(raw: unknown, known: readonly TopicSearch[]): string {
+  const said = String(raw ?? "");
+  return resolveTopicSearch(said, known)?.name ?? said;
 }
 
 const list = (add: unknown, remove: unknown) => ({ add: asStrings(add), remove: asStrings(remove) });
@@ -57,7 +65,7 @@ const strings = (description: string) => Type.Optional(Type.Array(Type.String(),
 export function buildUpdateTopicSearchTool(deps: EditToolDeps): AgentTool {
   return {
     name: "update_topic_search",
-    label: (args) => t("info.tool.updatingTopicSearch", { name: String(args.searchId ?? "") }),
+    label: (args) => t("info.tool.updatingTopicSearch", { name: searchLabelName(args.searchId, deps.known()) }),
     effect: "write",
     description:
       "Change a topic search the reader follows, when they say something that holds only for this " +
@@ -109,7 +117,7 @@ export function buildUpdateTopicSearchTool(deps: EditToolDeps): AgentTool {
 export function buildStopTopicSearchTool(deps: EditToolDeps): AgentTool {
   return {
     name: "stop_topic_search",
-    label: (args) => t("info.tool.stoppingTopicSearch", { name: String(args.searchId ?? "") }),
+    label: (args) => t("info.tool.stoppingTopicSearch", { name: searchLabelName(args.searchId, deps.known()) }),
     effect: "write",
     description:
       "Stop a topic search when the reader says they no longer care about it. Never on your own " +

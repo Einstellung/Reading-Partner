@@ -9,6 +9,7 @@
 
 import type { InfoItem } from "../sources/item";
 import { normalizeArxivId } from "../sources/plugins/arxiv-client";
+import type { ArxivLadder } from "./arxiv-ladder";
 import { xEngagement } from "../rank/engagement";
 import { arxivEventKey, eventKeyOfUrl, mergeIntoEvents, xEventKey, type EventCluster, type EventMember } from "../rank/events";
 import { weightedRrf, type Stream } from "../rank/fusion";
@@ -24,6 +25,12 @@ import type { XReadResult } from "./x-reader";
 export const RERANK_POOL = { daily: 40, first: 60 } as const;
 /** Candidates each stream gives the fusion: an X line reads hundreds, an arXiv search a page. */
 export const STREAM_TAKE = { x: 40, arxiv: 12 } as const;
+/**
+ * Places in the rerank pool kept, by fusion order, for posts and for the
+ * candidates each picked subtopic's queries found, so that the result's
+ * reservations (select.ts) have something reranked to take.
+ */
+export const POOL_RESERVE = { posts: 10, perSubtopic: 4 } as const;
 /** Characters of a candidate's text the rerank sees. */
 export const RERANK_TEXT_CHARS = 420;
 /** Links of one post the rerank is shown. */
@@ -67,6 +74,8 @@ export interface ArxivFound {
   query: string;
   items: InfoItem[];
   error: string | null;
+  /** How the query's ladder went (arxiv-ladder.ts), for the source health. */
+  ladder?: ArxivLadder;
 }
 
 /** "q1|x", "q1|arxiv": a (query, source) stream. */
@@ -215,7 +224,11 @@ function relevanceTo(query: TopicQuery | undefined, c: Candidate): number {
   return localRelevance(prepareQuery(words), c.text);
 }
 
-/** Weighted RRF over the (query, source) streams, the per-author cap, the pool's top (88 「打分」 3). */
+/**
+ * Weighted RRF over the (query, source) streams, the per-author cap, the
+ * pool's top (88 「打分」 3), with places kept for posts and for each picked
+ * subtopic (POOL_RESERVE). The pool stays in fusion order.
+ */
 export function fusePool(topic: TopicSearch, kept: readonly Candidate[], size: number): { cand: Candidate; rrf: number }[] {
   const byKey = new Map(kept.map((c) => [c.key, c]));
   const streams: Stream[] = [];
@@ -231,9 +244,28 @@ export function fusePool(topic: TopicSearch, kept: readonly Candidate[], size: n
       }
     }
   }
-  return weightedRrf(streams)
-    .slice(0, size)
-    .map((f) => ({ cand: byKey.get(f.key)!, rrf: f.score }));
+  const fused = weightedRrf(streams);
+  const subtopicOf = new Map(topic.queries.map((q) => [q.id, q.subtopic]));
+  const must: string[] = [];
+  const reserve = (n: number, fits: (c: Candidate) => boolean) => {
+    let found = 0;
+    for (const f of fused) {
+      if (found >= n) break;
+      if (!fits(byKey.get(f.key)!)) continue;
+      found++;
+      if (!must.includes(f.key)) must.push(f.key);
+    }
+  };
+  reserve(POOL_RESERVE.posts, (c) => c.kind === "post");
+  for (const s of topic.subtopics) {
+    if (s.picked) reserve(POOL_RESERVE.perSubtopic, (c) => c.queries.some((id) => subtopicOf.get(id) === s.id));
+  }
+  const inPool = new Set(must.slice(0, size));
+  for (const f of fused) {
+    if (inPool.size >= size) break;
+    inPool.add(f.key);
+  }
+  return fused.filter((f) => inPool.has(f.key)).map((f) => ({ cand: byKey.get(f.key)!, rrf: f.score }));
 }
 
 export interface Numbered {

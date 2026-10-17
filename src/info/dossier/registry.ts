@@ -79,9 +79,11 @@ export class MaterialRegistry {
   private readonly entries = new Map<string, { material: RegisteredMaterial; body: MaterialBody }>();
   private readonly byUrl = new Map<string, string>();
 
+  /** `after`: numbers already taken in the file this registry adds to, so its first material is M<after + 1>. */
   constructor(
     private readonly runDir: string,
     private readonly deps: MaterialRegistryDeps,
+    private readonly after = 0,
   ) {}
 
   get all(): RegisteredMaterial[] {
@@ -128,7 +130,7 @@ export class MaterialRegistry {
     const canonicalUrl = canonicalizeUrl(input.url) ?? input.url;
     const known = this.byUrl.get(canonicalUrl);
     if (known) return this.entries.get(known)!.material;
-    const id = `M${this.entries.size + 1}`;
+    const id = `M${this.after + this.entries.size + 1}`;
     const sections = input.sections
       .map((s) => ({ heading: s.heading?.trim() || null, text: s.text.trim() }))
       .filter((s) => s.text !== "")

@@ -28,6 +28,7 @@ import {
   type LibraryEntry,
 } from "../../../platform/app/library";
 import { mostRecentlyOpened, type FileRef, type Topic } from "../../../platform/app/topics";
+import { isRetryableFailure } from "../../../platform/sync/backend";
 import { articleRowLine } from "../shelf/article-row";
 import { displayFileTitle } from "../shelf/file-title";
 
@@ -187,13 +188,46 @@ export function materialTap(m: ShelfMaterial, can: FetchAbility): MaterialTap {
   return { kind: "download", bookId: m.bookId, then: door };
 }
 
+// How far a tapped book's download has got (platform/sync fetchBook).
+export interface DownloadProgress {
+  received: number;
+  total: number;
+}
+
+// Whole percent, rounded down so 100 is said only once every byte is here.
+export function downloadPercent(p: DownloadProgress): number {
+  if (p.total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.floor((p.received / p.total) * 100)));
+}
+
+/**
+ * What the shelf says when a tapped book did not come down. A network failure
+ * (a dropped connection, a deadline, a 5xx) is said as one, with the fact that
+ * matters: the bytes so far are kept and the next tap continues from them
+ * (platform/sync/driveBackend.ts). The raw transport text says neither. Any
+ * other failure keeps its own words — no account, a deleted book, a book gone
+ * from the account.
+ */
+export function downloadFailureLine(e: unknown): string {
+  if (isRetryableFailure(e)) return t("phone.shelf.downloadNetworkFailed");
+  return e instanceof Error && e.message ? e.message : t("phone.shelf.downloadFailed");
+}
+
 /**
  * The line over a card that is not a plain openable book: where the bytes are.
  * Null on a book that is here and openable — that card says what every shelf
  * card says, and for a PDF that is the lesson's own line (lessonNote).
  */
-export function materialNote(m: ShelfMaterial, downloading: boolean): string | null {
-  if (downloading) return t("phone.shelfList.downloading");
+export function materialNote(
+  m: ShelfMaterial,
+  downloading: boolean,
+  progress?: DownloadProgress | null,
+): string | null {
+  if (downloading) {
+    return progress && progress.total > 0
+      ? t("phone.shelfList.downloadingPercent", { percent: downloadPercent(progress) })
+      : t("phone.shelfList.downloading");
+  }
   if (m.format === "unknown" || !m.bookId) return t("phone.shelfList.notImportedShort");
   if (m.onDevice) return null;
   return m.filed ? t("phone.shelfList.inCloud") : t("phone.shelfList.notSyncedYet");

@@ -214,6 +214,14 @@ agent 派活过程的运行时数据在 durable 库里（AppData 的 `durable/tu
 
 pi-agent-core 时代的 session 仓（AppData 的 `session/`、palace 的 `session` 行）已删，升级后第一次启动时整个目录删掉，里面没跑完的回合不续。
 
+## 门口查进度
+
+2026-10-17 定。用户问后台的活回来没有、做完没有、在不在跑，卢明先调 `background_status`（`legion/status/tool.ts`，只读，不用确认），不靠搜对话。工具读本机能看到的全部 run 文件（同步的和本进程的），可按 `which`（`running` 只看排队和在跑的，默认 `recent` 再加 48 小时内结束的）、`kind`、`about`（描述器给的主题 id 或名字；带了 kind 或 about 就不限 48 小时）筛，最多 8 条，未结束的在前。每条：标题、kind、状态（排队等哪台认领 / 在哪台跑 / 完成 / 失败带原因 / 跳过带原因 / 取消）、问起和开始是几分钟前、跑了多久、第几次尝试、最后一行汇报。时间全由程序算成「4 min ago (today 10:42)」，不给模型时间戳去减。
+
+看不见的要说看不见：run 不在本机跑时，只能看到同步过来的 run 文件，工具写明「本机看不到那台的进度，只有上次同步的记录」和本机多久前同步过；在跑的 run 最后一次汇报超过 15 分钟，写明可能是那台睡了或关了、也可能本机这份落后，不许说成没在做。排队没人认领时，按 claim 心跳说能跑它的那台是否两小时内在线。
+
+kind 自己的细节由描述器给（`legion/status/registry.ts` `registerRunDescriber`，领域启动时和 worker 一起登记）：`about` 给标题、可筛的主题、跳过原因，`detail` 给细节行，只许程序算出的计数和结论，不给模型原始日志或抓来的正文。没登记描述器的 kind 照样有通用那几行；以后加 kind 不改工具。第一个描述器是主题搜索（[88](../info/88-主题搜索.md)「进度」）。
+
 ## 目录与依赖
 
 ```
@@ -226,6 +234,7 @@ legion/
   runner/     worker 契约与 runner、产出落盘
   durable/    回合运行时（pi-durable）、stall、watchdog、observable-run、limiter
   subagent/   子 agent 的 brief、配额和诚实失败
+  status/     门口的 background_status 和各 kind 的描述器登记表
 ```
 
 durable 库的宿主接口是 `platform/app/durable-sqlite.ts`。soul 只装配回合（prompt、工具、角色），回合由 `legion/durable` 跑。

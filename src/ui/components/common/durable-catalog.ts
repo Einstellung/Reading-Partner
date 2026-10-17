@@ -37,6 +37,8 @@ import { buildResearchAgent } from "../../../reading/papers/research-agent";
 import { subagentTool } from "../../../legion/subagent/tool";
 import { buildTakeLinkTool } from "../../../reading/ingest/take-link-tool";
 import { buildMealsCatalogTools } from "../../../info/meals/tools";
+import { topicSearchDoorTools } from "../../../info/topic-search/live";
+import { buildBackgroundStatusTool } from "../../../legion/status/tool";
 import { buildWebSearchTool } from "../../../websearch/tool";
 import type { AgentTool } from "../../../legion/durable/contract";
 
@@ -78,6 +80,10 @@ export function appToolCatalog(): AgentTool[] {
     subagentTool(buildResearchAgent(inert({})), inert({})),
     buildTakeLinkTool(inert({ links: () => [], origin: { place: "door", date: "" } })),
     ...buildMealsCatalogTools(inert({ threadId: "", ports: {} })),
+    // The door's topic-search tools (docs/info/88): drafting, confirming, changing, stopping, resuming X.
+    ...topicSearchDoorTools(inert({ threadId: "" })),
+    // The door's look at background work (legion/status).
+    buildBackgroundStatusTool(inert({})),
     ...buildCompanionTools(
       inert({
         fetchFn: noFetch,

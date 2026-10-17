@@ -21,21 +21,14 @@ function shell(over: { inReader?: boolean } = {}) {
   return { places, log };
 }
 
-test("the tablet shell has all five places, in the order a day uses them", () => {
-  expect(shell().places.map((p) => p.id)).toEqual([
-    "today",
-    "briefing",
-    "topics",
-    "sources",
-    "settings",
-  ]);
+test("the tablet shell has all four places, in the order a day uses them", () => {
+  expect(shell().places.map((p) => p.id)).toEqual(["today", "briefing", "topics", "settings"]);
 });
 
 test("each place opens its screen", () => {
   expect(screenForPlace("today")).toBe("vestibule");
   expect(screenForPlace("briefing")).toBe("briefing");
   expect(screenForPlace("topics")).toBe("library");
-  expect(screenForPlace("sources")).toBe("sources");
   expect(screenForPlace("settings")).toBe("settings");
 });
 
@@ -46,7 +39,6 @@ test("going anywhere from the shelf just changes the screen", async () => {
     "screen:vestibule",
     "screen:briefing",
     "screen:library",
-    "screen:sources",
     "screen:settings",
   ]);
 });
@@ -61,16 +53,16 @@ test("going anywhere from inside a book closes the book first", async () => {
 });
 
 // The phone has no shelf — nothing on its home screen leads to the library — and
-// opens no books, so it registers four places and no way out of a reader.
+// opens no books, so it registers three places and no way out of a reader.
 test("the phone registers the places it has, and needs no reader to leave", async () => {
   const log: string[] = [];
   const places = shellPlaces(
     { goToScreen: (screen: HomeScreen) => void log.push(screen) },
     PHONE_PLACES,
   );
-  expect(places.map((p) => p.id)).toEqual(["today", "briefing", "sources", "settings"]);
+  expect(places.map((p) => p.id)).toEqual(["today", "briefing", "settings"]);
   for (const place of places) await place.go();
-  expect(log).toEqual(["vestibule", "briefing", "sources", "settings"]);
+  expect(log).toEqual(["vestibule", "briefing", "settings"]);
 });
 
 // The sentence is what the soul reads out when it shows somebody around, so

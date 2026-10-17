@@ -9,8 +9,15 @@ import type { FileRef, Topic } from "../../../../src/platform/app/topics";
 import type { TableChapter } from "../../../../src/reading/chapters/table";
 import type { Thread } from "../../../../src/platform/app/threads";
 import {
+  RemoteGoneError,
+  SyncHttpError,
+  SyncTransportError,
+} from "../../../../src/platform/sync/backend";
+import {
   continueReading,
   conversationDoor,
+  downloadFailureLine,
+  downloadPercent,
   lessonNote,
   materialNote,
   materialTap,
@@ -139,6 +146,37 @@ test("a book that is not on this device is fetched by the tap", () => {
   expect(materialNote(m, false)).toBe("In the cloud");
   expect(materialNote(m, true)).toBe("Downloading…");
   expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "download", bookId: "h1", then: "open" });
+});
+
+test("a download under way says how far it has got once the size is known", () => {
+  const entries = { h1: entry("h1") };
+  const [m] = shelfMaterials([file("a.epub", "h1")], entries, new Set());
+  expect(materialNote(m, true, null)).toBe("Downloading…");
+  expect(materialNote(m, true, { received: 0, total: 0 })).toBe("Downloading…");
+  expect(materialNote(m, true, { received: 1, total: 3 })).toBe("Downloading… 33%");
+  // Progress from another card's download says nothing on this one.
+  expect(materialNote(m, false, { received: 1, total: 3 })).toBe("In the cloud");
+});
+
+test("the percentage rounds down, so 100% means every byte is here", () => {
+  expect(downloadPercent({ received: 999, total: 1000 })).toBe(99);
+  expect(downloadPercent({ received: 1000, total: 1000 })).toBe(100);
+  expect(downloadPercent({ received: 0, total: 1000 })).toBe(0);
+  expect(downloadPercent({ received: 5, total: 0 })).toBe(0);
+});
+
+test("a download that failed on the network says so, and that tapping again continues", () => {
+  const network = t("phone.shelf.downloadNetworkFailed");
+  expect(downloadFailureLine(new SyncTransportError("error sending request for url"))).toBe(network);
+  expect(downloadFailureLine(new SyncHttpError(503, "Drive book download failed (HTTP 503)"))).toBe(
+    network,
+  );
+  // Anything else keeps its own words.
+  expect(downloadFailureLine(new RemoteGoneError("Drive book not found: h1"))).toBe(
+    "Drive book not found: h1",
+  );
+  expect(downloadFailureLine(new Error("This book was deleted"))).toBe("This book was deleted");
+  expect(downloadFailureLine("odd")).toBe(t("phone.shelf.downloadFailed"));
 });
 
 test("a device with no account says so rather than trying", () => {

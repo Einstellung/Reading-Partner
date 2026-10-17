@@ -5,7 +5,7 @@
 
 import { expect, test } from "bun:test";
 import { NO_KEYBOARD } from "../../../../src/ui/components/common/useKeyboardInset";
-import { panelOnKeyboard, panelPadding } from "../../../../src/ui/components/lumen/door-panel";
+import { fullPadding, panelOnKeyboard, panelPadding } from "../../../../src/ui/components/lumen/door-panel";
 
 test("with no keyboard the panel stands on Lumen, above the corner's margin and its lift", () => {
   expect(panelPadding(NO_KEYBOARD, 0).paddingBottom).toBe("calc(max(24px, env(safe-area-inset-bottom)) + 80px)");
@@ -26,4 +26,12 @@ test("the panel keeps 16px under the top inset either way", () => {
   const top = "calc(env(safe-area-inset-top) + 16px)";
   expect(panelPadding(NO_KEYBOARD, 0).paddingTop).toBe(top);
   expect(panelPadding({ covered: 300, cramped: false }, 0).paddingTop).toBe(top);
+});
+
+test("filled, the panel runs edge to edge inside the safe area, down to a keyboard", () => {
+  expect(fullPadding(NO_KEYBOARD)).toEqual({
+    paddingTop: "env(safe-area-inset-top)",
+    paddingBottom: "env(safe-area-inset-bottom)",
+  });
+  expect(fullPadding({ covered: 428, cramped: false }).paddingBottom).toBe("428px");
 });

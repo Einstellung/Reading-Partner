@@ -12,45 +12,51 @@
 import { isAbortError, throwIfAborted } from "../app/abort";
 import { isTauri, type FetchFn } from "../app/host";
 import { cleanTauriFetch } from "../app/tauri-fetch";
+import { gatedFetch, hostGate, isRateLimitError, RateLimitError, sleep, type HostGate } from "./host-gate";
 import { MAX_RETRY_WAIT_MS, retryAfterMs } from "./retry-after";
 
 export type { FetchFn };
+export {
+  HostCoolingDownError,
+  isHostCoolingDown,
+  isRateLimitError,
+  RateLimitError,
+  sleep,
+  type Clock,
+} from "./host-gate";
 
-// Polite identification for arXiv/Semantic Scholar (their usage policies ask
-// for a contactable UA). Only settable on the plugin path; the browser path
-// keeps its own UA.
-const POLITE_HEADERS = {
-  "User-Agent":
-    "Reading-Partner/0.2 (https://github.com/Einstellung/Reading-Partner; mailto:einstellungsu@gmail.com)",
-};
+// Polite identification for the literature APIs (arXiv, Semantic Scholar,
+// OpenAlex and NCBI ask for a descriptive, contactable UA). Only settable on the
+// plugin path; a webview's fetch keeps the browser's own UA.
+export const POLITE_USER_AGENT =
+  "Reading-Partner (https://github.com/Einstellung/Reading-Partner; mailto:einstellungsu@gmail.com)";
+
+/** Hosts that get POLITE_USER_AGENT from either transport. */
+export const POLITE_UA_HOSTS = new Set([
+  "arxiv.org",
+  "www.arxiv.org",
+  "export.arxiv.org",
+  "api.semanticscholar.org",
+  "api.openalex.org",
+  "eutils.ncbi.nlm.nih.gov",
+]);
+
+// A modest default for hosts not in the gate's table — user-pasted links (link
+// ingestion, docs/09) can point at any host, so space them out politely.
+export const DEFAULT_HOST_INTERVAL_MS = 1000;
 
 // The reading domain's outbound fetch, the counterpart of info's infoFetch: any
 // host the reading side talks to (literature APIs, a PDF mirror, a pasted
 // article) goes through here, so nothing reading fetches is subject to the
-// webview's CORS and CSP.
-export const readingFetch: FetchFn = (url, init) => {
+// webview's CORS and CSP. Every attempt passes the process-wide host gate.
+export const readingFetch: FetchFn = gatedFetch((url, init) => {
   if (isTauri()) {
     const headers = new Headers(init?.headers);
-    for (const [k, v] of Object.entries(POLITE_HEADERS)) {
-      if (!headers.has(k)) headers.set(k, v);
-    }
+    if (!headers.has("User-Agent")) headers.set("User-Agent", POLITE_USER_AGENT);
     return cleanTauriFetch(url, { ...init, headers });
   }
   return fetch(url, init);
-};
-
-// Thrown when a request is terminally rate-limited (429 after every retry).
-// The pipeline treats this as "cool down and retry later", not a hard failure.
-export class RateLimitError extends Error {
-  constructor(public readonly host: string) {
-    super(`HTTP 429 from ${host}`);
-    this.name = "RateLimitError";
-  }
-}
-
-export function isRateLimitError(e: unknown): e is RateLimitError {
-  return e instanceof RateLimitError;
-}
+}, DEFAULT_HOST_INTERVAL_MS);
 
 // Thrown by a client when the server answered with a status it cannot use. The
 // status is carried rather than folded into a sentence because callers have to
@@ -71,77 +77,6 @@ export function isHttpStatusError(e: unknown): e is HttpStatusError {
   return e instanceof HttpStatusError;
 }
 
-// --- per-host request spacing ---
-
-// Minimum gap between requests to the same host (ms). arXiv's usage policy
-// asks for one request per three seconds; Semantic Scholar's shared free pool
-// is happier with spacing too. Other hosts (open-access PDF mirrors) are
-// unthrottled.
-export const HOST_MIN_INTERVAL_MS: Record<string, number> = {
-  "arxiv.org": 3000,
-  "export.arxiv.org": 3000,
-  "api.semanticscholar.org": 1500,
-  // Polite pool allows 10 req/s; stay well under it.
-  "api.openalex.org": 500,
-  // NCBI E-utilities allow 3 requests/second without a key, and a topic search
-  // is two calls (esearch then efetch) back to back.
-  "eutils.ncbi.nlm.nih.gov": 400,
-};
-
-// A modest default for hosts not in the table — user-pasted links (link
-// ingestion, docs/09) can point at any host, so space them out politely.
-export const DEFAULT_HOST_INTERVAL_MS = 1000;
-
-export interface Clock {
-  now(): number;
-  sleep(ms: number): Promise<void>;
-}
-
-// The one wait on a real timer, for every backoff in the app that has no fake
-// clock injected.
-export const sleep = (ms: number): Promise<void> => new Promise<void>((r) => setTimeout(r, ms));
-
-const realClock: Clock = {
-  now: () => Date.now(),
-  sleep,
-};
-
-// A gate that spaces out requests per host. Serializes calls for the same host
-// (a chain of promises) so back-to-back metadata+PDF fetches keep their gap.
-// The clock is injectable so tests never touch real timers.
-export type Throttle = (host: string) => Promise<void>;
-
-export function createThrottle(
-  intervals: Record<string, number> = HOST_MIN_INTERVAL_MS,
-  clock: Clock = realClock,
-  // Applied to hosts not named in `intervals` (0 = no spacing).
-  defaultInterval = 0,
-): Throttle {
-  const last = new Map<string, number>();
-  const tail = new Map<string, Promise<void>>();
-  return (host: string) => {
-    const interval = intervals[host] ?? defaultInterval;
-    if (!interval) return Promise.resolve();
-    const run = (tail.get(host) ?? Promise.resolve()).then(async () => {
-      const lastAt = last.get(host);
-      if (lastAt !== undefined) {
-        const wait = lastAt + interval - clock.now();
-        if (wait > 0) await clock.sleep(wait);
-      }
-      last.set(host, clock.now());
-    });
-    // A failed request must not poison the chain for the next one.
-    tail.set(host, run.catch(() => {}));
-    return run;
-  };
-}
-
-// Process-wide gate used by the real fetch path.
-let hostThrottle = createThrottle(HOST_MIN_INTERVAL_MS, realClock, DEFAULT_HOST_INTERVAL_MS);
-// For callers that do their own pacing (info's briefing fetch spaces its sources
-// out itself) and for fakes.
-export const noThrottle: Throttle = () => Promise.resolve();
-
 // Exponential backoff with deterministic jitter, exported for tests.
 export function backoffMs(attempt: number, baseMs = 1000): number {
   return baseMs * 2 ** attempt + (attempt * 137) % 400;
@@ -153,7 +88,9 @@ export interface RetryOptions {
   base429Ms?: number; // 429 backoff base (higher: the pool needs longer to clear)
   fetchFn?: FetchFn;
   sleep?: (ms: number) => Promise<void>;
-  throttle?: Throttle;
+  // Asked after a 429: a host now cooling down ends the loop at once instead
+  // of waiting out a backoff only to be refused.
+  gate?: HostGate;
   // Injected by tests. Read only to measure an HTTP-date Retry-After against.
   now?: () => number;
   // Cancels the request in flight and ends the retry loop. A stopped run must
@@ -204,9 +141,9 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
   const retries = opts?.retries ?? 3;
   const doFetch = opts?.fetchFn ?? readingFetch;
   const doSleep = opts?.sleep ?? sleep;
-  // An injected fetchFn means a fake: don't make it wait on the real per-host
-  // gate. The live path (no fetchFn) keeps the process-wide spacing.
-  const throttle = opts?.throttle ?? (opts?.fetchFn ? noThrottle : hostThrottle);
+  // Spacing and cooldown live in the transports (host-gate.ts), so a fake
+  // fetchFn never waits on them and every live one does.
+  const gate = opts?.gate ?? hostGate;
   const baseMs = opts?.baseMs ?? 1000;
   const base429 = opts?.base429Ms ?? 5000;
   const backoff = opts?.backoff ?? backoffMs;
@@ -223,12 +160,13 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0 && waitBeforeNext > 0) await waitFor(waitBeforeNext, doSleep, signal);
     throwIfAborted(signal);
-    await throttle(host);
     try {
       const res = await doFetch(url, init);
       if (res.status === 429 || res.status >= 500) {
         lastWas429 = res.status === 429;
         lastError = new Error(`HTTP ${res.status} from ${host}`);
+        const cooling = lastWas429 ? gate.coolingDown(host) : null;
+        if (cooling) throw cooling;
         const asked = retryAfterMs(res.headers.get("retry-after"), now());
         const base = lastWas429 ? base429 : baseMs;
         // Capped: a host answering 429 with "retry-after: 999999" is asking for
@@ -243,7 +181,8 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
       }
       return res;
     } catch (e) {
-      if (isAbortError(e) || signal?.aborted) throw e;
+      // A cooldown is the answer for now; retrying would only be refused again.
+      if (isAbortError(e) || signal?.aborted || isRateLimitError(e)) throw e;
       lastError = e;
       lastWas429 = false;
       waitBeforeNext = backoff(attempt, baseMs);

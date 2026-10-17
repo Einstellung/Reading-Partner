@@ -59,10 +59,11 @@ import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-work
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photos/photo-sweep";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerProseAdjudicateWorker } from "../../../memory/adjudicate/live";
-import { noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
+import { amICollecting, noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
 import { registerTopicSearchRuns } from "../../../info/topic-search/runs-live";
+import { issueRunClosed, liveIssueExpiryMarker } from "../../../info/issue/live";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../info/briefer/deliver";
-import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
+import { deleteBook, deleteIfUnreferenced } from "../../../reading/delete/delete-book";
 import { retireReplacedBook } from "../../../reading/delete/retire-book";
 import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
 import { setBookRetirer } from "../../../reading/replace/live";
@@ -270,8 +271,12 @@ export function bootDomains(): void {
   registerInfoCollectWorker();
   // Topic searches' first look and nightly increment (docs/info/88): a run that
   // reads X in the hidden window, so only a desktop collector claims it. The
-  // result builder is topic-search/build-live.ts's.
-  registerTopicSearchRuns({ noteHalt: noteCollectorHalt });
+  // result builder is topic-search/build-live.ts's; a closed run goes to the
+  // nightly brief (info/issue), which files the issue through the platform.
+  registerTopicSearchRuns({
+    noteHalt: noteCollectorHalt,
+    closed: ({ runId, searchId, kind, night, resultFile }) => issueRunClosed({ runId, searchId, kind, night, resultFile }),
+  });
   // Settling a prose file sync parked a conflict copy of, with a model (docs/59
   // §6). Registered on every device for the same reason as collect: the
   // election picks the executor among the devices that hold the worker.
@@ -302,6 +307,9 @@ export function bootDomains(): void {
   registerGarbageMarker(runFilesMarker());
   registerGarbageMarker(bellMarker);
   registerGarbageMarker(infoDailyMarker);
+  // Old issues of the brief go the way a book does (docs/info/88), on the
+  // collector, the one device that writes the info shelf.
+  registerGarbageMarker(liveIssueExpiryMarker({ deleteBook: (bookId) => deleteBook(bookId), isCollector: amICollecting }));
 }
 
 export interface ShellBootstrap {

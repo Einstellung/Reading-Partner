@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
+import { NIGHTLY_COLLECT_ENABLED } from "../../../info/program/nightly-collect";
 import { Button } from "../ui/button";
 import { briefingCardBody, briefingFooterLine, builtAt } from "./today";
 import { noLabNotice, briefingErrorText } from "./no-labs";
@@ -88,6 +89,9 @@ export interface BriefingCardProps {
   // it was last seen, why its last run stopped, which site needs signing in
   // again. Nobody is looking at that machine's screen.
   notices: string[];
+  // Whether the briefing collects itself (info/program/nightly-collect.ts). The
+  // switch's value unless a test says otherwise.
+  nightlyCollect?: boolean;
   // Open the companion on the state of today's briefing. There is no Generate
   // button any more (docs/35): the day's briefing collects itself when the app
   // opens, and asking for another one is something the user says, not clicks.
@@ -106,6 +110,7 @@ export function BriefingCardBody({
   noLabs,
   collecting,
   notices,
+  nightlyCollect = NIGHTLY_COLLECT_ENABLED,
   onAsk,
   onStop,
   onOpen,
@@ -248,7 +253,13 @@ export function BriefingCardBody({
   //
   // "On its way" is a promise only the collector can make. A reader says what it
   // knows about the machine that would have made it instead.
-  const waiting = collecting ? t("info.home.waitingCollecting") : t("info.home.waitingReader");
+  // With the nightly collection switched off nothing is on its way on either
+  // role, and the card says so instead (info/program/nightly-collect.ts).
+  const waiting = !nightlyCollect
+    ? t("info.home.waitingPaused")
+    : collecting
+      ? t("info.home.waitingCollecting")
+      : t("info.home.waitingReader");
   return (
     <div className="flex flex-1 flex-col justify-between">
       <div>

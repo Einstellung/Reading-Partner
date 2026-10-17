@@ -50,14 +50,15 @@ export default {
   "lumen.show": "Show Lumen",
   "lumen.hide": "Hide Lumen",
   "lumen.needsDecision": "Needs a decision",
-  "lumen.holdForMenu": "Hold for Lumen's menu",
-  "lumen.menuVoice": "Voice",
-  "lumen.menuType": "Text",
   "lumen.callCardClose": "Close",
+  "lumen.tapToChat": "Lumen: tap to chat, hold to talk",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
   "door.close": "Close",
+  "door.expand": "Larger",
+  "door.shrink": "Smaller",
+  "door.dropQuote": "Remove the passage",
   "door.empty": "What's on your mind?",
   "door.placeholder": "Message Lumen…",
   "door.failed": "Couldn't start this reply.",
@@ -73,7 +74,7 @@ export default {
   "box.notOnPhone": "This one opens on the iPad or the desk.",
   "box.label": "The box",
   "box.waiting": { one: "The box, {count} waiting", other: "The box, {count} waiting" },
-  "box.empty": "Nothing in the box.",
+  "box.cardKicker": "From the box",
 
   // A figure cited in a reply: the card, its chip fallback and its dialog.
   "figure.label": "Fig. {id} · p.{page}",
@@ -121,6 +122,7 @@ export default {
   // The sidebar's items (base/shell-nav.ts).
   "nav.today": "Today",
   "nav.briefing": "Briefing",
+  "nav.briefs": "Briefs",
   "nav.meals": "Meals",
   "nav.topics": "Topics",
 

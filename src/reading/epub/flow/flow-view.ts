@@ -17,7 +17,7 @@ import type { Annotation, ViewState, ViewStats } from "../../../platform/app/rea
 import { openExternal } from "../../../platform/app/external-link";
 import { acquireEpub, ensurePagination, releaseEpub } from "../book-cache";
 import { caretAtPoint } from "../caret";
-import { epubCfi, parseCfiStart, resolvePointRange } from "../file/cfi";
+import { epubCfi, parseCfiStart, pointSteps, resolvePointRange } from "../file/cfi";
 import type { FlowMarkPopup, FlowReaderView, FlowSelection, FlowTool } from "./flow-contract";
 import { intrinsicHeightEstimate } from "./flow-gesture";
 import {
@@ -403,6 +403,11 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     }
     const mine = { doc, range };
     quote = mine;
+    // The words sit a way below the top edge, so the page under the edge can be
+    // the one before: the position and the count are the words' own until the
+    // reader scrolls (the same pin a landed CFI makes in settle).
+    const start = pointSteps(range.startContainer, range.startOffset);
+    const wordsAt = start !== null && spot ? { cfi: epubCfi(doc.spine, doc.idref, start), pageIndex: spot.pageIndex } : null;
     // Measured again on every pass of the landing: a document off screen may
     // not have been laid out yet, and its pictures move the words under the
     // band when they arrive.
@@ -415,6 +420,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
       () => scroller.clientHeight * QUOTE_LANDING,
       () => {
         find();
+        if (wordsAt && quote === mine) pinned = { ...wordsAt, scrollTop: scroller.scrollTop };
         readPosition();
         paintShown();
         emit();

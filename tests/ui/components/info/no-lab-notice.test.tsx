@@ -18,7 +18,12 @@ const { BriefingCardBody } = await import("../../../../src/ui/components/info/Ho
 const { noLabNotice } = await import("../../../../src/ui/components/info/no-labs");
 const NO_LAB_NOTICE = noLabNotice();
 
-function card(over: { noLabs: boolean | null; collecting?: boolean; onAsk?: () => void }) {
+function card(over: {
+  noLabs: boolean | null;
+  collecting?: boolean;
+  nightlyCollect?: boolean;
+  onAsk?: () => void;
+}) {
   return (
     <BriefingCardBody
       snap={null}
@@ -27,6 +32,7 @@ function card(over: { noLabs: boolean | null; collecting?: boolean; onAsk?: () =
       hasSources
       noLabs={over.noLabs}
       collecting={over.collecting ?? true}
+      nightlyCollect={over.nightlyCollect}
       notices={[]}
       onAsk={over.onAsk ?? (() => {})}
       onStop={() => {}}
@@ -80,8 +86,21 @@ test("before the labs file answers the card holds its placeholder", async () => 
 });
 
 test("with a room open the card is back to waiting for today's briefing", async () => {
-  const { container } = await paint(card({ noLabs: false }));
+  const { container } = await paint(card({ noLabs: false, nightlyCollect: true }));
 
   expect(container.textContent ?? "").toContain("Today's is on its way");
   expect(container.textContent ?? "").not.toContain(NO_LAB_NOTICE);
+});
+
+// The nightly collection is switched off (info/program/nightly-collect.ts):
+// nothing is on its way, on the collector or on a reader.
+test("with the nightly collection off the card promises nothing", async () => {
+  for (const collecting of [true, false]) {
+    const { container } = await paint(card({ noLabs: false, collecting }));
+    const text = container.textContent ?? "";
+    expect(text).toContain("The daily briefing is paused");
+    expect(text).not.toContain("Today's is on its way");
+    expect(text).not.toContain("built on the computer that collects");
+    cleanup();
+  }
 });

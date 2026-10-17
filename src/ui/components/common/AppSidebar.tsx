@@ -14,7 +14,7 @@
 import appIcon from "../../assets/app-icon.png";
 import { useT } from "../../../i18n";
 import { lumenToggleTitle } from "../base/lumen-toggle";
-import { IconBriefing, IconBooks, IconMeals, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
+import { IconBriefing, IconBriefs, IconBooks, IconMeals, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
 import { restartLabel, type UpdateState } from "../../../platform/app/update-policy";
 import { shellNavItems, type ShellNavId } from "../base/shell-nav";
 import {
@@ -31,6 +31,7 @@ import { Button } from "../ui/button";
 const ICONS: Record<ShellNavId, (p: { size?: number }) => JSX.Element> = {
   today: IconToday,
   briefing: IconBriefing,
+  briefs: IconBriefs,
   meals: IconMeals,
   topics: IconBooks,
   settings: IconGear,

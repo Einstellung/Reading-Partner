@@ -4,7 +4,8 @@ import type en from "./en";
 export default {
   title: "Настройки",
   done: "Готово",
-  "tab.account": "Аккаунт",
+  "tab.account": "ИИ и синхронизация",
+  "tab.accounts": "Аккаунты",
   "tab.features": "Функции",
   "tab.optional": "Дополнительно",
   connected: "Подключено",

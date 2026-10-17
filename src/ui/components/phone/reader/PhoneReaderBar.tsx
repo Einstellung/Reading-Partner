@@ -39,6 +39,8 @@ export default function PhoneReaderBar(props: {
   learnDot: LessonDot;
   // A panel is up: the dot over the page steps aside for it.
   covered: boolean;
+  // A brief: no Learn at all (reading/issue.ts).
+  noLearn?: boolean;
 }) {
   const t = useT();
   const pageText = readerPageText(props.stats, t);
@@ -118,7 +120,8 @@ export default function PhoneReaderBar(props: {
         <BarTool label={t("phone.readerBar.display")} onClick={props.onDisplay}>
           <IconTextSize size={22} />
         </BarTool>
-        <BarTool
+        {/* A brief has no lesson, and nothing takes Learn's place (docs/info/88). */}
+        {!props.noLearn && <BarTool
           label={t("phone.readerBar.learn")}
           ariaLabel={bookThread + (props.learnDot ? dotWords[props.learnDot] : "")}
           title={bookThread}
@@ -135,7 +138,7 @@ export default function PhoneReaderBar(props: {
               )}
             />
           )}
-        </BarTool>
+        </BarTool>}
       </nav>
     </>
   );

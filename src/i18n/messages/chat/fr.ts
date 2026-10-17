@@ -36,6 +36,7 @@ export default {
   "delegate.handingToKind": "Confié à un agent {kind}",
   "delegate.handingOver": "Confié à un agent",
   "delegate.sentOffWork": "Travail {kind} envoyé",
+  "backgroundStatus.checking": "Vérification du travail en arrière-plan",
 
   "places.goingTo": "Direction {place}",
   "places.goingSomewhere": "Déplacement dans l’app",
@@ -44,6 +45,8 @@ export default {
   "statements.writingSelf": "Note de ce que vous avez dit sur vous-même",
   "statements.wroteKind": "{kind} noté",
   "statements.rewroteKind": "{kind} réécrit",
+  "statements.wroteAboutYou": "Noté à ton sujet",
+  "statements.rewroteAboutYou": "Réécrit ce que je sais de toi",
 
   "filing.proposingUnder": "Proposition de classer ceci sous {topic}",
   "filing.proposingWhere": "Proposition d’un classement",

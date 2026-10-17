@@ -4,11 +4,12 @@
 // 30-day history (dedupe, continuation, the metric questions).
 //
 // Every fact here — titles, URLs, authors, dates, counts, stars — is the
-// program's. A model wrote only `overview.text`, each item's `summary`, and the
-// `says` / `difference` of a discrepancy, and all of those passed the number
+// program's. A model wrote only `overview.text`, each item's `summary`, `body`
+// and `unknown`, and the `says` / `difference` of a discrepancy, and all of those passed the number
 // check (numbers.ts) against the materials they cite.
 
 import type { RegisteredMaterial } from "../dossier/registry";
+import type { RunSource } from "./pace";
 
 export const TOPIC_SEARCH_RESULT_VERSION = 1;
 export const RESULT_FILE_PREFIX = "topic-search-";
@@ -38,9 +39,22 @@ export interface ResultPost {
   truncated: boolean;
 }
 
+export type PaperDepth = "abstract" | "head" | "full";
+
 /** The facts line of an item, by kind; rendered by the page, written by the program. */
 export type ResultFacts =
-  | { kind: "paper"; arxivId: string; authors: string[]; publishedAt: string | null }
+  | {
+      kind: "paper";
+      arxivId: string;
+      authors: string[];
+      publishedAt: string | null;
+      /**
+       * How much of the paper was read: the abstract, the abstract and the start
+       * of the body (verify.ts PAPER_BODY_CHARS), or the whole paper (a deeper
+       * read the write-up asked for). Absent in files written before 2026-10-16.
+       */
+      depth?: PaperDepth;
+    }
   | {
       kind: "repo";
       fullName: string;
@@ -112,8 +126,16 @@ export interface TopicSearchResultItem {
   /** The original's title; else the author and the post's first sentence, cut to 120 characters. Never rewritten. */
   title: string;
   titleFrom: "original" | "post";
-  /** One or two sentences, the model's. Null in the fallback write-up and for a continuing item. */
+  /**
+   * The one-sentence conclusion, the model's: the brief's contents line and the
+   * entry's italic lede (88 「简报书」). Null in the fallback write-up, and for a
+   * continuing item the model had nothing new to say about.
+   */
   summary: string | null;
+  /** Two or three paragraphs, facts before judgements. Empty where `summary` is null. Absent in files written before 2026-10-15. */
+  body?: string[];
+  /** One sentence on what is not yet known or could not be checked; null when the model had none. */
+  unknown?: string | null;
   facts: ResultFacts;
   /** The original (null when the post is the original) and the posts that led to it. */
   links: { original: string | null; posts: ResultPost[] };
@@ -145,6 +167,8 @@ export interface ResultStats {
   /** Items per subtopic id ("" for the whole topic). */
   subtopicItems: Record<string, number>;
   modelCalls: number;
+  /** Papers the write-up asked to read in full: read, unreadable, refused for the run's cap. Absent before 2026-10-16. */
+  deepReads?: { read: string[]; failed: string[]; refused: string[] };
 }
 
 export interface TopicSearchResult {
@@ -152,7 +176,6 @@ export interface TopicSearchResult {
   /** The file name without ".json". */
   id: string;
   searchId: string;
-  topicId: string;
   name: string;
   kind: ResultRunKind;
   /** Local date of the run, YYYY-MM-DD. */
@@ -174,8 +197,194 @@ export interface TopicSearchResult {
   /** Questions for you, at the end of the page. */
   questions: ResultQuestion[];
   stats: ResultStats;
-  /** Where this run's cached material bodies are. */
+  /** Where this run's cached material bodies are (a retry's bodies go here too). */
   runDir: string;
+  /** First look only: what each retry added to this file (retry.ts), and its slow part (pace.ts). Absent until one did. */
+  retries?: ResultRetry[];
+  /**
+   * First look only: the first look's own overview, write-up and counts, kept
+   * once a retry or the slow part made the file's speak for the merged whole
+   * (`firstPart` reads them back). Absent until one did.
+   */
+  firstLook?: ResultFirstLook;
+  /**
+   * Not in the file: items of the same file told in another issue, which the
+   * overview may name (`retryPart` sets it, so the annex can still footnote them).
+   */
+  citable?: { id: string; title: string }[];
+  /**
+   * First look only (pace.ts): the slow sources its first part was built
+   * without, still being read by the same run. Cleared when their part is
+   * merged; left set when that run failed before it was. Absent otherwise.
+   */
+  awaiting?: RunSource[];
+}
+
+/** What one retry of a first look, or its slow part, added to its file: its items, its write-up and questions, its own counts. */
+export interface ResultRetry {
+  runId: string;
+  /** "slow": the first look's own slow part (pace.ts), under the first run's id. Absent on a retry. */
+  part?: "slow";
+  at: number;
+  /** Item ids it added, in the file's numbering. */
+  items: string[];
+  overview: TopicSearchResult["overview"];
+  writeup: TopicSearchResult["writeup"];
+  /** Question ids it asked. */
+  questions: string[];
+  stats: ResultStats;
+}
+
+/** The first look's own part of a file retries were merged into. */
+export interface ResultFirstLook {
+  overview: TopicSearchResult["overview"];
+  writeup: TopicSearchResult["writeup"];
+  stats: ResultStats;
+}
+
+function addCounts(into: Record<string, number>, from: Record<string, number>): Record<string, number> {
+  for (const [k, n] of Object.entries(from)) into[k] = (into[k] ?? 0) + n;
+  return into;
+}
+
+/**
+ * The counts of runs that wrote one file, added up: candidates, the floor, the
+ * pool, items per subtopic, avoid blocks and model calls summed; the anchor
+ * miss share weighted by what passed the floor; reranked when any part was.
+ */
+export function sumStats(parts: readonly ResultStats[]): ResultStats {
+  const passed = parts.reduce((n, p) => n + p.passedFloor, 0);
+  const deep = parts.filter((p) => p.deepReads).map((p) => p.deepReads!);
+  return {
+    candidates: { x: parts.reduce((n, p) => n + p.candidates.x, 0), arxiv: parts.reduce((n, p) => n + p.candidates.arxiv, 0) },
+    passedFloor: passed,
+    pooled: parts.reduce((n, p) => n + p.pooled, 0),
+    reranked: parts.some((p) => p.reranked),
+    anchorMiss: passed ? parts.reduce((n, p) => n + p.anchorMiss * p.passedFloor, 0) / passed : 0,
+    avoidBlocked: parts.reduce((acc, p) => addCounts(acc, p.avoidBlocked), {} as Record<string, number>),
+    subtopicItems: parts.reduce((acc, p) => addCounts(acc, p.subtopicItems), {} as Record<string, number>),
+    modelCalls: parts.reduce((n, p) => n + p.modelCalls, 0),
+    ...(deep.length
+      ? { deepReads: { read: deep.flatMap((d) => d.read), failed: deep.flatMap((d) => d.failed), refused: deep.flatMap((d) => d.refused) } }
+      : {}),
+  };
+}
+
+/** The highest number among ids like "E7" or "M12"; 0 when there is none. */
+export function highestNumber(ids: readonly string[]): number {
+  return ids.reduce((most, id) => Math.max(most, Number(/^[A-Z](\d+)$/.exec(id)?.[1] ?? 0)), 0);
+}
+
+/** Groups in the order their subtopic first appears, the whole topic's last, items in file order. */
+function regroup(groups: readonly TopicSearchResult["groups"][number][]): TopicSearchResult["groups"] {
+  const out: TopicSearchResult["groups"] = [];
+  for (const g of groups) {
+    const same = out.find((o) => o.subtopic === g.subtopic);
+    if (same) same.items.push(...g.items);
+    else out.push({ subtopic: g.subtopic, items: [...g.items] });
+  }
+  return [...out.filter((g) => g.subtopic !== null), ...out.filter((g) => g.subtopic === null)];
+}
+
+/**
+ * The first look's file with a retry's part added (docs/info/88 「重跑第一次」):
+ * the items, materials and questions there stay as they were, the part's
+ * follow (already numbered after the file's), and the retry is recorded. The
+ * file's overview, groups and counts then speak for the merged whole: the
+ * part's overview was written over every item in the file (build-result.ts
+ * hands the write-up the file's items beside its own), so it replaces the
+ * file's; a part whose write-up fell back leaves none. The counts are the
+ * first look's and every part's added up. What the first look had of its own
+ * is kept in `firstLook`. The first look's slow part (`slow`) merges the same
+ * way and settles what the file was awaiting. Pure.
+ */
+export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, runId: string, slow = false): TopicSearchResult {
+  const record: ResultRetry = {
+    runId,
+    ...(slow ? { part: "slow" as const } : {}),
+    at: part.createdAt,
+    items: part.items.map((i) => i.id),
+    overview: part.overview,
+    writeup: part.writeup,
+    questions: part.questions.map((q) => q.id),
+    stats: part.stats,
+  };
+  const items = [...target.items, ...part.items];
+  const retries = [...(target.retries ?? []).filter((r) => r.runId !== runId), record];
+  // A file merged before `firstLook` existed still has the first look's own overview on top,
+  // unless the first look had none and an earlier retry's was taken in its place.
+  const firstLook: ResultFirstLook = target.firstLook ?? {
+    overview: target.retries?.some((r) => r.overview && r.overview.text === target.overview?.text) ? null : target.overview,
+    writeup: target.writeup,
+    stats: target.stats,
+  };
+  const { awaiting, ...rest } = target;
+  return {
+    ...rest,
+    ...(awaiting && !slow ? { awaiting } : {}),
+    empty: items.length === 0,
+    writeup: target.writeup === "none" ? part.writeup : target.writeup,
+    // A part that added nothing wrote nothing: the file's overview still holds.
+    overview: part.items.length ? part.overview : target.overview,
+    groups: regroup([...target.groups, ...part.groups]),
+    items,
+    materials: [...target.materials, ...part.materials],
+    questions: [...target.questions, ...part.questions],
+    stats: sumStats([firstLook.stats, ...retries.map((r) => r.stats)]),
+    retries,
+    firstLook,
+  };
+}
+
+/** What a retry added to a first look's file, as a result of its own (its brief issue); null when it added nothing. */
+export function retryPart(result: TopicSearchResult, runId: string): TopicSearchResult | null {
+  const record = result.retries?.find((r) => r.runId === runId);
+  if (!record || record.items.length === 0) return null;
+  const items = result.items.filter((i) => record.items.includes(i.id));
+  const used = new Set(items.flatMap((i) => i.materials));
+  return {
+    ...result,
+    citable: result.items.filter((i) => !record.items.includes(i.id)).map((i) => ({ id: i.id, title: i.title })),
+    createdAt: record.at,
+    empty: items.length === 0,
+    writeup: record.writeup,
+    overview: record.overview,
+    groups: result.groups
+      .map((g) => ({ subtopic: g.subtopic, items: g.items.filter((id) => record.items.includes(id)) }))
+      .filter((g) => g.items.length > 0),
+    items,
+    materials: result.materials.filter((m) => used.has(m.id)),
+    questions: result.questions.filter((q) => record.questions.includes(q.id)),
+    stats: record.stats,
+    retries: undefined,
+    awaiting: undefined,
+    firstLook: undefined,
+  };
+}
+
+/**
+ * The first look's own items, overview, write-up and counts, without what
+ * retries or its slow part added later: what the issue `first:<id>` carries,
+ * even when it is assembled after those were merged (a crash, the collector's
+ * tick). Pure.
+ */
+export function firstPart(result: TopicSearchResult): TopicSearchResult {
+  const added = new Set((result.retries ?? []).flatMap((r) => r.items));
+  const addedQuestions = new Set((result.retries ?? []).flatMap((r) => r.questions));
+  if (added.size === 0 && addedQuestions.size === 0 && !result.firstLook) return result;
+  const items = result.items.filter((i) => !added.has(i.id));
+  const used = new Set(items.flatMap((i) => i.materials));
+  return {
+    ...result,
+    ...(result.firstLook ? { overview: result.firstLook.overview, writeup: result.firstLook.writeup, stats: result.firstLook.stats } : {}),
+    empty: items.length === 0,
+    groups: result.groups
+      .map((g) => ({ subtopic: g.subtopic, items: g.items.filter((id) => !added.has(id)) }))
+      .filter((g) => g.items.length > 0),
+    items,
+    materials: result.materials.filter((m) => used.has(m.id)),
+    questions: result.questions.filter((q) => !addedQuestions.has(q.id)),
+  };
 }
 
 /** `topic-search-<id>-<date>.json`, `-2`, `-3` … for a second run the same day. */

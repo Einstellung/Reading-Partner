@@ -78,8 +78,10 @@ import { getObservationAdapter } from "../../memory/live/live";
 import { buildObservationSnapshot, trimObservations } from "../../memory/observations/select";
 import { runDreamIfDue } from "../../memory/dream/live";
 import { sweepProseConflictsNow } from "../../memory/adjudicate/live";
-import { DAILY_ANCHOR_HOUR, DAILY_TICK_MS, lastAnchorDate } from "./daily";
+import { DAILY_ROUND_SCHEDULE, DAILY_TICK_MS, lastAnchorDate, registerMorningRound } from "./daily";
+import { switchedGates } from "./nightly-collect";
 import { checkTopicSearchNight } from "../topic-search/runs-live";
+import { checkIssuesDue } from "../issue/live";
 import { registerCollectWorker, writeCollectBrief, type CollectScope } from "./collect-worker";
 import { appRunner } from "../../legion/runner/runner";
 import { collectorStatusLine, InfoCollector } from "../collect/collector";
@@ -87,11 +89,10 @@ import { createCollectorSession, type CollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "../boxes/publish";
 import { ASK_PULL_ROUTE, COLLECT_KIND, readAsks, type CollectorClaim } from "../briefer/handoff";
 import { appClaims, WEBVIEW_FETCH } from "../../legion/claim";
-import { registerSchedule } from "../../legion/schedule";
 import { subscribeSyncStatus } from "../../platform/sync";
 import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
-import { allSignInSites } from "../sources/site-session";
+import { accountSites } from "../sources/accounts";
 import { hasTopicSearches } from "../topic-search/store";
 import {
   loadPool,
@@ -225,7 +226,7 @@ async function screen(
 // empty). Each source is handed to the pipeline as it settles so the run's
 // checkpoint advances one source at a time, and into the pool at the same time,
 // so a run's own requests stock it exactly as a background poll does. Health is
-// recorded for the source-list UI.
+// recorded for the companion and the collector's status file.
 //
 // A source the background collector polled recently is not polled again here: it
 // settles with nothing new, and the pool supplies its items. `force` — the user
@@ -349,12 +350,27 @@ async function saveAndPublishBriefing(briefing: Briefing): Promise<void> {
 // against a room's observables and the briefing is cut by room, so a bureau with
 // none of them has nothing to spend the day on. The companion asks for one
 // instead.
-async function canAutoGenerate(): Promise<boolean> {
+async function canAutoGenerateWhenOn(): Promise<boolean> {
   if (!(await session.amICollecting())) return false;
   const [settings, sources, labs] = await Promise.all([loadSettings(), loadSources(), loadLabs()]);
   if (!settings.defaultProviderId || !settings.defaultModelId) return false;
   if (activeLabs(labs).length === 0) return false;
   return sources.some((d) => d.enabled);
+}
+
+// Both automatic gates behind the nightly collection's switch (nightly-collect.ts).
+// Off, nothing generates on its own and the sources are not polled in the
+// background; a briefing the reader asks for passes neither gate and still runs.
+const autoGates = switchedGates({
+  canAutoGenerate: canAutoGenerateWhenOn,
+  // Two answers, both needed: this machine was told to collect, and this
+  // machine is the one holding the claim (docs/36).
+  backgroundOn: async () =>
+    (await loadDeviceSettings()).backgroundCollect && (await session.amICollecting()),
+});
+
+function canAutoGenerate(): Promise<boolean> {
+  return autoGates.canAutoGenerate();
 }
 
 // --- the morning round (docs/35) --------------------------------------------
@@ -363,20 +379,10 @@ async function canAutoGenerate(): Promise<boolean> {
 // bound to: the recorded date, the real clock, a repeating wake, and the two
 // gates a generate nobody asked for has to pass.
 
-// The round as a schedule (docs/55): the hour is declared once, here, and which
-// machine acts on it is the election for `collect` — the same election
-// canAutoGenerate asks below. What legion does about the hour is ring a wake
-// bell, so that the soul knows the night is being worked; the round itself is a
-// run the tick below delegates.
-export const DAILY_ROUND_SCHEDULE = "info-daily-round";
-
-registerSchedule({
-  id: DAILY_ROUND_SCHEDULE,
-  kind: COLLECT_KIND,
-  at: { daily: { hour: DAILY_ANCHOR_HOUR } },
-  brief:
-    "The morning briefing round is due. The collect run for it has been delegated by the daily tick on this device and will report when it settles; say something to the reader only if there is something worth saying.",
-});
+// The round's schedule (daily.ts), registered only while the nightly collection
+// is switched on (nightly-collect.ts). Which machine acts on the hour is the
+// election for `collect` — the same election canAutoGenerate asks above.
+registerMorningRound();
 
 // The last anchor this process delegated for. Only a saving of file reads: the
 // record that matters is the run itself, which is on disk under a name derived
@@ -466,6 +472,9 @@ async function checkDailyRound(): Promise<void> {
   // collector, owns its own window and gates (topic-search/runs-live.ts) and
   // never throws.
   await checkTopicSearchNight(() => session.amICollecting());
+  // The night's brief at 04:40 from whatever runs closed, and any issue a
+  // crash left half done (info/issue). Never throws.
+  if (await session.amICollecting().catch(() => false)) await checkIssuesDue();
   // Every device looks for parked prose copies and asks for a run per copy
   // (docs/59 §6); the run is keyed by content, so the devices' asks meet in one
   // file and the election picks who settles it. Never throws, never calls a model.
@@ -551,10 +560,7 @@ export function getInfoCollector(): InfoCollector {
       listSources: loadSources,
       poll: pollSources,
       loadBodies: loadArticles,
-      // Two answers, both needed: this machine was told to collect, and this
-      // machine is the one holding the claim (docs/36).
-      backgroundOn: async () =>
-        (await loadDeviceSettings()).backgroundCollect && (await session.amICollecting()),
+      backgroundOn: () => autoGates.backgroundOn(),
       busy: () => getInfoPipeline().snapshot().running,
       now: realTimers.now,
       today: () => todayLocal(),
@@ -728,7 +734,7 @@ function collectorView(): BriefingView {
     },
     // This machine is the one collecting; whatever went wrong is already in the
     // snapshot's error, on the screen of the person who can act on it, and the
-    // sign-in rows on its source list are the real ones.
+    // rows in its own Settings › Accounts are the real ones.
     notices: () => [],
     collectorSites: () => null,
     async article(itemId: string): Promise<ArticleState> {
@@ -810,7 +816,7 @@ async function siteStates(): Promise<Record<string, boolean>> {
       hasTopicSearches(),
     ]);
     const out: Record<string, boolean> = {};
-    for (const site of allSignInSites(sources, topicSearch)) {
+    for (const site of accountSites(sources, topicSearch)) {
       const state = sessions[site.host];
       out[site.host] = !!state && !state.unknown && state.signedIn;
     }

@@ -24,7 +24,7 @@
 
 import { PALACE, type PalaceRow } from "../palace";
 import { GENERIC_MARKER, isGenericRule } from "./generic";
-import type { MarkedBy } from "./marker";
+import type { Mark, MarkedBy } from "./marker";
 
 export type Outcome = "done" | "deferred" | "refused" | "failed";
 
@@ -38,6 +38,8 @@ export interface HousekeeperLogLine {
   rule: string | null;
   kind: string | null;
   reason: string;
+  /** A flow mark's subject. */
+  subject?: string;
   outcome: Outcome;
   detail?: string;
 }
@@ -56,6 +58,8 @@ export interface ExecuteOptions {
   /** Remote purges this night may ask for. */
   remoteBudget: number;
   rows?: readonly PalaceRow[];
+  /** The markers' own flows, by marker name, for their "flow" marks (markerFlows). */
+  flows?: ReadonlyMap<string, (mark: Mark) => Promise<void>>;
 }
 
 export interface ExecuteResult {
@@ -108,13 +112,14 @@ export async function executeMarks(
         rule: row?.retention.rule ?? null,
         kind: row?.kind ?? null,
         reason: mark.reason,
+        ...(mark.subject === undefined ? {} : { subject: mark.subject }),
         outcome,
         ...(detail === undefined ? {} : { detail }),
       };
       await io.log(line).catch((e) => console.warn("housekeeper: failed to log", mark.path, e));
     };
 
-    const key = `${mark.marker} ${mark.action} ${mark.path}`;
+    const key = `${mark.marker} ${mark.action} ${mark.path} ${mark.subject ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -133,6 +138,25 @@ export async function executeMarks(
     const synced = row.sync === "data" || row.sync === "books";
     if (row.sync === "remote-only") {
       await settle("refused", "remote-only kind");
+      continue;
+    }
+
+    // The marker's own flow: what it deletes and how it keeps that sync-safe
+    // is the flow's (a book goes by its tombstone), so neither the channel nor
+    // the remote budget comes into it.
+    if (mark.action === "flow") {
+      const flow = opts.flows?.get(mark.marker);
+      if (!flow) {
+        await settle("refused", "the marker has no flow");
+        continue;
+      }
+      const { marker: _marker, ...plain } = mark;
+      try {
+        await flow(plain);
+        await settle("done");
+      } catch (e) {
+        await settle("failed", String(e));
+      }
       continue;
     }
 

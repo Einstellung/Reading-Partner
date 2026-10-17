@@ -36,6 +36,7 @@ export default {
   "delegate.handingToKind": "Übergibt dies an eine {kind}-Arbeitskraft",
   "delegate.handingOver": "Übergibt dies an eine Arbeitskraft",
   "delegate.sentOffWork": "{kind}-Auftrag verschickt",
+  "backgroundStatus.checking": "Hintergrundarbeit wird geprüft",
 
   "places.goingTo": "Geht zu {place}",
   "places.goingSomewhere": "Bewegt sich innerhalb der App",
@@ -44,6 +45,8 @@ export default {
   "statements.writingSelf": "Notiert, was du über dich selbst gesagt hast",
   "statements.wroteKind": "{kind} notiert",
   "statements.rewroteKind": "{kind} neu geschrieben",
+  "statements.wroteAboutYou": "Über dich notiert",
+  "statements.rewroteAboutYou": "Was ich über dich weiß, neu geschrieben",
 
   "filing.proposingUnder": "Schlägt vor, dies unter {topic} einzuordnen",
   "filing.proposingWhere": "Schlägt eine Einordnung vor",

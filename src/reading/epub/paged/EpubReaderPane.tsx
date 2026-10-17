@@ -33,6 +33,8 @@ export interface EpubReaderPaneProps {
   onQuoteHighlightChange?: (active: boolean) => void;
   /** A finger's selection appeared, moved on screen, or went (docs/82). */
   onSelection?: (selection: ReaderSelection | null) => void;
+  /** A mouse with no tool selects words instead of turning the page (a brief). */
+  mouseSelects?: boolean;
   className?: string;
 }
 
@@ -75,6 +77,7 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
           return;
         }
         controllerRef.current = controller;
+        controller.setMouseSelects(propsRef.current.mouseSelects ?? false);
         propsRef.current.onView(controller);
         propsRef.current.onInitialized();
       })
@@ -92,6 +95,10 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
     // switch, and nothing else here may restart the desk.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.bookId]);
+
+  useEffect(() => {
+    controllerRef.current?.setMouseSelects(props.mouseSelects ?? false);
+  }, [props.mouseSelects]);
 
   // Taking the touch off the browser in the paged flip, on the moves the
   // pointer events cannot speak for (docs/pitfall/117). React's own touch
@@ -116,13 +123,10 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     // The pens get the pointer first. One they take is theirs to the end — the
     // desk captures it, so a stroke that leaves the pane still finishes — and
-    // no tap is read out of it.
-    if (controllerRef.current?.markPointerDown(e.nativeEvent)) {
-      markingRef.current = e.pointerId;
-      downRef.current = null;
-      return;
-    }
+    // no tap is read out of it unless the marks hand the up back (a mouse
+    // press on the words that never became a selection is a click).
     downRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    if (controllerRef.current?.markPointerDown(e.nativeEvent)) markingRef.current = e.pointerId;
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -135,8 +139,10 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       const controller = controllerRef.current;
       if (markingRef.current === e.pointerId) {
         markingRef.current = null;
-        controller?.markPointerUp(e.nativeEvent);
-        return;
+        if (controller?.markPointerUp(e.nativeEvent)) {
+          downRef.current = null;
+          return;
+        }
       }
       const down = downRef.current;
       downRef.current = null;

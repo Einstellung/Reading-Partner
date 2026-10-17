@@ -92,10 +92,10 @@ interface Policy {
 // Manifest, searches, metadata and data files: all small (the largest data file
 // is ~100 KB), so a request still running after this is not going to finish.
 const SMALL: Policy = { attempts: 3, timeoutMs: 20_000 };
-// Whole book blobs in one request (a small book's multipart upload, any book's
-// download): no deadline, since a slow link can take minutes to move 26 MB
-// legitimately, and one retry only — a repeat costs the whole blob again, and
-// the next pass retries anyway.
+// Whole book blobs in one request (a small book's multipart upload, a download
+// from a server that ignores Range, see rangedBook): no deadline, since a slow
+// link can take minutes to move 26 MB legitimately, and one retry only — a
+// repeat costs the whole blob again, and the next pass retries anyway.
 const BULK: Policy = { attempts: 2, timeoutMs: null };
 // One chunk of a large book's upload. A deadline is affordable here in a way it
 // was not for the whole blob, because the request carries a known CHUNK_BYTES
@@ -105,6 +105,30 @@ const BULK: Policy = { attempts: 2, timeoutMs: null };
 // that gives up strands the other twenty-five, which have to be sent again from
 // scratch on the next pass.
 const CHUNK: Policy = { attempts: 3, timeoutMs: 60_000 };
+
+// How much of a book one ranged GET asks for. A response body does not pay the
+// twentyfold encoding an upload body does (docs/pitfall/54: fetch_read_body
+// hands back ArrayBuffers), so the size is set by what one retry may cost on a
+// slow link: 1 MB is twenty-six chunks for a 26 MB book.
+const DOWNLOAD_CHUNK_BYTES = 1024 * 1024;
+
+// How many of a book's ranged GETs are in flight at once. One connection
+// through a slow proxy rarely fills the link, and four chunks of 1 MB held at a
+// time cost nothing next to the book's own buffer.
+const DOWNLOAD_PARALLEL = 4;
+
+// The slowest link a ranged GET waits for, as bytes per second: a chunk still
+// running after its size over this is presumed dead and asked for again. 16 KB/s
+// is about the floor CHUNK sets for an upload, and gives a 1 MB chunk 64 s.
+const DOWNLOAD_FLOOR_BYTES_PER_SEC = 16 * 1024;
+
+// One ranged GET of a book: three attempts, like an upload chunk, under a
+// deadline scaled to the chunk rather than to the book. Never below SMALL's,
+// so a tiny chunk (tests) is not held to a deadline no real link could meet.
+function rangePolicy(chunkBytes: number): Policy {
+  const ms = Math.ceil((chunkBytes / DOWNLOAD_FLOOR_BYTES_PER_SEC) * 1000);
+  return { attempts: 3, timeoutMs: Math.max(SMALL.timeoutMs!, ms) };
+}
 
 // Backoff before attempt 2 and attempt 3. Short on purpose: this is a background
 // pass on a flaky link, not a queue drain, and the pass itself repeats.
@@ -121,6 +145,64 @@ export interface DriveBackendDeps {
   // Injectable for tests, so a chunk boundary can be put where a small fake book
   // will actually reach it. Production always uses CHUNK_BYTES.
   chunkBytes?: number;
+  // The same for a book download's ranged GETs. Production always uses
+  // DOWNLOAD_CHUNK_BYTES.
+  downloadChunkBytes?: number;
+  // How many of those GETs run at once. Production always uses
+  // DOWNLOAD_PARALLEL.
+  downloadParallel?: number;
+}
+
+// How far a book download has got: bytes received, bytes in the book.
+export type DownloadProgress = (received: number, total: number) => void;
+
+// A book download in progress, and kept after it gives up so the next ask for
+// the same book fetches only the chunks missing from `done` instead of all of
+// them. Tied to the Drive id and the size the server reported: a different id
+// or size is a different blob, and these bytes would be stitched onto the wrong
+// one. `chunkBytes` is what the chunk indices in `done` count in.
+interface PartialBook {
+  hash: string;
+  id: string;
+  total: number;
+  chunkBytes: number;
+  bytes: Uint8Array;
+  done: Set<number>;
+}
+
+// Bytes placed so far: every chunk in `done` is whole, and only the last chunk
+// of the book can be short.
+function receivedOf(book: PartialBook): number {
+  let n = 0;
+  for (const i of book.done) n += Math.min(book.chunkBytes, book.total - i * book.chunkBytes);
+  return n;
+}
+
+const isGone = (e: unknown): boolean => e instanceof SyncHttpError && e.status === 404;
+
+// How one round of parallel chunks ended, short of a failure (which throws).
+// "whole": a chunk was answered 200/416, so the server is not serving ranges.
+// "resized": a chunk reported a different total, so the held bytes are stale.
+type FillOutcome = "done" | "whole" | "resized";
+
+// What one ranged GET came back with. "whole" is a server that ignored the
+// Range header (200) or could not satisfy it (416, an empty file): the body was
+// not read, and the caller fetches the blob in one piece instead.
+type RangeAnswer =
+  | { kind: "part"; start: number; total: number; bytes: Uint8Array }
+  | { kind: "whole" };
+
+// `bytes a-b/total`, the header a 206 carries. Null for anything else,
+// including `bytes */total` and an unknown total (`*`), which a ranged download
+// cannot be assembled against.
+export function parseContentRange(
+  header: string | null,
+): { start: number; end: number; total: number } | null {
+  const found = /^bytes (\d+)-(\d+)\/(\d+)$/.exec((header ?? "").trim());
+  if (!found) return null;
+  const [start, end, total] = [Number(found[1]), Number(found[2]), Number(found[3])];
+  if (end < start || end >= total) return null;
+  return { start, end, total };
 }
 
 // Escape a value for a Drive `q` search string (single-quoted).
@@ -241,6 +323,8 @@ export class DriveBackend implements SyncBackend {
   private holdings: Record<string, RemoteEntry> = {};
   // The in-range names the last listRemote() found more than once.
   private duplicates: RemoteDuplicate[] = [];
+  // A book download that gave up partway (rangedBook).
+  private partial: PartialBook | null = null;
 
   constructor(private readonly d: DriveBackendDeps) {}
 
@@ -734,13 +818,13 @@ export class DriveBackend implements SyncBackend {
     await this.d.persistIds();
   }
 
-  async downloadBook(hash: string): Promise<Uint8Array> {
+  async downloadBook(hash: string, onProgress?: DownloadProgress): Promise<Uint8Array> {
     const cached = await this.withCachedId(
       this.ids.bookIds[hash],
       () => {
         delete this.ids.bookIds[hash];
       },
-      (id) => this.getMedia(id, "book download", BULK),
+      (id) => this.rangedBook(hash, id, onProgress),
     );
     if (cached.done) return cached.value;
 
@@ -748,7 +832,183 @@ export class DriveBackend implements SyncBackend {
     if (!found) throw new RemoteGoneError(`Drive book not found: ${hash}`);
     this.ids.bookIds[hash] = found.id;
     await this.d.persistIds();
-    return this.getMedia(found.id, "book download", BULK);
+    return this.rangedBook(hash, found.id, onProgress);
+  }
+
+  // A book download that gave up partway and is still held for `hash`, thrown
+  // away: the book was deleted, so nothing will ask to continue it.
+  dropPartialBook(hash: string): void {
+    if (this.partial?.hash === hash) this.partial = null;
+  }
+
+  // A book in ranged GETs of downloadChunkBytes, each under its own deadline and
+  // its own three attempts, assembled into one buffer allocated at the size the
+  // first answer reports. The first chunk is asked for alone, to learn that
+  // size; the rest are fetched downloadParallel at a time, each written into its
+  // own slot of the buffer, so they may land in any order.
+  //
+  // One GET of the whole blob is what this used to be. On a slow link (mainland
+  // China, reaching Google through a proxy) that request could run for minutes
+  // with no deadline, and a connection that dropped at 90% cost the whole book
+  // again: two attempts, each from byte zero. Here a dropped connection costs
+  // the chunk it was in.
+  //
+  // A download that gives up is kept (this.partial) with the set of chunks it
+  // completed, and the next ask for the same hash fetches only the missing
+  // ones, provided the Drive id and the reported size are unchanged. Only in
+  // memory, and only one book: a restart of the app, or a download of another
+  // book in between, starts from zero. The partial is not written to disk
+  // because a half-written book in the library directory would read as a book
+  // this device has.
+  //
+  // A server that ignores Range (200) or cannot satisfy it (416) gets the old
+  // single request instead; nothing already assembled is mixed into it.
+  private async rangedBook(
+    hash: string,
+    id: string,
+    onProgress?: DownloadProgress,
+  ): Promise<Uint8Array> {
+    const size = this.d.downloadChunkBytes ?? DOWNLOAD_CHUNK_BYTES;
+    const policy = rangePolicy(size);
+    const held = this.partial;
+    // Taken out whoever it belonged to: one book's bytes in memory at a time,
+    // and this one is put back only if this attempt gives up too.
+    this.partial = null;
+    let book: PartialBook | null =
+      held !== null && held.hash === hash && held.id === id && held.chunkBytes === size
+        ? held
+        : null;
+    if (book !== null) onProgress?.(receivedOf(book), book.total);
+    try {
+      for (;;) {
+        if (book === null) {
+          const first = await this.getRange(id, 0, size, policy);
+          if (first.kind === "whole") return await this.wholeBook(id, onProgress);
+          book = {
+            hash,
+            id,
+            total: first.total,
+            chunkBytes: size,
+            bytes: new Uint8Array(first.total),
+            done: new Set([0]),
+          };
+          book.bytes.set(first.bytes, 0);
+          onProgress?.(first.bytes.length, book.total);
+        }
+        const outcome = await this.fillChunks(book, policy, onProgress);
+        if (outcome === "done") return book.bytes;
+        // Either way the held bytes are no use: a server not serving ranges
+        // gets the single GET, and a blob whose size moved is started again.
+        book = null;
+        if (outcome === "whole") return await this.wholeBook(id, onProgress);
+      }
+    } catch (e) {
+      // A 404 is the id gone, and with it what these bytes were part of.
+      if (book !== null && book.done.size > 0 && !isGone(e)) this.partial = book;
+      throw e;
+    }
+  }
+
+  // Every chunk of `book` not yet in `done`, downloadParallel at a time. A chunk
+  // that exhausts its attempts stops new chunks from being issued, and the ones
+  // already in flight are waited for before this returns or throws, so nothing
+  // is still writing into the buffer once the caller holds it again. The chunks
+  // that completed stay in `done` whatever happens to the others.
+  private async fillChunks(
+    book: PartialBook,
+    policy: Policy,
+    onProgress?: DownloadProgress,
+  ): Promise<FillOutcome> {
+    const size = book.chunkBytes;
+    const queue: number[] = [];
+    for (let i = 0; i * size < book.total; i++) if (!book.done.has(i)) queue.push(i);
+    // Shared by the workers. An object rather than locals, so the checks after
+    // the workers settle are not narrowed away by the compiler.
+    const run: { stop: Exclude<FillOutcome, "done"> | null; failed: boolean; failure: unknown } = {
+      stop: null,
+      failed: false,
+      failure: undefined,
+    };
+    let received = receivedOf(book);
+
+    const worker = async (): Promise<void> => {
+      while (run.stop === null && !run.failed) {
+        const i = queue.shift();
+        if (i === undefined) return;
+        const start = i * size;
+        let answer: RangeAnswer;
+        try {
+          answer = await this.getRange(book.id, start, Math.min(start + size, book.total), policy);
+        } catch (e) {
+          // A 404 outranks whatever else failed: it is what tells the caller
+          // the cached id is stale.
+          if (!run.failed || (!isGone(run.failure) && isGone(e))) run.failure = e;
+          run.failed = true;
+          return;
+        }
+        if (answer.kind === "whole") {
+          run.stop = "whole";
+          return;
+        }
+        if (answer.total !== book.total) {
+          run.stop ??= "resized";
+          return;
+        }
+        // Bytes that land after another chunk's verdict go with the rest.
+        if (run.stop !== null) return;
+        book.bytes.set(answer.bytes, start);
+        book.done.add(i);
+        received += answer.bytes.length;
+        onProgress?.(received, book.total);
+      }
+    };
+
+    const workers = Math.min(this.d.downloadParallel ?? DOWNLOAD_PARALLEL, queue.length);
+    await Promise.all(Array.from({ length: workers }, worker));
+    if (run.failed && isGone(run.failure)) throw run.failure;
+    if (run.stop !== null) return run.stop;
+    if (run.failed) throw run.failure;
+    return "done";
+  }
+
+  private async wholeBook(id: string, onProgress?: DownloadProgress): Promise<Uint8Array> {
+    const whole = await this.getMedia(id, "book download", BULK);
+    onProgress?.(whole.length, whole.length);
+    return whole;
+  }
+
+  // One ranged GET, retried under `policy`. The answer is checked against what
+  // was asked for before a byte of it is used: a Content-Range that is not the
+  // asked range (clipped to the book's end), or a body shorter than the range it
+  // claims, is a failure to retry rather than bytes to place. A short range
+  // cannot be placed: a chunk is either complete or missing.
+  private getRange(id: string, start: number, end: number, policy: Policy): Promise<RangeAnswer> {
+    const asked = `bytes=${start}-${end - 1}`;
+    return this.send(
+      `${DRIVE}/files/${id}?alt=media`,
+      { headers: { Range: asked } },
+      `book download at ${start}`,
+      policy,
+      async (res): Promise<RangeAnswer> => {
+        if (res.status !== 206) {
+          // Not read: a 200 is the whole book, under a deadline meant for one
+          // chunk of it. Cancelling releases the plugin's body resource.
+          await res.body?.cancel().catch(() => undefined);
+          return { kind: "whole" };
+        }
+        const header = res.headers.get("Content-Range");
+        const range = parseContentRange(header);
+        if (!range || range.start !== start || range.end !== Math.min(end, range.total) - 1) {
+          throw new Error(`Content-Range "${header ?? ""}" does not answer ${asked}`);
+        }
+        const body = new Uint8Array(await res.arrayBuffer());
+        if (body.length !== range.end - range.start + 1) {
+          throw new Error(`${body.length} bytes for Content-Range "${header}"`);
+        }
+        return { kind: "part", start, total: range.total, bytes: body };
+      },
+      (status) => status === 416,
+    );
   }
 
   // The books channel's remove(), for the same reasons: deleted for good rather
@@ -756,6 +1016,7 @@ export class DriveBackend implements SyncBackend {
   // the same book at once leave two and the survivor would be pulled back by the
   // next device to sign in.
   async removeBook(hash: string): Promise<void> {
+    this.dropPartialBook(hash);
     const cached = this.ids.bookIds[hash];
     const found = await this.listAll(this.bookQuery(hash));
     for (const id of new Set([...(cached ? [cached] : []), ...found.map((f) => f.id)])) {

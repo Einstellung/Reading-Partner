@@ -15,6 +15,7 @@ export default function PhoneHome({
   launch,
   savedCount,
   onOpenSaved,
+  onOpenBriefs,
   continueBook,
   onContinue,
   onOpenLibrary,
@@ -28,6 +29,8 @@ export default function PhoneHome({
   // How many articles are kept, or null while saved-articles.json is being read.
   savedCount: number | null;
   onOpenSaved: () => void;
+  // The info shelf: the brief's issues and the topic volumes (docs/info/88).
+  onOpenBriefs: () => void;
   // The book to continue, null when no EPUB has been opened yet, and undefined
   // while topics.json is being read.
   continueBook: ContinueBook | null | undefined;
@@ -104,6 +107,21 @@ export default function PhoneHome({
             </button>
           </Card>
         )}
+
+        <Card>
+          <CardLabel>{t("phone.home.briefsLabel")}</CardLabel>
+          <button
+            className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
+            onClick={onOpenBriefs}
+          >
+            <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
+              {t("phone.home.briefsBlurb")}
+            </p>
+            <div className="mt-4 flex items-center justify-end">
+              <span className="text-[13px] font-medium text-accent-line">{t("phone.home.open")}</span>
+            </div>
+          </button>
+        </Card>
 
         <Card>
           <CardLabel>{t("phone.home.savedLabel")}</CardLabel>

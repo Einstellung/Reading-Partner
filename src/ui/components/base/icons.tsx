@@ -253,6 +253,21 @@ export function IconExpand({ size = 16 }: IconProps) {
 	);
 }
 
+// The expand glyph turned inwards: back to the smaller size.
+export function IconShrink({ size = 16 }: IconProps) {
+	return (
+		<svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path
+				d="M2.5 6H6V2.5M13.5 6H10V2.5M10 13.5V10H13.5M2.5 10H6V13.5"
+				stroke="currentColor"
+				strokeWidth="1.3"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
+
 // Panel glyph for the sidebar collapse/expand toggle.
 export function IconSidebar({ size = 20 }: IconProps) {
 	return (
@@ -639,6 +654,24 @@ export function IconBriefing({ size = 20 }: IconProps) {
 			<path d="M5.5 7.5H11.5" />
 			<path d="M5.5 10H11.5" />
 			<path d="M5.5 12.5H9" />
+		</svg>
+	);
+}
+
+// The info shelf (docs/info/88): issues of the brief stacked like booklets.
+export function IconBriefs({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M6 3.5H15C15.55 3.5 16 3.95 16 4.5V14.5" />
+			<path d="M4 6.5C4 5.95 4.45 5.5 5 5.5H13C13.55 5.5 14 5.95 14 6.5V16.5H5C4.45 16.5 4 16.05 4 15.5V6.5Z" />
+			<path d="M6.5 9H11.5" />
+			<path d="M6.5 11.5H10" />
 		</svg>
 	);
 }

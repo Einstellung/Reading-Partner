@@ -30,7 +30,6 @@ function search(id: string, over: Partial<TopicSearch> = {}): TopicSearch {
   return {
     id,
     name: id,
-    topicId: "topic-1",
     concernId: null,
     scope: "AI used to do science",
     subtopics: [
@@ -179,9 +178,8 @@ test("the guidance lists searches and live concerns, and a lapsed concern only b
       st("s-old", { supersededBy: "s-live" }),
       st("s-prof", { kind: "profile" }),
     ],
-    topics: [{ id: "topic-1", name: "Science" }],
   });
-  expect(text).toContain('- ts-1 (id: ts-1, stopped, topic "Science")');
+  expect(text).toContain("- ts-1 (id: ts-1, stopped) —");
   expect(text).toContain("(id s-live, reader)");
   expect(text).toContain("(id s-back, reader, lapsed)");
   expect(text).not.toContain("s-gone");
@@ -190,6 +188,8 @@ test("the guidance lists searches and live concerns, and a lapsed concern only b
   expect(text).toContain("keyword trap");
   expect(text).toContain("confirm_topic_search");
   expect(text).toContain("propose with once");
+  expect(text).toContain("Write 2 to 4 short\n  keywords, the most specific first");
+  expect(text).toContain("never a sentence");
   expect(text).not.toContain("X reading on this device");
 });
 
@@ -197,9 +197,11 @@ test("the guidance says when X reading is held on this device", () => {
   const text = topicSearchGuidance({
     searches: [],
     statements: [],
-    topics: [],
     xPaused: "X reading is paused after a second challenge until the reader resumes it",
   });
   expect(text).toContain("X reading on this device: X reading is paused after a second challenge");
   expect(text).toContain("resume_x_reading");
+  // The door says what it cannot do: X is read only by the runs.
+  expect(text).toContain("This conversation cannot read X");
+  expect(text).toContain("retry_topic_search_first_run");
 });

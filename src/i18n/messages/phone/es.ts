@@ -42,6 +42,8 @@ export default {
   "home.mealsBlurb": "Los desayunos, comidas y cenas de esta semana, y qué comprar.",
   "home.open": "Abrir →",
   "home.savedLabel": "Guardados",
+  "home.briefsLabel": "Boletines",
+  "home.briefsBlurb": "El boletín de cada noche como libro, y los volúmenes por tema.",
   "home.savedBlurb": "Artículos que guardaste, para leer cuando quieras.",
   "home.savedCount": { one: "{count} artículo", other: "{count} artículos" },
   "home.savedEmpty": "Todavía no has guardado nada. Guarda un artículo del resumen y te esperará aquí.",
@@ -67,6 +69,7 @@ export default {
   "shelf.nothingFiled": "Todavía no hay nada archivado aquí.",
   "shelf.lessonBadge": "Lección",
   "shelf.downloadFailed": "No se pudo descargar este libro",
+  "shelf.downloadNetworkFailed": "La conexión se cortó durante la descarga. Toca el libro otra vez para continuar donde se detuvo.",
   "shelf.importFailed": "No se pudo importar este libro",
 
   "shelfList.notConfigured":
@@ -75,6 +78,7 @@ export default {
   "shelfList.notImported": "El escritorio todavía no ha importado este archivo, así que no hay nada que obtener",
   "shelfList.notFiledYet": "Este libro todavía no ha terminado de sincronizarse a este dispositivo",
   "shelfList.downloading": "Descargando…",
+  "shelfList.downloadingPercent": "Descargando… {percent} %",
   "shelfList.notImportedShort": "No importado",
   "shelfList.inCloud": "En la nube",
   "shelfList.notSyncedYet": "Aún sin sincronizar",

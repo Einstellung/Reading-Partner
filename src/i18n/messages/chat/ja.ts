@@ -36,6 +36,7 @@ export default {
   "delegate.handingToKind": "{kind} のワーカーに任せています",
   "delegate.handingOver": "ワーカーに任せています",
   "delegate.sentOffWork": "{kind} の作業を送り出しました",
+  "backgroundStatus.checking": "バックグラウンドの作業を確認中",
 
   "places.goingTo": "{place} へ移動しています",
   "places.goingSomewhere": "アプリ内を移動しています",
@@ -44,6 +45,8 @@ export default {
   "statements.writingSelf": "あなたが自分について言ったことを書き留めています",
   "statements.wroteKind": "{kind} を書き留めました",
   "statements.rewroteKind": "{kind} を書き直しました",
+  "statements.wroteAboutYou": "あなたについて記録しました",
+  "statements.rewroteAboutYou": "あなたについての記録を書き直しました",
 
   "filing.proposingUnder": "{topic} に入れることを提案しています",
   "filing.proposingWhere": "どこに入れるか提案しています",

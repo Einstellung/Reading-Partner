@@ -16,8 +16,10 @@ export type HomeScreen =
   | "vestibule"
   | "library"
   | "briefing"
+  // The info shelf: the brief's issues as books, and the topic volumes
+  // (docs/info/88).
+  | "briefs"
   | "article"
-  | "sources"
   | "meals"
   | "meals-shopping"
   | "meals-day"
@@ -26,7 +28,7 @@ export type HomeScreen =
   | "meals-onboarding"
   | "settings";
 
-export type ShellNavId = "today" | "briefing" | "meals" | "topics" | "settings";
+export type ShellNavId = "today" | "briefing" | "briefs" | "meals" | "topics" | "settings";
 
 // Top to bottom, in the order a day uses them: what is open now, what came in
 // overnight, everything else. Settings is a nav id but not one of these — it is
@@ -34,12 +36,18 @@ export type ShellNavId = "today" | "briefing" | "meals" | "topics" | "settings";
 // The label is a catalog key, looked up at render so a language switch redraws it.
 export interface ShellNavItem {
   id: ShellNavId;
-  labelKey: "shell.nav.today" | "shell.nav.briefing" | "shell.nav.meals" | "shell.nav.topics";
+  labelKey:
+    | "shell.nav.today"
+    | "shell.nav.briefing"
+    | "shell.nav.briefs"
+    | "shell.nav.meals"
+    | "shell.nav.topics";
 }
 
 export const SHELL_NAV_ITEMS: readonly ShellNavItem[] = [
   { id: "today", labelKey: "shell.nav.today" },
   { id: "briefing", labelKey: "shell.nav.briefing" },
+  { id: "briefs", labelKey: "shell.nav.briefs" },
   { id: "meals", labelKey: "shell.nav.meals" },
   { id: "topics", labelKey: "shell.nav.topics" },
 ];
@@ -59,6 +67,8 @@ export function screenForNav(id: ShellNavId): HomeScreen {
       return "vestibule";
     case "briefing":
       return "briefing";
+    case "briefs":
+      return "briefs";
     case "meals":
       return "meals";
     case "topics":
@@ -68,9 +78,9 @@ export function screenForNav(id: ShellNavId): HomeScreen {
   }
 }
 
-// Which item is lit. The briefing's two side rooms — the source list and an
-// opened article — are still the briefing: they are reached from it and go back
-// to it, and an unlit sidebar would say the reader had left the app's map.
+// Which item is lit. The briefing's side room — an opened article — is still
+// the briefing: it is reached from it and goes back to it, and an unlit sidebar
+// would say the reader had left the app's map.
 // Null while the reader is open, where the sidebar is not drawn at all.
 export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
   switch (screen) {
@@ -78,10 +88,11 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
       return "today";
     case "briefing":
     case "article":
-    case "sources":
       return "briefing";
+    case "briefs":
+      return "briefs";
     // The shopping trip and one day are rooms of the meals page: reached from
-    // it, going back to it, the same as the briefing's two above.
+    // it, going back to it, the same as the briefing's article above.
     case "meals":
     case "meals-shopping":
     case "meals-day":

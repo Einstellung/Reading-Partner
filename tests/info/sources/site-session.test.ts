@@ -9,7 +9,6 @@ import {
   parseSiteSessions,
   resolveSignInSite,
   sessionLabel,
-  sessionRowLine,
   sessionWorkFor,
   sessionWorkLabel,
   signInSiteLine,
@@ -116,15 +115,33 @@ test("a check that could not tell does not read as signed out", () => {
   expect(sessions["www.bloomberg.com"].unknown).toContain("bot wall");
   expect(sessionLabel(sessions["www.bloomberg.com"])).toBe("Could not tell");
 
-  // A page that loaded and offered a sign-in is a real answer.
+  // A page that loaded and offered a sign-in is a real answer. After a session
+  // that was there, the site has ended it.
   sessions = applySessionCheck(
     sessions,
     "www.bloomberg.com",
     { status: "ok", signedIn: false },
     now + 2000,
   );
-  expect(sessions["www.bloomberg.com"]).toEqual({ signedIn: false, checkedAt: now + 2000 });
-  expect(sessionLabel(sessions["www.bloomberg.com"])).toBe("Not signed in");
+  expect(sessions["www.bloomberg.com"]).toEqual({ signedIn: false, checkedAt: now + 2000, expired: true });
+  expect(sessionLabel(sessions["www.bloomberg.com"])).toBe("Expired");
+});
+
+test("an expiry lasts until a check finds a session again, and a fresh site is just signed out", () => {
+  let sessions = applySessionCheck({}, "x.com", { status: "ok", signedIn: false }, 1);
+  expect(sessions["x.com"]).toEqual({ signedIn: false, checkedAt: 1 });
+  expect(sessionLabel(sessions["x.com"])).toBe("Not signed in");
+
+  sessions = applySessionCheck(sessions, "x.com", { status: "ok", signedIn: true }, 2);
+  sessions = applySessionCheck(sessions, "x.com", { status: "ok", signedIn: false }, 3);
+  expect(sessions["x.com"].expired).toBe(true);
+  // A check that could not tell keeps the expiry; so does a second "signed out".
+  sessions = applySessionCheck(sessions, "x.com", { status: "timeout", signedIn: false }, 4);
+  expect(sessions["x.com"].expired).toBe(true);
+  sessions = applySessionCheck(sessions, "x.com", { status: "ok", signedIn: false }, 5);
+  expect(sessions["x.com"].expired).toBe(true);
+  sessions = applySessionCheck(sessions, "x.com", { status: "ok", signedIn: true }, 6);
+  expect(sessions["x.com"]).toEqual({ signedIn: true, checkedAt: 6 });
 });
 
 test("signing out forgets the site", () => {
@@ -144,45 +161,31 @@ test("the stored file is parsed defensively", () => {
         "a.test": { signedIn: true, checkedAt: 5 },
         "b.test": { signedIn: "yes", checkedAt: 5 },
         "c.test": { signedIn: false, checkedAt: 6, unknown: "timeout" },
+        "d.test": { signedIn: false, checkedAt: 7, expired: true },
+        "e.test": { signedIn: false, checkedAt: 8, expired: "yes" },
       }),
     ),
   ).toEqual({
     "a.test": { signedIn: true, checkedAt: 5 },
     "c.test": { signedIn: false, checkedAt: 6, unknown: "timeout" },
+    "d.test": { signedIn: false, checkedAt: 7, expired: true },
+    "e.test": { signedIn: false, checkedAt: 8 },
   });
 });
 
 test("a busy row says which of the two waits the reader is in", () => {
-  const site = signInSites(BLOOMBERG)[0];
-  const state = { signedIn: false, checkedAt: 1 };
-
-  // Window open: the row names the thing that ends the flow.
-  expect(sessionRowLine(site, state, "signing-in")).toBe(
-    "Finish in the sign-in window, then close it",
-  );
-  // Window closed: the wait that follows is a different wait, and says so
-  // rather than repeating "working".
-  expect(sessionRowLine(site, state, "confirming")).toBe("Confirming your sign-in…");
-  expect(sessionRowLine(site, state, "checking")).toBe("Checking the site…");
-  expect(sessionRowLine(site, state, "signing-out")).toBe("Signing out…");
+  // Window open: the row names the thing that ends the flow. Window closed: the
+  // wait that follows is a different wait, and says so rather than repeating
+  // "working".
+  expect(sessionWorkLabel("signing-in")).toBe("Finish in the sign-in window, then close it");
+  expect(sessionWorkLabel("confirming")).toBe("Confirming your sign-in…");
+  expect(sessionWorkLabel("checking")).toBe("Checking the site…");
+  expect(sessionWorkLabel("signing-out")).toBe("Signing out…");
   // No two of them read alike, or the split bought nothing.
   const lines = (["signing-in", "confirming", "checking", "signing-out"] as const).map(
     sessionWorkLabel,
   );
   expect(new Set(lines).size).toBe(lines.length);
-});
-
-test("an idle row still says where the site stands and what reads through it", () => {
-  const site = signInSites(BLOOMBERG)[0];
-  expect(sessionRowLine(site, { signedIn: true, checkedAt: 1 }, null)).toBe(
-    `Signed in · ${BLOOMBERG.length} sources`,
-  );
-  expect(sessionRowLine(site, undefined, null)).toBe(`Not checked · ${BLOOMBERG.length} sources`);
-  // One source is named; several are counted.
-  const single = signInSites([BLOOMBERG[0]])[0];
-  expect(sessionRowLine(single, { signedIn: false, checkedAt: 1 }, null)).toBe(
-    `Not signed in · ${BLOOMBERG[0].name}`,
-  );
 });
 
 test("only the site being worked on is busy", () => {

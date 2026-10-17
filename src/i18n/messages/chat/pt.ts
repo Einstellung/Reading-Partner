@@ -36,6 +36,7 @@ export default {
   "delegate.handingToKind": "Passando isto para um trabalhador de {kind}",
   "delegate.handingOver": "Passando isto para um trabalhador",
   "delegate.sentOffWork": "Trabalho de {kind} enviado",
+  "backgroundStatus.checking": "Verificando o trabalho em segundo plano",
 
   "places.goingTo": "Indo para {place}",
   "places.goingSomewhere": "Movendo-se dentro do app",
@@ -44,6 +45,8 @@ export default {
   "statements.writingSelf": "Anotando o que você disse sobre si mesmo",
   "statements.wroteKind": "{kind} anotado",
   "statements.rewroteKind": "{kind} reescrito",
+  "statements.wroteAboutYou": "Anotado sobre você",
+  "statements.rewroteAboutYou": "Reescrito o que sei sobre você",
 
   "filing.proposingUnder": "Propondo colocar isto em {topic}",
   "filing.proposingWhere": "Propondo onde isto se encaixa",

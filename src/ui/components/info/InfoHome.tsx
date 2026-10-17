@@ -1,10 +1,10 @@
 // The info home screens (docs/16, docs/17): the vestibule, today's briefing, an
-// opened article, the source list, and the info companion chat over them. App
+// opened article, and the info companion chat over them. App
 // keeps only which screen is showing, since the header and the library branch on
 // it too.
 //
-// Rendering and event binding only. The briefing view, the source list, the open
-// article and the conversation that is up all live in use-info-home.ts.
+// Rendering and event binding only. The briefing view, the open article and the
+// conversation that is up all live in use-info-home.ts.
 
 import { useState } from "react";
 import { savedArticleId } from "../../../reading/saved/saved-articles";
@@ -15,10 +15,8 @@ import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
 import { mealsKickoff } from "../../../info/briefer/anchors";
 import { EMPTY_MEALS, type MealKey } from "../../../info/meals/plan/types";
-import type { SignInSite } from "../../../info/sources/site-session";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
-import { SourcesPage } from "./SourcesPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
 import { MealsHome } from "./meals/MealsPage";
@@ -128,8 +126,6 @@ export default function InfoHome(props: {
   onOpenSettings: () => void;
   // Keeping an article can create the Brief topic, so the shelf needs a reload.
   onTopicsChanged: () => Promise<void> | void;
-  // A failure the reader has to hear about, such as a removal that did not happen.
-  onSay: (line: string) => void;
   // Called with a way to close the info call whenever one opens, and with null
   // when it closes. For a shell whose back is global (the phone's: a left-edge
   // swipe and the Android button, neither of which can aim at a close button) —
@@ -184,7 +180,6 @@ export default function InfoHome(props: {
     onNavigate,
     onTopicsChanged: props.onTopicsChanged,
     onOverlayChange: props.onOverlayChange,
-    onSay: props.onSay,
   });
 
   // What a hold on Lumen would be about (docs/68). The briefing screen is the
@@ -256,7 +251,6 @@ export default function InfoHome(props: {
               onDismiss={info.dismissItem}
               onAskBriefing={info.askBriefing}
               onAskArticle={info.askArticle}
-              onOpenSources={info.openSourcesPage}
             />
           </div>
         );
@@ -426,30 +420,6 @@ export default function InfoHome(props: {
           </>
         );
       })()}
-
-      {screen === "sources" && (
-        <div className="absolute inset-0 overflow-y-auto bg-background">
-          <SourcesPage
-            sources={info.sources}
-            topicSearch={info.topicSearch}
-            health={info.sourceHealth}
-            labs={info.labs ?? []}
-            sessions={info.siteSessions}
-            sessionBusy={info.sessionBusy}
-            {...(info.canSignIn
-              ? {
-                  onSignIn: (site: SignInSite) => void info.signInToSite(site),
-                  onCheckSession: (site: SignInSite) => void info.checkSession(site),
-                  onSignOut: (site: SignInSite) => void info.signOutOfSite(site),
-                }
-              : {})}
-            collectorSites={info.collectorSites}
-            onToggle={info.toggleSource}
-            onRemove={info.removeSourceById}
-            onBack={() => onNavigate("briefing")}
-          />
-        </div>
-      )}
 
       {screen === "article" && info.openArticleId && info.snap?.briefing && (() => {
         const openArticleId = info.openArticleId;

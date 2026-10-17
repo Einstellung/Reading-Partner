@@ -6,7 +6,8 @@
 // (`requires: [WEBVIEW_FETCH]`). It runs the `rp.topicsearch` task under the
 // run's id, so a retry or a restart finds the task already there and waits for
 // it. The gates are on this side (docs/pitfall/210): each ask is keyed
-// (`topic-search:<id>:first`, `topic-search:<id>:<night>`) and the run store
+// (`topic-search:<id>:first`, `topic-search:<id>:<night>`,
+// `topic-search:<id>:retry:<n>`) and the run store
 // hands back the run already under the key; the nightly tick also refuses to
 // overlap itself and remembers the night it asked for.
 
@@ -15,7 +16,9 @@ import type { DurableRuntime } from "../../legion/durable/harness";
 import { runProgramTask } from "../../legion/durable/program-task";
 import type { Delegated, DelegateInput, Worker } from "../../legion/runner/worker";
 import { GiveUpError, StoppedError } from "../../legion/stop";
+import type { Run } from "../../legion/run";
 import { inNightWindow, planNight, type NightConditions } from "./nightly";
+import { nextRetryNumber } from "./retry";
 import {
   encodeBrief,
   NO_BUILDER,
@@ -63,7 +66,7 @@ export function topicSearchWorker(ports: TopicSearchWorkerPorts): Worker {
           { task: ports.task, key: ctx.run.id, name: TOPIC_SEARCH_KIND, input: { runId: ctx.run.id, brief: parsed }, signal: stop.signal },
         );
         if (outcome.status === "completed") {
-          const output = outcome.result.boxItemId ?? outcome.result.resultFile ?? undefined;
+          const output = outcome.result.resultFile ?? undefined;
           return { ...(output ? { output } : {}), progress: line(outcome.result) };
         }
         if (outcome.status === "aborted" || stop.signal.aborted) throw new StoppedError();
@@ -87,9 +90,42 @@ export function askTopicSearchRun(
   return delegate({
     kind: TOPIC_SEARCH_KIND,
     idempotencyKey: topicSearchRunKey(brief),
-    delegator: { kind: "program", name: brief.kind === "first" ? "topic-search first run" : "topic-search nightly" },
+    delegator: { kind: "program", name: DELEGATOR[brief.kind] },
     brief: encodeBrief(brief),
   });
+}
+
+const DELEGATOR = { first: "topic-search first run", daily: "topic-search nightly", retry: "topic-search retry" } as const;
+
+/** What asking for a retry of a first look came to. */
+export type RetryAsk =
+  | { status: "asked"; run: Run; n: number }
+  /** The first look or an earlier retry of it is still pending or running. */
+  | { status: "busy"; run: Run; what: "first" | "retry" }
+  | { status: "refused"; reason: string };
+
+/**
+ * Ask for a retry of a search's first look (retry.ts). Keyed by the number one
+ * past the search's retries still on file, so two asks racing from two devices
+ * reach one run; an ask while the first look or a retry is still going is not
+ * made.
+ */
+export async function askRetryRun(
+  searchId: string,
+  ports: { runs(): Promise<Run[]>; delegate(input: DelegateInput): Promise<Delegated> },
+): Promise<RetryAsk> {
+  const mine = (await ports.runs())
+    .map((run) => ({ run, brief: parseBrief(run.brief) }))
+    .filter((r) => r.brief?.searchId === searchId);
+  const busy = mine.find((r) => r.brief!.kind !== "daily" && (r.run.state === "pending" || r.run.state === "running"));
+  if (busy) return { status: "busy", run: busy.run, what: busy.brief!.kind === "first" ? "first" : "retry" };
+  const n = nextRetryNumber(
+    mine.map((r) => r.run.idempotencyKey),
+    searchId,
+  );
+  const asked = await askTopicSearchRun({ searchId, kind: "retry", night: null, n }, ports.delegate);
+  if (!asked.ok) return { status: "refused", reason: asked.reason };
+  return { status: "asked", run: asked.run, n };
 }
 
 export interface NightPorts {

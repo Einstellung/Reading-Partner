@@ -36,6 +36,7 @@ export default {
   "delegate.handingToKind": "正在交给一个{kind}工作者",
   "delegate.handingOver": "正在把这件事交出去",
   "delegate.sentOffWork": "已交出{kind}工作",
+  "backgroundStatus.checking": "正在查看后台工作进度",
 
   "places.goingTo": "正在前往{place}",
   "places.goingSomewhere": "正在应用内移动",
@@ -44,6 +45,8 @@ export default {
   "statements.writingSelf": "正在记下你对自己说的话",
   "statements.wroteKind": "记下了一条{kind}",
   "statements.rewroteKind": "重写了一条{kind}",
+  "statements.wroteAboutYou": "记进了关于你本人",
+  "statements.rewroteAboutYou": "改写了关于你本人的一条",
 
   "filing.proposingUnder": "正在提议归入{topic}",
   "filing.proposingWhere": "正在提议归属",

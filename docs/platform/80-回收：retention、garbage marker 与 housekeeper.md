@@ -39,6 +39,7 @@ palace 行上的 `retention` 字段（`src/palace/kinds.ts`），取代原来只
 - `remote-only`：拒绝。
 - `truncate-tail` 只对 `local` 做。同步文件截尾没有现成的安全做法，拒绝并记日志。
 - `demote-local` 只定义了动作，没有冷层，执行时记一条「未实现」。
+- `flow`：一次删除不止一个文件（比如一本书连带线程和标注）时，marker 交 `{ path, action: "flow", subject }`，path 是点名这个 marker 的那一行的文件，由 marker 的 `carryOut` 执行；同步安全由那个流程自己负责（书靠墓碑），不走远端删除预算。marker 没有 `carryOut` 就拒绝。
 
 每个动作在本地 `housekeeper-log.jsonl` 记一行（路径、marker、规则、理由、结果）。这个文件不同步，retention 是 `tail`，由 housekeeper 自己截。
 
@@ -52,6 +53,7 @@ palace 行上的 `retention` 字段（`src/palace/kinds.ts`），取代原来只
 | `legion-run-files` | `run`、`run-brief`、`run-output` | run 文件：ledger 有它的行（`tombstonedRunIds`）。brief / output：没有任何 hot run 指向它，且 mtime 超过 7 天；折叠过的和孤儿一条规则 |
 | `legion-bell` | `bell` | 已 ack 且 ack 后 14 天。重响只发生在 run 还热或 tick 响铃未记账时，run 最迟 ack 后 7 天折叠 |
 | `info-daily-files` | `info-cables`、`info-daily-{briefing,articles,items,run}` | 今天以外的日切文件；cables 30 天 |
+| `info-issue-expiry` | `info-shelf` | 只在采集端：日期早于 30 天的简报期。动作是 `flow`：marker 自己的 `carryOut` 走 `deleteBook` 再删索引行，索引文件本身不删（[88](../info/88-主题搜索.md)） |
 
 ledger 折叠写 ledger 行，不是纯 marker：它是 legion 自己的夜间任务 `LEDGER_FOLD_JOB`，同一时刻注册在 housekeeper 之前，折完当晚 run 文件就被 marker 标走。info 生成前的 prune 和阅读机启动时的 prune 都删了，重新分诊从来不 prune 的缺口也随之不存在。`info-daily-pool` 仍由 collector 的 `removePoolDays` 即时处理。
 

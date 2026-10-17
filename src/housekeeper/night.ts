@@ -7,7 +7,7 @@ import { requestRemotePurge } from "../platform/sync";
 import type { PalaceRow } from "../palace";
 import { executeMarks, type ExecuteIo, type ExecuteResult, type HousekeeperLogLine } from "./execute";
 import { genericMarker } from "./generic";
-import { registeredGarbageMarkers, type GarbageMarker, type MarkedBy, type MarkReadIo } from "./marker";
+import { markerFlows, registeredGarbageMarkers, type GarbageMarker, type MarkedBy, type MarkReadIo } from "./marker";
 
 /** The local, unsynced log: one line per mark (palace kind "housekeeper-log"). */
 export const HOUSEKEEPER_LOG = "housekeeper-log.jsonl";
@@ -89,6 +89,7 @@ export async function runHousekeeper(deps: HousekeeperDeps = {}): Promise<Execut
     return await executeMarks(marks, deps.executeIo ?? appExecuteIo, {
       now,
       remoteBudget: deps.remoteBudget ?? REMOTE_PURGES_PER_NIGHT,
+      flows: markerFlows(markers),
       ...(deps.rows ? { rows: deps.rows } : {}),
     });
   } catch (e) {

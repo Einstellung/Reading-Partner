@@ -50,8 +50,8 @@ test("every row is named whether or not its label is showing", () => {
 // The rows and the collapse toggle, by the box they all share; the wordmark
 // above them is the same height and is not one of them.
 test("every row and the toggle are 44px touch targets", () => {
-  expect(render().match(/h-11 w-11/g)?.length).toBe(5);
-  expect(render({ collapsed: true }).match(/h-11 w-11/g)?.length).toBe(5);
+  expect(render().match(/h-11 w-11/g)?.length).toBe(6);
+  expect(render({ collapsed: true }).match(/h-11 w-11/g)?.length).toBe(6);
 });
 
 // The app's own icon, at the size the artwork is drawn for, and its name in the

@@ -848,6 +848,72 @@ test("fetchBook brings one book down under the phone policy", async () => {
   expect(dec(store.get("h")!)).toBe("EPUB");
 });
 
+test("fetchBook hands the shelf's progress listener to the backend", async () => {
+  const be = makeBackend();
+  const heard: [number, number][] = [];
+  be.backend.downloadBook = async (_hash, onProgress) => {
+    onProgress?.(2, 4);
+    onProgress?.(4, 4);
+    return enc("EPUB");
+  };
+  const { books, store } = makeBooks();
+  const { engine } = makeEngine({ backend: be.backend, books, booksPolicy: "off", snapshot: {} });
+
+  await engine.fetchBook("h", (received, total) => heard.push([received, total]));
+
+  expect(dec(store.get("h")!)).toBe("EPUB");
+  expect(heard).toEqual([
+    [2, 4],
+    [4, 4],
+  ]);
+});
+
+test("a pass asked for mid-fetch stands down, and a second book waits for the first", async () => {
+  const be = makeBackend();
+  be.books.set("a", enc("EPUB-A"));
+  be.books.set("b", enc("EPUB-B"));
+  let lists = 0;
+  const gates = new Map<string, () => void>();
+  const order: string[] = [];
+  const backend: SyncBackend = {
+    ...be.backend,
+    async listRemote() {
+      lists += 1;
+      return be.backend.listRemote();
+    },
+    async downloadBook(hash, onProgress) {
+      order.push(`start ${hash}`);
+      await new Promise<void>((r) => gates.set(hash, r));
+      order.push(`end ${hash}`);
+      return be.backend.downloadBook(hash, onProgress);
+    },
+  };
+  const { books, store } = makeBooks();
+  const { engine } = makeEngine({ backend, books, booksPolicy: "off", snapshot: {} });
+
+  const first = engine.fetchBook("a");
+  const second = engine.fetchBook("b");
+  await new Promise((r) => setTimeout(r, 0));
+  expect(order).toEqual(["start a"]);
+
+  // The book's chunks may be in flight in parallel; the remote is still one
+  // book's at a time, and a pass does not start under it.
+  await engine.syncNow();
+  expect(lists).toBe(0);
+
+  gates.get("a")!();
+  await first;
+  await new Promise((r) => setTimeout(r, 0));
+  expect(order).toEqual(["start a", "end a", "start b"]);
+  gates.get("b")!();
+  await second;
+  expect(dec(store.get("a")!)).toBe("EPUB-A");
+  expect(dec(store.get("b")!)).toBe("EPUB-B");
+
+  await engine.syncNow();
+  expect(lists).toBe(1);
+});
+
 test("pushBook sends one book up under the phone policy", async () => {
   const be = makeBackend();
   const { books } = makeBooks({ h: "EPUB" });

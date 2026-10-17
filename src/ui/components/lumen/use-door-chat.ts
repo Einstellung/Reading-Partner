@@ -33,7 +33,6 @@ import type { CallRow } from "../../../reading/turn/call-state";
 import { createPlaceSession, registerOpenSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
 import {
   appendMessage,
-  onThreadMessage,
   patchThreadMessage,
   setThreadTopic,
 } from "../../../platform/app/threads";
@@ -51,9 +50,22 @@ import {
 import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools } from "./door-tools";
+import { getOpenIssue, issueDoorTurn, noteOnLastLine, type IssueQuote } from "./issue-context";
+import { listenToThread, withArrivedRow } from "./door-arrivals";
+import { quotedQuestion } from "../chat/quoted-question";
+import { speakIssueOpening } from "../../../info/issue/opening";
+import {
+  ISSUE_ANSWER_OP,
+  ISSUE_OWN_OP,
+  cardAwaitingWords,
+  issueAnswerNote,
+  type IssueQuestionCard,
+} from "../../../info/issue/question-card";
+import { headingPage } from "../../../reading/issue";
 import { TOPIC_SEARCH_APPLY_OP, topicSearchAppliedNote } from "../../../info/topic-search/cards";
 import type { ApplyResult } from "../../../info/topic-search/apply";
 import { applyTopicSearchCard, loadTopicSearchGuidance } from "../../../info/topic-search/live";
+import { BACKGROUND_STATUS_RULE } from "../../../legion/status/tool";
 import {
   INTAKE_CHOOSE_OP,
   INTAKE_NEW_TOPIC_OP,
@@ -69,7 +81,8 @@ export interface DoorChat {
   /** The day's thread is loaded and a line can be sent. */
   ready: boolean;
   streaming: boolean;
-  send(text: string): Promise<void>;
+  /** Say a line; with a quote, a question about that passage of the open brief. */
+  send(text: string, quote?: IssueQuote): Promise<void>;
   stop(): void;
   onCardAction(cardId: string, action: CardAction): void;
 }
@@ -82,14 +95,28 @@ export interface DoorChatOptions {
   date?: string;
   /** Open a document an intake card filed (its 「打开阅读」), in this shell's reader. */
   onOpenDocument?: (doc: IntakeOpenDocument) => void;
+  /**
+   * The brief whose opening brought the conversation up (docs/info/88): Lumen's
+   * first words about it go in once the day's conversation is loaded. Read once.
+   */
+  openedFor?: string;
 }
 
 const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
+
+// The questions Lumen asked when a brief opened, in the order they stand.
+const issueCards = (rows: readonly UiMessage[]): { cardId: string; card: IssueQuestionCard }[] =>
+  rows.flatMap((m) =>
+    (m.parts ?? []).flatMap((part) =>
+      part.type === "card" && part.card.kind === "issue-question" ? [{ cardId: part.id, card: part.card }] : [],
+    ),
+  );
 
 export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   // The day the chat was opened on. A conversation left open over midnight
   // stays in the day it began, the way a call does.
   const [date] = useState(() => options.date ?? doorDate());
+  const [openedFor] = useState(() => options.openedFor ?? null);
   const openDocumentRef = useRef(options.onOpenDocument);
   openDocumentRef.current = options.onOpenDocument;
   const key = doorKey(date);
@@ -149,6 +176,13 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       const origin = doorOrigin(date, id);
       setThreadId(id);
       setMessages(thread.messages.map(rehydrateMessage));
+      // Every append through the store is announced, this view's own and the
+      // runtime's landing included; a row already on screen under that role and
+      // timestamp is skipped. Heard from here on (door-arrivals.ts).
+      const unlisten = listenToThread(key, id, (message) => {
+        const row = rehydrateMessage(message);
+        setMessages((prev) => withArrivedRow(prev, row));
+      });
       const assemble = async (signal: AbortSignal): Promise<PlaceAssembled> => {
         const history = messagesRef.current.filter((m) => !m.streaming && !m.queued);
         // A message carrying links goes to the model with an app note that
@@ -161,12 +195,18 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           m.parts?.some((part) => part.type === "card" && part.card.kind === "link-intake"),
         );
         const topics = latestLinks.length > 0 ? await listTopics().catch(() => []) : [];
-        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) : "";
-        const sent = note && latest ? [...history.slice(0, -1), { ...latest, text: latest.text + note }] : history;
+        // With a brief open, the brief is on the desk and where the reader is
+        // in it rides the same note (issue-context.ts, docs/info/88).
+        const issue = await issueDoorTurn(getOpenIssue(), latest?.role === "user" ? latest.text : "");
+        // A line answering one of the brief's questions says which (info/issue/question-card.ts).
+        const answers = latest?.role === "user" ? issueAnswerNote(issueCards(history).map((c) => c.card), latest.ts) : "";
+        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) + issue.note + answers : "";
+        const sent = noteOnLastLine(history, note);
         const prepared = await prepareDoorTurn({
           threadId: id,
           date,
           history: replayableHistory(sent),
+          ...(issue.desk.length > 0 ? { desk: issue.desk } : {}),
           signal,
           // The door's own tools, beside the soul's (door-tools.ts).
           tools: doorTools({
@@ -187,8 +227,8 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
             applyTopicSearchCard: (cardId) => applyTopicSearchRef.current(cardId),
           }),
           topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
-          // How a topic search is drafted, and the ones the reader has (docs/info/88).
-          prompt: await loadTopicSearchGuidance(),
+          // How a topic search is drafted, and the ones the reader has (docs/info/88); asking how background work is going.
+          prompt: `${await loadTopicSearchGuidance()}\n\n${BACKGROUND_STATUS_RULE}`,
         });
         if (prepared.kind === "no-provider") return { kind: "failed", message: t("info.errors.noProvider") };
         if (prepared.kind === "refused") return { kind: "refused", message: prepared.text };
@@ -231,10 +271,22 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       const closed = registerOpenSession(doorThreadKey(origin), session);
       const unwatchDoor = setDoorWatching((o) => o.date === date && o.threadId === id);
       unwatch = () => {
+        unlisten();
         closed();
         unwatchDoor();
       };
       lookingRef.current = session.resume().catch((e: unknown) => console.warn("door turn could not be resumed", e));
+      // An issue just opened: Lumen speaks first about it (info/issue/opening.ts),
+      // its items cited by the page they stand on in the book that is open.
+      if (openedFor) {
+        void lookingRef.current
+          .then(async () => {
+            const open = getOpenIssue();
+            const text = open?.bookId === openedFor ? await open.fulltext().catch(() => null) : null;
+            await speakIssueOpening({ bookId: openedFor, date, threadId: id, pageOf: (heading) => headingPage(text, heading) });
+          })
+          .catch((e: unknown) => console.warn("the brief's opening could not be said", e));
+      }
     });
     return () => {
       live = false;
@@ -246,18 +298,6 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
-  // Every append through the store is announced, this view's own and the
-  // runtime's landing included; a row already on screen under that role and
-  // timestamp is skipped.
-  useEffect(() => {
-    if (!threadId) return;
-    return onThreadMessage((append) => {
-      if (append.key !== key || append.threadId !== threadId) return;
-      const row = rehydrateMessage(append.message);
-      setMessages((prev) => (prev.some((m) => m.ts === row.ts && m.role === row.role) ? prev : [...prev, row]));
-    });
-  }, [key, threadId, setMessages]);
-
   const note = useCallback(
     (text: string, role: "user" | "ai" = "user") => {
       if (!threadId) return;
@@ -268,20 +308,52 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     [key, threadId, setMessages, stamp],
   );
 
-  const send = useCallback(
-    async (text: string) => {
-      if (!text.trim() || !threadId) return;
+  // A question of the brief's answered by the line said at `ts`: the card shows
+  // the answer, on screen and in the thread file.
+  const markAnswered = useCallback(
+    (cardId: string, answer: string, ts: number) => {
+      if (!threadId) return;
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "issue-question") return;
+      const patch = { phase: "answered" as const, answer, answerTs: ts };
+      setMessages((prev) => patchCardPayload(prev, cardId, patch));
+      patchThreadMessage(key, threadId, found.ts, { parts: [toPersistedCardPart(cardId, { ...found.payload, ...patch })] });
+    },
+    [key, threadId, setMessages],
+  );
+
+  const say = useCallback(
+    async (typed: string, quote?: IssueQuote, answering?: string) => {
+      if (!typed.trim() || !threadId) return;
+      // A question about a passage carries the passage above it (quoted-question.ts).
+      const text = quote ? quotedQuestion(quote.text, typed) : typed;
       await lookingRef.current;
       const session = sessionRef.current;
       if (!session) return;
       const ts = stamp();
+      // A quick answer, or the words a question was left waiting for.
+      const card = answering ?? cardAwaitingWords(issueCards(messagesRef.current));
+      if (card) markAnswered(card, typed, ts);
       // Into the turn that is running (docs/72); otherwise a turn of its own.
       if (session.say(text, ts)) return;
       setMessages((prev) => [...prev, { role: "user", text, ts }]);
       appendMessage(key, threadId, { role: "user", text, ts });
       session.ask();
     },
-    [key, threadId, setMessages, stamp],
+    [key, threadId, setMessages, stamp, markAnswered],
+  );
+  const send = useCallback((typed: string, quote?: IssueQuote) => say(typed, quote), [say]);
+
+  // "In my own words": the card waits for the next line typed.
+  const awaitWords = useCallback(
+    (cardId: string) => {
+      if (!threadId) return;
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "issue-question" || found.payload.phase === "answered") return;
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "own" }));
+      patchThreadMessage(key, threadId, found.ts, { parts: [toPersistedCardPart(cardId, { ...found.payload, phase: "own" })] });
+    },
+    [key, threadId, setMessages],
   );
 
   const stop = useCallback(() => sessionRef.current?.stop(), []);
@@ -387,6 +459,8 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           else if (action.op === TOPIC_SEARCH_APPLY_OP) void followTopicSearch(cardId);
           else if (action.op === INTAKE_CHOOSE_OP && action.arg) void pickIntakeTopic(cardId, { id: action.arg });
           else if (action.op === INTAKE_NEW_TOPIC_OP && action.arg) void pickIntakeTopic(cardId, { name: action.arg });
+          else if (action.op === ISSUE_ANSWER_OP && action.arg) void say(action.arg, undefined, cardId);
+          else if (action.op === ISSUE_OWN_OP) awaitWords(cardId);
           break;
         case "local":
           setMessages((prev) => patchCardPayload(prev, cardId, action.patch));
@@ -401,7 +475,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           break;
       }
     },
-    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages],
+    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages, say, awaitWords],
   );
 
   return { messages, stickKey, ready: threadId !== null, streaming, send, stop, onCardAction };

@@ -39,10 +39,13 @@ import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
+import InfoShelf from "./ui/components/info/InfoShelf";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
-import { displaySource, readLibraryBook, type BookFormat } from "./platform/app/library";
+import { displaySource, getLibraryEntry, readLibraryBook, type BookFormat } from "./platform/app/library";
+import { readerModeOf, type ReaderMode } from "./reading/issue";
+import { askLumen, publishOpenIssue } from "./ui/components/lumen/issue-context";
 import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -66,7 +69,7 @@ import PrepPanel from "./ui/components/reader/PrepPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
 import { escapeTarget } from "./ui/components/reader/escape";
-import { readerTool } from "./ui/components/reader/reader-tool";
+import { mouseSelectsText, readerTool } from "./ui/components/reader/reader-tool";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/call/CallBubble";
 import CallView from "./ui/components/chat/call/CallView";
@@ -191,6 +194,9 @@ export default function App() {
   // Which document is on screen, as something that renders: the Outline lights
   // the row the reader is in. A ref cannot do that.
   const [docId, setDocId] = useState<string | null>(null);
+  // A brief opens without the lesson and the reader's own conversation; Lumen
+  // talks about it in the door (reading/issue.ts, docs/info/88).
+  const [readerMode, setReaderMode] = useState<ReaderMode>("book");
 
   // The current book's full text, extracted fire-and-forget on open. A call's
   // context assembly awaits this so the AI can see the page even if extraction
@@ -263,6 +269,9 @@ export default function App() {
   useEffect(() => setFingerSel(null), [embedDoc]);
 
   const [stats, setStats] = useState<ViewStats | null>(null);
+  // Where the reader is, for a turn at the door assembled between renders.
+  const statsRef = useRef<ViewStats | null>(null);
+  statsRef.current = stats;
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [pickedTool, setPickedTool] = useState<ToolType>("none");
@@ -642,6 +651,27 @@ export default function App() {
     await viewRef.current?.highlightQuote(pageIndex, { searchText, displayText: quote });
   }, []);
 
+  // The brief open in this reader, for Lumen's conversation (lumen/issue-context.ts):
+  // published while it is open, which also brings the conversation up.
+  const issueBookId = readerMode === "issue" && docId !== null ? bookIdRef.current : null;
+  useEffect(() => {
+    if (!issueBookId) return;
+    return publishOpenIssue({
+      bookId: issueBookId,
+      title: bookTitle,
+      where: () => {
+        const s = statsRef.current;
+        return { page: s ? s.pageIndex + 1 : null, pageCount: s?.pagesCount ?? null };
+      },
+      fulltext: () => currentFulltextRef.current ?? Promise.resolve(null),
+      marks: () => [...annsRef.current.values()],
+      jump: (pageIndex, quote) => {
+        if (quote) void jumpToQuote(pageIndex, quote);
+        else viewRef.current?.navigate({ pageIndex });
+      },
+    });
+  }, [issueBookId, bookTitle, jumpToQuote, annsRef]);
+
   // A clicked citation chip in a chat reply. Survey pages jump the reader (and
   // un-cover it when chat is full-window); paper citations open that paper's
   // note in the prep panel (v1: the note, not the paper PDF).
@@ -789,6 +819,7 @@ export default function App() {
         setDocId(null);
         setSupplements([]);
         setBookTitle("");
+        setReaderMode("book");
         viewRef.current = null;
         pageDwellRef.current = null;
       },
@@ -854,6 +885,7 @@ export default function App() {
     async (bookId: string, name: string, bytes: Uint8Array) => {
       setBookTitle(name);
       setSupplements([]);
+      setReaderMode(readerModeOf(await getLibraryEntry(bookId).catch(() => null)));
       await openBook(readerShell, { bookId, name, bytes });
       await refreshSupplements();
     },
@@ -894,6 +926,22 @@ export default function App() {
     const bookId = bookIdRef.current;
     return bookId ? openDocument(bookId, bookTitle) : null;
   }, [openDocument, bookTitle]);
+
+  // A book on no topic, from the info shelf (docs/info/88): an issue of the
+  // brief or a topic volume, read straight from the library.
+  const openIssueBook = useCallback(
+    async (bookId: string, name: string) => {
+      try {
+        const bytes = await readLibraryBook(bookId);
+        if (!bytes) throw new Error("the book is not in the library");
+        await openInReader(bookId, name, bytes);
+      } catch (e) {
+        console.error("failed to open the book", e);
+        pushToast("error", t("shell.toast.cantOpenDownloading"));
+      }
+    },
+    [openInReader, pushToast, t],
+  );
 
   // Open a topic file. If its book id is known and the library holds the
   // authoritative copy, open straight from the library (the original path may be
@@ -1201,6 +1249,10 @@ export default function App() {
             return;
           }
         }
+        // A brief or a topic volume is on no topic (docs/info/88): it opens
+        // straight from the library, as from the info shelf.
+        const entry = await getLibraryEntry(bookId).catch(() => null);
+        if (entry) await openIssueBook(bookId, entry.title);
       },
       goToPage: (page: number) => viewRef.current?.navigate({ pageIndex: page - 1 }),
       openThread: (bookId: string, threadId: string) => {
@@ -1247,7 +1299,7 @@ export default function App() {
         if (file) await openFile(file, doc.topicId);
       },
     }),
-    [topics, openFile, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
+    [topics, openFile, openIssueBook, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
   );
 
   // The same shelf lookup a receipt's book link needs. One way in, so a card and
@@ -1424,6 +1476,7 @@ export default function App() {
             lumenShown={lumenShown}
             onToggleLumen={toggleLumen}
             onOpenBookThread={openBookThread}
+            mode={readerMode}
             onOpenSettings={openSettings}
             settingsAlert={syncReport.alert !== "none"}
           />
@@ -1526,6 +1579,7 @@ export default function App() {
               onSetAnnotationPopup={onSetAnnotationPopup}
               onQuoteHighlightChange={setQuoteHlActive}
               onSelection={onFingerSelection}
+              mouseSelects={mouseSelectsText(readerMode)}
             />
           )}
           {embedDoc && fingerSel && (
@@ -1535,6 +1589,13 @@ export default function App() {
               onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
               onHighlight={highlightSelection}
               onAsk={() => {
+                // In a brief the passage goes to Lumen's conversation (docs/info/88).
+                if (readerMode === "issue") {
+                  askLumen({ text: fingerSel.selection.text });
+                  viewRef.current?.clearSelection();
+                  setFingerSel(null);
+                  return;
+                }
                 // Inside a side conversation no new one opens: the AI pen's rule
                 // (reading/turn/call-state.ts), said the way the rack says it.
                 if (gate.aiPen !== null) {
@@ -1574,7 +1635,6 @@ export default function App() {
             launchReady={bootstrapped}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshTopics}
-            onSay={(line) => pushToast("error", line)}
           />
 
           {!inReader && settingsShowing && (
@@ -1583,6 +1643,15 @@ export default function App() {
               onSettingsChange={applySettings}
               device={device}
               onDeviceChange={applyDevice}
+            />
+          )}
+
+          {!inReader && homeScreen === "briefs" && (
+            <InfoShelf
+              onOpenBook={(bookId, name) => void openIssueBook(bookId, name)}
+              onTell={(line) => pushToast("info", line)}
+              onSay={(line) => pushToast("error", line)}
+              onTopicsChanged={refreshTopics}
             />
           )}
 

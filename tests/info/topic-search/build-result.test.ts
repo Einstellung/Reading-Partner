@@ -12,11 +12,14 @@ import { MaterialRegistry } from "../../../src/info/dossier/registry";
 import type { InfoItem } from "../../../src/info/sources/item";
 import type { RepoLookup } from "../../../src/info/sources/plugins/github-lookup";
 import { parseSearchRead, SEARCH_PAGE_SCRIPT, type XSearchPost } from "../../../src/info/x/search-page";
-import { makeResultBuilder, SOURCE_HEALTH_FILE, type BuildResultDeps, type SourceHealthFile } from "../../../src/info/topic-search/build-result";
+import { makeResultBuilder as makeBuilder, SOURCE_HEALTH_FILE, type BuildResultDeps, type BuildTopicSearchResultArgs, type SourceHealthFile } from "../../../src/info/topic-search/build-result";
+import type { ArxivSearch } from "../../../src/info/topic-search/arxiv-ladder";
+import { readArxiv } from "../../../src/info/topic-search/arxiv-read";
 import { missingNumbers, numbersIn, type TopicModelCall } from "../../../src/info/topic-search/model-io";
 import { QUESTIONS_FILE, enqueue, metricQuestions, pickQuestions, questionCap, type PendingQuestion } from "../../../src/info/topic-search/questions";
 import { numberPool, parseRerank, type Candidate } from "../../../src/info/topic-search/rank-pool";
-import { parseResultFile, type ResultStats, type TopicSearchResult } from "../../../src/info/topic-search/result-types";
+import { firstPart, parseResultFile, type ResultStats, type TopicSearchResult } from "../../../src/info/topic-search/result-types";
+import { ITEM_FLOOR } from "../../../src/info/topic-search/select";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import type { XReadResult } from "../../../src/info/topic-search/x-reader";
 
@@ -40,7 +43,6 @@ const post = (handle: string) => POSTS.find((p) => p.handle === handle)!;
 const TOPIC: TopicSearch = {
   id: "ts-0a1b2c3d",
   name: "AI for science",
-  topicId: "topic-1",
   concernId: null,
   scope: "AI used to do science: discovery, materials, proteins, autonomous labs.",
   subtopics: [
@@ -163,7 +165,7 @@ function scriptedModel(log: TopicModelCall[], opts: { writeFails?: number } = {}
     const bad = writes <= (opts.writeFails ?? 0);
     return JSON.stringify({
       overview: { text: bad ? `Seventy-seven labs, 77 in all, joined; see ${paperItem}.` : `Agent markets for discovery lead this window; see ${paperItem}.`, cites: [paperItem] },
-      items: ids.filter((m) => !m[3]).map((m) => ({ e: m[1], summary: m[1] === paperItem ? "A study of agent markets, posted September 30, 2026." : "Work relevant to the topic.", cites: [] })),
+      items: ids.filter((m) => !m[3]).map((m) => ({ e: m[1], summary: m[1] === paperItem ? "A study of agent markets, posted September 30, 2026." : "Work relevant to the topic.", body: ["What it is."], cites: [] })),
       doubts: [],
       repeats: [],
     });
@@ -182,6 +184,19 @@ function memoryFiles(seed: Record<string, string> = {}) {
   };
 }
 
+/** The build's deps, and the arXiv search the run's read phase would have sent. */
+type TestDeps = BuildResultDeps & { searchArxiv: ArxivSearch };
+
+/** The builder after an arXiv read over the scripted search, as the run hands it what its read phase found. */
+function makeResultBuilder(d: TestDeps) {
+  const build = makeBuilder(d);
+  return async (args: Omit<BuildTopicSearchResultArgs, "arxiv">) => {
+    const plan = { kind: args.kind, since: args.since, today: d.today(), only: args.retry?.arxiv ?? null };
+    const read = await readArxiv(args.topic, plan, { search: d.searchArxiv, load: async () => null, save: async () => {} }, args.signal);
+    return build({ ...args, arxiv: read.found });
+  };
+}
+
 function deps(over: {
   files: ReturnType<typeof memoryFiles>;
   log: TopicModelCall[];
@@ -189,13 +204,14 @@ function deps(over: {
   writeFails?: number;
   arxiv?: Record<string, InfoItem[]>;
   opened?: string[];
-}): BuildResultDeps {
+}): TestDeps {
   const now = Date.parse(`${over.today}T12:00:00Z`);
   return {
     model: scriptedModel(over.log, { writeFails: over.writeFails }),
     searchArxiv: async (text) => {
       if (text === "materials discovery" && !over.arxiv) throw new Error("export.arxiv.org answered HTTP 429");
-      return (over.arxiv ?? { "AI for science": [AGENTIC, MATERIALS] })[text] ?? [];
+      // The ladder sends the query's searchable words: "AI for science" searches "science".
+      return (over.arxiv ?? { science: [AGENTIC, MATERIALS] })[text] ?? [];
     },
     fetchText: async (url) => {
       if (url === "https://arxiv.org/html/2609.31562") return { status: 200, text: ARXIV_HTML };
@@ -254,7 +270,7 @@ describe("a first run, then a day, then a quiet day", () => {
     expect(agentic.kind).toBe("paper");
     expect(agentic.title).toBe("Agentic Economies for Autonomous Scientific Discovery");
     expect(agentic.titleFrom).toBe("original");
-    expect(agentic.facts).toEqual({ kind: "paper", arxivId: "2609.31562", authors: ["Ada Lovelace", "Alan Turing"], publishedAt: "2026-09-30T00:00:00Z" });
+    expect(agentic.facts).toEqual({ kind: "paper", arxivId: "2609.31562", authors: ["Ada Lovelace", "Alan Turing"], publishedAt: "2026-09-30T00:00:00Z", depth: "head" });
     expect(agentic.links.posts.map((p) => p.handle)).toContain("bimedotcom");
     expect(agentic.links.posts[0].url).toBe(`https://x.com/bimedotcom/status/${post("bimedotcom").id}`);
     expect(agentic.subtopic).toBe("s1");
@@ -328,7 +344,7 @@ describe("a first run, then a day, then a quiet day", () => {
       links: [{ tco: "https://t.co/abc", url: "https://github.com/acme/sci-bench", card: false }],
       permalink: "https://x.com/acme_lab/status/2110300000000000000",
     };
-    const build = makeResultBuilder(deps({ files, log, today: "2026-10-15", arxiv: { "AI for science": [AGENTIC] } }));
+    const build = makeResultBuilder(deps({ files, log, today: "2026-10-15", arxiv: { science: [AGENTIC] } }));
     const out = await build({
       topic: TOPIC,
       kind: "daily",
@@ -354,13 +370,56 @@ describe("a first run, then a day, then a quiet day", () => {
 
   test("a quiet day: nothing new, no model write, an empty file", async () => {
     const log: TopicModelCall[] = [];
-    const build = makeResultBuilder(deps({ files, log, today: "2026-10-16", arxiv: { "AI for science": [AGENTIC] } }));
+    const build = makeResultBuilder(deps({ files, log, today: "2026-10-16", arxiv: { science: [AGENTIC] } }));
     const out = await build({ topic: TOPIC, kind: "daily", x: xRead([post("yashgurbani4")]), since: Date.parse("2026-10-15T12:00:00Z"), runDir: "runs/topic-search-3", xPages: ANY_PAGES, signal: new AbortController().signal });
     expect(out).toEqual({ resultFile: "topic-search-ts-0a1b2c3d-2026-10-16.json", itemCount: 0, empty: true });
     const day = parseResultFile(files.files.get(out.resultFile!)!)!;
     expect(day.writeup).toBe("none");
     expect(log.some((c) => c.site === "write")).toBe(false);
   });
+});
+
+test("the slow part merged into the first part's file: the overview and counts speak for the whole, the first part stays its own", async () => {
+  const files = memoryFiles();
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  const since = now - 30 * 86_400_000;
+  const noX: XReadResult = { status: "done", why: null, halt: null, posts: [], lines: [], pages: { search: 0, permalink: 0 }, activeMs: 0 };
+  const fastOut = await makeResultBuilder(deps({ files, log: [], today: "2026-10-14" }))({
+    topic: TOPIC, kind: "first", x: noX, since, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal, later: ["x"],
+  });
+  const fast = parseResultFile(files.files.get(fastOut.resultFile!)!)!;
+  expect(fast.items.every((i) => i.kind === "paper")).toBe(true);
+  expect(fast.stats.candidates.x).toBe(0);
+
+  const log: TopicModelCall[] = [];
+  const slowOut = await makeResultBuilder(deps({ files, log, today: "2026-10-14" }))({
+    topic: TOPIC, kind: "first", x: xRead(POSTS), since, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal,
+    retry: { runId: "r-first", x: ["q1", "q3"], arxiv: [], part: "slow" },
+  });
+  expect(slowOut.resultFile).toBe(fastOut.resultFile);
+  const merged = parseResultFile(files.files.get(slowOut.resultFile!)!)!;
+  const added = merged.retries![0].items;
+  expect(added.length).toBeGreaterThan(0);
+
+  // The write-up saw the first part's items beside its own and wrote the overview over both.
+  const write = log.find((c) => c.site === "write")!;
+  expect(write.user).toContain("Already in this result (no entries):");
+  for (const i of fast.items) expect(write.user).toContain(`<material id="${i.id}">\n${i.id} · paper`);
+  expect(merged.overview).toEqual(merged.retries![0].overview);
+  expect(merged.overview!.cites.some((c) => fast.items.some((i) => i.id === c))).toBe(true);
+
+  // Counts add up; every item is in a group; the first part keeps its own.
+  expect(merged.stats.candidates).toEqual({ x: merged.retries![0].stats.candidates.x, arxiv: fast.stats.candidates.arxiv });
+  expect(merged.stats.candidates.x).toBeGreaterThan(0);
+  expect(merged.groups.flatMap((g) => g.items).sort()).toEqual(merged.items.map((i) => i.id).sort());
+  expect(merged.firstLook).toEqual({ overview: fast.overview, writeup: fast.writeup, stats: fast.stats });
+  const first = firstPart(merged);
+  expect(first.items).toEqual(fast.items);
+  expect(first.overview).toEqual(fast.overview);
+  expect(first.stats).toEqual(fast.stats);
+
+  // Nothing under the item floor is listed (select.test.ts has the small-pool case).
+  expect(merged.items.every((i) => i.score >= ITEM_FLOOR)).toBe(true);
 });
 
 test("a write-up that fails twice falls back to the program's version", async () => {
@@ -385,6 +444,33 @@ test("a rerank that fails ranks by relevance instead", async () => {
   const result = parseResultFile(files.files.get(out.resultFile!)!)!;
   expect(result.stats.reranked).toBe(false);
   expect(result.items.length).toBeGreaterThan(0);
+});
+
+test("the build takes arXiv from what the read phase found and sends no arXiv request", async () => {
+  const files = memoryFiles();
+  let searched = 0;
+  const d = { ...deps({ files, log: [], today: "2026-10-14" }), searchArxiv: async () => (searched++, []) };
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  const step = { terms: ["science"], since: "2025-10-14", until: "2026-10-14" };
+  const out = await makeBuilder(d)({
+    topic: TOPIC,
+    kind: "first",
+    x: xRead(POSTS),
+    arxiv: [
+      { query: "q1", items: [AGENTIC], error: null, ladder: { outcome: "widened", steps: [{ ...step, hits: 1 }] } },
+      { query: "q2", items: [], error: "rate limited (HTTP 429)", ladder: { outcome: "rate_limited", steps: [{ ...step, terms: ["materials", "discovery"], hits: null }] } },
+    ],
+    since: now - 30 * 86_400_000,
+    runDir: RUN_DIR,
+    xPages: ANY_PAGES,
+    signal: new AbortController().signal,
+  });
+  expect(searched).toBe(0);
+  const result = parseResultFile(files.files.get(out.resultFile!)!)!;
+  expect(result.items.some((i) => i.key === "arxiv:2609.31562")).toBe(true);
+  const health = JSON.parse(files.files.get(`${RUN_DIR}/${SOURCE_HEALTH_FILE}`)!) as SourceHealthFile;
+  expect(health.entries.find((e) => e.query === "q1" && e.source === "arxiv")).toMatchObject({ status: "ok", ladder: { outcome: "widened" } });
+  expect(health.entries.find((e) => e.query === "q2" && e.source === "arxiv")).toMatchObject({ status: "failed", why: "rate limited (HTTP 429)", ladder: { outcome: "rate_limited" } });
 });
 
 describe("pieces", () => {
@@ -454,4 +540,43 @@ test("with the X pages spent, a post on X is not opened and stays as the search 
   expect(result.items.find((i) => i.key === `x:${post("thePandaily").id}`)?.title).not.toBe("SRHarness: an open-source runtime for agents");
   // Pages off X still open.
   expect(opened.some((u) => !u.includes("x.com"))).toBe(true);
+});
+
+test("the write-up asks to read papers in full: one is read whole, one cannot be, and the item says how deep", async () => {
+  const files = memoryFiles();
+  const log: TopicModelCall[] = [];
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  const scripted = scriptedModel(log);
+  let asked = false;
+  const d = deps({ files, log, today: "2026-10-14" });
+  d.model = async (call) => {
+    if (call.site !== "write" || asked) return scripted(call);
+    asked = true;
+    log.push(call);
+    const papers = [...call.user.matchAll(/<material id="(E\d+)">\n\1 · paper/g)].map((m) => m[1]);
+    return JSON.stringify({ deeper: papers });
+  };
+  const out = await makeResultBuilder(d)({ topic: TOPIC, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal });
+  const result = parseResultFile(files.files.get(out.resultFile!)!)!;
+  const writes = log.filter((c) => c.site === "write");
+  expect(writes[0].system).toContain("you may ask to read up to 5 of these papers in full");
+  expect(writes[0].user).toContain("Paper read: the abstract and the start of the body");
+
+  const agentic = result.items.find((i) => i.key === "arxiv:2609.31562")!;
+  const materials = result.items.find((i) => i.key === "arxiv:2610.00001")!;
+  expect(agentic.facts).toMatchObject({ kind: "paper", depth: "full" });
+  expect(materials.facts).toMatchObject({ kind: "paper", depth: "abstract" });
+  const whole = result.materials.find((m) => agentic.materials.includes(m.id))!;
+  expect(whole.url).toBe("https://arxiv.org/html/2609.31562");
+  expect(whole.facts).toMatchObject({ depth: "full", body: "whole HTML" });
+  // The head read cut the method short; the whole read has all of it.
+  expect(whole.sections.reduce((n, s) => n + s.chars, 0)).toBeGreaterThan(8000);
+  expect(result.stats.deepReads).toEqual({ read: [agentic.id], failed: [materials.id], refused: [] });
+
+  // The write-up after the reads: the whole paper in, the unread one told, no more asking.
+  expect(writes[1].user).toContain("Paper read: the whole paper, below.");
+  expect(writes[1].user).toContain(`Read in full: ${agentic.id}.`);
+  expect(writes[1].user).toContain(`Could not be read: ${materials.id}`);
+  expect(writes[1].system).not.toContain("you may ask to read");
+  expect(result.writeup).toBe("model");
 });

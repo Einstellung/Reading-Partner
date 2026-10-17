@@ -35,14 +35,15 @@ export default {
   "lumen.show": "Lumen einblenden",
   "lumen.hide": "Lumen ausblenden",
   "lumen.needsDecision": "Entscheidung nötig",
-  "lumen.holdForMenu": "Gedrückt halten für Lumens Menü",
-  "lumen.menuVoice": "Sprechen",
-  "lumen.menuType": "Text",
   "lumen.callCardClose": "Schließen",
+  "lumen.tapToChat": "Lumen: tippen zum Schreiben, halten zum Sprechen",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
   "door.close": "Schließen",
+  "door.expand": "Vergrößern",
+  "door.shrink": "Verkleinern",
+  "door.dropQuote": "Zitat entfernen",
   "door.empty": "Was beschäftigt dich?",
   "door.placeholder": "Nachricht an Lumen…",
   "door.failed": "Diese Antwort konnte nicht starten.",
@@ -57,7 +58,7 @@ export default {
   "box.notOnPhone": "Das hier öffnet sich auf dem iPad oder am Schreibtisch.",
   "box.label": "Die Box",
   "box.waiting": { one: "Die Box, {count} wartend", other: "Die Box, {count} wartend" },
-  "box.empty": "Nichts in der Box.",
+  "box.cardKicker": "Aus der Box",
 
   "figure.label": "Abb. {id} · S.{page}",
   "figure.number": "Abb. {id}",
@@ -97,6 +98,7 @@ export default {
 
   "nav.today": "Heute",
   "nav.briefing": "Briefing",
+  "nav.briefs": "Briefs",
   "nav.meals": "Mahlzeiten",
   "nav.topics": "Themen",
 

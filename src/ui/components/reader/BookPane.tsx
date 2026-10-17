@@ -33,9 +33,11 @@ export interface BookPaneProps
     "buffer" | "annotations" | "authorName" | "viewState" | "className"
   > {
   book: OpenBook;
+  /** A mouse with no tool selects words instead of turning the page (EPUB only). */
+  mouseSelects?: boolean;
 }
 
-export default function BookPane({ book, ...on }: BookPaneProps) {
+export default function BookPane({ book, mouseSelects, ...on }: BookPaneProps) {
   const shared = {
     buffer: book.buffer,
     annotations: book.annotations,
@@ -55,7 +57,13 @@ export default function BookPane({ book, ...on }: BookPaneProps) {
     onSelection: on.onSelection,
   };
   return book.format === "epub" ? (
-    <EpubReaderPane key={book.docId} {...shared} bookId={book.docId} className="block" />
+    <EpubReaderPane
+      key={book.docId}
+      {...shared}
+      bookId={book.docId}
+      mouseSelects={mouseSelects}
+      className="block"
+    />
   ) : (
     <EmbedReaderPane
       key={book.docId}

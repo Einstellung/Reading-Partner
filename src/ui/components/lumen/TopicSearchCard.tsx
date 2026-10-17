@@ -61,17 +61,13 @@ export function TopicSearchProposalCard({ payload, dispatch }: CardComponentProp
       <Section title={t("info.cards.topicSearchWant")} items={payload.want} />
       <Section title={t("info.cards.topicSearchAvoid")} items={payload.avoid} />
       <Section title={t("info.cards.topicSearchJudgments")} items={payload.judgments} />
-      <div className="mt-3 text-[12px] leading-snug text-faint-foreground">
-        {payload.topic.id
-          ? t("info.cards.topicSearchFilesInto", { topic: payload.topic.name })
-          : t("info.cards.topicSearchFilesIntoNew", { topic: payload.topic.name })}
-      </div>
       {payload.once && (
-        <div className="mt-1 text-[12px] leading-snug text-faint-foreground">{t("info.cards.topicSearchOnce")}</div>
+        <div className="mt-3 text-[12px] leading-snug text-faint-foreground">{t("info.cards.topicSearchOnce")}</div>
       )}
       {!applied && (
         <div className="mt-1 text-[12px] leading-snug text-faint-foreground">
-          {payload.eta === "soon" ? t("info.cards.topicSearchEtaSoon") : t("info.cards.topicSearchEtaTonight")}
+          {payload.eta === "soon" ? t("info.cards.topicSearchEtaSoon") : t("info.cards.topicSearchEtaTonight")}{" "}
+          {t("info.cards.topicSearchSlowSources")}
         </div>
       )}
       <div className="mt-3.5 flex items-center justify-end gap-2">

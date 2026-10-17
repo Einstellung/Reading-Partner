@@ -128,7 +128,7 @@ export interface FulltextDetailEndpoint {
 export interface FulltextWebview {
   mode: "webview";
   // Where to send the user to sign in, when the site gives an anonymous reader
-  // less than a subscriber. Drives the sign-in row on the sources page; the
+  // less than a subscriber. Gives the site a row in Settings › Accounts; the
   // fetch itself never navigates here.
   signInUrl?: string;
 }

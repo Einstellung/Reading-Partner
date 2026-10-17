@@ -17,8 +17,8 @@ import type { SavedArticle } from "../../../reading/saved/saved-articles";
 export type ScreenKind =
   | "home"
   | "briefing"
+  | "briefs"
   | "article"
-  | "sources"
   | "meals"
   | "meals-shopping"
   | "meals-day"
@@ -40,8 +40,9 @@ export type ScreenKind =
 export type PhoneScreen =
   | { kind: "home" }
   | { kind: "briefing" }
+  // The info shelf (docs/info/88), pushed from home.
+  | { kind: "briefs" }
   | { kind: "article" }
-  | { kind: "sources" }
   | { kind: "meals" }
   | { kind: "meals-shopping" }
   // Which day is open. One of a week, so the entry carries the date the way an

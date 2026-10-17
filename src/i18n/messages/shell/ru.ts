@@ -35,14 +35,15 @@ export default {
   "lumen.show": "Показать Lumen",
   "lumen.hide": "Скрыть Lumen",
   "lumen.needsDecision": "Требуется решение",
-  "lumen.holdForMenu": "Удерживайте, чтобы открыть меню Lumen",
-  "lumen.menuVoice": "Голос",
-  "lumen.menuType": "Текст",
   "lumen.callCardClose": "Закрыть",
+  "lumen.tapToChat": "Lumen: нажмите, чтобы написать, удерживайте, чтобы говорить",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
   "door.close": "Закрыть",
+  "door.expand": "Развернуть",
+  "door.shrink": "Свернуть",
+  "door.dropQuote": "Убрать цитату",
   "door.empty": "О чём думаете?",
   "door.placeholder": "Сообщение для Lumen…",
   "door.failed": "Не удалось начать ответ.",
@@ -62,7 +63,7 @@ export default {
     many: "Ящик, {count} в ожидании",
     other: "Ящик, {count} в ожидании",
   },
-  "box.empty": "В ящике пусто.",
+  "box.cardKicker": "Из ящика",
 
   "figure.label": "Рис. {id} · с.{page}",
   "figure.number": "Рис. {id}",
@@ -102,6 +103,7 @@ export default {
 
   "nav.today": "Сегодня",
   "nav.briefing": "Сводка",
+  "nav.briefs": "Выпуски",
   "nav.meals": "Питание",
   "nav.topics": "Темы",
 

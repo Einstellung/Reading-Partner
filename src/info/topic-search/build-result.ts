@@ -1,5 +1,6 @@
 // From what a topic search run read to its result file (docs/info/88, the
-// run's rank, verify and write phases): arXiv searched beside X, candidates
+// run's rank, verify and write phases): what X and arXiv found (both read in
+// the run's read phase, arxiv-read.ts; the build searches nothing), candidates
 // scored and reranked and merged into events, the topic's 30-day history taken
 // out, each item's originals read and compared, the sentences written and
 // checked, questions saved up and picked, and the file written.
@@ -19,10 +20,11 @@ import { dedupeBatch, type Headline } from "../rank/dedupe";
 import { eventKeyOfUrl, type EventCluster } from "../rank/events";
 import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
-import type { InfoItem } from "../sources/item";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
-import { composeResult } from "./compose";
+import type { ArxivLadder } from "./arxiv-ladder";
+import { composeResult, deepenableMaterial, EARLIER_LINES, type DeeperReads, type EarlierLine } from "./compose";
 import { parseJsonReply, type TopicModel } from "./model-io";
+import type { RunSource } from "./pace";
 import { enqueue, loadQueue, metricQuestions, pickQuestions, questionCap, saveQueue, waiting, type NewQuestion } from "./questions";
 import {
   fusePool,
@@ -40,6 +42,8 @@ import {
   type Scored,
 } from "./rank-pool";
 import {
+  highestNumber,
+  mergeRetry,
   parseResultFile,
   parseResultFileName,
   RESULT_FILE_PREFIX,
@@ -53,12 +57,27 @@ import {
   type TopicSearchResult,
   type TopicSearchResultItem,
 } from "./result-types";
+import { selectItems, shortlist, type SelectView } from "./select";
 import type { TopicSearch } from "./types";
-import { claimsPrompt, countsOf, parseClaims, readSource, SOURCES_PER_ITEM, type FetchText, type OpenLink, type Target } from "./verify";
+import {
+  claimsPrompt,
+  countsOf,
+  parseClaims,
+  readPaperFull,
+  readSource,
+  SOURCES_PER_ITEM,
+  type FetchText,
+  type OpenLink,
+  type SourceDeps,
+  type Target,
+} from "./verify";
+import { addDays } from "./windows";
 import type { XReadResult } from "./x-reader";
 
 /** Items a result lists: a first run's, and a day's (88 「打分」 7). */
 export const RESULT_ITEMS = { first: 15, daily: 8 } as const;
+/** Papers the write-up may have read in full, per run: a first run's, and a day's (initial values). */
+export const DEEP_READS = { first: 5, daily: 2 } as const;
 /** How far back the topic's results count as already reported. */
 export const HISTORY_DAYS = 30;
 /** 88 延续: a seen post is listed again when its engagement doubled and it gained this many likes. */
@@ -75,12 +94,26 @@ export interface BuildTopicSearchResultArgs {
   topic: TopicSearch;
   kind: "first" | "daily";
   x: XReadResult;
+  /** What the run's arXiv read found, query by query (arxiv-read.ts). */
+  arxiv: readonly ArxivFound[];
   /** Start of this run's window, epoch ms. */
   since: number;
   runDir: string;
   /** The X pages this build may still open. */
   xPages: XPageBudget;
   signal: AbortSignal;
+  /**
+   * A retry of the first look (retry.ts): only these queries (ids) were read on
+   * X and are searched on arXiv, and what is found is added to the first look's
+   * file rather than written as a new one. Absent or null on the other runs.
+   */
+  retry?: { runId: string; x: readonly string[]; arxiv: readonly string[]; part?: "slow" } | null;
+  /**
+   * A split first look's first part (pace.ts): the slow sources read after it.
+   * The file records them as awaiting and the source health leaves them out;
+   * their part comes back as `retry` with `part: "slow"`.
+   */
+  later?: readonly RunSource[];
 }
 
 /**
@@ -129,6 +162,8 @@ export interface SourceHealthEntry {
   read: number;
   fresh: number;
   passedFloor: number;
+  /** arXiv only: how the query ladder ended and the steps it took. */
+  ladder?: ArxivLadder;
 }
 
 export interface SourceHealthFile {
@@ -148,31 +183,26 @@ export interface ResultFiles {
 
 export interface BuildResultDeps {
   model: TopicModel;
-  /** The arXiv plugin's search slot; `since` and `until` are local days, inclusive. */
-  searchArxiv(text: string, window: { since: string; until: string }, signal: AbortSignal): Promise<InfoItem[]>;
   fetchText: FetchText;
   openLink: OpenLink;
+  /** A PDF's text layer, for a deeper read of a paper arXiv has no HTML for; absent: such a paper is not read deeper. */
+  readPdfText?: SourceDeps["readPdfText"];
   /** A fresh counted GitHub lookup for one run (github-lookup.ts RepoLookups). */
   repoLookups(): { lookup(fullName: string): Promise<RepoLookup>; quotaLeft(): number | null };
   files: ResultFiles;
   /** The reader's profile statements (docs/soul/48), text only. */
   profile(): Promise<string[]>;
-  /** The output language instruction; "" to let the model follow the material. */
+  /** The output language instruction for what is only compared and extracted; "" to let the model follow the material. */
   language(): Promise<string>;
+  /**
+   * The language of what ends up in the brief book: the write-up and the
+   * questions the ranking raises (book-language.ts, never empty on the real
+   * host). Absent: `language`.
+   */
+  bookLanguage?(): Promise<string>;
   now(): number;
   /** Local date, YYYY-MM-DD. */
   today(): string;
-}
-
-function localDay(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function addDays(date: string, n: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
 }
 
 function total(c: PostCounts): number {
@@ -224,6 +254,21 @@ function draftOf(cluster: EventCluster<Scored>): Draft {
   const headline = paper ? paper.title : lead ? firstSentence(lead.text) : cluster.lead.text;
   return { cluster, members, posts, keys, headline, score: cluster.score, continuing: null, previous: null };
 }
+
+function subtopicOf(draft: Draft): string | null {
+  return draft.members.find((m) => m.subtopic)?.subtopic ?? null;
+}
+
+/** How the selection sees a draft; a continuing item fills neither reservation. */
+const DRAFT_VIEW: SelectView<Draft> = {
+  score: (d) => d.score,
+  postScore: (d) => {
+    if (d.continuing) return null;
+    const scores = d.members.filter((m) => m.cand.post).map((m) => m.score);
+    return scores.length ? Math.max(...scores) : null;
+  },
+  subtopic: (d) => (d.continuing ? null : subtopicOf(d)),
+};
 
 /** The originals to read for an item: its main thing, then one more pointing at the same story. */
 function targetsOf(draft: Draft): Target[] {
@@ -288,7 +333,9 @@ async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<Top
 }
 
 async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs): Promise<BuildTopicSearchResultOutput> {
-  const { topic, kind, x, since, runDir, xPages, signal } = args;
+  const { topic, kind, x, arxiv, since, runDir, xPages, signal } = args;
+  const retry = args.retry ?? null;
+  const later = args.later?.length ? [...args.later] : null;
   throwIfAborted(signal);
   const now = deps.now();
   const today = deps.today();
@@ -301,20 +348,14 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
 
   const history = await loadHistory(deps, topic.id);
   const recent = history.filter((r) => r.date >= addDays(today, -HISTORY_DAYS));
-  const [profile, language] = await Promise.all([deps.profile(), deps.language()]);
-
-  // arXiv beside X (88 「取材 / arXiv」).
-  const arxiv: ArxivFound[] = [];
-  for (const q of topic.queries) {
-    if (!q.arxiv) continue;
-    throwIfAborted(signal);
-    try {
-      arxiv.push({ query: q.id, items: await deps.searchArxiv(q.arxiv, { since: localDay(since), until: today }, signal), error: null });
-    } catch (e) {
-      if (signal.aborted) throw e;
-      arxiv.push({ query: q.id, items: [], error: e instanceof Error ? e.message : String(e) });
-    }
-  }
+  // A retry adds to the first look's file; its items and materials are numbered after the file's.
+  const target = retry ? ([...history].reverse().find((r) => r.kind === "first") ?? null) : null;
+  const itemsBefore = target ? highestNumber(target.items.map((i) => i.id)) : 0;
+  const [profile, language, bookLanguage] = await Promise.all([
+    deps.profile(),
+    deps.language(),
+    deps.bookLanguage ? deps.bookLanguage() : deps.language(),
+  ]);
 
   // Rank (88 「打分」 1-6).
   const gathered = gatherCandidates(topic, x, arxiv, since);
@@ -322,7 +363,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   let answers = new Map<string, RerankAnswer>();
   let reranked = false;
   if (numbered.length) {
-    const prompt = rerankPrompt(topic, numbered, profile, language);
+    const prompt = rerankPrompt(topic, numbered, profile, bookLanguage);
     try {
       answers = parseRerank(await call({ site: "rerank", ...prompt, signal }), numbered, topic);
       reranked = answers.size > 0;
@@ -340,7 +381,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const lastCounts = new Map<string, { result: string; counts: PostCounts; item: TopicSearchResultItem }>();
   for (const { result, item } of pastItems) for (const p of item.links.posts) lastCounts.set(p.statusId, { result: result.id, counts: p.counts, item });
   const headlines: Headline[] = pastItems.map((p) => ({ id: `${p.result.id}#${p.item.id}`, headline: p.item.title, keys: p.item.keys }));
-  const drafts = clusters.slice(0, want * 3).map(draftOf);
+  const pickedSubtopics = topic.subtopics.filter((s) => s.picked).map((s) => s.id);
+  const drafts = shortlist(clusters.map(draftOf), want * 3, pickedSubtopics, DRAFT_VIEW);
   const verdicts = dedupeBatch(
     drafts.map((d, i) => ({ id: `d${i + 1}`, headline: d.headline, keys: d.keys, draft: d })),
     headlines,
@@ -374,23 +416,34 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       if (signal.aborted) throw e;
     }
   }
-  const chosen = kept.slice(0, want);
+  // By score, with slots kept for post items and for each picked subtopic (select.ts).
+  const chosen = selectItems(kept, want, pickedSubtopics, DRAFT_VIEW);
 
   // Verify (88 「看原文」) and the items.
-  const registry = new MaterialRegistry(runDir, { write: (path, content) => deps.files.write(path, content) });
+  const registry = new MaterialRegistry(
+    target?.runDir ?? runDir,
+    { write: (path, content) => deps.files.write(path, content) },
+    target ? highestNumber(target.materials.map((m) => m.id)) : 0,
+  );
   const lookups = deps.repoLookups();
   // A page on X opens only while the budget lasts; past it a cut-short post stays cut.
   const openLink: OpenLink = async (url, s) => {
     if (isXPage(url) && !(await xPages.take())) return { ok: false, reason: X_PAGES_USED_UP };
     return deps.openLink(url, s);
   };
-  const sourceDeps = { fetchText: deps.fetchText, openLink, lookupRepo: (n: string) => lookups.lookup(n), repoQuotaLeft: () => lookups.quotaLeft() };
+  const sourceDeps: SourceDeps = {
+    fetchText: deps.fetchText,
+    openLink,
+    lookupRepo: (n: string) => lookups.lookup(n),
+    repoQuotaLeft: () => lookups.quotaLeft(),
+    ...(deps.readPdfText ? { readPdfText: deps.readPdfText } : {}),
+  };
   const items: TopicSearchResultItem[] = [];
   for (const [i, d] of chosen.entries()) {
     throwIfAborted(signal);
-    const id = `E${i + 1}`;
+    const id = `E${itemsBefore + i + 1}`;
     const lead = d.cluster.lead;
-    const subtopic = d.members.find((m) => m.subtopic)?.subtopic ?? null;
+    const subtopic = subtopicOf(d);
     if (d.continuing && d.previous) {
       const prev = d.previous;
       items.push({
@@ -398,6 +451,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         id,
         keys: [...new Set([...prev.keys, ...d.keys])],
         summary: null,
+        body: [],
+        unknown: null,
         links: { original: prev.links.original, posts: d.posts },
         facts: prev.facts.kind === "post" ? { ...prev.facts, counts: d.continuing.after } : prev.facts,
         materials: [],
@@ -431,7 +486,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     if (facts === null) {
       const paper = d.members.find((m) => m.cand.paper)?.cand.paper;
       facts = paper
-        ? { kind: "paper", arxivId: paper.id, authors: paper.authors, publishedAt: paper.publishedAt }
+        ? { kind: "paper", arxivId: paper.id, authors: paper.authors, publishedAt: paper.publishedAt, depth: "abstract" }
         : { kind: "post", handle: leadPost!.handle, name: leadPost!.name, postedAt: leadPost!.postedAt, counts: countsOf(leadPost!) };
       title = paper?.title ?? null;
     }
@@ -467,6 +522,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       title: title ? cut120(title) : fromPost,
       titleFrom: title ? "original" : "post",
       summary: null,
+      body: [],
+      unknown: null,
       facts,
       links: { original, posts: d.posts },
       materials,
@@ -500,7 +557,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   };
 
   const sameDay = history.filter((r) => r.date === today).length;
-  const name = resultFileName(topic.id, today, sameDay + 1);
+  const name = target ? `${target.id}.json` : resultFileName(topic.id, today, sameDay + 1);
   const resultId = name.replace(/\.json$/, "");
   const empty = items.length === 0;
   const doubts: NewQuestion[] = scored
@@ -512,20 +569,64 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   let writeup: TopicSearchResult["writeup"] = "none";
   let overview: TopicSearchResult["overview"] = null;
   let repeats = new Set<string>();
+  // A paper the write-up asks to read in full (compose.ts): read, registered
+  // apart, and put in place of the shorter read of it.
+  const deeper: DeeperReads = {
+    left: DEEP_READS[kind],
+    cap: DEEP_READS[kind],
+    read: async (itemId, s) => {
+      const item = items.find((i) => i.id === itemId);
+      const m = item ? deepenableMaterial(item, registry) : null;
+      if (!item || !m) return { ok: false, reason: "nothing to read deeper" };
+      const arxivId = String(m.facts.arxivId);
+      const paperFacts = item.facts.kind === "paper" && item.facts.arxivId === arxivId ? item.facts : null;
+      const known = {
+        title: m.title,
+        authors: paperFacts?.authors ?? (m.author ? m.author.split(", ") : []),
+        publishedAt: m.publishedAt,
+        abstract: registry.sections(m.id).find((x) => x.heading === "Abstract")?.text ?? null,
+      };
+      const read = await readPaperFull(arxivId, known, sourceDeps, s);
+      if (!read.ok) return { ok: false, reason: read.reason };
+      const full = await registry.register(read.input);
+      item.materials = item.materials.map((id) => (id === m.id ? full.id : id));
+      if (paperFacts) item.facts = { ...paperFacts, depth: "full" };
+      return { ok: true };
+    },
+  };
   if (!empty) {
     const offered = waiting(queue).slice(0, 6);
     const label = new Map(offered.map((q, i) => [`Q${i + 1}`, q.id]));
-    const { written, calls } = await composeResult(
-      { topic, kind, items, registry, profile, questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })), language },
+    const { written, calls, deeper: deepReads } = await composeResult(
+      {
+        topic,
+        kind,
+        items,
+        registry,
+        profile,
+        questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })),
+        language: bookLanguage,
+        // A retry's overview replaces the file's (mergeRetry), so it is written over the file's items too;
+        // those are shown beside the new ones rather than again as earlier lines.
+        earlier: earlierLines(target ? recent.filter((r) => r.id !== target.id) : recent),
+        ...(target ? { alongside: target.items } : {}),
+        deeper,
+      },
       deps.model,
       signal,
       Math.max(0, callsLeft()),
     );
     modelCalls += calls;
+    if (deepReads.read.length + deepReads.failed.length + deepReads.refused.length) stats.deepReads = deepReads;
     if (written) {
       writeup = "model";
       overview = written.overview;
-      for (const item of items) item.summary = written.summaries.get(item.id) ?? null;
+      for (const item of items) {
+        const entry = written.items.get(item.id);
+        item.summary = entry?.summary ?? null;
+        item.body = entry?.body ?? [];
+        item.unknown = entry?.unknown ?? null;
+      }
       repeats = new Set([...written.repeats].map((r) => label.get(r)).filter((r): r is string => !!r));
       const keyOf = new Map(items.map((i) => [i.id, i.key]));
       queue = enqueue(
@@ -552,7 +653,6 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     version: TOPIC_SEARCH_RESULT_VERSION,
     id: resultId,
     searchId: topic.id,
-    topicId: topic.topicId,
     name: topic.name,
     kind,
     date: today,
@@ -568,15 +668,30 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     questions: picked.asked.map((q) => ({ id: q.id, text: q.text, source: q.source, template: q.template })),
     stats,
     runDir,
+    ...(later ? { awaiting: later } : {}),
   };
   throwIfAborted(signal);
-  await deps.files.write(name, `${JSON.stringify(result, null, 2)}\n`);
+  const written = target ? mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId, retry!.part === "slow") : result;
+  await deps.files.write(name, `${JSON.stringify(written, null, 2)}\n`);
   await saveQueue(deps.files, topic.id, picked.queue);
-  await deps.files.write(
-    `${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`,
-    `${JSON.stringify(sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now), null, 2)}\n`,
-  );
+  const health = sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now);
+  // A retry speaks only for what it read again; the other lines keep what the first look found.
+  if (retry) health.entries = health.entries.filter((e) => (e.source === "x" ? retry.x : retry.arxiv).includes(e.query));
+  // A first part speaks only for its fast sources; the slow part writes the rest.
+  if (later) health.entries = health.entries.filter((e) => !later.includes(e.source));
+  await deps.files.write(`${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`, `${JSON.stringify(health, null, 2)}\n`);
   return { resultFile: name, itemCount: items.length, empty };
+}
+
+/** The conclusions earlier results of the topic wrote, newest first (88 「跨天延续」). */
+export function earlierLines(recent: readonly TopicSearchResult[]): EarlierLine[] {
+  const out: EarlierLine[] = [];
+  for (const r of [...recent].sort((a, b) => b.createdAt - a.createdAt)) {
+    for (const item of r.items) {
+      if (item.summary && out.length < EARLIER_LINES) out.push({ date: r.date, title: item.title, summary: item.summary });
+    }
+  }
+  return out;
 }
 
 /** One call for the near ones: only "duplicate" with "high" confidence takes an item out. */
@@ -642,11 +757,12 @@ export function sourceHealth(
       query: q.id,
       source: "arxiv",
       status: a.error ? "failed" : freshA > 0 ? "ok" : "empty",
-      why: a.error,
+      why: a.error ?? (a.ladder?.steps.length === 0 ? "the query has no searchable word" : null),
       fetchedAt: a.error ? null : now,
       read: sa.read.length,
       fresh: freshA,
       passedFloor: sa.kept.length,
+      ...(a.ladder ? { ladder: a.ladder } : {}),
     });
   }
   return { version: 1, searchId: topic.id, kind, at: now, entries };

@@ -7,6 +7,10 @@
 // body and the column's gap. With a keyboard up the shell has moved to what is
 // visible and the keyboard covers the bottom of it (KeyboardShell); the panel
 // stands on the keyboard instead, and Lumen stands down under it.
+//
+// The panel's expand button fills the shell with it (docs/68, 2026-10-15): edge
+// to edge inside the safe area, over the page and over Lumen, down to the
+// keyboard when one is up. The page under it does not move either way.
 
 import type { ShellKeyboard } from "../common/useKeyboardInset";
 
@@ -35,4 +39,12 @@ export function panelPadding(
 		paddingTop,
 		paddingBottom: `calc(max(24px, env(safe-area-inset-bottom)) + ${PANEL_ABOVE_BODY_PX + liftPx}px)`,
 	};
+}
+
+/** The layer's padding with the panel filling the shell. */
+export function fullPadding(keyboard: ShellKeyboard | null): { paddingTop: string; paddingBottom: string } {
+  return {
+    paddingTop: "env(safe-area-inset-top)",
+    paddingBottom: keyboard && panelOnKeyboard(keyboard) ? `${keyboard.covered}px` : "env(safe-area-inset-bottom)",
+  };
 }

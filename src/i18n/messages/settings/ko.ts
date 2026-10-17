@@ -4,7 +4,8 @@ import type en from "./en";
 export default {
   title: "설정",
   done: "완료",
-  "tab.account": "계정",
+  "tab.account": "AI 및 동기화",
+  "tab.accounts": "계정",
   "tab.features": "기능",
   "tab.optional": "선택 사항",
   connected: "연결됨",

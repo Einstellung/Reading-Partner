@@ -39,8 +39,6 @@ export interface TopicSearch {
   // "ts-" + 8 hex.
   id: string;
   name: string;
-  // The reading topic results and dossiers are filed under.
-  topicId: string;
   // The concern statement that says the reader is following this.
   concernId: string | null;
   // One paragraph of scope, in the reader's words.
