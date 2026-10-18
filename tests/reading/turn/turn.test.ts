@@ -36,6 +36,9 @@ import { appRunner } from "../../../src/legion/runner/runner";
 import { registerWorker } from "../../../src/legion/runner/worker";
 import type { Run } from "../../../src/legion/run";
 import { toolText } from "../../support/tool-text";
+import { providers } from "../../../src/ai/providers";
+import { FIND_PAPER_PROMPT } from "../../../src/reading/papers/citation-tool";
+import { WEB_SEARCH_PROMPT, WEB_SEARCH_UNAVAILABLE_PROMPT } from "../../../src/websearch/prompt";
 
 // An empty in-memory AppData, so every optional read misses (the overview note,
 // the observation index) and the turn treats them as "not there yet" — and so
@@ -192,6 +195,28 @@ test("companion turn: reading tools only, kickoff as the first message", async (
   ]);
   expect(turn!.messages).toEqual([{ role: "user", text: EXPLAIN_KICKOFF }]);
   expect(turn!.systemPrompt).toContain("inline caches");
+});
+
+// When to search rides with web_search; where the provider cannot search, the
+// line saying so rides instead (docs/info/24).
+test("the web-search paragraph rides only where web_search is mounted", async () => {
+  const mounted = await buildReadingTurn(input());
+  expect(mounted!.systemPrompt).toContain(WEB_SEARCH_PROMPT);
+  expect(mounted!.systemPrompt).not.toContain(WEB_SEARCH_UNAVAILABLE_PROMPT);
+  // Last in the literature group, which is where the cache order wants it.
+  expect(mounted!.systemPrompt.indexOf(WEB_SEARCH_PROMPT)).toBeGreaterThan(
+    mounted!.systemPrompt.indexOf(FIND_PAPER_PROMPT),
+  );
+
+  const groq: Settings = {
+    ...settings,
+    defaultProviderId: "groq",
+    defaultModelId: providers.groq.getModels()[0].id,
+  };
+  const unmounted = await buildReadingTurn(input({ settings: groq }));
+  expect(names(unmounted!.tools)).not.toContain("web_search");
+  expect(unmounted!.systemPrompt).not.toContain(WEB_SEARCH_PROMPT);
+  expect(unmounted!.systemPrompt).toContain(WEB_SEARCH_UNAVAILABLE_PROMPT);
 });
 
 // The literature tools are the ones that do not depend on the book: a book with no

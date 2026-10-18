@@ -34,6 +34,7 @@ import {
 import { addSourceSystemPrompt } from "../sources/source-skill";
 import { holdSecretaryTools } from "./role";
 import { labGuidance } from "./lab-tool";
+import { webSearchPrompt } from "../../websearch/prompt";
 import {
   articleContextSection,
   briefingChatSystemPrompt,
@@ -158,7 +159,10 @@ async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<Des
   const topicId = getThread(env.thread.key, env.thread.id)?.topicId ?? null;
   const observations = await topicObservations(topicId, ref.listObservations);
   if (env.signal?.aborted) return null;
-  const base = join(briefingPrompt(ref), labSection(ref));
+  // When to search (docs/info/24), said only where the companion has tools at
+  // all: whether web_search is among them is the provider's to decide.
+  const search = tools.length > 0 ? webSearchPrompt(tools.map((t) => t.name)) : "";
+  const base = join(briefingPrompt(ref), labSection(ref), search);
   return {
     kind: INFO_BRIEFING_KIND,
     label: ref.onboarding ? "Subscriptions" : "Today's briefing",

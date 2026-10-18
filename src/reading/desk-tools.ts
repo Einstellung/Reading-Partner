@@ -20,6 +20,7 @@ import { bookDeleter, liveTranslateToolDeps } from "./translate/tool-live";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
 import { RESEARCH_PROMPT } from "./papers/research-agent";
 import { liveWebSearchTools } from "../websearch/tool";
+import { webSearchPrompt } from "../websearch/prompt";
 import { buildReadPageTool } from "../info/sources/read-page-tool";
 import { infoFetch } from "../workshop/extract/http";
 
@@ -45,18 +46,24 @@ export interface BookSideToolDeps {
 export interface BookSideTools {
   shelf: AgentTool[];
   literature: AgentTool[];
+  // The literature group's paragraphs, which depend on what was mounted:
+  // web_search is there only where the provider can search.
+  literaturePrompts: string[];
 }
 
 // The paragraphs of those tools, in the order they have always come out in:
 // the shelf's before whatever the rest of the desk brought, the literature's
-// after.
+// after. The web-search paragraph is last in the literature group, so a
+// provider change moves nothing ahead of it.
 export const SHELF_TOOL_PROMPTS = [
   INGEST_URL_PROMPT,
   REMOVE_SUPPLEMENT_PROMPT,
   TRANSLATE_PROMPT,
   READ_SUPPLEMENT_PROMPT,
 ];
-export const LITERATURE_TOOL_PROMPTS = [FIND_PAPER_PROMPT, RESEARCH_PROMPT];
+export function literatureToolPrompts(literature: readonly AgentTool[]): string[] {
+  return [FIND_PAPER_PROMPT, RESEARCH_PROMPT, webSearchPrompt(literature.map((t) => t.name))];
+}
 
 export function bookSideTools(deps: BookSideToolDeps): BookSideTools {
   const { bookId, docId, topicId, threadId, settings: s, pipeline } = deps;
@@ -158,5 +165,10 @@ export function bookSideTools(deps: BookSideToolDeps): BookSideTools {
   const search = liveWebSearchTools(s, { caller: "reading", bookId, sessionId: threadId });
   const web = search.length ? [...search, buildReadPageTool({ fetchFn: infoFetch })] : [];
 
-  return { shelf: [...ingest, ...supplement, ...translate, ...readSupplement], literature: [findPaper, ...web] };
+  const literature = [findPaper, ...web];
+  return {
+    shelf: [...ingest, ...supplement, ...translate, ...readSupplement],
+    literature,
+    literaturePrompts: literatureToolPrompts(literature),
+  };
 }

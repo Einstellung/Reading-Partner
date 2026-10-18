@@ -99,7 +99,7 @@ import {
   replayedLesson,
   type ReadingTurnMessage,
 } from "./desk-history";
-import { bookSideTools, LITERATURE_TOOL_PROMPTS, SHELF_TOOL_PROMPTS } from "./desk-tools";
+import { bookSideTools, SHELF_TOOL_PROMPTS } from "./desk-tools";
 import { savedArticlesKind } from "./saved/saved-articles-desk";
 import { issueDeskKind } from "./issue-desk";
 
@@ -594,7 +594,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       // brought — a kept article's paragraph among them — because the order they
       // came out in before the desk existed is the order the provider's cache
       // still remembers.
-      toolPrompts: [...SHELF_TOOL_PROMPTS, ...view.toolPrompts, ...LITERATURE_TOOL_PROMPTS],
+      toolPrompts: [...SHELF_TOOL_PROMPTS, ...view.toolPrompts, ...sideTools.literaturePrompts],
       supplements: supplementsSection(supplements, viewing),
       ...(focusChapter ? { focusLabel: chapterFocusLabel(focusChapter) } : {}),
       // Memory, as one paragraph of three blocks in a fixed order (docs/48),

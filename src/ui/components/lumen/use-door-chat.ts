@@ -49,7 +49,7 @@ import {
 } from "../chat/chatParts";
 import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
-import { doorTools } from "./door-tools";
+import { doorTools, doorToolsPrompt } from "./door-tools";
 import { getOpenIssue, issueDoorTurn, noteOnLastLine, type IssueQuote } from "./issue-context";
 import { listenToThread, withArrivedRow } from "./door-arrivals";
 import { quotedQuestion } from "../chat/quoted-question";
@@ -202,33 +202,35 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
         const answers = latest?.role === "user" ? issueAnswerNote(issueCards(history).map((c) => c.card), latest.ts) : "";
         const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) + issue.note + answers : "";
         const sent = noteOnLastLine(history, note);
+        // The door's own tools, beside the soul's (door-tools.ts).
+        const tools = doorTools({
+          threadId: id,
+          date,
+          raiseCard: (prefix, payload) => raiseCardRef.current(prefix, payload),
+          links: linksToTake(history),
+          settings: await loadSettings(),
+          readerLines: () =>
+            history
+              .filter((m) => m.role === "user")
+              .map((m) => ({ ...(m.id ? { id: m.id } : {}), ts: m.ts, text: m.text })),
+          // Read when called: a card drawn earlier in the same turn counts.
+          latestTopicSearchCard: () => {
+            const found = latestCardOf(messagesRef.current, "topic-search-proposal");
+            return found ? { cardId: found.cardId, card: found.payload } : null;
+          },
+          applyTopicSearchCard: (cardId) => applyTopicSearchRef.current(cardId),
+        });
         const prepared = await prepareDoorTurn({
           threadId: id,
           date,
           history: replayableHistory(sent),
           ...(issue.desk.length > 0 ? { desk: issue.desk } : {}),
           signal,
-          // The door's own tools, beside the soul's (door-tools.ts).
-          tools: doorTools({
-            threadId: id,
-            date,
-            raiseCard: (prefix, payload) => raiseCardRef.current(prefix, payload),
-            links: linksToTake(history),
-            settings: await loadSettings(),
-            readerLines: () =>
-              history
-                .filter((m) => m.role === "user")
-                .map((m) => ({ ...(m.id ? { id: m.id } : {}), ts: m.ts, text: m.text })),
-            // Read when called: a card drawn earlier in the same turn counts.
-            latestTopicSearchCard: () => {
-              const found = latestCardOf(messagesRef.current, "topic-search-proposal");
-              return found ? { cardId: found.cardId, card: found.payload } : null;
-            },
-            applyTopicSearchCard: (cardId) => applyTopicSearchRef.current(cardId),
-          }),
+          tools,
           topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
-          // How a topic search is drafted, and the ones the reader has (docs/info/88); asking how background work is going.
-          prompt: `${await loadTopicSearchGuidance()}\n\n${BACKGROUND_STATUS_RULE}`,
+          // How a topic search is drafted, and the ones the reader has (docs/info/88); asking how background
+          // work is going; when to search the web.
+          prompt: `${await loadTopicSearchGuidance()}\n\n${BACKGROUND_STATUS_RULE}\n\n${doorToolsPrompt(tools)}`,
         });
         if (prepared.kind === "no-provider") return { kind: "failed", message: t("info.errors.noProvider") };
         if (prepared.kind === "refused") return { kind: "refused", message: prepared.text };

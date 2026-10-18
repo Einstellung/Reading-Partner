@@ -30,6 +30,7 @@ import { installAppData } from "../../support/appdata-fake";
 import type { AgentTool } from "../../../src/legion/durable/contract";
 import type { CompanionContext } from "../../../src/info/briefer/chat";
 import type { Briefing } from "../../../src/info/boxes/types";
+import { WEB_SEARCH_PROMPT, WEB_SEARCH_UNAVAILABLE_PROMPT } from "../../../src/websearch/prompt";
 
 const CTX: CompanionContext = { reader: "Reads robotics.", sources: [], collecting: true };
 
@@ -140,6 +141,22 @@ test("an article desk keeps the briefing first and the article after it", async 
   expect(briefingAt).toBeGreaterThanOrEqual(0);
   expect(articleAt).toBeGreaterThan(briefingAt);
   expect(turn.systemPrompt).toContain("the full body text");
+});
+
+// When to search rides with the companion's tools, and says what the provider
+// can do: search, or not (docs/info/24).
+test("the briefing says when to search only where it has tools, and whether it can", async () => {
+  const searching = await assemble([briefingRef], [tool("read_page"), tool("web_search")]);
+  expect(searching.systemPrompt).toContain(WEB_SEARCH_PROMPT);
+  expect(searching.systemPrompt).not.toContain(WEB_SEARCH_UNAVAILABLE_PROMPT);
+
+  const notSearching = await assemble([briefingRef], [tool("read_page")]);
+  expect(notSearching.systemPrompt).not.toContain(WEB_SEARCH_PROMPT);
+  expect(notSearching.systemPrompt).toContain(WEB_SEARCH_UNAVAILABLE_PROMPT);
+
+  const noTools = await assemble([briefingRef]);
+  expect(noTools.systemPrompt).not.toContain(WEB_SEARCH_PROMPT);
+  expect(noTools.systemPrompt).not.toContain(WEB_SEARCH_UNAVAILABLE_PROMPT);
 });
 
 // The article brings a body of text and nothing else: what the companion can do
