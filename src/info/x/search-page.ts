@@ -158,8 +158,8 @@ export interface XCounts {
 }
 
 export interface XLinkOut {
-  /** The t.co link the post carries. */
-  tco: string;
+  /** The t.co link the post carries; null for a link the page gave without t.co (a permalink page's anchor straight to the target). */
+  tco: string | null;
   /** The real target: from the page when it spells it out, else from t.co's redirect, else null. */
   url: string | null;
   /** A card's link (title and domain only on the page) rather than one in the text. */
@@ -241,7 +241,7 @@ function nameOf(userName: string): string {
 }
 
 /** A t.co anchor's text when it spells out an http(s) URL. */
-function spelledUrl(text: string): string | null {
+export function spelledUrl(text: string): string | null {
   const t = text.trim();
   if (!/^https?:\/\/\S+$/.test(t)) return null;
   try {

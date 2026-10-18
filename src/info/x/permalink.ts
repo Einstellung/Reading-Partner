@@ -16,6 +16,7 @@
 import { escapeHtmlAttr, escapeHtmlText } from "../../platform/std/text";
 import { isObject } from "../../platform/std/json";
 import { isXHost, largePhoto } from "./post";
+import { spelledUrl, type XLinkOut } from "./search-page";
 
 /** Evaluated in the page; its value is JSON (workshop/extract/webview-page). */
 export const PERMALINK_SCRIPT = `(function () {
@@ -38,6 +39,7 @@ export const PERMALINK_SCRIPT = `(function () {
       href: a.href,
       path: a.getAttribute("href") || "",
       text: (a.innerText || "").trim().slice(0, 200),
+      quoted: a.closest("article") !== article,
     }));
     const images = [];
     for (const img of Array.from(article.querySelectorAll("img"))) {
@@ -72,6 +74,8 @@ export interface PageAnchor {
   /** As the page spells it: relative for x.com's own links. */
   path: string;
   text: string;
+  /** Inside a quoted post's <article>: the quoted author's link, not this post's. */
+  quoted: boolean;
 }
 
 export interface PagePost {
@@ -105,6 +109,7 @@ export function parsePermalinkResult(value: unknown): PermalinkRead | null {
         href: typeof a.href === "string" ? a.href : "",
         path: typeof a.path === "string" ? a.path : "",
         text: typeof a.text === "string" ? a.text : "",
+        quoted: a.quoted === true,
       }));
     const profile = anchors.map((a) => PROFILE_PATH.exec(a.path)).find((m) => m !== null);
     const statusIds = anchors
@@ -293,6 +298,37 @@ export function outboundAnchors(post: PagePost): string[] {
     }
     if (isXHost(host) || out.includes(a.href)) continue;
     out.push(a.href);
+  }
+  return out;
+}
+
+const TCO = /^https:\/\/t\.co\/\w+$/;
+
+/**
+ * The links out of X that a post's own text and card carry, a quoted post's
+ * left out, the way the search page's reader keeps them: a t.co link with the
+ * target its words spell out (X's hidden part included, the ellipsis not), else
+ * with none yet; a link straight to its target as that target.
+ */
+export function outboundLinks(post: PagePost): XLinkOut[] {
+  const out: XLinkOut[] = [];
+  for (const a of post.anchors) {
+    if (a.quoted) continue;
+    let host: string;
+    try {
+      host = new URL(a.href).hostname;
+    } catch {
+      continue;
+    }
+    if (isXHost(host)) continue;
+    if (TCO.test(a.href)) {
+      const url = spelledUrl(a.text.replace(/…$/, ""));
+      const at = out.findIndex((l) => l.tco === a.href);
+      if (at < 0) out.push({ tco: a.href, url, card: false });
+      else if (url && !out[at].url) out[at] = { ...out[at], url };
+    } else if (!out.some((l) => l.url === a.href)) {
+      out.push({ tco: null, url: a.href, card: false });
+    }
   }
   return out;
 }

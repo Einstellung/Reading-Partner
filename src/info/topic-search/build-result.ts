@@ -375,6 +375,7 @@ export async function readOriginals(targets: readonly Target[], deps: SourceDeps
       out.reasons.push(read.reason);
       return;
     }
+    if (read.note) out.reasons.push(read.note);
     const m = await registry.register(read.input);
     if (!out.materials.includes(m.id)) out.materials.push(m.id);
     if (out.first === null) out.first = { facts: read.facts, title: m.title };

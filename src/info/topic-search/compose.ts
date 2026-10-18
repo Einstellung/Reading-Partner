@@ -158,6 +158,8 @@ function itemSources(item: TopicSearchResultItem, registry: MaterialRegistry, ea
     factsText(item.facts),
     ...item.links.posts.map((p) => p.text),
     ...item.materials.map((m) => registry.text(m) ?? ""),
+    // The prompt shows each material's title and section headings too.
+    ...item.materials.flatMap((m) => [registry.get(m)?.title ?? "", ...registry.sections(m).map((s) => s.heading ?? "")]),
     ...item.verify.discrepancies.map((d) => `${d.says} ${d.difference ?? ""}`),
   ];
 }

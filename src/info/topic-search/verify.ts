@@ -11,8 +11,9 @@
 // listing, with its facts from the counted GitHub lookup; any other link through
 // 86's `open` route (readers, site adapters, the generic page and PDF read),
 // injected as `openLink`; a post that is its own content is read whole through
-// the same route when the search page cut it, and the links in its full text
-// name the original read beside it (pitfall 657).
+// the same route when the search page cut it, and the links the reader kept,
+// those its text names and those in its full text name the original read
+// beside it (pitfall 657).
 //
 // A link the site answers with a PDF — by its bytes, whatever its address says —
 // is read from the PDF's text layer through `readPdfText`, with the budget of a
@@ -33,6 +34,7 @@ import { arxivIdUrl, arxivPdfUrl, parseArxivAtom } from "../sources/plugins/arxi
 import type { RepoLookup } from "../sources/plugins/github-lookup";
 import { isXHost } from "../x/post";
 import type { XSearchPost } from "../x/search-page";
+import { linkKey, postLinksOut } from "../x/text-links";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
 import type { PaperInfo } from "./rank-pool";
 import {
@@ -125,6 +127,8 @@ export type SourceRead =
       links?: string[];
       /** The steps of the read, in order; a failed one makes the read partial. */
       steps: StepRecord[];
+      /** Why the read fell short, in plain words, for the item's reason: a post read only as far as its search card. */
+      note?: string;
     }
   | { ok: false; reason: string; steps: StepRecord[] };
 
@@ -215,7 +219,12 @@ async function readArxivHtml(id: string, deps: SourceDeps, signal: AbortSignal):
   if (/^untitled document$/i.test(title)) return fail("no_such_format", "arXiv has no HTML version of it");
   const html = bodyOfArxivHtml(res.text);
   if (htmlToText(html).length <= ARXIV_HTML_MIN_CHARS) return fail("no_such_format", "arXiv's HTML version holds no body text");
-  return { ok: true, title: arxivHtmlTitle(res.text, title) || null, sections: htmlSections(html, htmlToText) };
+  return { ok: true, title: arxivHtmlTitle(res.text, title) || null, sections: htmlSections(headingsWithoutNotes(html), htmlToText) };
+}
+
+/** The HTML with LaTeXML's footnotes taken out of its headings: a `\thanks` on a heading is a paragraph, not a name. */
+function headingsWithoutNotes(html: string): string {
+  return html.replace(/<h([1-6])\b[^>]*>[\s\S]*?<\/h\1>/gi, (h) => withoutNotes(h));
 }
 
 /**
@@ -590,24 +599,30 @@ async function readPage(url: string, deps: SourceDeps, signal: AbortSignal): Pro
 async function readSelfPost(post: XSearchPost, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   let sections = [{ heading: null as string | null, text: [post.text, post.quoted ? `Quoting @${post.quoted.handle ?? "?"}: ${post.quoted.text}` : ""].filter(Boolean).join("\n\n") }];
   let title: string | null = null;
-  let links: string[] = [];
+  // The links the reader found (the card's, its permalink page's, the ones its text names), then the full text's.
+  const links = postLinksOut(post).map((l) => l.url);
+  const addLinks = (more: readonly string[]) => {
+    for (const url of more) if (!links.some((l) => linkKey(l) === linkKey(url))) links.push(url);
+  };
   let whole = !post.truncated;
+  let note: string | undefined;
   const steps: StepRecord[] = [];
   if (post.truncated || post.article) {
     const opened = await deps.openLink(post.permalink, signal).catch((e): OpenedLink => {
       if (signal.aborted) throw e;
       return { ok: false, code: codeOfError(e), reason: errText(e) };
     });
-    if (opened.ok) {
-      links = opened.links;
-      const read = openedSections(opened);
-      if (read.length) {
-        sections = read;
-        title = opened.title;
-        whole = true;
-        steps.push(okStep("post"));
-      } else steps.push(failedStep(failure("post", "too_short", "the post's page had no text")));
-    } else steps.push(failedStep(failure("post", opened.code, opened.reason)));
+    const failed = opened.ok ? (openedSections(opened).length ? null : failure("post", "too_short", "the post's page had no text")) : failure("post", opened.code, opened.reason);
+    if (opened.ok) addLinks(opened.links);
+    if (opened.ok && !failed) {
+      sections = openedSections(opened);
+      title = opened.title;
+      whole = true;
+      steps.push(okStep("post"));
+    } else if (failed) {
+      steps.push(failedStep(failed));
+      note = `only the start of the post the search page showed was read: ${failed.detail}`;
+    }
   }
   return {
     ok: true,
@@ -623,6 +638,7 @@ async function readSelfPost(post: XSearchPost, deps: SourceDeps, signal: AbortSi
     facts: { kind: "post", handle: post.handle, name: post.name, postedAt: post.postedAt, counts: countsOf(post) },
     links,
     steps,
+    ...(note ? { note } : {}),
   };
 }
 

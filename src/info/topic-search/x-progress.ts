@@ -3,7 +3,8 @@
 // and the device's daily allowance of X pages. Pure shapes and folds; where the
 // files live is the caller's.
 
-import type { XHalt, XSearchPost } from "../x/search-page";
+import type { XHalt, XLinkOut, XSearchPost } from "../x/search-page";
+import { linkKey } from "../x/text-links";
 
 /** Why a line stopped being read. */
 export type XLineStop =
@@ -35,7 +36,15 @@ export type XStep = { n: number; at: number; activeMs: number } & (
   | { kind: "stay"; line: string; ms: number; chars: number; why: "screen" | "long" | "sitting" | "between" }
   | { kind: "scroll"; line: string; asked: number; moved: number }
   | { kind: "line-end"; line: string; why: XLineStop; screens: number; kept: number; topId: string | null }
-  | { kind: "permalink"; line: string; id: string; status: string; text: string | null }
+  | {
+      kind: "permalink";
+      line: string;
+      id: string;
+      status: string;
+      text: string | null;
+      /** The post's links out on its own page, as read there; absent in files written before 2026-10-18. */
+      links?: XLinkOut[];
+    }
   | { kind: "expand"; tco: string; url: string | null }
   | { kind: "halt"; halt: XHalt }
   | { kind: "end"; status: XRunStatus; why: string | null }
@@ -113,6 +122,22 @@ export function localDay(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/**
+ * A post after its permalink page was read: the whole text when the page gave
+ * it, and the links out the page showed added to the search card's, each once
+ * (pitfall 657: the card of a cut-short post carries only the links in the part
+ * it shows).
+ */
+export function afterPermalink(post: XSearchPost, text: string | null, links: readonly XLinkOut[]): XSearchPost {
+  const merged = [...post.links];
+  for (const l of links) {
+    const same = merged.findIndex((m) => (l.tco !== null && m.tco === l.tco) || (l.url !== null && m.url !== null && linkKey(m.url) === linkKey(l.url)));
+    if (same < 0) merged.push(l);
+    else if (l.url && !merged[same].url) merged[same] = { ...merged[same], url: l.url };
+  }
+  return { ...post, ...(text ? { text, truncated: false } : {}), links: merged };
+}
+
 /** What a run had done when its progress file was last written. */
 export interface XReplay {
   order: string[] | null;
@@ -167,7 +192,7 @@ export function replay(steps: readonly XStep[]): XReplay {
         out.pages.permalink++;
         out.permalinked.add(step.id);
         const kept = out.posts.get(step.id);
-        if (kept && step.text) out.posts.set(step.id, { ...kept, post: { ...kept.post, text: step.text, truncated: false } });
+        if (kept) out.posts.set(step.id, { ...kept, post: afterPermalink(kept.post, step.text, step.links ?? []) });
         break;
       }
       case "expand":
@@ -183,11 +208,17 @@ export function replay(steps: readonly XStep[]): XReplay {
   }
   // A link's target found after the post was kept is written into the post.
   for (const [id, kept] of out.posts) {
-    if (!kept.post.links.some((l) => l.url === null && out.expanded.get(l.tco))) continue;
-    const links = kept.post.links.map((l) => (l.url === null ? { ...l, url: out.expanded.get(l.tco) ?? null } : l));
-    out.posts.set(id, { ...kept, post: { ...kept.post, links } });
+    const post = withExpanded(kept.post, out.expanded);
+    if (post !== kept.post) out.posts.set(id, { ...kept, post });
   }
   return out;
+}
+
+/** The post with each t.co link it carries unread given its target from `expanded`; the same post when none is there. */
+export function withExpanded(post: XSearchPost, expanded: ReadonlyMap<string, string | null>): XSearchPost {
+  const target = (l: XLinkOut) => (l.url === null && l.tco !== null ? (expanded.get(l.tco) ?? null) : null);
+  if (!post.links.some(target)) return post;
+  return { ...post, links: post.links.map((l) => ({ ...l, url: l.url ?? target(l) })) };
 }
 
 /** A running count of a run's X progress file, fed one step at a time. */

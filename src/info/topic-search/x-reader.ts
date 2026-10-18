@@ -11,7 +11,8 @@
 // go in a shuffled order, reading comes in sittings with breaks between, and
 // every search and permalink page counts against the run's ceiling and the
 // device's daily allowance. A cut-short post that clears the local relevance
-// floor gets its permalink page opened for the whole text.
+// floor gets its permalink page opened for the whole text and the links out of
+// it, which the search card did not show (pitfall 657).
 //
 // Every step is a line in the progress file. Called again with the same file,
 // the run picks up where it was: finished lines are not read again, kept posts
@@ -25,7 +26,7 @@
 
 import type { BrowseOpen, BrowseSession } from "../../workshop/extract/webview-browse";
 import { localRelevance, prepareQuery, RELEVANCE_FLOOR } from "../rank/relevance";
-import { bodyText, focalPost, parsePermalinkResult, PERMALINK_SCRIPT, postBodyLines } from "../x/permalink";
+import { bodyText, focalPost, outboundLinks, parsePermalinkResult, PERMALINK_SCRIPT, postBodyLines } from "../x/permalink";
 import {
   noResults,
   PAGE_CHROME_SCRIPT,
@@ -35,11 +36,13 @@ import {
   SEARCH_READY,
   xSearchUrl,
   type XHalt,
+  type XLinkOut,
   type XSearchLineSpec,
   type XSearchPost,
 } from "../x/search-page";
 import { draw, drawInt, fitViewport, screenStayMs, scrollSteps, X_PACE, type XPace } from "./x-pace";
 import {
+  afterPermalink,
   atOrBehind,
   localDay,
   markAfter,
@@ -53,6 +56,7 @@ import {
   type XReplay,
   type XRunStatus,
   type XStep,
+  withExpanded,
 } from "./x-progress";
 
 const MIN = 60_000;
@@ -429,18 +433,7 @@ class Run {
   /** After a line: links out that the page did not spell out, and permalink pages for cut-short posts worth it. */
   private async followUp(session: BrowseSession, line: XReadLine): Promise<void> {
     const mine = [...this.past.posts.values()].filter((k) => k.line === line.key);
-    for (const kept of mine) {
-      for (const link of kept.post.links) {
-        if (link.url !== null || this.past.expanded.has(link.tco)) continue;
-        const url = await this.deps.expandLink(link.tco).catch(() => null);
-        this.past.expanded.set(link.tco, url);
-        await this.log({ kind: "expand", tco: link.tco, url });
-      }
-      if (kept.post.links.some((l) => l.url === null && this.past.expanded.get(l.tco))) {
-        const links = kept.post.links.map((l) => (l.url === null ? { ...l, url: this.past.expanded.get(l.tco) ?? null } : l));
-        this.past.posts.set(kept.post.id, { ...kept, post: { ...kept.post, links } });
-      }
-    }
+    for (const kept of mine) await this.expandLinks(kept.post.id);
 
     const query = prepareQuery(line.relevance);
     const owed = mine
@@ -473,15 +466,32 @@ class Run {
         }
       }
       const ev = await session.evaluate(PERMALINK_SCRIPT);
-      const whole = wholeText(ev.value, post);
-      await this.log({ kind: "permalink", line: line.key, id: post.id, status: whole ? "ok" : "unread", text: whole });
+      const read = permalinkRead(ev.value, post);
+      const whole = read?.text ?? null;
+      // The links are written with the step, so a run picked up from the file keeps them.
+      await this.log({ kind: "permalink", line: line.key, id: post.id, status: whole ? "ok" : "unread", text: whole, links: read?.links ?? [] });
+      const kept = this.past.posts.get(post.id)!;
+      this.past.posts.set(post.id, { ...kept, post: afterPermalink(kept.post, whole, read?.links ?? []) });
+      await this.expandLinks(post.id);
       if (whole) {
-        const kept = this.past.posts.get(post.id)!;
-        this.past.posts.set(post.id, { ...kept, post: { ...kept.post, text: whole, truncated: false } });
         const extra = Math.max(0, whole.length - post.text.length);
         await this.stay(screenStayMs(extra, this.pace, this.deps.random), extra, "screen", line.key);
       }
     }
+  }
+
+  /** Where each t.co link of a kept post goes that the page did not spell out, asked once a run. */
+  private async expandLinks(id: string): Promise<void> {
+    const kept = this.past.posts.get(id);
+    if (!kept) return;
+    for (const link of kept.post.links) {
+      if (link.url !== null || link.tco === null || this.past.expanded.has(link.tco)) continue;
+      const url = await this.deps.expandLink(link.tco).catch(() => null);
+      this.past.expanded.set(link.tco, url);
+      await this.log({ kind: "expand", tco: link.tco, url });
+    }
+    const post = withExpanded(kept.post, this.past.expanded);
+    if (post !== kept.post) this.past.posts.set(id, { ...kept, post });
   }
 
   // --- time, ceilings, stopping -------------------------------------------------
@@ -572,13 +582,23 @@ export function shuffle<T>(items: readonly T[], random: () => number): T[] {
  * way the search page showed it.
  */
 export function wholeText(value: unknown, post: Pick<XSearchPost, "id" | "handle" | "text">): string | null {
+  return permalinkRead(value, post)?.text ?? null;
+}
+
+/**
+ * What a cut-short post's permalink page gave: its whole text (null as in
+ * `wholeText`) and the links out its own text and card carry there (pitfall
+ * 657), t.co ones not yet expanded; null when the post is not on the page.
+ */
+export function permalinkRead(value: unknown, post: Pick<XSearchPost, "id" | "handle" | "text">): { text: string | null; links: XLinkOut[] } | null {
   const read = parsePermalinkResult(value);
   if (!read) return null;
   const found = focalPost(read, post.id, post.handle);
   if (!found) return null;
+  const links = outboundLinks(found.focal);
   const text = bodyText(postBodyLines(found.focal.text, { handle: post.handle }));
   const squash = (s: string) => s.replace(/\s+/g, " ").trim();
   const head = squash(post.text).slice(0, 40);
-  if (!text || !squash(text).startsWith(head) || squash(text).length < squash(post.text).length) return null;
-  return text;
+  if (!text || !squash(text).startsWith(head) || squash(text).length < squash(post.text).length) return { text: null, links };
+  return { text, links };
 }

@@ -17,6 +17,7 @@ import { localRelevance, prepareQuery, RELEVANCE_FLOOR } from "../rank/relevance
 import { finalScore, mentionsAnchor } from "../rank/score";
 const DAY_MS = 86_400_000;
 import type { XSearchPost } from "../x/search-page";
+import { postLinksOut } from "../x/text-links";
 import { cut, letter, material, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
 import type { TopicQuery, TopicSearch } from "./types";
 import type { XReadResult } from "./x-reader";
@@ -162,7 +163,8 @@ export function gatherCandidates(topic: TopicSearch, x: XReadResult, arxiv: read
       at: post.postedAt,
       post,
       paper: null,
-      links: post.links.filter((l) => l.url).map((l) => ({ url: l.url as string, card: l.card })),
+      // The text's own links too: a link the page gave without t.co, or that the text only names (pitfall 657).
+      links: postLinksOut(post),
       relevance: 0,
       engagement: xEngagement(post.counts),
       mentionsAnchor: true,
