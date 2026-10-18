@@ -65,7 +65,7 @@ import {
   parseClaims,
   readPaperFull,
   readSource,
-  SOURCES_PER_ITEM,
+  ORIGINALS_PER_ITEM,
   type FetchText,
   type OpenLink,
   type SourceDeps,
@@ -270,12 +270,20 @@ const DRAFT_VIEW: SelectView<Draft> = {
   subtopic: (d) => (d.continuing ? null : subtopicOf(d)),
 };
 
-/** The originals to read for an item: its main thing, then one more pointing at the same story. */
+/** Papers before repositories before pages: what a post points at matters in that order. */
+const rankOfTarget = (t: Target): number => (t.kind === "paper" ? 0 : t.kind === "repo" ? 1 : 2);
+
+/**
+ * What to read for an item: the post that is its own content (one at most, read
+ * besides the originals) and up to ORIGINALS_PER_ITEM originals its events and
+ * its posts' links name, papers first, then repositories, then pages. The post
+ * leads when the item's first event is the post.
+ */
 export function targetsOf(draft: Draft): Target[] {
   const targets: Target[] = [];
   const seen = new Set<string>();
   const add = (key: string, url: string | null) => {
-    if (seen.has(key) || targets.length >= SOURCES_PER_ITEM) return;
+    if (seen.has(key)) return;
     seen.add(key);
     const [kind, rest] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
     if (kind === "arxiv") {
@@ -297,15 +305,19 @@ export function targetsOf(draft: Draft): Target[] {
     add(event.key, url);
   }
   // A post that is its own content still points at its paper or repository: that is its original.
-  if (targets.length < SOURCES_PER_ITEM) {
-    for (const m of draft.members) {
-      for (const l of m.cand.links) {
-        const key = eventKeyOfUrl(l.url);
-        if (key && (key.startsWith("arxiv:") || key.startsWith("github:"))) add(key, l.url);
-      }
+  for (const m of draft.members) {
+    for (const l of m.cand.links) {
+      const key = eventKeyOfUrl(l.url);
+      if (key && (key.startsWith("arxiv:") || key.startsWith("github:"))) add(key, l.url);
     }
   }
-  return targets;
+  const post = targets.find((t) => t.kind === "post");
+  const originals = targets
+    .filter((t) => t.kind !== "post")
+    .sort((a, b) => rankOfTarget(a) - rankOfTarget(b))
+    .slice(0, ORIGINALS_PER_ITEM);
+  if (!post) return originals;
+  return targets[0] === post ? [post, ...originals] : [...originals, post];
 }
 
 /** The original a link out of a post points at: a paper, a repository, else the page; null for a link to X. */
@@ -341,32 +353,43 @@ export interface ReadOriginals {
 /**
  * Read an item's originals: its targets, then the links out of a post read
  * whole (most posts are cut on the search page, so their links show only in the
- * full text), papers and repositories before pages, up to SOURCES_PER_ITEM.
+ * full text), up to ORIGINALS_PER_ITEM originals besides the post, papers
+ * first, then repositories, then pages.
+ * When the post leads, it is read first, so the links in it can take a place
+ * ahead of a page the item already named.
  */
 export async function readOriginals(targets: readonly Target[], deps: SourceDeps, registry: MaterialRegistry, signal: AbortSignal): Promise<ReadOriginals> {
-  const queue = [...targets];
-  const seen = new Set(queue.map(keyOfTarget));
+  const posts = targets.filter((t) => t.kind === "post");
+  const pending: Target[] = targets.filter((t) => t.kind !== "post");
+  const seen = new Set(targets.map(keyOfTarget));
   const out: ReadOriginals = { materials: [], reasons: [], first: null, original: null };
-  for (let k = 0; k < queue.length; k++) {
-    const t = queue[k];
+  let originalsTried = 0;
+  const readOne = async (t: Target) => {
     const read = await readSource(t, deps, signal);
     if (!read.ok) {
       out.reasons.push(read.reason);
-      continue;
+      return;
     }
     const m = await registry.register(read.input);
     if (!out.materials.includes(m.id)) out.materials.push(m.id);
     if (out.first === null) out.first = { facts: read.facts, title: m.title };
     if (out.original === null && t.kind !== "post") out.original = m.url;
-    const found = (read.links ?? []).map(targetOfLink).filter((x): x is { key: string; target: Target } => x !== null);
-    const rank = (x: { target: Target }) => (x.target.kind === "page" ? 1 : 0);
-    for (const x of [...found].sort((a, b) => rank(a) - rank(b))) {
-      if (queue.length >= SOURCES_PER_ITEM) break;
-      if (seen.has(x.key)) continue;
+    for (const x of (read.links ?? []).map(targetOfLink)) {
+      if (x === null || seen.has(x.key)) continue;
       seen.add(x.key);
-      queue.push(x.target);
+      pending.push(x.target);
     }
-  }
+  };
+  const readPending = async () => {
+    while (originalsTried < ORIGINALS_PER_ITEM && pending.length) {
+      pending.sort((a, b) => rankOfTarget(a) - rankOfTarget(b));
+      originalsTried++;
+      await readOne(pending.shift()!);
+    }
+  };
+  if (targets[0]?.kind !== "post") await readPending();
+  for (const p of posts) await readOne(p);
+  await readPending();
   return out;
 }
 

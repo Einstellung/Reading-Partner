@@ -5,12 +5,15 @@
 
 import type { FetchBytes } from "../../workshop/bindery";
 import { manuscriptText } from "../../workshop/bindery/manuscript";
+import type { ExtractReadable } from "../../workshop/extract/readable-select";
 import type { LinkReader } from "../links/readers";
 import { LinkSession } from "../links/session";
 import { linksOut, type OpenedLink } from "./verify";
 
 export interface OpenOriginalDeps {
   fetch: FetchBytes;
+  /** Cuts the article out of a generic web page; without it no plain page can be read. */
+  extractReadable: ExtractReadable;
   /** The readers to route by; the registered ones when absent. */
   readers?: readonly LinkReader[];
 }
@@ -19,6 +22,7 @@ export interface OpenOriginalDeps {
 export async function openOriginal(url: string, deps: OpenOriginalDeps): Promise<OpenedLink> {
   const session = new LinkSession<never>(url, {
     fetch: deps.fetch,
+    extractReadable: deps.extractReadable,
     ...(deps.readers ? { readers: deps.readers } : {}),
     file: async () => {
       throw new Error("a topic search reads originals and files nothing");

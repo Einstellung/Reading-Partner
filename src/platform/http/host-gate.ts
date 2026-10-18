@@ -34,16 +34,25 @@ export function isRateLimitError(e: unknown): e is RateLimitError {
 // Thrown instead of sending a request while the host's group is cooling down
 // from an earlier rate limit. A rate limit like any other to callers that only
 // ask isRateLimitError; one that wants to say "nothing was sent" asks for this.
+// `refused` marks the one request that was sent and drew the rate limit.
 export class HostCoolingDownError extends RateLimitError {
   constructor(
     host: string,
     public readonly until: number,
-    now: number,
+    private readonly now: number,
+    public readonly refused = false,
   ) {
     super(host);
     const minutes = Math.max(1, Math.ceil((until - now) / 60_000));
-    this.message = `${host} is cooling down after a rate limit (${minutes} min left); no request sent`;
+    this.message = refused
+      ? `${host} refused the request with a rate limit; cooling down (${minutes} min left)`
+      : `${host} is cooling down after a rate limit (${minutes} min left); no request sent`;
     this.name = "HostCoolingDownError";
+  }
+
+  /** The same cooldown, said of the request it refused. */
+  asRefusal(): HostCoolingDownError {
+    return new HostCoolingDownError(this.host, this.until, this.now, true);
   }
 }
 

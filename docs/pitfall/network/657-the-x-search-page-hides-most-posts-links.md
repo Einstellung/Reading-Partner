@@ -13,7 +13,7 @@ X 搜索页每条帖子只显示约 275 字，长帖和 X Article 后面截掉�
 ## 解法
 
 - `OpenedLink` 带 `links`：#1 那次读交出的候选，去掉 X 自己和本站导航，t.co 用读法已经展开的地址，不另发请求（`verify.ts` 的 `linksOut`，`open-link.ts`）。
-- `readSelfPost` 把全文里的链接交回，`build-result.ts` 的 `readOriginals` 把它们变成原文目标，论文和仓库在前、网页在后，补到每件 `SOURCES_PER_ITEM` 份；读到非帖子的原文时 `original` 记它、状态是 `compared`。
+- `readSelfPost` 把全文里的链接交回，`build-result.ts` 的 `readOriginals` 把它们变成原文目标，帖子之外每件最多读 `ORIGINALS_PER_ITEM`（2）份原文，论文先、仓库次、网页最后；读到非帖子的原文时 `original` 记它、状态是 `compared`。
 - `targetsOf` 对帖子领头的件也加搜索页上就有的论文和仓库链接。
 - 写总结时只有一节的 X 材料用整件的额度（`ITEM_MATERIAL_CHARS`），后面每还有一份材料给它留 1200 字。
 

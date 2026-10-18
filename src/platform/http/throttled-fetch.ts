@@ -166,7 +166,7 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
         lastWas429 = res.status === 429;
         lastError = new Error(`HTTP ${res.status} from ${host}`);
         const cooling = lastWas429 ? gate.coolingDown(host) : null;
-        if (cooling) throw cooling;
+        if (cooling) throw cooling.asRefusal();
         const asked = retryAfterMs(res.headers.get("retry-after"), now());
         const base = lastWas429 ? base429 : baseMs;
         // Capped: a host answering 429 with "retry-after: 999999" is asking for

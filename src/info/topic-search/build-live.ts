@@ -20,6 +20,7 @@ import { fetchWithRetry, interactiveRetry } from "../../platform/http/throttled-
 import type { FetchBytes } from "../../workshop/bindery";
 import { isPdfBytes } from "../../workshop/bindery/pdf";
 import { infoFetch } from "../../workshop/extract/http";
+import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { listStatements } from "../../memory/live/statements";
 import { arxivPlugin } from "../sources/plugins/arxiv";
 import { RepoLookups } from "../sources/plugins/github-lookup";
@@ -61,12 +62,13 @@ export const liveResultDeps: BuildResultDeps = {
   }),
   readPdfText: async (url) => {
     const got = await fetchBytes(url);
-    if (!got.ok || !isPdfBytes(got.bytes)) return null;
+    if (!got.ok) throw new Error(`${new URL(url).hostname} answered HTTP ${got.status}`);
+    if (!isPdfBytes(got.bytes)) return null;
     const { extractFulltext } = await import("../../fulltext/extract");
     const { pages, status } = await extractFulltext(got.bytes.slice().buffer);
     return status === "ok" ? pages.join("\n\n") : null;
   },
-  openLink: (url) => openOriginal(url, { fetch: fetchBytes }),
+  openLink: async (url) => openOriginal(url, { fetch: fetchBytes, extractReadable: await loadExtractReadable() }),
   repoLookups: () => {
     const lookups = new RepoLookups();
     return { lookup: (name) => lookups.lookup(name, { fetchFn: infoFetch }), quotaLeft: () => lookups.quotaRemaining };

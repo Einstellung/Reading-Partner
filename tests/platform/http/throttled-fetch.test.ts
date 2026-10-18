@@ -117,6 +117,9 @@ test("a 429 from a host now cooling down ends the loop without a retry or a wait
   }).catch((e) => e);
   expect(isHostCoolingDown(err)).toBe(true);
   expect(isRateLimitError(err)).toBe(true);
+  // This request was sent and refused, so the message does not say none was sent.
+  expect(err.refused).toBe(true);
+  expect(err.message).toBe("export.arxiv.org refused the request with a rate limit; cooling down (10 min left)");
   expect(calls).toBe(1);
   expect(sleeps).toEqual([]);
 });

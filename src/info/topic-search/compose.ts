@@ -22,12 +22,14 @@ import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE, type Top
 import { topicBlock } from "./rank-pool";
 import type { PaperDepth, ResultFacts, ResultRunKind, TopicSearchResultItem } from "./result-types";
 import type { TopicSearch } from "./types";
-import { PAPER_FULL_CHARS } from "./verify";
+import { ORIGINALS_PER_ITEM, PAPER_FULL_CHARS } from "./verify";
 
-/** Characters of an item's materials the write-up sees. */
+/** Characters of an item's materials the write-up sees, at least; an item with more materials gets a section's share for each. */
 export const ITEM_MATERIAL_CHARS = 2400;
 /** Characters of one section the write-up sees, where the item's budget is shared. */
 export const SECTION_CHARS = 1200;
+/** Materials an ordinary read gives an item at most: the post and its originals. */
+const MATERIALS_PER_ITEM = ORIGINALS_PER_ITEM + 1;
 /** Characters of an item's materials the write-up sees once its paper was read in full: the whole read, the abstract beside it. */
 const ITEM_FULL_CHARS = PAPER_FULL_CHARS + 4000;
 
@@ -215,16 +217,18 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     }
     for (const p of item.links.posts.slice(0, 3)) lines.push(`Post @${p.handle}: ${cut(p.text, 400)}`);
     const whole = depth === "full";
-    let left = whole ? ITEM_FULL_CHARS : ITEM_MATERIAL_CHARS;
+    let left = whole ? ITEM_FULL_CHARS : Math.max(ITEM_MATERIAL_CHARS, Math.min(item.materials.length, MATERIALS_PER_ITEM) * SECTION_CHARS);
     item.materials.forEach((id, k) => {
       const m = input.registry.get(id);
       const sections = input.registry.sections(id);
-      // A post or X Article read whole is one section: it takes the item's budget, less a section's share for each material after it.
+      // Each material leaves a section's share for each material after it. A post
+      // or X Article read whole is one section: it takes the rest of the budget.
       const onePost = m?.reader === "x" && sections.length === 1;
       const after = item.materials.length - k - 1;
       for (const s of sections) {
-        if (left <= 0) break;
-        const room = whole ? left : onePost ? Math.max(Math.min(left, SECTION_CHARS), left - after * SECTION_CHARS) : Math.min(left, SECTION_CHARS);
+        const mine = left - after * SECTION_CHARS;
+        const room = whole ? left : onePost ? Math.max(Math.min(left, SECTION_CHARS), mine) : Math.min(left, SECTION_CHARS, mine);
+        if (room <= 0) break;
         const text = cut(s.text, room);
         left -= text.length;
         lines.push(`${s.id}${s.heading ? ` (${s.heading})` : ""}${m?.title ? ` of "${m.title}"` : ""}: ${text}`);

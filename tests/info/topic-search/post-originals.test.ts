@@ -7,8 +7,9 @@ import { expect, test } from "bun:test";
 import { MaterialRegistry } from "../../../src/info/dossier/registry";
 import type { LinkReader } from "../../../src/info/links/readers";
 import type { XSearchPost } from "../../../src/info/x/search-page";
+import type { ExtractReadable } from "../../../src/workshop/extract/readable-select";
 import { readOriginals, targetsOf, type Draft } from "../../../src/info/topic-search/build-result";
-import { composePrompt, ITEM_MATERIAL_CHARS } from "../../../src/info/topic-search/compose";
+import { composePrompt, ITEM_MATERIAL_CHARS, SECTION_CHARS } from "../../../src/info/topic-search/compose";
 import { openOriginal } from "../../../src/info/topic-search/open-link";
 import type { TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
@@ -97,11 +98,12 @@ test("a post with links only in its full text gets its paper read beside it; the
   expect(paper.facts.body).toBe("HTML");
   expect(got.original).toBe(`https://arxiv.org/abs/${PAPER}`);
   expect(got.first?.facts.kind).toBe("post");
-  // Two originals per item: the repository and the blog are left.
-  expect(fetched.some((u) => u.includes("github"))).toBe(false);
+  // Two originals besides the post: the paper, then the repository; the blog is left.
+  expect(fetched.some((u) => u.includes("raw.githubusercontent.com/quill-lab/plate-planner"))).toBe(true);
+  expect(opened.includes("https://quill.example/blog/plates")).toBe(false);
 });
 
-test("a repository link is taken before a page, and the post's own links are not read twice", async () => {
+test("a repository link is read before a page, both beside the post, and the post's own links are not read twice", async () => {
   const opened: string[] = [];
   const openLink: OpenLink = async (url) => {
     const base = await fullPost(url, signal);
@@ -113,7 +115,39 @@ test("a repository link is taken before a page, and the post's own links are not
   const got = await readOriginals([{ kind: "post", post: POST }], deps({ fetchText, openLink, opened }), reg, signal);
   expect(got.materials.map((id) => reg.get(id)!.reader)).toEqual(["x", "github"]);
   expect(got.original).toBe("https://github.com/quill-lab/plate-planner");
+  expect(opened).toEqual([POST.permalink, "https://quill.example/blog/plates"]);
+  expect(got.reasons).toEqual(["not here"]);
+});
+
+test("the post's links name a paper ahead of a page the item already had; two originals at most", async () => {
+  const opened: string[] = [];
+  const fetched: string[] = [];
+  const fetchText: FetchText = async (url) => (url === `https://arxiv.org/html/${PAPER}` ? { status: 200, text: ARXIV_HTML } : { status: 404, text: "" });
+  const reg = registry();
+  const page = { kind: "page" as const, url: "https://news.example/quill-planner" };
+  const got = await readOriginals([{ kind: "post", post: POST }, page], deps({ fetchText, openLink: fullPost, opened, fetched }), reg, signal);
+  // The paper and the repository outrank the news page; the page is not opened.
   expect(opened).toEqual([POST.permalink]);
+  expect(fetched.some((u) => u.includes("raw.githubusercontent.com/quill-lab/plate-planner"))).toBe(true);
+  expect(got.materials.map((id) => reg.get(id)!.reader)).toEqual(["x", "arxiv"]);
+});
+
+test("an item's targets: the post leads, then papers before repositories before pages, two originals at most", () => {
+  const member = (key: string, over: Record<string, unknown>) => ({ key, mainUrl: null, cand: { post: null, paper: null, links: [], ...over } });
+  const post = member(`x:${POST.id}`, {
+    post: { ...POST, truncated: false },
+    links: [
+      { url: "https://github.com/quill-lab/plate-planner", card: false },
+      { url: `https://arxiv.org/abs/${PAPER}`, card: false },
+    ],
+  });
+  const page = { ...member("url:news.example/quill-planner", {}), mainUrl: "https://news.example/quill-planner" };
+  const draft = { cluster: { events: [{ key: `x:${POST.id}`, members: [post] }, { key: page.key, members: [page] }] }, members: [post, page] } as unknown as Draft;
+  expect(targetsOf(draft)).toEqual([
+    { kind: "post", post: { ...POST, truncated: false } },
+    { kind: "paper", id: PAPER, known: null },
+    { kind: "repo", owner: "quill-lab", repo: "plate-planner", url: "https://github.com/quill-lab/plate-planner" },
+  ]);
 });
 
 test("when neither the arXiv API, the HTML nor the PDF answers, the paper is unread with each reason; the post stays", async () => {
@@ -125,9 +159,38 @@ test("when neither the arXiv API, the HTML nor the PDF answers, the paper is unr
   const got = await readOriginals([{ kind: "post", post: POST }], deps({ fetchText, openLink: fullPost, readPdfText: async () => null }), reg, signal);
   expect(got.materials.length).toBe(1);
   expect(got.original).toBeNull();
-  expect(got.reasons).toEqual([
+  expect(got.reasons[0]).toBe(
     `arXiv ${PAPER} could not be read: the arXiv API: export.arxiv.org is cooling down after a rate limit (9 min left); no request sent; arXiv HTML answered HTTP 503; the PDF could not be read or has no text layer`,
-  ]);
+  );
+});
+
+test("a PDF whose fetch failed keeps the HTTP status in the reason", async () => {
+  const readPdfText = async (url: string): Promise<string | null> => {
+    throw new Error(`${new URL(url).hostname} answered HTTP 404`);
+  };
+  const got = await readSource({ kind: "paper", id: PAPER, known: null }, deps({ fetchText: async () => ({ status: 404, text: "" }), readPdfText }), signal);
+  expect(got).toEqual({
+    ok: false,
+    reason: `arXiv ${PAPER} could not be read: the arXiv API answered HTTP 404; arXiv HTML answered HTTP 404; the PDF: arxiv.org answered HTTP 404`,
+  });
+});
+
+test("a paper's title comes from the document heading, without its footnote", async () => {
+  const html =
+    "<html><head><title>[2610.04242] RecursiveSelf-Improvement in Labs*</title></head><body><article>" +
+    '<h1 class="ltx_title ltx_title_document">Recursive<br class="ltx_break">Self-Improvement in Labs' +
+    '<span class="ltx_note ltx_role_thanks" id="footnotex1"><sup class="ltx_note_mark">∗</sup><span class="ltx_note_outer"><span class="ltx_note_content"><sup class="ltx_note_mark">∗</sup>Work done at Quill.</span></span></span></h1>' +
+    `<h2>Abstract</h2><p>We schedule wet-lab plates.</p><h2>1 Introduction</h2><p>${"The planner books plates. ".repeat(400)}</p>` +
+    "</article></body></html>";
+  const fetchText: FetchText = async (url) => (url === `https://arxiv.org/html/${PAPER}` ? { status: 200, text: html } : { status: 404, text: "" });
+  const got = await readSource({ kind: "paper", id: PAPER, known: null }, deps({ fetchText }), signal);
+  if (!got.ok) throw new Error(got.reason);
+  expect(got.input.title).toBe("Recursive Self-Improvement in Labs");
+  // Without a document heading, the head's title, its footnote mark dropped.
+  const plain = html.replace(/<h1[\s\S]*?<\/h1>/, "");
+  const fromHead = await readSource({ kind: "paper", id: PAPER, known: null }, deps({ fetchText: async (url) => (url.includes("/html/") ? { status: 200, text: plain } : { status: 404, text: "" }) }), signal);
+  if (!fromHead.ok) throw new Error(fromHead.reason);
+  expect(fromHead.input.title).toBe("RecursiveSelf-Improvement in Labs");
 });
 
 test("without arXiv HTML the paper's body comes from its PDF", async () => {
@@ -181,12 +244,45 @@ const fakeX = (html: string): LinkReader => ({
 
 test("the open route hands back a post's expanded links, and a failed page keeps its message", async () => {
   const fetch = async (url: string) => ({ ok: false, status: 503, bytes: new Uint8Array(), contentType: null, url });
-  const post = await openOriginal(POST.permalink, { fetch, readers: [fakeX(FULL_POST_HTML)] });
+  const post = await openOriginal(POST.permalink, { fetch, extractReadable: articleOf, readers: [fakeX(FULL_POST_HTML)] });
   if (!post.ok) throw new Error(post.reason);
   expect(post.via).toBe("x");
   expect(post.links).toEqual([`https://arxiv.org/abs/${PAPER}`]);
-  const page = await openOriginal("https://quill.example/blog/plates", { fetch, readers: [] });
+  const page = await openOriginal("https://quill.example/blog/plates", { fetch, extractReadable: articleOf, readers: [] });
   expect(page).toEqual({ ok: false, reason: "quill.example answered HTTP 503" });
+});
+
+/** A stand-in for Readability: the page's <article>, its <h1> as the title. */
+const articleOf: ExtractReadable = (html) => {
+  const body = /<article>([\s\S]*?)<\/article>/.exec(html)?.[1];
+  if (body === undefined) return null;
+  return { title: /<h1>([^<]*)<\/h1>/.exec(body)?.[1] ?? "", contentHtml: body, textContent: body.replace(/<[^>]+>/g, " ") };
+};
+
+const pageFetch = (html: string) => async (url: string) => ({
+  ok: true,
+  status: 200,
+  bytes: new TextEncoder().encode(html),
+  contentType: "text/html; charset=utf-8",
+  url,
+});
+
+test("a plain web page original is read through the open route with the injected extractor", async () => {
+  const html =
+    "<html><head><title>Quill ships a planner</title></head><body><nav>Home</nav><article><h1>Quill ships a planner</h1>" +
+    `<p>${"Quill's planner booked thirty plates in its first week and read every result back. ".repeat(6)}</p>` +
+    '<p>More at <a href="https://github.com/quill-lab/plate-planner">the repository</a>.</p></article></body></html>';
+  const got = await openOriginal("https://news.example/quill-planner", { fetch: pageFetch(html), extractReadable: articleOf, readers: [] });
+  if (!got.ok) throw new Error(got.reason);
+  expect(got.title).toBe("Quill ships a planner");
+  expect(got.sections.map((s) => s.html).join("")).toContain("thirty plates");
+  expect(got.links).toContain("https://github.com/quill-lab/plate-planner");
+});
+
+test("a plain web page with too little text says why it was not read", async () => {
+  const html = "<html><head><title>Quill</title></head><body><article><h1>Quill</h1><p>Short note.</p></article></body></html>";
+  const got = await openOriginal("https://news.example/short", { fetch: pageFetch(html), extractReadable: articleOf, readers: [] });
+  expect(got).toEqual({ ok: false, reason: "the body is only 18 characters, fewer than the 200 a document needs" });
 });
 
 test("a one-section X material takes the item's whole budget, less a share for the original after it", async () => {
@@ -210,4 +306,16 @@ test("a one-section X material takes the item's whole budget, less a share for t
   const paper = await reg.register({ url: `https://arxiv.org/abs/${PAPER}`, title: "Plate Planner", author: null, publishedAt: null, reader: "arxiv", facts: { arxivId: PAPER, depth: "abstract" }, sections: [{ heading: "Abstract", text: "We schedule plates." }] });
   const beside = shown([item([xm.id, paper.id])]);
   expect(beside.length).toBeLessThanOrEqual(1201);
+  // A post and two originals: each original keeps a section's share, however long the one before it.
+  const longPaper = await reg.register({
+    url: `https://arxiv.org/abs/${PAPER}`, title: "Plate Planner", author: null, publishedAt: null, reader: "arxiv", facts: { arxivId: PAPER, depth: "head", body: "HTML" },
+    sections: [{ heading: "1 Introduction", text: "Plates get booked. ".repeat(100) }, { heading: "2 Method", text: "Each plate gets a slot. ".repeat(100) }],
+  });
+  const repo = await reg.register({ url: "https://github.com/quill-lab/plate-planner", title: "quill-lab/plate-planner", author: null, publishedAt: null, reader: "github", facts: {}, sections: [{ heading: "README", text: "Run the planner with a plate list. ".repeat(60) }] });
+  const user = composePrompt({ topic, kind: "daily", items: [item([xm.id, longPaper.id, repo.id])], registry: reg, profile: [], questions: [], language: "" }).user;
+  const textOf = (id: string) => [...user.matchAll(new RegExp(`${id}\\.§\\d+[^:]*: ([^\\n]*)`, "g"))].map((m) => m[1]).join("");
+  expect(textOf(xm.id).length).toBeLessThanOrEqual(1201);
+  expect(textOf(longPaper.id).length).toBeLessThanOrEqual(1201);
+  expect(textOf(repo.id).length).toBeGreaterThan(1100);
+  expect(textOf(xm.id).length + textOf(longPaper.id).length + textOf(repo.id).length).toBeLessThanOrEqual(3 * SECTION_CHARS + 3);
 });

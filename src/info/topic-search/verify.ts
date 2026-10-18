@@ -35,8 +35,8 @@ export const PAPER_BODY_CHARS = 8000;
 export const PAPER_FULL_CHARS = 48000;
 /** Characters of one section of a PDF's text layer, which has no headings to cut at. */
 const PDF_PART_CHARS = 4000;
-/** Originals read per item at most (88). */
-export const SOURCES_PER_ITEM = 2;
+/** Originals read per item at most; the item's post is read besides them (88). */
+export const ORIGINALS_PER_ITEM = 2;
 /** Characters of one material the comparison sees. */
 const COMPARE_MATERIAL_CHARS = 8000;
 /** pitfall 377: a converted arXiv HTML paper has more text than this. */
@@ -78,7 +78,11 @@ export interface SourceDeps {
   lookupRepo(fullName: string): Promise<RepoLookup>;
   /** GitHub's requests left this hour as last seen; null before any request. */
   repoQuotaLeft(): number | null;
-  /** A PDF's text layer, or null when it has none; absent where PDFs cannot be read. Only a deeper read uses it. */
+  /**
+   * A PDF's text layer, or null when it is not a PDF or has no text layer;
+   * throws, saying the HTTP status, when the fetch failed. Absent where PDFs
+   * cannot be read.
+   */
   readPdfText?(url: string, signal: AbortSignal): Promise<string | null>;
 }
 
@@ -172,7 +176,39 @@ async function readArxivHtml(id: string, deps: SourceDeps, signal: AbortSignal):
   if (/^untitled document$/i.test(title)) return { ok: false, why: "arXiv has no HTML version of it" };
   const html = bodyOfArxivHtml(res.text);
   if (htmlToText(html).length <= ARXIV_HTML_MIN_CHARS) return { ok: false, why: "arXiv's HTML version holds no body text" };
-  return { ok: true, title: title || null, sections: htmlSections(html, htmlToText) };
+  return { ok: true, title: arxivHtmlTitle(res.text, title) || null, sections: htmlSections(html, htmlToText) };
+}
+
+/**
+ * A converted paper's title: its document heading without the footnotes in it,
+ * else the head's <title>, which can run words together across a line break
+ * ("RecursiveSelf"). A trailing footnote mark is dropped either way.
+ */
+function arxivHtmlTitle(page: string, headTitle: string): string {
+  const h1 = /<h1\b[^>]*\bltx_title_document\b[^>]*>([\s\S]*?)<\/h1>/i.exec(page)?.[1];
+  const title = (h1 ? htmlToText(withoutNotes(h1)) : "") || headTitle;
+  return title.replace(/\s+/g, " ").replace(/[\s*∗†‡]+$/u, "").trim();
+}
+
+/** HTML without LaTeXML's footnote spans (`ltx_note`, which hold the note's whole text), nesting counted. */
+function withoutNotes(html: string): string {
+  let out = html;
+  for (;;) {
+    const open = /<span\b[^>]*\bclass="[^"]*\bltx_note\b[^"]*"[^>]*>/i.exec(out);
+    if (!open) return out;
+    const tag = /<(\/?)span\b[^>]*>/gi;
+    tag.lastIndex = open.index + open[0].length;
+    let depth = 1;
+    let end = out.length;
+    for (let t = tag.exec(out); t; t = tag.exec(out)) {
+      depth += t[1] ? -1 : 1;
+      if (depth === 0) {
+        end = tag.lastIndex;
+        break;
+      }
+    }
+    out = out.slice(0, open.index) + out.slice(end);
+  }
 }
 
 const isAbstract = (s: { heading: string | null }) => /^abstract$/i.test(s.heading ?? "");
