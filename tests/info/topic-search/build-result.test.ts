@@ -229,7 +229,7 @@ function deps(over: {
       if (url.includes("thePandaily")) {
         return { ok: true, via: "x", title: "SRHarness: an open-source runtime for agents", author: "@thePandaily", publishedAt: null, sections: [{ heading: null, html: "<p>Tsinghua researchers released SRHarness, an open-source runtime for agentic science.</p>" }], whole: null, links: [] };
       }
-      return { ok: false, reason: `${new URL(url).hostname} needs a sign-in` };
+      return { ok: false, code: "login_wall", reason: `${new URL(url).hostname} needs a sign-in` };
     },
     repoLookups: () => ({
       lookup: async (name): Promise<RepoLookup> => ({

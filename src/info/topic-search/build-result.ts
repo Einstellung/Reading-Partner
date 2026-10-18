@@ -57,6 +57,7 @@ import {
   type TopicSearchResult,
   type TopicSearchResultItem,
 } from "./result-types";
+import { traceOf, type ReadTrace } from "./read-failure";
 import { selectItems, shortlist, type SelectView } from "./select";
 import type { TopicSearch } from "./types";
 import {
@@ -65,6 +66,7 @@ import {
   parseClaims,
   readPaperFull,
   readSource,
+  urlOfTarget,
   ORIGINALS_PER_ITEM,
   type FetchText,
   type OpenLink,
@@ -342,8 +344,10 @@ function keyOfTarget(t: Target): string {
 
 export interface ReadOriginals {
   materials: string[];
-  /** Why each original that could not be read was not. */
+  /** Why each original that could not be read was not, in plain words. */
   reasons: string[];
+  /** Every original tried, in order: how its read ended and each step's record (read-failure.ts). */
+  traces: ReadTrace[];
   /** The first read's facts and title: the item's. */
   first: { facts: TopicSearchResultItem["facts"]; title: string | null } | null;
   /** The first original read that is not the post itself. */
@@ -362,10 +366,11 @@ export async function readOriginals(targets: readonly Target[], deps: SourceDeps
   const posts = targets.filter((t) => t.kind === "post");
   const pending: Target[] = targets.filter((t) => t.kind !== "post");
   const seen = new Set(targets.map(keyOfTarget));
-  const out: ReadOriginals = { materials: [], reasons: [], first: null, original: null };
+  const out: ReadOriginals = { materials: [], reasons: [], traces: [], first: null, original: null };
   let originalsTried = 0;
   const readOne = async (t: Target) => {
     const read = await readSource(t, deps, signal);
+    out.traces.push(traceOf(urlOfTarget(t), read.ok, read.steps));
     if (!read.ok) {
       out.reasons.push(read.reason);
       return;
@@ -514,7 +519,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const lookups = deps.repoLookups();
   // A page on X opens only while the budget lasts; past it a cut-short post stays cut.
   const openLink: OpenLink = async (url, s) => {
-    if (isXPage(url) && !(await xPages.take())) return { ok: false, reason: X_PAGES_USED_UP };
+    if (isXPage(url) && !(await xPages.take())) return { ok: false, code: "budget_spent", reason: X_PAGES_USED_UP };
     return deps.openLink(url, s);
   };
   const sourceDeps: SourceDeps = {
@@ -549,7 +554,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       continue;
     }
     const targets = targetsOf(d);
-    const { materials, reasons, first, original } = await readOriginals(targets, sourceDeps, registry, signal);
+    const { materials, reasons, traces, first, original } = await readOriginals(targets, sourceDeps, registry, signal);
     let facts = first?.facts ?? null;
     let title = first?.title ?? null;
     const leadPost = lead.members.find((m) => m.cand.post)?.cand.post ?? d.members.find((m) => m.cand.post)?.cand.post ?? null;
@@ -567,6 +572,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       reason: materials.length === 0 ? reasons.join("; ") || "no original to read" : selfPost && reasons.length ? reasons.join("; ") : null,
       discrepancies: [],
       checked: { match: 0, mismatch: 0, absent: 0 },
+      ...(traces.length ? { reads: traces } : {}),
     };
     const comparable = materials.filter((m) => (registry.get(m)?.sections.length ?? 0) > 0 && registry.get(m)?.reader !== "x");
     if (verify.status === "compared") {

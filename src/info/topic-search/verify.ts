@@ -14,11 +14,19 @@
 // the same route when the search page cut it, and the links in its full text
 // name the original read beside it (pitfall 657).
 //
+// A link the site answers with a PDF — by its bytes, whatever its address says —
+// is read from the PDF's text layer through `readPdfText`, with the budget of a
+// paper's PDF fallback; a page route that got a PDF's raw bytes as text tries
+// the PDF read once. Every step leaves a typed record (read-failure.ts): what
+// failed, why, and whether trying later can help; the plain reason is made of
+// their words.
+//
 // Facts — stars, dates, authors — come from the reads and the lookup, never
 // from the model. The comparison is one model call per item; a sentence it
 // writes with a number or date the cited post or section does not hold is
 // dropped (numbers.ts).
 
+import { inspectFetchedPage } from "../../workshop/bindery/gate";
 import { htmlToText } from "../../workshop/extract/sanitize";
 import { htmlSections, markdownSections, type MaterialInput, type MaterialReader, type MaterialRegistry } from "../dossier/registry";
 import { arxivIdUrl, arxivPdfUrl, parseArxivAtom } from "../sources/plugins/arxiv-client";
@@ -27,6 +35,18 @@ import { isXHost } from "../x/post";
 import type { XSearchPost } from "../x/search-page";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
 import type { PaperInfo } from "./rank-pool";
+import {
+  codeOfError,
+  codeOfRejection,
+  codeOfStatus,
+  failedStep,
+  failure,
+  okStep,
+  type FailureCode,
+  type ReadFailure,
+  type ReadStep,
+  type StepRecord,
+} from "./read-failure";
 import type { Discrepancy, ResultFacts, ResultPost, ResultVerify } from "./result-types";
 
 /** Characters of a paper's body read after its abstract (88). */
@@ -62,12 +82,15 @@ export type OpenedLink =
       publishedAt: string | null;
       /** Readable sections; empty for a whole document. */
       sections: { heading: string | null; html: string }[];
-      /** A document the site served whole (a PDF), whose text layer is not read here. */
-      whole: { format: "pdf" | "epub"; abstract: string | null } | null;
+      /**
+       * A document the site served whole (a PDF, known by its bytes), with the
+       * bytes as fetched so its text layer is read without fetching it again.
+       */
+      whole: { format: "pdf" | "epub"; abstract: string | null; bytes?: Uint8Array } | null;
       /** Links out of what was read, as the reader expanded them, off the link's own site; in the order found. */
       links: string[];
     }
-  | { ok: false; reason: string };
+  | { ok: false; code: FailureCode; reason: string };
 
 export type OpenLink = (url: string, signal: AbortSignal) => Promise<OpenedLink>;
 
@@ -80,10 +103,11 @@ export interface SourceDeps {
   repoQuotaLeft(): number | null;
   /**
    * A PDF's text layer, or null when it is not a PDF or has no text layer;
-   * throws, saying the HTTP status, when the fetch failed. Absent where PDFs
+   * throws, saying the HTTP status, when the fetch failed. With `bytes` (a PDF
+   * the open route already fetched) nothing is fetched. Absent where PDFs
    * cannot be read.
    */
-  readPdfText?(url: string, signal: AbortSignal): Promise<string | null>;
+  readPdfText?(url: string, signal: AbortSignal, bytes?: Uint8Array): Promise<string | null>;
 }
 
 export type Target =
@@ -99,8 +123,16 @@ export type SourceRead =
       facts: ResultFacts;
       /** A post's links out, the full text's where it was read whole: what the item reads as its original. */
       links?: string[];
+      /** The steps of the read, in order; a failed one makes the read partial. */
+      steps: StepRecord[];
     }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; steps: StepRecord[] };
+
+/** A read that failed, its reason the failures' words. */
+function unread(steps: StepRecord[], reason?: string): Extract<SourceRead, { ok: false }> {
+  const words = steps.filter((s): s is Extract<StepRecord, { ok: false }> => !s.ok).map((s) => s.detail);
+  return { ok: false, reason: reason ?? words.join("; "), steps };
+}
 
 function readerOf(via: string): MaterialReader {
   return (["x", "github", "drive", "arxiv", "pdf"] as const).find((r) => r === via) ?? (via === "epub" ? "pdf" : "web");
@@ -158,25 +190,54 @@ function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-type ArxivHtml = { ok: true; title: string | null; sections: { heading: string | null; text: string }[] } | { ok: false; why: string };
+type ArxivHtml = { ok: true; title: string | null; sections: { heading: string | null; text: string }[] } | { ok: false; why: ReadFailure };
 
-/** A paper's arXiv HTML, its title and body sections, or why there is none (pitfall 377: a real page is a 200 with real text and a real title). */
+/**
+ * A paper's arXiv HTML, its title and body sections, or why there is none: a
+ * block page or a PDF's bytes by what the page holds (gate.ts), then pitfall
+ * 377 — a real page is a 200 with real text and a real title.
+ */
 async function readArxivHtml(id: string, deps: SourceDeps, signal: AbortSignal): Promise<ArxivHtml> {
+  const fail = (code: FailureCode, detail: string): ArxivHtml => ({ ok: false, why: failure("html", code, detail, `https://arxiv.org/html/${id}`) });
   let res: FetchedText;
   try {
     res = await deps.fetchText(`https://arxiv.org/html/${id}`, signal);
   } catch (e) {
     if (signal.aborted) throw e;
-    return { ok: false, why: `arXiv HTML: ${errText(e)}` };
+    return fail(codeOfError(e), `arXiv HTML: ${errText(e)}`);
   }
-  if (res.status !== 200) return { ok: false, why: `arXiv HTML answered HTTP ${res.status}` };
+  if (res.status !== 200) return fail(res.status === 404 ? "no_such_format" : codeOfStatus(res.status), `arXiv HTML answered HTTP ${res.status}`);
+  const held = inspectFetchedPage(res.text, htmlToText);
+  if (held) return fail(codeOfRejection(held), `arXiv HTML: ${held.message}`);
   const title = htmlToText(/<title>([\s\S]*?)<\/title>/i.exec(res.text)?.[1] ?? "")
     .replace(/^\[[^\]]*\]\s*/, "")
     .trim();
-  if (/^untitled document$/i.test(title)) return { ok: false, why: "arXiv has no HTML version of it" };
+  if (/^untitled document$/i.test(title)) return fail("no_such_format", "arXiv has no HTML version of it");
   const html = bodyOfArxivHtml(res.text);
-  if (htmlToText(html).length <= ARXIV_HTML_MIN_CHARS) return { ok: false, why: "arXiv's HTML version holds no body text" };
+  if (htmlToText(html).length <= ARXIV_HTML_MIN_CHARS) return fail("no_such_format", "arXiv's HTML version holds no body text");
   return { ok: true, title: arxivHtmlTitle(res.text, title) || null, sections: htmlSections(html, htmlToText) };
+}
+
+/**
+ * A PDF's text layer, cut into parts and capped at `chars`, through
+ * `readPdfText` (with the bytes when they were fetched already); or why not.
+ */
+async function readPdfBody(
+  url: string,
+  bytes: Uint8Array | undefined,
+  chars: number,
+  deps: SourceDeps,
+  signal: AbortSignal,
+): Promise<{ ok: true; sections: { heading: string | null; text: string }[] } | { ok: false; why: ReadFailure }> {
+  if (!deps.readPdfText) return { ok: false, why: failure("pdf", "unsupported", "PDFs cannot be read here", url) };
+  try {
+    const text = await deps.readPdfText(url, signal, bytes);
+    if (!text?.trim()) return { ok: false, why: failure("pdf", "no_text_layer", "the PDF could not be read or has no text layer", url) };
+    return { ok: true, sections: capChars(pdfParts(text), chars) };
+  } catch (e) {
+    if (signal.aborted) throw e;
+    return { ok: false, why: failure("pdf", codeOfError(e), `the PDF: ${errText(e)}`, url) };
+  }
 }
 
 /**
@@ -249,7 +310,9 @@ export interface KnownPaper {
 export async function readPaperFull(id: string, known: KnownPaper, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   let url = `https://arxiv.org/html/${id}`;
   let via = "HTML";
+  const steps: StepRecord[] = [];
   const html = await readArxivHtml(id, deps, signal);
+  steps.push(html.ok ? okStep("html", url) : failedStep(html.why));
   let body = html.ok ? html.sections.filter((s) => !isAbstract(s) && !BACK_MATTER.test(s.heading ?? "")) : null;
   if (!body && deps.readPdfText) {
     url = arxivPdfUrl(id);
@@ -259,12 +322,14 @@ export async function readPaperFull(id: string, known: KnownPaper, deps: SourceD
       if (text?.trim()) {
         const backAt = text.search(/\n\s*(?:references|bibliography)\s*\n/i);
         body = pdfParts(backAt > 0 ? text.slice(0, backAt) : text);
-      }
+        steps.push(okStep("pdf", url));
+      } else steps.push(failedStep(failure("pdf", "no_text_layer", "the PDF could not be read or has no text layer", url)));
     } catch (e) {
       if (signal.aborted) throw e;
+      steps.push(failedStep(failure("pdf", codeOfError(e), `the PDF: ${errText(e)}`, url)));
     }
   }
-  if (!body?.length) return { ok: false, reason: `neither arXiv HTML nor a PDF text layer could be read for ${id}` };
+  if (!body?.length) return unread(steps, `neither arXiv HTML nor a PDF text layer could be read for ${id}`);
   const capped = capChars(body, PAPER_FULL_CHARS);
   const chars = (xs: { text: string }[]) => xs.reduce((n, x) => n + x.text.length, 0);
   const cutShort = chars(capped) < chars(body);
@@ -280,16 +345,18 @@ export async function readPaperFull(id: string, known: KnownPaper, deps: SourceD
       sections: [...(known.abstract ? [{ heading: "Abstract", text: known.abstract }] : []), ...capped],
     },
     facts: { kind: "paper", arxivId: id, authors: known.authors, publishedAt: known.publishedAt, depth: "full" },
+    steps,
   };
 }
 
 async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   // Without the export API's metadata (rate-limited, cooling down) the body is still read: HTML, else the PDF.
-  const why: string[] = [];
+  const steps: StepRecord[] = [];
   let paper = t.known;
   if (!paper) {
+    const api = arxivIdUrl(t.id);
     try {
-      const res = await deps.fetchText(arxivIdUrl(t.id), signal);
+      const res = await deps.fetchText(api, signal);
       const entry = res.status === 200 ? parseArxivAtom(res.text)[0] : undefined;
       if (entry && entry.id === t.id && entry.title) {
         paper = {
@@ -300,10 +367,18 @@ async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps
           publishedAt: entry.published || null,
           url: `https://arxiv.org/abs/${entry.id}`,
         };
-      } else why.push(res.status === 200 ? "the arXiv API has no entry for it" : `the arXiv API answered HTTP ${res.status}`);
+        steps.push(okStep("api", api));
+      } else
+        steps.push(
+          failedStep(
+            res.status === 200
+              ? failure("api", "not_found", "the arXiv API has no entry for it", api)
+              : failure("api", codeOfStatus(res.status), `the arXiv API answered HTTP ${res.status}`, api),
+          ),
+        );
     } catch (e) {
       if (signal.aborted) throw e;
-      why.push(`the arXiv API: ${errText(e)}`);
+      steps.push(failedStep(failure("api", codeOfError(e), `the arXiv API: ${errText(e)}`, api)));
     }
   }
   const html = await readArxivHtml(t.id, deps, signal);
@@ -313,24 +388,21 @@ async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps
     // The HTML's own abstract stands in when the API gave none.
     body = capChars(paper?.abstract ? html.sections.filter((s) => !isAbstract(s)) : html.sections, PAPER_BODY_CHARS);
     bodyFrom = "HTML";
+    steps.push(okStep("html", `https://arxiv.org/html/${t.id}`));
   } else {
-    why.push(html.why);
+    steps.push(failedStep(html.why));
     // With the API's abstract in hand an ordinary read stops there; without it, the PDF is all there is.
     if (deps.readPdfText && !paper?.abstract) {
-      try {
-        const text = await deps.readPdfText(arxivPdfUrl(t.id), signal);
-        if (text?.trim()) {
-          body = capChars(pdfParts(text), PAPER_BODY_CHARS);
-          bodyFrom = "PDF";
-        } else why.push("the PDF could not be read or has no text layer");
-      } catch (e) {
-        if (signal.aborted) throw e;
-        why.push(`the PDF: ${errText(e)}`);
-      }
+      const pdf = await readPdfBody(arxivPdfUrl(t.id), undefined, PAPER_BODY_CHARS, deps, signal);
+      if (pdf.ok) {
+        body = pdf.sections;
+        bodyFrom = "PDF";
+        steps.push(okStep("pdf", arxivPdfUrl(t.id)));
+      } else steps.push(failedStep(pdf.why));
     }
   }
   const depth = body.length ? "head" : "abstract";
-  if (!paper && body.length === 0) return { ok: false, reason: `arXiv ${t.id} could not be read: ${why.join("; ")}` };
+  if (!paper && body.length === 0) return { ...unread(steps), reason: `arXiv ${t.id} could not be read: ${unread(steps).reason}` };
   const sections = [...(paper?.abstract ? [{ heading: "Abstract", text: paper.abstract }] : []), ...body];
   return {
     ok: true,
@@ -344,33 +416,43 @@ async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps
       sections,
     },
     facts: { kind: "paper", arxivId: t.id, authors: paper?.authors ?? [], publishedAt: paper?.publishedAt ?? null, depth },
+    steps,
   };
 }
 
 async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   const full = `${t.owner}/${t.repo}`;
+  const steps: StepRecord[] = [];
   let lookup: RepoLookup;
   try {
     lookup = await deps.lookupRepo(full);
+    if (lookup.kind === "found") steps.push(okStep("lookup"));
+    else if (lookup.kind === "skipped") steps.push(failedStep(failure("lookup", "budget_spent", `the GitHub lookup was not made (${lookup.reason})`)));
   } catch (e) {
     if (signal.aborted) throw e;
     lookup = { kind: "skipped", reason: "quota" };
+    steps.push(failedStep(failure("lookup", codeOfError(e), `the GitHub lookup: ${errText(e)}`)));
   }
-  if (lookup.kind === "missing") return { ok: false, reason: `GitHub has no public repository ${full}` };
+  if (lookup.kind === "missing") return unread([...steps, failedStep(failure("lookup", "not_found", `GitHub has no public repository ${full}`))]);
   const found = lookup.kind === "found" ? lookup.facts : null;
   const name = found?.fullName ?? full;
   const sections: { heading: string | null; text: string }[] = [];
+  let readmeFailed: ReadFailure | null = failure("readme", "not_found", "the repository has no README");
   for (const file of ["README.md", "readme.md", "README.rst", "README"]) {
     try {
       const res = await deps.fetchText(`https://raw.githubusercontent.com/${name}/HEAD/${file}`, signal);
       if (res.status === 200 && res.text.trim()) {
         sections.push(...markdownSections(res.text));
+        readmeFailed = null;
         break;
       }
+      if (res.status !== 404 && res.status !== 200) readmeFailed = failure("readme", codeOfStatus(res.status), `the README answered HTTP ${res.status}`);
     } catch (e) {
       if (signal.aborted) throw e;
+      readmeFailed = failure("readme", codeOfError(e), `the README: ${errText(e)}`);
     }
   }
+  steps.push(readmeFailed ? failedStep(readmeFailed) : okStep("readme"));
   const quota = deps.repoQuotaLeft();
   if (quota === null || quota > LISTING_RESERVE) {
     try {
@@ -386,7 +468,7 @@ async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, 
       if (signal.aborted) throw e;
     }
   }
-  if (sections.length === 0 && !found) return { ok: false, reason: `neither the README nor the facts of ${full} could be read` };
+  if (sections.length === 0 && !found) return unread(steps, `neither the README nor the facts of ${full} could be read`);
   const facts: ResultFacts = {
     kind: "repo",
     fullName: name,
@@ -417,6 +499,7 @@ async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, 
       sections,
     },
     facts,
+    steps,
   };
 }
 
@@ -430,11 +513,64 @@ function openedSections(opened: Extract<OpenedLink, { ok: true }>): { heading: s
   return out;
 }
 
+/** A link's read from its PDF's text layer, capped like a paper's PDF fallback. */
+function pdfRead(
+  url: string,
+  title: string | null,
+  abstract: string | null,
+  sections: { heading: string | null; text: string }[],
+  steps: StepRecord[],
+  more: { author?: string | null; publishedAt?: string | null; format?: "pdf" | "epub" } = {},
+): SourceRead {
+  const author = more.author ?? null;
+  const publishedAt = more.publishedAt ?? null;
+  return {
+    ok: true,
+    input: {
+      url,
+      title,
+      author,
+      publishedAt,
+      reader: "pdf",
+      facts: {
+        format: more.format ?? "pdf",
+        text: sections.length ? `text layer, first ${PAPER_BODY_CHARS} characters at most` : "not read (whole document)",
+      },
+      sections: [...(abstract ? [{ heading: "Abstract", text: abstract }] : []), ...sections],
+    },
+    facts: { kind: "page", host: hostOf(url), author, publishedAt },
+    steps,
+  };
+}
+
 async function readPage(url: string, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   const opened = await deps.openLink(url, signal);
-  if (!opened.ok) return { ok: false, reason: opened.reason };
+  if (!opened.ok) {
+    const steps = [failedStep(failure("page", opened.code, opened.reason))];
+    // A text route that got a PDF's raw bytes: the link is a PDF, read as one.
+    if (opened.code !== "wrong_content" || !deps.readPdfText) return unread(steps, opened.reason);
+    const pdf = await readPdfBody(url, undefined, PAPER_BODY_CHARS, deps, signal);
+    if (!pdf.ok) return unread([...steps, failedStep(pdf.why)]);
+    return pdfRead(url, null, null, pdf.sections, [...steps, okStep("pdf")]);
+  }
+  if (opened.whole) {
+    // A document served whole, known by its bytes whatever its address: a PDF's text layer is read.
+    const steps = [okStep("page")];
+    const abstract = opened.whole.abstract;
+    const pdf =
+      opened.whole.format === "pdf"
+        ? await readPdfBody(url, opened.whole.bytes, PAPER_BODY_CHARS, deps, signal)
+        : { ok: false as const, why: failure("pdf", "unsupported", "an EPUB is not read here") };
+    steps.push(pdf.ok ? okStep("pdf") : failedStep(pdf.why));
+    if (!pdf.ok && !abstract) return unread(steps);
+    return pdfRead(url, opened.title, abstract, pdf.ok ? pdf.sections : [], steps, {
+      author: opened.author,
+      publishedAt: opened.publishedAt,
+      format: opened.whole.format,
+    });
+  }
   const sections = openedSections(opened);
-  if (sections.length === 0 && !opened.whole) return { ok: false, reason: `${hostOf(url)} gave no readable text` };
+  if (sections.length === 0) return unread([failedStep(failure("page", "too_short", `${hostOf(url)} gave no readable text`))]);
   return {
     ok: true,
     input: {
@@ -442,11 +578,12 @@ async function readPage(url: string, deps: SourceDeps, signal: AbortSignal): Pro
       title: opened.title,
       author: opened.author,
       publishedAt: opened.publishedAt,
-      reader: opened.whole ? "pdf" : readerOf(opened.via),
-      facts: opened.whole ? { format: opened.whole.format, text: "not read (whole document)" } : {},
+      reader: readerOf(opened.via),
+      facts: {},
       sections,
     },
     facts: { kind: "page", host: hostOf(url), author: opened.author, publishedAt: opened.publishedAt },
+    steps: [okStep("page")],
   };
 }
 
@@ -455,10 +592,11 @@ async function readSelfPost(post: XSearchPost, deps: SourceDeps, signal: AbortSi
   let title: string | null = null;
   let links: string[] = [];
   let whole = !post.truncated;
+  const steps: StepRecord[] = [];
   if (post.truncated || post.article) {
-    const opened = await deps.openLink(post.permalink, signal).catch((e) => {
+    const opened = await deps.openLink(post.permalink, signal).catch((e): OpenedLink => {
       if (signal.aborted) throw e;
-      return { ok: false, reason: String(e) } as OpenedLink;
+      return { ok: false, code: codeOfError(e), reason: errText(e) };
     });
     if (opened.ok) {
       links = opened.links;
@@ -467,8 +605,9 @@ async function readSelfPost(post: XSearchPost, deps: SourceDeps, signal: AbortSi
         sections = read;
         title = opened.title;
         whole = true;
-      }
-    }
+        steps.push(okStep("post"));
+      } else steps.push(failedStep(failure("post", "too_short", "the post's page had no text")));
+    } else steps.push(failedStep(failure("post", opened.code, opened.reason)));
   }
   return {
     ok: true,
@@ -483,6 +622,7 @@ async function readSelfPost(post: XSearchPost, deps: SourceDeps, signal: AbortSi
     },
     facts: { kind: "post", handle: post.handle, name: post.name, postedAt: post.postedAt, counts: countsOf(post) },
     links,
+    steps,
   };
 }
 
@@ -500,8 +640,18 @@ export async function readSource(t: Target, deps: SourceDeps, signal: AbortSigna
     return await readPage(t.url, deps, signal);
   } catch (e) {
     if (signal.aborted) throw e;
-    return { ok: false, reason: errText(e) };
+    return unread([failedStep(failure(STEP_OF_TARGET[t.kind], codeOfError(e), errText(e)))]);
   }
+}
+
+/** The step a read of each kind of target starts with: where an error nobody caught is put. */
+const STEP_OF_TARGET: Record<Target["kind"], ReadStep> = { paper: "api", repo: "lookup", page: "page", post: "post" };
+
+/** The address an original is read under. */
+export function urlOfTarget(t: Target): string {
+  if (t.kind === "paper") return `https://arxiv.org/abs/${t.id}`;
+  if (t.kind === "post") return t.post.permalink;
+  return t.url;
 }
 
 // --- the comparison --------------------------------------------------------

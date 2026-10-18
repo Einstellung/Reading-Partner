@@ -38,6 +38,7 @@ import { manuscriptText } from "../../workshop/bindery/manuscript";
 import type { ExtractReadable } from "../../workshop/extract/readable-select";
 import { extractPageLinks } from "../../workshop/extract/read-page";
 import { htmlToText } from "../../workshop/extract/sanitize";
+import { isRateLimitError } from "../../platform/http/host-gate";
 import { errMsg } from "../../platform/std/errors";
 import { oneLine } from "../../platform/std/text";
 import { classifyOutbound, ORIGIN_LABEL, type LinkHint, type LinkOrigin } from "./hints";
@@ -380,15 +381,17 @@ export class LinkSession<D> {
     let res: FetchedBytes;
     try {
       res = await this.deps.fetch(url);
-    } catch {
-      return { via: "web", what: "unreadable", content: rejection("unreachable", `${host} could not be reached`), fresh: [] };
+    } catch (e) {
+      // A rate limit (or a host still cooling down from one) keeps its own words: it passes, a dead host does not.
+      const content = isRateLimitError(e) ? rejection("rate-limited", errMsg(e), 429) : rejection("unreachable", `${host} could not be reached`);
+      return { via: "web", what: "unreadable", content, fresh: [] };
     }
     if (!res.ok) {
-      return { via: "web", what: "unreadable", content: rejection("unreachable", `${host} answered HTTP ${res.status}`), fresh: [] };
+      return { via: "web", what: "unreadable", content: rejection("unreachable", `${host} answered HTTP ${res.status}`, res.status), fresh: [] };
     }
     if (res.bytes.length > MAX_PAGE_BYTES) {
       const mb = Math.round(res.bytes.length / 1e6);
-      return { via: "web", what: "unreadable", content: rejection("unreachable", `the file is ${mb} MB, too large to take in`), fresh: [] };
+      return { via: "web", what: "unreadable", content: rejection("too-large", `the file is ${mb} MB, too large to take in`), fresh: [] };
     }
     if (isPdfBytes(res.bytes)) {
       const doc = pdfDocument(res, url, titleFromFilename(lastSegment(url)) || host);

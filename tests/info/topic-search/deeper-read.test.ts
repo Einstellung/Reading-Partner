@@ -93,7 +93,7 @@ const HTML = (body: string) => `<html><head><title>Paper</title></head><body><ar
 function sourceDeps(over: Partial<SourceDeps> & { html?: string }): SourceDeps {
   return {
     fetchText: async (url) => (url.startsWith("https://arxiv.org/html/") && over.html ? { status: 200, text: over.html } : { status: 404, text: "" }),
-    openLink: async () => ({ ok: false, reason: "not here" }),
+    openLink: async () => ({ ok: false, code: "not_found", reason: "not here" }),
     lookupRepo: async () => ({ kind: "skipped", reason: "quota" }),
     repoQuotaLeft: () => null,
     ...over,

@@ -9,7 +9,7 @@ import { micromark } from "micromark";
 import { gfm, gfmHtml } from "micromark-extension-gfm";
 import { escapeHtmlText, oneLine } from "../../platform/std/text";
 import { htmlToText } from "../extract/sanitize";
-import { rejection } from "./gate";
+import { inspectArticleText, inspectFetchedPage, rejection } from "./gate";
 import type { Manuscript } from "./manuscript";
 import type { Adapter, Material, MaterialKind, MaterialMeta } from "./material";
 import { pageLanguage, readPageMeta } from "./page-meta";
@@ -50,10 +50,15 @@ export const webAdapter: Adapter<Of<"web">> = {
   minChars: 200,
   async toManuscript(material, deps) {
     if (!deps.extractReadable) throw new Error("the web adapter needs extractReadable");
+    // A 200 is not content: a challenge, a consent wall or a script shell is turned back by what it holds.
+    const structure = inspectFetchedPage(material.html, htmlToText);
+    if (structure) return structure;
     const extraction = deps.extractReadable(material.html, material.url);
     if (!extraction || extraction.textContent.trim() === "") {
       return rejection("empty", "no readable article text was found on the page");
     }
+    const said = inspectArticleText(extraction.textContent);
+    if (said) return said;
     const meta = readPageMeta(material.html);
     const language = pageLanguage(material.html);
     return {

@@ -10,6 +10,7 @@
 
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { RunSource } from "./pace";
+import type { ReadTrace } from "./read-failure";
 
 export const TOPIC_SEARCH_RESULT_VERSION = 1;
 export const RESULT_FILE_PREFIX = "topic-search-";
@@ -101,6 +102,13 @@ export interface ResultVerify {
   discrepancies: Discrepancy[];
   /** Claims checked: how many the original bore out, contradicted, and did not mention. */
   checked: { match: number; mismatch: number; absent: number };
+  /**
+   * Every original tried, in order, with each step's typed record: read,
+   * partial (read, a step failed) or unread, and per failure its code and
+   * whether a retry can help (read-failure.ts; `failuresOf` reads either
+   * shape). Absent in files written before 2026-10-18, which hold only `reason`.
+   */
+  reads?: ReadTrace[];
 }
 
 export interface ResultContinuation {

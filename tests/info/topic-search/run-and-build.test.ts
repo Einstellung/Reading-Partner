@@ -179,7 +179,7 @@ function world(opts: { papers?: InfoItem[] } = {}) {
       if (new URL(url).hostname === "x.com") {
         return { ok: true, via: "x", title: null, author: null, publishedAt: null, sections: [{ heading: null, html: "<p>The whole post, read off its own page.</p>" }], whole: null, links: [] };
       }
-      return { ok: false, reason: "not in this test" };
+      return { ok: false, code: "not_found", reason: "not in this test" };
     },
     repoLookups: () => ({ lookup: async () => ({ kind: "missing" }) as never, quotaLeft: () => 50 }),
     files: {

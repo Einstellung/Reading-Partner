@@ -60,12 +60,17 @@ export const liveResultDeps: BuildResultDeps = {
     const res = await fetchWithRetry(url, { signal }, interactiveRetry(infoFetch));
     return { status: res.status, text: await res.text() };
   }),
-  readPdfText: async (url) => {
-    const got = await fetchBytes(url);
-    if (!got.ok) throw new Error(`${new URL(url).hostname} answered HTTP ${got.status}`);
-    if (!isPdfBytes(got.bytes)) return null;
+  // pdf.js in the webview; a PDF the open route fetched already is not fetched again.
+  readPdfText: async (url, _signal, fetched) => {
+    let bytes = fetched;
+    if (!bytes) {
+      const got = await fetchBytes(url);
+      if (!got.ok) throw new Error(`${new URL(url).hostname} answered HTTP ${got.status}`);
+      bytes = got.bytes;
+    }
+    if (!isPdfBytes(bytes)) return null;
     const { extractFulltext } = await import("../../fulltext/extract");
-    const { pages, status } = await extractFulltext(got.bytes.slice().buffer);
+    const { pages, status } = await extractFulltext(bytes.slice().buffer);
     return status === "ok" ? pages.join("\n\n") : null;
   },
   openLink: async (url) => openOriginal(url, { fetch: fetchBytes, extractReadable: await loadExtractReadable() }),

@@ -5,3 +5,5 @@
 原因：arXiv 的 LaTeXML 转换失败或没跑过的论文，有的路由到错误页，有的路由到一个空壳文档，后者是正常返回的一份 HTML。带版本号和不带版本号返回的字节数完全一致，也区分不出来。
 
 解法：判存在要看正文长度加 title，不看状态码。实测用的判据是 HTTP 200、去标签后正文超过 8000 字符、`<title>` 不是 `Untitled Document`，40 篇抽样上没有误判。
+
+2026-10-18 起这条判据之前先过 `workshop/bindery/gate.ts` 的 `inspectFetchedPage`（主题搜索的 `readArxivHtml` 和通用网页的 `webAdapter` 共用）：拦截页标记、PDF 原始字节、脚本壳各有自己的原因。这两种「没有 HTML 版」在结果文件里记 `no_such_format`，404 也是，不可重试（`info/topic-search/read-failure.ts`）。

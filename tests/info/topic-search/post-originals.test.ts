@@ -53,7 +53,7 @@ function deps(over: { fetchText?: FetchText; openLink?: OpenLink; readPdfText?: 
     openLink: async (url, s) => {
       over.opened?.push(url);
       if (over.openLink) return over.openLink(url, s);
-      return { ok: false, reason: "not here" };
+      return { ok: false, code: "not_found", reason: "not here" };
     },
     lookupRepo: async () => ({ kind: "skipped", reason: "quota" }),
     repoQuotaLeft: () => null,
@@ -73,7 +73,7 @@ const fullPost: OpenLink = async (url) =>
         whole: null,
         links: [`https://arxiv.org/abs/${PAPER}`, "https://github.com/quill-lab/plate-planner", "https://quill.example/blog/plates"],
       }
-    : { ok: false, reason: "not here" };
+    : { ok: false, code: "not_found", reason: "not here" };
 
 const registry = () => new MaterialRegistry("runs/t", { write: async () => {} });
 
@@ -169,10 +169,16 @@ test("a PDF whose fetch failed keeps the HTTP status in the reason", async () =>
     throw new Error(`${new URL(url).hostname} answered HTTP 404`);
   };
   const got = await readSource({ kind: "paper", id: PAPER, known: null }, deps({ fetchText: async () => ({ status: 404, text: "" }), readPdfText }), signal);
-  expect(got).toEqual({
+  expect(got).toMatchObject({
     ok: false,
     reason: `arXiv ${PAPER} could not be read: the arXiv API answered HTTP 404; arXiv HTML answered HTTP 404; the PDF: arxiv.org answered HTTP 404`,
   });
+  // Each step's own record: a 404 from the API is a miss, from arXiv HTML no HTML version, from the PDF a miss.
+  expect(got.steps.map((s) => (s.ok ? `${s.step} ok` : `${s.step} ${s.code} ${s.retryable}`))).toEqual([
+    "api not_found false",
+    "html no_such_format false",
+    "pdf not_found false",
+  ]);
 });
 
 test("a paper's title comes from the document heading, without its footnote", async () => {
@@ -249,7 +255,7 @@ test("the open route hands back a post's expanded links, and a failed page keeps
   expect(post.via).toBe("x");
   expect(post.links).toEqual([`https://arxiv.org/abs/${PAPER}`]);
   const page = await openOriginal("https://quill.example/blog/plates", { fetch, extractReadable: articleOf, readers: [] });
-  expect(page).toEqual({ ok: false, reason: "quill.example answered HTTP 503" });
+  expect(page).toEqual({ ok: false, code: "upstream_error", reason: "quill.example answered HTTP 503" });
 });
 
 /** A stand-in for Readability: the page's <article>, its <h1> as the title. */
@@ -282,7 +288,7 @@ test("a plain web page original is read through the open route with the injected
 test("a plain web page with too little text says why it was not read", async () => {
   const html = "<html><head><title>Quill</title></head><body><article><h1>Quill</h1><p>Short note.</p></article></body></html>";
   const got = await openOriginal("https://news.example/short", { fetch: pageFetch(html), extractReadable: articleOf, readers: [] });
-  expect(got).toEqual({ ok: false, reason: "the body is only 18 characters, fewer than the 200 a document needs" });
+  expect(got).toEqual({ ok: false, code: "too_short", reason: "the body is only 18 characters, fewer than the 200 a document needs" });
 });
 
 test("a one-section X material takes the item's whole budget, less a share for the original after it", async () => {
