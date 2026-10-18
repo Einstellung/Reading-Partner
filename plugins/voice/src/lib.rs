@@ -86,7 +86,6 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::speech_probe,
             commands::speech_live,
             commands::speech_report,
-            commands::set_speech_key,
             commands::speak_begin,
             commands::speak_push,
             commands::speak_close,
@@ -121,7 +120,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             // "this host cannot speak" here would say the same thing twice.
             //
             // Which voice it speaks with is decided in one place:
-            // `session::on_device_voice` (Kokoro on iOS, MiMo elsewhere).
+            // `session::on_device_voice` (Kokoro where the feature is on, which
+            // is iOS; nothing elsewhere).
             app.manage(session::SpeechSession::from_env(
                 Arc::new(speaker::DeviceSpeakers::new(app.clone())),
                 &models,

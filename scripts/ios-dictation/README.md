@@ -38,19 +38,13 @@ in (docs/pitfall/31).
 ## The whole line, once, on the phone
 
 The fixture legs measure the player and nothing in front of it. The one run that
-goes text → 小米 → trim → relay → speaker is `speech-live`, and the first command
-after the phone is plugged in is:
+goes text → on-device Kokoro → trim → relay → speaker is `speech-live`. It needs
+the voice downloaded in Settings first; the MiMo key it took before 2026-10-18 is
+gone with MiMo.
 
 ```sh
-MIMO_API_KEY=$(grep -m1 '^MIMO_API_KEY=' ~/Reading-Partner/.env | cut -d= -f2-) \
-  ~/Reading-Partner/scripts/ios-dictation/speech-run.sh speech-live
+~/Reading-Partner/scripts/ios-dictation/speech-run.sh speech-live
 ```
-
-The key never lands on the phone's disk and is never built into the app:
-`devicectl` forwards `DEVICECTL_CHILD_MIMO_API_KEY` into the launched process's
-environment and Rust reads it there. The `.env` it comes from is the Linux
-checkout's, so on the Mac either copy that one line over first or paste the key
-into the command.
 
 **Before the first leg that talks to the network, grant the freshly installed app
 its 无线数据 permission on the phone** (设置 → 无线数据 → Reading Partner). A

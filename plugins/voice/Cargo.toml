@@ -23,11 +23,10 @@ thiserror = "2"
 # CLOCK_MONOTONIC_RAW for the per-sentence marks (tts/player.rs), the clock
 # Swift reads too. Already in the graph through tokio.
 libc = "0.2"
-# The speaking half (src/tts) makes its own HTTPS requests: Mimo streams PCM over
-# SSE and the bytes are headed for an audio node, not for the webview, so they
-# never leave Rust until they reach Swift. Every crate below is already in the
-# app's dependency graph through tauri-plugin-http, and the features are the ones
-# it already builds with, so this adds a compile unit to nothing.
+# The Kokoro weights downloader (src/kokoro/download.rs) fetches over HTTPS from
+# Rust. Every crate below is already in the app's dependency graph through
+# tauri-plugin-http, and the features are the ones it already builds with, so
+# this adds a compile unit to nothing.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "json"] }
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 async-trait = "0.1"

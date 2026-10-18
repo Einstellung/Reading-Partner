@@ -21,15 +21,6 @@ export {
   resolveSttConfig,
   type SttConfig,
 } from "./config";
-export {
-  SPEECH_KEY_COMMAND,
-  getTtsKey,
-  setTtsKey,
-  hasTtsKey,
-  pushSpeechKey,
-  syncSpeechKey,
-  type SpeechKeyBridge,
-} from "./speech-key";
 export { transcribe } from "./stt";
 export {
   buildGlossary,

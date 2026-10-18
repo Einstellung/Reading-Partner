@@ -125,10 +125,6 @@ export default {
   "optional.dictationLanguage": "音声入力の言語",
   "optional.dictationHint":
     "バーを押したまま話すときに iPhone が聞き取る言語です。音声はスマートフォン上で文字起こしされ、アップロードされません。ほかの言語で話すと、雑な文字起こしではなく、もっともらしい誤った文章になります。実際に話す言語に設定してください。",
-  "optional.speechKey": "音声合成 API キー",
-  "optional.speechKeyReplace": "音声合成 API キーを置き換える",
-  "optional.speechHint":
-    "回答を読み上げる音声用の Xiaomi MiMo のキーです。なくてもアプリは声を出さないだけで、ほかはすべて今までどおり動きます。",
   "optional.onDeviceVoice": "端末内の音声",
   "optional.onDeviceVoiceHint": "回答を読み上げる音声はこの端末上で動作します。",
   "optional.onDeviceVoiceSize": "回答を読み上げる音声はこの端末上で動作します。Hugging Face から一度だけ約 {mb} MB をダウンロードします。完了するまで回答は読み上げられません。",

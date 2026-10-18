@@ -125,10 +125,6 @@ export default {
   "optional.dictationLanguage": "Diktiersprache",
   "optional.dictationHint":
     "Die Sprache, auf die das iPhone hört, wenn du die Leiste gedrückt hältst und sprichst. Die Sprache wird auf dem Telefon transkribiert und nie hochgeladen. Wer eine andere Sprache spricht, bekommt keine grobe Abschrift, sondern eine überzeugend falsche – stell also die Sprache ein, die du wirklich sprichst.",
-  "optional.speechKey": "Sprachausgabe-API-Schlüssel",
-  "optional.speechKeyReplace": "Sprachausgabe-API-Schlüssel ersetzen",
-  "optional.speechHint":
-    "Ein Xiaomi-MiMo-Schlüssel für die Stimme, die Antworten vorliest. Ohne ihn bleibt die App stumm und alles andere funktioniert wie bisher.",
   "optional.onDeviceVoice": "Stimme auf dem Gerät",
   "optional.onDeviceVoiceHint": "Die Stimme, die Antworten vorliest, läuft auf diesem Gerät.",
   "optional.onDeviceVoiceSize": "Die Stimme, die Antworten vorliest, läuft auf diesem Gerät. Ein einmaliger Download von {mb} MB von Hugging Face. Bis er fertig ist, werden Antworten nicht vorgelesen.",

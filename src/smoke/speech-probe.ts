@@ -375,12 +375,11 @@ function runLeg(leg: Leg, fixtureDir: string, captureDir: string): Promise<LegRe
   });
 }
 
-/// The leg with the vendor in it: the same twelve sentences, synthesised now.
-/// Everything the fixture legs leave out is in this one — the request, the
-/// trim, the relay deciding how far ahead to work — and it answers with the
-/// relay's own timeline, which is the only record of anything before the
-/// player. Needs MIMO_API_KEY in the app's environment; the run that puts it
-/// there is scripts/ios-dictation/speech-run.sh.
+/// The leg that synthesises: the same twelve sentences, through the on-device
+/// voice now. Everything the fixture legs leave out is in this one — the
+/// synthesis, the trim, the relay deciding how far ahead to work — and it
+/// answers with the relay's own timeline, which is the only record of anything
+/// before the player. Needs the on-device voice downloaded.
 ///
 /// The sentences come from the fixture's manifest so that the two kinds of leg
 /// say the same words and their measurements line up sentence by sentence.
@@ -591,8 +590,8 @@ async function runHuman(
 }
 
 /// `live` adds the leg that synthesises. It is off by default because it needs
-/// a key and a network, and the fixture legs are the control that must keep
-/// working without either.
+/// the on-device voice downloaded, and the fixture legs are the control that
+/// must keep working without it.
 export async function runSpeechProbe(
   options: { live?: boolean; echoOnly?: boolean; control?: boolean } = {},
 ): Promise<void> {

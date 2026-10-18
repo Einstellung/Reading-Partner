@@ -14,6 +14,6 @@
 - 设备实际支持约三十种，真正的清单是 `SpeechTranscriber.supportedLocales`；插件没有从 webview 读它的命令，所以下拉框写死两项（`settings.ts` 注释）。
 - `dictationLocale` 在三处被读：`src/ui/components/chat/Composer.tsx`（按住说话）、`src/info/briefer/voice-call-live.ts`（语音通话）、`src/reading/rehearsal/transcript-source.ts`（排练转写）。
 - 桌面听写走 STT 服务（默认硅基流动 SenseVoice），服务端自己判断语言，桌面忽略 `dictationLocale`（`settings.ts` 注释，[15](../companion/15-语音输入.md)）。
-- TTS 是小米 MiMo `mimo-v2.5-tts`，默认音色「冰糖」，是四个中文音色之一（`plugins/voice/src/tts/mimo.rs`）。别的语言要另选音色或服务商。
+- TTS 是端上 Kokoro-82M-v1.1-zh，只在 iOS：带中文的句子用 `zf_001`，纯英文用 `af_maple`（`plugins/voice/src/tts/kokoro.rs`）。小米 MiMo 2026-10-18 已删除。别的语言要另选音色或模型。
 - 麦克风权限说明：`src-tauri/Info.ios.plist` 与 `src-tauri/Info.plist` 各一条英文；iOS 本地化要加各语言的 `InfoPlist.strings`。桌面麦克风错误文案在 `src-tauri/src/voice.rs`。
 - 要迁的前端文案在 [81](../ui/81-多语言.md) 清单末尾「延后（语音）」一行。

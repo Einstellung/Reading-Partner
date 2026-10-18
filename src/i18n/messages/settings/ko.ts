@@ -122,10 +122,6 @@ export default {
   "optional.dictationLanguage": "받아쓰기 언어",
   "optional.dictationHint":
     "바를 누른 채 말할 때 iPhone이 알아듣는 언어입니다. 음성은 휴대폰에서 받아쓰며 업로드되지 않습니다. 다른 언어로 말하면 거친 받아쓰기가 아니라 그럴듯하게 틀린 문장이 나오므로, 실제로 말하는 언어로 설정하세요.",
-  "optional.speechKey": "음성 API 키",
-  "optional.speechKeyReplace": "음성 API 키 교체",
-  "optional.speechHint":
-    "답변을 소리 내어 읽어 주는 음성을 위한 Xiaomi MiMo 키입니다. 없으면 앱은 소리를 내지 않을 뿐 나머지는 지금처럼 작동합니다.",
   "optional.onDeviceVoice": "기기 내 음성",
   "optional.onDeviceVoiceHint": "답변을 소리 내어 읽는 음성이 이 기기에서 실행됩니다.",
   "optional.onDeviceVoiceSize": "답변을 소리 내어 읽는 음성이 이 기기에서 실행됩니다. Hugging Face에서 약 {mb} MB를 한 번만 내려받습니다. 완료될 때까지 답변은 읽어 주지 않습니다.",

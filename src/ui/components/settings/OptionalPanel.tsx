@@ -15,7 +15,6 @@ import { CARD } from "./cardStyles";
 import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
 import VoiceInputCard from "./VoiceInputCard";
 import DictationLanguageCard from "./DictationLanguageCard";
-import SpeechKeyCard from "./SpeechKeyCard";
 import OnDeviceVoiceCard from "./OnDeviceVoiceCard";
 import { hasNativeSpeech, hasOnDeviceDictation } from "../../../platform/app/platform";
 
@@ -81,13 +80,15 @@ export default function OptionalPanel({
           )}
         </SettingsSection>
 
-        <SettingsSection title={t("settings.optional.voiceOutput")}>
-          {/* Not under "Voice input": this is the other direction. Where the
-              host speaks on its own (iOS, plugins/voice) the voice runs on the
-              device and needs its weights downloaded once instead of a key;
-              everywhere else it is the MiMo key. */}
-          {hasNativeSpeech() ? <OnDeviceVoiceCard /> : <SpeechKeyCard />}
-        </SettingsSection>
+        {/* Not under "Voice input": this is the other direction. Only a host
+            that speaks (iOS, plugins/voice) has it: the voice runs on the
+            device and needs its weights downloaded once. Elsewhere nothing
+            reads answers aloud, so there is nothing to set. */}
+        {hasNativeSpeech() && (
+          <SettingsSection title={t("settings.optional.voiceOutput")}>
+            <OnDeviceVoiceCard />
+          </SettingsSection>
+        )}
       </div>
     </>
   );

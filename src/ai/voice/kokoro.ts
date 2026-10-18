@@ -1,9 +1,9 @@
 // On-device Kokoro TTS (plugins/voice/src/kokoro, docs/companion/136): the
-// weights download and the device bench. On iOS Kokoro is the only voice
-// (plugins/voice/src/session.rs `on_device_voice`): MiMo is parked there while
-// Kokoro is evaluated on device, and until the fp32 files are downloaded and
-// verified a turn is refused with a message pointing at Settings. Desktop and
-// Android speak with MiMo.
+// weights download and the device bench. Kokoro is the only voice, on iOS only
+// (plugins/voice/src/session.rs `on_device_voice`): until the fp32 files are
+// downloaded and verified a turn is refused with a message pointing at
+// Settings. Desktop and Android read nothing aloud. The network vendor, Xiaomi
+// MiMo, was removed on 2026-10-18.
 //
 // The plugin downloads in the background and answers every question from the
 // files on disk, so the webview polls `kokoroStatus` rather than listening for
@@ -92,7 +92,7 @@ export function downloadState(s: KokoroStatus, variant: KokoroVariant): KokoroDo
 }
 
 // What speaks on iOS: Kokoro once the variant is fully downloaded and verified,
-// nothing before that (there is no fallback to MiMo), and nothing when the
+// nothing before that (there is no fallback), and nothing when the
 // status cannot be read.
 export function speakingEngine(
   s: KokoroStatus | null,

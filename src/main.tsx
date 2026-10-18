@@ -6,7 +6,7 @@ import { applyStoredAutostart } from "./platform/app/autostart";
 import { startUpdateChecks } from "./platform/app/updater";
 import { initDeviceSettings } from "./platform/app/device";
 import { detectShell } from "./platform/app/shell";
-import { syncSpeechKey } from "./ai/voice/speech-key";
+import { dropRetiredTtsKey } from "./ai/auth/credentials";
 import { initPaperTint } from "./ui/components/base/paper-tint";
 import { reloadAfterFailedShell, shellLoaded } from "./dev-reload";
 import "./styles.css";
@@ -67,9 +67,9 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // network and nobody in the room (docs/33, M-voice-2).
   void import("./smoke/speech-probe").then(({ runSpeechProbe }) => runSpeechProbe());
 } else if (import.meta.env.VITE_SMOKE === "speech-live") {
-  // The same legs plus the one with the vendor in it: text synthesised now,
-  // trimmed and scheduled in Rust, spoken by the phone. Needs MIMO_API_KEY in
-  // the app's environment.
+  // The same legs plus the one that synthesises: text through the on-device
+  // voice now, trimmed and scheduled in Rust, spoken by the phone. Needs the
+  // voice downloaded.
   void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
     runSpeechProbe({ live: true }),
   );
@@ -140,11 +140,9 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // machine's, whichever shell is showing. A no-op on mobile and in dev.
   startUpdateChecks();
 
-  // The voice plugin holds the speaking key for the process, so it is handed
-  // over once here rather than carried on every turn (ai/voice/speech-key.ts).
-  // Not awaited and never rejects: nothing on screen depends on it, and the
-  // first thing that speaks is minutes away.
-  void syncSpeechKey();
+  // The MiMo key from before 2026-10-18, deleted from this device's credentials
+  // once. Not awaited: nothing on screen depends on it.
+  void dropRetiredTtsKey().catch(() => {});
 
   // Which shell (docs/22), decided once here: the phone one carries no reader,
   // so the choice also decides whether PDFium is ever loaded. Both are dynamic

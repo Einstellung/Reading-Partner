@@ -154,8 +154,8 @@ mod tests {
 
     fn key(text: &str) -> OpeningKey {
         OpeningKey {
-            backend: "mimo".into(),
-            model: "mimo-v2.5-tts".into(),
+            backend: "kokoro".into(),
+            model: "kokoro-82m-v1.1-zh".into(),
             voice: "冰糖".into(),
             text: text.into(),
         }

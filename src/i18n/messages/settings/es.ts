@@ -125,10 +125,6 @@ export default {
   "optional.dictationLanguage": "Idioma del dictado",
   "optional.dictationHint":
     "El idioma que escucha el iPhone cuando mantienes pulsada la barra y hablas. La voz se transcribe en el teléfono y nunca se sube. Hablar en otro idioma no da una transcripción aproximada, sino una equivocada que parece correcta, así que elige el idioma que de verdad hablas.",
-  "optional.speechKey": "Clave de API de voz",
-  "optional.speechKeyReplace": "Reemplazar clave de API de voz",
-  "optional.speechHint":
-    "Una clave de Xiaomi MiMo, para la voz que lee las respuestas en voz alta. Sin ella la app no habla y todo lo demás funciona igual que ahora.",
   "optional.onDeviceVoice": "Voz en el dispositivo",
   "optional.onDeviceVoiceHint": "La voz que lee las respuestas en voz alta se ejecuta en este dispositivo.",
   "optional.onDeviceVoiceSize": "La voz que lee las respuestas en voz alta se ejecuta en este dispositivo. Una descarga única de {mb} MB desde Hugging Face. Hasta que termine, las respuestas no se leen en voz alta.",
