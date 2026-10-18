@@ -111,23 +111,23 @@ beside it saying why.
 
 ## Speaking
 
-The other half, and the newer one: `src/tts` turns a sentence into PCM. On iOS
-that is on-device Kokoro and nothing else (see "On-device Kokoro" below); on
-desktop and Android it is Mimo's `mimo-v2.5-tts` over SSE, base64 inside `choices[0].delta.audio.data`,
-24 kHz / 16-bit / mono, the text to speak in an **assistant** message — a user
-message would be read as a style instruction and never spoken (docs/33).
+The other half, and the newer one: `src/tts` turns a sentence into 24 kHz /
+16-bit / mono PCM. The one voice is on-device Kokoro, on iOS only (see
+"On-device Kokoro" below). Desktop and Android read nothing aloud: they have no
+player (`fallback.rs`) and the plugin's ACL is granted on iOS alone. Xiaomi
+MiMo, the network vendor desktop builds were wired to, was removed on
+2026-10-18 together with its Settings key.
 
 It is here rather than in the app crate because this plugin owns the audio: the
 PCM is headed for an `AVAudioPlayerNode` on the same voice-processing engine
 `AudioFront` already holds, and producer and consumer in one crate is a function
 call instead of a cross-crate contract and a second ACL namespace. Nothing in it
-is iOS-only. It compiles and makes real requests on the Linux desktop, which is
-the only place any of it can be measured, and everything below was.
+is iOS-only: it compiles and runs on the Linux desktop, where the relay, the
+trim and Kokoro itself (`--features kokoro`) are tested.
 
 ```
-TtsBackend        one vendor. MimoBackend over the network, KokoroBackend on
-                  the device (tts/kokoro.rs); qwen3-tts-flash is the named
-                  alternate and fits the same shape.
+TtsBackend        one voice. KokoroBackend on the device (tts/kokoro.rs) is
+                  the only implementation outside tests.
 SilenceTrimmer    streaming head and tail trim, pushed bytes in, playable bytes
                   out.
 SpeechRelay       sentences in, trimmed audio to the player in order, working
@@ -295,11 +295,10 @@ Debug builds only, and it measures without deciding: no threshold, no turn
 detector, no barge-in. `src/smoke/turn-probe.ts` drives it.
 
 `speech_probe` plays sentences synthesised days ago and measures the player;
-`speech_live` is the same twelve sentences through the vendor, the trim and the
-relay, which is the only path that runs every stage at once. It takes its key
-from the process environment (`MIMO_API_KEY`) rather than an argument or a file,
-resolves when the last sentence has been queued rather than when the voice
-stops, and is a debug build's tool on both counts.
+`speech_live` is the same twelve sentences through the session's voice, the
+trim and the relay, which is the only path that runs every stage at once. It
+needs the on-device voice downloaded, resolves when the last sentence has been
+queued rather than when the voice stops, and is a debug build's tool.
 
 `enqueue_speech` is deliberately **not** a command, and neither is
 `finish_speech` beside it. Sentences are put on the queue from Rust, through
@@ -495,10 +494,13 @@ Kokoro-82M-v1.1-zh on the CPU through ONNX Runtime: misaki phonemes (the exact
 string `kokoro.KPipeline` feeds the model, produced by the text front end) and
 a voice in, 24 kHz mono float samples out, one sentence per call.
 
-On iOS it is the only voice. `session::on_device_voice` is the one switch:
-with the `kokoro` feature (iOS only) the session speaks through
-`tts::kokoro::KokoroBackend` and never asks MiMo, which is parked there while
-Kokoro is evaluated on device; without it (desktop, Android) nothing changes.
+It is the only voice. `session::on_device_voice` is the one switch: with the
+`kokoro` feature (src-tauri turns it on for iOS only) the session speaks
+through `tts::kokoro::KokoroBackend`; without it (desktop, Android) a turn is
+refused with "no voice on this device". The feature builds and links on Linux
+x86_64 (ort's prebuilt static ONNX Runtime; `cargo test --features kokoro`
+runs the real model there), but turning it on elsewhere would download weights
+with no player to hear them.
 
 - fp32 only, 4 intra-op threads, voice `zf_001` (`af_maple` for a sentence
   with no Chinese in it), all constants in `tts/kokoro.rs`. Text with any
@@ -512,7 +514,8 @@ Kokoro is evaluated on device; without it (desktop, Android) nothing changes.
 - The model loads once per process and stays (0.5-0.7 s, about 1 GB on an
   A16). It is warmed on a thread of its own when a call opens
   (`start_conversation`) and whenever a turn or cue asks for the backend, so the
-  first sentence finds it loaded; `set_speech_key` at startup does not load it.
+  first sentence finds it loaded; building the session at startup does not
+  load it.
 - Each model call runs on a blocking thread. `max_in_flight` is 1, so the relay
   has one sentence out at a time and the next one is synthesised while the one
   before plays; a barge-in wastes at most the chunk being computed.

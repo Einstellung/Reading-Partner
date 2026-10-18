@@ -1,5 +1,5 @@
-// On-device Kokoro as a `TtsBackend` (docs/companion/136): the only voice on
-// iOS, where MiMo is parked while Kokoro is evaluated on device (session.rs).
+// On-device Kokoro as a `TtsBackend` (docs/companion/136): the only voice.
+// Linked on iOS only (src-tauri/Cargo.toml); other hosts have no player.
 //
 // A sentence goes text -> misaki phonemes (kokoro_g2p) -> the model (kokoro::
 // engine) -> 24 kHz float samples -> 16-bit PCM, the format the relay, the trim

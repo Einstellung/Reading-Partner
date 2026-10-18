@@ -110,8 +110,8 @@ mod tests {
 
     fn key(text: &str, voice: &str) -> OpeningKey {
         OpeningKey {
-            backend: "mimo".into(),
-            model: "mimo-v2.5-tts".into(),
+            backend: "kokoro".into(),
+            model: "kokoro-82m-v1.1-zh".into(),
             voice: voice.into(),
             text: text.into(),
         }
@@ -139,7 +139,7 @@ mod tests {
             key("早上好，今天有三条", "冰糖"),
             key("早上好", "茉莉"),
             OpeningKey {
-                model: "mimo-v3-tts".into(),
+                model: "kokoro-82m-v1.2-zh".into(),
                 ..key("早上好", "冰糖")
             },
             OpeningKey {

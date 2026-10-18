@@ -6,8 +6,8 @@ import { Button } from "../ui/button";
 import { CARD } from "./cardStyles";
 import { createVoicePoller, voiceRowView, type VoicePoller } from "./on-device-voice";
 
-// The voice output card on iOS: the on-device voice's one-time download in
-// place of the MiMo key (on-device-voice.ts holds the states and the polling).
+// The voice output card on iOS: the on-device voice's one-time download
+// (on-device-voice.ts holds the states and the polling).
 export default function OnDeviceVoiceCard({ bridge = kokoroBridge }: { bridge?: KokoroBridge }) {
   const t = useT();
   const [status, setStatus] = useState<KokoroStatus | null>(null);

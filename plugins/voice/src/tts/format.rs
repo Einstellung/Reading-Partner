@@ -12,10 +12,9 @@ pub struct AudioFormat {
 }
 
 impl AudioFormat {
-    /// Mimo and Qwen3-TTS both deliver this and neither lets the caller pick, so
-    /// it is a constant rather than a request parameter. It is also absent from
-    /// the response: the rate was arrived at by cross-checking per-sentence
-    /// durations against the two vendors that document 24 kHz (docs/33, TTS).
+    /// What every voice is converted to before the relay sees it: Kokoro's
+    /// 24 kHz float samples become this (tts/kokoro.rs), so it is a constant
+    /// rather than a parameter.
     pub const PCM16_24K_MONO: AudioFormat = AudioFormat {
         sample_rate_hz: 24_000,
         channels: 1,

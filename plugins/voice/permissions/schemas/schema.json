@@ -415,18 +415,6 @@
           "markdownDescription": "Denies the set_indicator_probe command without any pre-configured scope."
         },
         {
-          "description": "Enables the set_speech_key command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-set-speech-key",
-          "markdownDescription": "Enables the set_speech_key command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the set_speech_key command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-set-speech-key",
-          "markdownDescription": "Denies the set_speech_key command without any pre-configured scope."
-        },
-        {
           "description": "Enables the set_speech_volume command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-speech-volume",
@@ -595,10 +583,10 @@
           "markdownDescription": "Denies the stop_speaking command without any pre-configured scope."
         },
         {
-          "description": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call, and fetch, inspect and bench the on-device Kokoro voice.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-live`\n- `allow-speech-report`\n- `allow-set-speech-key`\n- `allow-speak-begin`\n- `allow-speak-push`\n- `allow-speak-close`\n- `allow-speak-stop`\n- `allow-prime-speech-cues`\n- `allow-speak-cue`\n- `allow-start-conversation`\n- `allow-stop-conversation`\n- `allow-set-speech-volume`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-harness`\n- `allow-kokoro-status`\n- `allow-kokoro-download`\n- `allow-kokoro-bench`",
+          "description": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call, and fetch, inspect and bench the on-device Kokoro voice.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-live`\n- `allow-speech-report`\n- `allow-speak-begin`\n- `allow-speak-push`\n- `allow-speak-close`\n- `allow-speak-stop`\n- `allow-prime-speech-cues`\n- `allow-speak-cue`\n- `allow-start-conversation`\n- `allow-stop-conversation`\n- `allow-set-speech-volume`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-harness`\n- `allow-kokoro-status`\n- `allow-kokoro-download`\n- `allow-kokoro-bench`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call, and fetch, inspect and bench the on-device Kokoro voice.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-live`\n- `allow-speech-report`\n- `allow-set-speech-key`\n- `allow-speak-begin`\n- `allow-speak-push`\n- `allow-speak-close`\n- `allow-speak-stop`\n- `allow-prime-speech-cues`\n- `allow-speak-cue`\n- `allow-start-conversation`\n- `allow-stop-conversation`\n- `allow-set-speech-volume`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-harness`\n- `allow-kokoro-status`\n- `allow-kokoro-download`\n- `allow-kokoro-bench`"
+          "markdownDescription": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call, and fetch, inspect and bench the on-device Kokoro voice.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-live`\n- `allow-speech-report`\n- `allow-speak-begin`\n- `allow-speak-push`\n- `allow-speak-close`\n- `allow-speak-stop`\n- `allow-prime-speech-cues`\n- `allow-speak-cue`\n- `allow-start-conversation`\n- `allow-stop-conversation`\n- `allow-set-speech-volume`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-harness`\n- `allow-kokoro-status`\n- `allow-kokoro-download`\n- `allow-kokoro-bench`"
         }
       ]
     }

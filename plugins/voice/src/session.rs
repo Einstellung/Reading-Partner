@@ -16,7 +16,7 @@
 // which is why a turn keeps its player beside it — see `cut`.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::Arc;
 
 use tokio::sync::{mpsc, Mutex};
 
@@ -28,25 +28,16 @@ use crate::tts::{
 };
 use crate::{Error, Result};
 
-/// The vendor key's fallback source: the process environment. A bench launch is
-/// what sets it (`DEVICECTL_CHILD_MIMO_API_KEY`, live.rs), so it exists for the
-/// length of that run and is on nobody's disk. It is the second source, not the
-/// only one — see `effective_key`.
-pub(crate) const KEY_VAR: &str = "MIMO_API_KEY";
-
-/// What `begin` answers with when no key was found at either source. Names
-/// neither key nor source: it is shown to the user, and the fix is the same
-/// either way.
-const NO_VOICE: &str = "There is no voice to speak with: set the speech API key in Settings.";
+/// What `begin` answers with when this host has no voice at all: a build
+/// without the `kokoro` feature.
+const NO_VOICE: &str = "There is no voice to speak with on this device.";
 
 /// Which voice speaks on this host: the one switch between the two engines.
 ///
 /// With the `kokoro` feature, which src-tauri turns on for iOS only, it is
-/// on-device Kokoro and nothing else. MiMo is parked on iOS while Kokoro is
-/// evaluated on device: its code and the key in Settings stay as they are, it
-/// is just never asked, not even as a fallback before the download. Returning
-/// `None` here brings it back. Desktop and Android build without the feature
-/// and speak with MiMo exactly as before.
+/// on-device Kokoro. Without it there is none: desktop and Android have no
+/// player either (fallback.rs). The network vendor that used to sit beside it,
+/// Xiaomi MiMo, was removed on 2026-10-18.
 fn on_device_voice(
     models: &Arc<crate::kokoro::download::Downloader>,
 ) -> Option<Arc<dyn OnDeviceVoice>> {
@@ -59,20 +50,6 @@ fn on_device_voice(
         let _ = models;
         None
     }
-}
-
-/// The key to build the vendor from, in priority order: the one saved in
-/// Settings and handed over by the webview, then `MIMO_API_KEY` from the
-/// process environment. Blank at either level counts as unset, so clearing the
-/// field in Settings falls back to the environment rather than silencing a
-/// bench build that was launched with a key.
-fn effective_key(from_settings: Option<&str>, from_env: Option<&str>) -> Option<String> {
-    [from_settings, from_env]
-        .into_iter()
-        .flatten()
-        .map(str::trim)
-        .find(|key| !key.is_empty())
-        .map(str::to_string)
 }
 
 /// A turn of speech, from `begin` until it is stopped or replaced.
@@ -109,19 +86,14 @@ async fn cut(turn: &Turn) -> Option<Heard> {
 }
 
 pub struct SpeechSession {
-    /// The vendor, when a key was found. A build without one still manages a
-    /// session: the rejection has to reach the webview as a command that
-    /// answered "no key", not as a command that does not exist.
-    ///
-    /// Behind a lock because Settings can replace it while the app runs. The
-    /// key itself is not kept beside it: `use_key` builds the backend and lets
-    /// the string go, so the only copy in this process is the one the client
-    /// signs requests with. A turn already speaking keeps its own `Arc` and is
-    /// not disturbed by a replacement.
-    backend: StdMutex<Option<Arc<dyn TtsBackend>>>,
+    /// A fixed backend handed in by whoever built the session: the tests'
+    /// stand-ins. A session with neither this nor `on_device` still exists, so
+    /// the rejection reaches the webview as a command that answered "no
+    /// voice", not as a command that does not exist.
+    backend: Option<Arc<dyn TtsBackend>>,
     /// The voice on this device, when this host speaks with one
     /// (`on_device_voice`). Present means it is the only voice: `backend`
-    /// above is kept up to date and never asked.
+    /// above is never asked.
     on_device: Option<Arc<dyn OnDeviceVoice>>,
     speakers: Arc<dyn Speakers>,
     config: RelayConfig,
@@ -147,7 +119,7 @@ impl SpeechSession {
         config: RelayConfig,
     ) -> Self {
         Self {
-            backend: StdMutex::new(backend),
+            backend,
             on_device: None,
             speakers,
             config,
@@ -165,49 +137,14 @@ impl SpeechSession {
 
     /// Build the session this plugin runs with: a player per turn on whatever
     /// host this is, the on-device voice where this host has one
-    /// (`on_device_voice`), and otherwise Mimo if the process was launched
-    /// with a key. The key saved in Settings is not readable from here — it is
-    /// in the webview's credential store — so it arrives afterwards through
-    /// `use_key`.
+    /// (`on_device_voice`), and otherwise no voice.
     pub fn from_env(
         speakers: Arc<dyn Speakers>,
         models: &Arc<crate::kokoro::download::Downloader>,
     ) -> Self {
         let mut session = Self::new(None, speakers, RelayConfig::default());
         session.on_device = on_device_voice(models);
-        session.use_key(None);
         session
-    }
-
-    /// Take the key saved in Settings and rebuild the vendor around it. `None`
-    /// or blank clears it, after which `MIMO_API_KEY` is used again if the run
-    /// was launched with one. Answers whether there is a voice afterwards; with
-    /// an on-device voice that is whether its files are on disk, whatever the
-    /// key.
-    ///
-    /// Called once when the app starts and again on every save, rather than
-    /// per turn: the key belongs to the process, and carrying it on
-    /// `speak_begin` would put it across the IPC boundary once per answer.
-    pub fn use_key(&self, from_settings: Option<&str>) -> bool {
-        self.use_key_with(from_settings, std::env::var(KEY_VAR).ok().as_deref())
-    }
-
-    /// `use_key` with the environment's half handed in, so the priority between
-    /// the two sources can be exercised without a process environment. A test
-    /// that read the real one would pass or fail by what the shell exported.
-    fn use_key_with(&self, from_settings: Option<&str>, from_env: Option<&str>) -> bool {
-        let backend = effective_key(from_settings, from_env)
-            .and_then(|key| crate::tts::mimo::MimoBackend::new(key).ok())
-            .map(|backend| Arc::new(backend) as Arc<dyn TtsBackend>);
-        let speaking = backend.is_some();
-        *self.backend.lock().expect("speech backend lock") = backend;
-        self.cues.clear();
-        match &self.on_device {
-            // Not `backend()`: that would load the model, and this runs at
-            // startup whether or not a call ever opens.
-            Some(voice) => voice.ready(),
-            None => speaking,
-        }
     }
 
     /// The vendor to open a turn with, or the rejection to answer with. Not
@@ -217,13 +154,11 @@ impl SpeechSession {
     /// disk the answer is the rejection telling the user to download them, and
     /// it is asked again on every turn, so a download that finishes during the
     /// session speaks from the next turn on.
-    fn vendor(&self) -> Result<Arc<dyn TtsBackend>> {
+    pub(crate) fn vendor(&self) -> Result<Arc<dyn TtsBackend>> {
         if let Some(voice) = &self.on_device {
             return voice.backend().map_err(Error::Speech);
         }
         self.backend
-            .lock()
-            .expect("speech backend lock")
             .clone()
             .ok_or_else(|| Error::Speech(NO_VOICE.to_string()))
     }
@@ -861,80 +796,15 @@ mod tests {
         assert_eq!(session.stop().await.unwrap(), SpeechStopped::UNKNOWN);
     }
 
-    // Where the key comes from. `effective_key` is the whole of that decision,
-    // and it is pure, so the priority and the fallback are testable without a
-    // process environment or a network. The strings below are shaped like keys
-    // and are not: nothing here reaches a vendor.
-
-    #[test]
-    fn settings_wins_over_the_environment() {
-        assert_eq!(
-            effective_key(Some("from-settings-not-real"), Some("from-env-not-real")),
-            Some("from-settings-not-real".to_string())
-        );
-    }
-
-    #[test]
-    fn a_blank_settings_key_falls_back_to_the_environment() {
-        for blank in ["", "   "] {
-            assert_eq!(
-                effective_key(Some(blank), Some("from-env-not-real")),
-                Some("from-env-not-real".to_string()),
-                "{blank:?}"
-            );
-        }
-        assert_eq!(
-            effective_key(None, Some("from-env-not-real")),
-            Some("from-env-not-real".to_string())
-        );
-    }
-
-    #[test]
-    fn settings_alone_is_enough() {
-        assert_eq!(
-            effective_key(Some("from-settings-not-real"), None),
-            Some("from-settings-not-real".to_string())
-        );
-    }
-
-    #[test]
-    fn neither_source_means_no_voice() {
-        assert_eq!(effective_key(None, None), None);
-        assert_eq!(effective_key(Some("  "), Some("")), None);
-    }
-
-    #[test]
-    fn a_key_is_taken_trimmed() {
-        assert_eq!(
-            effective_key(Some("  from-settings-not-real\n"), None),
-            Some("from-settings-not-real".to_string())
-        );
-    }
-
-    /// The session with no key at either source refuses to open a turn, and the
-    /// refusal says where to fix it without naming a key or a variable.
+    /// A session with no voice refuses to open a turn.
     #[tokio::test]
-    async fn a_session_with_no_key_refuses_to_begin() {
+    async fn a_session_with_no_voice_refuses_to_begin() {
         let session = SpeechSession::new(None, Arc::new(Stage::default()), RelayConfig::default());
         let refused = session.begin().await;
         let Err(Error::Speech(message)) = refused else {
             panic!("{refused:?}");
         };
         assert_eq!(message, NO_VOICE);
-    }
-
-    /// Handing a key over builds a vendor; clearing it with nothing in the
-    /// environment takes the vendor away again; clearing it with a key in the
-    /// environment falls back to that one and keeps a voice.
-    #[tokio::test]
-    async fn a_key_handed_over_gives_the_session_a_voice() {
-        let session = SpeechSession::new(None, Arc::new(Stage::default()), RelayConfig::default());
-        assert!(session.use_key_with(Some("handed-over-not-real"), None));
-        assert!(session.vendor().is_ok());
-        assert!(!session.use_key_with(Some("   "), None));
-        assert!(session.vendor().is_err());
-        assert!(session.use_key_with(None, Some("from-env-not-real")));
-        assert!(session.vendor().is_ok());
     }
 
     #[tokio::test]
@@ -1001,16 +871,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_unknown_cue_is_refused_and_a_new_key_drops_what_was_made() {
+    async fn an_unknown_cue_is_refused() {
         let session = session(Arc::new(Stage::default()));
         assert!(session.speak_cue("zh/nope").await.is_err());
-
-        session.prime_cues("en").await.unwrap();
-        let backend = session.vendor().unwrap();
-        let key = session.cue_key(backend.as_ref(), "Let me think about that.");
-        assert!(session.cues.has("en/think", &key));
-        session.use_key_with(None, None);
-        assert!(!session.cues.has("en/think", &key));
     }
     /// An on-device voice whose files appear when the test says so.
     struct Local {
@@ -1044,16 +907,16 @@ mod tests {
         })
     }
 
-    /// A MiMo key in hand changes nothing: until the files are there the turn
-    /// is refused with the download message, and the vendor is never asked.
+    /// A fixed backend beside it changes nothing: until the files are there
+    /// the turn is refused with the download message, and the backend is
+    /// never asked.
     #[tokio::test]
     async fn an_on_device_voice_not_downloaded_yet_refuses_and_never_falls_back() {
-        let mimo = Arc::new(Fake::default());
-        let started = mimo.started.clone();
+        let other = Arc::new(Fake::default());
+        let started = other.started.clone();
         let voice = local(false);
-        let session = session_with(Arc::new(Stage::default()), mimo).with_on_device(voice.clone());
+        let session = session_with(Arc::new(Stage::default()), other).with_on_device(voice.clone());
 
-        assert!(!session.use_key_with(Some("handed-over-not-real"), None));
         let refused = session.begin().await;
         let Err(Error::Speech(message)) = refused else {
             panic!("{refused:?}");
@@ -1067,31 +930,29 @@ mod tests {
     #[tokio::test]
     async fn a_download_that_finishes_mid_session_speaks_from_the_next_turn() {
         let stage = Arc::new(Stage::default());
-        let mimo = Arc::new(Fake::default());
-        let mimo_started = mimo.started.clone();
+        let other = Arc::new(Fake::default());
+        let other_started = other.started.clone();
         let voice = local(false);
-        let session = session_with(stage.clone(), mimo).with_on_device(voice.clone());
+        let session = session_with(stage.clone(), other).with_on_device(voice.clone());
         assert!(session.begin().await.is_err());
 
         voice.ready.store(true, Ordering::SeqCst);
-        assert!(session.use_key_with(None, None));
         let utterance = session.begin().await.unwrap();
         session.push("a".to_string()).await.unwrap();
         session.close().await.unwrap();
         let player = stage.player_for(utterance);
         assert!(until(|| player.sentences().len() == 1).await);
         assert_eq!(voice.backend.started.load(Ordering::SeqCst), 1);
-        assert_eq!(mimo_started.load(Ordering::SeqCst), 0);
+        assert_eq!(other_started.load(Ordering::SeqCst), 0);
     }
 
-    /// `use_key` runs at startup and must not load a model; a call opening
-    /// does, through `backend`.
+    /// Building the session must not load a model; a call opening does,
+    /// through `backend`.
     #[tokio::test]
-    async fn warming_asks_the_on_device_voice_and_the_key_does_not() {
+    async fn warming_asks_the_on_device_voice_and_building_does_not() {
         let voice = local(true);
         let session = SpeechSession::new(None, Arc::new(Stage::default()), RelayConfig::default())
             .with_on_device(voice.clone());
-        assert!(session.use_key_with(None, None));
         assert_eq!(voice.asked.load(Ordering::SeqCst), 0);
         session.warm();
         assert_eq!(voice.asked.load(Ordering::SeqCst), 1);

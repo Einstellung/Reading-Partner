@@ -1,18 +1,16 @@
-// Speaking: the network half of the spoken briefing (docs/33, M-voice-2).
+// Speaking: the synthesis half of the spoken briefing (docs/33, M-voice-2).
 //
 // It lives in this plugin and not in the app crate because the plugin already
 // owns the audio: the PCM produced here is destined for an AVAudioPlayerNode on
 // the same VPIO engine AudioFront holds, and producer and consumer in one crate
 // is one function call instead of a cross-crate contract and a second ACL
-// namespace. Nothing below is iOS-only — it compiles and makes real requests on
-// the Linux desktop, which is the only place any of it can be measured.
+// namespace. Nothing below is iOS-only: it compiles and runs on the Linux
+// desktop, where the relay and the trim are tested.
 //
 // The pieces, in the order a sentence passes through them:
 //
 //   backend  what a vendor has to look like
-//   mimo     the vendor over the network (desktop and Android)
-//   kokoro   on-device Kokoro, the only voice on iOS
-//   sse      the frame parser under it
+//   kokoro   on-device Kokoro, the only voice (iOS; MiMo was removed 2026-10-18)
 //   trim     the head and tail silence that would otherwise stack up between
 //            sentences
 //   relay    how far ahead of the player to work
@@ -25,11 +23,9 @@ pub mod cues;
 mod error;
 mod format;
 pub mod kokoro;
-pub mod mimo;
 mod opening;
 mod player;
 mod relay;
-mod sse;
 mod trim;
 
 pub use backend::{OnDeviceVoice, SpeechRequest, TtsBackend};

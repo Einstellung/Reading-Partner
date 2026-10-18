@@ -1,8 +1,6 @@
-// What a TTS vendor has to look like from here. Mimo's free period has neither
-// an end date nor a published price after it (docs/33, 小米落地要点 four), so
-// the shape has to hold a second vendor without anything above it changing.
-// Qwen3-TTS-flash is the named alternate and fits: different host, different
-// body, different JSON path to the audio, same raw PCM out.
+// What a voice has to look like from here. The one implementation is
+// on-device Kokoro (tts/kokoro.rs); the network vendor it replaced, Xiaomi
+// MiMo, was removed on 2026-10-18. Tests speak through stand-ins.
 
 use async_trait::async_trait;
 use tokio::sync::mpsc;
@@ -14,10 +12,8 @@ use super::format::AudioFormat;
 #[derive(Debug, Clone)]
 pub struct SpeechRequest {
     pub text: String,
-    /// Vendor-specific voice name. Mimo takes the Chinese literal (冰糖 / 茉莉 /
-    /// 苏打 / 白桦); Qwen3 takes `Cherry` and friends. No shared enum: an enum
-    /// would have to be extended for every vendor and would still not say what
-    /// any of them sound like.
+    /// Backend-specific voice name (a Kokoro voice id). Empty takes the
+    /// backend's default.
     pub voice: String,
 }
 

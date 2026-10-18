@@ -4,7 +4,7 @@
 // measure the player and nothing in front of it, which is what makes them the
 // control — no vendor latency in the middle of a question about splicing. This
 // is the other half, and it is the only path that ever runs all of it at once:
-// text in, Mimo's SSE, the trim, the relay's admission gate, the phone's own
+// text in, the on-device voice, the trim, the relay's admission gate, the phone's own
 // speaker, and a per-sentence timeline of the whole thing back out.
 //
 // The answer is untyped for the same reason the Swift report is (models.rs): it
@@ -16,19 +16,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::mpsc;
 
 use crate::speaker::DevicePlayer;
-use crate::tts::{mimo::MimoBackend, RelayConfig, RelayEvent, SpeechRelay, TtsBackend};
+use crate::session::SpeechSession;
+use crate::tts::{RelayConfig, RelayEvent, SpeechRelay};
 use crate::{Error, Result};
-
-// The key is read from the process environment, never from an argument and
-// never from a file: the run is launched with
-// `DEVICECTL_CHILD_MIMO_API_KEY=… xcrun devicectl device process launch`, so it
-// exists for the length of the run and is nowhere on the phone's disk, in the
-// bundle, or in the repository. The same variable the session reads.
-use crate::session::KEY_VAR;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,7 +31,7 @@ struct LiveArgs {
     /// fixture manifest, so a live run says exactly what the fixture legs say
     /// and the two can be compared line by line.
     sentences: Vec<String>,
-    /// Vendor voice name. Absent takes the backend's own default (冰糖).
+    /// Voice id. Absent takes the backend's own default.
     voice: Option<String>,
     prefetch_ms: Option<f64>,
     concurrency: Option<usize>,
@@ -50,14 +44,8 @@ pub async fn run<R: Runtime>(app: AppHandle<R>, args: Value) -> Result<Value> {
     if args.sentences.is_empty() {
         return Err(Error::Speech("A live run needs a sentence to say.".into()));
     }
-    let key = std::env::var(KEY_VAR).map_err(|_| {
-        Error::Speech(format!(
-            "{KEY_VAR} is not in this process's environment. Launch the app with \
-             DEVICECTL_CHILD_{KEY_VAR} set."
-        ))
-    })?;
-
-    let backend = MimoBackend::new(key).map_err(|e| Error::Speech(e.to_string()))?;
+    // The same voice a turn speaks with, so the run is the production line.
+    let backend = app.state::<SpeechSession>().vendor()?;
     let mut config = RelayConfig::default();
     if let Some(voice) = args.voice.filter(|v| !v.is_empty()) {
         config.voice = voice;
@@ -87,7 +75,10 @@ pub async fn run<R: Runtime>(app: AppHandle<R>, args: Value) -> Result<Value> {
         .unwrap_or(0);
     let player = Arc::new(DevicePlayer::new(app, utterance));
     let (events, mut incoming) = mpsc::unbounded_channel();
-    let relay = SpeechRelay::start(Arc::new(backend), player, config.clone(), events);
+    if let Some(most) = backend.max_in_flight() {
+        config.concurrency = config.concurrency.min(most.max(1));
+    }
+    let relay = SpeechRelay::start(backend, player, config.clone(), events);
 
     let chars: usize = args.sentences.iter().map(|s| s.chars().count()).sum();
     for sentence in &args.sentences {
@@ -98,8 +89,7 @@ pub async fn run<R: Runtime>(app: AppHandle<R>, args: Value) -> Result<Value> {
     // Until the relay says every sentence has been handed to the player. The
     // audio goes on playing after that — the `speech` event is what says the
     // voice has stopped — and there is no timeout here: the harness owns the
-    // one it already has, and the vendor's own read and connect timeouts bound
-    // each request.
+    // one it already has.
     let mut timeline = Vec::new();
     let mut queued = 0;
     let mut failed = 0;

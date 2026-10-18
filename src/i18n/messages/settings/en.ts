@@ -125,10 +125,6 @@ export default {
   "optional.dictationLanguage": "Dictation language",
   "optional.dictationHint":
     "The language the iPhone listens for when you hold the bar and talk. Speech is transcribed on the phone and never uploaded. Speaking a language other than this one does not produce a rough transcript — it produces a confident wrong one, so set it to the language you actually speak.",
-  "optional.speechKey": "Speech API key",
-  "optional.speechKeyReplace": "Replace speech API key",
-  "optional.speechHint":
-    "A Xiaomi MiMo key, for the voice that reads answers aloud. Without one the app stays silent and everything else works as it does now.",
   "optional.onDeviceVoice": "On-device voice",
   "optional.onDeviceVoiceHint": "The voice that reads answers aloud runs on this device.",
   "optional.onDeviceVoiceSize": "The voice that reads answers aloud runs on this device. A {mb} MB download from Hugging Face, once. Until it is done, answers are not read aloud.",

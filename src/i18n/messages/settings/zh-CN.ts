@@ -120,9 +120,6 @@ export default {
   "optional.dictationLanguage": "听写语言",
   "optional.dictationHint":
     "按住输入条说话时 iPhone 识别的语言。语音在手机上转写，从不上传。说其他语言不会得到粗糙的转写，而会得到一段看似可信的错误文字，所以请设为你实际说的语言。",
-  "optional.speechKey": "语音 API 密钥",
-  "optional.speechKeyReplace": "替换语音 API 密钥",
-  "optional.speechHint": "小米 MiMo 的密钥，用于朗读回答的语音。没有它，应用保持静音，其余一切照常工作。",
   "optional.onDeviceVoice": "本机语音",
   "optional.onDeviceVoiceHint": "朗读回答的语音在这台设备上运行。",
   "optional.onDeviceVoiceSize": "朗读回答的语音在这台设备上运行。需从 Hugging Face 下载一次，约 {mb} MB。下载完成前，回答不会朗读出来。",

@@ -106,211 +106,21 @@ impl fmt::Display for TtsError {
 
 impl std::error::Error for TtsError {}
 
-/// The whole of what went wrong, not the outermost sentence of it.
-///
-/// A reqwest send failure says only `error sending request for url (…)`;
-/// whether the name did not resolve, the connection was refused, TLS failed or
-/// the connect timeout ran out lives one or more levels down in `source()`. A
-/// device run on 2026-09-05 lost all twelve sentences to that one sentence and
-/// could not say which of those four it was, which is a run repeated for
-/// nothing.
-pub(crate) fn describe_chain(e: &(dyn std::error::Error + 'static)) -> String {
-    let mut out = e.to_string();
-    let mut cause = e.source();
-    while let Some(e) = cause {
-        let text = e.to_string();
-        if !text.is_empty() {
-            out.push_str(": ");
-            out.push_str(&text);
-        }
-        cause = e.source();
-    }
-    out
-}
-
-/// What separates a refusal from a failure. Both vendors bury it one level down
-/// and neither uses a status code of its own, so the body is the only thing to
-/// go on. A list rather than an exact code because the two known vendors already
-/// disagree — DashScope puts `DataInspectionFailed` at the top level, Mimo nests
-/// an OpenAI-shaped `error` object — and a third will disagree again.
-const MODERATION_MARKERS: &[&str] = &[
-    "datainspectionfailed",
-    "data_inspection_failed",
-    "content_filter",
-    "content_policy",
-    "contentpolicy",
-    "risk_control",
-    "sensitive",
-    "moderation",
-    "内容安全",
-    "内容审核",
-    "违规",
-];
-
-/// Split a vendor error body into "refused" and "failed". `status` is `None`
-/// when the error arrived inside an SSE frame rather than as a response status.
-pub(crate) fn classify(status: Option<u16>, body: &str) -> TtsError {
-    let (code, message) = extract_code_and_message(body);
-    let haystack = format!(
-        "{} {} {}",
-        code.as_deref().unwrap_or(""),
-        message.as_deref().unwrap_or(""),
-        body
-    )
-    .to_lowercase();
-    let moderated = MODERATION_MARKERS.iter().any(|m| haystack.contains(m));
-    let message = message.unwrap_or_else(|| truncate(body, 300));
-    if moderated {
-        TtsError::Moderated { code, message }
-    } else {
-        match status {
-            Some(status) => TtsError::Status {
-                status,
-                code,
-                message,
-            },
-            None => TtsError::Protocol(message),
-        }
-    }
-}
-
-fn extract_code_and_message(body: &str) -> (Option<String>, Option<String>) {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
-        return (None, None);
-    };
-    let src = value.get("error").filter(|e| e.is_object()).unwrap_or(&value);
-    let code = src
-        .get("code")
-        .or_else(|| src.get("type"))
-        .and_then(json_as_string);
-    let message = src.get("message").and_then(json_as_string);
-    (code, message)
-}
-
-fn json_as_string(v: &serde_json::Value) -> Option<String> {
-    match v {
-        serde_json::Value::String(s) => Some(s.clone()),
-        serde_json::Value::Number(n) => Some(n.to_string()),
-        _ => None,
-    }
-}
-
-fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        return s.to_string();
-    }
-    let mut end = max;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    s[..end].to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn openai_shaped_moderation_is_a_refusal() {
-        let e = classify(
-            Some(400),
-            r#"{"error":{"code":"content_filter","message":"blocked","type":"invalid_request_error"}}"#,
-        );
-        assert!(matches!(e, TtsError::Moderated { .. }), "{e:?}");
-        assert!(!e.is_retryable());
-    }
-
-    #[test]
-    fn dashscope_shaped_moderation_is_a_refusal() {
-        let e = classify(Some(400), r#"{"code":"DataInspectionFailed","message":"no"}"#);
-        assert!(matches!(e, TtsError::Moderated { .. }), "{e:?}");
-    }
-
-    #[test]
-    fn an_ordinary_bad_request_is_not_a_refusal() {
-        let e = classify(
-            Some(400),
-            r#"{"error":{"code":"invalid_voice","message":"no such voice"}}"#,
-        );
-        match e {
-            TtsError::Status { status, code, .. } => {
-                assert_eq!(status, 400);
-                assert_eq!(code.as_deref(), Some("invalid_voice"));
-            }
-            other => panic!("{other:?}"),
-        }
-    }
-
-    #[test]
     fn a_server_error_is_worth_a_second_try_and_a_client_error_is_not() {
-        assert!(classify(Some(503), "{}").is_retryable());
-        assert!(classify(Some(429), "{}").is_retryable());
-        assert!(!classify(Some(401), "{}").is_retryable());
+        let status = |status| TtsError::Status { status, code: None, message: String::new() };
+        assert!(status(503).is_retryable());
+        assert!(status(429).is_retryable());
+        assert!(!status(400).is_retryable());
     }
 
     #[test]
     fn an_answer_with_no_audio_in_it_is_worth_another_try() {
         assert!(TtsError::NoAudio.is_retryable());
-    }
-
-    #[test]
-    fn a_body_that_is_not_json_still_produces_a_sentence() {
-        let e = classify(Some(502), "<html>bad gateway</html>");
-        assert!(e.to_string().contains("502"), "{e}");
-    }
-
-    /// One link of a hand-built chain. A `reqwest::Error` cannot be constructed
-    /// from outside its crate, and what is under test is the walk rather than
-    /// any one vendor's wording.
-    #[derive(Debug)]
-    struct Link {
-        text: &'static str,
-        under: Option<Box<Link>>,
-    }
-
-    impl fmt::Display for Link {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str(self.text)
-        }
-    }
-
-    impl std::error::Error for Link {
-        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            self.under
-                .as_deref()
-                .map(|e| e as &(dyn std::error::Error + 'static))
-        }
-    }
-
-    fn chain(texts: &[&'static str]) -> Link {
-        let mut under = None;
-        for text in texts.iter().rev() {
-            under = Some(Box::new(Link { text, under }));
-        }
-        *under.expect("a chain needs a link")
-    }
-
-    #[test]
-    fn a_transport_failure_carries_the_cause_under_it() {
-        let e = chain(&[
-            "error sending request for url (https://api.xiaomimimo.com/v1/chat/completions)",
-            "client error (Connect)",
-            "dns error",
-            "failed to lookup address information: Name or service not known",
-        ]);
-        assert_eq!(
-            describe_chain(&e),
-            "error sending request for url (https://api.xiaomimimo.com/v1/chat/completions): \
-             client error (Connect): dns error: \
-             failed to lookup address information: Name or service not known"
-        );
-    }
-
-    #[test]
-    fn an_error_with_nothing_under_it_reads_as_itself() {
-        assert_eq!(
-            describe_chain(&chain(&["connection refused"])),
-            "connection refused"
-        );
+        assert!(!TtsError::Engine("no model".into()).is_retryable());
     }
 }
