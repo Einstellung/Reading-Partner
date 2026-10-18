@@ -25,7 +25,9 @@ import type { TopicSearch } from "./types";
 import { PAPER_FULL_CHARS } from "./verify";
 
 /** Characters of an item's materials the write-up sees. */
-const ITEM_MATERIAL_CHARS = 2400;
+export const ITEM_MATERIAL_CHARS = 2400;
+/** Characters of one section the write-up sees, where the item's budget is shared. */
+export const SECTION_CHARS = 1200;
 /** Characters of an item's materials the write-up sees once its paper was read in full: the whole read, the abstract beside it. */
 const ITEM_FULL_CHARS = PAPER_FULL_CHARS + 4000;
 
@@ -205,6 +207,7 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
       lines.push(`Since the last report: likes ${b.likes ?? 0} -> ${a.likes ?? 0}, reposts ${b.reposts ?? 0} -> ${a.reposts ?? 0}`);
     }
     if (item.verify.status === "unread") lines.push(`The original was not read: ${item.verify.reason ?? ""}`);
+    if (item.verify.status === "self" && item.verify.reason) lines.push(`What the post links to could not be read: ${item.verify.reason}`);
     const depth = paperDepth(item, input.registry);
     if (depth) lines.push(DEPTH_LINE[depth]);
     for (const d of item.verify.discrepancies) {
@@ -213,15 +216,20 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     for (const p of item.links.posts.slice(0, 3)) lines.push(`Post @${p.handle}: ${cut(p.text, 400)}`);
     const whole = depth === "full";
     let left = whole ? ITEM_FULL_CHARS : ITEM_MATERIAL_CHARS;
-    for (const id of item.materials) {
+    item.materials.forEach((id, k) => {
       const m = input.registry.get(id);
-      for (const s of input.registry.sections(id)) {
+      const sections = input.registry.sections(id);
+      // A post or X Article read whole is one section: it takes the item's budget, less a section's share for each material after it.
+      const onePost = m?.reader === "x" && sections.length === 1;
+      const after = item.materials.length - k - 1;
+      for (const s of sections) {
         if (left <= 0) break;
-        const text = cut(s.text, whole ? left : Math.min(left, 1200));
+        const room = whole ? left : onePost ? Math.max(Math.min(left, SECTION_CHARS), left - after * SECTION_CHARS) : Math.min(left, SECTION_CHARS);
+        const text = cut(s.text, room);
         left -= text.length;
         lines.push(`${s.id}${s.heading ? ` (${s.heading})` : ""}${m?.title ? ` of "${m.title}"` : ""}: ${text}`);
       }
-    }
+    });
     return material(item.id, lines.join("\n"));
   });
   const questions = input.questions.map((q) => `${q.id}: ${q.text}`);

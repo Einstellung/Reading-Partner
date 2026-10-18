@@ -177,7 +177,7 @@ function world(opts: { papers?: InfoItem[] } = {}) {
     openLink: async (url) => {
       opened.push(url);
       if (new URL(url).hostname === "x.com") {
-        return { ok: true, via: "x", title: null, author: null, publishedAt: null, sections: [{ heading: null, html: "<p>The whole post, read off its own page.</p>" }], whole: null };
+        return { ok: true, via: "x", title: null, author: null, publishedAt: null, sections: [{ heading: null, html: "<p>The whole post, read off its own page.</p>" }], whole: null, links: [] };
       }
       return { ok: false, reason: "not in this test" };
     },

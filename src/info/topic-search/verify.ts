@@ -3,13 +3,16 @@
 //
 // What is read, by what the item is: a paper's abstract and the first 8000
 // characters of its arXiv HTML (pitfall 377: an HTML page is real only when it
-// is a 200 with real text and a real title), or the whole paper when the
+// is a 200 with real text and a real title), the body read even when the export
+// API gives no metadata, and then from the PDF's text layer when there is no
+// HTML; or the whole paper when the
 // write-up asks to read it deeper (readPaperFull: the whole HTML, else the PDF's
 // text layer, capped at PAPER_FULL_CHARS); a repository's README and top-level
 // listing, with its facts from the counted GitHub lookup; any other link through
 // 86's `open` route (readers, site adapters, the generic page and PDF read),
-// injected as `openLink`; a post that is its own content is the original, read
-// whole through the same route when the search page cut it.
+// injected as `openLink`; a post that is its own content is read whole through
+// the same route when the search page cut it, and the links in its full text
+// name the original read beside it (pitfall 657).
 //
 // Facts — stars, dates, authors — come from the reads and the lookup, never
 // from the model. The comparison is one model call per item; a sentence it
@@ -20,6 +23,7 @@ import { htmlToText } from "../../workshop/extract/sanitize";
 import { htmlSections, markdownSections, type MaterialInput, type MaterialReader, type MaterialRegistry } from "../dossier/registry";
 import { arxivIdUrl, arxivPdfUrl, parseArxivAtom } from "../sources/plugins/arxiv-client";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
+import { isXHost } from "../x/post";
 import type { XSearchPost } from "../x/search-page";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
 import type { PaperInfo } from "./rank-pool";
@@ -60,6 +64,8 @@ export type OpenedLink =
       sections: { heading: string | null; html: string }[];
       /** A document the site served whole (a PDF), whose text layer is not read here. */
       whole: { format: "pdf" | "epub"; abstract: string | null } | null;
+      /** Links out of what was read, as the reader expanded them, off the link's own site; in the order found. */
+      links: string[];
     }
   | { ok: false; reason: string };
 
@@ -82,7 +88,15 @@ export type Target =
   | { kind: "page"; url: string }
   | { kind: "post"; post: XSearchPost };
 
-export type SourceRead = { ok: true; input: MaterialInput; facts: ResultFacts } | { ok: false; reason: string };
+export type SourceRead =
+  | {
+      ok: true;
+      input: MaterialInput;
+      facts: ResultFacts;
+      /** A post's links out, the full text's where it was read whole: what the item reads as its original. */
+      links?: string[];
+    }
+  | { ok: false; reason: string };
 
 function readerOf(via: string): MaterialReader {
   return (["x", "github", "drive", "arxiv", "pdf"] as const).find((r) => r === via) ?? (via === "epub" ? "pdf" : "web");
@@ -94,6 +108,29 @@ function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * The links out of what a link's read turned up (86's session candidates found
+ * by #1, as the reader expanded them: the X reader resolves t.co), in their
+ * order: not X itself, not the link's own site, which is page navigation.
+ */
+export function linksOut(candidates: readonly { url: string; from: number | null }[], url: string): string[] {
+  const host = (u: string) => {
+    try {
+      return new URL(u).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  };
+  const own = host(url)?.replace(/^www\./, "");
+  const out: string[] = [];
+  for (const c of candidates) {
+    const h = host(c.url);
+    if (c.from !== 1 || !h || isXHost(h) || h.replace(/^www\./, "") === own || out.includes(c.url)) continue;
+    out.push(c.url);
+  }
+  return out;
 }
 
 function capChars(sections: { heading: string | null; text: string }[], n: number): { heading: string | null; text: string }[] {
@@ -113,20 +150,32 @@ function bodyOfArxivHtml(html: string): string {
   return article.replace(/<(nav|header|footer)\b[\s\S]*?<\/\1>/gi, " ");
 }
 
-/** The body sections of a paper's arXiv HTML, or null when arXiv has no real HTML for it (pitfall 377). */
-async function arxivHtmlSections(id: string, deps: SourceDeps, signal: AbortSignal): Promise<{ heading: string | null; text: string }[] | null> {
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+type ArxivHtml = { ok: true; title: string | null; sections: { heading: string | null; text: string }[] } | { ok: false; why: string };
+
+/** A paper's arXiv HTML, its title and body sections, or why there is none (pitfall 377: a real page is a 200 with real text and a real title). */
+async function readArxivHtml(id: string, deps: SourceDeps, signal: AbortSignal): Promise<ArxivHtml> {
+  let res: FetchedText;
   try {
-    const res = await deps.fetchText(`https://arxiv.org/html/${id}`, signal);
-    const title = /<title>([\s\S]*?)<\/title>/i.exec(res.text)?.[1]?.trim() ?? "";
-    const html = bodyOfArxivHtml(res.text);
-    if (res.status === 200 && !/^untitled document$/i.test(title) && htmlToText(html).length > ARXIV_HTML_MIN_CHARS) {
-      return htmlSections(html, htmlToText).filter((s) => !/^abstract$/i.test(s.heading ?? ""));
-    }
+    res = await deps.fetchText(`https://arxiv.org/html/${id}`, signal);
   } catch (e) {
     if (signal.aborted) throw e;
+    return { ok: false, why: `arXiv HTML: ${errText(e)}` };
   }
-  return null;
+  if (res.status !== 200) return { ok: false, why: `arXiv HTML answered HTTP ${res.status}` };
+  const title = htmlToText(/<title>([\s\S]*?)<\/title>/i.exec(res.text)?.[1] ?? "")
+    .replace(/^\[[^\]]*\]\s*/, "")
+    .trim();
+  if (/^untitled document$/i.test(title)) return { ok: false, why: "arXiv has no HTML version of it" };
+  const html = bodyOfArxivHtml(res.text);
+  if (htmlToText(html).length <= ARXIV_HTML_MIN_CHARS) return { ok: false, why: "arXiv's HTML version holds no body text" };
+  return { ok: true, title: title || null, sections: htmlSections(html, htmlToText) };
 }
+
+const isAbstract = (s: { heading: string | null }) => /^abstract$/i.test(s.heading ?? "");
 
 /** Back matter a deeper read leaves out: it says nothing about the paper's method or results. */
 const BACK_MATTER = /^[\d.\s]*(?:references|bibliography|acknowledge?ments?)\b/i;
@@ -164,7 +213,8 @@ export interface KnownPaper {
 export async function readPaperFull(id: string, known: KnownPaper, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   let url = `https://arxiv.org/html/${id}`;
   let via = "HTML";
-  let body = (await arxivHtmlSections(id, deps, signal))?.filter((s) => !BACK_MATTER.test(s.heading ?? "")) ?? null;
+  const html = await readArxivHtml(id, deps, signal);
+  let body = html.ok ? html.sections.filter((s) => !isAbstract(s) && !BACK_MATTER.test(s.heading ?? "")) : null;
   if (!body && deps.readPdfText) {
     url = arxivPdfUrl(id);
     via = "PDF";
@@ -198,6 +248,8 @@ export async function readPaperFull(id: string, known: KnownPaper, deps: SourceD
 }
 
 async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
+  // Without the export API's metadata (rate-limited, cooling down) the body is still read: HTML, else the PDF.
+  const why: string[] = [];
   let paper = t.known;
   if (!paper) {
     try {
@@ -212,25 +264,47 @@ async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps
           publishedAt: entry.published || null,
           url: `https://arxiv.org/abs/${entry.id}`,
         };
-      }
+      } else why.push(res.status === 200 ? "the arXiv API has no entry for it" : `the arXiv API answered HTTP ${res.status}`);
     } catch (e) {
       if (signal.aborted) throw e;
+      why.push(`the arXiv API: ${errText(e)}`);
     }
   }
-  const html = await arxivHtmlSections(t.id, deps, signal);
-  const body = html ? capChars(html, PAPER_BODY_CHARS) : [];
+  const html = await readArxivHtml(t.id, deps, signal);
+  let body: { heading: string | null; text: string }[] = [];
+  let bodyFrom: "HTML" | "PDF" | null = null;
+  if (html.ok) {
+    // The HTML's own abstract stands in when the API gave none.
+    body = capChars(paper?.abstract ? html.sections.filter((s) => !isAbstract(s)) : html.sections, PAPER_BODY_CHARS);
+    bodyFrom = "HTML";
+  } else {
+    why.push(html.why);
+    // With the API's abstract in hand an ordinary read stops there; without it, the PDF is all there is.
+    if (deps.readPdfText && !paper?.abstract) {
+      try {
+        const text = await deps.readPdfText(arxivPdfUrl(t.id), signal);
+        if (text?.trim()) {
+          body = capChars(pdfParts(text), PAPER_BODY_CHARS);
+          bodyFrom = "PDF";
+        } else why.push("the PDF could not be read or has no text layer");
+      } catch (e) {
+        if (signal.aborted) throw e;
+        why.push(`the PDF: ${errText(e)}`);
+      }
+    }
+  }
   const depth = body.length ? "head" : "abstract";
-  if (!paper && body.length === 0) return { ok: false, reason: `arXiv answered nothing readable for ${t.id}` };
+  if (!paper && body.length === 0) return { ok: false, reason: `arXiv ${t.id} could not be read: ${why.join("; ")}` };
   const sections = [...(paper?.abstract ? [{ heading: "Abstract", text: paper.abstract }] : []), ...body];
   return {
     ok: true,
     input: {
       url: `https://arxiv.org/abs/${t.id}`,
-      title: paper?.title ?? null,
+      title: paper?.title ?? (html.ok ? html.title : null),
       author: paper?.authors.join(", ") || null,
       publishedAt: paper?.publishedAt ?? null,
       reader: "arxiv",
-      facts: { arxivId: t.id, depth, body: body.length ? "abstract and HTML" : "abstract only" },
+      facts: { arxivId: t.id, depth, body: bodyFrom ? (paper?.abstract ? `abstract and ${bodyFrom}` : bodyFrom) : "abstract only" },
       sections,
     },
     facts: { kind: "paper", arxivId: t.id, authors: paper?.authors ?? [], publishedAt: paper?.publishedAt ?? null, depth },
@@ -343,6 +417,7 @@ async function readPage(url: string, deps: SourceDeps, signal: AbortSignal): Pro
 async function readSelfPost(post: XSearchPost, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   let sections = [{ heading: null as string | null, text: [post.text, post.quoted ? `Quoting @${post.quoted.handle ?? "?"}: ${post.quoted.text}` : ""].filter(Boolean).join("\n\n") }];
   let title: string | null = null;
+  let links: string[] = [];
   let whole = !post.truncated;
   if (post.truncated || post.article) {
     const opened = await deps.openLink(post.permalink, signal).catch((e) => {
@@ -350,6 +425,7 @@ async function readSelfPost(post: XSearchPost, deps: SourceDeps, signal: AbortSi
       return { ok: false, reason: String(e) } as OpenedLink;
     });
     if (opened.ok) {
+      links = opened.links;
       const read = openedSections(opened);
       if (read.length) {
         sections = read;
@@ -370,6 +446,7 @@ async function readSelfPost(post: XSearchPost, deps: SourceDeps, signal: AbortSi
       sections,
     },
     facts: { kind: "post", handle: post.handle, name: post.name, postedAt: post.postedAt, counts: countsOf(post) },
+    links,
   };
 }
 
@@ -387,7 +464,7 @@ export async function readSource(t: Target, deps: SourceDeps, signal: AbortSigna
     return await readPage(t.url, deps, signal);
   } catch (e) {
     if (signal.aborted) throw e;
-    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+    return { ok: false, reason: errText(e) };
   }
 }
 

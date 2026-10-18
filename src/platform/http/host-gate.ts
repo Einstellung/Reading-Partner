@@ -8,8 +8,9 @@
 // - spacing: a minimum gap between requests. A serial group also lets one
 //   request out at a time and measures the gap from the previous answer, which
 //   is what arXiv asks for (one request per three seconds, one connection).
-// - cooldown (arXiv only): once the host answers with its rate limit, nothing
-//   goes to the group from any caller until a backoff passes. The backoff grows
+// - cooldown (arXiv only): once a host answers with its rate limit, nothing
+//   goes to that host from any caller until a backoff passes; the group's
+//   other hosts keep their turns. The backoff grows
 //   on repeats, is never shorter than the Retry-After asked for, and is kept in
 //   localStorage so a restart does not go straight back to the host.
 
@@ -69,13 +70,23 @@ export interface GroupPolicy {
   cooldown: boolean;
 }
 
-// Hosts that share one limiter. arXiv limits by IP across its hosts, so the
-// export API, the abstract/HTML pages and the PDFs are one group.
+// Hosts that share one clock. arXiv's one-request-per-three-seconds rule is per
+// IP across its hosts, so the export API, the abstract/HTML pages and the PDFs
+// are one group for spacing.
 export const HOST_GROUP: Record<string, string> = {
   "arxiv.org": "arxiv",
   "www.arxiv.org": "arxiv",
   "export.arxiv.org": "arxiv",
 };
+
+// A cooldown is kept per host, not per group: the export API rate-limits on its
+// own while arxiv.org's pages and PDFs still answer (seen 2026-10-17/18), so its
+// 429 must not stop the paper reads.
+const COOLDOWN_KEY: Record<string, string> = {
+  "www.arxiv.org": "arxiv.org",
+};
+
+const cooldownKeyOf = (host: string): string => COOLDOWN_KEY[host] ?? host;
 
 export const GROUP_POLICY: Record<string, GroupPolicy> = {
   // arXiv's usage policy: one request per three seconds, one connection.
@@ -188,7 +199,7 @@ export function createHostGate(opts: { clock?: Clock; store?: CooldownStore } = 
   const coolingDown = (host: string): HostCoolingDownError | null => {
     const group = groupOf(host);
     if (!GROUP_POLICY[group]?.cooldown) return null;
-    const s = readStrikes()[group];
+    const s = readStrikes()[cooldownKeyOf(host)];
     const now = clock.now();
     return s && typeof s.until === "number" && s.until > now ? new HostCoolingDownError(host, s.until, now) : null;
   };
@@ -242,23 +253,23 @@ export function createHostGate(opts: { clock?: Clock; store?: CooldownStore } = 
     },
 
     async observe(host, res) {
-      const group = groupOf(host);
-      if (!GROUP_POLICY[group]?.cooldown) return;
+      if (!GROUP_POLICY[groupOf(host)]?.cooldown) return;
+      const key = cooldownKeyOf(host);
       const strikes = readStrikes();
       if (res.ok) {
-        if (strikes[group]) {
-          delete strikes[group];
+        if (strikes[key]) {
+          delete strikes[key];
           store.save(JSON.stringify(strikes));
         }
         return;
       }
       if (!(await isRateLimitAnswer(res))) return;
       const now = clock.now();
-      const prior = strikes[group];
+      const prior = strikes[key];
       const count = prior && now - prior.at < STRIKE_MEMORY_MS ? prior.strikes + 1 : 1;
       const backoff = Math.min(COOLDOWN_BASE_MS * 2 ** (count - 1), COOLDOWN_MAX_MS);
       const asked = Math.min(retryAfterMs(res.headers.get("retry-after"), now) ?? 0, RETRY_AFTER_CAP_MS);
-      strikes[group] = { until: now + Math.max(backoff, asked), strikes: count, at: now };
+      strikes[key] ={ until: now + Math.max(backoff, asked), strikes: count, at: now };
       store.save(JSON.stringify(strikes));
     },
   };

@@ -23,7 +23,8 @@ arXiv 的规矩是每个 IP 每 3 秒最多一个请求、同时只开一个连�
 限速挪到传输层，全进程一把闸（`platform/http/host-gate.ts`）：`readingFetch` 和 `infoFetch` 都用 `gatedFetch` 包起来，每次请求（含重试）都过 `hostGate`，不管上面是谁、传没传 `fetchFn`。`fetchWithRetry` 不再自己限速，假 `fetchFn` 自然不等。
 
 - arXiv 的 `arxiv.org`、`www.arxiv.org`、`export.arxiv.org` 算一组：一次只放一个请求，间隔从上一个请求回来时算 3 秒。S2、OpenAlex、NCBI 照旧按开始时间间隔；`readingFetch` 对表外主机默认 1 秒，`infoFetch` 不管表外主机。
-- arXiv 回 429，或 403 且正文是「Rate exceeded」，整组冷却：10 分钟起，连着再被拒翻倍，封顶 4 小时；`Retry-After` 更长就按它（24 小时内）。冷却期间任何调用方都不发请求，直接抛 `HostCoolingDownError`（是 `RateLimitError` 的子类，消息写「no request sent」和剩几分钟）；排在被拒那个请求后面的也不发。成功一次清零。冷却记在 localStorage，重启不会马上再撞。
+- arXiv 回 429，或 403 且正文是「Rate exceeded」，回它的那个主机冷却（`www.arxiv.org` 算 `arxiv.org`）：10 分钟起，连着再被拒翻倍，封顶 4 小时；`Retry-After` 更长就按它（24 小时内）。冷却期间任何调用方都不往这个主机发请求，直接抛 `HostCoolingDownError`（是 `RateLimitError` 的子类，消息写「no request sent」和剩几分钟）；排在被拒那个请求后面的也不发。这个主机成功一次清零。冷却记在 localStorage，重启不会马上再撞。
+- 冷却原来按整组记，2026-10-17/18 实测 export.arxiv.org 回 429 时 arxiv.org 的 abs、HTML、列表页和 rss.arxiv.org 都回 200，整组冷却让 export API 的一次限流把论文的 HTML 和 PDF 也停了 10 分钟到 4 小时。间隔仍按整组算，冷却改成按主机。
 - `fetchWithRetry` 遇到冷却不重试、不等退避，直接抛。
 - 主题搜索的梯子把冷却记成单独的结局 `cooling_down`（和真被 429 的 `rate_limited` 分开），源健康照样是 `failed`，「重跑第一次」会补；采集的源健康 `lastError` 写的就是那句「no request sent」。
 - 两条传输对 arXiv、S2、OpenAlex、NCBI 都发 `POLITE_USER_AGENT`（项目名、仓库地址、联系邮箱），只在 Tauri 的 http 插件路径上能设；浏览器里的 fetch 不能改 UA。

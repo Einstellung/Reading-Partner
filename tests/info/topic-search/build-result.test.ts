@@ -224,10 +224,10 @@ function deps(over: {
     openLink: async (url) => {
       over.opened?.push(url);
       if (url.includes("comp.nus.edu.sg")) {
-        return { ok: true, via: "web", title: "From code to cancer: NUS Computing's expanding role in AI for science", author: "NUS Computing", publishedAt: "2026-10-12", sections: [{ heading: null, html: "<p>Four NUS teams apply AI to cancer research and materials science.</p><h2>Teams</h2><p>The four teams work across two faculties.</p>" }], whole: null };
+        return { ok: true, via: "web", title: "From code to cancer: NUS Computing's expanding role in AI for science", author: "NUS Computing", publishedAt: "2026-10-12", sections: [{ heading: null, html: "<p>Four NUS teams apply AI to cancer research and materials science.</p><h2>Teams</h2><p>The four teams work across two faculties.</p>" }], whole: null, links: [] };
       }
       if (url.includes("thePandaily")) {
-        return { ok: true, via: "x", title: "SRHarness: an open-source runtime for agents", author: "@thePandaily", publishedAt: null, sections: [{ heading: null, html: "<p>Tsinghua researchers released SRHarness, an open-source runtime for agentic science.</p>" }], whole: null };
+        return { ok: true, via: "x", title: "SRHarness: an open-source runtime for agents", author: "@thePandaily", publishedAt: null, sections: [{ heading: null, html: "<p>Tsinghua researchers released SRHarness, an open-source runtime for agentic science.</p>" }], whole: null, links: [] };
       }
       return { ok: false, reason: `${new URL(url).hostname} needs a sign-in` };
     },

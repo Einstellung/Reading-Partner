@@ -83,7 +83,7 @@ test("other listed hosts are spaced start to start, unlisted ones only with a de
   expect(clock.sleeps).toEqual([1500, 1000]);
 });
 
-test("a 429 cools the whole arXiv group down for every caller, and nothing is sent", async () => {
+test("a 429 cools that arXiv host down for every caller, and nothing is sent to it", async () => {
   const clock = fakeClock();
   const gate = createHostGate({ clock, store: memoryStore() });
   let sent = 0;
@@ -104,7 +104,7 @@ test("a 429 cools the whole arXiv group down for every caller, and nothing is se
     gate,
   );
   expect((await limited("https://export.arxiv.org/api/query?a")).status).toBe(429);
-  const err = await other("https://arxiv.org/pdf/2401.00001").catch((e) => e);
+  const err = await other("https://export.arxiv.org/api/query?b").catch((e) => e);
   expect(isHostCoolingDown(err)).toBe(true);
   expect(err.message).toContain("no request sent");
   expect(err.until).toBe(1_000_000 + COOLDOWN_BASE_MS);
@@ -113,6 +113,32 @@ test("a 429 cools the whole arXiv group down for every caller, and nothing is se
   expect((await other("https://api.openalex.org/works")).status).toBe(200);
   clock.t += COOLDOWN_BASE_MS;
   expect((await other("https://export.arxiv.org/api/query?b")).status).toBe(200);
+});
+
+test("the export API's 429 does not stop arxiv.org's pages, which keep the shared spacing; arxiv.org's own 429 does", async () => {
+  const clock = fakeClock();
+  const gate = createHostGate({ clock, store: memoryStore() });
+  const sent: { url: string; at: number }[] = [];
+  const f = gatedFetch(
+    async (url) => {
+      sent.push({ url: String(url), at: clock.t });
+      return String(url).includes("export.") || String(url).includes("/limited") ? new Response("", { status: 429 }) : ok();
+    },
+    0,
+    gate,
+  );
+  expect((await f("https://export.arxiv.org/api/query?id_list=2401.00001")).status).toBe(429);
+  expect((await f("https://arxiv.org/html/2401.00001")).status).toBe(200);
+  expect((await f("https://arxiv.org/pdf/2401.00001")).status).toBe(200);
+  expect(sent.map((s) => s.at)).toEqual([1_000_000, 1_003_000, 1_006_000]);
+  expect(isHostCoolingDown(await f("https://export.arxiv.org/api/query?id_list=2401.00002").catch((e) => e))).toBe(true);
+  // A success on arxiv.org leaves the export API's cooldown standing.
+  expect(gate.coolingDown("export.arxiv.org")).not.toBeNull();
+
+  expect((await f("https://arxiv.org/limited")).status).toBe(429);
+  expect(isHostCoolingDown(await f("https://arxiv.org/html/2401.00003").catch((e) => e))).toBe(true);
+  expect(isHostCoolingDown(await f("https://www.arxiv.org/abs/2401.00003").catch((e) => e))).toBe(true);
+  expect(sent.length).toBe(4);
 });
 
 test("a request queued behind the one that drew the 429 stays home", async () => {
@@ -166,7 +192,7 @@ test("a cooldown is kept in the store, so a new gate (a restart) honours it", as
   const store: CooldownStore = memoryStore();
   await createHostGate({ clock, store }).observe("export.arxiv.org", new Response("", { status: 429 }));
   const restarted = createHostGate({ clock, store });
-  expect(isHostCoolingDown(restarted.coolingDown("arxiv.org"))).toBe(true);
+  expect(isHostCoolingDown(restarted.coolingDown("export.arxiv.org"))).toBe(true);
   // A broken store reads as no cooldown rather than a crash.
   const broken = createHostGate({ clock, store: { load: () => "{not json", save: () => {} } });
   expect(broken.coolingDown("export.arxiv.org")).toBeNull();

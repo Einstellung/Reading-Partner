@@ -18,17 +18,15 @@ import { languageInstruction } from "../../platform/app/settings";
 import { bookLanguageInstruction } from "./book-language";
 import { fetchWithRetry, interactiveRetry } from "../../platform/http/throttled-fetch";
 import type { FetchBytes } from "../../workshop/bindery";
-import { manuscriptText } from "../../workshop/bindery/manuscript";
 import { isPdfBytes } from "../../workshop/bindery/pdf";
 import { infoFetch } from "../../workshop/extract/http";
 import { listStatements } from "../../memory/live/statements";
-import { LinkSession } from "../links/session";
 import { arxivPlugin } from "../sources/plugins/arxiv";
 import { RepoLookups } from "../sources/plugins/github-lookup";
 import type { ArxivSearch } from "./arxiv-ladder";
 import { memoArxivFetchText } from "./fetch-memo";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResult } from "./build-result";
-import type { OpenedLink } from "./verify";
+import { openOriginal } from "./open-link";
 import { localDay } from "./windows";
 
 const ARXIV_LIMIT = 20;
@@ -38,44 +36,6 @@ const fetchBytes: FetchBytes = async (url) => {
   const bytes = res.ok ? new Uint8Array(await res.arrayBuffer()) : new Uint8Array();
   return { ok: res.ok, status: res.status, bytes, contentType: res.headers.get("content-type"), url: res.url || url };
 };
-
-/** 86's open route for one link: readers, site adapters, the generic page and PDF read. Nothing is filed. */
-async function openLink(url: string): Promise<OpenedLink> {
-  const session = new LinkSession<never>(url, {
-    fetch: fetchBytes,
-    file: async () => {
-      throw new Error("a topic search reads originals and files nothing");
-    },
-  });
-  await session.open(1);
-  const opened = session.get(1)?.opened;
-  const content = opened?.content ?? null;
-  if (!opened || content === null) return { ok: false, reason: opened?.why ?? "nothing readable at the link" };
-  if (!content.ok) return { ok: false, reason: content.reason };
-  if ("passedThrough" in content) {
-    const meta = content.metadata;
-    return {
-      ok: true,
-      via: opened.via,
-      title: meta.title || null,
-      author: meta.author ?? null,
-      publishedAt: meta.publishedAt ?? null,
-      sections: [],
-      whole: { format: content.format, abstract: meta.abstract ?? null },
-    };
-  }
-  const m = content.manuscript;
-  if (!manuscriptText(m).trim()) return { ok: false, reason: "the page had no text" };
-  return {
-    ok: true,
-    via: opened.via,
-    title: m.title || null,
-    author: m.author ?? null,
-    publishedAt: m.publishedAt ?? null,
-    sections: m.sections.map((s) => ({ heading: s.heading ?? null, html: s.html })),
-    whole: null,
-  };
-}
 
 async function writeUnder(path: string, content: string): Promise<void> {
   const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
@@ -106,7 +66,7 @@ export const liveResultDeps: BuildResultDeps = {
     const { pages, status } = await extractFulltext(got.bytes.slice().buffer);
     return status === "ok" ? pages.join("\n\n") : null;
   },
-  openLink: (url) => openLink(url),
+  openLink: (url) => openOriginal(url, { fetch: fetchBytes }),
   repoLookups: () => {
     const lookups = new RepoLookups();
     return { lookup: (name) => lookups.lookup(name, { fetchFn: infoFetch }), quotaLeft: () => lookups.quotaRemaining };

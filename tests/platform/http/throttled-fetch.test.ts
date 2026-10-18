@@ -123,7 +123,7 @@ test("a 429 from a host now cooling down ends the loop without a retry or a wait
 
 test("a cooldown thrown by the transport is not retried", async () => {
   const gate = createHostGate({ store: memoryStore() });
-  await gate.observe("export.arxiv.org", new Response("", { status: 429 }));
+  await gate.observe("arxiv.org", new Response("", { status: 429 }));
   let calls = 0;
   const fetchFn = async (url: string) => {
     calls++;

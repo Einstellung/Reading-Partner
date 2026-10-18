@@ -234,7 +234,7 @@ function resultPost(m: Scored): ResultPost {
   };
 }
 
-interface Draft {
+export interface Draft {
   cluster: EventCluster<Scored>;
   members: Scored[];
   posts: ResultPost[];
@@ -271,7 +271,7 @@ const DRAFT_VIEW: SelectView<Draft> = {
 };
 
 /** The originals to read for an item: its main thing, then one more pointing at the same story. */
-function targetsOf(draft: Draft): Target[] {
+export function targetsOf(draft: Draft): Target[] {
   const targets: Target[] = [];
   const seen = new Set<string>();
   const add = (key: string, url: string | null) => {
@@ -296,7 +296,8 @@ function targetsOf(draft: Draft): Target[] {
     const url = event.members.find((m) => m.mainUrl)?.mainUrl ?? null;
     add(event.key, url);
   }
-  if (targets.length < SOURCES_PER_ITEM && targets[0]?.kind !== "post") {
+  // A post that is its own content still points at its paper or repository: that is its original.
+  if (targets.length < SOURCES_PER_ITEM) {
     for (const m of draft.members) {
       for (const l of m.cand.links) {
         const key = eventKeyOfUrl(l.url);
@@ -305,6 +306,68 @@ function targetsOf(draft: Draft): Target[] {
     }
   }
   return targets;
+}
+
+/** The original a link out of a post points at: a paper, a repository, else the page; null for a link to X. */
+function targetOfLink(url: string): { key: string; target: Target } | null {
+  const key = eventKeyOfUrl(url);
+  if (!key || key.startsWith("x:") || isXPage(url)) return null;
+  const rest = key.slice(key.indexOf(":") + 1);
+  if (key.startsWith("arxiv:")) return { key, target: { kind: "paper", id: rest, known: null } };
+  if (key.startsWith("github:")) {
+    const [owner, repo] = rest.split("/");
+    return { key, target: { kind: "repo", owner, repo, url: `https://github.com/${rest}` } };
+  }
+  return { key, target: { kind: "page", url } };
+}
+
+function keyOfTarget(t: Target): string {
+  if (t.kind === "paper") return `arxiv:${t.id}`;
+  if (t.kind === "repo") return `github:${t.owner}/${t.repo}`.toLowerCase();
+  if (t.kind === "post") return `x:${t.post.id}`;
+  return eventKeyOfUrl(t.url) ?? t.url;
+}
+
+export interface ReadOriginals {
+  materials: string[];
+  /** Why each original that could not be read was not. */
+  reasons: string[];
+  /** The first read's facts and title: the item's. */
+  first: { facts: TopicSearchResultItem["facts"]; title: string | null } | null;
+  /** The first original read that is not the post itself. */
+  original: string | null;
+}
+
+/**
+ * Read an item's originals: its targets, then the links out of a post read
+ * whole (most posts are cut on the search page, so their links show only in the
+ * full text), papers and repositories before pages, up to SOURCES_PER_ITEM.
+ */
+export async function readOriginals(targets: readonly Target[], deps: SourceDeps, registry: MaterialRegistry, signal: AbortSignal): Promise<ReadOriginals> {
+  const queue = [...targets];
+  const seen = new Set(queue.map(keyOfTarget));
+  const out: ReadOriginals = { materials: [], reasons: [], first: null, original: null };
+  for (let k = 0; k < queue.length; k++) {
+    const t = queue[k];
+    const read = await readSource(t, deps, signal);
+    if (!read.ok) {
+      out.reasons.push(read.reason);
+      continue;
+    }
+    const m = await registry.register(read.input);
+    if (!out.materials.includes(m.id)) out.materials.push(m.id);
+    if (out.first === null) out.first = { facts: read.facts, title: m.title };
+    if (out.original === null && t.kind !== "post") out.original = m.url;
+    const found = (read.links ?? []).map(targetOfLink).filter((x): x is { key: string; target: Target } => x !== null);
+    const rank = (x: { target: Target }) => (x.target.kind === "page" ? 1 : 0);
+    for (const x of [...found].sort((a, b) => rank(a) - rank(b))) {
+      if (queue.length >= SOURCES_PER_ITEM) break;
+      if (seen.has(x.key)) continue;
+      seen.add(x.key);
+      queue.push(x.target);
+    }
+  }
+  return out;
 }
 
 function kindOfKey(key: string): TopicSearchResultItem["kind"] {
@@ -463,25 +526,9 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       continue;
     }
     const targets = targetsOf(d);
-    const materials: string[] = [];
-    const reasons: string[] = [];
-    let facts: TopicSearchResultItem["facts"] | null = null;
-    let title: string | null = null;
-    let original: string | null = null;
-    for (const t of targets) {
-      const read = await readSource(t, sourceDeps, signal);
-      if (!read.ok) {
-        reasons.push(read.reason);
-        continue;
-      }
-      const m = await registry.register(read.input);
-      if (!materials.includes(m.id)) materials.push(m.id);
-      if (facts === null) {
-        facts = read.facts;
-        title = m.title;
-        original = t.kind === "post" ? null : m.url;
-      }
-    }
+    const { materials, reasons, first, original } = await readOriginals(targets, sourceDeps, registry, signal);
+    let facts = first?.facts ?? null;
+    let title = first?.title ?? null;
     const leadPost = lead.members.find((m) => m.cand.post)?.cand.post ?? d.members.find((m) => m.cand.post)?.cand.post ?? null;
     if (facts === null) {
       const paper = d.members.find((m) => m.cand.paper)?.cand.paper;
@@ -490,10 +537,11 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         : { kind: "post", handle: leadPost!.handle, name: leadPost!.name, postedAt: leadPost!.postedAt, counts: countsOf(leadPost!) };
       title = paper?.title ?? null;
     }
-    const selfPost = targets[0]?.kind === "post";
+    // A post that is its own content is "self" only when nothing it points at was read; otherwise it is compared with that.
+    const selfPost = targets[0]?.kind === "post" && original === null;
     let verify: ResultVerify = {
       status: materials.length === 0 ? "unread" : selfPost ? "self" : d.posts.length ? "compared" : "read",
-      reason: materials.length === 0 ? reasons.join("; ") || "no original to read" : null,
+      reason: materials.length === 0 ? reasons.join("; ") || "no original to read" : selfPost && reasons.length ? reasons.join("; ") : null,
       discrepancies: [],
       checked: { match: 0, mismatch: 0, absent: 0 },
     };
