@@ -892,6 +892,7 @@ dependencies = [
  "jni",
  "kokoro-onnx",
  "llama-cpp-2",
+ "llama-cpp-sys-2",
  "ort",
  "realfft",
  "voice-wire",

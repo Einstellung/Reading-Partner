@@ -71,10 +71,31 @@ jobs:
           if readelf -dW "$SO" | grep NEEDED | grep -E 'libc\+\+_shared\.so|libomp\.so'; then
             echo "::error::$SO needs libc++_shared.so or libomp.so at run time"; exit 1
           fi
-          for sym in voice_engine_probe OrtGetApiBase llama_backend_init; do
+          for sym in voice_engine_probe voice_engine_asr_probe OrtGetApiBase llama_backend_init mtmd_init_from_file; do
             readelf -sW --dyn-syms "$SO" | grep -qw "$sym" && echo "symbol $sym: present" || echo "symbol $sym: not exported"
           done
           size -A "$SO" | grep -E '^\.(text|rodata|data\.rel\.ro) ' || true
+
+      # GGML_CPU_ARM_ARCH (scripts/android-voice-engine.sh) must reach ggml-cpu:
+      # its cmake cache and compile flags name it, and libggml-cpu.a has
+      # dot-product instructions but no i8mm ones. (ONNX Runtime's MLAS
+      # dispatches its own dotprod and i8mm kernels at run time, so the .so as
+      # a whole proves nothing.)
+      - name: Check ggml-cpu's Arm architecture
+        run: |
+          set -euo pipefail
+          OUT=$(ls -d plugins/voice-engine/target/aarch64-linux-android/release/build/llama-cpp-sys-2-*/out | head -1)
+          grep -E '^GGML_CPU_ARM_ARCH' "$OUT/build/CMakeCache.txt"
+          FLAGS=$(find "$OUT/build" -path '*ggml-cpu.dir/flags.make' | head -1)
+          grep -E '^C(XX)?_FLAGS' "$FLAGS"
+          grep -q -- '-march=armv8.2-a+dotprod' "$FLAGS" || { echo "::error::ggml-cpu is not built for armv8.2-a+dotprod"; exit 1; }
+          OBJDUMP=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump
+          "$OBJDUMP" -d --no-show-raw-insn "$OUT/lib/libggml-cpu.a" > ggml-cpu.s
+          SDOT=$(grep -cwE 'sdot|udot' ggml-cpu.s || true)
+          I8MM=$(grep -cwE 'smmla|ummla|usmmla|usdot' ggml-cpu.s || true)
+          echo "libggml-cpu.a: $SDOT dotprod instructions, $I8MM i8mm instructions"
+          [ "$SDOT" -gt 0 ] || { echo "::error::no sdot/udot in libggml-cpu.a"; exit 1; }
+          [ "$I8MM" -eq 0 ] || { echo "::error::libggml-cpu.a has i8mm instructions"; exit 1; }
 
       - uses: actions/upload-artifact@v7
         with:

@@ -5,6 +5,8 @@
 // For now it only brings both runtimes up, which proves they link into one
 // shared object for aarch64-linux-android.
 
+pub mod asr;
+
 use llama_cpp_2::llama_backend::LlamaBackend;
 
 /// Create the ONNX Runtime environment and initialise the llama.cpp backend.

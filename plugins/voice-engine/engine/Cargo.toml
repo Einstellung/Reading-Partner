@@ -21,6 +21,9 @@ ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "
 # Qwen3-ASR through llama.cpp's mtmd, built from source by cmake, CPU. No
 # openmp, no common.
 llama-cpp-2 = { version = "=0.1.160", default-features = false, features = ["mtmd"] }
+# The same llama.cpp, called directly by asr.rs: llama-cpp-2 exposes neither
+# llama_set_abort_callback nor mtmd_tokenize_from_parts.
+llama-cpp-sys-2 = { version = "=0.1.160", default-features = false, features = ["mtmd"] }
 # The Whisper log-mel for Smart Turn.
 realfft = "3.5.0"
 
