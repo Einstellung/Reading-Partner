@@ -11,10 +11,11 @@
 // Portions Copyright (c) 2026 Matt Van Horn, under the MIT License; the full
 // notice is in third-party-licenses.txt here.
 
-import { arxivPaperOfUrl, normalizeArxivId } from "../sources/plugins/arxiv-client";
+import { normalizeArxivId } from "../sources/plugins/arxiv-client";
 import { githubRepoOfUrl } from "../sources/plugins/github-site";
 import { xPostOfUrl } from "../x/post";
 import { canonicalizeUrl } from "./canonical-url";
+import { paperKeyOfUrl, unwrapLink } from "./link-identity";
 import { hybridSimilarity, prepareText, type PreparedText } from "./similarity";
 
 export const CLUSTER_THRESHOLD = 0.48;
@@ -23,20 +24,32 @@ export const POST_BONUS_CAP = 10;
 export const POST_BONUS_STEP = 3;
 
 /**
- * The key of the thing a URL names: "arxiv:2505.06708" (any version, abs or
- * PDF or mirror), "github:owner/repo" (lowercased, any page of the repo),
- * "x:1849…" (a post), else "url:" + the canonical URL. Null for a URL that is
- * not http(s).
+ * The key of the thing a URL names, a redirect wrapper unwrapped first:
+ * "arxiv:2505.06708" (any version, abs or PDF or HTML, a mirror, its Hugging
+ * Face page, its arXiv DOI), "doi:10.…" (a DOI link or a publisher page with
+ * the DOI in its path), "openreview:…", "acl:…", "ieee:…" (link-identity.ts),
+ * "github:owner/repo" (lowercased, any page of the repo), "x:1849…" (a post),
+ * else "url:" + the canonical URL. Null for a URL that is not http(s).
  */
-export function eventKeyOfUrl(url: string): string | null {
-  const paper = arxivPaperOfUrl(url);
-  if (paper) return `arxiv:${paper.id}`;
+export function eventKeyOfUrl(raw: string): string | null {
+  const url = unwrapLink(raw);
+  const paper = paperKeyOfUrl(url);
+  if (paper) return paper;
   const repo = githubRepoOfUrl(url);
   if (repo) return `github:${repo.owner}/${repo.repo}`.toLowerCase();
   const post = xPostOfUrl(url);
   if (post) return `x:${post.id}`;
   const canonical = canonicalizeUrl(url);
   return canonical ? `url:${canonical}` : null;
+}
+
+/**
+ * A key as eventKeyOfUrl gives it today: a "url:" key a past result stored is
+ * keyed again, so a page seen under an older spelling (http, `www.`, a DOI
+ * page) is still the same thing; any other key as it is.
+ */
+export function currentEventKey(key: string): string {
+  return key.startsWith("url:") ? (eventKeyOfUrl(key.slice(4)) ?? key) : key;
 }
 
 /** The key of an arXiv paper by id ("arXiv:2505.06708v2" -> "arxiv:2505.06708"). */

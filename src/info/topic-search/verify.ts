@@ -91,6 +91,8 @@ export type OpenedLink =
       whole: { format: "pdf" | "epub"; abstract: string | null; bytes?: Uint8Array } | null;
       /** Links out of what was read, as the reader expanded them, off the link's own site; in the order found. */
       links: string[];
+      /** The arXiv paper the page's head says it is (link-identity.ts arxivIdOfPageMeta): read through arXiv instead. */
+      arxivId?: string;
     }
   | { ok: false; code: FailureCode; reason: string };
 
@@ -110,6 +112,11 @@ export interface SourceDeps {
    * cannot be read.
    */
   readPdfText?(url: string, signal: AbortSignal, bytes?: Uint8Array): Promise<string | null>;
+  /**
+   * Where a short link (goo.gle, bit.ly) goes, read off its redirect without
+   * following it; null when it says nothing. Absent: short links are read as pages.
+   */
+  resolveShortLink?(url: string, signal: AbortSignal): Promise<string | null>;
 }
 
 export type Target =
@@ -586,6 +593,11 @@ async function readPage(url: string, deps: SourceDeps, signal: AbortSignal): Pro
       publishedAt: opened.publishedAt,
       format: opened.whole.format,
     });
+  }
+  if (opened.arxivId) {
+    // A paper's landing page that names its arXiv version: the paper is read there, whole and with its metadata.
+    const paper = await readPaper({ kind: "paper", id: opened.arxivId, known: null }, deps, signal);
+    if (paper.ok) return { ...paper, steps: [okStep("page"), ...paper.steps] };
   }
   const sections = openedSections(opened);
   if (sections.length === 0) return unread([failedStep(failure("page", "too_short", `${hostOf(url)} gave no readable text`))]);

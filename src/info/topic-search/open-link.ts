@@ -8,6 +8,7 @@ import { manuscriptText } from "../../workshop/bindery/manuscript";
 import type { ExtractReadable } from "../../workshop/extract/readable-select";
 import type { LinkReader } from "../links/readers";
 import { LinkSession } from "../links/session";
+import { arxivIdOfPageMeta } from "../rank/link-identity";
 import { codeOfRejection } from "./read-failure";
 import { linksOut, type OpenedLink } from "./verify";
 
@@ -54,6 +55,7 @@ export async function openOriginal(url: string, deps: OpenOriginalDeps): Promise
   }
   const m = content.manuscript;
   if (!manuscriptText(m).trim()) return { ok: false, code: "too_short", reason: "the page had no text" };
+  const arxivId = opened.meta ? arxivIdOfPageMeta(opened.meta) : null;
   return {
     ok: true,
     via: opened.via,
@@ -63,5 +65,6 @@ export async function openOriginal(url: string, deps: OpenOriginalDeps): Promise
     sections: m.sections.map((s) => ({ heading: s.heading ?? null, html: s.html })),
     whole: null,
     links,
+    ...(arxivId ? { arxivId } : {}),
   };
 }

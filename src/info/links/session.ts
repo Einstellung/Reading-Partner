@@ -35,6 +35,7 @@ import {
   type Rejection,
 } from "../../workshop/bindery";
 import { manuscriptText } from "../../workshop/bindery/manuscript";
+import { metaTags } from "../../workshop/bindery/page-meta";
 import type { ExtractReadable } from "../../workshop/extract/readable-select";
 import { extractPageLinks } from "../../workshop/extract/read-page";
 import { htmlToText } from "../../workshop/extract/sanitize";
@@ -89,6 +90,8 @@ export interface Opened {
   /** Why there is no content, when `content` is null. */
   why?: string;
   reading?: LinkReading;
+  /** A generic page's own <meta> tags (page-meta.ts metaTags), for a caller that names what the page is. */
+  meta?: ReadonlyMap<string, string>;
   /** Numbers this read added to the table. */
   fresh: number[];
   /** What open told the model. */
@@ -417,7 +420,7 @@ export class LinkSession<D> {
       ...body.map((l) => ({ url: l.url, anchor: l.text, origin: "body" as const })),
       ...page.map((l) => ({ url: l.url, anchor: l.text, origin: "page" as const })),
     ];
-    return this.contentRead(c, "web", "web page", content, seeds);
+    return { ...this.contentRead(c, "web", "web page", content, seeds), meta: metaTags(html) };
   }
 
   private contentRead(

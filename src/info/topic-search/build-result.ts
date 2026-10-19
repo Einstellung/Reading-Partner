@@ -17,7 +17,8 @@
 import { throwIfAborted } from "../../platform/app/abort";
 import { MaterialRegistry } from "../dossier/registry";
 import { dedupeBatch, type Headline } from "../rank/dedupe";
-import { eventKeyOfUrl, type EventCluster } from "../rank/events";
+import { currentEventKey, eventKeyOfUrl, type EventCluster } from "../rank/events";
+import { isShortLink, paperKeyOfUrl, unwrapLink } from "../rank/link-identity";
 import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
@@ -189,6 +190,8 @@ export interface BuildResultDeps {
   openLink: OpenLink;
   /** A PDF's text layer, for a deeper read of a paper arXiv has no HTML for; absent: such a paper is not read deeper. */
   readPdfText?: SourceDeps["readPdfText"];
+  /** Where a short link goes, off its redirect; absent: a short link is read as a page. */
+  resolveShortLink?: SourceDeps["resolveShortLink"];
   /** A fresh counted GitHub lookup for one run (github-lookup.ts RepoLookups). */
   repoLookups(): { lookup(fullName: string): Promise<RepoLookup>; quotaLeft(): number | null };
   files: ResultFiles;
@@ -272,8 +275,16 @@ const DRAFT_VIEW: SelectView<Draft> = {
   subtopic: (d) => (d.continuing ? null : subtopicOf(d)),
 };
 
-/** Papers before repositories before pages: what a post points at matters in that order. */
-const rankOfTarget = (t: Target): number => (t.kind === "paper" ? 0 : t.kind === "repo" ? 1 : 2);
+/**
+ * Papers before repositories before pages: what a post points at matters in
+ * that order. A paper's page off arXiv (a DOI, OpenReview) comes after the arXiv
+ * papers and before the repositories.
+ */
+const rankOfTarget = (t: Target): number =>
+  t.kind === "paper" ? 0 : t.kind === "page" && paperKeyOfUrl(t.url) ? 0.5 : t.kind === "repo" ? 1 : 2;
+
+/** The key of a paper off arXiv: read as its page, ranked as a paper. */
+const isPaperPageKey = (key: string): boolean => /^(?:doi|openreview|acl|ieee):/.test(key);
 
 /**
  * What to read for an item: the post that is its own content (one at most, read
@@ -297,9 +308,9 @@ export function targetsOf(draft: Draft): Target[] {
     } else if (kind === "x") {
       const self = draft.members.find((m) => m.cand.post?.id === rest)?.cand.post;
       if (self) targets.push({ kind: "post", post: self });
-      else if (url) targets.push({ kind: "page", url });
+      else if (url) targets.push({ kind: "page", url: unwrapLink(url) });
     } else if (url) {
-      targets.push({ kind: "page", url });
+      targets.push({ kind: "page", url: unwrapLink(url) });
     }
   };
   for (const event of draft.cluster.events) {
@@ -310,7 +321,7 @@ export function targetsOf(draft: Draft): Target[] {
   for (const m of draft.members) {
     for (const l of m.cand.links) {
       const key = eventKeyOfUrl(l.url);
-      if (key && (key.startsWith("arxiv:") || key.startsWith("github:"))) add(key, l.url);
+      if (key && (key.startsWith("arxiv:") || key.startsWith("github:") || isPaperPageKey(key))) add(key, l.url);
     }
   }
   const post = targets.find((t) => t.kind === "post");
@@ -332,7 +343,7 @@ function targetOfLink(url: string): { key: string; target: Target } | null {
     const [owner, repo] = rest.split("/");
     return { key, target: { kind: "repo", owner, repo, url: `https://github.com/${rest}` } };
   }
-  return { key, target: { kind: "page", url } };
+  return { key, target: { kind: "page", url: unwrapLink(url) } };
 }
 
 function keyOfTarget(t: Target): string {
@@ -386,11 +397,33 @@ export async function readOriginals(targets: readonly Target[], deps: SourceDeps
       pending.push(x.target);
     }
   };
+  // A short link (goo.gle, bit.ly) is keyed by where its redirect goes: what it
+  // leads to may be a paper, or something already read or listed.
+  const expanded = async (t: Target): Promise<Target | null> => {
+    if (t.kind !== "page" || !deps.resolveShortLink || !isShortLink(t.url)) return t;
+    const to = await deps.resolveShortLink(t.url, signal).catch((e: unknown) => {
+      if (signal.aborted) throw e;
+      return null;
+    });
+    let abs: string | null = null;
+    try {
+      abs = to ? new URL(to, t.url).toString() : null;
+    } catch {
+      abs = null;
+    }
+    if (!abs) return t;
+    const x = targetOfLink(abs);
+    if (x === null || seen.has(x.key)) return null;
+    seen.add(x.key);
+    return x.target;
+  };
   const readPending = async () => {
     while (originalsTried < ORIGINALS_PER_ITEM && pending.length) {
       pending.sort((a, b) => rankOfTarget(a) - rankOfTarget(b));
+      const next = await expanded(pending.shift()!);
+      if (next === null) continue;
       originalsTried++;
-      await readOne(pending.shift()!);
+      await readOne(next);
     }
   };
   if (targets[0]?.kind !== "post") await readPending();
@@ -419,7 +452,8 @@ async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<Top
   const out: TopicSearchResult[] = [];
   for (const { name } of names) {
     const parsed = parseResultFile((await deps.files.read(name)) ?? "");
-    if (parsed) out.push(parsed);
+    // Keys stored under an older spelling of a page are keyed as today.
+    if (parsed) out.push({ ...parsed, items: parsed.items.map((i) => ({ ...i, key: currentEventKey(i.key), keys: [...new Set(i.keys.map(currentEventKey))] })) });
   }
   return out;
 }
@@ -529,6 +563,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     lookupRepo: (n: string) => lookups.lookup(n),
     repoQuotaLeft: () => lookups.quotaLeft(),
     ...(deps.readPdfText ? { readPdfText: deps.readPdfText } : {}),
+    ...(deps.resolveShortLink ? { resolveShortLink: deps.resolveShortLink } : {}),
   };
   const items: TopicSearchResultItem[] = [];
   for (const [i, d] of chosen.entries()) {

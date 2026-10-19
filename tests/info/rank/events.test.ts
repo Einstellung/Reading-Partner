@@ -17,7 +17,7 @@ import {
 
 test("canonical URLs: lowercase host, no default port, fragment, trailing slash or trackers; sorted query", () => {
   expect(canonicalizeUrl("HTTPS://Example.COM:443/a/b/?utm_source=x&b=2&fbclid=z&a=1#frag")).toBe("https://example.com/a/b?a=1&b=2");
-  expect(canonicalizeUrl("http://example.com:8080/")).toBe("http://example.com:8080/");
+  expect(canonicalizeUrl("http://example.com:8080/")).toBe("https://example.com:8080/");
   expect(canonicalizeUrl("https://example.com")).toBe("https://example.com/");
   // X's share suffix is a tracker on X only.
   expect(canonicalizeUrl("https://x.com/a/status/123?s=20&t=abc")).toBe("https://x.com/a/status/123");

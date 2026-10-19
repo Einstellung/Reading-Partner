@@ -24,6 +24,7 @@ import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { listStatements } from "../../memory/live/statements";
 import { arxivPlugin } from "../sources/plugins/arxiv";
 import { RepoLookups } from "../sources/plugins/github-lookup";
+import { resolveRedirect } from "../x/live";
 import type { ArxivSearch } from "./arxiv-ladder";
 import { memoArxivFetchText } from "./fetch-memo";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResult } from "./build-result";
@@ -74,6 +75,8 @@ export const liveResultDeps: BuildResultDeps = {
     return status === "ok" ? pages.join("\n\n") : null;
   },
   openLink: async (url) => openOriginal(url, { fetch: fetchBytes, extractReadable: await loadExtractReadable() }),
+  // One redirect read off the answer, as t.co is: goo.gle, bit.ly and the like.
+  resolveShortLink: (url) => resolveRedirect(url),
   repoLookups: () => {
     const lookups = new RepoLookups();
     return { lookup: (name) => lookups.lookup(name, { fetchFn: infoFetch }), quotaLeft: () => lookups.quotaRemaining };
