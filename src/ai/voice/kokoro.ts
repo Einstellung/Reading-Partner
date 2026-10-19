@@ -1,8 +1,8 @@
 // On-device Kokoro TTS (plugins/voice/src/kokoro, docs/companion/136): the
-// weights download and the device bench. Kokoro is the only voice, on iOS only
-// (plugins/voice/src/session.rs `on_device_voice`): until the fp32 files are
-// downloaded and verified a turn is refused with a message pointing at
-// Settings. Desktop and Android read nothing aloud. The network vendor, Xiaomi
+// weights download and the device bench. Kokoro is the only voice, on iOS and
+// Android (plugins/voice/src/session.rs `on_device_voice`): until the fp32
+// files are downloaded and verified a turn is refused with a message pointing
+// at Settings. Desktop reads nothing aloud. The network vendor, Xiaomi
 // MiMo, was removed on 2026-10-18.
 //
 // The plugin downloads in the background and answers every question from the
@@ -31,6 +31,11 @@ export interface KokoroFileStatus {
 }
 
 // plugins/voice/src/kokoro/download.rs ModelStatus, camelCased.
+//
+// `listen` and `listenReady` are the listening package (docs/companion/89): on
+// Android the models that hear, next to the Kokoro files that speak. iOS lists
+// none and is always ready, and a build from before the fields existed sends
+// neither, so both are optional and read as the iOS case when absent.
 export interface KokoroStatus {
   repo: string;
   revision: string;
@@ -43,6 +48,8 @@ export interface KokoroStatus {
   haveBytes: number;
   totalBytes: number;
   files: KokoroFileStatus[];
+  listen?: KokoroFileStatus[];
+  listenReady?: boolean;
 }
 
 export interface KokoroBenchArgs {

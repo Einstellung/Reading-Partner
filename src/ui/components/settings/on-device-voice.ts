@@ -1,5 +1,6 @@
-// The "On-device voice" row of the Voice output section on iOS: the Kokoro
-// weights download (ai/voice/kokoro.ts). What the row shows is a function of
+// The "On-device voice" row of the Voice output section on iOS and of the Voice
+// call section on Android: the Kokoro weights download, and on Android the
+// listening models with it (ai/voice/kokoro.ts). What the row shows is a function of
 // the plugin's status, and the plugin is polled rather than heard from, so the
 // polling loop is here too, with its clock as a parameter.
 
@@ -10,6 +11,7 @@ import {
   type KokoroStatus,
   type KokoroVariant,
 } from "../../../ai/voice/kokoro";
+import { currentPlatform } from "../../../platform/app/platform";
 
 // The one variant the app speaks with. Not the user's to pick.
 export const VOICE_VARIANT: KokoroVariant = "fp32";
@@ -18,6 +20,29 @@ export const VOICE_VARIANT: KokoroVariant = "fp32";
 // files. Only for the hint before the first status read lands, or when it
 // never does; every number on screen otherwise comes from the plugin.
 export const FALLBACK_TOTAL_BYTES = 339_369_442 + 2 * 522_240;
+
+// Android downloads the listening models too (docs/companion/89, "Model
+// files"): Kokoro 340,413,922 + Qwen3-ASR 484,215,744 + its mmproj 214,392,480
+// + Silero 2,327,524 + Smart Turn 32,411,198.
+export const ANDROID_FALLBACK_TOTAL_BYTES = 1_073_760_868;
+
+// Whether this host's voice is a call (listening and speaking) rather than
+// speech alone.
+export function isCallVoice(host: string = currentPlatform()): boolean {
+  return host === "android";
+}
+
+export function fallbackTotalBytes(host: string = currentPlatform()): number {
+  return isCallVoice(host) ? ANDROID_FALLBACK_TOTAL_BYTES : FALLBACK_TOTAL_BYTES;
+}
+
+// Whether every file the host needs is on disk and verified: the Kokoro
+// variant, and where there is a listening package, that too. An absent
+// `listenReady` is iOS (or an older plugin), which has no such package.
+export function voiceReady(s: KokoroStatus | null, variant: KokoroVariant = VOICE_VARIANT): boolean {
+  if (!s) return false;
+  return s.ready.includes(variant) && (s.listenReady ?? true);
+}
 
 const VARIANT_FILE: Record<KokoroVariant, string> = {
   fp32: "onnx/model.onnx",
@@ -40,7 +65,11 @@ export function variantBytes(
     have += f.have;
     total += f.size;
   }
-  if (total === 0) return { have: 0, total: FALLBACK_TOTAL_BYTES };
+  for (const f of s.listen ?? []) {
+    have += f.have;
+    total += f.size;
+  }
+  if (total === 0) return { have: 0, total: fallbackTotalBytes() };
   return { have: Math.min(have, total), total };
 }
 
@@ -71,11 +100,11 @@ export function voiceRowView(
   status: KokoroStatus | null,
   opts: { startError?: string | null; starting?: boolean } = {},
 ): VoiceRowView {
-  const bytes = status ? variantBytes(status, VOICE_VARIANT) : { have: 0, total: FALLBACK_TOTAL_BYTES };
+  const bytes = status ? variantBytes(status, VOICE_VARIANT) : { have: 0, total: fallbackTotalBytes() };
   const totalMB = megabytes(bytes.total);
   const percent = percentOf(bytes.have, bytes.total);
   const haveMB = megabytes(bytes.have);
-  if (status?.ready.includes(VOICE_VARIANT)) return { kind: "ready" };
+  if (voiceReady(status)) return { kind: "ready" };
   if (status?.running) return { kind: "downloading", percent, haveMB, totalMB };
   if (opts.starting) return { kind: "starting", totalMB };
   const error = opts.startError ?? status?.error ?? null;

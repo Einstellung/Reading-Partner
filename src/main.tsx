@@ -6,6 +6,7 @@ import { applyStoredAutostart } from "./platform/app/autostart";
 import { startUpdateChecks } from "./platform/app/updater";
 import { initDeviceSettings } from "./platform/app/device";
 import { detectShell } from "./platform/app/shell";
+import { loadVoiceCapability } from "./platform/app/voice-capability";
 import { dropRetiredTtsKey } from "./ai/auth/credentials";
 import { initPaperTint } from "./ui/components/base/paper-tint";
 import { reloadAfterFailedShell, shellLoaded } from "./dev-reload";
@@ -134,6 +135,11 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void initDeviceSettings()
     .catch(() => {})
     .then(() => applyStoredAutostart());
+
+  // Whether this device can hold a voice call (docs/companion/89): asked once,
+  // on Android only. Not awaited; the voice entry points subscribe and appear
+  // when the answer lands, and a failed ask leaves them off.
+  void loadVoiceCapability();
 
   // Look for a new desktop version now and every six hours after (docs/76).
   // Here for the same reason as autostart: the installed bundle is the

@@ -50,6 +50,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	useSyncExternalStore,
 	type MouseEvent,
 	type PointerEvent,
 } from "react";
@@ -60,6 +61,7 @@ import type { BoxItem } from "../../../box/types";
 import { useT } from "../../../i18n";
 import { voiceStartFeedback, voiceStopFeedback } from "../../../platform/app/haptics";
 import { hasNativeSpeech } from "../../../platform/app/platform";
+import { subscribeVoiceCapability } from "../../../platform/app/voice-capability";
 import { cn } from "../lib/utils";
 import { orbErrorLine } from "../orb/orb";
 import { OVERLAY_Z, useBottomSheetOpen } from "../ui/overlay";
@@ -174,7 +176,10 @@ export function LumenCorner({
 	// the iOS plugin's (docs/33) — and neither has a screen with nothing to talk
 	// about, unless the call the hold would end is already up. There the body
 	// does not charge, and a long press is a press.
-	const canTalk = hasNativeSpeech() && (live || context !== null);
+	// Read through the capability store: on Android the answer lands after first
+	// paint, and the entry has to come out with it (docs/companion/89).
+	const speaks = useSyncExternalStore(subscribeVoiceCapability, hasNativeSpeech);
+	const canTalk = speaks && (live || context !== null);
 	const handle = voiceCallHandle(call);
 	const t = useT();
 	const [door, setDoor] = useState<DoorOpen | null>(null);

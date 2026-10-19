@@ -4,7 +4,7 @@ import type { KokoroBridge, KokoroStatus } from "../../../ai/voice/kokoro";
 import { useT } from "../../../i18n";
 import { Button } from "../ui/button";
 import { CARD } from "./cardStyles";
-import { createVoicePoller, voiceRowView, type VoicePoller } from "./on-device-voice";
+import { createVoicePoller, isCallVoice, voiceRowView, type VoicePoller } from "./on-device-voice";
 
 // The voice output card on iOS: the on-device voice's one-time download
 // (on-device-voice.ts holds the states and the polling).
@@ -30,6 +30,7 @@ export default function OnDeviceVoiceCard({ bridge = kokoroBridge }: { bridge?: 
   };
 
   const view = voiceRowView(status, { startError, starting });
+  const call = isCallVoice();
 
   return (
     <div className={CARD}>
@@ -82,8 +83,10 @@ export default function OnDeviceVoiceCard({ bridge = kokoroBridge }: { bridge?: 
 
       <p className="m-0 text-xs text-faint-foreground">
         {view.kind === "ready"
-          ? t("settings.optional.onDeviceVoiceHint")
-          : t("settings.optional.onDeviceVoiceSize", { mb: view.totalMB })}
+          ? t(call ? "settings.optional.onDeviceVoiceCallHint" : "settings.optional.onDeviceVoiceHint")
+          : t(call ? "settings.optional.onDeviceVoiceCallSize" : "settings.optional.onDeviceVoiceSize", {
+              mb: view.totalMB,
+            })}
       </p>
 
       {view.kind === "failed" && (

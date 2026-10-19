@@ -1,14 +1,19 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as os from "@tauri-apps/plugin-os";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { KOKORO_COMMANDS, type KokoroBridge, type KokoroStatus } from "../../../../src/ai/voice/kokoro";
 import {
+  ANDROID_FALLBACK_TOTAL_BYTES,
   FALLBACK_TOTAL_BYTES,
   POLL_MS,
   createVoicePoller,
+  fallbackTotalBytes,
+  isCallVoice,
   megabytes,
   percentOf,
   variantBytes,
+  voiceReady,
   voiceRowView,
   type Clock,
 } from "../../../../src/ui/components/settings/on-device-voice";
@@ -108,6 +113,83 @@ describe("voiceRowView", () => {
   test("ready wins over everything, and only for fp32", () => {
     expect(voiceRowView(status({ ready: ["fp32"], error: "old" })).kind).toBe("ready");
     expect(voiceRowView(status({ ready: ["int8"] })).kind).toBe("idle");
+  });
+});
+
+describe("Android: the call package", () => {
+  const QWEN = 484_215_744;
+  const MMPROJ = 214_392_480;
+  const SILERO = 2_327_524;
+  const SMART_TURN = 32_411_198;
+
+  function listen(have: number[]) {
+    const sizes = [
+      ["Qwen3-ASR-0.6B-Q4_K_M.gguf", QWEN],
+      ["mmproj-Qwen3-ASR-0.6B-Q8_0.gguf", MMPROJ],
+      ["silero_vad.onnx", SILERO],
+      ["smart-turn-v3.2-gpu.onnx", SMART_TURN],
+    ] as const;
+    return sizes.map(([path, size], i) => ({ path, size, have: have[i], ready: have[i] === size }));
+  }
+  const allListen = [QWEN, MMPROJ, SILERO, SMART_TURN];
+
+  test("the fallback total is the five files of the design", () => {
+    expect(ANDROID_FALLBACK_TOTAL_BYTES).toBe(1_073_760_868);
+    expect(ANDROID_FALLBACK_TOTAL_BYTES).toBe(FP32 + 2 * VOICE + QWEN + MMPROJ + SILERO + SMART_TURN);
+    expect(fallbackTotalBytes("android")).toBe(1_073_760_868);
+    expect(fallbackTotalBytes("ios")).toBe(FALLBACK_TOTAL_BYTES);
+    expect(fallbackTotalBytes("linux")).toBe(FALLBACK_TOTAL_BYTES);
+    expect(isCallVoice("android")).toBe(true);
+    expect(isCallVoice("ios")).toBe(false);
+  });
+
+  test("no status reads as idle at the Android total", () => {
+    spyOn(os, "platform").mockImplementation((() => "android") as typeof os.platform);
+    expect(voiceRowView(null)).toEqual({ kind: "idle", totalMB: 1074, resumable: false, percent: 0 });
+    expect(variantBytes(status({ files: [] }), "fp32")).toEqual({ have: 0, total: 1_073_760_868 });
+  });
+
+  test("variantBytes adds the listening files to the Kokoro ones", () => {
+    const s = status({ files: files(FP32, VOICE), listen: listen([QWEN, 0, 0, 0]) });
+    expect(variantBytes(s, "fp32")).toEqual({
+      have: FP32 + 2 * VOICE + QWEN,
+      total: ANDROID_FALLBACK_TOTAL_BYTES,
+    });
+  });
+
+  test("Kokoro alone is not ready while the listening package is not", () => {
+    const s = status({
+      ready: ["fp32"],
+      files: files(FP32, VOICE),
+      listen: listen([QWEN, 0, 0, 0]),
+      listenReady: false,
+    });
+    expect(voiceReady(s)).toBe(false);
+    expect(voiceRowView(s)).toMatchObject({ kind: "idle", resumable: true });
+    expect(voiceRowView({ ...s, running: true }).kind).toBe("downloading");
+  });
+
+  test("ready needs Kokoro and listenReady together", () => {
+    const s = status({
+      ready: ["fp32"],
+      files: files(FP32, VOICE),
+      listen: listen(allListen),
+      listenReady: true,
+    });
+    expect(voiceReady(s)).toBe(true);
+    expect(voiceRowView(s)).toEqual({ kind: "ready" });
+    expect(voiceReady({ ...s, ready: [] })).toBe(false);
+  });
+
+  test("a ready listening package without Kokoro is not ready", () => {
+    const s = status({ files: files(0), listen: listen(allListen), listenReady: true });
+    expect(voiceReady(s)).toBe(false);
+  });
+
+  test("iOS: a status without the listening fields is ready on Kokoro alone", () => {
+    expect(voiceReady(status({ ready: ["fp32"] }))).toBe(true);
+    expect(voiceReady(status({ ready: ["fp32"], listen: [], listenReady: true }))).toBe(true);
+    expect(voiceReady(null)).toBe(false);
   });
 });
 
@@ -245,6 +327,9 @@ describe("strings", () => {
       "onDeviceVoiceFailed",
       "onDeviceVoiceRetry",
       "onDeviceVoiceReady",
+      "voiceCall",
+      "onDeviceVoiceCallHint",
+      "onDeviceVoiceCallSize",
     ];
     const en = readFileSync(join(ROOT, "src/i18n/messages/settings/en.ts"), "utf8");
     const holes = (src: string, key: string) => {

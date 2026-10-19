@@ -6,6 +6,7 @@
 // is an ordinary setting and does sync, so the note names what it covers rather
 // than claiming all three.
 
+import { useSyncExternalStore } from "react";
 import { type Settings } from "../../../platform/app/settings";
 import { useT } from "../../../i18n";
 import { Input } from "../ui/input";
@@ -17,6 +18,8 @@ import VoiceInputCard from "./VoiceInputCard";
 import DictationLanguageCard from "./DictationLanguageCard";
 import OnDeviceVoiceCard from "./OnDeviceVoiceCard";
 import { hasNativeSpeech, hasOnDeviceDictation } from "../../../platform/app/platform";
+import { subscribeVoiceCapability } from "../../../platform/app/voice-capability";
+import { isCallVoice } from "./on-device-voice";
 
 export default function OptionalPanel({
   settings,
@@ -26,6 +29,7 @@ export default function OptionalPanel({
   onSettingsChange: (next: Settings) => void;
 }) {
   const t = useT();
+  const speaks = useSyncExternalStore(subscribeVoiceCapability, hasNativeSpeech);
   return (
     <>
       <p className="mt-0 mb-5 text-xs text-faint-foreground">{t("settings.optional.intro")}</p>
@@ -84,8 +88,10 @@ export default function OptionalPanel({
             that speaks (iOS, plugins/voice) has it: the voice runs on the
             device and needs its weights downloaded once. Elsewhere nothing
             reads answers aloud, so there is nothing to set. */}
-        {hasNativeSpeech() && (
-          <SettingsSection title={t("settings.optional.voiceOutput")}>
+        {speaks && (
+          <SettingsSection
+            title={t(isCallVoice() ? "settings.optional.voiceCall" : "settings.optional.voiceOutput")}
+          >
             <OnDeviceVoiceCard />
           </SettingsSection>
         )}

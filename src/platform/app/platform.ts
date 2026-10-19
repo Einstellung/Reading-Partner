@@ -9,6 +9,7 @@
 // plugin call is the one that matters on device.
 
 import { platform } from "@tauri-apps/plugin-os";
+import { voiceCallCapable } from "./voice-capability";
 
 // Whether the host can capture the microphone. Voice input records through the
 // Rust side (src-tauri/src/voice.rs), which is compiled `#[cfg(desktop)]` — on a
@@ -45,22 +46,17 @@ export function hasOnDeviceDictation(): boolean {
 	}
 }
 
-// Whether the host can say an answer out loud (docs/33). Synthesis and playback
-// are both the voice plugin's, and the capability that grants its commands is
-// iOS-only (src-tauri/capabilities/ios.json), so a desktop invoke is refused by
-// the ACL rather than answered — and off iOS the player answers every sentence
-// with "this host cannot speak" anyway (plugins/voice/src/fallback.rs).
+// Whether the host can hold a voice call: listen, think and say the answer out
+// loud (docs/33, docs/companion/89). iOS always can; Android can when the
+// device passes the voice plugin's capability check (voice-capability.ts, false
+// until it answers); desktop has no audio path behind it, and a desktop invoke
+// is refused by the ACL (src-tauri/capabilities) anyway.
 //
 // Its own question rather than hasOnDeviceDictation's: that one is the
-// microphone and this one is the speaker, and the day a desktop gets the grant
-// only one of them changes.
+// microphone and this one is the call, and Android answers yes to this one and
+// no to that one.
 export function hasNativeSpeech(): boolean {
-	try {
-		return platform() === "ios";
-	} catch {
-		// Not running under Tauri (unit tests, plain-browser dev): no commands.
-		return false;
-	}
+	return voiceCallCapable();
 }
 
 // Whether the host can render an article in a hidden webview
