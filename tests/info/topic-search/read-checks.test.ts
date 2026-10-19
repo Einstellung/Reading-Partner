@@ -113,12 +113,12 @@ function fakePdfText(calls: { url: string; given: boolean }[], fetchable: Record
   };
 }
 
-function deps(over: { fetchText?: FetchText; openLink?: OpenLink; readPdfText?: SourceDeps["readPdfText"] }): SourceDeps {
+function deps(over: { fetchText?: FetchText; openLink?: OpenLink; readPdfText?: SourceDeps["readPdfText"]; quotaLeft?: number }): SourceDeps {
   return {
     fetchText: over.fetchText ?? (async () => ({ status: 404, text: "" })),
     openLink: over.openLink ?? (async () => ({ ok: false, code: "not_found", reason: "not here" })),
     lookupRepo: async () => ({ kind: "skipped", reason: "quota" }),
-    repoQuotaLeft: () => null,
+    repoQuotaLeft: () => over.quotaLeft ?? null,
     ...(over.readPdfText ? { readPdfText: over.readPdfText } : {}),
   };
 }
@@ -312,4 +312,28 @@ test("a repository without a README, or whose README answers an error or is empt
   expect((await run({ status: 503, text: "" })).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false, retryable: true });
   expect((await run(readmeAnswer("   \n"))).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false, code: "not_found" });
   expect((await run({ status: 200, text: "<html>not json" })).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false });
+});
+
+test("with GitHub's API quota spent, the README is read off raw.githubusercontent by its common filenames and nothing calls the API", async () => {
+  const urls: string[] = [];
+  const fetchText: FetchText = async (url) => {
+    urls.push(url);
+    return url === "https://raw.githubusercontent.com/acme/tool/HEAD/README.rst" ? { status: 200, text: "Tool\n\nReads ferrite cells." } : { status: 404, text: "" };
+  };
+  const got = await readSource({ kind: "repo", owner: "acme", repo: "tool", url: "https://github.com/acme/tool" }, deps({ fetchText, quotaLeft: 2 }), signal);
+  expect(urls.filter((u) => u.startsWith("https://api.github.com/"))).toEqual([]);
+  expect(urls).toEqual([
+    "https://raw.githubusercontent.com/acme/tool/HEAD/README.md",
+    "https://raw.githubusercontent.com/acme/tool/HEAD/readme.md",
+    "https://raw.githubusercontent.com/acme/tool/HEAD/README.rst",
+  ]);
+  expect(got.steps.find((s) => s.step === "readme")).toMatchObject({ ok: true });
+  expect(JSON.stringify(got)).toContain("Reads ferrite cells.");
+});
+
+test("with GitHub's API quota spent, a raw README that is missing or answers an error is still a typed readme failure", async () => {
+  const run = (answer: { status: number; text: string }) =>
+    readSource({ kind: "repo", owner: "acme", repo: "tool", url: "https://github.com/acme/tool" }, deps({ fetchText: async () => answer, quotaLeft: 0 }), signal);
+  expect((await run({ status: 404, text: "" })).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false, code: "not_found" });
+  expect((await run({ status: 503, text: "" })).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false, retryable: true });
 });

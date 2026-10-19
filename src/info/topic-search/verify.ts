@@ -445,6 +445,38 @@ function decodeReadme(body: string): string {
   return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
 }
 
+type ReadmeRead = { ok: true; text: string } | { ok: false; why: ReadFailure };
+
+/** One call: GitHub finds the README whatever its filename or branch. */
+async function readmeFromApi(name: string, deps: SourceDeps, signal: AbortSignal): Promise<ReadmeRead> {
+  try {
+    const res = await deps.fetchText(`https://api.github.com/repos/${name}/readme`, signal);
+    if (res.status === 404) return { ok: false, why: failure("readme", "not_found", "the repository has no README") };
+    if (res.status !== 200) return { ok: false, why: failure("readme", codeOfStatus(res.status), `the README answered HTTP ${res.status}`) };
+    const text = decodeReadme(res.text);
+    return text.trim() ? { ok: true, text } : { ok: false, why: failure("readme", "not_found", "the repository has no README") };
+  } catch (e) {
+    if (signal.aborted) throw e;
+    return { ok: false, why: failure("readme", codeOfError(e), `the README: ${errText(e)}`) };
+  }
+}
+
+/** Without API quota to spare: the common README filenames on the default branch, which cost none. */
+async function readmeFromRaw(name: string, deps: SourceDeps, signal: AbortSignal): Promise<ReadmeRead> {
+  let why = failure("readme", "not_found", "the repository has no README");
+  for (const file of ["README.md", "readme.md", "README.rst", "README"]) {
+    try {
+      const res = await deps.fetchText(`https://raw.githubusercontent.com/${name}/HEAD/${file}`, signal);
+      if (res.status === 200 && res.text.trim()) return { ok: true, text: res.text };
+      if (res.status !== 404 && res.status !== 200) why = failure("readme", codeOfStatus(res.status), `the README answered HTTP ${res.status}`);
+    } catch (e) {
+      if (signal.aborted) throw e;
+      why = failure("readme", codeOfError(e), `the README: ${errText(e)}`);
+    }
+  }
+  return { ok: false, why };
+}
+
 async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   const full = `${t.owner}/${t.repo}`;
   const steps: StepRecord[] = [];
@@ -462,24 +494,13 @@ async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, 
   const found = lookup.kind === "found" ? lookup.facts : null;
   const name = found?.fullName ?? full;
   const sections: { heading: string | null; text: string }[] = [];
-  let readmeFailed: ReadFailure | null = null;
-  try {
-    // One call: GitHub finds the README whatever its filename or branch.
-    const res = await deps.fetchText(`https://api.github.com/repos/${name}/readme`, signal);
-    if (res.status === 404) readmeFailed = failure("readme", "not_found", "the repository has no README");
-    else if (res.status !== 200) readmeFailed = failure("readme", codeOfStatus(res.status), `the README answered HTTP ${res.status}`);
-    else {
-      const text = decodeReadme(res.text);
-      if (text.trim()) sections.push(...markdownSections(text));
-      else readmeFailed = failure("readme", "not_found", "the repository has no README");
-    }
-  } catch (e) {
-    if (signal.aborted) throw e;
-    readmeFailed = failure("readme", codeOfError(e), `the README: ${errText(e)}`);
-  }
-  steps.push(readmeFailed ? failedStep(readmeFailed) : okStep("readme"));
+  // GitHub's API answers 60 requests an hour without a key; the lookups come first.
   const quota = deps.repoQuotaLeft();
-  if (quota === null || quota > LISTING_RESERVE) {
+  const apiLeft = quota === null || quota > LISTING_RESERVE;
+  const readme = apiLeft ? await readmeFromApi(name, deps, signal) : await readmeFromRaw(name, deps, signal);
+  if (readme.ok) sections.push(...markdownSections(readme.text));
+  steps.push(readme.ok ? okStep("readme") : failedStep(readme.why));
+  if (apiLeft) {
     try {
       const res = await deps.fetchText(`https://api.github.com/repos/${name}/contents`, signal);
       const list = res.status === 200 ? (JSON.parse(res.text) as unknown) : null;
