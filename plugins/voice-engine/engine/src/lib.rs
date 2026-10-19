@@ -9,6 +9,14 @@ pub mod asr;
 
 use llama_cpp_2::llama_backend::LlamaBackend;
 
+pub mod mel;
+pub mod smart_turn;
+pub mod turn;
+pub mod vad;
+
+#[cfg(test)]
+mod fixture;
+
 /// Create the ONNX Runtime environment and initialise the llama.cpp backend.
 /// The backend must outlive every llama.cpp model and context.
 pub fn init_runtimes() -> Result<LlamaBackend, String> {
