@@ -330,6 +330,7 @@
 - [656-kokoro-int8-onnx-is-slower-than-fp32-on-cpu](./native-audio/656-kokoro-int8-onnx-is-slower-than-fp32-on-cpu.md) — 动态量化的 `model_int8.onnx` 在 x86 CPU 上 RTF 1.2，fp32 是 0.21，`ConvInteger` 没有优化内核；音质和时长也偏，选型以 iPad 实测为准
 - [653-pruning-pypinyin-phrases-changes-readings-through-segmentation](./native-audio/653-pruning-pypinyin-phrases-changes-readings-through-segmentation.md) — 删掉首读音和逐字默认一样的 pypinyin 词组，jieba 词条里 6813 个读音变了：词组表也是 mmseg 正向最大匹配的前缀集合，删长词组会改切分。导出脚本按删前删后的 mmseg 对比把用到的词组放回去，裁表必须重跑这遍对比
 - [654-misaki-reads-english-fragments-by-spacy-tag](./native-audio/654-misaki-reads-english-fragments-by-spacy-tag.md) — 中文句子里的英文片段被 spaCy 单独当一句标词性，词性决定 misaki 查词典的路：AWS 标 NNS 读成 `ˈɔz`，GPU 标 NNP 拼字母；Wi-Fi 的连字符标 HYPH 才合成一个词。Rust 移植用规则近似，剩余差异在多音词词性上，列在 `gold_tests::KNOWN_DIFFS`
+- [660-kokoro-onnx-samples-noise-every-run](./native-audio/660-kokoro-onnx-samples-noise-every-run.md) — Kokoro v1.1-zh 的 ONNX 图里有不带 `seed` 的 `RandomNormalLike`/`RandomUniformLike`，同一输入每次合成的波形都不一样（样本数相同），ORT 的 C API 设不了全局种子；要逐字节对比就给这些节点补 `seed` 另存一份模型来跑
 
 ## WebKit / webview
 
