@@ -389,7 +389,10 @@ export function scorePool(topic: TopicSearch, numbered: readonly Numbered[], ans
     const mainUrl = answer && answer.main !== "self" ? (n.links.find((l) => l.id === answer.main)?.url ?? null) : null;
     const key = (mainUrl ? eventKeyOfUrl(mainUrl) : null) ?? c.key;
     const score = finalScore({
-      kind: c.kind,
+      // A post whose main is a paper is scored as the paper: whoever recommends
+      // a paper is often a small account, and engagement near 0 would sink it.
+      // It shares the paper's event key, so the two stay one event.
+      kind: key.startsWith("arxiv:") ? "paper" : c.kind,
       rerank: answer ? answer.score : null,
       relevance: c.relevance,
       rrf: n.rrf,

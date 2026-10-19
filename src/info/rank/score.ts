@@ -3,6 +3,9 @@
 //   post   0.65·score + 0.20·RRF + 0.15·engagement
 //   paper  0.80·score + 0.20·RRF
 //
+// A post whose main (the link it is about) is a paper is scored as a paper;
+// the caller passes kind "paper" for it (topic-search/rank-pool.ts).
+//
 // `score` is the rerank model's 0-100; below 20 the whole sum is multiplied by
 // 0.3. A candidate that names none of the topic's anchors (judged here, by the
 // program) loses 20. When the rerank failed, `score` is 0.7·relevance·100,
