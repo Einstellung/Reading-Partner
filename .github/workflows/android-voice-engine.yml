@@ -8,6 +8,10 @@ name: Android voice engine
 
 on:
   workflow_dispatch:
+  # GitHub dispatches only workflows that are on the default branch (404 otherwise);
+  # a push to an Android voice branch runs it before it gets there.
+  push:
+    branches: ["dev/android-voice-*"]
 
 concurrency:
   group: android-voice-engine-${{ github.ref }}
