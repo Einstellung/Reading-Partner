@@ -29,6 +29,10 @@ export AR_aarch64_linux_android=$BIN/llvm-ar
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$BIN/$TARGET$API-clang
 # Unset, ort-sys links c++_shared on Android.
 export ORT_CXX_STDLIB=c++_static
+# ggml-cpu's -march for Qwen3-ASR's Q4_K_M kernels (llama-cpp-sys-2 passes it to
+# cmake; unset, ggml builds plain armv8-a). Phones that clear the memory gate
+# all have dotprod; i8mm stays off because some of them lack it.
+export GGML_CPU_ARM_ARCH=armv8.2-a+dotprod
 
 cargo build --release --target "$TARGET" \
   --manifest-path "$ROOT/plugins/voice-engine/Cargo.toml" -p voice-engine
