@@ -410,7 +410,7 @@ test("the slow part merged into the first part's file: the overview and counts s
   expect(merged.overview!.cites.some((c) => fast.items.some((i) => i.id === c))).toBe(true);
 
   // Counts add up; every item is in a group; the first part keeps its own.
-  expect(merged.stats.candidates).toEqual({ x: merged.retries![0].stats.candidates.x, arxiv: fast.stats.candidates.arxiv });
+  expect(merged.stats.candidates).toEqual({ x: merged.retries![0].stats.candidates.x, arxiv: fast.stats.candidates.arxiv, huggingface: 0 });
   expect(merged.stats.candidates.x).toBeGreaterThan(0);
   expect(merged.groups.flatMap((g) => g.items).sort()).toEqual(merged.items.map((i) => i.id).sort());
   expect(merged.firstLook).toEqual({ overview: fast.overview, writeup: fast.writeup, stats: fast.stats });

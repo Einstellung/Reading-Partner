@@ -7,7 +7,8 @@
 // What is read again is decided from the source health on the collector's state
 // file (source-health.ts): a (query, source) the last run of the search failed
 // on or never read, and an arXiv query that came back empty before the query
-// ladder existed (no ladder recorded), since widening may find it something. An
+// ladder existed (no ladder recorded), since widening may find it something.
+// Hugging Face is read like arXiv, for the queries with arXiv words. An
 // X query that read and found nothing new is left alone, as is everything ok.
 // Pure.
 
@@ -24,10 +25,12 @@ export const X_READ_RULE =
 export interface RetryPlan {
   x: string[];
   arxiv: string[];
+  /** Absent in a plan made before Hugging Face was a source; such a retry reads it where it reads arXiv. */
+  huggingface?: string[];
 }
 
 export function isEmptyPlan(plan: RetryPlan): boolean {
-  return plan.x.length === 0 && plan.arxiv.length === 0;
+  return plan.x.length === 0 && plan.arxiv.length === 0 && (plan.huggingface?.length ?? 0) === 0;
 }
 
 /** The queries a run reads: those of the whole topic and of a picked subtopic. */
@@ -38,13 +41,15 @@ export function readQueries(search: TopicSearch): TopicSearch["queries"] {
 
 /** What a retry of the search's first look reads, from the health its runs left. */
 export function planRetry(search: TopicSearch, health: Readonly<Record<string, SourceHealth>>): RetryPlan {
-  const plan: RetryPlan = { x: [], arxiv: [] };
+  const plan: RetryPlan = { x: [], arxiv: [], huggingface: [] };
   for (const q of readQueries(search)) {
     const x = health[topicSearchHealthKey(search.id, q.id, "x")]?.topicSearch;
     if (!x || x.status === "failed") plan.x.push(q.id);
     if (!q.arxiv) continue;
     const a = health[topicSearchHealthKey(search.id, q.id, "arxiv")]?.topicSearch;
     if (!a || a.status === "failed" || (a.status === "empty" && !a.ladder)) plan.arxiv.push(q.id);
+    const h = health[topicSearchHealthKey(search.id, q.id, "huggingface")]?.topicSearch;
+    if (!h || h.status === "failed") plan.huggingface!.push(q.id);
   }
   return plan;
 }

@@ -4,11 +4,13 @@
 // file stays testable: everything here reaches the host.
 //
 // The run pipeline (run.ts) injects `buildTopicSearchResult`, and searches
-// arXiv in its read phase with `searchArxivLive`.
+// arXiv and Hugging Face in its read phase with `searchArxivLive` and
+// `searchHfLive`.
 //
 // Every request here goes through `infoFetch`, whose host gate spaces arXiv to
-// one request per three seconds for the whole process and holds off after a
-// rate limit (platform/http/host-gate.ts, pitfall 502). arXiv page reads are
+// one request per three seconds for the whole process, Hugging Face's paper
+// search to one per six, and holds off after a rate limit (platform/http/host-gate.ts,
+// pitfall 502). arXiv page reads are
 // memoized for the run's deeper reads (fetch-memo.ts).
 
 import { callModel, resolveModel } from "../../ai/model-call";
@@ -23,9 +25,11 @@ import { infoFetch } from "../../workshop/extract/http";
 import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { listStatements } from "../../memory/live/statements";
 import { arxivPlugin } from "../sources/plugins/arxiv";
+import { huggingfacePlugin } from "../sources/plugins/huggingface";
 import { RepoLookups } from "../sources/plugins/github-lookup";
 import { resolveRedirect } from "../x/live";
 import type { ArxivSearch } from "./arxiv-ladder";
+import type { HfSearch } from "./hf-ladder";
 import { memoArxivFetchText } from "./fetch-memo";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResult } from "./build-result";
 import { openOriginal } from "./open-link";
@@ -48,6 +52,15 @@ async function writeUnder(path: string, content: string): Promise<void> {
 /** The arXiv plugin's search slot, through the host gate; `since` and `until` are local days, inclusive. */
 export const searchArxivLive: ArxivSearch = (text, window, signal) =>
   arxivPlugin.search!(text, { since: window.since, until: window.until, limit: ARXIV_LIMIT }, {
+    fetchFn: infoFetch,
+    signal,
+    now: () => Date.now(),
+    today: () => localDay(Date.now()),
+  });
+
+/** The Hugging Face plugin's search slot, through the host gate: one request, the window applied to its answer. */
+export const searchHfLive: HfSearch = (text, window, signal) =>
+  huggingfacePlugin.search!(text, { since: window.since, until: window.until }, {
     fetchFn: infoFetch,
     signal,
     now: () => Date.now(),

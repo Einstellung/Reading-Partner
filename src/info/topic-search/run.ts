@@ -6,12 +6,13 @@
 //   open     the search is still followed, the night is not over, X may be
 //            read (halt.ts) and the session is real; take the keep-awake lock
 //   read     the X lines (x-reader.ts), in the X lane, inside the lock, and
-//            beside them the arXiv queries (arxiv-read.ts): plain HTTP that
-//            touches neither the screen nor the X session, so it does not wait
-//            in the lane or for X. Neither half's failure stops the other; the
-//            run's signal stops both. Each writes what it got to the run
-//            directory (`x-read.json`, `arxiv-read.json`), and the phase moves
-//            on once both have settled
+//            beside them the arXiv queries (arxiv-read.ts) and the same queries
+//            on Hugging Face (hf-read.ts): plain HTTP that touches neither the
+//            screen nor the X session, so it does not wait in the lane or for X.
+//            No source's failure stops another; the run's signal stops all.
+//            Each writes what it got to the run directory (`x-read.json`,
+//            `arxiv-read.json`, `hf-read.json`), and the phase moves on once
+//            all have settled
 //   build    the result, by the builder the caller injected (not built here),
 //            from both files, opening X pages only from what is left of the
 //            day's allowance and the run's ceiling; then the source health it
@@ -24,7 +25,7 @@
 //            box itself
 //
 // A first look is split by the sources' pace (pace.ts, 88 「第一次分两段」): its
-// first part reads only the fast sources (arXiv) and goes read, build, deliver,
+// first part reads only the fast sources (arXiv, Hugging Face) and goes read, build, deliver,
 // telling the brief at once (its own issue `first:<id>`, with the file saying
 // what it still awaits); then `later` checks X the way `open` would, and the
 // slow part goes read (X only), build (added to the same file the way a retry
@@ -47,6 +48,8 @@ import type { XHalt } from "../x/search-page";
 import type { ArxivSearch } from "./arxiv-ladder";
 import { arxivProgressLine, readArxiv, type ArxivRead } from "./arxiv-read";
 import type { BuildTopicSearchResult, BuildTopicSearchResultOutput, XPageBudget } from "./build-result";
+import type { HfSearch } from "./hf-ladder";
+import { hfProgressLine, readHf } from "./hf-read";
 import { lastNightAnchor, nightEndAt } from "./nightly";
 import { sourceNames, sourcesOf, sourcesOfPace, splitsFirstLook, type RunPart } from "./pace";
 import type { FirstPartOnFile } from "./run-state";
@@ -191,6 +194,10 @@ export interface TopicSearchRunDeps {
   searchArxiv: ArxivSearch;
   saveArxiv(dir: string, read: ArxivRead): Promise<void>;
   loadArxiv(dir: string): Promise<ArxivRead | null>;
+  /** The Hugging Face plugin's search slot, through the host gate (build-live.ts searchHfLive). */
+  searchHf: HfSearch;
+  saveHf(dir: string, read: ArxivRead): Promise<void>;
+  loadHf(dir: string): Promise<ArxivRead | null>;
   /** A split first look's delivered first part, in the run directory (run-state.ts). */
   saveFirstPart(dir: string, part: FirstPartOnFile): Promise<void>;
   loadFirstPart(dir: string): Promise<FirstPartOnFile | null>;
@@ -348,7 +355,28 @@ export function topicSearchTask(
     }
   };
 
-  // The run's arXiv queries, those not yet on file in its directory.
+  // The run's paper queries on arXiv and on Hugging Face, those not yet on file in its directory.
+  const paperPlan = (brief: TopicSearchBrief, window: Window, only: readonly string[] | null) => ({
+    kind: lookOf(brief.kind),
+    since: window.since,
+    today: localDay(deps.now()),
+    only,
+  });
+  const readHfOf = (
+    search: TopicSearch,
+    brief: TopicSearchBrief,
+    window: Window,
+    dir: string,
+    signal: AbortSignal,
+    onChange?: (read: ArxivRead) => void,
+  ) =>
+    readHf(
+      search,
+      // A retry planned before Hugging Face was a source has no list for it: it reads it where it reads arXiv.
+      paperPlan(brief, window, window.retry ? (window.retry.huggingface ?? window.retry.arxiv) : null),
+      { search: deps.searchHf, load: () => deps.loadHf(dir), save: (read) => deps.saveHf(dir, read), onChange },
+      signal,
+    );
   const readArxivOf = (
     search: TopicSearch,
     brief: TopicSearchBrief,
@@ -359,7 +387,7 @@ export function topicSearchTask(
   ) =>
     readArxiv(
       search,
-      { kind: lookOf(brief.kind), since: window.since, today: localDay(deps.now()), only: window.retry?.arxiv ?? null },
+      paperPlan(brief, window, window.retry?.arxiv ?? null),
       { search: deps.searchArxiv, load: () => deps.loadArxiv(dir), save: (read) => deps.saveArxiv(dir, read), onChange },
       signal,
     );
@@ -391,17 +419,18 @@ export function topicSearchTask(
         if (retry && isEmptyPlan(retry)) return skip(runtime, "nothing the first look missed is left to read again", context);
         if (splitsFirstLook(brief.kind)) {
           // The fast sources first; X is checked when its part starts (`later`).
-          say(runId, `arXiv: starting; ${sourceNames(sourcesOfPace("slow"))}: ${READ_LATER}`);
+          say(runId, `${sourceNames(sourcesOfPace("fast"))}: starting; ${sourceNames(sourcesOfPace("slow"))}: ${READ_LATER}`);
           const window: Window = { startedAt: now, since: now - FIRST_LOOK_BACK_MS, night, retry: null, part: "fast" };
           return next(runtime, { phase: "read", blocked: null, ...window }, context);
         }
         const blocked = retry && retry.x.length === 0 ? "no X query to read again" : await xBlocked(night, search.id, runId);
-        // A night's increment is X alone, and so is a retry with no arXiv query to read again;
+        // A night's increment is X alone, and so is a retry with no paper query to read again;
         // the first look still builds from what else it has.
-        if (blocked && (brief.kind === "daily" || (retry && retry.arxiv.length === 0))) return skip(runtime, blocked, context);
+        const papersLeft = retry ? retry.arxiv.length + (retry.huggingface?.length ?? 0) : 0;
+        if (blocked && (brief.kind === "daily" || (retry && papersLeft === 0))) return skip(runtime, blocked, context);
         if (!blocked) await hold(runId);
         const since = brief.kind === "daily" ? (search.lastRunAt ?? now - FIRST_LOOK_BACK_MS) : now - FIRST_LOOK_BACK_MS;
-        say(runId, `${blocked ? `not reading X: ${blocked}` : "waiting to read X"}; arXiv: starting`);
+        say(runId, `${blocked ? `not reading X: ${blocked}` : "waiting to read X"}; ${sourceNames(sourcesOfPace("fast"))}: starting`);
         await next(runtime, { phase: "read", blocked, startedAt: now, since, night, retry }, context);
       }),
       read: guarded<Extract<Checkpoint, { phase: "read" }>>(async (task, runtime, context) => {
@@ -413,20 +442,31 @@ export function topicSearchTask(
         const dir = await deps.runDir(runId);
         const search = await deps.loadSearch(brief.searchId);
         if (!search) return skip(runtime, "the topic search is gone", context, part ?? undefined);
-        // The run's line says where each half is: "reading X: ...; arXiv done: ...".
-        const line = { x: cp.blocked ? `not reading X: ${cp.blocked}` : "waiting to read X", arxiv: "arXiv: starting" };
+        // The run's line says where each source is: "reading X: ...; arXiv done: ...; Hugging Face done: ...".
+        const line = {
+          x: cp.blocked ? `not reading X: ${cp.blocked}` : "waiting to read X",
+          arxiv: "arXiv: starting",
+          hf: "Hugging Face: starting",
+        };
+        const papersLine = () => [reads.includes("arxiv") ? line.arxiv : "", reads.includes("huggingface") ? line.hf : ""].filter(Boolean).join("; ");
         const tell = () =>
           say(
             runId,
             part === "fast"
-              ? `${line.arxiv}; ${sourceNames(sourcesOfPace("slow"))}: ${READ_LATER}`
+              ? `${papersLine()}; ${sourceNames(sourcesOfPace("slow"))}: ${READ_LATER}`
               : part === "slow"
                 ? `first part delivered; ${line.x}`
-                : `${line.x}; ${line.arxiv}`,
+                : `${line.x}; ${papersLine()}`,
           );
         const arxivWork = reads.includes("arxiv")
           ? readArxivOf(search, brief, window, dir, runtime.signal, (read) => {
               line.arxiv = arxivProgressLine(read);
+              tell();
+            })
+          : Promise.resolve(null);
+        const hfWork = reads.includes("huggingface")
+          ? readHfOf(search, brief, window, dir, runtime.signal, (read) => {
+              line.hf = hfProgressLine(read);
               tell();
             })
           : Promise.resolve(null);
@@ -455,12 +495,14 @@ export function topicSearchTask(
           }
           return read;
         })();
-        // Both run to the end whatever the other does; a failure is raised once both have settled.
-        const [xDone, arxivDone] = await Promise.allSettled([xWork, arxivWork]);
+        // Each runs to the end whatever the others do; a failure is raised once all have settled.
+        const [xDone, arxivDone, hfDone] = await Promise.allSettled([xWork, arxivWork, hfWork]);
         if (xDone.status === "rejected") throw xDone.reason;
         if (arxivDone.status === "rejected") throw arxivDone.reason;
+        if (hfDone.status === "rejected") throw hfDone.reason;
         const x = xDone.value;
-        const papers = (arxivDone.value?.found ?? []).reduce((n, f) => n + f.items.length, 0);
+        const count = (read: ArxivRead | null) => (read?.found ?? []).reduce((n, f) => n + f.items.length, 0);
+        const papers = `${count(arxivDone.value)} arXiv and ${count(hfDone.value)} Hugging Face papers`;
         if (brief.kind === "daily" && !(await runtime.memo<boolean>("night-spent", context))) {
           await deps.spendNight(window.night, x);
           await runtime.memo("night-spent", true, context);
@@ -470,10 +512,10 @@ export function topicSearchTask(
         say(
           runId,
           part === "fast"
-            ? `read ${papers} arXiv papers; building the first part`
+            ? `read ${papers}; building the first part`
             : part === "slow"
               ? `read ${x.posts.length} posts (${x.status}); adding them to the first part`
-              : `read ${x.posts.length} posts (${x.status}) and ${papers} arXiv papers; building the result`,
+              : `read ${x.posts.length} posts (${x.status}) and ${papers}; building the result`,
         );
         await next(runtime, { phase: "build", ...window }, context);
       }),
@@ -497,18 +539,20 @@ export function topicSearchTask(
           const xPages = deps.xPages({ kind: look, night: window.night, x });
           // The slow part adds to the first part's file the way a retry adds, over every query it read on X.
           const retry = window.retry
-            ? { runId, x: window.retry.x, arxiv: window.retry.arxiv }
+            ? { runId, x: window.retry.x, arxiv: window.retry.arxiv, huggingface: window.retry.huggingface ?? window.retry.arxiv }
             : part === "slow"
-              ? { runId, x: readQueries(search).map((q) => q.id), arxiv: [], part: "slow" as const }
+              ? { runId, x: readQueries(search).map((q) => q.id), arxiv: [], huggingface: [], part: "slow" as const }
               : null;
-          // On file since the read phase; a run whose read phase came before arXiv moved there searches it here.
+          // On file since the read phase; a run whose read phase came before a paper source moved (or was added) there searches it here.
           const arxiv = part === "slow" ? [] : (await readArxivOf(search, brief, window, dir, runtime.signal)).found;
+          const huggingface = part === "slow" ? [] : (await readHfOf(search, brief, window, dir, runtime.signal)).found;
           const later = part === "fast" ? sourcesOfPace("slow") : undefined;
           const made = await build({
             topic: search,
             kind: look,
             x,
             arxiv,
+            huggingface,
             since: window.since,
             runDir: dir,
             xPages,

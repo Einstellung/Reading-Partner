@@ -25,9 +25,11 @@ import { topicSearchTask, type TopicSearchRunDeps, type TopicSearchRunResult } f
 import {
   createStateStore,
   loadArxivRead,
+  loadHfRead,
   loadFirstPart,
   loadRead,
   saveArxivRead,
+  saveHfRead,
   saveFirstPart,
   nightLimits,
   permalinkBudget,
@@ -214,6 +216,9 @@ function world(opts: { papers?: InfoItem[] } = {}) {
     },
     saveArxiv: (dir, read) => saveArxivRead(fs, dir, read),
     loadArxiv: (dir) => loadArxivRead(fs, dir),
+    searchHf: async () => [],
+    saveHf: (dir, read) => saveHfRead(fs, dir, read),
+    loadHf: (dir) => loadHfRead(fs, dir),
     saveFirstPart: (dir, part) => saveFirstPart(fs, dir, part),
     loadFirstPart: (dir) => loadFirstPart(fs, dir),
     memory: store.reader,
@@ -322,13 +327,15 @@ describe("a first run, then the next night", () => {
 
   test("the source health is on the collector's state file", () => {
     const health = JSON.parse(w.fs.files.get(HEALTH_FILE)!) as Record<string, SourceHealth>;
-    // The topic search's lines, by query, X before arXiv.
+    // The topic search's lines, by query, X, arXiv, Hugging Face.
+    const order = ["x", "arxiv", "huggingface"];
     const rows = Object.entries(health)
       .flatMap(([key, h]) => (h.topicSearch ? [{ key, health: h, line: h.topicSearch }] : []))
-      .sort((a, b) => a.line.query.localeCompare(b.line.query) || (a.line.source === b.line.source ? 0 : a.line.source === "x" ? -1 : 1));
+      .sort((a, b) => a.line.query.localeCompare(b.line.query) || order.indexOf(a.line.source) - order.indexOf(b.line.source));
     expect(rows.map((r) => [r.key, r.line.status])).toEqual([
       ["topic-search:ts-0a1b2c3d:q1:x", "ok"],
       ["topic-search:ts-0a1b2c3d:q1:arxiv", "empty"],
+      ["topic-search:ts-0a1b2c3d:q1:huggingface", "empty"],
     ]);
     expect(rows[0].line).toMatchObject({ name: "AI for science", label: SEARCH.queries[0].x, read: OLDER.posts.length });
     // Read when the build ran, after the reading.
@@ -388,7 +395,8 @@ describe("a first run signed out of X, then a retry after signing in", () => {
     expect(w.fs.files.has(firstFile)).toBe(true);
     expect(health()["topic-search:ts-0a1b2c3d:q1:x"]?.topicSearch?.status).toBe("failed");
     expect(health()["topic-search:ts-0a1b2c3d:q1:arxiv"]?.topicSearch?.status).toBe("empty");
-    expect(planRetry(w.search(), health())).toEqual({ x: ["q1"], arxiv: [] });
+    expect(health()["topic-search:ts-0a1b2c3d:q1:huggingface"]?.topicSearch?.status).toBe("empty");
+    expect(planRetry(w.search(), health())).toEqual({ x: ["q1"], arxiv: [], huggingface: [] });
     expect((await w.store.load()).halt?.kind).toBe("signed-out");
   });
 
@@ -427,7 +435,7 @@ describe("a first run signed out of X, then a retry after signing in", () => {
   });
 
   test("with nothing left to read again, a second retry is skipped", async () => {
-    expect(planRetry(w.search(), health())).toEqual({ x: [], arxiv: [] });
+    expect(planRetry(w.search(), health())).toEqual({ x: [], arxiv: [], huggingface: [] });
     const result = await run(w, "r-retry-2", { searchId: SEARCH.id, kind: "retry", night: null, n: 2 });
     expect(result).toMatchObject({ status: "skipped", why: "nothing the first look missed is left to read again" });
   });

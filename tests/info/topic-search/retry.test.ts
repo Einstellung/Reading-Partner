@@ -48,7 +48,7 @@ const SEARCH: TopicSearch = {
   lastRunAt: 1,
 };
 
-function line(query: string, source: "x" | "arxiv", status: TopicSearchLineHealth["status"], ladder?: TopicSearchLineHealth["ladder"]): [string, SourceHealth] {
+function line(query: string, source: "x" | "arxiv" | "huggingface", status: TopicSearchLineHealth["status"], ladder?: TopicSearchLineHealth["ladder"]): [string, SourceHealth] {
   return [
     `topic-search:${SEARCH.id}:${query}:${source}`,
     { topicSearch: { searchId: SEARCH.id, name: SEARCH.name, query, label: query, source, status, read: 0, fresh: 0, passedFloor: 0, ...(ladder ? { ladder } : {}) } },
@@ -57,7 +57,7 @@ function line(query: string, source: "x" | "arxiv", status: TopicSearchLineHealt
 
 const EXHAUSTED = { outcome: "exhausted" as const, steps: [] };
 
-test("a retry reads X that failed or was never read, and arXiv that failed or was empty before the ladder", () => {
+test("a retry reads X that failed or was never read, arXiv that failed or was empty before the ladder, and Hugging Face that failed or was never read", () => {
   const health = Object.fromEntries([
     line("q1", "x", "failed"),
     line("q1", "arxiv", "empty"), // before the ladder: widening may find it something
@@ -65,11 +65,16 @@ test("a retry reads X that failed or was never read, and arXiv that failed or wa
     line("q2", "arxiv", "empty", EXHAUSTED), // the ladder already widened to the end
     line("q3", "x", "ok"),
     line("q3", "arxiv", "failed"),
-    // q4 never read on X; q5 is under an unpicked subtopic.
+    line("q1", "huggingface", "empty", EXHAUSTED),
+    line("q2", "huggingface", "failed"),
+    // q3 never searched on Hugging Face (before it was a source); q4 never read on X and has no arXiv words;
+    // q5 is under an unpicked subtopic.
   ]);
-  expect(planRetry(SEARCH, health)).toEqual({ x: ["q1", "q4"], arxiv: ["q1", "q3"] });
-  const all = Object.fromEntries(SEARCH.queries.flatMap((q) => [line(q.id, "x", "ok"), line(q.id, "arxiv", "ok")]));
-  expect(planRetry(SEARCH, all)).toEqual({ x: [], arxiv: [] });
+  expect(planRetry(SEARCH, health)).toEqual({ x: ["q1", "q4"], arxiv: ["q1", "q3"], huggingface: ["q2", "q3"] });
+  const all = Object.fromEntries(
+    SEARCH.queries.flatMap((q) => [line(q.id, "x", "ok"), line(q.id, "arxiv", "ok"), line(q.id, "huggingface", "empty", EXHAUSTED)]),
+  );
+  expect(planRetry(SEARCH, all)).toEqual({ x: [], arxiv: [], huggingface: [] });
 });
 
 test("retries are keyed one past the highest still on file, per search", () => {
@@ -175,7 +180,7 @@ test("a retry's part is added to the first look's file and read back as its own 
   // The file speaks for the merged whole: the retry's overview was written over all of it.
   expect(merged.overview).toEqual(part.overview);
   expect(merged.stats).toEqual({
-    candidates: { x: 40, arxiv: 1 },
+    candidates: { x: 40, arxiv: 1, huggingface: 0 },
     passedFloor: 13,
     pooled: 11,
     reranked: true,
@@ -221,7 +226,7 @@ test("a second part adds up over the first look and every part, and the first lo
   // A write-up that fell back has no overview of the whole: none stands rather than the first look's stale one.
   const twice = mergeRetry(once, result({ createdAt: 300, items: [item("E3", ["M3"])], groups: [{ subtopic: null, items: ["E3"] }], stats: STATS, overview: null, writeup: "fallback" }), "r-retry");
   expect(twice.overview).toBeNull();
-  expect(twice.stats.candidates).toEqual({ x: 40, arxiv: 2 });
+  expect(twice.stats.candidates).toEqual({ x: 40, arxiv: 2, huggingface: 0 });
   expect(twice.stats.modelCalls).toBe(8);
   expect(twice.firstLook).toEqual({ overview: { text: "The first look.", cites: ["E1"] }, writeup: "model", stats: STATS });
   expect(firstPart(twice).items.map((i) => i.id)).toEqual(["E1"]);

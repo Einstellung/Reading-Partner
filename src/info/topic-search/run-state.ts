@@ -9,7 +9,8 @@
 //   topic-search-runs/<run id>/    one directory per run: the X progress file
 //                                  (one step a line, what a cut-off run resumes
 //                                  from), what the X read handed the build,
-//                                  what the arXiv read found (arxiv-read.ts),
+//                                  what the arXiv read found (arxiv-read.ts)
+//                                  and the Hugging Face read (hf-read.ts),
 //                                  and a split first look's delivered first
 //                                  part (`first-part.json`, pace.ts).
 //
@@ -28,6 +29,7 @@ export const TOPIC_SEARCH_RUNS_DIR = "topic-search-runs";
 export const X_PROGRESS_FILE = "x-progress.jsonl";
 export const X_READ_FILE = "x-read.json";
 export const ARXIV_READ_FILE = "arxiv-read.json";
+export const HF_READ_FILE = "hf-read.json";
 
 /** What the night's runs have used of its ceiling, every topic together. */
 export interface NightUse {
@@ -259,8 +261,20 @@ export async function loadFirstPart(fs: StateFs, dir: string): Promise<FirstPart
   }
 }
 
-export async function loadArxivRead(fs: StateFs, dir: string): Promise<ArxivRead | null> {
-  const path = `${dir}/${ARXIV_READ_FILE}`;
+/** What the Hugging Face read has found so far, rewritten after each query (the arXiv read's shape). */
+export async function saveHfRead(fs: StateFs, dir: string, read: ArxivRead): Promise<void> {
+  await fs.writeAtomic(`${dir}/${HF_READ_FILE}`, JSON.stringify(read));
+}
+
+export function loadHfRead(fs: StateFs, dir: string): Promise<ArxivRead | null> {
+  return loadPaperRead(fs, `${dir}/${HF_READ_FILE}`);
+}
+
+export function loadArxivRead(fs: StateFs, dir: string): Promise<ArxivRead | null> {
+  return loadPaperRead(fs, `${dir}/${ARXIV_READ_FILE}`);
+}
+
+async function loadPaperRead(fs: StateFs, path: string): Promise<ArxivRead | null> {
   if (!(await fs.exists(path))) return null;
   try {
     const raw = JSON.parse(await fs.readText(path)) as ArxivRead;

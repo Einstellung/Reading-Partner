@@ -95,7 +95,7 @@ export function topicSearchGuidance({ searches, statements, xPaused = null }: Gu
       "tool told you; never promise when X will be read or a result will come.",
       "When they ask whether a search's first look, a retry or a night's run has started, come back or",
       "finished, call background_status (about: the search's name or id) first: it says the run's state,",
-      "elapsed time, X and arXiv progress, result and brief issue (for a first look, whether its first part",
+      "elapsed time, X, arXiv and Hugging Face progress, result and brief issue (for a first look, whether its first part",
       "is out and X is still being read). Conversation search is not a source for run state.",
     ].join("\n"),
   ]

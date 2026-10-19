@@ -1,6 +1,6 @@
 // How fast each source of a topic search reads, and the first look delivered
 // in two parts by it (docs/info/88 「第一次分两段」). A fast source is plain
-// HTTP (arXiv); a slow one is read at a person's pace in the browse window (X,
+// HTTP (arXiv, Hugging Face); a slow one is read at a person's pace in the browse window (X,
 // and later other social media). The first look builds and delivers what the
 // fast sources found without waiting, then reads the slow ones and adds what
 // they found to the same result file, the way a retry does (retry.ts), with a
@@ -13,14 +13,14 @@
 // reads it.
 
 /** The sources a run reads. */
-export type RunSource = "x" | "arxiv";
+export type RunSource = "x" | "arxiv" | "huggingface";
 
 export type Pace = "fast" | "slow";
 
-export const SOURCE_PACE: Readonly<Record<RunSource, Pace>> = { x: "slow", arxiv: "fast" };
+export const SOURCE_PACE: Readonly<Record<RunSource, Pace>> = { x: "slow", arxiv: "fast", huggingface: "fast" };
 
 /** How a source is named to the reader and to Lumen. */
-export const SOURCE_NAME: Readonly<Record<RunSource, string>> = { x: "X", arxiv: "arXiv" };
+export const SOURCE_NAME: Readonly<Record<RunSource, string>> = { x: "X", arxiv: "arXiv", huggingface: "Hugging Face" };
 
 /** Whether the first look delivers its fast sources first and adds the slow ones after. */
 export const SPLIT_FIRST_LOOK = true;

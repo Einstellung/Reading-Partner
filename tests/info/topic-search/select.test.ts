@@ -75,6 +75,7 @@ function cand(key: string, kind: "post" | "paper", query: string, relevance: num
     kind,
     source: kind === "post" ? "x" : "arxiv",
     queries: [query],
+    foundIn: [`${query}|${kind === "post" ? "x" : "arxiv"}`],
     text: "materials discovery with machine learning",
     author: key,
     at: 0,

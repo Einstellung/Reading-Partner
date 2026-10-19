@@ -37,7 +37,7 @@ export function buildBackgroundStatusTool(deps: BackgroundStatusDeps): AgentTool
       "How background work is getting on: queued, running and recently finished runs (topic searches, " +
       "briefings, links being taken in, anything handed off), with the state, which device runs it, " +
       "when it started and how long it has run, its last report, a failure's reason, and what the kind " +
-      `adds (a topic search's X and arXiv progress, result and brief issue). ${BACKGROUND_STATUS_RULE}`,
+      `adds (a topic search's X, arXiv and Hugging Face progress, result and brief issue). ${BACKGROUND_STATUS_RULE}`,
     parameters: Type.Object({
       which: Type.Optional(
         Type.String({ description: "\"running\" for queued and running only; \"recent\" (default) adds what finished in the last 48 hours." }),

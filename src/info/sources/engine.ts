@@ -621,13 +621,14 @@ export interface TopicSearchLineHealth {
   query: string;
   /** The query's text for this source. */
   label: string;
-  source: "x" | "arxiv";
+  source: "x" | "arxiv" | "huggingface";
   status: "ok" | "empty" | "failed";
   read: number;
   fresh: number;
   passedFloor: number;
   /**
-   * arXiv only: how the query ladder ended (topic-search/arxiv-ladder.ts) —
+   * arXiv and Hugging Face only: how the query ladder ended
+   * (topic-search/arxiv-ladder.ts, hf-ladder.ts) —
    * found at once, found after widening, nothing even when widened to the end,
    * refused for the rate limit, or failed — and each step it took.
    */

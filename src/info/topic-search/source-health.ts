@@ -8,11 +8,12 @@
 
 import type { SourceHealth } from "../sources/engine";
 import type { SourceHealthFile } from "./build-result";
+import type { RunSource } from "./pace";
 import type { TopicSearch } from "./types";
 
 export const TOPIC_SEARCH_HEALTH_PREFIX = "topic-search:";
 
-export function topicSearchHealthKey(searchId: string, query: string, source: "x" | "arxiv"): string {
+export function topicSearchHealthKey(searchId: string, query: string, source: RunSource): string {
   return `${TOPIC_SEARCH_HEALTH_PREFIX}${searchId}:${query}:${source}`;
 }
 
@@ -41,7 +42,7 @@ export function foldTopicSearchHealth(
   const queried = new Set(
     search.queries.flatMap((q) => [
       topicSearchHealthKey(file.searchId, q.id, "x"),
-      ...(q.arxiv ? [topicSearchHealthKey(file.searchId, q.id, "arxiv")] : []),
+      ...(q.arxiv ? [topicSearchHealthKey(file.searchId, q.id, "arxiv"), topicSearchHealthKey(file.searchId, q.id, "huggingface")] : []),
     ]),
   );
   const out: Record<string, SourceHealth> = {};
@@ -49,7 +50,7 @@ export function foldTopicSearchHealth(
   for (const e of file.entries) {
     const key = topicSearchHealthKey(file.searchId, e.query, e.source);
     const q = search.queries.find((x) => x.id === e.query);
-    const label = (e.source === "arxiv" ? q?.arxiv : q?.x) ?? e.query;
+    const label = (e.source === "x" ? q?.x : q?.arxiv) ?? e.query;
     const line = { searchId: file.searchId, name: search.name, query: e.query, label, source: e.source, status: e.status, read: e.read, fresh: e.fresh, passedFloor: e.passedFloor, ...(e.ladder ? { ladder: e.ladder } : {}) };
     const before = out[key] ?? {};
     out[key] =

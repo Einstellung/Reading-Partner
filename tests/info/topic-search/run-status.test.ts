@@ -128,6 +128,7 @@ function deps(over: Partial<TopicSearchStatusDeps> = {}) {
       asked.push(`arxiv:${id}`);
       return null;
     },
+    hfRead: async () => null,
     runHealth: async (id) => {
       asked.push(`health:${id}`);
       return null;
@@ -206,6 +207,26 @@ test("on the collector, arXiv done while X is still being read says so, query by
   const half = await backgroundStatusText(input([tsRun(FIRST)], deps({ arxivRead: async () => limited }).d), { about: "Mechanism discovery" });
   expect(half).toContain("arXiv: 1 of 2 queries searched (1 rate limited), 0 papers.");
   expect(half).toContain('arXiv per query: "autonomous experiment" failed (rate limited (HTTP 429 from export.arxiv.org)).');
+});
+
+test("on the collector, Hugging Face's read is said beside arXiv's, with arXiv cooling down", async () => {
+  const step = { terms: ["autonomous", "experiment"], since: "2025-10-17", until: "2026-10-17" };
+  const cooling: ArxivRead = {
+    version: 1,
+    window: { since: "2025-10-17", until: "2026-10-17" },
+    planned: ["q1"],
+    found: [{ query: "q1", items: [], error: "export.arxiv.org is cooling down", ladder: { outcome: "cooling_down", steps: [{ ...step, hits: null }] } }],
+    done: true,
+  };
+  const hub: ArxivRead = {
+    ...cooling,
+    found: [{ query: "q1", items: [{ id: "a" }, { id: "b" }, { id: "c" }] as never, error: null, ladder: { outcome: "direct", steps: [{ ...step, hits: 3 }] } }],
+  };
+  const { d } = deps({ arxivRead: async () => cooling, hfRead: async () => hub });
+  const text = await backgroundStatusText(input([tsRun(FIRST)], d), { about: "Mechanism discovery" });
+  expect(text).toContain("arXiv done: 1 query searched (1 cooling down), 0 papers;");
+  expect(text).toContain("Hugging Face done: 1 query searched (1 direct), 3 papers;");
+  expect(text).toContain('Hugging Face per query: "autonomous experiment" direct, 3 papers.');
 });
 
 test("on the collector, a done run gives its per-query outcomes, result growth and issue", async () => {

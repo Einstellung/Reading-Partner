@@ -2,7 +2,7 @@
 // the generic entry is legion/status). Counts and outcomes only, worked out by
 // the program: never a post's text, never a raw log.
 //
-// Where each piece is: the X progress file, the arXiv read and the run's source health are in
+// Where each piece is: the X progress file, the arXiv and Hugging Face reads and the run's source health are in
 // the run directory, on the computer that ran it only (run-state.ts); this
 // device's halt and X session are its own. The result files and the info shelf
 // sync. The collector's claim carries its source health, whether it has an X
@@ -15,8 +15,8 @@ import type { Run } from "../../legion/run";
 import type { RunAbout, RunDescriber, RunView } from "../../legion/status/registry";
 import type { SourceHealth } from "../sources/engine";
 import { X_SIGN_IN_URL } from "../sources/x-search";
-import { arxivProgressLine, type ArxivRead } from "./arxiv-read";
-import { sourceNames, sourcesOfPace, splitsFirstLook } from "./pace";
+import { paperProgressLine, type ArxivRead } from "./arxiv-read";
+import { SOURCE_NAME, sourceNames, sourcesOfPace, splitsFirstLook, type RunSource } from "./pace";
 import type { SourceHealthEntry, SourceHealthFile } from "./build-result";
 import type { XHaltRecord } from "./halt";
 import type { TopicSearchResult } from "./result-types";
@@ -44,6 +44,8 @@ export interface TopicSearchStatusDeps {
   steps(runId: string): Promise<XStep[] | null>;
   /** What the run's arXiv read has on file (arxiv-read.ts), or null when this device has none for it. */
   arxivRead(runId: string): Promise<ArxivRead | null>;
+  /** What the run's Hugging Face read has on file (hf-read.ts), or null when this device has none for it. */
+  hfRead(runId: string): Promise<ArxivRead | null>;
   /** The run directory's source health, or null when this device has none for it. */
   runHealth(runId: string): Promise<SourceHealthFile | null>;
   /** The search's result files on this device. */
@@ -77,9 +79,9 @@ export function aboutTopicSearchRun(run: Run, searches: readonly TopicSearch[]):
   };
 }
 
-function queryLabel(search: TopicSearch | undefined, query: string, source: "x" | "arxiv"): string {
+function queryLabel(search: TopicSearch | undefined, query: string, source: RunSource): string {
   const q = search?.queries.find((x) => x.id === query);
-  return `"${(source === "arxiv" ? q?.arxiv : q?.x) ?? query}"`;
+  return `"${(source === "x" ? q?.x : q?.arxiv) ?? query}"`;
 }
 
 function outcome(e: Pick<SourceHealthEntry, "status" | "read" | "fresh" | "ladder"> & { why?: string | null }): string {
@@ -88,13 +90,13 @@ function outcome(e: Pick<SourceHealthEntry, "status" | "read" | "fresh" | "ladde
   return `${ladder}${e.read} read, ${e.fresh} new`;
 }
 
-/** Per-query outcome lines, X then arXiv. */
+/** Per-query outcome lines, X, then arXiv, then Hugging Face. */
 export function healthLines(entries: readonly (Pick<SourceHealthEntry, "query" | "source" | "status" | "read" | "fresh" | "ladder"> & { why?: string | null })[], search: TopicSearch | undefined): string[] {
   const out: string[] = [];
-  for (const source of ["x", "arxiv"] as const) {
+  for (const source of ["x", "arxiv", "huggingface"] as const) {
     const mine = entries.filter((e) => e.source === source);
     if (!mine.length) continue;
-    out.push(`${source === "x" ? "X" : "arXiv"} per query: ${mine.map((e) => `${queryLabel(search, e.query, source)} ${outcome(e)}`).join("; ")}.`);
+    out.push(`${SOURCE_NAME[source]} per query: ${mine.map((e) => `${queryLabel(search, e.query, source)} ${outcome(e)}`).join("; ")}.`);
   }
   return out;
 }
@@ -102,18 +104,26 @@ export function healthLines(entries: readonly (Pick<SourceHealthEntry, "query" |
 /**
  * The run's arXiv read before the build has written the source health: how far
  * it got, and each searched query's ladder outcome and papers. arXiv runs beside
- * X, so it is usually done while X is still being read.
+ * X, so it is usually done while X is still being read. Hugging Face's read
+ * says the same with `source`.
  */
-export function arxivLines(read: ArxivRead, search: TopicSearch | undefined, open: boolean, split = false): string[] {
-  const head = arxivProgressLine(read);
+export function arxivLines(
+  read: ArxivRead,
+  search: TopicSearch | undefined,
+  open: boolean,
+  split = false,
+  source: "arxiv" | "huggingface" = "arxiv",
+): string[] {
+  const name = SOURCE_NAME[source];
+  const head = paperProgressLine(name, read);
   const after = split ? "the first part is built from it without waiting for X" : "the result is built once X has been read";
   const lines = [read.done && open && read.planned.length ? `${head}; ${after}.` : `${head}.`];
   if (read.found.length) {
     const each = read.found.map((f) => {
       const papers = `${f.items.length} paper${f.items.length === 1 ? "" : "s"}`;
-      return `${queryLabel(search, f.query, "arxiv")} ${f.error ? `failed (${f.error})` : `${f.ladder?.outcome ?? "searched"}, ${papers}`}`;
+      return `${queryLabel(search, f.query, source)} ${f.error ? `failed (${f.error})` : `${f.ladder?.outcome ?? "searched"}, ${papers}`}`;
     });
-    lines.push(`arXiv per query: ${each.join("; ")}.`);
+    lines.push(`${name} per query: ${each.join("; ")}.`);
   }
   return lines;
 }
@@ -239,11 +249,15 @@ export function topicSearchDescriber(deps: TopicSearchStatusDeps): RunDescriber 
         if (steps?.length) lines.push(`X: ${tallySteps(steps).line()}.`);
         else if (run.state === "running") lines.push(split ? "X: not started; it is read after the first part is delivered." : "X: nothing read yet on this device.");
         const health = await deps.runHealth(run.id);
-        // A split first look's slow part rewrites the run's health with X alone; arXiv's is then on its read file.
-        const arxiv = !health || !health.entries.some((e) => e.source === "arxiv") ? await deps.arxivRead(run.id) : null;
+        // A split first look's slow part rewrites the run's health with X alone; the paper sources' are then on their read files.
         if (health) lines.push(...healthLines(health.entries, search));
-        if (arxiv) lines.push(...arxivLines(arxiv, search, open && !health, split));
-        else if (!health && open) lines.push(split ? "arXiv: searched first; nothing on file yet." : "arXiv: searched beside X while X is read; nothing on file yet.");
+        for (const source of ["arxiv", "huggingface"] as const) {
+          const onFile = !health || !health.entries.some((e) => e.source === source);
+          const read = onFile ? await (source === "arxiv" ? deps.arxivRead(run.id) : deps.hfRead(run.id)) : null;
+          const name = SOURCE_NAME[source];
+          if (read) lines.push(...arxivLines(read, search, open && !health, split, source));
+          else if (!health && open) lines.push(split ? `${name}: searched first; nothing on file yet.` : `${name}: searched beside X while X is read; nothing on file yet.`);
+        }
       } else if (run.claimant) {
         const name = view.claimant?.deviceName ? `"${view.claimant.deviceName}"` : "the computer running it";
         if (open) {

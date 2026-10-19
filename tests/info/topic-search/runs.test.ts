@@ -25,11 +25,13 @@ import {
   createStateStore,
   emptyState,
   loadArxivRead,
+  loadHfRead,
   loadFirstPart,
   nightLimits,
   permalinkBudget,
   progressLog,
   saveArxivRead,
+  saveHfRead,
   saveFirstPart,
   spendNight,
   takePermalink,
@@ -43,7 +45,7 @@ import type { ArxivRead } from "../../../src/info/topic-search/arxiv-read";
 import type { XReadResult } from "../../../src/info/topic-search/x-reader";
 import type { InfoItem } from "../../../src/info/sources/item";
 import { AbortError } from "../../../src/platform/app/abort";
-import { HttpStatusError } from "../../../src/platform/http/throttled-fetch";
+import { HostCoolingDownError, HttpStatusError } from "../../../src/platform/http/throttled-fetch";
 import { openTestRuntime } from "../../legion/durable/support/runtime";
 
 const local = (y: number, mo: number, d: number, h: number, mi = 0) => new Date(y, mo - 1, d, h, mi).getTime();
@@ -238,6 +240,9 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
     searchArxiv: async () => [],
     saveArxiv: (dir, read) => saveArxivRead(fs, dir, read),
     loadArxiv: (dir) => loadArxivRead(fs, dir),
+    searchHf: async () => [],
+    saveHf: (dir, read) => saveHfRead(fs, dir, read),
+    loadHf: (dir) => loadHfRead(fs, dir),
     saveFirstPart: (dir, part) => saveFirstPart(fs, dir, part),
     loadFirstPart: (dir) => loadFirstPart(fs, dir),
     memory: store.reader,
@@ -414,6 +419,8 @@ async function until(check: () => boolean) {
   expect(check()).toBe(true);
 }
 
+const hfOnFile = (fs: { files: Map<string, string> }, runId: string): ArxivRead | null =>
+  fs.files.has(`runs/${runId}/hf-read.json`) ? (JSON.parse(fs.files.get(`runs/${runId}/hf-read.json`)!) as ArxivRead) : null;
 const arxivOnFile = (fs: { files: Map<string, string> }, runId: string): ArxivRead | null =>
   JSON.parse(fs.files.get(`runs/${runId}/arxiv-read.json`) ?? "null") as ArxivRead | null;
 
@@ -436,12 +443,14 @@ test("arXiv is searched while X still waits in the lane, and the run's line says
     report: (_id, text) => void said.push(text),
   });
   const running = runTask(deps, { runId: "r-a1", brief: BOTH });
-  await until(() => arxivOnFile(fs, "r-a1")?.done === true);
+  await until(() => arxivOnFile(fs, "r-a1")?.done === true && hfOnFile(fs, "r-a1")?.done === true);
   expect(entered).toBe(false);
   expect(trace.opened).toBe(0);
   expect(seen.length).toBe(0);
   expect(searched).toEqual(["protein design", "materials discovery"]);
-  expect(said[said.length - 1]).toBe("waiting to read X; arXiv done: 2 queries searched (2 direct), 6 papers");
+  expect(said[said.length - 1]).toBe(
+    "waiting to read X; arXiv done: 2 queries searched (2 direct), 6 papers; Hugging Face done: 2 queries searched (2 exhausted), 0 papers",
+  );
 
   gate.resolve();
   const outcome = await running;
@@ -453,6 +462,43 @@ test("arXiv is searched while X still waits in the lane, and the run's line says
   ]);
   // The build searched nothing.
   expect(searched.length).toBe(2);
+});
+
+test("with arXiv cooling down, Hugging Face reads alone and the build has its papers", async () => {
+  const { seen, builder } = capturing();
+  const hfAsked: { text: string; window: { since: string; until: string } }[] = [];
+  const { deps, fs } = fakeDeps({
+    ...READ_BOTH,
+    search: withArxiv(),
+    builder: () => builder,
+    searchArxiv: async () => {
+      throw new HostCoolingDownError("export.arxiv.org", Date.now() + 600_000, Date.now());
+    },
+    searchHf: async (text, window) => {
+      hfAsked.push({ text, window });
+      return [1, 2, 3].map((i) => ({
+        ...paper(`2610.0000${i}`),
+        source: "huggingface",
+        sourceName: "Hugging Face",
+        title: `${text} ${i}`,
+        publishedAt: "2026-10-01",
+      }));
+    },
+  });
+  const outcome = await runTask(deps, { runId: "r-h1", brief: BOTH });
+  expect(outcome.status).toBe("completed");
+  expect(seen[0].arxiv.map((f) => [f.query, f.ladder?.outcome])).toEqual([
+    ["q1", "cooling_down"],
+    ["q2", "cooling_down"],
+  ]);
+  expect(seen[0].huggingface?.map((f) => [f.query, f.ladder?.outcome, f.items.length])).toEqual([
+    ["q1", "direct", 3],
+    ["q2", "direct", 3],
+  ]);
+  // One request a query, over the window widened by a year, which the ladder narrows on the client.
+  expect(hfAsked.map((a) => a.text)).toEqual(["protein design", "materials discovery"]);
+  expect(hfAsked[0].window).toEqual({ since: "2024-10-14", until: "2026-10-14" });
+  expect(hfOnFile(fs, "r-h1")).toMatchObject({ done: true, window: { since: "2025-10-14", until: "2026-10-14" } });
 });
 
 test("an X read that halts early waits for arXiv, and the build has both", async () => {
@@ -620,7 +666,9 @@ test("a first look builds and delivers arXiv before X is even in the lane, then 
   expect(seen[0].x).toMatchObject({ status: "unavailable", why: READ_LATER, posts: [] });
   expect(seen[0].arxiv.map((f) => f.query)).toEqual(["q1", "q2"]);
   expect(await loadFirstPart(fs, "runs/r-s1")).toMatchObject({ status: "delivered", resultFile: file, itemCount: 2 });
-  expect(said).toContain("arXiv done: 2 queries searched (2 direct), 6 papers; X: read after the first part");
+  expect(said).toContain(
+    "arXiv done: 2 queries searched (2 direct), 6 papers; Hugging Face done: 2 queries searched (2 exhausted), 0 papers; X: read after the first part",
+  );
   expect(said[said.length - 1]).toBe("first part delivered; waiting to read X");
 
   gate.resolve();

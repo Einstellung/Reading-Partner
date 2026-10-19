@@ -100,7 +100,8 @@ export const QUERY_SCHEMA = Type.Object({
   arxiv: Type.String({
     description:
       "2-4 short keywords as arXiv titles would put them, the most specific first, never a sentence " +
-      "(every word must appear in the paper); empty when papers do not fit.",
+      "(every word must appear in the paper; Hugging Face's paper search is asked with the same words); " +
+      "empty when papers do not fit.",
   }),
   ranking: Type.String({ description: "One plain question a good result answers, for reranking." }),
 });
@@ -118,7 +119,7 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
     gate: "card",
     description:
       "Propose a topic search once you and the reader have talked it through: a topic followed on " +
-      "X, arXiv and GitHub, with a first overview and then what is new each day. It draws a card " +
+      "X, arXiv, Hugging Face's paper search and GitHub, with a first overview and then what is new each day. It draws a card " +
       "and files nothing; the reader applies it. Call it again with the changes when they correct " +
       "the draft. The card shows name, scope, subtopics, want/avoid, your judgements and the " +
       "topic it files into; the queries and anchors are never shown.",

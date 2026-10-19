@@ -33,11 +33,12 @@ export function askedText(name: string, plan: RetryPlan, xSignedIn: boolean | nu
   const reads = [
     plan.x.length ? `X for ${queries(plan.x.length)}` : "",
     plan.arxiv.length ? `arXiv for ${queries(plan.arxiv.length)}` : "",
+    plan.huggingface?.length ? `Hugging Face for ${queries(plan.huggingface.length)}` : "",
   ].filter(Boolean);
   const signedOut =
     plan.x.length && xSignedIn === false
       ? " The last check on this device found X signed out: unless the reader has signed in to X " +
-        "in Settings > Accounts since, X fails again and only arXiv is read."
+        "in Settings > Accounts since, X fails again and only the paper sources are read."
       : "";
   return (
     `Asked to read again what the first look of "${name}" missed: ${reads.join(", ")} (as this ` +
@@ -56,8 +57,8 @@ export function buildRetryFirstRunTool(deps: RetryToolDeps): AgentTool {
     gate: "instruction",
     description:
       "Read again what a topic search's first run missed: the X queries that failed (for " +
-      "example X had signed this device out) and the arXiv queries that failed or came back " +
-      "empty before the query ladder. What already read is not read again; what is found is " +
+      "example X had signed this device out), the arXiv queries that failed or came back " +
+      "empty before the query ladder, and the Hugging Face paper searches that failed. What already read is not read again; what is found is " +
       "added to the first run's result. Call it when the reader asks to search again after " +
       `signing in to X, or to redo the first look. ${X_READ_RULE} To change what is searched, ` +
       "use update_topic_search with the reader's say-so first.",
@@ -80,7 +81,7 @@ export function buildRetryFirstRunTool(deps: RetryToolDeps): AgentTool {
         return {
           text:
             `Nothing the first look of "${search.name}" missed is left to read again: every query ` +
-            "read on X and on arXiv. Nothing was asked. New posts come with the nightly run from 01:00.",
+            "read on X, arXiv and Hugging Face. Nothing was asked. New posts come with the nightly run from 01:00.",
           receipt: null,
         };
       }

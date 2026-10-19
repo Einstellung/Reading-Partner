@@ -164,7 +164,8 @@ export interface ResultQuestion {
 }
 
 export interface ResultStats {
-  candidates: { x: number; arxiv: number };
+  /** huggingface: papers only Hugging Face found (one arXiv found too counts as arXiv's); absent before it was a source. */
+  candidates: { x: number; arxiv: number; huggingface?: number };
   passedFloor: number;
   pooled: number;
   reranked: boolean;
@@ -264,7 +265,11 @@ export function sumStats(parts: readonly ResultStats[]): ResultStats {
   const passed = parts.reduce((n, p) => n + p.passedFloor, 0);
   const deep = parts.filter((p) => p.deepReads).map((p) => p.deepReads!);
   return {
-    candidates: { x: parts.reduce((n, p) => n + p.candidates.x, 0), arxiv: parts.reduce((n, p) => n + p.candidates.arxiv, 0) },
+    candidates: {
+      x: parts.reduce((n, p) => n + p.candidates.x, 0),
+      arxiv: parts.reduce((n, p) => n + p.candidates.arxiv, 0),
+      huggingface: parts.reduce((n, p) => n + (p.candidates.huggingface ?? 0), 0),
+    },
     passedFloor: passed,
     pooled: parts.reduce((n, p) => n + p.pooled, 0),
     reranked: parts.some((p) => p.reranked),

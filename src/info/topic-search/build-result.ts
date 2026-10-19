@@ -1,6 +1,7 @@
 // From what a topic search run read to its result file (docs/info/88, the
-// run's rank, verify and write phases): what X and arXiv found (both read in
-// the run's read phase, arxiv-read.ts; the build searches nothing), candidates
+// run's rank, verify and write phases): what X, arXiv and Hugging Face found
+// (all read in the run's read phase, arxiv-read.ts, hf-read.ts; the build
+// searches nothing), candidates
 // scored and reranked and merged into events, the topic's 30-day history taken
 // out, each item's originals read and compared, the sentences written and
 // checked, questions saved up and picked, and the file written.
@@ -99,6 +100,8 @@ export interface BuildTopicSearchResultArgs {
   x: XReadResult;
   /** What the run's arXiv read found, query by query (arxiv-read.ts). */
   arxiv: readonly ArxivFound[];
+  /** What the run's Hugging Face read found, query by query (hf-read.ts); absent: none. */
+  huggingface?: readonly ArxivFound[];
   /** Start of this run's window, epoch ms. */
   since: number;
   runDir: string;
@@ -110,7 +113,7 @@ export interface BuildTopicSearchResultArgs {
    * X and are searched on arXiv, and what is found is added to the first look's
    * file rather than written as a new one. Absent or null on the other runs.
    */
-  retry?: { runId: string; x: readonly string[]; arxiv: readonly string[]; part?: "slow" } | null;
+  retry?: { runId: string; x: readonly string[]; arxiv: readonly string[]; huggingface?: readonly string[]; part?: "slow" } | null;
   /**
    * A split first look's first part (pace.ts): the slow sources read after it.
    * The file records them as awaiting and the source health leaves them out;
@@ -156,7 +159,7 @@ export type BuildTopicSearchResult = (args: BuildTopicSearchResultArgs) => Promi
 export interface SourceHealthEntry {
   searchId: string;
   query: string;
-  source: "x" | "arxiv";
+  source: RunSource;
   /** ok: read and something new; empty: read, nothing new; failed: not read (halt, error, ceiling). */
   status: "ok" | "empty" | "failed";
   why: string | null;
@@ -165,7 +168,7 @@ export interface SourceHealthEntry {
   read: number;
   fresh: number;
   passedFloor: number;
-  /** arXiv only: how the query ladder ended and the steps it took. */
+  /** arXiv and Hugging Face only: how the query ladder ended and the steps it took. */
   ladder?: ArxivLadder;
 }
 
@@ -460,6 +463,7 @@ async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<Top
 
 async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs): Promise<BuildTopicSearchResultOutput> {
   const { topic, kind, x, arxiv, since, runDir, xPages, signal } = args;
+  const huggingface = args.huggingface ?? [];
   const retry = args.retry ?? null;
   const later = args.later?.length ? [...args.later] : null;
   throwIfAborted(signal);
@@ -484,7 +488,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   ]);
 
   // Rank (88 「打分」 1-6).
-  const gathered = gatherCandidates(topic, x, arxiv, since);
+  const gathered = gatherCandidates(topic, x, arxiv, since, huggingface);
   const numbered = numberPool(fusePool(topic, gathered.kept, RERANK_POOL[kind]));
   let answers = new Map<string, RerankAnswer>();
   let reranked = false;
@@ -659,7 +663,11 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const subtopicItems: Record<string, number> = {};
   for (const item of items) if (!item.continuing) subtopicItems[item.subtopic ?? ""] = (subtopicItems[item.subtopic ?? ""] ?? 0) + 1;
   const stats: ResultStats = {
-    candidates: { x: gathered.all.filter((c) => c.source === "x").length, arxiv: gathered.all.filter((c) => c.source === "arxiv").length },
+    candidates: {
+      x: gathered.all.filter((c) => c.source === "x").length,
+      arxiv: gathered.all.filter((c) => c.source === "arxiv").length,
+      huggingface: gathered.all.filter((c) => c.source === "huggingface").length,
+    },
     passedFloor: gathered.kept.length,
     pooled: numbered.length,
     reranked,
@@ -787,9 +795,12 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const written = target ? mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId, retry!.part === "slow") : result;
   await deps.files.write(name, `${JSON.stringify(written, null, 2)}\n`);
   await saveQueue(deps.files, topic.id, picked.queue);
-  const health = sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now);
+  const health = sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now, huggingface);
   // A retry speaks only for what it read again; the other lines keep what the first look found.
-  if (retry) health.entries = health.entries.filter((e) => (e.source === "x" ? retry.x : retry.arxiv).includes(e.query));
+  if (retry) {
+    const readAgain = { x: retry.x, arxiv: retry.arxiv, huggingface: retry.huggingface ?? retry.arxiv };
+    health.entries = health.entries.filter((e) => readAgain[e.source].includes(e.query));
+  }
   // A first part speaks only for its fast sources; the slow part writes the rest.
   if (later) health.entries = health.entries.filter((e) => !later.includes(e.source));
   await deps.files.write(`${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`, `${JSON.stringify(health, null, 2)}\n`);
@@ -842,6 +853,7 @@ export function sourceHealth(
   streams: ReadonlyMap<string, { read: string[]; kept: string[] }>,
   recent: readonly TopicSearchResult[],
   now: number,
+  huggingface: readonly ArxivFound[] = [],
 ): SourceHealthFile {
   const seen = new Set(recent.flatMap((r) => r.items.flatMap((i) => i.keys)));
   const entries: SourceHealthEntry[] = [];
@@ -861,22 +873,24 @@ export function sourceHealth(
       fresh,
       passedFloor: s.kept.length,
     });
-    const a = arxiv.find((f) => f.query === q.id);
-    if (!a) continue;
-    const sa = streams.get(streamKey(q.id, "arxiv")) ?? { read: [], kept: [] };
-    const freshA = sa.read.filter((k) => !seen.has(k)).length;
-    entries.push({
-      searchId: topic.id,
-      query: q.id,
-      source: "arxiv",
-      status: a.error ? "failed" : freshA > 0 ? "ok" : "empty",
-      why: a.error ?? (a.ladder?.steps.length === 0 ? "the query has no searchable word" : null),
-      fetchedAt: a.error ? null : now,
-      read: sa.read.length,
-      fresh: freshA,
-      passedFloor: sa.kept.length,
-      ...(a.ladder ? { ladder: a.ladder } : {}),
-    });
+    for (const [source, found] of [["arxiv", arxiv], ["huggingface", huggingface]] as const) {
+      const a = found.find((f) => f.query === q.id);
+      if (!a) continue;
+      const sa = streams.get(streamKey(q.id, source)) ?? { read: [], kept: [] };
+      const freshA = sa.read.filter((k) => !seen.has(k)).length;
+      entries.push({
+        searchId: topic.id,
+        query: q.id,
+        source,
+        status: a.error ? "failed" : freshA > 0 ? "ok" : "empty",
+        why: a.error ?? (a.ladder?.steps.length === 0 ? "the query has no searchable word" : null),
+        fetchedAt: a.error ? null : now,
+        read: sa.read.length,
+        fresh: freshA,
+        passedFloor: sa.kept.length,
+        ...(a.ladder ? { ladder: a.ladder } : {}),
+      });
+    }
   }
   return { version: 1, searchId: topic.id, kind, at: now, entries };
 }

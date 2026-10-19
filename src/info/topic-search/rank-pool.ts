@@ -1,5 +1,6 @@
 // The rank phase of a topic search run (docs/info/88 「打分」 1-6): what the X
-// reader and the arXiv search brought, as candidates; the local relevance
+// reader and the arXiv and Hugging Face searches brought, as candidates (one
+// paper found by both is one candidate, by arXiv id, carrying the Hub's facts); the local relevance
 // floor; weighted RRF over the (query, source) streams; the rerank call and its
 // stand-in; the final score; candidates merged into events.
 //
@@ -25,7 +26,7 @@ import type { XReadResult } from "./x-reader";
 /** Candidates sent to the rerank: a day's run, and a first run's. */
 export const RERANK_POOL = { daily: 40, first: 60 } as const;
 /** Candidates each stream gives the fusion: an X line reads hundreds, an arXiv search a page. */
-export const STREAM_TAKE = { x: 40, arxiv: 12 } as const;
+export const STREAM_TAKE = { x: 40, arxiv: 12, huggingface: 12 } as const;
 /**
  * Places in the rerank pool kept, by fusion order, for posts and for the
  * candidates each picked subtopic's queries found, so that the result's
@@ -44,9 +45,22 @@ export interface PaperInfo {
   authors: string[];
   publishedAt: string | null;
   url: string;
+  /** What Hugging Face's paper search said of it, when the Hub found it. */
+  hub?: HubFacts;
 }
 
-export type CandidateSource = "x" | "arxiv";
+/** A Hub paper row's own facts (huggingface.ts searchItem). */
+export interface HubFacts {
+  repo?: string;
+  stars?: number;
+  upvotes?: number;
+  projectPage?: string;
+  aiSummary?: string;
+}
+
+export type CandidateSource = "x" | "arxiv" | "huggingface";
+
+const PAPER_SOURCES = ["arxiv", "huggingface"] as const;
 
 export interface Candidate {
   /** "x:<status id>" or "arxiv:<id>". */
@@ -55,6 +69,8 @@ export interface Candidate {
   source: CandidateSource;
   /** Ids of the queries that found it, first finder first. */
   queries: string[];
+  /** The (query, source) streams that found it (streamKey), first finder first. */
+  foundIn: string[];
   /** What relevance and the anchors are measured on: a post's text and its quoted post's; a paper's title and abstract. */
   text: string;
   author: string;
@@ -70,7 +86,7 @@ export interface Candidate {
   order: number;
 }
 
-/** One arXiv search's answer: the query it ran and what came back, or why it failed. */
+/** One arXiv (or Hugging Face) search's answer: the query it ran and what came back, or why it failed. */
 export interface ArxivFound {
   query: string;
   items: InfoItem[];
@@ -79,7 +95,7 @@ export interface ArxivFound {
   ladder?: ArxivLadder;
 }
 
-/** "q1|x", "q1|arxiv": a (query, source) stream. */
+/** "q1|x", "q1|arxiv", "q1|huggingface": a (query, source) stream. */
 export function streamKey(query: string, source: CandidateSource): string {
   return `${query}|${source}`;
 }
@@ -116,9 +132,23 @@ export interface Gathered {
   streams: Map<string, { read: string[]; kept: string[] }>;
 }
 
-function paperOf(item: InfoItem): PaperInfo | null {
+/** The Hub's facts off an item its paper search gave; undefined when it carries none. */
+function hubOf(item: InfoItem): HubFacts | undefined {
+  const s = item.signals;
+  if (!s) return undefined;
+  const hub: HubFacts = {};
+  if (s.repo) hub.repo = s.repo;
+  if (s.stars !== undefined) hub.stars = s.stars;
+  if (s.upvotes !== undefined) hub.upvotes = s.upvotes;
+  if (s.projectPage) hub.projectPage = s.projectPage;
+  if (s.aiSummary) hub.aiSummary = s.aiSummary;
+  return Object.keys(hub).length ? hub : undefined;
+}
+
+function paperOf(item: InfoItem, source: CandidateSource): PaperInfo | null {
   const id = normalizeArxivId(item.sourceKey ?? item.url);
   if (!id) return null;
+  const hub = source === "huggingface" ? hubOf(item) : undefined;
   return {
     id,
     title: item.title,
@@ -126,11 +156,22 @@ function paperOf(item: InfoItem): PaperInfo | null {
     authors: item.authors ?? [],
     publishedAt: item.publishedAt || null,
     url: `https://arxiv.org/abs/${id}`,
+    ...(hub ? { hub } : {}),
   };
 }
 
-/** Normalize, merge by identity, measure relevance and anchors (88 「打分」 1-2). */
-export function gatherCandidates(topic: TopicSearch, x: XReadResult, arxiv: readonly ArxivFound[], since: number): Gathered {
+/**
+ * Normalize, merge by identity, measure relevance and anchors (88 「打分」 1-2).
+ * A paper both arXiv and Hugging Face found is one candidate: arXiv's entry
+ * (its v1 date) with the Hub's facts added.
+ */
+export function gatherCandidates(
+  topic: TopicSearch,
+  x: XReadResult,
+  arxiv: readonly ArxivFound[],
+  since: number,
+  huggingface: readonly ArxivFound[] = [],
+): Gathered {
   const byKey = new Map<string, Candidate>();
   const streams = new Map<string, { read: string[]; kept: string[] }>();
   const queries = new Map(topic.queries.map((q) => [q.id, q]));
@@ -146,10 +187,12 @@ export function gatherCandidates(topic: TopicSearch, x: XReadResult, arxiv: read
     // 88 「打分」 1: a page time more than a day off the id's is a misread post.
     if (post.shownAt !== null && Math.abs(post.shownAt - post.postedAt) > DAY_MS) continue;
     const key = xEventKey(post.id);
-    touch(streamKey(query.id, "x"), key);
+    const stream = streamKey(query.id, "x");
+    touch(stream, key);
     const got = byKey.get(key);
     if (got) {
       if (!got.queries.includes(query.id)) got.queries.push(query.id);
+      if (!got.foundIn.includes(stream)) got.foundIn.push(stream);
       continue;
     }
     const text = [post.text, post.quoted ? post.quoted.text : ""].filter(Boolean).join("\n\n");
@@ -158,6 +201,7 @@ export function gatherCandidates(topic: TopicSearch, x: XReadResult, arxiv: read
       kind: "post",
       source: "x",
       queries: [query.id],
+      foundIn: [stream],
       text,
       author: post.handle,
       at: post.postedAt,
@@ -172,37 +216,42 @@ export function gatherCandidates(topic: TopicSearch, x: XReadResult, arxiv: read
     });
   }
 
-  for (const found of arxiv) {
-    if (!queries.has(found.query)) continue;
-    const stream = streamKey(found.query, "arxiv");
-    if (!streams.has(stream)) streams.set(stream, { read: [], kept: [] });
-    for (const item of found.items) {
-      const paper = paperOf(item);
-      const key = paper ? arxivEventKey(paper.id) : null;
-      if (!paper || !key) continue;
-      touch(stream, key);
-      const got = byKey.get(key);
-      if (got) {
-        if (!got.queries.includes(found.query)) got.queries.push(found.query);
-        continue;
+  for (const source of PAPER_SOURCES) {
+    for (const found of source === "arxiv" ? arxiv : huggingface) {
+      if (!queries.has(found.query)) continue;
+      const stream = streamKey(found.query, source);
+      if (!streams.has(stream)) streams.set(stream, { read: [], kept: [] });
+      for (const item of found.items) {
+        const paper = paperOf(item, source);
+        const key = paper ? arxivEventKey(paper.id) : null;
+        if (!paper || !key) continue;
+        touch(stream, key);
+        const got = byKey.get(key);
+        if (got) {
+          if (!got.queries.includes(found.query)) got.queries.push(found.query);
+          if (!got.foundIn.includes(stream)) got.foundIn.push(stream);
+          if (paper.hub && got.paper && !got.paper.hub) got.paper.hub = paper.hub;
+          continue;
+        }
+        const at = paper.publishedAt ? Date.parse(paper.publishedAt) : NaN;
+        byKey.set(key, {
+          key,
+          kind: "paper",
+          source,
+          queries: [found.query],
+          foundIn: [stream],
+          text: `${paper.title}\n\n${paper.abstract}`,
+          author: paper.authors[0] ?? "",
+          at: Number.isFinite(at) ? at : since,
+          post: null,
+          paper,
+          links: [],
+          relevance: 0,
+          engagement: null,
+          mentionsAnchor: true,
+          order: byKey.size,
+        });
       }
-      const at = paper.publishedAt ? Date.parse(paper.publishedAt) : NaN;
-      byKey.set(key, {
-        key,
-        kind: "paper",
-        source: "arxiv",
-        queries: [found.query],
-        text: `${paper.title}\n\n${paper.abstract}`,
-        author: paper.authors[0] ?? "",
-        at: Number.isFinite(at) ? at : since,
-        post: null,
-        paper,
-        links: [],
-        relevance: 0,
-        engagement: null,
-        mentionsAnchor: true,
-        order: byKey.size,
-      });
     }
   }
 
@@ -215,7 +264,7 @@ export function gatherCandidates(topic: TopicSearch, x: XReadResult, arxiv: read
     // their window, and a seen post read again is what continuation looks for.
     if (c.relevance < RELEVANCE_FLOOR) continue;
     kept.push(c);
-    for (const id of c.queries) streams.get(streamKey(id, c.source))?.kept.push(c.key);
+    for (const stream of c.foundIn) streams.get(stream)?.kept.push(c.key);
   }
   return { all, kept, streams };
 }
@@ -235,9 +284,9 @@ export function fusePool(topic: TopicSearch, kept: readonly Candidate[], size: n
   const byKey = new Map(kept.map((c) => [c.key, c]));
   const streams: Stream[] = [];
   for (const q of topic.queries) {
-    for (const source of ["x", "arxiv"] as const) {
+    for (const source of ["x", ...PAPER_SOURCES] as const) {
       const members = kept
-        .filter((c) => c.source === source && c.queries.includes(q.id))
+        .filter((c) => c.foundIn.includes(streamKey(q.id, source)))
         .map((c) => ({ c, r: relevanceTo(q, c) }))
         // A live line is newest first; its stream is ranked by how well each post answers the query.
         .sort((a, b) => b.r - a.r || a.c.order - b.c.order);
