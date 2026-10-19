@@ -127,6 +127,7 @@ function toItem(desc: Pick<SourceDescriptor, "id" | "name">, e: ArxivEntry): Inf
     summaryOnly: true,
   };
   if (e.authors.length) item.authors = [...e.authors];
+  if (e.doi) item.doi = e.doi;
   if (tags.length) item.signals = { tags };
   return item;
 }

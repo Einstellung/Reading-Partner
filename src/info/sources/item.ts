@@ -38,6 +38,9 @@ export interface InfoItem {
   // The bylines the library gave, in its order (an arXiv paper's authors), when
   // the source knows them. Facts the program writes into a result (docs/88).
   authors?: string[];
+  // The DOI of the published version, when the library gives one (an arXiv
+  // entry's <arxiv:doi>). Topic search maps a DOI link to the arXiv paper by it.
+  doi?: string;
   // What the index that yielded this item counted for it (docs/69): attention
   // and citation numbers, present only when an index source reported them. The
   // cable carries them on, so the screen and the analyst read the same numbers.

@@ -24,6 +24,7 @@ import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
 import type { ArxivLadder } from "./arxiv-ladder";
+import { doiArxiv, heldDois, poolDois, type DoiLookup } from "./doi-arxiv";
 import { composeResult, deepenableMaterial, EARLIER_LINES, type DeeperReads, type EarlierLine } from "./compose";
 import { parseJsonReply, type TopicModel } from "./model-io";
 import type { RunSource } from "./pace";
@@ -195,6 +196,12 @@ export interface BuildResultDeps {
   readPdfText?: SourceDeps["readPdfText"];
   /** Where a short link goes, off its redirect; absent: a short link is read as a page. */
   resolveShortLink?: SourceDeps["resolveShortLink"];
+  /**
+   * Which arXiv paper a DOI is, asked of a library (Semantic Scholar on the real
+   * host); null when it knows none. Best effort: a throw is a miss. Asked once
+   * per DOI per run, after what the run's arXiv finds carry. Absent: only those.
+   */
+  arxivIdOfDoi?: DoiLookup;
   /** A fresh counted GitHub lookup for one run (github-lookup.ts RepoLookups). */
   repoLookups(): { lookup(fullName: string): Promise<RepoLookup>; quotaLeft(): number | null };
   files: ResultFiles;
@@ -293,9 +300,10 @@ const isPaperPageKey = (key: string): boolean => /^(?:doi|openreview|acl|ieee):/
  * What to read for an item: the post that is its own content (one at most, read
  * besides the originals) and up to ORIGINALS_PER_ITEM originals its events and
  * its posts' links name, papers first, then repositories, then pages. The post
- * leads when the item's first event is the post.
+ * leads when the item's first event is the post. `keyOfUrl` keys the posts'
+ * links: eventKeyOfUrl, or the run's with DOIs mapped to arXiv (doi-arxiv.ts).
  */
-export function targetsOf(draft: Draft): Target[] {
+export function targetsOf(draft: Draft, keyOfUrl: (url: string) => string | null = eventKeyOfUrl): Target[] {
   const targets: Target[] = [];
   const seen = new Set<string>();
   const add = (key: string, url: string | null) => {
@@ -323,7 +331,7 @@ export function targetsOf(draft: Draft): Target[] {
   // A post that is its own content still points at its paper or repository: that is its original.
   for (const m of draft.members) {
     for (const l of m.cand.links) {
-      const key = eventKeyOfUrl(l.url);
+      const key = keyOfUrl(l.url);
       if (key && (key.startsWith("arxiv:") || key.startsWith("github:") || isPaperPageKey(key))) add(key, l.url);
     }
   }
@@ -420,10 +428,21 @@ export async function readOriginals(targets: readonly Target[], deps: SourceDeps
     seen.add(x.key);
     return x.target;
   };
+  // A DOI page whose arXiv paper the run holds or a lookup finds is read as that paper.
+  const asPaper = async (t: Target | null): Promise<Target | null> => {
+    if (t?.kind !== "page" || !deps.arxivIdOfDoi) return t;
+    const key = eventKeyOfUrl(t.url);
+    if (!key?.startsWith("doi:")) return t;
+    const id = await deps.arxivIdOfDoi(key.slice(4), signal);
+    if (!id) return t;
+    if (seen.has(`arxiv:${id}`)) return null;
+    seen.add(`arxiv:${id}`);
+    return { kind: "paper", id, known: null };
+  };
   const readPending = async () => {
     while (originalsTried < ORIGINALS_PER_ITEM && pending.length) {
       pending.sort((a, b) => rankOfTarget(a) - rankOfTarget(b));
-      const next = await expanded(pending.shift()!);
+      const next = await asPaper(await expanded(pending.shift()!));
       if (next === null) continue;
       originalsTried++;
       await readOne(next);
@@ -501,7 +520,10 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       if (signal.aborted) throw e;
     }
   }
-  const scored = scorePool(topic, numbered, answers);
+  // A DOI link in the pool is its arXiv paper when the run holds or a lookup finds it.
+  const dois = doiArxiv(heldDois([...arxiv, ...huggingface]), deps.arxivIdOfDoi ?? null);
+  for (const doi of poolDois(numbered)) await dois.resolve(doi, signal);
+  const scored = scorePool(topic, numbered, answers, dois.keyOfUrl);
   const clusters = rankEvents(scored);
 
   // The 30-day history: seen keys out, continuation back in, the near ones to the judge.
@@ -568,6 +590,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     repoQuotaLeft: () => lookups.quotaLeft(),
     ...(deps.readPdfText ? { readPdfText: deps.readPdfText } : {}),
     ...(deps.resolveShortLink ? { resolveShortLink: deps.resolveShortLink } : {}),
+    arxivIdOfDoi: (doi, s) => dois.resolve(doi, s),
   };
   const items: TopicSearchResultItem[] = [];
   for (const [i, d] of chosen.entries()) {
@@ -593,7 +616,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       });
       continue;
     }
-    const targets = targetsOf(d);
+    const targets = targetsOf(d, dois.keyOfUrl);
     const { materials, reasons, traces, first, original } = await readOriginals(targets, sourceDeps, registry, signal);
     let facts = first?.facts ?? null;
     let title = first?.title ?? null;

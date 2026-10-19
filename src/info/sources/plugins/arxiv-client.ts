@@ -20,6 +20,8 @@ export interface ArxivEntry {
   // <arxiv:primary_category term="cs.RO"/>, when the entry carries one. The
   // index provider (info/sources/index/arxiv) tags items with it.
   primaryCategory?: string;
+  // <arxiv:doi>, the published version's DOI, when the authors gave one.
+  doi?: string;
 }
 
 // "arXiv:2303.12345v2" / a full abs URL / bare id -> "2303.12345". Old-style
@@ -103,6 +105,7 @@ export function parseArxivAtom(xml: string): ArxivEntry[] {
     let a: RegExpExecArray | null;
     while ((a = authorRe.exec(entry))) authors.push(decodeEntities(a[1]).trim());
     const primary = /<arxiv:primary_category\b[^>]*\bterm="([^"]+)"/.exec(entry);
+    const doi = tagText(entry, "arxiv:doi");
     out.push({
       id,
       title: tagText(entry, "title"),
@@ -111,6 +114,7 @@ export function parseArxivAtom(xml: string): ArxivEntry[] {
       pdfUrl: arxivPdfUrl(id),
       published: tagText(entry, "published"),
       ...(primary ? { primaryCategory: primary[1] } : {}),
+      ...(doi ? { doi } : {}),
     });
   }
   return out;

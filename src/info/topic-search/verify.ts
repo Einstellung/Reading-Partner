@@ -117,6 +117,11 @@ export interface SourceDeps {
    * following it; null when it says nothing. Absent: short links are read as pages.
    */
   resolveShortLink?(url: string, signal: AbortSignal): Promise<string | null>;
+  /**
+   * The arXiv paper a DOI is, from what the run holds or a lookup kept for the
+   * run (doi-arxiv.ts); null when none is found. Absent: a DOI link is read as its page.
+   */
+  arxivIdOfDoi?(doi: string, signal: AbortSignal): Promise<string | null>;
 }
 
 export type Target =

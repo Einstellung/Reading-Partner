@@ -26,6 +26,7 @@ import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { listStatements } from "../../memory/live/statements";
 import { arxivPlugin } from "../sources/plugins/arxiv";
 import { huggingfacePlugin } from "../sources/plugins/huggingface";
+import { parseS2ArxivId, s2DoiUrl } from "../sources/plugins/s2-client";
 import { RepoLookups } from "../sources/plugins/github-lookup";
 import { resolveRedirect } from "../x/live";
 import type { ArxivSearch } from "./arxiv-ladder";
@@ -90,6 +91,14 @@ export const liveResultDeps: BuildResultDeps = {
   openLink: async (url) => openOriginal(url, { fetch: fetchBytes, extractReadable: await loadExtractReadable() }),
   // One redirect read off the answer, as t.co is: goo.gle, bit.ly and the like.
   resolveShortLink: (url) => resolveRedirect(url),
+  // Semantic Scholar's DOI route, in a gate lane of its own: one retry at most,
+  // and while the lane cools down after a 429 the gate refuses at once (a miss).
+  arxivIdOfDoi: async (doi, signal) => {
+    const res = await fetchWithRetry(s2DoiUrl(doi), { signal }, interactiveRetry(infoFetch));
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Semantic Scholar answered HTTP ${res.status}`);
+    return parseS2ArxivId(await res.json());
+  },
   repoLookups: () => {
     const lookups = new RepoLookups();
     return { lookup: (name) => lookups.lookup(name, { fetchFn: infoFetch }), quotaLeft: () => lookups.quotaRemaining };

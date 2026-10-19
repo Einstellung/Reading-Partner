@@ -26,6 +26,17 @@ export function s2ArxivUrl(arxivId: string): string {
   return `${S2_BASE}/paper/arXiv:${encodeURIComponent(arxivId)}?fields=${FIELDS}`;
 }
 
+/** The paper a DOI names, asking only for its other ids (the arXiv one among them). */
+export function s2DoiUrl(doi: string): string {
+  return `${S2_BASE}/paper/DOI:${encodeURIComponent(doi).replace(/%2F/gi, "/")}?fields=externalIds`;
+}
+
+/** The arXiv id in an answer to s2DoiUrl, or null when S2 knows none. */
+export function parseS2ArxivId(body: unknown): string | null {
+  const id = (body as { externalIds?: { ArXiv?: unknown } | null } | null)?.externalIds?.ArXiv;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
 interface S2Paper {
   paperId?: string;
   title?: string;

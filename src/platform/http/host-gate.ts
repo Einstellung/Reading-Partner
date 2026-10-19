@@ -8,7 +8,7 @@
 // - spacing: a minimum gap between requests. A serial group also lets one
 //   request out at a time and measures the gap from the previous answer, which
 //   is what arXiv asks for (one request per three seconds, one connection).
-// - cooldown (arXiv and Hugging Face): once a host answers with its rate limit,
+// - cooldown (arXiv, Hugging Face, S2's DOI lookup): once a host answers with its rate limit,
 //   nothing goes to that host from any caller until a backoff passes; the
 //   group's other hosts keep their turns. The backoff grows
 //   on repeats, is never shorter than the Retry-After asked for, and is kept in
@@ -85,10 +85,17 @@ export interface GroupPolicy {
 // hostname, with its own spacing and its own cooldown.
 export const HF_PAPER_SEARCH_LANE = "huggingface.co/api/papers/search";
 
+// Topic search asks Semantic Scholar which arXiv paper a DOI is (docs/info/88).
+// Without a key S2's shared pool answers 429 often; the lookup is best effort,
+// so it cools down on a rate limit and is skipped meanwhile, without stopping
+// S2's other callers, which wait out their 429s.
+export const S2_DOI_LANE = "api.semanticscholar.org/graph/v1/paper/DOI";
+
 /** The gate key of a request: its hostname, or the lane a host splits into. */
 export function gateKeyOf(url: string): string {
   const u = new URL(url);
   if (u.hostname === "huggingface.co" && u.pathname.startsWith("/api/papers/search")) return HF_PAPER_SEARCH_LANE;
+  if (u.hostname === "api.semanticscholar.org" && u.pathname.startsWith("/graph/v1/paper/DOI:")) return S2_DOI_LANE;
   return u.hostname;
 }
 
@@ -101,6 +108,7 @@ export const HOST_GROUP: Record<string, string> = {
   "export.arxiv.org": "arxiv",
   "huggingface.co": "huggingface",
   [HF_PAPER_SEARCH_LANE]: "huggingface-search",
+  [S2_DOI_LANE]: "semanticscholar-doi",
 };
 
 // A cooldown is kept per host, not per group: the export API rate-limits on its
@@ -126,6 +134,7 @@ export const GROUP_POLICY: Record<string, GroupPolicy> = {
   huggingface: { intervalMs: 1000, serial: false, cooldown: true },
   // Paper search: 50 per 5 minutes, so one per six seconds can never exceed it.
   "huggingface-search": { intervalMs: 6000, serial: false, cooldown: true },
+  "semanticscholar-doi": { intervalMs: 1500, serial: false, cooldown: true },
 };
 
 /** First cooldown after a rate limit; each repeat doubles it, up to the max. */

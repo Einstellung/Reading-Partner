@@ -429,14 +429,23 @@ export interface Scored extends EventMember {
   mainUrl: string | null;
 }
 
-/** Final scores (88 「打分」 5) and each member's event key. */
-export function scorePool(topic: TopicSearch, numbered: readonly Numbered[], answers: ReadonlyMap<string, RerankAnswer>): Scored[] {
+/**
+ * Final scores (88 「打分」 5) and each member's event key. `keyOfUrl` keys a
+ * member's main link: eventKeyOfUrl, or the run's with DOIs mapped to their
+ * arXiv papers (doi-arxiv.ts).
+ */
+export function scorePool(
+  topic: TopicSearch,
+  numbered: readonly Numbered[],
+  answers: ReadonlyMap<string, RerankAnswer>,
+  keyOfUrl: (url: string) => string | null = eventKeyOfUrl,
+): Scored[] {
   const queries = new Map(topic.queries.map((q) => [q.id, q]));
   return numbered.map((n) => {
     const answer = answers.get(n.c) ?? null;
     const c = n.cand;
     const mainUrl = answer && answer.main !== "self" ? (n.links.find((l) => l.id === answer.main)?.url ?? null) : null;
-    const key = (mainUrl ? eventKeyOfUrl(mainUrl) : null) ?? c.key;
+    const key = (mainUrl ? keyOfUrl(mainUrl) : null) ?? c.key;
     const score = finalScore({
       // A post whose main is a paper is scored as the paper: whoever recommends
       // a paper is often a small account, and engagement near 0 would sink it.

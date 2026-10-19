@@ -12,6 +12,7 @@ import {
   HF_PAPER_SEARCH_LANE,
   isHostCoolingDown,
   memoryStore,
+  S2_DOI_LANE,
   type CooldownStore,
 } from "../../../src/platform/http/host-gate";
 
@@ -170,6 +171,28 @@ test("Hugging Face's paper search is a lane of its own: its own spacing and its 
   // The Hub API keeps answering while the search lane cools down.
   expect((await f("https://huggingface.co/api/daily_papers")).status).toBe(200);
   expect(gate.coolingDown("huggingface.co")).toBeNull();
+});
+
+test("Semantic Scholar's DOI lookup is a lane of its own that cools down on a 429; S2's other calls do not", async () => {
+  expect(gateKeyOf("https://api.semanticscholar.org/graph/v1/paper/DOI:10.1103/x?fields=externalIds")).toBe(S2_DOI_LANE);
+  expect(gateKeyOf("https://api.semanticscholar.org/graph/v1/paper/arXiv:2401.00001")).toBe("api.semanticscholar.org");
+  const clock = fakeClock();
+  const gate = createHostGate({ clock, store: memoryStore() });
+  let sent = 0;
+  const f = gatedFetch(
+    async () => {
+      sent++;
+      return new Response("", { status: 429 });
+    },
+    0,
+    gate,
+  );
+  expect((await f("https://api.semanticscholar.org/graph/v1/paper/DOI:10.1103/a")).status).toBe(429);
+  const err = await f("https://api.semanticscholar.org/graph/v1/paper/DOI:10.1103/b").catch((e) => e);
+  expect(isHostCoolingDown(err)).toBe(true);
+  expect(sent).toBe(1);
+  expect((await f("https://api.semanticscholar.org/graph/v1/paper/search?query=a")).status).toBe(429);
+  expect(gate.coolingDown("api.semanticscholar.org")).toBeNull();
 });
 
 test("a request queued behind the one that drew the 429 stays home", async () => {
