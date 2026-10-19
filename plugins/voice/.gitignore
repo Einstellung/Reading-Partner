@@ -15,3 +15,6 @@ node_modules/
 
 dist-js
 dist
+
+# Built by scripts/android-voice-engine.sh (docs/companion/89), never committed.
+/android/src/main/jniLibs/

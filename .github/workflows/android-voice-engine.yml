@@ -1,0 +1,79 @@
+# Build libvoice_engine.so (plugins/voice-engine, docs/companion/89) for
+# arm64-v8a with scripts/android-voice-engine.sh and check what a phone will
+# load: LOAD segments aligned for a 16 KB kernel, libc++ and OpenMP linked in
+# rather than needed at run time. Prints the size and the NEEDED list and
+# uploads the stripped .so.
+
+name: Android voice engine
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: android-voice-engine-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The NDK android-apk.yml builds with (r28c, 16 KB page size by default).
+  NDK_VERSION: "28.2.13676358"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/voice-engine
+
+      # The action's default `tools` package is gone from Google's repository
+      # (pitfall 314); the NDK comes from the step below.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Install Android NDK
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;${NDK_VERSION}"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build libvoice_engine.so
+        run: scripts/android-voice-engine.sh
+
+      - name: Check the shared object
+        run: |
+          set -euo pipefail
+          SO=plugins/voice/android/src/main/jniLibs/arm64-v8a/libvoice_engine.so
+          echo "size: $(stat -c %s "$SO") bytes ($(du -h "$SO" | cut -f1))"
+          readelf -hW "$SO" | grep -E 'Class|Machine'
+          echo "NEEDED:"
+          readelf -dW "$SO" | grep NEEDED
+          ALIGNS=$(readelf -lW "$SO" | awk '$1=="LOAD"{print $NF}' | sort -u)
+          echo "LOAD align: $(echo $ALIGNS)"
+          for a in $ALIGNS; do
+            case "$a" in
+              0x4000|0x10000) ;;
+              *) echo "::error::$SO has a LOAD segment aligned at $a, not 16 KB"; exit 1 ;;
+            esac
+          done
+          if readelf -dW "$SO" | grep NEEDED | grep -E 'libc\+\+_shared\.so|libomp\.so'; then
+            echo "::error::$SO needs libc++_shared.so or libomp.so at run time"; exit 1
+          fi
+          for sym in voice_engine_probe OrtGetApiBase llama_backend_init; do
+            readelf -sW --dyn-syms "$SO" | grep -qw "$sym" && echo "symbol $sym: present" || echo "symbol $sym: not exported"
+          done
+          size -A "$SO" | grep -E '^\.(text|rodata|data\.rel\.ro) ' || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: libvoice_engine-arm64-v8a
+          path: plugins/voice/android/src/main/jniLibs/arm64-v8a/libvoice_engine.so
+          if-no-files-found: error

@@ -1,0 +1,11 @@
+[package]
+name = "voice-wire"
+version = "0.1.0"
+authors = ["Reading-Partner"]
+description = "Frames and messages between the main process and the Android voice engine (docs/companion/89)"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }

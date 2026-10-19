@@ -1,0 +1,31 @@
+[package]
+name = "voice-engine"
+version = "0.1.0"
+authors = ["Reading-Partner"]
+description = "The Android voice engine: turn detection, recognition and speech in the :voice process (docs/companion/89)"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+[lib]
+name = "voice_engine"
+# cdylib: libvoice_engine.so, loaded by VoiceService in :voice. rlib: the Linux
+# tests link it directly.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+voice-wire = { path = "../voice-wire" }
+kokoro-onnx = { path = "../kokoro-onnx", features = ["ort"] }
+# The same ort as iOS. No execution provider is registered: CPU.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls"] }
+# Qwen3-ASR through llama.cpp's mtmd, built from source by cmake, CPU. No
+# openmp, no common.
+llama-cpp-2 = { version = "=0.1.160", default-features = false, features = ["mtmd"] }
+# The Whisper log-mel for Smart Turn.
+realfft = "3.5.0"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# llama.cpp links libc++ statically, as ONNX Runtime does (ORT_CXX_STDLIB in
+# scripts/android-voice-engine.sh): no libc++_shared.so next to the engine.
+llama-cpp-2 = { version = "=0.1.160", default-features = false, features = ["mtmd", "android-static-stdcxx"] }
+jni = "0.21.1"
