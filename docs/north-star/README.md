@@ -15,6 +15,7 @@
 - [fitness](./fitness.md) — 健身线：将来和三餐并列，共用身体资料和训练日；现在三餐里训练只是输入（哪几天、什么时段），不管练什么；等三餐克数算法改完、跑顺几周再开
 - [telemetry](./telemetry.md) — 匿名使用统计：每天一条平台/机型/版本，无 ID 不存 IP，可强制；后端倾向 Vercel 挂自有域名
 - [system-one](./system-one.md) — 系统一判断模型：yes/no、选项、量表出校准概率，端侧推荐的核心；现产品一处不接，触发条件是 concern 影响排序权重要动手的时候（[生态调研](../research/Jev开源生态调研.md)）
+- [decision-data](./decision-data.md) — 决策数据与自有决策模型：用 app 采集真实决策标注，迭代排序并最终训练自己的 yes/no 校准模型；商业化仍搁置，现在只需定日志形状，上传与同意在上架前设计
 - [legion-rest](./legion-rest.md) — legion 派活的地基已落地（[55](../soul/55-legion.md)），剩 session 投影、effort 一等维度、ledger 重放和几处没闭合的验收
 - [memory-recycling](./memory-recycling.md) — 记忆的另一半：memory 自己的 garbage marker（回收框架 [80](../platform/80-回收：retention、garbage marker 与 housekeeper.md) 已落）、dream 的欠账与回收两段、concern 的 lapsed 与转正、statement 检索，[48](../soul/48-记忆：观察与statement.md)、[58](../soul/58-蒸馏器与dream.md) 定了，等数据
 - [sync-tiers](./sync-tiers.md) — [59](../platform/59-同步：持有清单与裁决.md) 剩档 2 删除推断，翻开前要先补 `retired` 的生产端；删除还有几条竞态和清理没做
