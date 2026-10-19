@@ -69,7 +69,7 @@ export interface SourcePlugin {
 
   // Relevance search (a topic search run, reading's paper search): free text
   // in, headlines with signals out, in the library's relevance order. arXiv
-  // implements it.
+  // and Hugging Face implement it.
   search?(text: string, opts: SearchOptions, deps: PluginDeps): Promise<InfoItem[]>;
   // One known handle (an arXiv id, a repo full name, a Hub id) resolved to an
   // item, or null when the library does not have it. GitHub implements it.

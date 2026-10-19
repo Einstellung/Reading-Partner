@@ -8,6 +8,8 @@ import {
   COOLDOWN_MAX_MS,
   createHostGate,
   gatedFetch,
+  gateKeyOf,
+  HF_PAPER_SEARCH_LANE,
   isHostCoolingDown,
   memoryStore,
   type CooldownStore,
@@ -139,6 +141,35 @@ test("the export API's 429 does not stop arxiv.org's pages, which keep the share
   expect(isHostCoolingDown(await f("https://arxiv.org/html/2401.00003").catch((e) => e))).toBe(true);
   expect(isHostCoolingDown(await f("https://www.arxiv.org/abs/2401.00003").catch((e) => e))).toBe(true);
   expect(sent.length).toBe(4);
+});
+
+test("Hugging Face's paper search is a lane of its own: its own spacing and its own cooldown", async () => {
+  expect(gateKeyOf("https://huggingface.co/api/papers/search?q=a")).toBe(HF_PAPER_SEARCH_LANE);
+  expect(gateKeyOf("https://huggingface.co/api/daily_papers")).toBe("huggingface.co");
+  const clock = fakeClock();
+  const gate = createHostGate({ clock, store: memoryStore() });
+  const sent: { url: string; at: number }[] = [];
+  const f = gatedFetch(
+    async (url) => {
+      sent.push({ url: String(url), at: clock.t });
+      return String(url).includes("q=limited") ? new Response("", { status: 429 }) : ok();
+    },
+    0,
+    gate,
+  );
+  await f("https://huggingface.co/api/papers/search?q=a");
+  await f("https://huggingface.co/api/papers/search?q=b");
+  await f("https://huggingface.co/api/daily_papers");
+  await f("https://huggingface.co/api/papers/2401.00001");
+  // Searches six seconds apart; the API on its own one-second clock.
+  expect(sent.map((s) => s.at)).toEqual([1_000_000, 1_006_000, 1_006_000, 1_007_000]);
+  expect((await f("https://huggingface.co/api/papers/search?q=limited")).status).toBe(429);
+  const err = await f("https://huggingface.co/api/papers/search?q=c").catch((e) => e);
+  expect(isHostCoolingDown(err)).toBe(true);
+  expect(err.until).toBe(clock.t + COOLDOWN_BASE_MS);
+  // The Hub API keeps answering while the search lane cools down.
+  expect((await f("https://huggingface.co/api/daily_papers")).status).toBe(200);
+  expect(gate.coolingDown("huggingface.co")).toBeNull();
 });
 
 test("a request queued behind the one that drew the 429 stays home", async () => {

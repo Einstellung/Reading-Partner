@@ -4,6 +4,12 @@
 // by pipeline tag, author and tags. Headlines with the Hub's own counts as
 // signals, never a body: a paper's abstract is the most this list carries.
 //
+// The search slot (docs/88 「取材 / Hugging Face」) asks the Hub's paper search:
+// no auth, up to 120 papers in relevance order, no date, sort or paging
+// parameter, so the window is applied here on the client. Each row already
+// names the paper's code repository, stars and project page. Its own rate-limit
+// bucket (50 per 5 minutes) is a lane of the host gate (platform/http/host-gate.ts).
+//
 // The model list is nine tenths finetunes and quantised conversions (docs/69),
 // so conversions are dropped unless the query asks for them. Downloads are
 // request counts (CI and mirrors included) and trending has been gamed; the
@@ -11,6 +17,7 @@
 // job.
 
 import { throwIfAborted } from "../../../platform/app/abort";
+import { fetchWithRetry, HttpStatusError, interactiveRetry } from "../../../platform/http/throttled-fetch";
 import { asString } from "../../../platform/std/json";
 import { oneLine } from "../../../platform/std/text";
 import { fetchText } from "../../../workshop/extract/http";
@@ -22,6 +29,7 @@ import {
   queryString,
   queryStrings,
   type PluginDeps,
+  type SearchOptions,
   type SourcePlugin,
   type IndexQuery,
 } from "../plugin";
@@ -268,6 +276,141 @@ async function discover(desc: SourceDescriptor, query: IndexQuery, deps: PluginD
   return items.slice(0, limit);
 }
 
+// --- search -----------------------------------------------------------------
+
+/** Papers one search answers with at most; the Hub ignores anything above. */
+export const HF_SEARCH_MAX = 120;
+/** The longest `q` the Hub takes. */
+const HF_QUERY_CHARS = 250;
+// The source a search item names: the plugin itself.
+const SEARCH_SOURCE = { id: "huggingface", name: "Hugging Face" };
+
+export function paperSearchUrl(text: string): string {
+  const q = text.trim().slice(0, HF_QUERY_CHARS);
+  return `${HOST}/api/papers/search?q=${encodeURIComponent(q)}&limit=${HF_SEARCH_MAX}`;
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}/;
+// A new-style arXiv id's year and month: "2602.08885" -> 2026-02.
+const ID_MONTH = /^(\d{2})(0[1-9]|1[0-2])\.\d{4,5}$/;
+
+function lastDayOf(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+
+/**
+ * The day a paper went up on arXiv, as near as the row tells. The Hub's
+ * `paper.publishedAt` is not always the v1 date (2026-10-18: 75 of 635 papers
+ * fell in another month than their id says, 53 of them later), while the id's
+ * year and month are v1's. So the Hub's day stands when it is in the id's month;
+ * a later day becomes the month's last day, an earlier one its first. Null when
+ * neither the id nor the row gives a date.
+ */
+export function paperDay(id: string, publishedAt: string): string | null {
+  const day = DAY.exec(publishedAt)?.[0] ?? null;
+  const m = ID_MONTH.exec(id);
+  if (!m) return day;
+  const month = `20${m[1]}-${m[2]}`;
+  if (!day) return `${month}-01`;
+  if (day.startsWith(month)) return day;
+  return day > month ? lastDayOf(month) : `${month}-01`;
+}
+
+function organizationOf(v: unknown): string | undefined {
+  if (typeof v === "string") return v || undefined;
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return asString(o.fullname) || asString(o.name) || undefined;
+  }
+  return undefined;
+}
+
+// One papers/search row: `{ paper: { id, title, summary, publishedAt, authors,
+// upvotes, ai_summary, ai_keywords, githubRepo?, githubStars?, projectPage?,
+// organization? }, numComments, highlighted*, ... }`. The item points at the
+// arXiv abstract, so a topic search merges it with what arXiv found by id; its
+// date is paperDay's. Null when the row has no id.
+export function searchItem(row: Record<string, unknown>): InfoItem | null {
+  const paper = (row.paper && typeof row.paper === "object" ? row.paper : {}) as Record<string, unknown>;
+  const id = asString(paper.id);
+  if (!id) return null;
+  const published = asString(paper.publishedAt);
+  const day = paperDay(id, published);
+  const summary = asString(paper.summary).trim();
+  const authors = (Array.isArray(paper.authors) ? paper.authors : [])
+    .map((a) => (a && typeof a === "object" ? asString((a as Record<string, unknown>).name).trim() : ""))
+    .filter(Boolean);
+  const repo = asString(paper.githubRepo);
+  const signals: ItemSignals = { tags: ["paper", ...(repo ? ["code"] : [])] };
+  const upvotes = num(paper.upvotes);
+  if (upvotes !== undefined) signals.upvotes = upvotes;
+  const comments = num(row.numComments) ?? num(paper.numComments);
+  if (comments !== undefined) signals.comments = comments;
+  const stars = num(paper.githubStars);
+  if (stars !== undefined) signals.stars = stars;
+  if (repo) signals.repo = repo;
+  const page = asString(paper.projectPage);
+  if (page) signals.projectPage = page;
+  const ai = oneLine(asString(paper.ai_summary));
+  if (ai) signals.aiSummary = ai;
+  const org = organizationOf(paper.organization);
+  if (org) signals.tags!.push(org);
+  const item: InfoItem = {
+    id: itemId(SEARCH_SOURCE.id, id),
+    source: SEARCH_SOURCE.id,
+    sourceName: SEARCH_SOURCE.name,
+    sourceKey: id,
+    title: oneLine(asString(paper.title) || asString(row.title)) || id,
+    url: `https://arxiv.org/abs/${id}`,
+    // The full stamp when it is the day paperDay keeps, else that day.
+    publishedAt: day && published.startsWith(day) ? published : (day ?? ""),
+    summaryOnly: true,
+    signals,
+  };
+  if (authors.length) item.authors = authors;
+  if (summary) {
+    item.summary = oneLine(summary).slice(0, SUMMARY_CHARS);
+    item.textContent = summary;
+  }
+  return item;
+}
+
+/** Whether an item's day is in the window; `since` and `until` are inclusive days, either may be open. */
+export function inWindow(item: Pick<InfoItem, "publishedAt">, since?: string, until?: string): boolean {
+  const day = DAY.exec(item.publishedAt)?.[0];
+  if (!day) return since === undefined && until === undefined;
+  return (since === undefined || day >= since) && (until === undefined || day <= until);
+}
+
+// Free text to the Hub's paper search, one request; the answer filtered to the
+// window and cut to the limit, in the Hub's relevance order.
+async function search(text: string, opts: SearchOptions, deps: PluginDeps): Promise<InfoItem[]> {
+  throwIfAborted(deps.signal);
+  const url = paperSearchUrl(text);
+  const init: RequestInit = { headers: { Accept: "application/json" }, ...(deps.signal ? { signal: deps.signal } : {}) };
+  const res = await fetchWithRetry(url, init, interactiveRetry(deps.fetchFn));
+  if (!res.ok) throw new HttpStatusError(res.status, "huggingface.co");
+  let data: unknown;
+  try {
+    data = JSON.parse(await res.text());
+  } catch {
+    throw new Error(t("sources.plugins.huggingface.nonJson", { url }));
+  }
+  if (!Array.isArray(data)) throw new Error(t("sources.plugins.huggingface.unexpectedShape", { url }));
+  const since = opts.since ?? (opts.sinceYear === undefined ? undefined : `${opts.sinceYear}-01-01`);
+  const seen = new Set<string>();
+  const items: InfoItem[] = [];
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const item = searchItem(row as Record<string, unknown>);
+    if (!item || seen.has(item.id) || !inWindow(item, since, opts.until)) continue;
+    seen.add(item.id);
+    items.push(item);
+  }
+  return items.slice(0, opts.limit ?? deps.limit ?? HF_SEARCH_MAX);
+}
+
 export const huggingfacePlugin: SourcePlugin = {
   id: "huggingface",
   name: "Hugging Face",
@@ -276,4 +419,5 @@ export const huggingfacePlugin: SourcePlugin = {
   validateQuery,
   describeQuery,
   discover,
+  search,
 };

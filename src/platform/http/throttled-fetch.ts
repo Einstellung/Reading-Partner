@@ -12,7 +12,7 @@
 import { isAbortError, throwIfAborted } from "../app/abort";
 import { isTauri, type FetchFn } from "../app/host";
 import { cleanTauriFetch } from "../app/tauri-fetch";
-import { gatedFetch, hostGate, isRateLimitError, RateLimitError, sleep, type HostGate } from "./host-gate";
+import { gatedFetch, gateKeyOf, hostGate, isRateLimitError, RateLimitError, sleep, type HostGate } from "./host-gate";
 import { MAX_RETRY_WAIT_MS, retryAfterMs } from "./retry-after";
 
 export type { FetchFn };
@@ -39,6 +39,7 @@ export const POLITE_UA_HOSTS = new Set([
   "api.semanticscholar.org",
   "api.openalex.org",
   "eutils.ncbi.nlm.nih.gov",
+  "huggingface.co",
 ]);
 
 // A modest default for hosts not in the gate's table — user-pasted links (link
@@ -165,7 +166,7 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
       if (res.status === 429 || res.status >= 500) {
         lastWas429 = res.status === 429;
         lastError = new Error(`HTTP ${res.status} from ${host}`);
-        const cooling = lastWas429 ? gate.coolingDown(host) : null;
+        const cooling = lastWas429 ? gate.coolingDown(gateKeyOf(url)) : null;
         if (cooling) throw cooling.asRefusal();
         const asked = retryAfterMs(res.headers.get("retry-after"), now());
         const base = lastWas429 ? base429 : baseMs;

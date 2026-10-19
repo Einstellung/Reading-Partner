@@ -8,9 +8,9 @@
 // - spacing: a minimum gap between requests. A serial group also lets one
 //   request out at a time and measures the gap from the previous answer, which
 //   is what arXiv asks for (one request per three seconds, one connection).
-// - cooldown (arXiv only): once a host answers with its rate limit, nothing
-//   goes to that host from any caller until a backoff passes; the group's
-//   other hosts keep their turns. The backoff grows
+// - cooldown (arXiv and Hugging Face): once a host answers with its rate limit,
+//   nothing goes to that host from any caller until a backoff passes; the
+//   group's other hosts keep their turns. The backoff grows
 //   on repeats, is never shorter than the Retry-After asked for, and is kept in
 //   localStorage so a restart does not go straight back to the host.
 
@@ -79,6 +79,19 @@ export interface GroupPolicy {
   cooldown: boolean;
 }
 
+// Hugging Face's paper search has a rate-limit bucket of its own (50 requests
+// per 5 minutes anonymous, seen in its RateLimit headers 2026-10-18), apart from
+// the Hub API's 500. It is gated as a lane of its own: a key that is not a
+// hostname, with its own spacing and its own cooldown.
+export const HF_PAPER_SEARCH_LANE = "huggingface.co/api/papers/search";
+
+/** The gate key of a request: its hostname, or the lane a host splits into. */
+export function gateKeyOf(url: string): string {
+  const u = new URL(url);
+  if (u.hostname === "huggingface.co" && u.pathname.startsWith("/api/papers/search")) return HF_PAPER_SEARCH_LANE;
+  return u.hostname;
+}
+
 // Hosts that share one clock. arXiv's one-request-per-three-seconds rule is per
 // IP across its hosts, so the export API, the abstract/HTML pages and the PDFs
 // are one group for spacing.
@@ -86,6 +99,8 @@ export const HOST_GROUP: Record<string, string> = {
   "arxiv.org": "arxiv",
   "www.arxiv.org": "arxiv",
   "export.arxiv.org": "arxiv",
+  "huggingface.co": "huggingface",
+  [HF_PAPER_SEARCH_LANE]: "huggingface-search",
 };
 
 // A cooldown is kept per host, not per group: the export API rate-limits on its
@@ -107,6 +122,10 @@ export const GROUP_POLICY: Record<string, GroupPolicy> = {
   // NCBI E-utilities allow 3 requests/second without a key, and a topic search
   // is two calls (esearch then efetch) back to back.
   "eutils.ncbi.nlm.nih.gov": { intervalMs: 400, serial: false, cooldown: false },
+  // The Hub API allows 500 requests per 5 minutes per IP anonymous.
+  huggingface: { intervalMs: 1000, serial: false, cooldown: true },
+  // Paper search: 50 per 5 minutes, so one per six seconds can never exceed it.
+  "huggingface-search": { intervalMs: 6000, serial: false, cooldown: true },
 };
 
 /** First cooldown after a rate limit; each repeat doubles it, up to the max. */
@@ -287,7 +306,7 @@ export function createHostGate(opts: { clock?: Clock; store?: CooldownStore } = 
 /** A transport with every request passed through the gate: spacing and cooldown before, the answer read after. */
 export function gatedFetch(inner: FetchFn, defaultIntervalMs: number, gate: HostGate = hostGate): FetchFn {
   return async (url, init) => {
-    const host = new URL(url).hostname;
+    const host = gateKeyOf(url);
     const release = await gate.acquire(host, defaultIntervalMs, init?.signal);
     try {
       const res = await inner(url, init);

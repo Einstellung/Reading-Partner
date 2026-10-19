@@ -79,6 +79,13 @@ export interface ItemSignals {
   releaseTag?: string;
   releaseAt?: string;
   license?: string;
+  // Hugging Face paper rows (docs/88): the code repository and project page the
+  // Hub links the paper to, and the Hub's model-written one-line summary
+  // (`ai_summary`; not the abstract, and not for printing before its terms are
+  // checked).
+  repo?: string;
+  projectPage?: string;
+  aiSummary?: string;
 }
 
 // One line of the signals for a prompt: "★ 1240 (+310) · ↑ 87 · cites 12 ·

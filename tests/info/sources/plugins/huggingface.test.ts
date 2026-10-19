@@ -5,10 +5,15 @@
 
 import { afterEach, expect, test } from "bun:test";
 import {
+  HF_SEARCH_MAX,
   huggingfacePlugin,
+  inWindow,
   isConversion,
+  paperDay,
   papersUrl,
+  paperSearchUrl,
   reposUrl,
+  searchItem,
 } from "../../../../src/info/sources/plugins/huggingface";
 import {
   registerSourcePlugin,
@@ -435,4 +440,102 @@ test("collectSource rejects a query the provider does not accept", async () => {
   const { calls, fetchFn } = scripted(() => jsonResponse([]));
   await expect(collectSource(desc({ kind: "spaces" }), { fetchFn })).rejects.toThrow(/index query rejected/);
   expect(calls.length).toBe(0);
+});
+
+// --- search ------------------------------------------------------------------
+
+// api/papers/search rows in the shape seen 2026-10-18, trimmed: `highlighted*`
+// and most authors dropped.
+function searchRow(id: string, publishedAt: string, extra: Record<string, unknown> = {}) {
+  return {
+    paper: {
+      id,
+      title: `Paper ${id}`,
+      summary: `Abstract of ${id}.`,
+      publishedAt,
+      authors: [{ name: "Ada Lovelace", hidden: false }, { name: "Alan Turing", hidden: false }],
+      upvotes: 3,
+      ai_summary: "A model-written line.",
+      ai_keywords: ["symbolic regression"],
+      ...extra,
+    },
+    publishedAt: "2026-01-01T00:00:00.000Z",
+    title: `Paper ${id}`,
+    numComments: 1,
+    highlightedTitle: [{ type: "text", text: `Paper ${id}` }],
+  };
+}
+
+test("paperDay keeps the Hub's day inside the id's month and clamps it to that month otherwise", () => {
+  expect(paperDay("2610.11059", "2026-10-13T17:59:59.000Z")).toBe("2026-10-13");
+  // A later stamp (a revision, the Hub's own date) falls back to the id's month.
+  expect(paperDay("2102.10570", "2021-10-26T00:00:00.000Z")).toBe("2021-02-28");
+  expect(paperDay("2602.08885", "2026-01-30T00:00:00.000Z")).toBe("2026-02-01");
+  expect(paperDay("2402.00001", "")).toBe("2024-02-01");
+  // An old-style id has no month in it.
+  expect(paperDay("hep-th/9901001", "1999-01-05T00:00:00.000Z")).toBe("1999-01-05");
+  expect(paperDay("hep-th/9901001", "")).toBeNull();
+});
+
+test("a search row becomes an arXiv-addressed item with the Hub's links and counts", () => {
+  const item = searchItem(
+    searchRow("2610.11059", "2026-10-13T17:59:59.000Z", {
+      githubRepo: "https://github.com/a/b",
+      githubStars: 42,
+      projectPage: "https://a.github.io/b",
+      organization: { name: "deepmind", fullname: "Google DeepMind" },
+    }),
+  )!;
+  expect(item.url).toBe("https://arxiv.org/abs/2610.11059");
+  expect(item.sourceKey).toBe("2610.11059");
+  expect(item.source).toBe("huggingface");
+  expect(item.publishedAt).toBe("2026-10-13T17:59:59.000Z");
+  expect(item.authors).toEqual(["Ada Lovelace", "Alan Turing"]);
+  expect(item.textContent).toBe("Abstract of 2610.11059.");
+  expect(item.signals).toMatchObject({
+    upvotes: 3,
+    comments: 1,
+    stars: 42,
+    repo: "https://github.com/a/b",
+    projectPage: "https://a.github.io/b",
+    aiSummary: "A model-written line.",
+    tags: ["paper", "code", "Google DeepMind"],
+  });
+  // A stamp outside the id's month is replaced by the day paperDay keeps.
+  expect(searchItem(searchRow("2102.10570", "2021-10-26T00:00:00.000Z"))!.publishedAt).toBe("2021-02-28");
+  expect(searchItem({ paper: {} })).toBeNull();
+});
+
+test("inWindow reads the item's day against inclusive bounds", () => {
+  const at = (publishedAt: string) => ({ publishedAt });
+  expect(inWindow(at("2026-10-13T17:59:59.000Z"), "2026-10-13", "2026-10-13")).toBe(true);
+  expect(inWindow(at("2026-10-12"), "2026-10-13")).toBe(false);
+  expect(inWindow(at("2026-10-14"), undefined, "2026-10-13")).toBe(false);
+  expect(inWindow(at(""), "2026-10-13")).toBe(false);
+  expect(inWindow(at(""))).toBe(true);
+});
+
+test("search sends one request and filters the answer to the window in the Hub's order", async () => {
+  const { calls, fetchFn } = scripted(() =>
+    jsonResponse([
+      searchRow("2401.00001", "2024-01-05T00:00:00.000Z"),
+      searchRow("2609.00002", "2026-09-20T00:00:00.000Z"),
+      searchRow("2610.00003", "2026-10-02T00:00:00.000Z"),
+      searchRow("2609.00002", "2026-09-20T00:00:00.000Z"),
+    ]),
+  );
+  const items = await P.search!("symbolic regression", { since: "2026-01-01", until: "2026-10-18" }, deps(fetchFn));
+  expect(calls).toEqual([paperSearchUrl("symbolic regression")]);
+  expect(new URL(calls[0]).searchParams.get("limit")).toBe(String(HF_SEARCH_MAX));
+  expect(items.map((i) => i.sourceKey)).toEqual(["2609.00002", "2610.00003"]);
+  const one = await P.search!("x", { sinceYear: 2026, limit: 1 }, deps(fetchFn));
+  expect(one.map((i) => i.sourceKey)).toEqual(["2609.00002"]);
+});
+
+test("search turns a refused request into a status error and a non-array answer into a shape error", async () => {
+  const refused = scripted(() => new Response("bad", { status: 400 }));
+  await expect(P.search!("x", {}, deps(refused.fetchFn))).rejects.toThrow(/HTTP 400 from huggingface.co/);
+  expect(refused.calls.length).toBe(1);
+  const odd = scripted(() => jsonResponse({ error: "nope" }));
+  await expect(P.search!("x", {}, deps(odd.fetchFn))).rejects.toThrow(/unexpected shape/);
 });
