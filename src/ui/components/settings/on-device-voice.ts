@@ -14,7 +14,7 @@ import {
 // The one variant the app speaks with. Not the user's to pick.
 export const VOICE_VARIANT: KokoroVariant = "fp32";
 
-// plugins/voice/src/kokoro/manifest.rs: the fp32 model plus the two voice
+// plugins/voice-engine/kokoro-onnx/src/manifest.rs: the fp32 model plus the two voice
 // files. Only for the hint before the first status read lands, or when it
 // never does; every number on screen otherwise comes from the plugin.
 export const FALLBACK_TOTAL_BYTES = 339_369_442 + 2 * 522_240;
