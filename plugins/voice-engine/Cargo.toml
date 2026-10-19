@@ -4,4 +4,4 @@
 # voice-wire only, never on engine.
 [workspace]
 resolver = "2"
-members = ["kokoro-onnx"]
+members = ["kokoro-onnx", "voice-wire", "engine"]
