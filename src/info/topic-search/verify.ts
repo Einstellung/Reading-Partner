@@ -429,6 +429,15 @@ async function readPaper(t: Extract<Target, { kind: "paper" }>, deps: SourceDeps
   };
 }
 
+/** The README from GitHub's /readme answer: JSON whose content is base64 text. */
+function decodeReadme(body: string): string {
+  const json = JSON.parse(body) as { content?: unknown; encoding?: unknown };
+  if (typeof json.content !== "string") return "";
+  if (json.encoding !== "base64") return json.content;
+  const bin = atob(json.content.replace(/\s+/g, ""));
+  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+}
+
 async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, signal: AbortSignal): Promise<SourceRead> {
   const full = `${t.owner}/${t.repo}`;
   const steps: StepRecord[] = [];
@@ -446,20 +455,20 @@ async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, 
   const found = lookup.kind === "found" ? lookup.facts : null;
   const name = found?.fullName ?? full;
   const sections: { heading: string | null; text: string }[] = [];
-  let readmeFailed: ReadFailure | null = failure("readme", "not_found", "the repository has no README");
-  for (const file of ["README.md", "readme.md", "README.rst", "README"]) {
-    try {
-      const res = await deps.fetchText(`https://raw.githubusercontent.com/${name}/HEAD/${file}`, signal);
-      if (res.status === 200 && res.text.trim()) {
-        sections.push(...markdownSections(res.text));
-        readmeFailed = null;
-        break;
-      }
-      if (res.status !== 404 && res.status !== 200) readmeFailed = failure("readme", codeOfStatus(res.status), `the README answered HTTP ${res.status}`);
-    } catch (e) {
-      if (signal.aborted) throw e;
-      readmeFailed = failure("readme", codeOfError(e), `the README: ${errText(e)}`);
+  let readmeFailed: ReadFailure | null = null;
+  try {
+    // One call: GitHub finds the README whatever its filename or branch.
+    const res = await deps.fetchText(`https://api.github.com/repos/${name}/readme`, signal);
+    if (res.status === 404) readmeFailed = failure("readme", "not_found", "the repository has no README");
+    else if (res.status !== 200) readmeFailed = failure("readme", codeOfStatus(res.status), `the README answered HTTP ${res.status}`);
+    else {
+      const text = decodeReadme(res.text);
+      if (text.trim()) sections.push(...markdownSections(text));
+      else readmeFailed = failure("readme", "not_found", "the repository has no README");
     }
+  } catch (e) {
+    if (signal.aborted) throw e;
+    readmeFailed = failure("readme", codeOfError(e), `the README: ${errText(e)}`);
   }
   steps.push(readmeFailed ? failedStep(readmeFailed) : okStep("readme"));
   const quota = deps.repoQuotaLeft();

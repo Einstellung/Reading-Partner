@@ -38,7 +38,7 @@ export default {
   "account.screening": "Screening",
   "account.analysis": "Analysis",
   "account.briefingHint":
-    "The briefing is built overnight, from every source, whether or not you read it. Screening reads the day's headlines to decide which articles are worth fetching, so it is the stage to keep low; analysis reads the ones that got through.",
+    "The briefing is not built overnight for now: it is paused while it is being redesigned, and you can still ask for one by hand. Screening reads the day's headlines to decide which articles are worth fetching, so it is the stage to keep low; analysis reads the ones that got through.",
   "account.thinking": "Thinking",
   "account.chat": "Chat",
   "account.lessonPrep": "Lesson prep",
@@ -99,7 +99,7 @@ export default {
   "features.briefing": "Briefing",
   "features.collect": "Collect from your sources on this computer",
   "features.collectHint":
-    "Each source is checked on its own schedule and what it published is kept until the day's briefing is built. Off, this machine stops collecting entirely and another collector, if you have one, takes over.",
+    "Each source is checked on its own schedule. Automatic collection for the briefing is paused while the briefing is redesigned; topic searches still run overnight. Off, this machine stops collecting entirely and another collector, if you have one, takes over.",
   "features.thisComputer": "This computer",
   "features.role": "This machine is a",
   "features.roleCollector": "Collector — read the sources here",

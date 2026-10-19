@@ -15,6 +15,7 @@ import type { TopicSearch } from "../../../src/info/topic-search/types";
 import { PAPER_BODY_CHARS, readSource, type FetchText, type OpenLink, type SourceDeps } from "../../../src/info/topic-search/verify";
 import { HostCoolingDownError } from "../../../src/platform/http/host-gate";
 import { inspectArticleText, inspectFetchedPage } from "../../../src/workshop/bindery/gate";
+import { readmeAnswer } from "./readme-answer";
 import type { ExtractReadable } from "../../../src/workshop/extract/readable-select";
 import { htmlToText } from "../../../src/workshop/extract/sanitize";
 
@@ -290,4 +291,25 @@ test("a post whose links could not be read still tells the write-up why in plain
   expect(got.traces).toEqual([
     { url: post.permalink, outcome: "partial", steps: [{ ok: false, step: "post", code: "budget_spent", retryable: true, detail: "X pages for today used up" }] },
   ]);
+});
+
+test("a repository's README is one call to GitHub's readme endpoint, decoded from base64", async () => {
+  const urls: string[] = [];
+  const fetchText: FetchText = async (url) => {
+    urls.push(url);
+    return url === "https://api.github.com/repos/acme/tool/readme" ? readmeAnswer("# Tool\n\nCafé-grade ünïcode, 3 commands.") : { status: 404, text: "" };
+  };
+  const got = await readSource({ kind: "repo", owner: "acme", repo: "tool", url: "https://github.com/acme/tool" }, deps({ fetchText }), signal);
+  expect(urls.filter((u) => u.includes("readme") || u.includes("raw.githubusercontent"))).toEqual(["https://api.github.com/repos/acme/tool/readme"]);
+  expect(got.steps.find((s) => s.step === "readme")).toMatchObject({ ok: true });
+  expect(JSON.stringify(got)).toContain("Café-grade ünïcode");
+});
+
+test("a repository without a README, or whose README answers an error or is empty, is a typed readme failure", async () => {
+  const run = (answer: { status: number; text: string }) =>
+    readSource({ kind: "repo", owner: "acme", repo: "tool", url: "https://github.com/acme/tool" }, deps({ fetchText: async (u) => (u.endsWith("/readme") ? answer : { status: 404, text: "" }) }), signal);
+  expect((await run({ status: 404, text: "" })).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false, code: "not_found" });
+  expect((await run({ status: 503, text: "" })).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false, retryable: true });
+  expect((await run(readmeAnswer("   \n"))).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false, code: "not_found" });
+  expect((await run({ status: 200, text: "<html>not json" })).steps.find((s) => s.step === "readme")).toMatchObject({ ok: false });
 });

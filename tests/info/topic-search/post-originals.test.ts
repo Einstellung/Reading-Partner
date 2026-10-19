@@ -14,6 +14,7 @@ import { openOriginal } from "../../../src/info/topic-search/open-link";
 import type { TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import { linksOut, readSource, type FetchText, type OpenLink, type SourceDeps } from "../../../src/info/topic-search/verify";
+import { readmeAnswer } from "./readme-answer";
 
 const signal = new AbortController().signal;
 const PAPER = "2610.04242";
@@ -99,7 +100,7 @@ test("a post with links only in its full text gets its paper read beside it; the
   expect(got.original).toBe(`https://arxiv.org/abs/${PAPER}`);
   expect(got.first?.facts.kind).toBe("post");
   // Two originals besides the post: the paper, then the repository; the blog is left.
-  expect(fetched.some((u) => u.includes("raw.githubusercontent.com/quill-lab/plate-planner"))).toBe(true);
+  expect(fetched.some((u) => u.includes("api.github.com/repos/quill-lab/plate-planner/readme"))).toBe(true);
   expect(opened.includes("https://quill.example/blog/plates")).toBe(false);
 });
 
@@ -110,7 +111,7 @@ test("a repository link is read before a page, both beside the post, and the pos
     return base.ok ? { ...base, links: ["https://quill.example/blog/plates", "https://github.com/quill-lab/plate-planner"] } : base;
   };
   const fetchText: FetchText = async (url) =>
-    url.includes("raw.githubusercontent.com/quill-lab/plate-planner/HEAD/README.md") ? { status: 200, text: "# Plate Planner\n\nSchedules plates." } : { status: 404, text: "" };
+    url === "https://api.github.com/repos/quill-lab/plate-planner/readme" ? readmeAnswer("# Plate Planner\n\nSchedules plates.") : { status: 404, text: "" };
   const reg = registry();
   const got = await readOriginals([{ kind: "post", post: POST }], deps({ fetchText, openLink, opened }), reg, signal);
   expect(got.materials.map((id) => reg.get(id)!.reader)).toEqual(["x", "github"]);
@@ -128,7 +129,7 @@ test("the post's links name a paper ahead of a page the item already had; two or
   const got = await readOriginals([{ kind: "post", post: POST }, page], deps({ fetchText, openLink: fullPost, opened, fetched }), reg, signal);
   // The paper and the repository outrank the news page; the page is not opened.
   expect(opened).toEqual([POST.permalink]);
-  expect(fetched.some((u) => u.includes("raw.githubusercontent.com/quill-lab/plate-planner"))).toBe(true);
+  expect(fetched.some((u) => u.includes("api.github.com/repos/quill-lab/plate-planner/readme"))).toBe(true);
   expect(got.materials.map((id) => reg.get(id)!.reader)).toEqual(["x", "arxiv"]);
 });
 

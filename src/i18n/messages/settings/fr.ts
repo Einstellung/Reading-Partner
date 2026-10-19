@@ -38,7 +38,7 @@ export default {
   "account.screening": "Tri",
   "account.analysis": "Analyse",
   "account.briefingHint":
-    "Le briefing est préparé la nuit à partir de toutes les sources, que vous le lisiez ou non. Le tri lit les titres du jour pour décider quels articles valent la peine d'être récupérés : c'est l'étape à garder basse. L'analyse lit ceux qui ont passé le tri.",
+    "Le briefing n'est pas préparé la nuit pour le moment : il est en pause pendant sa refonte, et vous pouvez toujours en demander un à la main. Le tri lit les titres du jour pour décider quels articles valent la peine d'être récupérés : c'est l'étape à garder basse. L'analyse lit ceux qui ont passé le tri.",
   "account.thinking": "Réflexion",
   "account.chat": "Chat",
   "account.lessonPrep": "Préparation des cours",
@@ -99,7 +99,7 @@ export default {
   "features.briefing": "Briefing",
   "features.collect": "Collecter vos sources sur cet ordinateur",
   "features.collectHint":
-    "Chaque source est consultée selon son propre calendrier et ce qu'elle publie est conservé jusqu'à la préparation du briefing du jour. Désactivé, cette machine arrête toute collecte et un autre collecteur, si vous en avez un, prend le relais.",
+    "Chaque source est consultée selon son propre calendrier. La collecte automatique pour le briefing est en pause pendant sa refonte ; les recherches par sujet continuent de tourner la nuit. Désactivé, cette machine arrête toute collecte et un autre collecteur, si vous en avez un, prend le relais.",
   "features.thisComputer": "Cet ordinateur",
   "features.role": "Cette machine est un",
   "features.roleCollector": "Collecteur — lit les sources ici",

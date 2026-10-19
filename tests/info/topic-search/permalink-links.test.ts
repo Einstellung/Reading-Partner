@@ -19,6 +19,7 @@ import { readSource, type FetchText, type OpenLink, type SourceDeps } from "../.
 import { readXSearch, type XReadDeps, type XReadInput, type XReadResult } from "../../../src/info/topic-search/x-reader";
 import { X_PACE } from "../../../src/info/topic-search/x-pace";
 import { replay, type XStep } from "../../../src/info/topic-search/x-progress";
+import { readmeAnswer } from "./readme-answer";
 
 const signal = new AbortController().signal;
 const EPOCH = 1288834974657n;
@@ -194,7 +195,7 @@ function sourceDeps(log: { fetched: string[]; opened: string[] }, openLink?: Ope
   const fetchText: FetchText = async (url) => {
     log.fetched.push(url);
     if (url === `https://arxiv.org/html/${PAPER}`) return { status: 200, text: ARXIV_HTML };
-    if (url.includes("raw.githubusercontent.com/plate-lab/plate-planner/HEAD/README.md")) return { status: 200, text: "# Plate Planner\n\nBooks plates." };
+    if (url.includes("api.github.com/repos/plate-lab/plate-planner/readme")) return readmeAnswer("# Plate Planner\n\nBooks plates.");
     return { status: 404, text: "" };
   };
   return {

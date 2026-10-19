@@ -38,7 +38,7 @@ export default {
   "account.screening": "Filtrado",
   "account.analysis": "Análisis",
   "account.briefingHint":
-    "El resumen se prepara por la noche a partir de todas las fuentes, lo leas o no. El filtrado lee los titulares del día para decidir qué artículos merece la pena descargar, así que conviene mantenerlo bajo; el análisis lee los que pasan.",
+    "Por ahora el resumen no se prepara por la noche: está en pausa mientras se rediseña, y aún puedes pedir uno a mano. El filtrado lee los titulares del día para decidir qué artículos merece la pena descargar, así que conviene mantenerlo bajo; el análisis lee los que pasan.",
   "account.thinking": "Razonamiento",
   "account.chat": "Chat",
   "account.lessonPrep": "Preparación de clases",
@@ -99,7 +99,7 @@ export default {
   "features.briefing": "Resumen de noticias",
   "features.collect": "Recopilar de tus fuentes en este ordenador",
   "features.collectHint":
-    "Cada fuente se consulta según su propio horario y lo que publica se guarda hasta que se prepara el resumen del día. Desactivado, este equipo deja de recopilar por completo y otro recopilador, si lo tienes, toma el relevo.",
+    "Cada fuente se consulta según su propio horario. La recopilación automática para el resumen está en pausa mientras se rediseña; las búsquedas por tema siguen ejecutándose por la noche. Desactivado, este equipo deja de recopilar por completo y otro recopilador, si lo tienes, toma el relevo.",
   "features.thisComputer": "Este ordenador",
   "features.role": "Este equipo es un",
   "features.roleCollector": "Recopilador: lee las fuentes aquí",

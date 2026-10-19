@@ -22,6 +22,7 @@ import { firstPart, parseResultFile, type ResultStats, type TopicSearchResult } 
 import { ITEM_FLOOR } from "../../../src/info/topic-search/select";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import type { XReadResult } from "../../../src/info/topic-search/x-reader";
+import { readmeAnswer } from "./readme-answer";
 
 const FIXTURE = readFileSync(join(import.meta.dir, "../x/fixtures/search-live-ai-for-science.html"), "utf8");
 
@@ -216,8 +217,8 @@ function deps(over: {
     fetchText: async (url) => {
       if (url === "https://arxiv.org/html/2609.31562") return { status: 200, text: ARXIV_HTML };
       if (url === "https://arxiv.org/html/2610.00001") return { status: 200, text: "<html><head><title>Untitled Document</title></head><body>Conversion failed</body></html>" };
-      if (url.includes("raw.githubusercontent.com/yashgurbani/amino-arcade/HEAD/README.md")) return { status: 200, text: "# Amino Arcade\n\nA game that teaches protein folding.\n\n## Install\n\nRun it with 3 commands." };
-      if (url.includes("raw.githubusercontent.com/acme/sci-bench/HEAD/README.md")) return { status: 200, text: "# SciBench\n\nA benchmark of 120 science tasks for agents." };
+      if (url.includes("api.github.com/repos/yashgurbani/amino-arcade/readme")) return readmeAnswer("# Amino Arcade\n\nA game that teaches protein folding.\n\n## Install\n\nRun it with 3 commands.");
+      if (url.includes("api.github.com/repos/acme/sci-bench/readme")) return readmeAnswer("# SciBench\n\nA benchmark of 120 science tasks for agents.");
       if (url.startsWith("https://api.github.com/repos/") && url.endsWith("/contents")) return { status: 200, text: JSON.stringify([{ name: "src", type: "dir" }, { name: "README.md", type: "file" }]) };
       return { status: 404, text: "" };
     },

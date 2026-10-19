@@ -39,7 +39,7 @@ export default {
   "account.screening": "Triagem",
   "account.analysis": "Análise",
   "account.briefingHint":
-    "O resumo é montado durante a noite a partir de todas as fontes, você lendo ou não. A triagem lê as manchetes do dia para decidir quais artigos vale a pena buscar, por isso é a etapa para manter baixa; a análise lê os que passaram.",
+    "Por enquanto o resumo não é montado durante a noite: está em pausa enquanto é redesenhado, e você ainda pode pedir um manualmente. A triagem lê as manchetes do dia para decidir quais artigos vale a pena buscar, por isso é a etapa para manter baixa; a análise lê os que passaram.",
   "account.thinking": "Raciocínio",
   "account.chat": "Chat",
   "account.lessonPrep": "Preparação de aulas",
@@ -100,7 +100,7 @@ export default {
   "features.briefing": "Resumo de notícias",
   "features.collect": "Coletar das suas fontes neste computador",
   "features.collectHint":
-    "Cada fonte é verificada no seu próprio horário e o que ela publicou fica guardado até o resumo do dia ser montado. Desativado, esta máquina para de coletar por completo e outro coletor, se você tiver, assume.",
+    "Cada fonte é verificada no seu próprio horário. A coleta automática para o resumo está em pausa enquanto ele é redesenhado; as buscas por tema continuam rodando durante a noite. Desativado, esta máquina para de coletar por completo e outro coletor, se você tiver, assume.",
   "features.thisComputer": "Este computador",
   "features.role": "Esta máquina é um",
   "features.roleCollector": "Coletor — lê as fontes aqui",

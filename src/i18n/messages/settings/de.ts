@@ -38,7 +38,7 @@ export default {
   "account.screening": "Sichtung",
   "account.analysis": "Analyse",
   "account.briefingHint":
-    "Das Briefing entsteht über Nacht aus allen Quellen, ob du es liest oder nicht. Die Sichtung liest die Schlagzeilen des Tages und entscheidet, welche Artikel sich zu laden lohnen – diese Stufe sollte niedrig bleiben; die Analyse liest die, die durchgekommen sind.",
+    "Das Briefing wird vorerst nicht über Nacht erstellt: Es ist pausiert, solange es neu gestaltet wird, und du kannst weiterhin per Hand eines anfordern. Die Sichtung liest die Schlagzeilen des Tages und entscheidet, welche Artikel sich zu laden lohnen – diese Stufe sollte niedrig bleiben; die Analyse liest die, die durchgekommen sind.",
   "account.thinking": "Denken",
   "account.chat": "Chat",
   "account.lessonPrep": "Unterrichtsvorbereitung",
@@ -99,7 +99,7 @@ export default {
   "features.briefing": "Briefing",
   "features.collect": "Quellen auf diesem Computer sammeln",
   "features.collectHint":
-    "Jede Quelle wird nach ihrem eigenen Zeitplan abgefragt, und was sie veröffentlicht hat, wird bis zum Erstellen des Tagesbriefings aufbewahrt. Aus: Dieser Rechner sammelt überhaupt nicht mehr, und ein anderer Sammler übernimmt, falls vorhanden.",
+    "Jede Quelle wird nach ihrem eigenen Zeitplan abgefragt. Das automatische Sammeln für das Briefing ist pausiert, solange es neu gestaltet wird; Themensuchen laufen weiterhin über Nacht. Aus: Dieser Rechner sammelt überhaupt nicht mehr, und ein anderer Sammler übernimmt, falls vorhanden.",
   "features.thisComputer": "Dieser Computer",
   "features.role": "Dieser Rechner ist ein",
   "features.roleCollector": "Sammler – liest die Quellen hier",

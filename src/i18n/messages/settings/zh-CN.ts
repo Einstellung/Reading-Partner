@@ -38,7 +38,7 @@ export default {
   "account.screening": "筛选",
   "account.analysis": "分析",
   "account.briefingHint":
-    "简报在夜间根据所有来源生成，不论你读不读。筛选阅读当天的标题来决定哪些文章值得抓取，所以这一步宜设低；分析阅读通过筛选的文章。",
+    "简报暂时不在夜间生成：重新设计期间已暂停，你仍可以手动请求。筛选阅读当天的标题来决定哪些文章值得抓取，所以这一步宜设低；分析阅读通过筛选的文章。",
   "account.thinking": "思考",
   "account.chat": "对话",
   "account.lessonPrep": "备课",
@@ -96,7 +96,7 @@ export default {
   "features.briefing": "新闻简报",
   "features.collect": "在这台电脑上从你的来源收集",
   "features.collectHint":
-    "每个来源按各自的时间表检查，发布的内容会保留到当天的简报生成为止。关闭后，这台机器完全停止收集，如果你有别的收集机，会由它接手。",
+    "每个来源按各自的时间表检查。简报的自动收集在重新设计期间已暂停；主题搜索仍在夜间运行。关闭后，这台机器完全停止收集，如果你有别的收集机，会由它接手。",
   "features.thisComputer": "这台电脑",
   "features.role": "这台机器是",
   "features.roleCollector": "收集机——在这里读取来源",

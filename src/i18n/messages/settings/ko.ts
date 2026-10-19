@@ -38,7 +38,7 @@ export default {
   "account.screening": "선별",
   "account.analysis": "분석",
   "account.briefingHint":
-    "브리핑은 읽든 안 읽든 모든 소스에서 밤사이 만들어집니다. 선별은 그날의 헤드라인을 읽고 가져올 기사를 정하는 단계라 낮게 두는 것이 좋고, 분석은 통과한 기사를 읽습니다.",
+    "브리핑은 당분간 밤사이 만들어지지 않습니다. 재설계하는 동안 중단되어 있으며, 직접 요청하면 만들 수 있습니다. 선별은 그날의 헤드라인을 읽고 가져올 기사를 정하는 단계라 낮게 두는 것이 좋고, 분석은 통과한 기사를 읽습니다.",
   "account.thinking": "사고",
   "account.chat": "채팅",
   "account.lessonPrep": "수업 준비",
@@ -98,7 +98,7 @@ export default {
   "features.briefing": "브리핑",
   "features.collect": "이 컴퓨터에서 소스 수집",
   "features.collectHint":
-    "각 소스는 자체 일정에 따라 확인되고, 게시된 내용은 그날의 브리핑이 만들어질 때까지 보관됩니다. 끄면 이 컴퓨터는 수집을 완전히 멈추고, 다른 수집 기기가 있다면 그 기기가 이어받습니다.",
+    "각 소스는 자체 일정에 따라 확인됩니다. 브리핑용 자동 수집은 재설계하는 동안 중단되어 있으며, 주제 검색은 계속 밤사이 실행됩니다. 끄면 이 컴퓨터는 수집을 완전히 멈추고, 다른 수집 기기가 있다면 그 기기가 이어받습니다.",
   "features.thisComputer": "이 컴퓨터",
   "features.role": "이 컴퓨터의 역할",
   "features.roleCollector": "수집 — 여기서 소스를 읽음",
