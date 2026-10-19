@@ -526,7 +526,7 @@ with no player to hear them.
 
 - Weights: `onnx-community/Kokoro-82M-v1.1-zh-ONNX` at revision
   `6cc0f0d2ebe369a68b0df87c2b65c1af8c0ac3e3` (Apache-2.0), files and sha256 in
-  `src/kokoro/manifest.rs`. Fetched in the app, never bundled, into
+  `plugins/voice-engine/kokoro-onnx/src/manifest.rs`. Fetched in the app, never bundled, into
   `<app local data>/voice-models/kokoro-v1.1-zh/<revision>/`, which is excluded
   from backup (`exclude_from_backup`, Swift) before the first byte lands.
 - Runtime: `ort` 2.0.0-rc.13 behind the `kokoro` feature, which src-tauri turns
@@ -547,7 +547,9 @@ audio, RTF and non-finite samples. From the Linux side:
       return await i("plugin:voice|kokoro_bench", { args: {
         phonemes: ["ㄋㄧ2ㄏㄠ3, 我3/ㄕ十4/ㄌㄨ2ㄇ应2."], threads: [1, 2, 4] } });' 900
 
-The Linux comparison with PyTorch is the ignored test `kokoro::engine::tests::linux_compare`;
+The Linux comparison with PyTorch is the ignored test `engine::tests::linux_compare` in
+kokoro-onnx (`cargo test --manifest-path plugins/voice-engine/Cargo.toml -p kokoro-onnx
+--features ort -- --ignored linux_compare`, with `KOKORO_MANIFEST`);
 the whole speaking path (text, phonemes, engine, PCM, a WAV per sentence, never
 played) is `tts::kokoro::tests::end_to_end`, with `KOKORO_MODELS` and
 `KOKORO_OUT`.

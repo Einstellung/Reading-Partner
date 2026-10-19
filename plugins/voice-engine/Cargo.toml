@@ -1,0 +1,7 @@
+# The Android voice engine and what it shares with the voice plugin
+# (docs/companion/89). Its own workspace so ONNX Runtime and llama.cpp never
+# enter the main process's library: the plugin depends on kokoro-onnx and
+# voice-wire only, never on engine.
+[workspace]
+resolver = "2"
+members = ["kokoro-onnx"]

@@ -31,13 +31,10 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 async-trait = "0.1"
 # On-device Kokoro TTS (src/kokoro), behind the `kokoro` feature so hosts that
-# never run it never link it. ONNX Runtime (MIT) through `ort` (MIT/Apache):
-# `download-binaries` makes ort-sys's build script fetch pyke's prebuilt static
-# ONNX Runtime 1.28 for the target (aarch64-apple-ios and -ios-sim included)
-# and check it against the sha256 in its own dist table, so the runtime is
-# linked into the app binary. Pinned exactly: the dist table and the C API
-# version move with every release candidate.
-ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls"], optional = true }
+# never run it never link it. The model code is the kokoro-onnx crate, shared
+# with the Android voice engine (docs/companion/89); its `ort` feature brings in
+# ONNX Runtime (see that crate's manifest).
+kokoro-onnx = { path = "../voice-engine/kokoro-onnx" }
 # The downloader's check of every model file against the manifest.
 sha2 = "0.10"
 # Decodes the Kokoro frontend's embedded tables (src/kokoro_g2p/data). BSD-3-Clause/MIT, already in the
@@ -45,7 +42,7 @@ sha2 = "0.10"
 brotli-decompressor = "5"
 
 [features]
-kokoro = ["dep:ort"]
+kokoro = ["kokoro-onnx/ort"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }

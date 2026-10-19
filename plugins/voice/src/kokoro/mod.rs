@@ -14,18 +14,16 @@
 // What compiles where: the manifest, the downloader, the tokenizer and the
 // voice tables are plain Rust and build everywhere. The engine and the bench
 // need ONNX Runtime and are behind the `kokoro` feature, which src-tauri turns
-// on for iOS only.
+// on for iOS only. The manifest, tokenizer, voice tables and engine live in the
+// `kokoro-onnx` crate (plugins/voice-engine), shared with the Android engine.
 
 pub mod download;
-pub mod manifest;
-pub mod tokens;
-mod vocab;
-pub mod voice;
+pub use kokoro_onnx::{manifest, tokens, voice};
 
 #[cfg(feature = "kokoro")]
 pub mod bench;
 #[cfg(feature = "kokoro")]
-pub mod engine;
+pub use kokoro_onnx::engine;
 
 /// The plugin's one downloader, managed state.
 pub struct KokoroModels(pub std::sync::Arc<download::Downloader>);

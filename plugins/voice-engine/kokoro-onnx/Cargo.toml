@@ -1,0 +1,24 @@
+[package]
+name = "kokoro-onnx"
+version = "0.1.0"
+authors = ["Reading-Partner"]
+description = "On-device Kokoro-82M-v1.1-zh: misaki phonemes and a voice in, 24 kHz PCM out (docs/companion/136, 89)"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+# ONNX Runtime (MIT) through `ort` (MIT/Apache), behind the `ort` feature so the
+# manifest, tokenizer and voice tables build without it (the main process on
+# Android links those, never the runtime). `download-binaries` makes ort-sys's
+# build script fetch pyke's prebuilt static ONNX Runtime 1.28 for the target and
+# check it against the sha256 in its own dist table. Pinned exactly: the dist
+# table and the C API version move with every release candidate.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "download-binaries", "tls-rustls"], optional = true }
+
+[features]
+ort = ["dep:ort"]
+
+[dev-dependencies]
+serde_json = "1"
