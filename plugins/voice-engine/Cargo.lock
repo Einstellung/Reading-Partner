@@ -894,6 +894,7 @@ dependencies = [
  "llama-cpp-2",
  "ort",
  "realfft",
+ "serde_json",
  "voice-wire",
 ]
 

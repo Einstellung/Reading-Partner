@@ -29,3 +29,7 @@ realfft = "3.5.0"
 # scripts/android-voice-engine.sh): no libc++_shared.so next to the engine.
 llama-cpp-2 = { version = "=0.1.160", default-features = false, features = ["mtmd", "android-static-stdcxx"] }
 jni = "0.21.1"
+
+[dev-dependencies]
+# Reads the turn-detection fixtures (docs/assets, fixtures/reference.json).
+serde_json = "1"
