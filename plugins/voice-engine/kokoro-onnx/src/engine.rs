@@ -62,9 +62,24 @@ impl Engine {
         voice: &VoicePack,
         speed: f32,
     ) -> Result<Vec<f32>, String> {
+        self.synthesize_style(phonemes, voice.style_for(phonemes), speed)
+    }
+
+    /// One sentence with the voice's style row already chosen (`STYLE_DIM`
+    /// floats, `VoicePack::style_for`): the Android engine gets the row over
+    /// the socket from the main process, which holds the voice tables.
+    pub fn synthesize_style(
+        &mut self,
+        phonemes: &str,
+        style: &[f32],
+        speed: f32,
+    ) -> Result<Vec<f32>, String> {
+        if style.len() != STYLE_DIM {
+            return Err(err(format!("style row has {} floats, not {STYLE_DIM}", style.len())));
+        }
         let ids = tokenize(phonemes)?;
         let n = ids.len();
-        let style = voice.style_for(phonemes).to_vec();
+        let style = style.to_vec();
         let inputs = ort::inputs! {
             "input_ids" => Tensor::from_array(([1usize, n], ids)).map_err(err)?,
             "style" => Tensor::from_array(([1usize, STYLE_DIM], style)).map_err(err)?,
