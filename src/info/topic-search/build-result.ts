@@ -18,7 +18,7 @@
 import { throwIfAborted } from "../../platform/app/abort";
 import { MaterialRegistry } from "../dossier/registry";
 import { dedupeBatch, type Headline } from "../rank/dedupe";
-import { currentEventKey, eventKeyOfUrl, type EventCluster } from "../rank/events";
+import { arxivEventKey, currentEventKey, eventKeyOfUrl, type EventCluster } from "../rank/events";
 import { isShortLink, paperKeyOfUrl, unwrapLink } from "../rank/link-identity";
 import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
@@ -57,6 +57,7 @@ import {
   type ResultRunKind,
   type ResultStats,
   type ResultVerify,
+  type HubFacts,
   type TopicSearchResult,
   type TopicSearchResultItem,
 } from "./result-types";
@@ -274,6 +275,14 @@ function subtopicOf(draft: Draft): string | null {
   return draft.members.find((m) => m.subtopic)?.subtopic ?? null;
 }
 
+/** The Hub's facts for an item: its lead paper's, else the first paper of it the Hub found; undefined when none. */
+export function hubOfDraft(draft: Draft): HubFacts | undefined {
+  const papers = draft.members.map((m) => m.cand.paper).filter((p): p is NonNullable<typeof p> => !!p?.hub);
+  const lead = papers.find((p) => arxivEventKey(p.id) === draft.cluster.lead.key);
+  const hub = (lead ?? papers[0])?.hub;
+  return hub ? { ...hub } : undefined;
+}
+
 /** How the selection sees a draft; a continuing item fills neither reservation. */
 const DRAFT_VIEW: SelectView<Draft> = {
   score: (d) => d.score,
@@ -327,6 +336,12 @@ export function targetsOf(draft: Draft, keyOfUrl: (url: string) => string | null
   for (const event of draft.cluster.events) {
     const url = event.members.find((m) => m.mainUrl)?.mainUrl ?? null;
     add(event.key, url);
+  }
+  // The repository the Hub names for a paper is that paper's original after the paper.
+  for (const m of draft.members) {
+    const repo = m.cand.paper?.hub?.repo;
+    const key = repo ? eventKeyOfUrl(repo) : null;
+    if (repo && key?.startsWith("github:")) add(key, repo);
   }
   // A post that is its own content still points at its paper or repository: that is its original.
   for (const m of draft.members) {
@@ -653,6 +668,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       }
     }
     const fromPost = leadPost ? cut120(`${leadPost.name || `@${leadPost.handle}`}: ${firstSentence(leadPost.text)}`) : lead.text;
+    const hub = hubOfDraft(d);
     items.push({
       id,
       key: lead.key,
@@ -665,6 +681,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       body: [],
       unknown: null,
       facts,
+      ...(hub ? { hub } : {}),
       links: { original, posts: d.posts },
       materials,
       verify,

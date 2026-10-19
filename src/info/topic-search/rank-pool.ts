@@ -20,6 +20,8 @@ const DAY_MS = 86_400_000;
 import type { XSearchPost } from "../x/search-page";
 import { postLinksOut } from "../x/text-links";
 import { cut, letter, material, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
+import { HUB_RULE, hubLines } from "./hub-line";
+import type { HubFacts } from "./result-types";
 import type { TopicQuery, TopicSearch } from "./types";
 import type { XReadResult } from "./x-reader";
 
@@ -49,14 +51,7 @@ export interface PaperInfo {
   hub?: HubFacts;
 }
 
-/** A Hub paper row's own facts (huggingface.ts searchItem). */
-export interface HubFacts {
-  repo?: string;
-  stars?: number;
-  upvotes?: number;
-  projectPage?: string;
-  aiSummary?: string;
-}
+export type { HubFacts };
 
 export type CandidateSource = "x" | "arxiv" | "huggingface";
 
@@ -364,7 +359,7 @@ export function rerankPrompt(
   language: string,
 ): { system: string; user: string } {
   const system = [
-    "You rank what a topic search found for a reader: posts from X and papers from arXiv.",
+    "You rank what a topic search found for a reader: posts from X and papers from arXiv and Hugging Face.",
     "For every candidate answer one object {c, score, main, subtopic, doubt}:",
     "- c: the candidate's number as given (c1, c2 …).",
     "- score: 0-100, how well it serves the topic as the reader defined it (scope, subtopics, wants, does-not-wants, the query questions). Promotion, event hype, giveaways and engagement bait score under 20.",
@@ -372,6 +367,7 @@ export function rerankPrompt(
     "- subtopic: the id of the subtopic it belongs to, or null.",
     "- doubt: only when you cannot tell whether the reader wants this kind of thing, one short question to ask them (\"Do you want funding news about AI chip design?\"); otherwise null.",
     "Use only the numbers given. Answer with JSON only: {\"items\": [ … ]}.",
+    HUB_RULE,
     UNTRUSTED_RULE,
     language,
   ]
@@ -384,7 +380,12 @@ export function rerankPrompt(
       const authors = c.paper.authors.slice(0, 3).join(", ") + (c.paper.authors.length > 3 ? " et al." : "");
       return material(
         n.c,
-        `${n.c} · paper · ${authors} · ${day(c.at)} · arXiv ${c.paper.id} · queries ${c.queries.join(", ")}\n${c.paper.title}\n${cut(c.paper.abstract, RERANK_TEXT_CHARS)}`,
+        [
+          `${n.c} · paper · ${authors} · ${day(c.at)} · arXiv ${c.paper.id} · queries ${c.queries.join(", ")}`,
+          c.paper.title,
+          cut(c.paper.abstract, RERANK_TEXT_CHARS),
+          ...hubLines(c.paper.hub),
+        ].join("\n"),
       );
     }
     const post = c.post!;

@@ -120,6 +120,20 @@ export interface ResultContinuation {
   after: PostCounts;
 }
 
+/**
+ * What Hugging Face's paper search said of a paper (huggingface.ts searchItem):
+ * reference for the rerank and the write-up, not a score term. The repo and
+ * project page are URLs as the Hub gave them; `aiSummary` is the Hub's
+ * machine-written summary, unchecked.
+ */
+export interface HubFacts {
+  repo?: string;
+  stars?: number;
+  upvotes?: number;
+  projectPage?: string;
+  aiSummary?: string;
+}
+
 export type ResultItemKind = "paper" | "repo" | "page" | "post";
 
 export interface TopicSearchResultItem {
@@ -145,6 +159,8 @@ export interface TopicSearchResultItem {
   /** One sentence on what is not yet known or could not be checked; null when the model had none. */
   unknown?: string | null;
   facts: ResultFacts;
+  /** The Hub's facts of the item's paper, when Hugging Face found it. Absent otherwise, and in files written before 2026-10-19. */
+  hub?: HubFacts;
   /** The original (null when the post is the original) and the posts that led to it. */
   links: { original: string | null; posts: ResultPost[] };
   /** Materials registered for this item, "M3". */

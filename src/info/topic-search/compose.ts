@@ -18,6 +18,7 @@
 // That round happens once and is not one of the two tries at the write-up.
 
 import type { MaterialRegistry, RegisteredMaterial } from "../dossier/registry";
+import { HUB_RULE, hubLine, hubLines } from "./hub-line";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE, type TopicModel } from "./model-io";
 import { topicBlock } from "./rank-pool";
 import type { PaperDepth, ResultFacts, ResultRunKind, TopicSearchResultItem } from "./result-types";
@@ -156,6 +157,8 @@ function itemSources(item: TopicSearchResultItem, registry: MaterialRegistry, ea
     ...earlier.map((e) => e.summary),
     item.title,
     factsText(item.facts),
+    // The Hub's counts may be cited; its machine-written summary may not.
+    hubLine(item.hub) ?? "",
     ...item.links.posts.map((p) => p.text),
     ...item.materials.map((m) => registry.text(m) ?? ""),
     // The prompt shows each material's title and section headings too.
@@ -189,6 +192,7 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
       : []),
     "Rules: skip promotion, event hype and engagement bait; tell a thread as one piece; tell a quoting post together with what it quotes; where an item lists a discrepancy, say what the original actually shows, not what the post claimed.",
     "Every number and date you write must appear in the materials, posts or facts of the items you cite. Never derive one (no sums, no differences, no rounding).",
+    `${HUB_RULE} You may mention the attention and the repository where they tell the reader something.`,
     "A paper item says how much of the paper was read. Conclude only from the part read: what its method does or what its results show beyond that is not known to you, so say so in unknown and never guess it.",
     ...(offer.length
       ? [
@@ -204,7 +208,7 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     .filter(Boolean)
     .join("\n");
   const blocks = input.items.map((item) => {
-    const lines = [`${item.id} · ${item.kind}${item.subtopic ? ` · subtopic ${item.subtopic}` : ""}${item.continuing ? " · continuing" : ""}`, `Title: ${item.title}`, `Facts: ${factsText(item.facts)}`];
+    const lines = [`${item.id} · ${item.kind}${item.subtopic ? ` · subtopic ${item.subtopic}` : ""}${item.continuing ? " · continuing" : ""}`, `Title: ${item.title}`, `Facts: ${factsText(item.facts)}`, ...hubLines(item.hub)];
     if (item.continuing) {
       const b = item.continuing.before;
       const a = item.continuing.after;
