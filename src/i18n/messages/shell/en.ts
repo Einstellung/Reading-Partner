@@ -51,7 +51,9 @@ export default {
   "lumen.hide": "Hide Lumen",
   "lumen.needsDecision": "Needs a decision",
   "lumen.callCardClose": "Close",
-  "lumen.tapToChat": "Lumen: tap to chat, hold to talk",
+  "lumen.tapToChat": "Lumen: tap to chat",
+  "lumen.inCall": "Lumen: open the conversation (the voice chat goes on)",
+  "lumen.hangUp": "End voice chat",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
@@ -61,6 +63,13 @@ export default {
   "door.dropQuote": "Remove the passage",
   "door.empty": "What's on your mind?",
   "door.placeholder": "Message Lumen…",
+  "door.voiceStart": "Voice chat",
+  "door.voiceEnd": "End voice chat",
+  "door.voiceNoDevice": "This device can't hold a voice chat.",
+  "door.voiceNoContext": "Voice chat starts from the briefing page.",
+  "door.voiceListening": "Listening",
+  "door.voiceThinking": "Thinking",
+  "door.voiceSpeaking": "Speaking",
   "door.failed": "Couldn't start this reply.",
 
   // The box's cards: where each item came from, and the case's own label.

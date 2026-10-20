@@ -82,6 +82,42 @@ export function IconArea({ size = 20 }: IconProps) {
 	);
 }
 
+// An audio waveform: five rounded vertical bars. Voice chat with Lumen.
+export function IconWave({ size = 22 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.4"
+			strokeLinecap="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M4 10v4M8 6v12M12 8.5v7M16 4v16M20 10v4" />
+		</svg>
+	);
+}
+
+// A heavy X: ending a voice chat.
+export function IconEnd({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.6"
+			strokeLinecap="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M6 6l12 12M18 6L6 18" />
+		</svg>
+	);
+}
+
 // Plain X.
 export function IconClose({ size = 16 }: IconProps) {
 	return (

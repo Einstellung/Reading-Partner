@@ -88,6 +88,11 @@ interface CallViewProps {
 	// A strip directly above the composer, in both the empty state and the full
 	// one: the lesson's two standing chips. Absent = nothing there.
 	footer?: ReactNode;
+	// Beside the composer, outside its field: the door's voice chat button.
+	beside?: ReactNode;
+	// Drawn in the composer's place while it stands: the door's voice bar during
+	// a call, when there is no typing.
+	replaceComposer?: ReactNode;
 }
 
 // The scope's box without the zoom, so the tree is the same shape either way.
@@ -119,6 +124,8 @@ export default function CallView({
 	stickKey,
 	header,
 	footer,
+	beside,
+	replaceComposer,
 }: CallViewProps) {
 	const empty = messages.length === 0;
 	// The shell's claim on the bottom edge, where this view was not handed one.
@@ -150,6 +157,17 @@ export default function CallView({
 		</Button>
 	);
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
+	// The composer, or what stands in its place, with whatever goes beside it.
+	const composerRow = (field: string) => {
+		const composer = replaceComposer ?? <Composer onSend={onSend} placeholder={field} pill {...composerProps} />;
+		if (!beside) return composer;
+		return (
+			<div className="flex items-center gap-2">
+				<div className="min-w-0 flex-1">{composer}</div>
+				{beside}
+			</div>
+		);
+	};
 	// Reserve space for the soft keyboard so the bottom composer stays above it.
 	// box-sizing:border-box shrinks the flex column by this padding, so the message
 	// list gives up the room and the composer rises. None on desktop.
@@ -215,7 +233,7 @@ export default function CallView({
 						ref={composerSlot}
 					>
 						{footer}
-						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
+						{composerRow(placeholder)}
 						{intents && intents.length > 0 && (
 							<IntentChips intents={intents} onPick={onSend} className="mt-3 justify-center" />
 						)}
@@ -248,7 +266,7 @@ export default function CallView({
 					<div key={composerKey} className={`px-4 ${keyboard.up ? 'pb-2' : 'pb-6'}`} ref={composerSlot}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							{footer}
-							<Composer onSend={onSend} placeholder={t('chat.call.reply')} pill {...composerProps} />
+							{composerRow(t('chat.call.reply'))}
 						</div>
 					</div>
 				</Scope>

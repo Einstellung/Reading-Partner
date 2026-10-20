@@ -36,7 +36,9 @@ export default {
   "lumen.hide": "Lumen ausblenden",
   "lumen.needsDecision": "Entscheidung nötig",
   "lumen.callCardClose": "Schließen",
-  "lumen.tapToChat": "Lumen: tippen zum Schreiben, halten zum Sprechen",
+  "lumen.tapToChat": "Lumen: tippen zum Schreiben",
+  "lumen.inCall": "Lumen: Unterhaltung öffnen (der Sprachchat läuft weiter)",
+  "lumen.hangUp": "Sprachchat beenden",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
@@ -46,6 +48,13 @@ export default {
   "door.dropQuote": "Zitat entfernen",
   "door.empty": "Was beschäftigt dich?",
   "door.placeholder": "Nachricht an Lumen…",
+  "door.voiceStart": "Sprachchat",
+  "door.voiceEnd": "Sprachchat beenden",
+  "door.voiceNoDevice": "Dieses Gerät kann keinen Sprachchat führen.",
+  "door.voiceNoContext": "Der Sprachchat startet auf der Briefing-Seite.",
+  "door.voiceListening": "Hört zu",
+  "door.voiceThinking": "Denkt nach",
+  "door.voiceSpeaking": "Spricht",
   "door.failed": "Diese Antwort konnte nicht starten.",
 
   "box.bookFallback": "Ein Buch",

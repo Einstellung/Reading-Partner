@@ -1,4 +1,5 @@
-// What a hold on Lumen would talk about, published by whichever screen has it.
+// What a voice call with Lumen would talk about, published by whichever screen
+// has it.
 //
 // The corner is mounted at shell level, outside every screen (App.tsx,
 // PhoneApp.tsx), and the thing a voice session needs — which day's thread, the
@@ -41,7 +42,7 @@ export function registerVoiceContext(context: VoiceContext): () => void {
   };
 }
 
-/** What a hold would talk about right now, or null where nothing can be said. */
+/** What a call would talk about right now, or null where nothing can be said. */
 export function getVoiceContext(): VoiceContext | null {
   return current;
 }

@@ -36,7 +36,9 @@ export default {
   "lumen.hide": "Lumen を隠す",
   "lumen.needsDecision": "判断が必要です",
   "lumen.callCardClose": "閉じる",
-  "lumen.tapToChat": "Lumen：タップでチャット、長押しで話す",
+  "lumen.tapToChat": "Lumen：タップでチャット",
+  "lumen.inCall": "Lumen：会話を開く（音声チャットは続きます）",
+  "lumen.hangUp": "音声チャットを終了",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
@@ -46,6 +48,13 @@ export default {
   "door.dropQuote": "引用を外す",
   "door.empty": "何か話したいことは？",
   "door.placeholder": "Lumen にメッセージ…",
+  "door.voiceStart": "音声チャット",
+  "door.voiceEnd": "音声チャットを終了",
+  "door.voiceNoDevice": "この端末では音声チャットができません。",
+  "door.voiceNoContext": "音声チャットはブリーフィングのページから始めます。",
+  "door.voiceListening": "聞いています",
+  "door.voiceThinking": "考えています",
+  "door.voiceSpeaking": "話しています",
   "door.failed": "返信を始められませんでした。",
 
   "box.bookFallback": "ある本",

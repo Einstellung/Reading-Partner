@@ -46,10 +46,9 @@ export const CORNER_REST_PX = 24;
 export const TOP_KEEP_PX = 64;
 
 /**
- * How far a press has to travel before it is a drag. Under the hold's own
- * HOLD_MOVE_PX (hold-toggle.ts), so that a press which becomes a drag has not
- * yet been let go of by the hold: the corner cancels the hold on the same move
- * that starts the drag, and the two never both act on one press.
+ * How far a press has to travel before it is a drag. A press that stays under
+ * it is the tap that opens the conversation (lumen-press.ts); one that crosses
+ * it opens nothing.
  */
 export const DRAG_SLOP_PX = 8;
 

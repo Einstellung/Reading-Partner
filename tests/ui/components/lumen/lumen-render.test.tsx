@@ -375,6 +375,24 @@ test("a barge-in takes the queued sentence away", () => {
 // The case (docs/68). Beside an open book the breath loop never starts, so the
 // reach has to bring a frame loop of its own — and hand the body back upright
 // when the case is down.
+test("a call beside a book moves the face, and hanging up puts the resting pose back", () => {
+	// The corner passes `still={inReader && !live}` (LumenCorner): a live call
+	// runs the loop even in the reader, and the end of it makes the body still.
+	const s = session("speaking");
+	const view = render(<Lumen handle={s.handle} still={false} />);
+	frame(0);
+	frame(400);
+	const el = body(view.container);
+	expect(el.style.getPropertyValue("--lumen-mouth-open")).not.toBe("");
+	expect(el.style.getPropertyValue("--lumen-brow")).not.toBe("");
+	view.rerender(<Lumen handle={s.handle} still />);
+	for (const name of ["--lumen-mouth-open", "--lumen-brow", "--lumen-gx", "--lumen-sx", "--lumen-tilt"]) {
+		expect(el.style.getPropertyValue(name)).toBe("");
+	}
+	// And the loop that wrote them is cancelled, not left to write them again.
+	expect(cancelled.length).toBeGreaterThan(0);
+});
+
 test("a still body goes with the case and comes back", () => {
 	const s = session("idle");
 	const reach = { w: 0 };

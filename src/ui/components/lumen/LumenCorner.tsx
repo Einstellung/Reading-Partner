@@ -14,34 +14,41 @@
 // the custom-property defaults paint is what stands there. The one thing that
 // moves in the reader is the case: something arrives and Lumen pulls it out
 // from behind itself and sets it down, the box empties and it puts it back
-// (case-motion.ts). The eyes and the lean go with it, in the reader too.
+// (case-motion.ts). The eyes and the lean go with it, in the reader too. A live
+// voice call is the exception: the reader is talking to him, so his face moves
+// with the call beside a book as it does everywhere else.
 //
 // The corner is only a way in (2026-10-15). A tap on Lumen or on the case opens
 // his conversation, the day's conversation at the door (DoorChat.tsx): the
 // whole screen on the phone, with Lumen standing down, and a panel standing on
 // Lumen everywhere else, which its expand button fills the shell with. What is
-// in the box is drawn there as cards among the day's rows. A hold on Lumen
-// talks to him — the info voice session — and during a call the same hold ends
-// it; where there is no call to have, the hold does not charge and a long press
-// is a tap. The desktop's right-click is the hold.
+// in the box is drawn there as cards among the day's rows.
+//
+// Voice chat (2026-10-20) starts from the waveform button beside the door's
+// composer and is hands-free: the conversation goes away and the reader talks
+// to Lumen here, whose brows, eyes and mouth follow the call. While it is up a
+// small X hangs on the body's corner away from the case, and one tap on it ends
+// the call. A tap on the body or the case opens the conversation without ending
+// it; there the composer is the call's state and its End button. A card that
+// wants a tap arriving mid-call brings the conversation up on its own.
 //
 // The body is also the handle it is dragged by (corner-drag.ts). One press
-// feeds both machines and the first one to claim it wins: past the slop it is a
-// drag, and the hold is cancelled on that same move, so a press that travels
-// never opens a call and a press that stays never moves the corner. Dragged to
-// the left edge the whole corner is mirrored — the case to the body's right,
-// the badge on its outer corner, the panel standing on the left — which is one
-// transform on the box the two stand in rather than a second composition.
+// feeds both: past the slop it is a drag and opens nothing, and a press that
+// never travels is the tap (lumen-press.ts). Dragged to the left edge the whole
+// corner is mirrored — the case to the body's right, the badge on its outer
+// corner, the hang-up on the body's other corner, the panel standing on the
+// left — which is one transform on the box they stand in rather than a second
+// composition.
 //
 // The session is the info screen's. What it would be about is published by
 // whichever screen holds it (voice-context.ts) and the call is built here, so
-// it outlives the screen it was opened from and can be hung up from anywhere.
+// it outlives the screen it was opened from and the conversation it was started
+// in, and can be hung up from anywhere.
 //
-// A call that never got going says so. The hold charges and buzzes before
-// anything is known about the microphone, and iOS can refuse it outright, so a
-// failure with nothing on screen is a hold that swallowed the gesture. The one
-// line stacks over the body the way the briefing's layer drew it (ErrorLine),
-// and takes no presses: the way back is another hold, on the body behind it.
+// A call that never got going says so. iOS can refuse the microphone outright,
+// so a failure with nothing on screen is a tap that swallowed the gesture. The
+// one line stacks over the body the way the briefing's layer drew it
+// (ErrorLine), and takes no presses.
 
 import { CallResultCard } from "./CallResultCard";
 import {
@@ -51,7 +58,6 @@ import {
 	useRef,
 	useState,
 	useSyncExternalStore,
-	type MouseEvent,
 	type PointerEvent,
 } from "react";
 
@@ -70,20 +76,21 @@ import { panelOnKeyboard } from "./door-panel";
 import { ErrorLine } from "./ErrorLine";
 import { Lumen, LumenCase } from "./Lumen";
 import { DoorChat, type DoorBox } from "./DoorChat";
-import { PRESS_REST, lumenPressStep, startsHold, type LumenPressEffect, type LumenPressInput } from "./lumen-press";
-import { useHoldToggle } from "./use-hold-toggle";
+import { PRESS_REST, lumenPressStep, startsPress, type LumenPressInput } from "./lumen-press";
 import { useVoiceCall, voiceCallHandle } from "./use-voice-call";
 import { getVoiceContext, subscribeVoiceContext, type VoiceContext } from "./voice-context";
 import { badgeCount, caseLabel } from "./box-cards";
 import { useBoxItems } from "./use-box-items";
+import { arrivedItem, carriesCard, voiceEntry } from "./door-voice";
+import { onThreadMessage } from "../../../platform/app/threads";
+import { doorDate, doorKey } from "../../../soul";
+import { IconEnd } from "../base/icons";
+import { Button } from "../ui/button";
 import { useCaseMotion } from "./use-case-motion";
 import { useCornerDrag } from "./use-corner-drag";
 import { doorFocusKey, planItemJump, stateAfterFollow, staysUntilDecided, type DoorFocus, type Place, type Shell } from "./box-jump";
 import type { IntakeOpenDocument } from "./intake-view";
 import { getOpenIssue, opensDoor, subscribeAskLumen, subscribeOpenIssue, type IssueQuote } from "./issue-context";
-
-// What the body is announced as during a call: the hold that ends it.
-const HOLD_TO_END = "Hold to end the conversation";
 
 /** What the shell can do about a card, in the shell's own terms. */
 export interface LumenJumpTargets {
@@ -160,7 +167,7 @@ export function LumenCorner({
 	// (use-case-motion.ts).
 	const motion = useCaseMotion(count);
 
-	// What a hold would talk about, as whichever screen holds it publishes it.
+	// What a call would talk about, as whichever screen holds it publishes it.
 	const [context, setContext] = useState<VoiceContext | null>(getVoiceContext);
 	useEffect(() => subscribeVoiceContext(() => setContext(getVoiceContext())), []);
 
@@ -172,14 +179,14 @@ export function LumenCorner({
 		briefing: context?.briefing ?? null,
 	});
 	const live = call.phase !== "idle";
-	// A host that cannot speak has nothing to hold for — the whole audio path is
-	// the iOS plugin's (docs/33) — and neither has a screen with nothing to talk
-	// about, unless the call the hold would end is already up. There the body
-	// does not charge, and a long press is a press.
+	// A host that cannot speak has no call to have — the whole audio path is
+	// native (docs/33) — and neither has a screen with nothing to talk about,
+	// unless the call is already up. There the door's voice button is grey.
 	// Read through the capability store: on Android the answer lands after first
 	// paint, and the entry has to come out with it (docs/companion/89).
 	const speaks = useSyncExternalStore(subscribeVoiceCapability, hasNativeSpeech);
 	const canTalk = speaks && (live || context !== null);
+	const entry = voiceEntry(speaks, context !== null);
 	const handle = voiceCallHandle(call);
 	const t = useT();
 	const [door, setDoor] = useState<DoorOpen | null>(null);
@@ -240,72 +247,69 @@ export function LumenCorner({
 		setQuote(null);
 	}, []);
 
-	// What a press decided. Read at the moment it lands, not at the render the
-	// press began in.
-	const act = useCallback(
-		(effect: LumenPressEffect) => {
-			if (effect === "hang-up") {
-				stop();
-				void voiceStopFeedback();
-			} else if (effect === "voice") {
-				if (!getVoiceContext()) return;
-				start();
-				void voiceStartFeedback();
-			} else if (effect === "open-door") openDoor();
-		},
-		[start, stop, openDoor],
+	// Voice chat, from the door's button: the call starts and the conversation
+	// goes away, so the reader talks to Lumen in the corner. Where the corner is
+	// hidden there is no body to talk to, and the conversation stays up with
+	// the call's End in it.
+	const startVoice = useCallback(() => {
+		if (!getVoiceContext()) return;
+		start();
+		void voiceStartFeedback();
+		if (shown) closeDoor();
+	}, [start, shown, closeDoor]);
+	const endVoice = useCallback(() => {
+		stop();
+		void voiceStopFeedback();
+	}, [stop]);
+
+	// A card that wants the reader's tap, arriving while a call is up, brings the
+	// conversation up on it; the call carries on. Two ways one arrives: a new
+	// item in the box (drawn there as a card), or a card appended to today's
+	// conversation (an intake's topic choice, a brief's questions).
+	const seenRef = useRef<Set<string> | null>(null);
+	useEffect(() => {
+		const arrived = seenRef.current && live ? arrivedItem(seenRef.current, box.items) : null;
+		seenRef.current = new Set(box.items.map((item) => item.id));
+		if (arrived) openDoor();
+	}, [box.items, live, openDoor]);
+	useEffect(
+		() =>
+			onThreadMessage((append) => {
+				if (liveRef.current && append.key === doorKey(doorDate()) && carriesCard(append.message)) openDoor();
+			}),
+		[openDoor],
 	);
-	// The press's state, stepped synchronously: a late fire and the release
-	// that follows it arrive in one event.
+
+	// The press's state, stepped synchronously: the release and the click that
+	// follows it arrive in one event.
 	const pressState = useRef(PRESS_REST);
 	const press = useCallback(
 		(input: LumenPressInput) => {
 			const step = lumenPressStep(pressState.current, input);
 			pressState.current = step.state;
-			act(step.effect);
+			if (step.effect === "open-door") openDoor();
 		},
-		[act],
-	);
-	const pressContext = useCallback(
-		() => ({ live: liveRef.current, canVoice: hasNativeSpeech() && getVoiceContext() !== null }),
-		[],
+		[openDoor],
 	);
 
-	const fire = useCallback(() => press({ kind: "fired", ...pressContext() }), [press, pressContext]);
-	const hold = useHoldToggle(canTalk, fire);
-
-	// One press and two machines to feed. The drag answers first: the move that
-	// carries the press past the slop is the move the hold is told to let go on,
-	// so a press ends as a drag or as a hold and never as both, and a press that
-	// never travels is the hold, or the tap, it always was.
+	// One press and two readings of it: the drag answers first, and the move
+	// that carries the press past the slop makes it a drag that opens nothing.
 	const handlers = {
 		onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
-			if (!startsHold(event.pointerType, event.button)) return;
+			if (!startsPress(event.pointerType, event.button)) return;
 			press({ kind: "down" });
 			drag.onPointerDown(event);
-			hold.handlers.onPointerDown(event);
 		},
 		onPointerMove: (event: PointerEvent<HTMLButtonElement>) => {
-			if (drag.onPointerMove(event)) {
-				hold.handlers.onPointerCancel(event);
-				press({ kind: "dragged" });
-			} else hold.handlers.onPointerMove(event);
+			if (drag.onPointerMove(event)) press({ kind: "dragged" });
 		},
 		onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
 			drag.onPointerUp(event);
-			// A release past full charge that no frame saw fires here, before the
-			// press hears the release.
-			hold.handlers.onPointerUp(event);
 			press({ kind: "up" });
 		},
 		onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
 			drag.onPointerCancel(event);
-			hold.handlers.onPointerCancel(event);
 			press({ kind: "cancel" });
-		},
-		onContextMenu: (event: MouseEvent<HTMLButtonElement>) => {
-			hold.handlers.onContextMenu(event);
-			press({ kind: "context", ...pressContext() });
 		},
 	};
 
@@ -405,6 +409,7 @@ export function LumenCorner({
 			onQuoteDone={() => setQuote(null)}
 			box={doorBox}
 			onOpenDocument={openDocument}
+			voice={{ live, phase: call.phase, entry, onStart: startVoice, onEnd: endVoice }}
 			onClose={closeDoor}
 		/>
 	);
@@ -458,31 +463,47 @@ export function LumenCorner({
 				style={mirrored ? { transform: "scaleX(-1)" } : undefined}
 			>
 				<Lumen
-					ref={hold.ref}
 					handle={handle}
 					attention={call.attention}
 					// Beside an open book nothing moves but the case and the hands on
-					// it (docs/68).
-					still={inReader}
+					// it (docs/68), unless a call is up: then his face is the call.
+					still={inReader && !live}
 					reach={motion.reach}
 					reaching={motion.moving}
-					label={live ? HOLD_TO_END : t("shell.lumen.tapToChat")}
-					aria-haspopup={live ? undefined : "dialog"}
-					aria-expanded={live ? undefined : door !== null}
+					label={live ? t("shell.lumen.inCall") : t("shell.lumen.tapToChat")}
+					aria-haspopup="dialog"
+					aria-expanded={door !== null}
 					// The tap. A keyboard's Enter lands here too, with no press
-					// before it; a press that was a drag or a hold swallows the
-					// click its release brings (lumen-press.ts).
+					// before it; a press that was a drag swallows the click its
+					// release brings (lumen-press.ts).
 					onActivate={() => press({ kind: "click" })}
 					// Which way round the body is drawn, so the eyes still follow
 					// the real pointer through the mirror.
 					mirrored={mirrored}
-					// `touch-none`, `select-none` and the callout off: a hold on iOS
-					// otherwise raises the system callout and starts a selection over
-					// the body (docs/pitfall/49, 262). Unconditional — the body takes
-					// a press everywhere, because everywhere it can be dragged.
+					// `touch-none`, `select-none` and the callout off: a long touch on
+					// iOS otherwise raises the system callout and starts a selection
+					// over the body (docs/pitfall/49, 262). Unconditional — the body
+					// takes a press everywhere, because everywhere it can be dragged.
 					className="h-18 w-18 pointer-events-auto touch-none select-none [-webkit-touch-callout:none]"
 					{...handlers}
 				/>
+				{/* The hang-up, on the body's top corner away from the case (which
+				    hangs off the left edge, its count on its own outer corner), so
+				    the two never meet; the corner's mirror carries it to the other
+				    side with the case. One tap ends the call. */}
+				{live && (
+					<Button
+						type="button"
+						variant="end"
+						size="badge"
+						aria-label={t("shell.lumen.hangUp")}
+						title={t("shell.lumen.hangUp")}
+						onClick={endVoice}
+						className="pointer-events-auto absolute -right-1.5 -top-1.5 z-10 border-2 border-background"
+					>
+						<IconEnd size={14} />
+					</Button>
+				)}
 				{motion.drawn && (
 					<button
 						ref={motion.caseRef}

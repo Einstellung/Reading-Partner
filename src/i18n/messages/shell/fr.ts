@@ -36,7 +36,9 @@ export default {
   "lumen.hide": "Masquer Lumen",
   "lumen.needsDecision": "Décision à prendre",
   "lumen.callCardClose": "Fermer",
-  "lumen.tapToChat": "Lumen : touchez pour écrire, maintenez pour parler",
+  "lumen.tapToChat": "Lumen : touchez pour écrire",
+  "lumen.inCall": "Lumen : ouvrir la conversation (le chat vocal continue)",
+  "lumen.hangUp": "Terminer le chat vocal",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
@@ -46,6 +48,13 @@ export default {
   "door.dropQuote": "Retirer la citation",
   "door.empty": "Qu'avez-vous en tête ?",
   "door.placeholder": "Écrire à Lumen…",
+  "door.voiceStart": "Chat vocal",
+  "door.voiceEnd": "Terminer le chat vocal",
+  "door.voiceNoDevice": "Cet appareil ne peut pas tenir de chat vocal.",
+  "door.voiceNoContext": "Le chat vocal se lance depuis la page du briefing.",
+  "door.voiceListening": "À l'écoute",
+  "door.voiceThinking": "Réfléchit",
+  "door.voiceSpeaking": "Parle",
   "door.failed": "Impossible de lancer cette réponse.",
 
   "box.bookFallback": "Un livre",

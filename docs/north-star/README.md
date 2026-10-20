@@ -9,7 +9,7 @@
 - [epub](./epub.md) — EPUB 支持,方案见 [39](../reading/39-epub支持调研.md)
 - [phone-reading](./phone-reading.md) — 手机阅读：碎片时间的续读；还没做的是翻页的跨屏划线、划线附一句话、书里的 pull-to-ask、听、书内搜索等小件
 - [observations](./observations.md) — 仍留在北极星的只有主动联想,其余四项已随 M8 转正
-- [companion](./companion.md) — 形象与养成:形象是 Lumen([66](../companion/66-Lumen.md)),已落地,长按开语音会话([68](../companion/68-Lumen与盒子的交互.md));逗弄、养成推后;主动说话不推后
+- [companion](./companion.md) — 形象与养成:形象是 Lumen([66](../companion/66-Lumen.md)),已落地,对话窗的波形按钮开语音会话([68](../companion/68-Lumen与盒子的交互.md));逗弄、养成推后;主动说话不推后
 - [podcast-video](./podcast-video.md) — 访谈视频:只接 YouTube,播客不做,接法定在 [56](../info/56-YouTube访谈接入.md)
 - [diet](./diet.md) — 饮食规划:省事和健康都是硬约束、不腻是区别所在,主件是周计划加购物清单,计划就是记录;第一片([73](../info/73-三餐：周计划、采购单与偏离.md))已在当前发布版里,设置里默认关,手机有三餐屏;六点推送和体重趋势回调还没做
 - [fitness](./fitness.md) — 健身线：将来和三餐并列，共用身体资料和训练日；现在三餐里训练只是输入（哪几天、什么时段），不管练什么；等三餐克数算法改完、跑顺几周再开

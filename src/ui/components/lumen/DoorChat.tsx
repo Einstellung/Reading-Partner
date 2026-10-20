@@ -25,6 +25,16 @@
 // which stands down for it (LumenCorner). The panel's expand button fills the
 // shell with it and the same button brings it back; the page under it never
 // moves.
+//
+// Voice chat is entered here (2026-10-20): the round waveform button beside the
+// composer starts a hands-free call and puts the conversation away, and the
+// reader talks to Lumen in the corner. The call is the corner's, not this
+// view's, so closing this leaves it running. Opened during a call, the composer
+// is a bar that says what the call is doing and the button beside it ends the
+// call; there is no typing while one is up. What is said in the call is written
+// into today's conversation as it settles (info/briefer/call-transcript.ts) and
+// arrives here like any other line. Where a call cannot start the button is
+// grey, and a tap on it says why in one line (door-voice.ts).
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
@@ -38,7 +48,7 @@ import { BOX_CARD_DISMISS_OP, BOX_CARD_FOLLOW_OP } from "../../../box/card";
 import type { BoxItem } from "../../../box/types";
 import { useT } from "../../../i18n";
 import { doorDate } from "../../../soul";
-import { IconClose, IconExpand, IconShrink } from "../base/icons";
+import { IconClose, IconEnd, IconExpand, IconShrink, IconWave } from "../base/icons";
 import type { CardAction } from "../chat/chatParts";
 import CallView from "../chat/call/CallView";
 import { holdInView, revealSent } from "../common/stick-to-bottom";
@@ -53,6 +63,8 @@ import { doorFocusSelector, type DoorFocus } from "./box-jump";
 import lumenIcon from "./lumen-icon.webp";
 import type { IntakeOpenDocument } from "./intake-view";
 import { useDoorChat } from "./use-door-chat";
+import { voiceOffLine, voicePhaseLine, type VoiceEntry } from "./door-voice";
+import type { SessionPhase } from "../../../soul/voice/voice-session";
 
 /** The box, as the corner reads it and acts on it. */
 export interface DoorBox {
@@ -64,6 +76,19 @@ export interface DoorBox {
 	/** One line about the last card followed, when it could not be followed here. */
 	note: string | null;
 }
+
+/** Voice chat with Lumen, as the corner holds it (LumenCorner). */
+export interface DoorVoice {
+	/** A call is up. */
+	live: boolean;
+	phase: SessionPhase;
+	entry: VoiceEntry;
+	onStart(): void;
+	onEnd(): void;
+}
+
+// How long the greyed button's one line stays up.
+const VOICE_NOTE_MS = 4000;
 
 // How long the sheet takes to go once a pull lets it go.
 const SHEET_OUT_MS = 200;
@@ -81,6 +106,7 @@ export function DoorChat({
 	openedFor,
 	quote = null,
 	onQuoteDone,
+	voice,
 	onClose,
 }: {
 	form: "sheet" | "panel";
@@ -103,6 +129,8 @@ export function DoorChat({
 	quote?: IssueQuote | null;
 	/** The passage was sent or put away. */
 	onQuoteDone?: () => void;
+	/** Voice chat: the button beside the composer, and the bar in its place during a call. */
+	voice?: DoorVoice;
 	onClose: () => void;
 }) {
 	const t = useT();
@@ -254,6 +282,60 @@ export function DoorChat({
 		};
 	}, [openedFor, chat.messages, cameUpAt]);
 
+	// The greyed button's reason, up for a moment after a tap on it.
+	const [voiceNote, setVoiceNote] = useState<string | null>(null);
+	useEffect(() => {
+		if (!voiceNote) return;
+		const timer = window.setTimeout(() => setVoiceNote(null), VOICE_NOTE_MS);
+		return () => window.clearTimeout(timer);
+	}, [voiceNote]);
+	const voiceLive = voice?.live ?? false;
+	const voiceButton = voice ? (
+		voice.live ? (
+			<Button
+				type="button"
+				variant="end"
+				size="voice"
+				aria-label={t("shell.door.voiceEnd")}
+				title={t("shell.door.voiceEnd")}
+				onClick={voice.onEnd}
+				className="shrink-0"
+			>
+				<IconEnd />
+			</Button>
+		) : (
+			<Button
+				type="button"
+				variant={voice.entry.kind === "ready" ? "voice" : "voice-off"}
+				size="voice"
+				aria-label={t("shell.door.voiceStart")}
+				title={t("shell.door.voiceStart")}
+				// Not `disabled`: a tap on the grey button is how the reader learns why.
+				aria-disabled={voice.entry.kind === "ready" ? undefined : true}
+				onClick={() => {
+					if (voice.entry.kind === "ready") {
+						setVoiceNote(null);
+						voice.onStart();
+					} else setVoiceNote(t(voiceOffLine(voice.entry.reason)));
+				}}
+				className="shrink-0"
+			>
+				<IconWave />
+			</Button>
+		)
+	) : undefined;
+	// In the composer's place during a call: what the call is doing, in the
+	// pill's own shape.
+	const voiceBar = voice?.live ? (
+		<div
+			role="status"
+			className="box-border flex min-h-13 items-center gap-2.5 rounded-3xl border border-black/10 bg-background px-4 text-[14px] text-foreground shadow-sm"
+		>
+			<span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-blue-500 motion-safe:animate-pulse" />
+			<span>{t(voicePhaseLine(voice.phase))}</span>
+		</div>
+	) : undefined;
+
 	const sizeLabel = full ? t("shell.door.shrink") : t("shell.door.expand");
 	const header = (
 		<div
@@ -300,7 +382,7 @@ export function DoorChat({
 
 	// The passage an Ask in the brief brought, above the composer until it is
 	// sent with the question or put away.
-	const quoteStrip = quote ? (
+	const quoteStrip = quote && !voiceLive ? (
 		<div className="mb-2 flex items-start gap-1 rounded-xl border border-border-subtle bg-background py-1.5 pl-3 pr-1">
 			<p className="m-0 line-clamp-3 flex-1 py-1 text-[13px] italic leading-snug text-muted-foreground">
 				“{quote.text}”
@@ -326,7 +408,20 @@ export function DoorChat({
 				void chat.send(text, quote ?? undefined);
 				if (quote) onQuoteDone?.();
 			}}
-			footer={quoteStrip}
+			footer={
+				voiceNote ? (
+					<>
+						{quoteStrip}
+						<p role="status" className="m-0 mb-2 px-1 text-[12.5px] text-muted-foreground">
+							{voiceNote}
+						</p>
+					</>
+				) : (
+					quoteStrip
+				)
+			}
+			beside={voiceButton}
+			replaceComposer={voiceBar}
 			onHangUp={onClose}
 			streaming={chat.streaming}
 			onStop={chat.stop}

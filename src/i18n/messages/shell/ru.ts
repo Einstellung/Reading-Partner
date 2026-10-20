@@ -36,7 +36,9 @@ export default {
   "lumen.hide": "Скрыть Lumen",
   "lumen.needsDecision": "Требуется решение",
   "lumen.callCardClose": "Закрыть",
-  "lumen.tapToChat": "Lumen: нажмите, чтобы написать, удерживайте, чтобы говорить",
+  "lumen.tapToChat": "Lumen: нажмите, чтобы написать",
+  "lumen.inCall": "Lumen: открыть разговор (голосовой чат продолжается)",
+  "lumen.hangUp": "Завершить голосовой чат",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
@@ -46,6 +48,13 @@ export default {
   "door.dropQuote": "Убрать цитату",
   "door.empty": "О чём думаете?",
   "door.placeholder": "Сообщение для Lumen…",
+  "door.voiceStart": "Голосовой чат",
+  "door.voiceEnd": "Завершить голосовой чат",
+  "door.voiceNoDevice": "На этом устройстве голосовой чат недоступен.",
+  "door.voiceNoContext": "Голосовой чат запускается со страницы брифинга.",
+  "door.voiceListening": "Слушает",
+  "door.voiceThinking": "Думает",
+  "door.voiceSpeaking": "Говорит",
   "door.failed": "Не удалось начать ответ.",
 
   "box.bookFallback": "Какая-то книга",

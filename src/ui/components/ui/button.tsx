@@ -57,6 +57,13 @@ const buttonVariants = cva(
         // Colour stays at the call site: these read as links in running text and
         // take the colour of whatever they sit in.
         link: "border-0 bg-transparent",
+        // Voice chat with Lumen (lumen/DoorChat.tsx): the blue of his light,
+        // greyed where a call cannot start, and the dark end that replaces it
+        // during a call (also the hang-up on his body).
+        voice:
+          "border-0 bg-blue-500 text-white shadow-[0_1px_6px_rgb(59_130_246/0.35)] can-hover:hover:bg-blue-600",
+        "voice-off": "border-0 bg-border text-muted-foreground",
+        end: "border-0 bg-foreground text-background can-hover:hover:opacity-90",
       },
       // Geometry only.
       size: {
@@ -83,6 +90,12 @@ const buttonVariants = cva(
         // A round control floating over a transcript: the jump to its newest
         // message.
         float: "h-9 w-9 rounded-full coarse:h-11 coarse:w-11",
+        // The waveform and End button beside the door's composer: the 44px
+        // circle at every pointer, the field beside it being that tall.
+        voice: "h-11 w-11 rounded-full",
+        // A small round control hung on a corner of Lumen's body (the hang-up).
+        // Its 44px target is a centred pseudo-element that grows outward.
+        badge: `relative h-8 w-8 rounded-full ${HIT_44}`,
         link: `relative p-0 coarse:px-2 coarse:py-1.5 ${HIT_44}`,
       },
     },

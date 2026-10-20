@@ -36,7 +36,9 @@ export default {
   "lumen.hide": "隐藏 Lumen",
   "lumen.needsDecision": "需要你定",
   "lumen.callCardClose": "关闭",
-  "lumen.tapToChat": "Lumen：点一下聊天，长按说话",
+  "lumen.tapToChat": "Lumen：点一下聊天",
+  "lumen.inCall": "Lumen：打开对话（语音聊天继续）",
+  "lumen.hangUp": "结束语音聊天",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
@@ -46,6 +48,13 @@ export default {
   "door.dropQuote": "移除引文",
   "door.empty": "想说点什么？",
   "door.placeholder": "和 Lumen 说点什么…",
+  "door.voiceStart": "语音聊天",
+  "door.voiceEnd": "结束语音聊天",
+  "door.voiceNoDevice": "这台设备不能语音聊天。",
+  "door.voiceNoContext": "语音聊天要从简报页开始。",
+  "door.voiceListening": "在听",
+  "door.voiceThinking": "在想",
+  "door.voiceSpeaking": "在说",
   "door.failed": "这次回复没能开始。",
 
   "box.bookFallback": "一本书",

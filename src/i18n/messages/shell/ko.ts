@@ -36,7 +36,9 @@ export default {
   "lumen.hide": "Lumen 숨기기",
   "lumen.needsDecision": "결정이 필요합니다",
   "lumen.callCardClose": "닫기",
-  "lumen.tapToChat": "Lumen: 탭하면 채팅, 길게 누르면 음성",
+  "lumen.tapToChat": "Lumen: 탭하면 채팅",
+  "lumen.inCall": "Lumen: 대화 열기 (음성 채팅은 계속됩니다)",
+  "lumen.hangUp": "음성 채팅 종료",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
   "door.title": "Lumen",
@@ -46,6 +48,13 @@ export default {
   "door.dropQuote": "인용 빼기",
   "door.empty": "무슨 생각을 하고 있나요?",
   "door.placeholder": "Lumen에게 메시지…",
+  "door.voiceStart": "음성 채팅",
+  "door.voiceEnd": "음성 채팅 종료",
+  "door.voiceNoDevice": "이 기기에서는 음성 채팅을 할 수 없습니다.",
+  "door.voiceNoContext": "음성 채팅은 브리핑 페이지에서 시작합니다.",
+  "door.voiceListening": "듣는 중",
+  "door.voiceThinking": "생각하는 중",
+  "door.voiceSpeaking": "말하는 중",
   "door.failed": "답장을 시작하지 못했어요.",
 
   "box.bookFallback": "어떤 책",

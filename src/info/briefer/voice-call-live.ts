@@ -25,6 +25,8 @@ import { loadSources } from "../sources/source-store";
 import { hasTopicSearches } from "../topic-search/store";
 import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
+import { callTranscriptWriter } from "./call-transcript";
+import { doorDate, doorKey, openDoorThread } from "../../soul";
 import { nativeConversation } from "../../soul/voice/conversation";
 import {
   createVoiceCall,
@@ -119,11 +121,20 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
 
   // The front answers each turn with one short call and hands the rest to the
   // back half (docs/companion/136); the turns are not on the durable runtime.
-  // Lines go to the day's thread as they settle, addressed by their stamp.
+  // Lines go to the day's thread as they settle, addressed by their stamp, and
+  // to today's door conversation, where Lumen's panel shows them
+  // (call-transcript.ts).
   const threadId = anchor.threadId;
   if (!getThread(bookId, threadId)) createThread(bookId, "info", threadId);
-  const stamps = new Map<string, number>();
-  let last = 0;
+  const today = doorDate();
+  const door = await openDoorThread(today);
+  const write = callTranscriptWriter(
+    [
+      { key: bookId, threadId },
+      { key: doorKey(today), threadId: door.id },
+    ],
+    { append: appendMessage, patch: patchThreadMessage, now: Date.now },
+  );
   const place = briefing
     ? `Today's briefing:\n${briefing.mustRead.map((r) => `- ${briefing.items[r.itemId]?.title ?? ""}`).join("\n")}`
     : `No briefing for ${opts.dateKey}.`;
@@ -139,17 +150,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     model: liveFrontModel(),
     backend: back,
     place: () => place,
-    write: ({ key, role, text }) => {
-      const at = stamps.get(key);
-      if (at !== undefined) {
-        patchThreadMessage(bookId, threadId, at, { text });
-        return;
-      }
-      const ts = Math.max(Date.now(), last + 1);
-      last = ts;
-      stamps.set(key, ts);
-      appendMessage(bookId, threadId, { role, text, ts });
-    },
+    write,
     filler,
     locale,
     marks: logMarks,

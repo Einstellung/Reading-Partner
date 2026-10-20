@@ -52,7 +52,7 @@ export interface CornerDrag {
   /** Goes on the corner's outer box: the element a drag moves. */
   frameRef: (el: HTMLElement | null) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-  /** Answers whether the press has become a drag, which is the hold's cue to let go. */
+  /** Answers whether the press has become a drag, which means it is no longer a tap. */
   onPointerMove: (event: ReactPointerEvent<HTMLElement>) => boolean;
   onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
   onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => void;
