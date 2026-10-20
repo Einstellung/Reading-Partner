@@ -100,10 +100,10 @@ class VoiceAudio(context: Context, private val event: (String) -> Unit) {
             )
             record = rec
             if (AcousticEchoCanceler.isAvailable()) {
-                echo = AcousticEchoCanceler.create(rec.audioSessionId)?.also { it.enabled = true }
+                echo = AcousticEchoCanceler.create(rec.audioSessionId)?.also { it.setEnabled(true) }
             }
             if (NoiseSuppressor.isAvailable()) {
-                noise = NoiseSuppressor.create(rec.audioSessionId)?.also { it.enabled = true }
+                noise = NoiseSuppressor.create(rec.audioSessionId)?.also { it.setEnabled(true) }
             }
             openTrack(rec.audioSessionId)
         }
