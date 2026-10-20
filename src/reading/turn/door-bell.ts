@@ -7,6 +7,7 @@
 
 import type { ThreadOrigin } from "../../legion/durable/extension";
 import { replayableHistory } from "../../ai/turn-view/turn-rows";
+import { appendMessage, flushThreads, newThreadMessageId, type ThreadMessage } from "../../platform/app/threads";
 import {
   doorKey,
   doorOrigin,
@@ -14,7 +15,9 @@ import {
   doorWatchingNow,
   openDoorThread,
   prepareDoorTurn,
+  registerReplyAppend,
   registerTurnDelivery,
+  type ReplyAppend,
   type TurnDelivery,
   type TurnDeliveryOutcome,
 } from "../../soul";
@@ -83,16 +86,51 @@ export async function deliverDoorBell(
   );
 }
 
+export interface DoorReplyDeps {
+  openThread(date: string): Promise<{ id: string }>;
+  append(key: string, threadId: string, message: ThreadMessage): void;
+  flush(): Promise<void>;
+}
+
+const appDoorReplyDeps: DoorReplyDeps = {
+  openThread: (date) => openDoorThread(date),
+  append: (key, threadId, message) => {
+    appendMessage(key, threadId, message);
+  },
+  flush: flushThreads,
+};
+
+/**
+ * Append a verbatim run's output (docs/companion/136) to the day's door
+ * conversation as the soul's reply, stamped with the run it came back from.
+ */
+export async function appendDoorReply(input: ReplyAppend, deps: DoorReplyDeps = appDoorReplyDeps): Promise<boolean> {
+  if (input.origin.place !== "door") return false;
+  const { date } = input.origin;
+  const thread = await deps.openThread(date);
+  deps.append(doorKey(date), thread.id, {
+    id: newThreadMessageId(),
+    role: "ai",
+    text: input.text,
+    ts: input.at,
+    origin: { runId: input.runId },
+  });
+  await deps.flush();
+  return true;
+}
+
 /**
  * Say that a bell with nowhere else to go is answered at the door, and that a
- * think run handed off from a call there gets the door's reads (door-think.ts).
- * The undo is for tests.
+ * think run handed off from a call there gets the door's reads (door-think.ts)
+ * and lands its answer in the day's conversation. The undo is for tests.
  */
 export function registerDoorDelivery(): () => void {
   const delivery = registerTurnDelivery("door", (input) => deliverDoorBell(input));
+  const reply = registerReplyAppend("door", (input) => appendDoorReply(input));
   const thinkDesk = registerDoorThinkDesk();
   return () => {
     delivery();
+    reply();
     thinkDesk();
   };
 }
