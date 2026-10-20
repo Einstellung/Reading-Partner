@@ -1,10 +1,10 @@
 // A voice call's lines, written to the day's info thread and copied into the
-// door conversation (src/info/briefer/call-transcript.ts).
-// Run: scripts/t.sh tests/info/briefer/call-transcript.test.ts
+// door conversation (src/soul/voice/live/call-transcript.ts).
+// Run: scripts/t.sh tests/soul/voice/live/call-transcript.test.ts
 
 import { expect, test } from "bun:test";
 
-import { callTranscriptWriter } from "../../../src/info/briefer/call-transcript";
+import { callTranscriptWriter } from "../../../../src/soul/voice/live/call-transcript";
 
 function harness(now: () => number) {
   const ops: string[] = [];

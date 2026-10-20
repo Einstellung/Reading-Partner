@@ -51,7 +51,6 @@ export default {
   "door.voiceStart": "Голосовой чат",
   "door.voiceEnd": "Завершить голосовой чат",
   "door.voiceNoDevice": "На этом устройстве голосовой чат недоступен.",
-  "door.voiceNoContext": "Голосовой чат запускается со страницы брифинга.",
   "door.voiceListening": "Слушает",
   "door.voiceThinking": "Думает",
   "door.voiceSpeaking": "Говорит",

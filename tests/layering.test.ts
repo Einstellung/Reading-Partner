@@ -180,6 +180,11 @@ const LAYER: Record<string, Layer> = {
   "soul/voice/front": "capability",
   // The silent voice bench's trace, script driver and run analysis (docs/platform/560).
   "soul/voice/harness": "capability",
+  // A call wired to the device (docs/68): the plugin, the front and the back
+  // half in one builder, the writer of its lines, and the call held at the
+  // door. Its own node because it reads soul/voice/front, which reads
+  // soul/voice; info/briefer hands it the briefing's call.
+  "soul/voice/live": "capability",
   // Turning raw material into usable material (docs/85), grouped by what is
   // done to it rather than by who asks: the secretary, reading and the meals
   // line are all callers, and nothing here knows any of them. Siblings may use

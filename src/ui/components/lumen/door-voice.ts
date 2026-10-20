@@ -9,24 +9,20 @@
 import type { SessionPhase } from "../../../soul/voice/voice-session";
 
 /** Whether the waveform button can start a call, and why not where it cannot. */
-export type VoiceEntry = { kind: "ready" } | { kind: "off"; reason: "no-device" | "no-context" };
+export type VoiceEntry = { kind: "ready" } | { kind: "off"; reason: "no-device" };
 
 /**
- * The entry, from whether the host can speak at all (the native audio path)
- * and whether the screen behind the corner has published something to talk
- * about (voice-context.ts).
+ * The entry, from whether the host can speak at all (the native audio path).
+ * Every screen can start a call: one with nothing published to talk about
+ * holds it at the door (voice-call-mode.ts).
  */
-export function voiceEntry(speaks: boolean, hasContext: boolean): VoiceEntry {
-	if (!speaks) return { kind: "off", reason: "no-device" };
-	if (!hasContext) return { kind: "off", reason: "no-context" };
-	return { kind: "ready" };
+export function voiceEntry(speaks: boolean): VoiceEntry {
+	return speaks ? { kind: "ready" } : { kind: "off", reason: "no-device" };
 }
 
 /** The one line a greyed button shows when tapped. */
-export function voiceOffLine(
-	reason: "no-device" | "no-context",
-): "shell.door.voiceNoDevice" | "shell.door.voiceNoContext" {
-	return reason === "no-device" ? "shell.door.voiceNoDevice" : "shell.door.voiceNoContext";
+export function voiceOffLine(_reason: "no-device"): "shell.door.voiceNoDevice" {
+	return "shell.door.voiceNoDevice";
 }
 
 /**

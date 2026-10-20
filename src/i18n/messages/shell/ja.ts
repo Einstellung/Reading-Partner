@@ -51,7 +51,6 @@ export default {
   "door.voiceStart": "音声チャット",
   "door.voiceEnd": "音声チャットを終了",
   "door.voiceNoDevice": "この端末では音声チャットができません。",
-  "door.voiceNoContext": "音声チャットはブリーフィングのページから始めます。",
   "door.voiceListening": "聞いています",
   "door.voiceThinking": "考えています",
   "door.voiceSpeaking": "話しています",

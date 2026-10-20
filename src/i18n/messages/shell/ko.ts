@@ -51,7 +51,6 @@ export default {
   "door.voiceStart": "음성 채팅",
   "door.voiceEnd": "음성 채팅 종료",
   "door.voiceNoDevice": "이 기기에서는 음성 채팅을 할 수 없습니다.",
-  "door.voiceNoContext": "음성 채팅은 브리핑 페이지에서 시작합니다.",
   "door.voiceListening": "듣는 중",
   "door.voiceThinking": "생각하는 중",
   "door.voiceSpeaking": "말하는 중",

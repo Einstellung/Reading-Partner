@@ -66,7 +66,6 @@ export default {
   "door.voiceStart": "Voice chat",
   "door.voiceEnd": "End voice chat",
   "door.voiceNoDevice": "This device can't hold a voice chat.",
-  "door.voiceNoContext": "Voice chat starts from the briefing page.",
   "door.voiceListening": "Listening",
   "door.voiceThinking": "Thinking",
   "door.voiceSpeaking": "Speaking",

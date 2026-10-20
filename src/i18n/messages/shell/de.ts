@@ -51,7 +51,6 @@ export default {
   "door.voiceStart": "Sprachchat",
   "door.voiceEnd": "Sprachchat beenden",
   "door.voiceNoDevice": "Dieses Gerät kann keinen Sprachchat führen.",
-  "door.voiceNoContext": "Der Sprachchat startet auf der Briefing-Seite.",
   "door.voiceListening": "Hört zu",
   "door.voiceThinking": "Denkt nach",
   "door.voiceSpeaking": "Spricht",

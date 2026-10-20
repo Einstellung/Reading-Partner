@@ -11,16 +11,13 @@ import {
   voicePhaseLine,
 } from "../../../../src/ui/components/lumen/door-voice";
 
-test("the button is ready only where the host speaks and a screen has something to talk about", () => {
-  expect(voiceEntry(true, true)).toEqual({ kind: "ready" });
-  expect(voiceEntry(false, true)).toEqual({ kind: "off", reason: "no-device" });
-  expect(voiceEntry(false, false)).toEqual({ kind: "off", reason: "no-device" });
-  expect(voiceEntry(true, false)).toEqual({ kind: "off", reason: "no-context" });
+test("the button is ready wherever the host speaks, whatever the screen", () => {
+  expect(voiceEntry(true)).toEqual({ kind: "ready" });
+  expect(voiceEntry(false)).toEqual({ kind: "off", reason: "no-device" });
 });
 
 test("a greyed button says why in one line", () => {
   expect(voiceOffLine("no-device")).toBe("shell.door.voiceNoDevice");
-  expect(voiceOffLine("no-context")).toBe("shell.door.voiceNoContext");
 });
 
 test("the voice bar reads the call's phase, and the start as listening", () => {

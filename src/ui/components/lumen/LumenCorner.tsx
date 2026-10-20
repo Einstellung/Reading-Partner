@@ -40,10 +40,10 @@
 // left — which is one transform on the box they stand in rather than a second
 // composition.
 //
-// The session is the info screen's. What it would be about is published by
-// whichever screen holds it (voice-context.ts) and the call is built here, so
-// it outlives the screen it was opened from and the conversation it was started
-// in, and can be hung up from anywhere.
+// The call is built here, so it outlives the screen it was opened from and the
+// conversation it was started in, and can be hung up from anywhere. Where it is
+// held is read when it starts: on the briefing where that page has published
+// its day (voice-context.ts), at the door everywhere else.
 //
 // A call that never got going says so. iOS can refuse the microphone outright,
 // so a failure with nothing on screen is a tap that swallowed the gesture. The
@@ -174,27 +174,23 @@ export function LumenCorner({
 	// Built unconditionally and held for the life of the shell. A call that
 	// belonged to the screen would die the moment the reader walked away from
 	// it, and there would be no way to hang up from where they landed.
-	const call = useVoiceCall({
-		dateKey: context?.dateKey ?? "",
-		briefing: context?.briefing ?? null,
-	});
+	// Where the call is held is read when it starts: the briefing where that
+	// page is up, the door everywhere else (voice-call-mode.ts).
+	const call = useVoiceCall({ context, inReader });
 	const live = call.phase !== "idle";
 	// A host that cannot speak has no call to have — the whole audio path is
-	// native (docs/33) — and neither has a screen with nothing to talk about,
-	// unless the call is already up. There the door's voice button is grey.
-	// Read through the capability store: on Android the answer lands after first
-	// paint, and the entry has to come out with it (docs/companion/89).
+	// native (docs/33). There the door's voice button is grey. Read through the
+	// capability store: on Android the answer lands after first paint, and the
+	// entry has to come out with it (docs/companion/89).
 	const speaks = useSyncExternalStore(subscribeVoiceCapability, hasNativeSpeech);
-	const canTalk = speaks && (live || context !== null);
-	const entry = voiceEntry(speaks, context !== null);
+	const entry = voiceEntry(speaks);
 	const handle = voiceCallHandle(call);
 	const t = useT();
 	const [door, setDoor] = useState<DoorOpen | null>(null);
 	const [full, setFull] = useState(false);
-	// Only where the body is a voice control: everywhere else there is no call
-	// of theirs to have broken, and a sentence in the corner of a book would be
-	// about nothing they did.
-	const errorLine = canTalk ? orbErrorLine(handle.error) : null;
+	// Only where the host can call: elsewhere there is no call of theirs to have
+	// broken, and a sentence in the corner would be about nothing they did.
+	const errorLine = speaks ? orbErrorLine(handle.error) : null;
 	const { start, stop } = call;
 
 	const liveRef = useRef(live);
@@ -252,7 +248,6 @@ export function LumenCorner({
 	// hidden there is no body to talk to, and the conversation stays up with
 	// the call's End in it.
 	const startVoice = useCallback(() => {
-		if (!getVoiceContext()) return;
 		start();
 		void voiceStartFeedback();
 		if (shown) closeDoor();

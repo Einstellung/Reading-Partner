@@ -127,7 +127,8 @@ test("a place with no desk registered gives a think run no tools", async () => {
     },
   });
   const ctx = {
-    run: { id: "r-2", kind: THINK_KIND, deliverTo: JSON.stringify({ place: "door", date: DATE }) } as unknown as Run,
+    // The meals conversation: no domain registers a think desk there (the door has one, reading/turn/door-think.ts).
+    run: { id: "r-2", kind: THINK_KIND, deliverTo: JSON.stringify({ place: "meals" }) } as unknown as Run,
     report: async () => {},
     reportTool: async () => {},
     delegate: async () => ({ ok: false as const, reason: "no" }),

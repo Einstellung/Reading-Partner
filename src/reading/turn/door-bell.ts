@@ -19,6 +19,7 @@ import {
   type TurnDeliveryOutcome,
 } from "../../soul";
 import { readingDurable } from "./durable-runtime";
+import { registerDoorThinkDesk } from "./door-think";
 import { appPlaceBellDeps, deliverPlaceBell, type PlaceBellDeps } from "./place-bell";
 
 export interface DoorBellDeps extends PlaceBellDeps {
@@ -82,7 +83,16 @@ export async function deliverDoorBell(
   );
 }
 
-/** Say that a bell with nowhere else to go is answered at the door. The undo is for tests. */
+/**
+ * Say that a bell with nowhere else to go is answered at the door, and that a
+ * think run handed off from a call there gets the door's reads (door-think.ts).
+ * The undo is for tests.
+ */
 export function registerDoorDelivery(): () => void {
-  return registerTurnDelivery("door", (input) => deliverDoorBell(input));
+  const delivery = registerTurnDelivery("door", (input) => deliverDoorBell(input));
+  const thinkDesk = registerDoorThinkDesk();
+  return () => {
+    delivery();
+    thinkDesk();
+  };
 }

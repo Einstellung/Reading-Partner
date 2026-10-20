@@ -51,7 +51,6 @@ export default {
   "door.voiceStart": "Chat de voz",
   "door.voiceEnd": "Terminar chat de voz",
   "door.voiceNoDevice": "Este dispositivo no puede mantener un chat de voz.",
-  "door.voiceNoContext": "El chat de voz se inicia desde la página del resumen.",
   "door.voiceListening": "Escuchando",
   "door.voiceThinking": "Pensando",
   "door.voiceSpeaking": "Hablando",

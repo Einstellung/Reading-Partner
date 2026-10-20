@@ -51,7 +51,6 @@ export default {
   "door.voiceStart": "语音聊天",
   "door.voiceEnd": "结束语音聊天",
   "door.voiceNoDevice": "这台设备不能语音聊天。",
-  "door.voiceNoContext": "语音聊天要从简报页开始。",
   "door.voiceListening": "在听",
   "door.voiceThinking": "在想",
   "door.voiceSpeaking": "在说",

@@ -51,7 +51,6 @@ export default {
   "door.voiceStart": "Chat vocal",
   "door.voiceEnd": "Terminer le chat vocal",
   "door.voiceNoDevice": "Cet appareil ne peut pas tenir de chat vocal.",
-  "door.voiceNoContext": "Le chat vocal se lance depuis la page du briefing.",
   "door.voiceListening": "À l'écoute",
   "door.voiceThinking": "Réfléchit",
   "door.voiceSpeaking": "Parle",
