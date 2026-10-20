@@ -6,16 +6,21 @@
 // shared object for aarch64-linux-android.
 
 pub mod asr;
-
-use llama_cpp_2::llama_backend::LlamaBackend;
-
+pub mod call;
+pub mod host;
 pub mod mel;
+pub mod playback;
 pub mod smart_turn;
 pub mod turn;
 pub mod vad;
+pub mod virtual_device;
+
+use llama_cpp_2::llama_backend::LlamaBackend;
 
 #[cfg(test)]
 mod fixture;
+#[cfg(test)]
+mod scenarios;
 
 /// Create the ONNX Runtime environment and initialise the llama.cpp backend.
 /// The backend must outlive every llama.cpp model and context.

@@ -25,8 +25,10 @@ pub const PLAYBACK_WAIT: Duration = Duration::from_millis(20);
 pub enum HostControl {
     /// Open the player, and the microphone when `capture`: communication
     /// mode, routing, focus, AudioRecord at 16 kHz, AudioTrack at 24 kHz.
-    /// Sent again with `capture: true` when a call starts over speech that
-    /// was playing without one.
+    /// Sent again whenever that changes: `capture: true` when a call starts
+    /// over speech that was playing without one, `capture: false` when a
+    /// call ends with the voice still playing (the microphone goes, the
+    /// track stays).
     OpenAudio { capture: bool },
     /// Put everything `OpenAudio` changed back.
     CloseAudio,

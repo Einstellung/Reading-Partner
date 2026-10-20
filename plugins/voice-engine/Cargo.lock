@@ -891,6 +891,7 @@ version = "0.1.0"
 dependencies = [
  "jni",
  "kokoro-onnx",
+ "libc",
  "llama-cpp-2",
  "llama-cpp-sys-2",
  "ort",
@@ -904,6 +905,7 @@ name = "voice-wire"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]
