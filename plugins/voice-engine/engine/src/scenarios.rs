@@ -349,10 +349,9 @@ fn f3_wait_a_moment_over_the_voice_ducks_then_stops_and_cuts_at_the_playhead() {
     assert_eq!(speech_kinds(&events).last().unwrap().2.as_deref(), Some("interrupted"));
     // Ducked to 0.25 on the duck, back to full when the stop lifted it.
     assert_eq!(volumes(&dev), [1.0, 0.25, 1.0]);
-    let controls = dev.host.controls();
-    let duck = controls.iter().position(|c| *c == HostControl::SetVolume(0.25)).unwrap();
-    let flush = controls.iter().position(|c| *c == HostControl::Flush).unwrap();
-    assert!(flush > duck);
+    let duck_at = conversation(&events).into_iter().find(|(_, e)| e.kind == "speech-duck").unwrap().0;
+    assert_eq!(dev.flushes.len(), 1);
+    assert!(dev.flushes[0] > duck_at);
     // Nothing of the cut turn is heard after the stop, and nothing more of it
     // is taken.
     let stop_at = conversation(&events).into_iter().find(|(_, e)| e.kind == "speech-stop").unwrap().0;
@@ -383,7 +382,7 @@ fn f4_a_false_alarm_ducks_and_resumes_and_the_voice_plays_on() {
     assert_eq!(volumes(&dev), [1.0, 0.25, 1.0]);
     let spoken = conversation(&events).pop().unwrap().1;
     assert_eq!((spoken.utterance, spoken.reason.as_deref()), (Some(1), Some("done")));
-    assert!(!dev.host.controls().contains(&HostControl::Flush));
+    assert!(dev.flushes.is_empty());
     // Every frame of the voice was played, the ones after the duck and up to
     // the resume at a quarter.
     assert_eq!(dev.reports.last().unwrap().1, 3 * PLAY_RATE as i64);

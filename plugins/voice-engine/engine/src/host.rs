@@ -9,7 +9,10 @@
 //
 //   nativeNextControl()            ControlQueue::next_json, the JNI's AudioHost
 //   nativeCapture(buf, n, timeNs)  Engine::capture
-//   nativeReadPlayback(buf)        Engine::read_playback(buf, PLAYBACK_WAIT)
+//   nativeReadPlayback(buf)        Engine::read_playback(buf, PLAYBACK_WAIT);
+//                                  its -1 is the only flush: the writer thread
+//                                  flushes and then writes, in that order, and
+//                                  no other thread touches the track's queue
 //   nativePlaybackPosition(f, t)   Engine::playback_position
 //   nativeAudioEvent(kind)         Engine::audio_event
 
@@ -32,10 +35,6 @@ pub enum HostControl {
     OpenAudio { capture: bool },
     /// Put everything `OpenAudio` changed back.
     CloseAudio,
-    /// `pause()` + `flush()` the track now: what it holds is not to be heard.
-    /// `read_playback` answers -1 once as well, for a writer that was not
-    /// blocked when this was sent.
-    Flush,
     /// The track's volume, 0..1.
     SetVolume(f32),
     /// The service is going away; `nativeNextControl` answers null after this.
@@ -48,7 +47,6 @@ impl HostControl {
         match self {
             HostControl::OpenAudio { capture } => format!("{{\"kind\":\"open\",\"capture\":{capture}}}"),
             HostControl::CloseAudio => "{\"kind\":\"close\"}".into(),
-            HostControl::Flush => "{\"kind\":\"flush\"}".into(),
             HostControl::SetVolume(v) => format!("{{\"kind\":\"volume\",\"value\":{v}}}"),
             HostControl::Exit => "{\"kind\":\"exit\"}".into(),
         }
@@ -133,7 +131,6 @@ mod tests {
         };
         q.control(HostControl::OpenAudio { capture: true });
         q.control(HostControl::SetVolume(0.25));
-        q.control(HostControl::Flush);
         q.control(HostControl::CloseAudio);
         q.control(HostControl::Exit);
         let got = reader.join().unwrap();
@@ -142,7 +139,6 @@ mod tests {
             [
                 r#"{"kind":"open","capture":true}"#,
                 r#"{"kind":"volume","value":0.25}"#,
-                r#"{"kind":"flush"}"#,
                 r#"{"kind":"close"}"#,
                 r#"{"kind":"exit"}"#,
             ]

@@ -325,8 +325,9 @@ impl Playback {
         self.handed = 0;
         self.base = 0;
         self.heard = None;
+        // The writer's next read answers -1 and it flushes the track itself:
+        // a flush from any other thread could land after the new samples.
         self.flush_pending = true;
-        self.effects.push(Effect::Host(HostControl::Flush));
         self.end(reason);
         at
     }
@@ -568,7 +569,6 @@ mod tests {
         // 600 frames reported, 600 more by the time of the stop, capped at 1200.
         let at = p.stop("interrupted", 100 * MS);
         assert_eq!((at.index, at.char_offset, at.played_ms), (0, 6, 50.0));
-        assert!(p.effects.contains(&Effect::Host(HostControl::Flush)));
         // A report from before the flush is ignored; the writer flushes once.
         p.report(1200, 120 * MS, 120 * MS);
         assert_eq!(p.read(&mut buf, 120 * MS), -1);

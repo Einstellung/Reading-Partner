@@ -3,7 +3,8 @@
 // and a clock that moves only when the device steps. No sound card is opened.
 //
 // One `step` is one microphone buffer, 32 ms, in the order the two Kotlin
-// threads would interleave it: the clock moves on, a pending flush empties the
+// threads would interleave it: the clock moves on, a -1 from the writer's read
+// empties the
 // track, the track plays the 32 ms that just went by, the writer tops it up
 // from `read_playback` and reports its frame count, then the microphone buffer
 // goes in. A step waits for Smart Turn to judge whatever pause it raised
@@ -49,7 +50,6 @@ struct HostState {
     /// `Some(capture)` while the audio is open.
     open: Option<bool>,
     volume: f32,
-    flush: bool,
 }
 
 /// Records every control and keeps the device's state from them.
@@ -73,10 +73,6 @@ impl VirtualHost {
     pub fn volume(&self) -> f32 {
         self.state.lock().unwrap().volume
     }
-
-    fn take_flush(&self) -> bool {
-        std::mem::take(&mut self.state.lock().unwrap().flush)
-    }
 }
 
 impl AudioHost for VirtualHost {
@@ -85,7 +81,6 @@ impl AudioHost for VirtualHost {
         match &control {
             HostControl::OpenAudio { capture } => s.open = Some(*capture),
             HostControl::CloseAudio | HostControl::Exit => s.open = None,
-            HostControl::Flush => s.flush = true,
             HostControl::SetVolume(v) => s.volume = *v,
         }
         s.controls.push(control);
@@ -131,6 +126,8 @@ pub struct VirtualDevice {
     pub heard: Vec<f32>,
     /// (time, frames since the flush) for every report.
     pub reports: Vec<(i64, i64)>,
+    /// When the writer flushed the track.
+    pub flushes: Vec<i64>,
 }
 
 impl Default for VirtualDevice {
@@ -170,6 +167,7 @@ impl VirtualDevice {
             played: 0,
             heard: Vec::new(),
             reports: Vec::new(),
+            flushes: Vec::new(),
         }
     }
 
@@ -179,7 +177,9 @@ impl VirtualDevice {
         assert_eq!(mic.len(), MIC_FRAME);
         self.clock.advance(STEP_NS);
         let now = self.clock.now_ns();
-        if self.host.take_flush() {
+        // The writer runs beside the microphone and is at most one write
+        // behind: a stop's -1 reaches it before the track plays on.
+        if self.engine.read_playback(&mut [], Duration::ZERO) == -1 {
             self.flush();
         }
         if self.host.open().is_some() {
@@ -213,6 +213,7 @@ impl VirtualDevice {
     }
 
     fn flush(&mut self) {
+        self.flushes.push(self.clock.now_ns());
         self.track.clear();
         self.played = 0;
     }
