@@ -1,6 +1,6 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call, and fetch, inspect and bench the on-device Kokoro voice.
+Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, speak a turn one sentence at a time, make and say the program's short cue lines, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call, ask whether this device can hold one, and fetch, inspect and bench the on-device Kokoro voice.
 
 #### This default permission set includes the following:
 
@@ -22,6 +22,7 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-start-conversation`
 - `allow-stop-conversation`
 - `allow-set-speech-volume`
+- `allow-voice-capability`
 - `allow-register-listener`
 - `allow-remove-listener`
 - `allow-harness`
@@ -658,6 +659,32 @@ Enables the stop_speaking command without any pre-configured scope.
 <td>
 
 Denies the stop_speaking command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-voice-capability`
+
+</td>
+<td>
+
+Enables the voice_capability command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-voice-capability`
+
+</td>
+<td>
+
+Denies the voice_capability command without any pre-configured scope.
 
 </td>
 </tr>

@@ -3,6 +3,10 @@
 // build resolves `voice:default` and answers every invoke instead of failing
 // with "command not found". The webview never gets this far anyway:
 // hasOnDeviceDictation() is false off iOS and the composer keeps the keyboard.
+//
+// Android uses this for dictation and the bench only (android.rs), which
+// leaves the rest unused there.
+#![cfg_attr(target_os = "android", allow(dead_code))]
 
 use serde::de::DeserializeOwned;
 use tauri::{ipc::Channel, plugin::PluginApi, AppHandle, Runtime};
@@ -17,13 +21,22 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
     app: &AppHandle<R>,
     _api: PluginApi<R, C>,
 ) -> crate::Result<Voice<R>> {
-    Ok(Voice(app.clone()))
+    Ok(Voice::new(app))
 }
 
 /// Access to the voice APIs.
 pub struct Voice<R: Runtime>(#[allow(dead_code)] AppHandle<R>);
 
 impl<R: Runtime> Voice<R> {
+    pub fn new(app: &AppHandle<R>) -> Self {
+        Voice(app.clone())
+    }
+
+    /// The desktop holds no call (docs/companion/89).
+    pub async fn voice_capability(&self) -> VoiceCapability {
+        VoiceCapability { call: false }
+    }
+
     /// Rejecting rather than resolving: a start that answers "fine" and then
     /// never emits leaves the hold stuck listening to a microphone nobody
     /// opened.

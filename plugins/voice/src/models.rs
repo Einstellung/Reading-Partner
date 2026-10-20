@@ -15,6 +15,14 @@ pub struct StopDictation {
     pub transcript: String,
 }
 
+/// Answer to `voice_capability`: whether this device can hold a voice call
+/// (docs/companion/89, 内存门槛). Always on iOS, never on the desktop, and on
+/// Android what Kotlin's gate says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub struct VoiceCapability {
+    pub call: bool,
+}
+
 /// Answer to `set_indicator_probe`. Where the audio stack was left standing, and
 /// enough of its state to show it really stopped there rather than one step
 /// short. Read by the bench and by nothing else.

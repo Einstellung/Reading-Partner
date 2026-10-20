@@ -17,8 +17,11 @@ use tauri::{
 
 pub use models::*;
 
-// Split by target_os rather than by tauri's desktop/mobile cfg: Android is
-// mobile and has no implementation here either.
+// Split by target_os rather than by tauri's desktop/mobile cfg: iOS goes to
+// Swift, Android to its voice process (docs/companion/89), and everything else
+// refuses. Android borrows the desktop's refusals for dictation.
+#[cfg(target_os = "android")]
+mod android;
 #[cfg(not(target_os = "ios"))]
 mod fallback;
 #[cfg(target_os = "ios")]
@@ -55,7 +58,9 @@ pub use error::{Error, Result};
 pub use session::SpeechSession;
 pub use speaker::{DevicePlayer, DeviceSpeakers, Speakers};
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(target_os = "android")]
+use android::Voice;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 use fallback::Voice;
 #[cfg(target_os = "ios")]
 use ios::Voice;
@@ -98,6 +103,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::start_conversation,
             commands::stop_conversation,
             commands::set_speech_volume,
+            commands::voice_capability,
             commands::register_listener,
             commands::remove_listener,
             commands::harness,
@@ -106,30 +112,42 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::kokoro_bench
         ])
         .setup(|app, api| {
-            #[cfg(target_os = "ios")]
-            let voice = ios::init(app, api)?;
-            #[cfg(not(target_os = "ios"))]
-            let voice = fallback::init(app, api)?;
+            // In this order: Android's models live where Kotlin says
+            // (`noBackupDir`), so the voice comes up first, and the session
+            // speaks over the link the voice holds.
+            #[cfg(target_os = "android")]
+            let (voice, models, link) = {
+                let voice = android::init(app, api)?;
+                let (models, link) = (voice.models(), voice.link());
+                (voice, models, Some(link))
+            };
+            #[cfg(not(target_os = "android"))]
+            let (voice, models, link) = {
+                #[cfg(target_os = "ios")]
+                let voice = ios::init(app, api)?;
+                #[cfg(not(target_os = "ios"))]
+                let voice = fallback::init(app, api)?;
+                let base = app.path().app_local_data_dir()?;
+                let models = Arc::new(kokoro::download::Downloader::for_host(&base));
+                (voice, models, None::<Arc<engine_link::EngineLink>>)
+            };
             app.manage(voice);
-            let models = Arc::new(kokoro::download::Downloader::new(
-                &app.path().app_local_data_dir()?,
-            ));
             app.manage(kokoro::KokoroModels(models.clone()));
-            // Not split by target_os, and deliberately: the session is Rust all
-            // the way down — a relay and a vendor — and the one thing on it that
-            // needs a phone is where the audio ends up. `DevicePlayer` already
-            // handles that by asking `Voice`, which off iOS answers every
-            // enqueue with a sentence saying so (fallback.rs). A second copy of
-            // "this host cannot speak" here would say the same thing twice.
+            // Where the audio ends up is the one thing on the session that
+            // needs a phone. On Android the player is the voice process, over
+            // the link. Elsewhere `DevicePlayer` asks `Voice`, which is Swift
+            // on iOS and off it answers every enqueue with a sentence saying
+            // it cannot (fallback.rs).
             //
             // Which voice it speaks with is decided in one place:
-            // `session::on_device_voice` (Kokoro where the feature is on, which
-            // is iOS; nothing elsewhere).
-            app.manage(session::SpeechSession::from_env(
-                Arc::new(speaker::DeviceSpeakers::new(app.clone())),
-                &models,
-                None,
-            ));
+            // `session::on_device_voice` (Kokoro in the voice process on
+            // Android, Kokoro here where the feature is on, which is iOS;
+            // nothing elsewhere).
+            let speakers: Arc<dyn Speakers> = match &link {
+                Some(link) => Arc::new(speaker::DeviceSpeakers::new(link.clone())),
+                None => Arc::new(speaker::DeviceSpeakers::new(app.clone())),
+            };
+            app.manage(session::SpeechSession::from_env(speakers, &models, link));
             Ok(())
         })
         .build()

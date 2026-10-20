@@ -331,6 +331,13 @@ pub(crate) async fn start_conversation<R: Runtime>(
         .await
 }
 
+/// Whether this device can hold a call. Never rejects: anything short of a
+/// yes is `{ call: false }`.
+#[command]
+pub(crate) async fn voice_capability<R: Runtime>(app: AppHandle<R>) -> Result<VoiceCapability> {
+    Ok(app.voice().voice_capability().await)
+}
+
 /// End the call. Resolves on no call at all.
 #[command]
 pub(crate) async fn stop_conversation<R: Runtime>(app: AppHandle<R>) -> Result<()> {

@@ -28,6 +28,7 @@ const COMMANDS: &[&str] = &[
     "start_conversation",
     "stop_conversation",
     "set_speech_volume",
+    "voice_capability",
     "register_listener",
     "remove_listener",
     "harness",

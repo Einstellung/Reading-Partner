@@ -107,6 +107,11 @@ impl<R: Runtime> Voice<R> {
             .map_err(Into::into)
     }
 
+    /// Every iOS this app runs on can hold a call (docs/companion/89).
+    pub async fn voice_capability(&self) -> VoiceCapability {
+        VoiceCapability { call: true }
+    }
+
     pub async fn stop_conversation(&self) -> crate::Result<()> {
         self.0
             .run_mobile_plugin_async("stop_conversation", ())
