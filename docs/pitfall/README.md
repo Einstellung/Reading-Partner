@@ -469,6 +469,7 @@
 - [563-codex-sse-body-is-zstd](./ai/563-codex-sse-body-is-zstd.md) — Codex 走 SSE 时请求体 zstd 压缩（`content-encoding: zstd`），假 fetch 直接 `JSON.parse` 会抛，被当成 provider 错误；先 `Bun.zstdDecompressSync`
 - [568-codex-web-search-has-no-citations](./ai/568-codex-web-search-has-no-citations.md) — Codex 端点的 hosted `web_search` 不给 url_citation、completed 的 output 为空，来源只有搜索候选；让模型写行内链接，从回答里抽出来排在前面
 - [647-an-auto-language-prompt-with-no-reader-words-picks-any-language](./ai/647-an-auto-language-prompt-with-no-reader-words-picks-any-language.md) — 语言设成 auto 时 `languageInstruction` 返回空串，主题搜索的结果和卢明开场话没有语言指令：同样的英文材料一次写成英文书、一次写成中文书（夹着英文的程序标签），开场话另挑一次。10-16 定：书、开场话、程序标签统一用界面语言（设置具体语言优先，auto 取系统语言），始终带明确的语言指令
+- [663-a-single-call-writes-its-whole-prompt-to-the-cache](./ai/663-a-single-call-writes-its-whole-prompt-to-the-cache.md) — pi 默认在最后一个用户块上打缓存断点，只调一次的调用（主题搜索的重排、开口）把整份提示按 1.25 倍写进缓存却没人读；整份用户文字拼成一个字符串时，重写那次也只读回 system。只调一次的传 `cacheRetention: "none"`；会被复用的前缀单独成块（`ChatMessage.parts`），变的部分另起块接在后面
 
 ## 开发环境
 

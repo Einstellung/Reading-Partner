@@ -7,7 +7,17 @@
 export interface TopicModelCall {
   site: "rerank" | "verify" | "dedupe" | "write";
   system: string;
+  /** What a later call of the same stage would repeat word for word. */
   user: string;
+  /** What only this call says, after `user`, each entry its own block (the write-up's notes and problems). */
+  tail?: string[];
+  /**
+   * Whether the prompt goes out with cache breakpoints. Only where a later
+   * call of the run can start with the same system and `user`: the write-up's
+   * second try. A stage that calls once writes the cache at 1.25x the input
+   * price and never reads it (pitfall 663), so it sends none.
+   */
+  cache: boolean;
   signal: AbortSignal;
 }
 

@@ -69,8 +69,8 @@ export const searchHfLive: HfSearch = (text, window, signal) =>
   });
 
 export const liveResultDeps: BuildResultDeps = {
-  model: ({ system, user, signal }) =>
-    callModel("prep", "plan", system, user, { signal, onProgress: () => {} }, { spend: { caller: "info" } }),
+  model: ({ system, user, tail, cache, signal }) =>
+    callModel("prep", "plan", system, [user, ...(tail ?? [])], { signal, onProgress: () => {} }, { spend: { caller: "info" } }, cache ? undefined : "none"),
   fetchText: memoArxivFetchText(async (url, signal) => {
     const res = await fetchWithRetry(url, { signal }, interactiveRetry(infoFetch));
     return { status: res.status, text: await res.text() };

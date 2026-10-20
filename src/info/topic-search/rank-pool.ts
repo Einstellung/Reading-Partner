@@ -361,11 +361,34 @@ export function topicBlock(topic: TopicSearch, profile: readonly string[]): stri
   return lines.join("\n");
 }
 
+/** Questions shown to a prompt as already raised, newest last. */
+export const RAISED_SHOWN = 20;
+
+/**
+ * What the reader has already answered and what was already asked, for a
+ * prompt that may raise questions. Empty when there is neither. `raised` is the
+ * topic's earlier questions, oldest first; the newest RAISED_SHOWN are shown.
+ */
+export function settledBlock(topic: TopicSearch, raised: readonly string[]): string {
+  const answered = topic.answers.map((a) => `- Asked "${a.asked}", answered "${a.answer}"`);
+  const asked = raised.slice(-RAISED_SHOWN).map((q) => `- ${q}`);
+  return [
+    ...(answered.length ? ["The reader's earlier answers:", ...answered] : []),
+    ...(asked.length ? ["Questions already raised (never ask them again, in any wording):", ...asked] : []),
+  ].join("\n");
+}
+
+/** The rule both question-raising prompts give the model (docs/info/88 「攒着问」). */
+export const SETTLED_RULE =
+  "Never ask what the scope, wants, does-not-wants, accepted judgements, the reader's earlier answers or an already raised question settle: " +
+  "a question about a kind of thing a judgement or a does-not-want already places is a repeat. Ask only what none of them decides.";
+
 export function rerankPrompt(
   topic: TopicSearch,
   numbered: readonly Numbered[],
   profile: readonly string[],
   language: string,
+  raised: readonly string[] = [],
 ): { system: string; user: string } {
   const system = [
     "You rank what a topic search found for a reader: posts from X and papers from arXiv and Hugging Face.",
@@ -375,6 +398,7 @@ export function rerankPrompt(
     '- main: what the candidate really is. "self" when the post itself (or the paper) is the content; the number of one of its links (c3.a) when the post points at the real thing — a paper, a repository, an article. Most posts are lead-ins.',
     "- subtopic: the id of the subtopic it belongs to, or null.",
     "- doubt: only when you cannot tell whether the reader wants this kind of thing, one short question to ask them (\"Do you want funding news about AI chip design?\"); otherwise null.",
+    SETTLED_RULE,
     "Use only the numbers given. Answer with JSON only: {\"items\": [ … ]}.",
     HUB_RULE,
     UNTRUSTED_RULE,
@@ -404,7 +428,8 @@ export function rerankPrompt(
     if (n.links.length) body.push("Links:", ...n.links.map((l) => `${l.id} ${l.url}${l.card ? " (card)" : ""}`));
     return material(n.c, body.join("\n"));
   });
-  const user = [topicBlock(topic, profile), "Query questions:", ...queries, "", "Candidates:", ...blocks].join("\n");
+  const settled = settledBlock(topic, raised);
+  const user = [topicBlock(topic, profile), ...(settled ? [settled] : []), "Query questions:", ...queries, "", "Candidates:", ...blocks].join("\n");
   return { system, user };
 }
 

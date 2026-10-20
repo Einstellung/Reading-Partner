@@ -63,8 +63,8 @@ test("asks past the cap are refused and the model is told the reads are used up"
   expect(out.calls).toBe(2);
   expect(out.written).not.toBeNull();
   expect(calls[0].system).toContain("you may ask to read up to 1 of these papers in full: E1, E2, E3");
-  expect(calls[1].user).toContain("- Refused: E3. This run's deeper reads are used up (1 of 1)");
-  expect(calls[1].user).toContain("No more deeper reads: write the answer now.");
+  expect(calls[1].tail?.join("\n")).toContain("- Refused: E3. This run's deeper reads are used up (1 of 1)");
+  expect(calls[1].tail?.join("\n")).toContain("No more deeper reads: write the answer now.");
 });
 
 test("every prompt says how much of a paper was read and that the rest goes to unknown; no offer when none are left", async () => {

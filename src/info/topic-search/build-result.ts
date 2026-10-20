@@ -529,10 +529,13 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const numbered = numberPool(fusePool(topic, gathered.kept, RERANK_POOL[kind]));
   let answers = new Map<string, RerankAnswer>();
   let reranked = false;
+  // The questions already raised, for both prompts that may raise more (88 「攒着问」).
+  const { queue: stored } = await loadQueue(deps.files, topic.id);
+  const raisedBefore = stored.filter((q) => q.source === "model");
   if (numbered.length) {
-    const prompt = rerankPrompt(topic, numbered, profile, bookLanguage);
+    const prompt = rerankPrompt(topic, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text));
     try {
-      answers = parseRerank(await call({ site: "rerank", ...prompt, signal }), numbered, topic);
+      answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, topic);
       reranked = answers.size > 0;
     } catch (e) {
       if (signal.aborted) throw e;
@@ -663,7 +666,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         const posts = d.posts.slice(0, COMPARE_POSTS).map((post, j) => ({ p: `p${j + 1}`, post }));
         try {
           const prompt = claimsPrompt(posts, comparable, registry, language);
-          verify = { ...verify, ...parseClaims(await call({ site: "verify", ...prompt, signal }), posts, comparable, registry) };
+          verify = { ...verify, ...parseClaims(await call({ site: "verify", ...prompt, cache: false, signal }), posts, comparable, registry) };
         } catch (e) {
           if (signal.aborted) throw e;
           verify = { ...verify, status: "read", reason: "the comparison call failed" };
@@ -727,7 +730,6 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const doubts: NewQuestion[] = scored
     .filter((s) => s.rerank?.doubt)
     .map((s) => ({ text: s.rerank!.doubt!, source: "model" as const, template: null, about: [s.cand.key] }));
-  const { queue: stored } = await loadQueue(deps.files, topic.id);
   let queue = enqueue(stored, [...metricQuestions(topic, today, stats, history), ...doubts], topic, now);
 
   let writeup: TopicSearchResult["writeup"] = "none";
@@ -769,6 +771,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         registry,
         profile,
         questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })),
+        raised: raisedBefore.filter((q) => q.askedIn !== null).map((q) => q.text),
         language: bookLanguage,
         // A retry's overview replaces the file's (mergeRetry), so it is written over the file's items too;
         // those are shown beside the new ones rather than again as earlier lines.
@@ -875,7 +878,7 @@ async function judgeDuplicates(
   const user = judge
     .map((j) => [`${j.id}: ${j.headline}`, ...j.matches.map((m) => `  earlier: ${m.headline}`)].join("\n"))
     .join("\n\n");
-  const raw = parseJsonReply(await call({ site: "dedupe", system, user, signal }));
+  const raw = parseJsonReply(await call({ site: "dedupe", system, user, cache: false, signal }));
   const list = Array.isArray(raw) ? raw : (raw as { verdicts?: unknown }).verdicts;
   const byId = new Map(judge.map((j) => [j.id, j.draft]));
   const out = new Set<Draft>();

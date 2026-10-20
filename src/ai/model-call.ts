@@ -7,7 +7,7 @@
 // dinner line's own headless turn. Which of those are everyday work is written
 // in model-tier.ts, not here.
 
-import type { Api, Context, Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, CacheRetention, Context, Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import { contextBudget, fitsBudget, OUTPUT_FLOOR, REFUSE_FLOOR_OVER, type BudgetPurpose } from "../budget";
 import { newRunId } from "../platform/app/cache-telemetry";
 import {
@@ -204,19 +204,25 @@ function gateWholeInput(
 // A failure rejects with a ModelCallError carrying pi's AssistantMessage when
 // the provider produced one, so the watchdog can tell a transient failure from a
 // deterministic one instead of guessing from the message text.
+//
+// userText may be a list: the first entry is the part a later call repeats, the
+// rest go as blocks of their own after it (ChatMessage.parts). `cache` is pi's
+// prompt cache setting; unset keeps pi's default, "none" sends no breakpoint.
 export function callModel(
 	thinking: ThinkingKind,
 	purpose: BudgetPurpose,
 	systemPrompt: string | ((model: ResolvedModel) => string),
-	userText: string,
+	userText: string | readonly string[],
 	opts: AiCallOptions,
 	observer?: ModelCallObserver,
+	cache?: CacheRetention,
 ): Promise<string> {
+	const [text = "", ...parts] = typeof userText === "string" ? [userText] : userText;
 	return resolveModel(thinking).then(
 		(model) =>
 			new Promise<string>((resolve, reject) => {
 				const prompt = typeof systemPrompt === "function" ? systemPrompt(model) : systemPrompt;
-				gateWholeInput(model, purpose, prompt, userText);
+				gateWholeInput(model, purpose, prompt, [text, ...parts].join("\n\n"));
 				let chars = 0;
 				const bump = (t: string) => {
 					chars += t.length;
@@ -226,7 +232,8 @@ export function callModel(
 					providerId: model.providerId,
 					modelId: model.modelId,
 					systemPrompt: prompt,
-					messages: [{ role: "user", text: userText }],
+					messages: [{ role: "user", text, ...(parts.length ? { parts } : {}) }],
+					...(cache ? { cacheRetention: cache } : {}),
 					signal: opts.signal,
 					// A pipeline call is one exchange with nothing before or after it: it
 					// takes its material entire and has no conversation to name. A fresh

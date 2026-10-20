@@ -20,7 +20,7 @@
 import type { MaterialRegistry, RegisteredMaterial } from "../dossier/registry";
 import { HUB_RULE, hubLine, hubLines } from "./hub-line";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE, type TopicModel } from "./model-io";
-import { topicBlock } from "./rank-pool";
+import { SETTLED_RULE, settledBlock, topicBlock } from "./rank-pool";
 import type { PaperDepth, ResultFacts, ResultRunKind, TopicSearchResultItem } from "./result-types";
 import type { TopicSearch } from "./types";
 import { ORIGINALS_PER_ITEM, PAPER_FULL_CHARS } from "./verify";
@@ -109,6 +109,8 @@ export interface ComposeInput {
   profile: readonly string[];
   /** Questions that may go out with this result, Q1 …, for the model to mark the ones already answered. */
   questions: readonly { id: string; text: string }[];
+  /** The topic's questions raised before this run, oldest first: not to be raised again. */
+  raised?: readonly string[];
   language: string;
   /** What earlier issues already said on this topic, newest first. */
   earlier?: readonly EarlierLine[];
@@ -184,7 +186,8 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     "  A new story that first shows up today is told short, saying what is not yet known.",
     "- Earlier issues: when an item continues something listed under \"Said in earlier issues\", write only what is new and carry the rest with words like yesterday, still, again. Never restate what was said there.",
     "- doubts: questions for the reader where you could not tell whether they want this kind of thing; usually none.",
-    "- repeats: the numbers of candidate questions (Q1 …) that ask something the reader already answered; usually none.",
+    "- repeats: the numbers of candidate questions (Q1 …) that ask something the reader already answered or that the topic already settles; usually none.",
+    SETTLED_RULE,
     ...(input.alongside?.length
       ? [
           'Items listed under "Already in this result" were written up earlier in the same result. The overview covers them together with the new items and may name them by number; write no entries for them.',
@@ -243,7 +246,7 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     return material(item.id, lines.join("\n"));
   });
   const questions = input.questions.map((q) => `${q.id}: ${q.text}`);
-  const answered = input.topic.answers.map((a) => `- Asked "${a.asked}", answered "${a.answer}"`);
+  const settled = settledBlock(input.topic, input.raised ?? []);
   const earlier = (input.earlier ?? []).map((e) => `- ${e.date} · ${e.title}: ${e.summary}`);
   const alongside = (input.alongside ?? []).map((item) =>
     material(
@@ -262,7 +265,7 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     "Items:",
     ...blocks,
     ...(questions.length ? ["", "Candidate questions:", ...questions] : []),
-    ...(answered.length ? ["", "The reader's earlier answers:", ...answered] : []),
+    ...(settled ? ["", settled] : []),
     ...(alongside.length ? ["", "Already in this result (no entries):", ...alongside] : []),
     ...(earlier.length ? ["", "Said in earlier issues (newest first):", ...earlier] : []),
   ].join("\n");
@@ -389,6 +392,13 @@ async function readDeeper(asked: string[], deeper: DeeperReads, signal: AbortSig
  * reads (and a call is left for the write-up after them), the papers are read
  * and the write-up asked for again; that round is not one of the two tries.
  * Answers the calls it made and what came of the deeper reads.
+ *
+ * A rewrite sends the same system and `user` as the call before it and adds
+ * the problems (and the deeper-read note, if any) as blocks of their own after
+ * them (`tail`), so it reads that call's cache instead of paying for the whole
+ * prompt again; the call after deeper reads has new items and starts afresh.
+ * Two writes were the usual case in live runs. With one call allowed there is
+ * nothing to read and no cache.
  */
 export async function composeResult(
   input: ComposeInput,
@@ -398,15 +408,16 @@ export async function composeResult(
 ): Promise<{ written: Written | null; calls: number; deeper: DeeperReport }> {
   let prompt = composePrompt(input);
   let note = "";
-  let user = prompt.user;
+  let tail: string[] = [];
   let calls = 0;
+  const cache = maxCalls > 1;
   let offered = !!input.deeper && input.deeper.left > 0;
   const deeper: DeeperReport = { read: [], failed: [], refused: [] };
   for (let attempt = 0; attempt < 2 && calls < maxCalls; attempt++) {
     calls++;
     let text: string;
     try {
-      text = await model({ site: "write", system: prompt.system, user, signal });
+      text = await model({ site: "write", system: prompt.system, user: prompt.user, ...(tail.length ? { tail } : {}), cache, signal });
     } catch (e) {
       if (signal.aborted) throw e;
       continue;
@@ -417,14 +428,14 @@ export async function composeResult(
       if (asked.length && calls < maxCalls) {
         note = await readDeeper(asked, input.deeper!, signal, deeper);
         prompt = composePrompt({ ...input, deeper: undefined });
-        user = `${prompt.user}\n\n${note}`;
+        tail = [note];
         attempt--;
         continue;
       }
     }
     const { written, problems } = checkWritten(text, input);
     if (written) return { written, calls, deeper };
-    user = `${prompt.user}\n\n${note ? `${note}\n\n` : ""}Your previous answer had these problems; write it again:\n${problems.map((p) => `- ${p}`).join("\n")}`;
+    tail = [...(note ? [note] : []), `Your previous answer had these problems; write it again:\n${problems.map((p) => `- ${p}`).join("\n")}`];
   }
   return { written: null, calls, deeper };
 }

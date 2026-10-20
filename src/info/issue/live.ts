@@ -80,8 +80,9 @@ const deps: IssueDeps = {
   },
   newBoxItemId: randomBoxItemId,
   // The everyday tier, as the result builder writes with (topic-search/build-live.ts).
+  // One call an issue, so no cache breakpoint: nothing would read it (pitfall 663).
   writeOpening: ({ system, user }) =>
-    callModel("prep", "plan", system, user, { signal: new AbortController().signal, onProgress: () => {} }, { spend: { caller: "info" } }),
+    callModel("prep", "plan", system, user, { signal: new AbortController().signal, onProgress: () => {} }, { spend: { caller: "info" } }, "none"),
   locale: async () => bookLocale((await resolveModel("prep")).aiLanguage),
   nightEndAt,
   now: () => Date.now(),

@@ -46,6 +46,7 @@ import type {
 	Api,
 	AssistantMessage,
 	AssistantMessageEventStream,
+	CacheRetention,
 	Message,
 	Model,
 	Provider,
@@ -98,6 +99,13 @@ export interface ChatMessage {
 	// `mediaType` is the MIME type (e.g. "image/png"). Only vision models accept
 	// these — streamChat rejects images for a model whose input lacks "image".
 	images?: { data: string; mediaType: string }[];
+	// More text for a user turn, each entry its own content block after `text`.
+	// pi puts Anthropic's cache breakpoint on the last block of the last user
+	// turn, so a caller that sends the same `text` again with something added
+	// here reads the first call's cache up to the end of `text`; joined into one
+	// string, the boundary would not exist and nothing past the system prompt is
+	// read (pitfall 663).
+	parts?: string[];
 }
 
 // pi hands the whole AssistantMessage to both the `done` and the `error` event,
@@ -156,6 +164,11 @@ export interface StreamChatOptions {
 	// which maps it per provider and ignores it on models without reasoning. We
 	// also omit it up front when the target model's metadata says reasoning:false.
 	reasoning?: ThinkingLevel;
+	// pi's prompt cache setting. Unset is pi's default ("short"): on Anthropic a
+	// breakpoint on the system prompt and on the last user block, which writes
+	// the whole prompt to the cache at 1.25x the input price. "none" sends no
+	// breakpoint, for a call whose prompt no later call starts with.
+	cacheRetention?: CacheRetention;
 	onDelta(text: string): void;
 	// Reasoning/thinking deltas, when the model streams them. Kept separate from
 	// onDelta so callers never render thinking into the visible reply; prep wires
@@ -436,14 +449,16 @@ export async function resolveCall(
 export function toPiMessages(messages: ChatMessage[]): Message[] {
 	return messages.map((m): Message => {
 		if (m.role === "user") {
-			if (!m.images?.length) {
+			if (!m.images?.length && !m.parts?.length) {
 				return { role: "user", content: m.text, timestamp: Date.now() };
 			}
-			// Mixed text + image goes as a content array. pi maps image items to
-			// each provider's shape (Anthropic base64 source / OpenAI data URL).
+			// Text in parts, or text with images, goes as a content array. pi maps
+			// image items to each provider's shape (Anthropic base64 source / OpenAI
+			// data URL).
 			const content = [
 				...(m.text ? [{ type: "text" as const, text: m.text }] : []),
-				...m.images.map((im) => ({ type: "image" as const, data: im.data, mimeType: im.mediaType })),
+				...(m.parts ?? []).filter(Boolean).map((text) => ({ type: "text" as const, text })),
+				...(m.images ?? []).map((im) => ({ type: "image" as const, data: im.data, mimeType: im.mediaType })),
 			];
 			return { role: "user", content, timestamp: Date.now() };
 		}
@@ -505,6 +520,8 @@ export interface StreamChatCoreParams {
 	sessionId?: string;
 	// Client-side retries on the opening request; DEFAULT_MAX_RETRIES when unset.
 	maxRetries?: number;
+	// See StreamChatOptions; left out of pi's options when unset.
+	cacheRetention?: CacheRetention;
 	// Who is spending this call (see StreamChatOptions). Optional here and only
 	// here: tests drive this core directly with a fake stream, and those calls
 	// are not spending anything to account for. streamChat always passes it.
@@ -524,7 +541,7 @@ export interface StreamChatCoreParams {
 // responseId) is available on this path too and not only in the agent loop.
 export async function streamChatCore(params: StreamChatCoreParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning, transport, headers } = params;
-	const { sessionId, spend } = params;
+	const { sessionId, spend, cacheRetention } = params;
 	const { onDelta, onThinking, onResponse, onDone, onError } = params;
 	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 	// One line per call, whichever way it ends: a call that failed still spent
@@ -543,7 +560,7 @@ export async function streamChatCore(params: StreamChatCoreParams): Promise<void
 		const s = stream(
 			model,
 			normalizeContext({ systemPrompt, messages }),
-			{ apiKey, signal, reasoning, transport, maxRetries, headers, sessionId, onResponse },
+			{ apiKey, signal, reasoning, transport, maxRetries, headers, sessionId, onResponse, ...(cacheRetention ? { cacheRetention } : {}) },
 		);
 		let full = "";
 		let final: StreamOutcome | undefined;
@@ -570,7 +587,7 @@ export async function streamChatCore(params: StreamChatCoreParams): Promise<void
 }
 
 export async function streamChat(options: StreamChatOptions): Promise<void> {
-	const { providerId, modelId, systemPrompt, messages, signal, reasoning, sessionId, spend } = options;
+	const { providerId, modelId, systemPrompt, messages, signal, reasoning, sessionId, spend, cacheRetention } = options;
 	const { onDelta, onThinking, onResponse, onDone, onError } = options;
 	try {
 		const call = await resolveCall(providerId, modelId, messages, reasoning);
@@ -584,6 +601,7 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 			reasoning: call.reasoning,
 			transport: call.transport,
 			spend,
+			cacheRetention,
 			// Decided here, where the provider id is known, and passed down as data.
 			// Both halves come from the one session value.
 			...providerCallSetup(providerId, sessionId),

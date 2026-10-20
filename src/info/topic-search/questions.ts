@@ -8,7 +8,9 @@
 // A result carries at most 3 questions, and from the fourth result on at most
 // 1. A question asked once is never asked again, answered or not; one that
 // repeats an answer the reader already gave is dropped (by the model's mark in
-// the write-up, and before that by wording).
+// the write-up, and before that by wording). A model question that a judgement,
+// a want or an avoid already settles, or that rewords an earlier question, is
+// dropped by wording before it is queued (`settledBy`).
 //
 // The queue is `info-topic-search-questions.json`, synced and records-merged on
 // the search id like info-topic-searches.json beside it: only the collecting
@@ -127,6 +129,48 @@ export function metricQuestions(topic: TopicSearch, today: string, stats: Result
   return out;
 }
 
+/** Words that make a sentence a question rather than say what it is about. */
+const ASKING: ReadonlySet<string> = new Set([
+  "do", "does", "you", "your", "want", "count", "should", "would", "it", "its", "this", "that", "these", "those",
+  "only", "not", "when", "even", "rather", "than", "kind", "still", "any", "all", "also", "like", "such", "there",
+  "here", "them", "they", "we", "our", "be", "if", "about", "what", "which", "how", "whether", "include", "cover",
+  "mean", "work", "works",
+]);
+
+function aboutWords(text: string): Set<string> {
+  return new Set([...headlineTokens(text)].filter((t) => !ASKING.has(t)));
+}
+
+/** Words a question must share with what settles it. */
+export const SETTLED_MIN_SHARED = 3;
+/** Share of a question's words found in one judgement, want or avoid that settles it. */
+export const SETTLED_SHARE = 1 / 3;
+/** Share of a question's words found in one earlier question that it rewords. */
+export const ASKED_SHARE = 1 / 2;
+
+function share(question: Set<string>, known: string): number {
+  const k = aboutWords(known);
+  let shared = 0;
+  for (const t of question) if (k.has(t)) shared++;
+  return shared >= SETTLED_MIN_SHARED ? shared / question.size : 0;
+}
+
+/**
+ * What already settles a model question, or null. A judgement, want or avoid
+ * settles it when SETTLED_SHARE of the question's words are in it; an earlier
+ * question (answered, or raised by the model) when ASKED_SHARE are. A statement
+ * is longer than a question and in the reader's words, often another language
+ * with the technical terms left in English, so a third of the question's words
+ * is already its subject; a question beside a question needs half.
+ */
+export function settledBy(text: string, topic: TopicSearch, raised: readonly string[]): string | null {
+  const q = aboutWords(text);
+  if (q.size === 0) return null;
+  for (const known of [...topic.judgments, ...topic.want, ...topic.avoid]) if (share(q, known) >= SETTLED_SHARE) return known;
+  for (const known of [...topic.answers.map((a) => a.asked), ...raised]) if (share(q, known) >= ASKED_SHARE) return known;
+  return null;
+}
+
 function similar(a: string, b: string): boolean {
   const ta = headlineTokens(a);
   const tb = headlineTokens(b);
@@ -139,7 +183,8 @@ function similar(a: string, b: string): boolean {
 /**
  * The queue with this run's new questions added: one that is already queued
  * (asked or not, by id or by wording, or about the same thing for a metric
- * question) or that repeats an answer is not added.
+ * question) or that repeats an answer is not added, nor a model question the
+ * topic already settles (`settledBy`).
  */
 export function enqueue(queue: readonly PendingQuestion[], fresh: readonly NewQuestion[], topic: TopicSearch, now: number): PendingQuestion[] {
   const out = [...queue];
@@ -152,6 +197,8 @@ export function enqueue(queue: readonly PendingQuestion[], fresh: readonly NewQu
         (q.source === "metric" && p.source === "metric" && p.askedIn === null && p.about.join() === q.about.join()),
     );
     if (dup || topic.answers.some((a) => similar(a.asked, q.text))) continue;
+    const raised = out.filter((p) => p.source === "model").map((p) => p.text);
+    if (q.source === "model" && settledBy(q.text, topic, raised) !== null) continue;
     out.push({ ...q, id, raisedAt: now, askedIn: null, askedAt: null });
   }
   return out;

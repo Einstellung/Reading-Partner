@@ -316,6 +316,17 @@ describe("a first run, then a day, then a quiet day", () => {
     expect(firstLog[0].user).toContain("Prefers engineering write-ups");
   });
 
+  test("first run: only the write-up carries cache breakpoints, and its second try repeats the first's prompt", () => {
+    const writes = firstLog.filter((c) => c.site === "write");
+    for (const c of firstLog.filter((c) => c.site !== "write")) expect(c.cache).toBe(false);
+    expect(writes.map((c) => c.cache)).toEqual([true, true]);
+    expect(writes[1].system).toBe(writes[0].system);
+    expect(writes[1].user).toBe(writes[0].user);
+    expect(writes[0].tail).toBeUndefined();
+    expect(writes[1].tail).toHaveLength(1);
+    expect(writes[1].tail![0]).toStartWith("Your previous answer had these problems; write it again:");
+  });
+
   test("first run: questions and source health", () => {
     expect(first.questions.map((q) => q.text)).toEqual(["Do you want runtime tools for agents, or only research results?"]);
     const queue = JSON.parse(files.files.get(QUESTIONS_FILE)!).topics[TOPIC.id].questions as PendingQuestion[];
@@ -576,8 +587,8 @@ test("the write-up asks to read papers in full: one is read whole, one cannot be
 
   // The write-up after the reads: the whole paper in, the unread one told, no more asking.
   expect(writes[1].user).toContain("Paper read: the whole paper, below.");
-  expect(writes[1].user).toContain(`Read in full: ${agentic.id}.`);
-  expect(writes[1].user).toContain(`Could not be read: ${materials.id}`);
+  expect(writes[1].tail?.join("\n")).toContain(`Read in full: ${agentic.id}.`);
+  expect(writes[1].tail?.join("\n")).toContain(`Could not be read: ${materials.id}`);
   expect(writes[1].system).not.toContain("you may ask to read");
   expect(result.writeup).toBe("model");
 });
