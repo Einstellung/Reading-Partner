@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "android",
+  "description": "The voice call on Android (docs/companion/89): the voice plugin's commands, which iOS gets from ios.json. Only phones that pass the plugin's capability check offer the call; elsewhere voice_capability answers false and nothing else is invoked.",
+  "platforms": ["android"],
+  "windows": ["main"],
+  "permissions": ["voice:default"]
+}

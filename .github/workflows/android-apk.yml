@@ -88,9 +88,13 @@ jobs:
         with:
           targets: aarch64-linux-android
 
+      # plugins/voice-engine is its own workspace with its own target dir
+      # (libvoice_engine.so, docs/companion/89).
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            plugins/voice-engine
 
       # Put the SDK command-line tools (sdkmanager) on PATH.
       - uses: android-actions/setup-android@v4
@@ -124,10 +128,22 @@ jobs:
       - name: Initialize the Android project
         run: bun tauri android init --ci
 
+      # The voice engine for the `:voice` process (docs/companion/89), into the
+      # voice plugin's jniLibs, where AGP merges it into the APK with the
+      # plugin's Kotlin module. Uses ANDROID_NDK_ROOT set above.
+      - name: Build libvoice_engine.so
+        run: scripts/android-voice-engine.sh
+
       # Build the release APK for arm64 only, unsigned. Runs beforeBuildCommand
       # (bun run build), which typechecks and builds the frontend.
       - name: Build the unsigned release APK
         run: bun tauri android build --apk --target aarch64
+
+      # The voice plugin's JVM tests (device priority, memory gate). Needs the
+      # Gradle project the build above wrote the plugin modules into.
+      - name: Test the voice plugin's Kotlin
+        working-directory: src-tauri/gen/android
+        run: ./gradlew :tauri-plugin-voice:testDebugUnitTest --console=plain
 
       # Restore the keystore and sign with apksigner (zipalign first, required for
       # v2+ signatures). Passwords and keystore come from repo secrets.
@@ -181,6 +197,31 @@ jobs:
             echo "::error::release APK is debuggable"; exit 1
           } || true
           echo "verify OK — signed release APK for ${BUNDLE_ID}"
+
+      # The voice engine went in with the plugin module, and the merged
+      # manifest has the `:voice` service and its permissions (docs/companion/89).
+      - name: Assert the voice engine and its manifest entries
+        run: |
+          set -euo pipefail
+          SO_LINE=$(unzip -lv "$SIGNED_APK" | awk '$NF=="lib/arm64-v8a/libvoice_engine.so"')
+          [ -n "$SO_LINE" ] || {
+            echo "::error::lib/arm64-v8a/libvoice_engine.so is not in the APK"; unzip -l "$SIGNED_APK" 'lib/*' || true; exit 1
+          }
+          echo "libvoice_engine.so: $(echo "$SO_LINE" | awk '{print $1}') bytes, $(echo "$SO_LINE" | awk '{print $2}') in the APK"
+          echo "APK: $(stat -c %s "$SIGNED_APK") bytes ($(du -h "$SIGNED_APK" | cut -f1))"
+          AAPT=$ANDROID_HOME/build-tools/${BUILD_TOOLS_VERSION}/aapt2
+          TREE=$("$AAPT" dump xmltree --file AndroidManifest.xml "$SIGNED_APK")
+          # The element from its `E: service` line to the next element.
+          SERVICE=$(echo "$TREE" | awk '/E: /{if (b ~ /VoiceService/) print b; b = ""} /E: service/{b = $0; next} b != ""{b = b "\n" $0} END{if (b ~ /VoiceService/) print b}')
+          echo "$SERVICE"
+          FAIL=0
+          echo "$SERVICE" | grep -q 'android:process.*":voice"' || { echo "::error::VoiceService is not in the :voice process"; FAIL=1; }
+          # microphone is 0x80 in foregroundServiceType's flags.
+          echo "$SERVICE" | grep -Eq 'android:foregroundServiceType\([^)]*\)=.*(0x80|128|microphone)' || { echo "::error::VoiceService's foregroundServiceType is not microphone"; FAIL=1; }
+          for PERM in RECORD_AUDIO MODIFY_AUDIO_SETTINGS FOREGROUND_SERVICE FOREGROUND_SERVICE_MICROPHONE; do
+            echo "$TREE" | grep -q "\"android.permission.${PERM}\"" && echo "permission $PERM: present" || { echo "::error::android.permission.$PERM is not in the manifest"; FAIL=1; }
+          done
+          [ "$FAIL" -eq 0 ] || { echo "$TREE" | grep -B2 -A12 'E: service' || true; exit 1; }
 
       # A 16 KB-page device (Pixel 8 and later can boot one; newer hardware ships
       # it) refuses to load a shared library whose LOAD segments are aligned on

@@ -35,11 +35,11 @@ use crate::Error;
 
 const PLUGIN_ID: &str = "com.xinyuan.readingpartner.voice";
 
-/// Off until slice 6 adds the Kotlin module and build.rs's
-/// `.android_path("android")` with it: registering a class the APK does not
-/// have leaves a ClassNotFoundException pending on the UI thread. While it is
-/// off the capability is false, so the webview offers no call and no voice.
-const KOTLIN_PLUGIN: bool = false;
+/// On together with build.rs's `.android_path("android")`, which puts the
+/// Kotlin module in the APK: registering a class the APK does not have leaves
+/// a ClassNotFoundException pending on the UI thread. Off, the capability is
+/// false and the webview offers no call and no voice.
+const KOTLIN_PLUGIN: bool = true;
 
 /// What a call is refused with when there is no voice process to open.
 const NO_ENGINE: &str = "The voice call is not available on this device.";

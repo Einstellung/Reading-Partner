@@ -2,12 +2,13 @@
 // in the `:voice` process. ONNX Runtime (Silero, Smart Turn, Kokoro) and
 // llama.cpp (Qwen3-ASR) live here and nowhere in the main process.
 //
-// For now it only brings both runtimes up, which proves they link into one
-// shared object for aarch64-linux-android.
+// `jni.rs` is the surface Kotlin's VoiceService and VoiceAudio call.
 
 pub mod asr;
 pub mod call;
 pub mod host;
+#[cfg(target_os = "android")]
+pub mod jni;
 pub mod mel;
 pub mod playback;
 pub mod serve;
