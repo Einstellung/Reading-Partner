@@ -251,6 +251,7 @@ export default {
   "issue.book.annexLine": "{link}、このテーマの最初の調査の全体像。",
   "issue.book.notesLine": "{link}：{titles}",
   "issue.book.awaiting": "{topic}：{sources} はまだ読んでいる途中です。見つかったものは別の号で届きます。",
+  "issue.book.unjudged": "{topic}：見つけたものを評価する段階が終わらなかったため、{count} 件の候補はここに載せていません。このトピックの次の実行で評価します。",
   "issue.book.entryLine": "{link}：{summary}",
   "issue.book.noteHead": "{label}：{title}",
   "issue.book.unknown": "まだ分かっていません。",

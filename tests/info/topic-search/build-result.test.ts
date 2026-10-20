@@ -18,7 +18,7 @@ import { readArxiv } from "../../../src/info/topic-search/arxiv-read";
 import { missingNumbers, numbersIn, type TopicModelCall } from "../../../src/info/topic-search/model-io";
 import { QUESTIONS_FILE, enqueue, metricQuestions, pickQuestions, questionCap, type PendingQuestion } from "../../../src/info/topic-search/questions";
 import { numberPool, parseRerank, type Candidate } from "../../../src/info/topic-search/rank-pool";
-import { firstPart, parseResultFile, type ResultStats, type TopicSearchResult } from "../../../src/info/topic-search/result-types";
+import { firstPart, parseResultFile, pendingJudging, type ResultStats, type TopicSearchResult } from "../../../src/info/topic-search/result-types";
 import { ITEM_FLOOR } from "../../../src/info/topic-search/select";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import type { XReadResult } from "../../../src/info/topic-search/x-reader";
@@ -446,16 +446,85 @@ test("a write-up that fails twice falls back to the program's version", async ()
   expect(result.items.every((i) => i.summary === null && i.title && i.facts)).toBe(true);
 });
 
-test("a rerank that fails ranks by relevance instead", async () => {
+describe("a rerank that fails", () => {
   const files = memoryFiles();
-  const d = deps({ files, log: [], today: "2026-10-14" });
-  const model = d.model;
-  d.model = async (call) => (call.site === "rerank" ? "not json" : model(call));
-  const now = Date.parse("2026-10-14T12:00:00Z");
-  const out = await makeResultBuilder(d)({ topic: TOPIC, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal });
-  const result = parseResultFile(files.files.get(out.resultFile!)!)!;
-  expect(result.stats.reranked).toBe(false);
-  expect(result.items.length).toBeGreaterThan(0);
+  const log: TopicModelCall[] = [];
+  const since = Date.parse("2026-10-14T12:00:00Z") - 30 * 86_400_000;
+  const firstFile = () => parseResultFile(files.files.get("topic-search-ts-0a1b2c3d-2026-10-14.json")!)!;
+
+  test("lists nothing on a fallback score, says so in the file, and asks the model nothing more", async () => {
+    const d = deps({ files, log, today: "2026-10-14" });
+    const model = d.model;
+    d.model = async (call) => (call.site === "rerank" ? "not json" : model(call));
+    const out = await makeResultBuilder(d)({ topic: TOPIC, kind: "first", x: xRead(POSTS), since, runDir: "topic-search-runs/r-first", runId: "r-first", xPages: ANY_PAGES, signal: new AbortController().signal });
+    expect(out).toMatchObject({ resultFile: "topic-search-ts-0a1b2c3d-2026-10-14.json", itemCount: 0, empty: true });
+    expect(out.unjudged).toBeGreaterThan(0);
+    const result = firstFile();
+    expect(result.items).toEqual([]);
+    expect(result.writeup).toBe("none");
+    expect(result.stats.reranked).toBe(false);
+    expect(result.unjudged).toMatchObject({ runId: "r-first", why: "the reply holds no JSON", candidates: out.unjudged });
+    // The rerank was the scripted model's only call, and it was bypassed: no write-up, no comparison.
+    expect(log).toEqual([]);
+    expect(pendingJudging([result]).map((u) => u.runId)).toEqual(["r-first"]);
+    // What was read stands in the source health: the retry does not read it again.
+    const health = JSON.parse(files.files.get(`topic-search-runs/r-first/${SOURCE_HEALTH_FILE}`)!) as SourceHealthFile;
+    expect(health.entries.find((e) => e.query === "q1" && e.source === "x")?.status).toBe("ok");
+  });
+
+  test("the next run takes the waiting reads in, judges them and lists them", async () => {
+    const d = deps({ files, log, today: "2026-10-15" });
+    const nothing = { ...xRead([]), posts: [], lines: [] };
+    const carried: string[] = [];
+    const out = await makeResultBuilder(d)({
+      topic: TOPIC,
+      kind: "daily",
+      x: nothing,
+      since: Date.parse("2026-10-14T12:00:00Z"),
+      runDir: "topic-search-runs/r-night",
+      runId: "r-night",
+      xPages: ANY_PAGES,
+      signal: new AbortController().signal,
+      carry: async (id) => (carried.push(id), { x: xRead(POSTS), arxiv: [], huggingface: [] }),
+    });
+    expect(carried).toEqual(["r-first"]);
+    expect(out.unjudged).toBeUndefined();
+    expect(out.itemCount).toBeGreaterThan(0);
+    const result = parseResultFile(files.files.get(out.resultFile!)!)!;
+    expect(result.judged).toEqual(["r-first"]);
+    expect(result.stats.reranked).toBe(true);
+    expect(result.items.some((i) => i.links.posts.length > 0)).toBe(true);
+    expect(log.filter((c) => c.site === "rerank").length).toBe(1);
+    expect(pendingJudging([firstFile(), result])).toEqual([]);
+  });
+});
+
+test("a model call the network broke is tried again twice, a few seconds apart, then the reads wait", async () => {
+  const since = Date.parse("2026-10-14T12:00:00Z") - 30 * 86_400_000;
+  const attempt = async (fails: number) => {
+    const files = memoryFiles();
+    const d = deps({ files, log: [], today: "2026-10-14" });
+    const model = d.model;
+    const waits: number[] = [];
+    let reranks = 0;
+    d.model = async (call) => {
+      if (call.site === "rerank" && ++reranks <= fails) throw new Error("Connection error.");
+      return model(call);
+    };
+    d.sleep = async (ms) => void waits.push(ms);
+    const out = await makeResultBuilder(d)({ topic: TOPIC, kind: "first", x: xRead(POSTS), since, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal });
+    return { out, waits, reranks, result: parseResultFile(files.files.get(out.resultFile!)!)! };
+  };
+  const twice = await attempt(2);
+  expect(twice.waits).toEqual([3_000, 6_000]);
+  expect(twice.out.itemCount).toBeGreaterThan(0);
+  expect(twice.result.stats.reranked).toBe(true);
+
+  const thrice = await attempt(3);
+  expect(thrice.waits).toEqual([3_000, 6_000]);
+  expect(thrice.reranks).toBe(3);
+  expect(thrice.out.itemCount).toBe(0);
+  expect(thrice.result.unjudged).toMatchObject({ runId: "topic-search-1", why: "Connection error." });
 });
 
 test("the build takes arXiv from what the read phase found and sends no arXiv request", async () => {

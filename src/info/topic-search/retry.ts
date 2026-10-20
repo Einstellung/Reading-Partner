@@ -10,6 +10,8 @@
 // ladder existed (no ladder recorded), since widening may find it something.
 // Hugging Face is read like arXiv, for the queries with arXiv words. An
 // X query that read and found nothing new is left alone, as is everything ok.
+// Reads no model judged (the rerank failed) are not read again: the plan names
+// their runs, and the build takes them in from those runs' directories.
 // Pure.
 
 import type { SourceHealth } from "../sources/engine";
@@ -27,10 +29,12 @@ export interface RetryPlan {
   arxiv: string[];
   /** Absent in a plan made before Hugging Face was a source; such a retry reads it where it reads arXiv. */
   huggingface?: string[];
+  /** Runs whose reads no model judged (result-types.ts pendingJudging): taken in and judged, not read again. Absent: none. */
+  judge?: string[];
 }
 
 export function isEmptyPlan(plan: RetryPlan): boolean {
-  return plan.x.length === 0 && plan.arxiv.length === 0 && (plan.huggingface?.length ?? 0) === 0;
+  return plan.x.length === 0 && plan.arxiv.length === 0 && (plan.huggingface?.length ?? 0) === 0 && (plan.judge?.length ?? 0) === 0;
 }
 
 /** The queries a run reads: those of the whole topic and of a picked subtopic. */
@@ -39,8 +43,11 @@ export function readQueries(search: TopicSearch): TopicSearch["queries"] {
   return search.queries.filter((q) => q.subtopic === null || picked.has(q.subtopic));
 }
 
-/** What a retry of the search's first look reads, from the health its runs left. */
-export function planRetry(search: TopicSearch, health: Readonly<Record<string, SourceHealth>>): RetryPlan {
+/**
+ * What a retry of the search's first look reads, from the health its runs left,
+ * and which runs' unjudged reads it judges (`waiting`, by run id).
+ */
+export function planRetry(search: TopicSearch, health: Readonly<Record<string, SourceHealth>>, waiting: readonly string[] = []): RetryPlan {
   const plan: RetryPlan = { x: [], arxiv: [], huggingface: [] };
   for (const q of readQueries(search)) {
     const x = health[topicSearchHealthKey(search.id, q.id, "x")]?.topicSearch;
@@ -51,7 +58,7 @@ export function planRetry(search: TopicSearch, health: Readonly<Record<string, S
     const h = health[topicSearchHealthKey(search.id, q.id, "huggingface")]?.topicSearch;
     if (!h || h.status === "failed") plan.huggingface!.push(q.id);
   }
-  return plan;
+  return waiting.length ? { ...plan, judge: [...waiting] } : plan;
 }
 
 const RETRY_KEY = /^topic-search:(.+):retry:(\d+)$/;

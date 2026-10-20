@@ -45,7 +45,9 @@ export interface TopicSearchWorkerPorts {
 function line(result: TopicSearchRunResult): string {
   if (result.status === "skipped") return `skipped: ${result.why ?? ""}`.trim();
   const x = result.x ? `${result.x.posts} posts read (${result.x.status}); ` : "";
-  return result.status === "empty" ? `${x}nothing new` : `${x}${result.itemCount} items delivered`;
+  const unjudged = result.unjudged ? `${result.status === "delivered" ? "; " : ""}${result.unjudged} candidates not judged, kept for the next run` : "";
+  if (result.status === "empty") return `${x}${unjudged || "nothing new"}`;
+  return `${x}${result.itemCount} items delivered${unjudged}`;
 }
 
 export function topicSearchWorker(ports: TopicSearchWorkerPorts): Worker {

@@ -251,6 +251,7 @@ export default {
   "issue.book.annexLine": "{link}, le panorama du premier regard sur ce sujet.",
   "issue.book.notesLine": "{link} : {titles}",
   "issue.book.awaiting": "{topic} : {sources} est encore en cours de lecture ; ce qui y sera trouvé viendra dans un numéro à part.",
+  "issue.book.unjudged": "{topic} : l'étape qui évalue ce qui a été trouvé n'a pas pu aboutir, {count} candidats ne figurent donc pas ici ; la prochaine exécution du sujet les évaluera.",
   "issue.book.entryLine": "{link} : {summary}",
   "issue.book.noteHead": "{label} : {title}",
   "issue.book.unknown": "Pas encore connu.",

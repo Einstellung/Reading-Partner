@@ -251,6 +251,7 @@ export default {
   "issue.book.annexLine": "{link}, обзор первого знакомства с этой темой.",
   "issue.book.notesLine": "{link}: {titles}",
   "issue.book.awaiting": "{topic}: {sources} ещё читается; найденное придёт отдельным выпуском.",
+  "issue.book.unjudged": "{topic}: этап оценки найденного не завершился, поэтому {count} кандидатов здесь не перечислены; их оценит следующий запуск темы.",
   "issue.book.entryLine": "{link}: {summary}",
   "issue.book.noteHead": "{label}: {title}",
   "issue.book.unknown": "Пока неизвестно.",

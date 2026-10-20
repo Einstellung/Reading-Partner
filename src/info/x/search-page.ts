@@ -396,6 +396,19 @@ export function pageHalt(read: Pick<XSearchRead, "path" | "loginWall" | "chrome"
   return null;
 }
 
+const GENERIC_ERROR = /Something went wrong|出错了/i;
+const LIMIT_SAID = /rate limit|try again later|too many requests|稍后再试|请求过多/i;
+
+/**
+ * Whether a limit the page showed may be X's generic error page instead
+ * ("Something went wrong. Try reloading."), which also shows when the network
+ * dropped for a moment: worth one reload before it is taken for a limit. A
+ * page that names the limit is not.
+ */
+export function mayBeGenericError(halt: XHalt, read: Pick<XSearchRead, "chrome">): boolean {
+  return halt.kind === "rate-limited" && GENERIC_ERROR.test(read.chrome) && !LIMIT_SAID.test(read.chrome);
+}
+
 function firstMatch(text: string, re: RegExp): string {
   const line = text.split("\n").find((l) => re.test(l)) ?? "";
   return `page says "${line.slice(0, 120)}"`;

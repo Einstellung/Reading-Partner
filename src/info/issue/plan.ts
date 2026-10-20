@@ -12,7 +12,9 @@
 //     papers outscoring every post cannot push posts all into the Notes;
 //   - when nothing qualifies for the body, the best-scored item with a written
 //     entry is promoted, so an issue never opens on Notes alone;
-//   - a topic's first look (kind "first") puts its panorama in the Annex.
+//   - a topic's first look (kind "first") puts its panorama in the Annex;
+//   - a run whose candidates no model judged lists none of them and gets a
+//     line saying so, which alone still makes an issue.
 
 import { SOURCE_NAME } from "../topic-search/pace";
 import type { TopicSearchResult, TopicSearchResultItem } from "../topic-search/result-types";
@@ -56,6 +58,8 @@ export interface IssuePlan {
   results: string[];
   /** A split first look's first part (topic-search/pace.ts): the slow sources still being read, by topic. */
   awaiting: { searchId: string; topic: string; sources: string[] }[];
+  /** Runs whose candidates no model judged (topic-search 88 「判不了」): nothing of theirs is listed, by topic. */
+  unjudged: { searchId: string; topic: string; candidates: number }[];
 }
 
 function written(item: TopicSearchResultItem): boolean {
@@ -77,10 +81,14 @@ export function itemLabel(p: Pick<PlannedItem, "topic" | "subtopic">): string {
   return p.subtopic ? `${p.topic} / ${p.subtopic}` : p.topic;
 }
 
-/** The plan, or null when no result has anything in it (no issue that night). */
+/**
+ * The plan, or null when no result has anything in it and none says its
+ * candidates wait to be judged (no issue that night).
+ */
 export function planIssue(results: readonly TopicSearchResult[], topics: readonly IssueTopic[]): IssuePlan | null {
   const usable = results.filter((r) => !r.empty && r.items.length > 0);
-  if (usable.length === 0) return null;
+  const waiting = results.filter((r) => r.unjudged);
+  if (usable.length === 0 && waiting.length === 0) return null;
   const topicOf = new Map(topics.map((t) => [t.searchId, t]));
   const order = new Map(usable.map((r, i) => [r.id, i]));
   const all: PlannedItem[] = usable.flatMap((r) => {
@@ -131,11 +139,12 @@ export function planIssue(results: readonly TopicSearchResult[], topics: readonl
       };
     });
   const seen = new Set<string>();
-  const topicList = usable
+  const topicList = [...usable, ...waiting]
     .filter((r) => !seen.has(r.searchId) && seen.add(r.searchId))
     .map((r) => ({ searchId: r.searchId, name: topicOf.get(r.searchId)?.name ?? r.name }));
   const awaiting = usable
     .filter((r) => r.awaiting?.length)
     .map((r) => ({ searchId: r.searchId, topic: topicOf.get(r.searchId)?.name ?? r.name, sources: r.awaiting!.map((s) => SOURCE_NAME[s] ?? s) }));
-  return { entries, notes, annex, topics: topicList, results: usable.map((r) => r.id), awaiting };
+  const unjudged = waiting.map((r) => ({ searchId: r.searchId, topic: topicOf.get(r.searchId)?.name ?? r.name, candidates: r.unjudged!.candidates }));
+  return { entries, notes, annex, topics: topicList, results: usable.map((r) => r.id), awaiting, unjudged };
 }

@@ -251,6 +251,7 @@ export default {
   "issue.book.annexLine": "{link}, el panorama de la primera mirada a este tema.",
   "issue.book.notesLine": "{link}: {titles}",
   "issue.book.awaiting": "{topic}: {sources} todavía se está leyendo; lo que se encuentre llegará en un número aparte.",
+  "issue.book.unjudged": "{topic}: el paso que evalúa lo encontrado no pudo terminar, así que {count} candidatos no aparecen aquí; la próxima ejecución del tema los evaluará.",
   "issue.book.entryLine": "{link}: {summary}",
   "issue.book.noteHead": "{label}: {title}",
   "issue.book.unknown": "Aún no se sabe.",

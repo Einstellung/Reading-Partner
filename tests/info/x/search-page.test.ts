@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Window } from "happy-dom";
 import {
+  mayBeGenericError,
   countOf,
   noResults,
   pageHalt,
@@ -124,6 +125,10 @@ describe("halts", () => {
     const h = pageHalt({ ...ok, chrome: "Search\nSomething went wrong. Try reloading.\nRetry" }, "search");
     expect(h?.kind).toBe("rate-limited");
     expect(h?.detail).toContain("Something went wrong");
+    // X's generic error is worth one reload; a page that names the limit is not.
+    expect(mayBeGenericError(h!, { chrome: "Search\nSomething went wrong. Try reloading.\nRetry" })).toBe(true);
+    const named = pageHalt({ ...ok, chrome: "Search\nRate limit exceeded. Something went wrong." }, "search")!;
+    expect(mayBeGenericError(named, { chrome: "Search\nRate limit exceeded. Something went wrong." })).toBe(false);
   });
 
   test("a permalink page is fine where it should be", () => {

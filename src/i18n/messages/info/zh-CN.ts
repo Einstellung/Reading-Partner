@@ -251,6 +251,7 @@ export default {
   "issue.book.annexLine": "{link}，这个主题第一次检索的全景。",
   "issue.book.notesLine": "{link}：{titles}",
   "issue.book.awaiting": "{topic}：{sources} 还在读，读到的另出一期。",
+  "issue.book.unjudged": "{topic}：给找到的内容打分那一步没做完，{count} 条候选没有列出，这个主题下一次运行时再判。",
   "issue.book.entryLine": "{link}：{summary}",
   "issue.book.noteHead": "{label}：{title}",
   "issue.book.unknown": "尚不清楚。",

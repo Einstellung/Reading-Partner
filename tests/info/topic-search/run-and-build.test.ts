@@ -20,7 +20,7 @@ import { PERMALINK_SCRIPT } from "../../../src/info/x/permalink";
 import { makeResultBuilder, SOURCE_HEALTH_FILE, type BuildResultDeps } from "../../../src/info/topic-search/build-result";
 import type { TopicModelCall } from "../../../src/info/topic-search/model-io";
 import { QUESTIONS_FILE, parseQuestionsFile } from "../../../src/info/topic-search/questions";
-import { parseResultFile } from "../../../src/info/topic-search/result-types";
+import { parseResultFile, pendingJudging } from "../../../src/info/topic-search/result-types";
 import { topicSearchTask, type TopicSearchRunDeps, type TopicSearchRunResult } from "../../../src/info/topic-search/run";
 import {
   createStateStore,
@@ -169,12 +169,18 @@ function world(opts: { papers?: InfoItem[] } = {}) {
   const library = new Map<string, { fileName: string; bytes: Uint8Array }>();
   let ids = 0;
   let arxivCalls = 0;
+  let offline = false;
+  const scripted = model(modelLog);
   const day = () => {
     const d = new Date(now);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
   const buildDeps: BuildResultDeps = {
-    model: model(modelLog),
+    model: async (call) => {
+      if (offline) throw new Error("Connection error.");
+      return scripted(call);
+    },
+    sleep: async () => {},
     fetchText: async () => ({ status: 404, text: "" }),
     openLink: async (url) => {
       opened.push(url);
@@ -227,8 +233,8 @@ function world(opts: { papers?: InfoItem[] } = {}) {
     gate: async (night) => xGate((await store.load()).halt, night),
     readClean: async () => void (await store.update((s) => ({ ...s, halt: null }))),
     checkSession: async () => "ok",
-    // As runs-live.ts does it, over this test's health file.
-    retryPlan: async (s) => planRetry(s, JSON.parse(fs.files.get(HEALTH_FILE) ?? "{}") as Record<string, SourceHealth>),
+    // As runs-live.ts does it, over this test's health file and result files.
+    retryPlan: async (s) => planRetry(s, JSON.parse(fs.files.get(HEALTH_FILE) ?? "{}") as Record<string, SourceHealth>, waitingRuns(fs, s.id)),
     halted: async (halt, about) => void (await store.update((s) => ({ ...s, halt: recordHalt(s.halt, halt, now, about.night) }))),
     keepAwake: async () => ({ held: true, detail: null, release: async () => {} }),
     open: async () => ({ status: "ok", session: fakeSession(screen, browse) }),
@@ -270,7 +276,17 @@ function world(opts: { papers?: InfoItem[] } = {}) {
     show: (s: unknown) => void (screen = s),
     search: () => search,
     arxivCalls: () => arxivCalls,
+    offline: (on: boolean) => void (offline = on),
   };
+}
+
+/** The runs whose reads wait to be judged, off the search's result files. */
+function waitingRuns(fs: ReturnType<typeof memFs>, searchId: string): string[] {
+  const results = [...fs.files.entries()]
+    .filter(([k]) => k.startsWith(`topic-search-${searchId}-`))
+    .map(([, text]) => parseResultFile(text))
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  return pendingJudging(results).map((u) => u.runId);
 }
 
 async function run(w: ReturnType<typeof world>, runId: string, brief: TopicSearchBrief) {
@@ -528,4 +544,56 @@ test("a line that failed keeps its last success; a query gone from the search go
   expect(Object.keys(after).sort()).toEqual(["arxiv-cs", key]);
   expect(after[key]).toMatchObject({ lastSuccess: 10, lastError: "rate-limited", lastErrorAt: 20 });
   expect(after[key].topicSearch?.status).toBe("failed");
+});
+
+describe("a first look whose judging the network broke, then a retry", () => {
+  const w = world();
+  const firstFile = "topic-search-ts-0a1b2c3d-2026-10-14.json";
+  const health = () => JSON.parse(w.fs.files.get(HEALTH_FILE)!) as Record<string, SourceHealth>;
+
+  test("X is read, nothing unjudged is listed, the file and the issue say the judging waits", async () => {
+    w.offline(true);
+    const result = await run(w, "r-first", { searchId: SEARCH.id, kind: "first", night: null });
+    expect(result.status).toBe("empty");
+    expect(result.x?.status).toBe("done");
+    expect(result.unjudged).toBeGreaterThan(0);
+    expect(result.resultFile).toBe(firstFile);
+
+    const file = parseResultFile(w.fs.files.get(firstFile)!)!;
+    expect(file.items).toEqual([]);
+    expect(file.retries?.map((r) => [r.runId, r.part, r.items.length, r.unjudged?.runId, r.unjudged?.why])).toEqual([
+      ["r-first", "slow", 0, "r-first", "Connection error."],
+    ]);
+    // What was read stands: X is not read again for it.
+    expect(health()["topic-search:ts-0a1b2c3d:q1:x"]?.topicSearch?.status).toBe("ok");
+    expect(planRetry(w.search(), health(), waitingRuns(w.fs, SEARCH.id))).toEqual({ x: [], arxiv: [], huggingface: [], judge: ["r-first"] });
+
+    // The X part's issue lists nothing and says why.
+    const shelf = parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null);
+    expect(shelf.issues.map((i) => [i.key, i.items])).toEqual([[`first:${SEARCH.id}#r-first`, 0]]);
+    expect(w.modelLog).toEqual([]);
+  });
+
+  test("the retry reads nothing again, judges the first look's reads and lists them in an issue of its own", async () => {
+    w.offline(false);
+    const navigations = w.browse.navigations.length;
+    const arxivBefore = w.arxivCalls();
+    const result = await run(w, "r-retry", { searchId: SEARCH.id, kind: "retry", night: null, n: 1 });
+    expect(result.status).toBe("delivered");
+    expect(result.unjudged).toBeUndefined();
+    expect(result.itemCount).toBeGreaterThan(0);
+    expect(w.browse.navigations.length).toBe(navigations);
+    expect(w.arxivCalls()).toBe(arxivBefore);
+    expect(w.modelLog.filter((c) => c.site === "rerank").length).toBe(1);
+
+    const file = parseResultFile(w.fs.files.get(firstFile)!)!;
+    expect(file.retries?.map((r) => [r.runId, r.items.length, r.judged])).toEqual([
+      ["r-first", 0, undefined],
+      ["r-retry", file.items.length, ["r-first"]],
+    ]);
+    expect(file.items.every((i) => i.summary)).toBe(true);
+    expect(waitingRuns(w.fs, SEARCH.id)).toEqual([]);
+    const shelf = parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null);
+    expect(shelf.issues.map((i) => i.key)).toEqual([`first:${SEARCH.id}#r-first`, `first:${SEARCH.id}#r-retry`]);
+  });
 });

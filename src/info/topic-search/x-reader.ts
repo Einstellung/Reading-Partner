@@ -45,6 +45,7 @@ import { bodyText, focalPost, outboundLinks, parsePermalinkResult, PERMALINK_SCR
 import {
   noResults,
   PAGE_CHROME_SCRIPT,
+  mayBeGenericError,
   pageHalt,
   parseSearchRead,
   SEARCH_PAGE_SCRIPT,
@@ -124,6 +125,8 @@ export const COLLAPSE_FALLBACK = 3;
 export const CAPTURE_MIN_POSTS = 20;
 
 const PAGE_TIMEOUT_MS = 60_000;
+/** The wait before the one reload of a search page that showed X's generic error. */
+export const RELOAD_WAIT_MS = 5_000;
 const PERMALINK_READY = `document.querySelectorAll("article").length > 0 || !location.pathname.includes("/status/")`;
 const SCREEN_SCRIPT = `({ availWidth: screen.availWidth, availHeight: screen.availHeight })`;
 
@@ -352,6 +355,7 @@ class Run {
     let stuck = 0;
     let seenRow = 0;
     let nextLong = drawInt(this.pace.longPauseEvery, this.deps.random);
+    let reloaded = false;
     let why: XLineStop;
     const end = async (stop: XLineStop) => {
       const after = markAfter(mark, readIds, this.deps.now());
@@ -370,6 +374,18 @@ class Run {
         await this.drain(session);
         if (read) {
           const halt = pageHalt(read, "search");
+          // X's generic error page also shows when the network dropped: one reload, then it counts.
+          if (halt && !reloaded && mayBeGenericError(halt, read) && this.daily.search < this.allowance.search) {
+            reloaded = true;
+            await this.stay(RELOAD_WAIT_MS, 0, "between", key);
+            const again = await session.navigate(url, { until: SEARCH_READY, timeoutMs: PAGE_TIMEOUT_MS });
+            this.past.pages.search++;
+            this.daily = { ...this.daily, search: this.daily.search + 1 };
+            await this.saveMemory();
+            await this.log({ kind: "open", line: key, url, status: again.status, landed: again.url, ms: again.elapsedMs });
+            if (again.status !== "ok" && again.status !== "timeout") throw new Stop("interrupted", `search page reload: ${again.status} ${again.detail ?? ""}`.trim());
+            continue;
+          }
           if (halt) await this.halt(halt);
           if (read.posts.length === 0 && noResults(read)) {
             why = "no-results";

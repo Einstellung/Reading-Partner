@@ -264,6 +264,7 @@ export default {
   "issue.book.annexLine": "{link}, the panorama of this topic's first look.",
   "issue.book.notesLine": "{link}: {titles}",
   "issue.book.awaiting": "{topic}: {sources} is still being read; what it finds comes in an issue of its own.",
+  "issue.book.unjudged": "{topic}: the step that judges what was found could not finish, so {count} candidates are not listed here; the topic's next run judges them.",
   "issue.book.entryLine": "{link}: {summary}",
   "issue.book.noteHead": "{label}: {title}",
   "issue.book.unknown": "Not yet known.",

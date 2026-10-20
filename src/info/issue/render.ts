@@ -206,6 +206,10 @@ export function issueEpubInput(plan: IssuePlan, meta: IssueMeta): SectionedEpubI
   for (const a of plan.awaiting) {
     contents.push(`<p><small>${fill(locale, "info.issue.book.awaiting", { topic: a.topic, sources: a.sources.join(", ") })}</small></p>`);
   }
+  // A run whose candidates no model judged: none of them is listed.
+  for (const u of plan.unjudged) {
+    contents.push(`<p><small>${fill(locale, "info.issue.book.unjudged", { topic: u.topic, count: u.candidates })}</small></p>`);
+  }
   const sections: SectionedEpubInput["sections"] = [
     { heading: translate(locale, "info.issue.book.contents"), html: contents.join("\n") },
     ...plan.entries.map((p) => ({ heading: cut(p.item.title, HEADING_CHARS), html: entryHtml(p, locale) })),

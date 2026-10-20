@@ -26,7 +26,7 @@ import type { RepoLookup } from "../sources/plugins/github-lookup";
 import type { ArxivLadder } from "./arxiv-ladder";
 import { doiArxiv, heldDois, poolDois, type DoiLookup } from "./doi-arxiv";
 import { composeResult, deepenableMaterial, EARLIER_LINES, type DeeperReads, type EarlierLine } from "./compose";
-import { parseJsonReply, type TopicModel } from "./model-io";
+import { abortableSleep, parseJsonReply, retryingModel, type TopicModel } from "./model-io";
 import type { RunSource } from "./pace";
 import { enqueue, loadQueue, metricQuestions, pickQuestions, questionCap, saveQueue, waiting, type NewQuestion } from "./questions";
 import {
@@ -49,6 +49,7 @@ import {
   mergeRetry,
   parseResultFile,
   parseResultFileName,
+  pendingJudging,
   RESULT_FILE_PREFIX,
   resultFileName,
   TOPIC_SEARCH_RESULT_VERSION,
@@ -56,6 +57,7 @@ import {
   type ResultPost,
   type ResultRunKind,
   type ResultStats,
+  type ResultUnjudged,
   type ResultVerify,
   type HubFacts,
   type TopicSearchResult,
@@ -123,6 +125,21 @@ export interface BuildTopicSearchResultArgs {
    * their part comes back as `retry` with `part: "slow"`.
    */
   later?: readonly RunSource[];
+  /** The run's id, for the record of reads no model judged; absent: the run directory's last segment. */
+  runId?: string;
+  /**
+   * What an earlier run of the topic read, by its id, for reads no model judged
+   * (result-types.ts pendingJudging): taken in with this run's and judged with
+   * them. Null when its directory holds nothing. Absent: none are taken in.
+   */
+  carry?: (runId: string) => Promise<CarriedRead | null>;
+}
+
+/** An earlier run's reads, out of its run directory. */
+export interface CarriedRead {
+  x: XReadResult | null;
+  arxiv: readonly ArxivFound[];
+  huggingface: readonly ArxivFound[];
 }
 
 /**
@@ -154,6 +171,8 @@ export type BuildTopicSearchResultOutput = {
   itemCount: number;
   /** Nothing new: the file says so and no box item goes out. */
   empty: boolean;
+  /** Candidates no model judged (the rerank failed): nothing listed, kept for the next run. Absent otherwise. */
+  unjudged?: number;
 };
 
 export type BuildTopicSearchResult = (args: BuildTopicSearchResultArgs) => Promise<BuildTopicSearchResultOutput>;
@@ -222,6 +241,8 @@ export interface BuildResultDeps {
   now(): number;
   /** Local date, YYYY-MM-DD. */
   today(): string;
+  /** The wait between tries of a model call that failed for the network; absent: a timer. */
+  sleep?(ms: number, signal: AbortSignal): Promise<void>;
 }
 
 function total(c: PostCounts): number {
@@ -507,9 +528,11 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const now = deps.now();
   const today = deps.today();
   let modelCalls = 0;
+  // A call the network broke is tried again twice, a few seconds apart.
+  const model = retryingModel(deps.model, deps.sleep ?? abortableSleep);
   const call: TopicModel = async (c) => {
     modelCalls++;
-    return deps.model(c);
+    return model(c);
   };
   const callsLeft = () => MAX_MODEL_CALLS - modelCalls;
 
@@ -524,25 +547,110 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     deps.bookLanguage ? deps.bookLanguage() : deps.language(),
   ]);
 
+  // Reads of earlier runs no model judged come in beside this run's (88 「判不了」).
+  const unjudgedBefore = args.carry ? pendingJudging(recent) : [];
+  const carried: CarriedRead[] = [];
+  for (const u of unjudgedBefore) {
+    const got = await args.carry!(u.runId);
+    if (got) carried.push(got);
+  }
+  const poolX: XReadResult = carried.length ? { ...x, posts: [...x.posts, ...carried.flatMap((c) => c.x?.posts ?? [])] } : x;
+  const poolArxiv = [...arxiv, ...carried.flatMap((c) => c.arxiv)];
+  const poolHf = [...huggingface, ...carried.flatMap((c) => c.huggingface)];
+
   // Rank (88 「打分」 1-6).
-  const gathered = gatherCandidates(topic, x, arxiv, since, huggingface);
+  const gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf);
+  // The source health speaks for this run's reads only.
+  const own = carried.length ? gatherCandidates(topic, x, arxiv, since, huggingface) : gathered;
   const numbered = numberPool(fusePool(topic, gathered.kept, RERANK_POOL[kind]));
   let answers = new Map<string, RerankAnswer>();
   let reranked = false;
   // The questions already raised, for both prompts that may raise more (88 「攒着问」).
   const { queue: stored } = await loadQueue(deps.files, topic.id);
   const raisedBefore = stored.filter((q) => q.source === "model");
+  let unjudgedWhy: string | null = null;
   if (numbered.length) {
     const prompt = rerankPrompt(topic, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text));
     try {
       answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, topic);
       reranked = answers.size > 0;
+      if (!reranked) unjudgedWhy = "the rerank named no candidate";
     } catch (e) {
       if (signal.aborted) throw e;
+      unjudgedWhy = e instanceof Error ? e.message : String(e);
     }
   }
+
+  const sameDay = history.filter((r) => r.date === today).length;
+  const name = target ? `${target.id}.json` : resultFileName(topic.id, today, sameDay + 1);
+  const resultId = name.replace(/\.json$/, "");
+  // The file (added to the first look's on a retry or the slow part) and this run's source health.
+  const finish = async (result: TopicSearchResult): Promise<void> => {
+    throwIfAborted(signal);
+    const written = target ? mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId, retry!.part === "slow") : result;
+    await deps.files.write(name, `${JSON.stringify(written, null, 2)}\n`);
+    const health = sourceHealth(topic, kind, x, arxiv, own.streams, recent, now, huggingface);
+    // A retry speaks only for what it read again; the other lines keep what the first look found.
+    if (retry) {
+      const readAgain = { x: retry.x, arxiv: retry.arxiv, huggingface: retry.huggingface ?? retry.arxiv };
+      health.entries = health.entries.filter((e) => readAgain[e.source].includes(e.query));
+    }
+    // A first part speaks only for its fast sources; the slow part writes the rest.
+    if (later) health.entries = health.entries.filter((e) => !later.includes(e.source));
+    await deps.files.write(`${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`, `${JSON.stringify(health, null, 2)}\n`);
+  };
+  const statsOf = (subtopicItems: Record<string, number>, avoidBlocked: Record<string, number>): ResultStats => ({
+    candidates: {
+      x: gathered.all.filter((c) => c.source === "x").length,
+      arxiv: gathered.all.filter((c) => c.source === "arxiv").length,
+      huggingface: gathered.all.filter((c) => c.source === "huggingface").length,
+    },
+    passedFloor: gathered.kept.length,
+    pooled: numbered.length,
+    reranked,
+    anchorMiss: gathered.kept.length ? gathered.kept.filter((c) => !c.mentionsAnchor).length / gathered.kept.length : 0,
+    avoidBlocked,
+    subtopicItems,
+    modelCalls,
+  });
+
+  // No model judged the pool: nothing is listed on a fallback score. The reads
+  // stay in their run directories and the topic's next run judges them.
+  if (unjudgedWhy !== null) {
+    const unjudged: ResultUnjudged = {
+      runId: args.runId ?? retry?.runId ?? runDir.replace(/\/+$/, "").split("/").pop()!,
+      at: now,
+      why: unjudgedWhy,
+      candidates: numbered.length,
+    };
+    await finish({
+      version: TOPIC_SEARCH_RESULT_VERSION,
+      id: resultId,
+      searchId: topic.id,
+      name: topic.name,
+      kind,
+      date: today,
+      createdAt: now,
+      window: { since, until: now },
+      empty: true,
+      writeup: "none",
+      overview: null,
+      groups: [],
+      quiet: [],
+      items: [],
+      materials: [],
+      questions: [],
+      stats: statsOf({}, {}),
+      runDir,
+      ...(later ? { awaiting: later } : {}),
+      unjudged,
+    });
+    return { resultFile: name, itemCount: 0, empty: true, unjudged: numbered.length };
+  }
+  const judged = unjudgedBefore.map((u) => u.runId);
+
   // A DOI link in the pool is its arXiv paper when the run holds or a lookup finds it.
-  const dois = doiArxiv(heldDois([...arxiv, ...huggingface]), deps.arxivIdOfDoi ?? null);
+  const dois = doiArxiv(heldDois([...poolArxiv, ...poolHf]), deps.arxivIdOfDoi ?? null);
   for (const doi of poolDois(numbered)) await dois.resolve(doi, signal);
   const scored = scorePool(topic, numbered, answers, dois.keyOfUrl);
   const clusters = rankEvents(scored);
@@ -708,24 +816,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   }
   const subtopicItems: Record<string, number> = {};
   for (const item of items) if (!item.continuing) subtopicItems[item.subtopic ?? ""] = (subtopicItems[item.subtopic ?? ""] ?? 0) + 1;
-  const stats: ResultStats = {
-    candidates: {
-      x: gathered.all.filter((c) => c.source === "x").length,
-      arxiv: gathered.all.filter((c) => c.source === "arxiv").length,
-      huggingface: gathered.all.filter((c) => c.source === "huggingface").length,
-    },
-    passedFloor: gathered.kept.length,
-    pooled: numbered.length,
-    reranked,
-    anchorMiss: gathered.kept.length ? gathered.kept.filter((c) => !c.mentionsAnchor).length / gathered.kept.length : 0,
-    avoidBlocked,
-    subtopicItems,
-    modelCalls: 0,
-  };
+  const stats: ResultStats = { ...statsOf(subtopicItems, avoidBlocked), modelCalls: 0 };
 
-  const sameDay = history.filter((r) => r.date === today).length;
-  const name = target ? `${target.id}.json` : resultFileName(topic.id, today, sameDay + 1);
-  const resultId = name.replace(/\.json$/, "");
   const empty = items.length === 0;
   const doubts: NewQuestion[] = scored
     .filter((s) => s.rerank?.doubt)
@@ -779,7 +871,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         ...(target ? { alongside: target.items } : {}),
         deeper,
       },
-      deps.model,
+      model,
       signal,
       Math.max(0, callsLeft()),
     );
@@ -836,20 +928,10 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     stats,
     runDir,
     ...(later ? { awaiting: later } : {}),
+    ...(judged.length ? { judged } : {}),
   };
-  throwIfAborted(signal);
-  const written = target ? mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId, retry!.part === "slow") : result;
-  await deps.files.write(name, `${JSON.stringify(written, null, 2)}\n`);
+  await finish(result);
   await saveQueue(deps.files, topic.id, picked.queue);
-  const health = sourceHealth(topic, kind, x, arxiv, gathered.streams, recent, now, huggingface);
-  // A retry speaks only for what it read again; the other lines keep what the first look found.
-  if (retry) {
-    const readAgain = { x: retry.x, arxiv: retry.arxiv, huggingface: retry.huggingface ?? retry.arxiv };
-    health.entries = health.entries.filter((e) => readAgain[e.source].includes(e.query));
-  }
-  // A first part speaks only for its fast sources; the slow part writes the rest.
-  if (later) health.entries = health.entries.filter((e) => !later.includes(e.source));
-  await deps.files.write(`${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`, `${JSON.stringify(health, null, 2)}\n`);
   return { resultFile: name, itemCount: items.length, empty };
 }
 

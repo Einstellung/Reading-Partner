@@ -27,13 +27,14 @@ import type { XHalt } from "../x/search-page";
 import { resolveRedirect } from "../x/live";
 import { stopFollowing } from "./apply";
 import { SOURCE_HEALTH_FILE, type BuildTopicSearchResult } from "./build-result";
-import { parseResultFile, RESULT_FILE_PREFIX, type TopicSearchResult } from "./result-types";
+import { parseResultFile, pendingJudging, RESULT_FILE_PREFIX, type TopicSearchResult } from "./result-types";
 import { topicSearchDescriber, type ShelfIssue, type TopicSearchStatusDeps } from "./run-status";
 import { buildTopicSearchResult, searchArxivLive, searchHfLive } from "./build-live";
 import { registerFirstRunDispatcher } from "./first-run";
 import { clearSignedOut, recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
 import type { XResume } from "./resume-tool";
-import { planRetry } from "./retry";
+import { planRetry, type RetryPlan } from "./retry";
+import type { TopicSearch } from "./types";
 import type { RetryToolDeps } from "./retry-tool";
 import { lastNightAnchor, type NightConditions } from "./nightly";
 import {
@@ -177,7 +178,7 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
       await state.update((s) => (s.halt ? { ...s, halt: null } : s));
     },
     checkSession: xSessionState,
-    retryPlan: async (search) => planRetry(search, await loadSourceHealth()),
+    retryPlan: retryPlanOf,
     halted,
     keepAwake: (reason) => keepAwake(reason),
     open: (viewport, opts) => openBrowse({ idleTimeoutMs: BROWSE_IDLE_MS, viewport, initScript: opts?.initScript }),
@@ -205,6 +206,23 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
   };
 }
 
+/** A search's result files on this device. */
+async function loadResults(searchId: string): Promise<TopicSearchResult[]> {
+  const names = (await appData.readDir("")).filter((e) => e.isFile && e.name.startsWith(`${RESULT_FILE_PREFIX}${searchId}-`));
+  const out: TopicSearchResult[] = [];
+  for (const e of names) {
+    const parsed = parseResultFile(await appData.readText(e.name));
+    if (parsed?.searchId === searchId) out.push(parsed);
+  }
+  return out;
+}
+
+/** What a retry reads again, and the runs whose reads wait to be judged (result files). */
+async function retryPlanOf(search: TopicSearch): Promise<RetryPlan> {
+  const waiting = pendingJudging(await loadResults(search.id)).map((u) => u.runId);
+  return planRetry(search, await loadSourceHealth(), waiting);
+}
+
 /** The shelf file info/issue writes (info/issue/types.ts INFO_SHELF_FILE); read here without importing that domain. */
 const SHELF_FILE = "info-shelf.json";
 
@@ -230,15 +248,7 @@ const statusDeps: TopicSearchStatusDeps = {
     const path = `${runDirOf(runId)}/${SOURCE_HEALTH_FILE}`;
     return (await appData.exists(path)) ? parseSourceHealthFile(await appData.readText(path)) : null;
   },
-  results: async (searchId) => {
-    const names = (await appData.readDir("")).filter((e) => e.isFile && e.name.startsWith(`${RESULT_FILE_PREFIX}${searchId}-`));
-    const out: TopicSearchResult[] = [];
-    for (const e of names) {
-      const parsed = parseResultFile(await appData.readText(e.name));
-      if (parsed?.searchId === searchId) out.push(parsed);
-    }
-    return out;
-  },
+  results: (searchId) => loadResults(searchId),
   issues: async () => {
     const shelf = (await readJson(SHELF_FILE)) as { issues?: ShelfIssue[] } | null;
     return Array.isArray(shelf?.issues) ? shelf.issues : [];
@@ -318,7 +328,7 @@ export async function resumeXReading(): Promise<XResume> {
 
 /** The retry tool's live side (retry-tool.ts): the plan and the session on this device, and the ask. */
 export const retryDeps: Omit<RetryToolDeps, "searches" | "known"> = {
-  plan: async (search) => planRetry(search, await loadSourceHealth()),
+  plan: retryPlanOf,
   xSignedIn: async () => {
     await liftSignedOut();
     const session = (await loadSiteSessions())[X_HOST];

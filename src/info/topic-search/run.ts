@@ -175,6 +175,13 @@ export interface TopicSearchRunResult {
   resultFile: string | null;
   itemCount: number;
   x: { status: XRunStatus; why: string | null; posts: number; searchPages: number; permalinkPages: number } | null;
+  /** Candidates no model judged (88 「判不了」): nothing listed, the file says so, the next run judges them. Absent otherwise. */
+  unjudged?: number;
+}
+
+/** The result file the brief takes from a run: one that lists something or says what waits to be judged. */
+function briefFile(result: TopicSearchRunResult): string | null {
+  return result.status === "delivered" || result.unjudged ? result.resultFile : null;
 }
 
 export interface TopicSearchRunDeps {
@@ -427,9 +434,9 @@ export function topicSearchTask(
           return next(runtime, { phase: "read", blocked: null, ...window }, context);
         }
         const blocked = retry && retry.x.length === 0 ? "no X query to read again" : await xBlocked(night, search.id, runId);
-        // A night's increment is X alone, and so is a retry with no paper query to read again;
-        // the first look still builds from what else it has.
-        const papersLeft = retry ? retry.arxiv.length + (retry.huggingface?.length ?? 0) : 0;
+        // A night's increment is X alone, and so is a retry with no paper query to read again
+        // and no unjudged reads to judge; the first look still builds from what else it has.
+        const papersLeft = retry ? retry.arxiv.length + (retry.huggingface?.length ?? 0) + (retry.judge?.length ?? 0) : 0;
         if (blocked && (brief.kind === "daily" || (retry && papersLeft === 0))) return skip(runtime, blocked, context);
         if (!blocked) await hold(runId);
         const since = brief.kind === "daily" ? (search.lastRunAt ?? now - FIRST_LOOK_BACK_MS) : now - FIRST_LOOK_BACK_MS;
@@ -562,8 +569,20 @@ export function topicSearchTask(
             signal: runtime.signal,
             retry,
             ...(later ? { later } : {}),
+            runId,
+            // Reads of earlier runs no model judged, out of their run directories.
+            carry: async (id) => {
+              const from = await deps.runDir(id);
+              const [xRead, arxivRead, hfRead] = await Promise.all([deps.loadRead(from), deps.loadArxiv(from), deps.loadHf(from)]);
+              if (!xRead && !arxivRead && !hfRead) return null;
+              return { x: xRead, arxiv: arxivRead?.found ?? [], huggingface: hfRead?.found ?? [] };
+            },
           });
-          built = await runtime.memo(memo("built"), { resultFile: made.resultFile, itemCount: made.itemCount, empty: made.empty }, context);
+          built = await runtime.memo(
+            memo("built"),
+            { resultFile: made.resultFile, itemCount: made.itemCount, empty: made.empty, ...(made.unjudged ? { unjudged: made.unjudged } : {}) },
+            context,
+          );
         }
         if (!(await runtime.memo<boolean>(memo("health-folded"), context))) {
           await deps.foldSourceHealth(dir, search);
@@ -590,6 +609,7 @@ export function topicSearchTask(
           resultFile: built.resultFile,
           itemCount: built.itemCount,
           x: x ? { status: x.status, why: x.why, posts: x.posts.length, searchPages: x.pages.search, permalinkPages: x.pages.permalink } : null,
+          ...(built.unjudged ? { unjudged: built.unjudged } : {}),
         };
         if (part === "fast") {
           // The first part goes to the brief now, as the first look's own issue.
@@ -599,7 +619,7 @@ export function topicSearchTask(
               searchId: brief.searchId,
               kind: brief.kind,
               night: brief.night,
-              resultFile: result.status === "delivered" ? result.resultFile : null,
+              resultFile: briefFile(result),
             });
             await runtime.memo("closed:fast", true, context);
           }
@@ -613,7 +633,11 @@ export function topicSearchTask(
             resultFile: result.resultFile,
             itemCount: result.itemCount,
           });
-          say(runId, `first part delivered: ${result.itemCount} items; waiting to read ${sourceNames(sourcesOfPace("slow"))}`);
+          say(
+            runId,
+            `first part ${result.unjudged ? `not judged (${result.unjudged} candidates kept for the next run)` : `delivered: ${result.itemCount} items`}; ` +
+              `waiting to read ${sourceNames(sourcesOfPace("slow"))}`,
+          );
           return next(runtime, { phase: "later", ...windowOf(cp) }, context);
         }
         if (part === "slow") {
@@ -652,7 +676,7 @@ export function topicSearchTask(
             // The slow part is told as what a retry adds: an issue of its own, keyed by this run (first:<id>#<runId>).
             kind: part === "slow" ? "retry" : brief.kind,
             night: brief.night,
-            resultFile: result.status === "delivered" ? result.resultFile : null,
+            resultFile: briefFile(result),
           });
           await runtime.memo("closed", true, context);
         }

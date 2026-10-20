@@ -243,6 +243,25 @@ export interface TopicSearchResult {
    * merged; left set when that run failed before it was. Absent otherwise.
    */
   awaiting?: RunSource[];
+  /**
+   * The run that wrote the file (the first part, on a split first look) had
+   * candidates no model judged: the rerank failed, so nothing was listed and its
+   * reads wait in its run directory for the topic's next run (88 「判不了」).
+   * A retry's or the slow part's is on its `retries` record. Absent otherwise.
+   */
+  unjudged?: ResultUnjudged;
+  /** Runs whose waiting reads this file's run took in and judged (`pendingJudging`). Absent when none. */
+  judged?: string[];
+}
+
+/** A run's reads that no model judged, kept for the next run of the topic. */
+export interface ResultUnjudged {
+  runId: string;
+  at: number;
+  /** Why the judging failed, in the model call's words. */
+  why: string;
+  /** Candidates that were waiting for the rerank. */
+  candidates: number;
 }
 
 /** What one retry of a first look, or its slow part, added to its file: its items, its write-up and questions, its own counts. */
@@ -258,6 +277,10 @@ export interface ResultRetry {
   /** Question ids it asked. */
   questions: string[];
   stats: ResultStats;
+  /** Its candidates no model judged (`TopicSearchResult.unjudged`). */
+  unjudged?: ResultUnjudged;
+  /** Runs whose waiting reads it judged. */
+  judged?: string[];
 }
 
 /** The first look's own part of a file retries were merged into. */
@@ -337,6 +360,8 @@ export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, r
     writeup: part.writeup,
     questions: part.questions.map((q) => q.id),
     stats: part.stats,
+    ...(part.unjudged ? { unjudged: part.unjudged } : {}),
+    ...(part.judged?.length ? { judged: part.judged } : {}),
   };
   const items = [...target.items, ...part.items];
   const retries = [...(target.retries ?? []).filter((r) => r.runId !== runId), record];
@@ -365,10 +390,13 @@ export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, r
   };
 }
 
-/** What a retry added to a first look's file, as a result of its own (its brief issue); null when it added nothing. */
+/**
+ * What a retry added to a first look's file, as a result of its own (its brief
+ * issue); null when it added nothing and left nothing waiting to be judged.
+ */
 export function retryPart(result: TopicSearchResult, runId: string): TopicSearchResult | null {
   const record = result.retries?.find((r) => r.runId === runId);
-  if (!record || record.items.length === 0) return null;
+  if (!record || (record.items.length === 0 && !record.unjudged)) return null;
   const items = result.items.filter((i) => record.items.includes(i.id));
   const used = new Set(items.flatMap((i) => i.materials));
   return {
@@ -388,7 +416,24 @@ export function retryPart(result: TopicSearchResult, runId: string): TopicSearch
     retries: undefined,
     awaiting: undefined,
     firstLook: undefined,
+    unjudged: record.unjudged,
+    judged: record.judged,
   };
+}
+
+/**
+ * The runs whose reads still wait to be judged, among a topic's results: each
+ * one some file says went unjudged and none says was judged since. Pure.
+ */
+export function pendingJudging(results: readonly TopicSearchResult[]): ResultUnjudged[] {
+  const judged = new Set(results.flatMap((r) => [...(r.judged ?? []), ...(r.retries ?? []).flatMap((x) => x.judged ?? [])]));
+  const out = new Map<string, ResultUnjudged>();
+  for (const r of results) {
+    for (const u of [r.unjudged, ...(r.retries ?? []).map((x) => x.unjudged)]) {
+      if (u && !judged.has(u.runId) && !out.has(u.runId)) out.set(u.runId, u);
+    }
+  }
+  return [...out.values()];
 }
 
 /**

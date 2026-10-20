@@ -359,3 +359,56 @@ describe("pace", () => {
     expect(fitViewport({ width: 1440, height: 2420 }, null)).toEqual({ width: 1440, height: 2420 });
   });
 });
+
+describe("X's generic error page", () => {
+  const ERROR = screen([], { chrome: "Search\nSomething went wrong. Try reloading.\nRetry", textChars: 200 });
+
+  /** The site, with the search page turned to `after` once it has been opened. */
+  function flaky(after: Screen[]) {
+    const site = new FakeSite();
+    site.pages.set("protein", [ERROR]);
+    const h = harness(site);
+    const open = h.deps.open;
+    h.deps.open = async (viewport, opts) => {
+      const opened = await open(viewport, opts);
+      if (opened.status !== "ok") return opened;
+      const navigate = opened.session.navigate;
+      opened.session.navigate = async (url, o) => {
+        const load = await navigate(url, o);
+        site.pages.set("protein", after);
+        return load;
+      };
+      return opened;
+    };
+    return { site, h };
+  }
+
+  test("is reloaded once, and the line reads on when the posts come back", async () => {
+    const { site, h } = flaky([screen([0, 1, 2].map((i) => raw(pid(i))))]);
+    const result = await readXSearch(input([line("t:q1", "protein")]), h.deps);
+    expect(result.status).toBe("done");
+    expect(result.posts.map((p) => p.post.id)).toEqual([0, 1, 2].map(pid));
+    expect(h.halts).toEqual([]);
+    expect(site.navigations.length).toBe(2);
+    expect(result.pages.search).toBe(2);
+    expect(h.steps.filter((s) => s.kind === "open").length).toBe(2);
+  });
+
+  test("still there after the reload, it is a limit", async () => {
+    const { site, h } = flaky([ERROR]);
+    const result = await readXSearch(input([line("t:q1", "protein")]), h.deps);
+    expect(result.status).toBe("halted");
+    expect(result.halt?.kind).toBe("rate-limited");
+    expect(h.halts.length).toBe(1);
+    expect(site.navigations.length).toBe(2);
+  });
+
+  test("a page that names the limit is not reloaded", async () => {
+    const site = new FakeSite();
+    site.pages.set("protein", [screen([], { chrome: "Search\nRate limit exceeded\nTry again later", textChars: 200 })]);
+    const h = harness(site);
+    const result = await readXSearch(input([line("t:q1", "protein")]), h.deps);
+    expect(result.halt?.kind).toBe("rate-limited");
+    expect(site.navigations.length).toBe(1);
+  });
+});

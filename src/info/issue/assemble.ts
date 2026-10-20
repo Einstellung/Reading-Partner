@@ -273,7 +273,8 @@ async function writeOpening(deps: IssueDeps, plan: IssuePlan, results: readonly 
     }
   }
   let reply: string | null = null;
-  if (deps.writeOpening) {
+  // An issue that only says what waits to be judged has nothing for the model to point at.
+  if (deps.writeOpening && plan.entries.length + plan.notes.length > 0) {
     try {
       // The book's language, so the opening and the book agree (docs/pitfall/647).
       reply = await deps.writeOpening(openingPrompt(plan, asked, languageInstruction(locale)));

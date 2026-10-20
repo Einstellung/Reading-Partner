@@ -278,3 +278,33 @@ describe("a first look in two parts (topic-search/pace.ts)", () => {
     expect(dueIssues(state, [], 0, () => 0)).toEqual([{ key: "first:ts-0000aaaa#r-first", date: null, files: ["f.json"] }]);
   });
 });
+
+describe("a run whose candidates no model judged (topic-search 88 「判不了」)", () => {
+  const unjudged = { runId: "r-first", at: 9, why: "Connection error.", candidates: 7 };
+
+  test("its issue lists none of them and says the next run judges them, even with nothing else in it", () => {
+    const waiting = result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [], { empty: true, unjudged });
+    const plan = planIssue([waiting], TOPICS)!;
+    expect(plan.entries).toEqual([]);
+    expect(plan.notes).toEqual([]);
+    expect(plan.unjudged).toEqual([{ searchId: "ts-0000aaaa", topic: "AI for science", candidates: 7 }]);
+    const contents = issueEpubInput(plan, { number: 3, date: "2026-10-15", locale: "en" }).sections[0].html;
+    expect(contents).toContain(
+      "AI for science: the step that judges what was found could not finish, so 7 candidates are not listed here; the topic's next run judges them.",
+    );
+    // Without it, an empty result still makes no issue.
+    expect(planIssue([result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [], { empty: true })], TOPICS)).toBeNull();
+  });
+
+  test("the slow part that went unjudged has an issue of its own; the first part's stays as it was", () => {
+    const first = result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [item("E1", 80)], { awaiting: ["x"] });
+    const slow = result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [], { empty: true, createdAt: 9, unjudged });
+    const merged = mergeRetry(first, slow, "r-first", true);
+    expect(merged.retries).toEqual([expect.objectContaining({ runId: "r-first", items: [], unjudged })]);
+    expect(merged.unjudged).toBeUndefined();
+    expect(firstPart(merged).unjudged).toBeUndefined();
+    const part = retryPart(merged, "r-first")!;
+    expect(part.items).toEqual([]);
+    expect(planIssue([part], TOPICS)!.unjudged.map((u) => u.candidates)).toEqual([7]);
+  });
+});
