@@ -316,6 +316,23 @@ describe("following up a line", () => {
     expect(result.posts.find((p) => p.post.id === pid(1))!.post.links[0].url).toBe("https://example.org/1234");
     expect(site.navigations[1]).toBe(`https://x.com/lab/status/${long}`);
   });
+
+  test("nearly every post at 0 relevance: a warning step, and the first few cut-short posts opened in page order", async () => {
+    const site = new FakeSite();
+    // A floor measured on words the posts never use (pitfall 660).
+    site.pages.set("protein", [screen(Array.from({ length: 64 }, (_, i) => raw(pid(i), { text: `post ${i} on enzymes`, showMore: true })))]);
+    const h = harness(site);
+    const result = await readXSearch(input([{ ...line("t:q1", "protein"), relevance: "怎么设计蛋白质？" }]), h.deps);
+    expect(result.collapse).toEqual({ posts: 64, zero: 64 });
+    expect(h.steps.filter((s) => s.kind === "relevance-collapse")).toHaveLength(1);
+    expect(result.pages.permalink).toBe(3);
+    expect(site.navigations.slice(1)).toEqual([0, 1, 2].map((i) => `https://x.com/someone/status/${pid(i)}`));
+
+    // Picked up again from the file: the warning is not written twice and nothing more is opened.
+    const again = await readXSearch(input([{ ...line("t:q1", "protein"), relevance: "怎么设计蛋白质？" }]), h.deps);
+    expect(again.collapse).toEqual({ posts: 64, zero: 64 });
+    expect(h.steps.filter((s) => s.kind === "relevance-collapse")).toHaveLength(1);
+  });
 });
 
 describe("pace", () => {

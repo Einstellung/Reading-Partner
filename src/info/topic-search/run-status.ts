@@ -84,19 +84,23 @@ function queryLabel(search: TopicSearch | undefined, query: string, source: RunS
   return `"${(source === "x" ? q?.x : q?.arxiv) ?? query}"`;
 }
 
-function outcome(e: Pick<SourceHealthEntry, "status" | "read" | "fresh" | "ladder"> & { why?: string | null }): string {
+type HealthLineEntry = Pick<SourceHealthEntry, "query" | "source" | "status" | "read" | "fresh" | "ladder" | "note"> & { why?: string | null };
+
+function outcome(e: HealthLineEntry): string {
   if (e.status === "failed") return `failed${e.why ? ` (${e.why})` : ""}`;
   const ladder = e.ladder ? `${e.ladder.outcome}, ` : "";
   return `${ladder}${e.read} read, ${e.fresh} new`;
 }
 
-/** Per-query outcome lines, X, then arXiv, then Hugging Face. */
-export function healthLines(entries: readonly (Pick<SourceHealthEntry, "query" | "source" | "status" | "read" | "fresh" | "ladder"> & { why?: string | null })[], search: TopicSearch | undefined): string[] {
+/** Per-query outcome lines, X, then arXiv, then Hugging Face; a source's warnings after its line, each once. */
+export function healthLines(entries: readonly HealthLineEntry[], search: TopicSearch | undefined): string[] {
   const out: string[] = [];
   for (const source of ["x", "arxiv", "huggingface"] as const) {
     const mine = entries.filter((e) => e.source === source);
     if (!mine.length) continue;
     out.push(`${SOURCE_NAME[source]} per query: ${mine.map((e) => `${queryLabel(search, e.query, source)} ${outcome(e)}`).join("; ")}.`);
+    const notes = [...new Set(mine.map((e) => e.note).filter((n): n is string => !!n))];
+    for (const note of notes) out.push(`${SOURCE_NAME[source]} warning: ${note}.`);
   }
   return out;
 }

@@ -52,6 +52,7 @@ import type { HfSearch } from "./hf-ladder";
 import { hfProgressLine, readHf } from "./hf-read";
 import { lastNightAnchor, nightEndAt } from "./nightly";
 import { sourceNames, sourcesOf, sourcesOfPace, splitsFirstLook, type RunPart } from "./pace";
+import { relevanceBasis } from "./rank-pool";
 import type { FirstPartOnFile } from "./run-state";
 import type { TopicSearch } from "./types";
 import { isEmptyPlan, readQueries, type RetryPlan } from "./retry";
@@ -116,7 +117,7 @@ export function searchLines(search: TopicSearch, kind: "first" | "daily", since:
       query: q.x,
       order: kind === "first" ? ("top" as const) : ("live" as const),
       ...(kind === "first" ? { since: localDay(since) } : {}),
-      relevance: q.ranking.trim() || q.x,
+      relevance: relevanceBasis(q, "x"),
     }));
 }
 
@@ -136,6 +137,7 @@ export function readFromSteps(steps: Parameters<typeof replay>[0], status: XRunS
     lines: [...past.lineEnds].map(([key, end]) => ({ key, ...end })),
     pages: { ...past.pages },
     activeMs: past.activeMs,
+    collapse: past.collapse,
   };
 }
 

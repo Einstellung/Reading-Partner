@@ -626,6 +626,8 @@ export interface TopicSearchLineHealth {
   read: number;
   fresh: number;
   passedFloor: number;
+  /** X only: a warning about the read, such as the reader's relevance alarm. */
+  note?: string;
   /**
    * arXiv and Hugging Face only: how the query ladder ended
    * (topic-search/arxiv-ladder.ts, hf-ladder.ts) —

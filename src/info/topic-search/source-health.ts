@@ -51,7 +51,7 @@ export function foldTopicSearchHealth(
     const key = topicSearchHealthKey(file.searchId, e.query, e.source);
     const q = search.queries.find((x) => x.id === e.query);
     const label = (e.source === "x" ? q?.x : q?.arxiv) ?? e.query;
-    const line = { searchId: file.searchId, name: search.name, query: e.query, label, source: e.source, status: e.status, read: e.read, fresh: e.fresh, passedFloor: e.passedFloor, ...(e.ladder ? { ladder: e.ladder } : {}) };
+    const line = { searchId: file.searchId, name: search.name, query: e.query, label, source: e.source, status: e.status, read: e.read, fresh: e.fresh, passedFloor: e.passedFloor, ...(e.ladder ? { ladder: e.ladder } : {}), ...(e.note ? { note: e.note } : {}) };
     const before = out[key] ?? {};
     out[key] =
       e.status === "failed"

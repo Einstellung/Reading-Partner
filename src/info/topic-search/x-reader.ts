@@ -12,7 +12,12 @@
 // every search and permalink page counts against the run's ceiling and the
 // device's daily allowance. A cut-short post that clears the local relevance
 // floor gets its permalink page opened for the whole text and the links out of
-// it, which the search card did not show (pitfall 657).
+// it, which the search card did not show (pitfall 657). The floor is measured
+// on the same words the build measures it on (rank-pool.ts relevanceBasis:
+// the X query, not the ranking question, which may be in another language,
+// pitfall 660). When nearly every post of the run scores 0 the floor has
+// stopped telling anything apart: the run writes a warning and opens the
+// first few cut-short posts of each line in page order instead.
 //
 // Every step is a line in the progress file. Called again with the same file,
 // the run picks up where it was: finished lines are not read again, kept posts
@@ -25,7 +30,7 @@
 // Phase 3's run calls `readXSearch`, inside its keep-awake hold.
 
 import type { BrowseOpen, BrowseSession } from "../../workshop/extract/webview-browse";
-import { localRelevance, prepareQuery, RELEVANCE_FLOOR } from "../rank/relevance";
+import { localRelevance, prepareQuery, RELEVANCE_FLOOR, type PreparedQuery } from "../rank/relevance";
 import { bodyText, focalPost, outboundLinks, parsePermalinkResult, PERMALINK_SCRIPT, postBodyLines } from "../x/permalink";
 import {
   noResults,
@@ -53,6 +58,7 @@ import {
   type XProgressLog,
   type XReaderMemory,
   type XReaderStore,
+  type XRelevanceCollapse,
   type XReplay,
   type XRunStatus,
   type XStep,
@@ -64,7 +70,7 @@ const MIN = 60_000;
 /** One search line of a run. `key` names it across runs: the topic search's id and the query's. */
 export interface XReadLine extends XSearchLineSpec {
   key: string;
-  /** What the local relevance floor is measured against: the query in plain words. */
+  /** What the local relevance floor is measured against: the words the build measures it on (rank-pool.ts relevanceBasis). */
   relevance: string;
 }
 
@@ -94,6 +100,13 @@ export const EMPTY_SCREENS = 3;
 export const LOADED_PAGE_CHARS = 400;
 /** Scrolls in a row that move nothing that end a line. */
 export const STUCK_SCROLLS = 2;
+
+/** Posts scored, across the run's lines, before the relevance alarm may go off. */
+export const COLLAPSE_MIN_POSTS = 60;
+/** Share of posts scoring 0 that sets off the alarm. */
+export const COLLAPSE_ZERO_SHARE = 0.9;
+/** Cut-short posts per line opened in page order once the alarm went off and the floor passes none. */
+export const COLLAPSE_FALLBACK = 3;
 
 const PAGE_TIMEOUT_MS = 60_000;
 const PERMALINK_READY = `document.querySelectorAll("article").length > 0 || !location.pathname.includes("/status/")`;
@@ -130,6 +143,8 @@ export interface XReadResult {
   lines: { key: string; why: XLineStop; screens: number; kept: number }[];
   pages: { search: number; permalink: number };
   activeMs: number;
+  /** Set when nearly every post scored 0 relevance (relevanceCollapse). */
+  collapse?: XRelevanceCollapse | null;
 }
 
 /** One line's part of what is left of the run's ceilings (Run.share). */
@@ -190,6 +205,7 @@ class Run {
       lines: [...this.past.lineEnds].map(([key, end]) => ({ key, ...end })),
       pages: { ...this.past.pages },
       activeMs: Math.round(this.active),
+      collapse: this.past.collapse,
     };
   }
 
@@ -430,19 +446,47 @@ class Run {
     await end(why);
   }
 
-  /** After a line: links out that the page did not spell out, and permalink pages for cut-short posts worth it. */
+  /**
+   * After a line: its own follow-ups. When this line sets off the relevance
+   * alarm, the lines already followed up get theirs again, now with the
+   * page-order fallback.
+   */
   private async followUp(session: BrowseSession, line: XReadLine): Promise<void> {
+    const fired = await this.watchRelevance();
+    await this.followUpLine(session, line);
+    if (!fired) return;
+    for (const other of this.input.lines) {
+      if (other.key !== line.key && this.past.ended.has(other.key)) await this.followUpLine(session, other);
+    }
+  }
+
+  /** Score every kept post against its line; write the alarm the first time it goes off. True when it went off now. */
+  private async watchRelevance(): Promise<boolean> {
+    if (this.past.collapse) return false;
+    const byKey = new Map(this.input.lines.map((l) => [l.key, prepareQuery(l.relevance)]));
+    const scores: number[] = [];
+    for (const { line, post } of this.past.posts.values()) {
+      const query = byKey.get(line);
+      if (query) scores.push(localRelevance(query, postText(post)));
+    }
+    const collapse = relevanceCollapse(scores);
+    if (!collapse) return false;
+    this.past.collapse = collapse;
+    await this.log({ kind: "relevance-collapse", ...collapse });
+    return true;
+  }
+
+  /** A line's follow-ups: links out that the page did not spell out, and permalink pages for cut-short posts worth it. */
+  private async followUpLine(session: BrowseSession, line: XReadLine): Promise<void> {
     const mine = [...this.past.posts.values()].filter((k) => k.line === line.key);
     for (const kept of mine) await this.expandLinks(kept.post.id);
 
-    const query = prepareQuery(line.relevance);
-    const owed = mine
-      .map((k) => k.post)
-      .filter((p) => p.truncated && !p.article && !this.past.permalinked.has(p.id))
-      .map((p) => ({ post: p, score: localRelevance(query, `${p.text}\n${p.quoted?.text ?? ""}`) }))
-      .filter((c) => c.score >= this.floor)
-      .sort((a, b) => b.score - a.score);
-    for (const { post } of owed) {
+    const owed = permalinkPicks(
+      mine.map((k) => k.post),
+      prepareQuery(line.relevance),
+      { floor: this.floor, collapsed: this.past.collapse !== null, permalinked: this.past.permalinked },
+    );
+    for (const post of owed) {
       if (this.past.pages.permalink >= this.input.limits.permalinkPages) return;
       if (this.daily.permalink >= this.allowance.permalink) return;
       if (this.active >= this.input.limits.activeMs) return;
@@ -565,6 +609,43 @@ class Run {
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+function postText(p: XSearchPost): string {
+  return `${p.text}\n${p.quoted?.text ?? ""}`;
+}
+
+/**
+ * The relevance alarm: once enough posts are scored, nearly all of them at 0
+ * means the floor is measuring against words the posts do not use (pitfall
+ * 660), not that every post is off-topic. Null when it does not go off.
+ */
+export function relevanceCollapse(scores: readonly number[]): XRelevanceCollapse | null {
+  if (scores.length < COLLAPSE_MIN_POSTS) return null;
+  const zero = scores.filter((s) => s <= 0).length;
+  return zero >= COLLAPSE_ZERO_SHARE * scores.length ? { posts: scores.length, zero } : null;
+}
+
+/**
+ * The cut-short posts of one line whose permalink pages to open, in order:
+ * those past the floor, best first. When the alarm went off and the floor
+ * passes none, the first few in page order, less those of the line already
+ * opened. `posts` is the line's kept posts in page order.
+ */
+export function permalinkPicks(
+  posts: readonly XSearchPost[],
+  query: PreparedQuery,
+  opts: { floor: number; collapsed: boolean; permalinked: ReadonlySet<string> },
+): XSearchPost[] {
+  const owed = posts.filter((p) => p.truncated && !p.article && !opts.permalinked.has(p.id));
+  const passed = owed
+    .map((p) => ({ post: p, score: localRelevance(query, postText(p)) }))
+    .filter((c) => c.score >= opts.floor)
+    .sort((a, b) => b.score - a.score)
+    .map((c) => c.post);
+  if (passed.length || !opts.collapsed) return passed;
+  const opened = posts.filter((p) => opts.permalinked.has(p.id)).length;
+  return owed.slice(0, Math.max(0, COLLAPSE_FALLBACK - opened));
+}
 
 /** Fisher-Yates with the caller's random source. */
 export function shuffle<T>(items: readonly T[], random: () => number): T[] {

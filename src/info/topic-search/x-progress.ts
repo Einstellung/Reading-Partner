@@ -47,8 +47,21 @@ export type XStep = { n: number; at: number; activeMs: number } & (
     }
   | { kind: "expand"; tco: string; url: string | null }
   | { kind: "halt"; halt: XHalt }
+  /** Nearly every post read so far scored 0 relevance (x-reader.ts relevanceCollapse); written once a run. */
+  | { kind: "relevance-collapse"; posts: number; zero: number }
   | { kind: "end"; status: XRunStatus; why: string | null }
 );
+
+/** The relevance alarm of a run: posts scored and how many scored 0. */
+export interface XRelevanceCollapse {
+  posts: number;
+  zero: number;
+}
+
+/** The alarm as one line, for the run's status and the source health. */
+export function collapseNote(c: XRelevanceCollapse): string {
+  return `relevance collapsed: ${c.zero} of ${c.posts} posts scored 0 against the queries, so post pages were opened in page order`;
+}
 
 export type XRunStatus = "done" | "limit" | "quota" | "halted" | "interrupted" | "unavailable";
 
@@ -152,6 +165,7 @@ export interface XReplay {
   activeMs: number;
   lastN: number;
   halt: XHalt | null;
+  collapse: XRelevanceCollapse | null;
   end: { status: XRunStatus; why: string | null } | null;
   lineEnds: Map<string, { why: XLineStop; screens: number; kept: number }>;
 }
@@ -168,6 +182,7 @@ export function replay(steps: readonly XStep[]): XReplay {
     activeMs: 0,
     lastN: 0,
     halt: null,
+    collapse: null,
     end: null,
     lineEnds: new Map(),
   };
@@ -200,6 +215,9 @@ export function replay(steps: readonly XStep[]): XReplay {
         break;
       case "halt":
         out.halt = step.halt;
+        break;
+      case "relevance-collapse":
+        out.collapse = { posts: step.posts, zero: step.zero };
         break;
       case "end":
         out.end = { status: step.status, why: step.why };
@@ -237,6 +255,7 @@ export function xTally(): XTally {
   let screens = 0;
   let permalinks = 0;
   let halt: string | null = null;
+  let collapse: XRelevanceCollapse | null = null;
   let end: { status: XRunStatus; why: string | null } | null = null;
   let count = 0;
   return {
@@ -262,6 +281,9 @@ export function xTally(): XTally {
         case "halt":
           halt = step.halt.kind;
           break;
+        case "relevance-collapse":
+          collapse = { posts: step.posts, zero: step.zero };
+          break;
         case "end":
           end = { status: step.status, why: step.why };
           break;
@@ -273,7 +295,7 @@ export function xTally(): XTally {
       const counts =
         `${screens} screen${screens === 1 ? "" : "s"} read, ${posts.size} distinct post${posts.size === 1 ? "" : "s"} found` +
         (permalinks ? `, ${permalinks} post page${permalinks === 1 ? "" : "s"} opened` : "");
-      const stopped = halt ? `; X stopped it (${halt})` : "";
+      const stopped = (halt ? `; X stopped it (${halt})` : "") + (collapse ? `; warning: ${collapseNote(collapse)}` : "");
       if (end) {
         const queries = total !== null ? `${ended.size} of ${total} queries read to their end, ` : "";
         return `finished (${end.status}${end.why ? `: ${end.why}` : ""}): ${queries}${counts}${stopped}`;

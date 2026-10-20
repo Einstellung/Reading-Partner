@@ -264,10 +264,19 @@ export function gatherCandidates(
   return { all, kept, streams };
 }
 
+/**
+ * The words a candidate's local relevance is measured on, for the build and
+ * for the X reader's permalink floor alike: the query as searched on that
+ * source. Never the ranking question: it is written in the reader's language
+ * and the posts often are not (pitfall 660).
+ */
+export function relevanceBasis(query: Pick<TopicQuery, "x" | "arxiv">, source: CandidateSource): string {
+  return source === "x" ? plainQuery(query.x) : (query.arxiv ?? plainQuery(query.x));
+}
+
 function relevanceTo(query: TopicQuery | undefined, c: Candidate): number {
   if (!query) return 0;
-  const words = c.source === "x" ? plainQuery(query.x) : (query.arxiv ?? plainQuery(query.x));
-  return localRelevance(prepareQuery(words), c.text);
+  return localRelevance(prepareQuery(relevanceBasis(query, c.source)), c.text);
 }
 
 /**

@@ -196,8 +196,13 @@ test("briefs, keys and lines", () => {
   const lines = searchLines(search(), "first", local(2026, 9, 14, 12));
   // The unpicked subtopic's query is not read.
   expect(lines.map((l) => l.key)).toEqual(["ts-0000aaaa:q1", "ts-0000aaaa:q2"]);
-  expect(lines[0]).toMatchObject({ order: "top", since: "2026-09-14", relevance: "What is new in AI for science?" });
+  // The permalink floor is measured on the X query, as the build measures it, never the ranking question (pitfall 660).
+  expect(lines[0]).toMatchObject({ order: "top", since: "2026-09-14", relevance: "AI for science" });
   expect(searchLines(search(), "daily", 0)[1]).toMatchObject({ order: "live", relevance: "AI materials discovery" });
+  const chinese = search({
+    queries: [{ id: "q1", subtopic: null, x: "symbolic regression equation discovery -filter:retweets lang:en", arxiv: null, ranking: "怎么从观测数据里自动归纳出规律、方程？", weight: 1 }],
+  });
+  expect(searchLines(chinese, "first", 0)[0].relevance).toBe("symbolic regression equation discovery");
 });
 
 // --- the task on a real Harness ------------------------------------------------
