@@ -113,6 +113,7 @@
 - [150-restoring-a-scale-nobody-saved-overrides-fit-width](./embedpdf/150-restoring-a-scale-nobody-saved-overrides-fit-width.md) — 没开过的书也带着一个合成的 viewState 进来，`scale: "auto"` 这个哨兵在壳里被折成数字 1，`requestZoom(1)` 当场作废注册时的 `FitWidth`，第一次开书停在 100%、改窗口也不再重新适配；"没存过的缩放"要一路保持"没有"，还原判据收进纯函数 `openingZoom`
 - [213-fit-width-in-paged-mode-turns-the-swipe-into-a-pan](./embedpdf/213-fit-width-in-paged-mode-turns-the-swipe-into-a-pan.md) — 翻页模式下点 "Fit page width" 之后就翻不动页：`zoomReset` 写死 fit-width，竖屏下它比 fit-page 大，`refreshZoomedIn` 判定放大、横滑归平移；重置要问布局自己锁的那个 fit（`resetZoom`），翻页还得重新居中并复位 `zoomedIn`
 - [376-a-cjk-font-that-is-not-embedded-renders-nothing](./embedpdf/376-a-cjk-font-that-is-not-embedded-renders-nothing.md) — 没嵌字体的中文 PDF 汉字全部不画，ASCII 照出、不报错；引擎传的是 `fontFallback: null`，而 pdfium.wasm 不带 CJK 字体，字体清单要宿主自己备
+- [659-devtools-network-keeps-every-page-image](./embedpdf/659-devtools-network-keeps-every-page-image.md) — Playwright 的页面会话开着 Network 域，DevTools 替页面留着每个 `blob:` 页图的响应体（封顶约 200MB），量出来的"渲染进程越读越大"是它；量内存改用裸 CDP、不开 Network 域
 
 ## 触摸与手势
 
