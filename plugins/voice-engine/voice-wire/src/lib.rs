@@ -115,3 +115,59 @@ pub struct SentenceMarks {
     pub first_audio_ms: f64,
     pub handed_ms: f64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, to_value};
+
+    // The shapes src/soul/voice/conversation.ts reads, as ConversationRun.swift
+    // sends them: only the kind's own fields on the wire.
+    #[test]
+    fn conversation_events_carry_only_their_kind_s_fields() {
+        let mut stop = ConversationEvent::new("speech-stop", 2);
+        stop.cut = Some(SpeechCut { utterance: 1, sentence: 1, char_offset: 16, played_ms: 2600.0 });
+        assert_eq!(
+            to_value(&stop).unwrap(),
+            json!({"kind": "speech-stop", "turn": 2, "cut": {"utterance": 1, "sentence": 1, "charOffset": 16, "playedMs": 2600.0}})
+        );
+        let mut end = ConversationEvent::new("speech-end", 2);
+        end.text = Some(String::new());
+        end.silent_ms = Some(288.0);
+        assert_eq!(to_value(&end).unwrap(), json!({"kind": "speech-end", "turn": 2, "text": "", "silentMs": 288.0}));
+        let mut env = ConversationEvent::new("envelope", 0);
+        env.utterance = Some(3);
+        env.sentence = Some(0);
+        env.starts_in_ms = Some(40.0);
+        env.window_ms = Some(25.0);
+        env.values = Some(vec![0.5, 1.0]);
+        assert_eq!(
+            to_value(&env).unwrap(),
+            json!({"kind": "envelope", "turn": 0, "utterance": 3, "sentence": 0, "startsInMs": 40.0, "windowMs": 25.0, "values": [0.5, 1.0]})
+        );
+        let mut state = ConversationEvent::new("state", 0);
+        state.running = Some(false);
+        state.reason = Some("failed".into());
+        assert_eq!(to_value(&state).unwrap(), json!({"kind": "state", "turn": 0, "running": false, "reason": "failed"}));
+        let back: ConversationEvent = serde_json::from_value(to_value(&stop).unwrap()).unwrap();
+        assert_eq!(back, stop);
+    }
+
+    #[test]
+    fn the_playback_answers_round_trip() {
+        let speaking = SpeechEvent { kind: "speaking".into(), value: 0.0, reason: Some("interrupted".into()) };
+        assert_eq!(to_value(&speaking).unwrap(), json!({"kind": "speaking", "value": 0.0, "reason": "interrupted"}));
+        let level = SpeechEvent { kind: "level".into(), value: 0.5, reason: None };
+        assert_eq!(to_value(&level).unwrap(), json!({"kind": "level", "value": 0.5}));
+        let at = SpeechPosition { speaking: true, utterance: 4, index: 1, char_offset: 3, played_ms: 120.0 };
+        assert_eq!(
+            to_value(at).unwrap(),
+            json!({"speaking": true, "utterance": 4, "index": 1, "charOffset": 3, "playedMs": 120.0})
+        );
+        let ack: SpeechEnqueued =
+            serde_json::from_value(json!({"dropped": false, "queuedMs": 80.0, "startMs": 0.0})).unwrap();
+        assert!(!ack.busy && ack.queued_ms == 80.0);
+        let marks = SentenceMarks { requested_ms: 1.0, first_audio_ms: 2.0, handed_ms: 3.0 };
+        assert_eq!(to_value(marks).unwrap(), json!({"requestedMs": 1.0, "firstAudioMs": 2.0, "handedMs": 3.0}));
+    }
+}

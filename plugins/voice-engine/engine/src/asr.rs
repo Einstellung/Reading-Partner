@@ -25,6 +25,9 @@ pub const N_BATCH: i32 = 512;
 /// Greedy decoding stops here even without an end-of-generation token.
 pub const MAX_TOKENS: usize = 800;
 pub const SAMPLE_RATE: u32 = 16_000;
+/// The decoder and the audio projector, under the download directory.
+pub const MODEL_FILE: &str = "qwen3-asr-0.6b/Qwen3-ASR-0.6B-Q4_K_M.gguf";
+pub const MMPROJ_FILE: &str = "qwen3-asr-0.6b/mmproj-Qwen3-ASR-0.6B-Q8_0.gguf";
 
 // No language is forced: the model writes `language X<asr_text>` first.
 const PROMPT_HEAD: &str = "<|im_start|>system\n<|im_end|>\n<|im_start|>user\n";
@@ -490,11 +493,11 @@ mod tests {
         std::fs::remove_dir_all(d).ok();
     }
 
-    /// `VOICE_MODELS` laid out like the download directory, with
-    /// qwen3-asr-0.6b/{Qwen3-ASR-0.6B-Q4_K_M.gguf, mmproj-Qwen3-ASR-0.6B-Q8_0.gguf}.
+    /// `VOICE_MODELS` laid out like the download directory: MODEL_FILE and
+    /// MMPROJ_FILE under it.
     fn models() -> Option<(PathBuf, PathBuf)> {
-        let dir = PathBuf::from(std::env::var_os("VOICE_MODELS")?).join("qwen3-asr-0.6b");
-        let m = (dir.join("Qwen3-ASR-0.6B-Q4_K_M.gguf"), dir.join("mmproj-Qwen3-ASR-0.6B-Q8_0.gguf"));
+        let dir = PathBuf::from(std::env::var_os("VOICE_MODELS")?);
+        let m = (dir.join(MODEL_FILE), dir.join(MMPROJ_FILE));
         if m.0.is_file() && m.1.is_file() {
             Some(m)
         } else {

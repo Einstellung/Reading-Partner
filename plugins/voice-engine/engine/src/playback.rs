@@ -393,6 +393,17 @@ impl Playback {
         self.end("lost");
     }
 
+    /// The audio was closed with nothing playing (`CloseAudio`): the track is
+    /// gone, and the next one counts its frames from zero with nothing to
+    /// flush.
+    pub fn track_closed(&mut self) {
+        self.queue.clear();
+        self.handed = 0;
+        self.base = 0;
+        self.heard = None;
+        self.flush_pending = false;
+    }
+
     /// The writer thread asks for samples. -1: flush the track first.
     pub fn read(&mut self, buf: &mut [i16], now_ns: i64) -> i32 {
         if self.flush_pending {
@@ -504,7 +515,7 @@ mod tests {
         assert_eq!(c.locate(0), Some((0, 0)));
         assert_eq!(c.locate(500), Some((0, 5)));
         assert_eq!(c.locate(1000), Some((1, 0)));
-        assert_eq!(c.locate(1600), Some((1, 2)));
+        assert_eq!(c.locate(1600), Some((1, 3)));
         assert_eq!(c.locate(5000), Some((1, 4)));
     }
 

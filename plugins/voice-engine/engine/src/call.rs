@@ -21,6 +21,9 @@
 // the cut position happen together; `front` is the capture thread's audio and
 // is always taken before `state`. Events are emitted with `state` held, which
 // is what keeps them in order; `Emit` must therefore not block or call back.
+// No thread is ever joined with a lock held: the Smart Turn worker takes
+// `state` to deliver its verdict, so replacing it (`install`) first takes its
+// sender out under `state`, lets go, and only then waits for it to finish.
 //
 // Ordering across turns: a turn's `speech-end` waits for its text, and every
 // event after its `end` waits behind that `speech-end`, so a turn never
@@ -41,10 +44,14 @@ use crate::playback::{Effect, Playback, ENVELOPE_WINDOW_MS};
 use crate::turn::{trailing_level_db, TurnDetector, TurnEvent, TurnPhase, NEURAL_TURN_DETECT};
 use crate::{asr, smart_turn, vad};
 
-/// What `open` refuses with when a model file is missing: the sentence the
-/// plugin shows for Kokoro (plugins/voice/src/tts/kokoro.rs NOT_DOWNLOADED).
+/// What `open` refuses with when a model file is missing. The plugin's
+/// sentence for Kokoro (plugins/voice/src/tts/kokoro.rs NOT_DOWNLOADED) with
+/// the section Android's settings show the download under
+/// (`settings.optional.voiceCall`). It travels as the refusal of
+/// `start_conversation`, which the webview shows; `state failed` carries no
+/// text, as on iOS.
 pub const NOT_DOWNLOADED: &str =
-    "The on-device voice is not downloaded yet: download it in Settings → Optional → Voice output.";
+    "The on-device voice is not downloaded yet: download it in Settings → Optional → Voice call.";
 
 const RATE: f64 = vad::RATE as f64;
 const FRAME: usize = vad::FRAME;
@@ -117,7 +124,9 @@ pub struct Listeners {
     pub recogniser: Arc<dyn Recognise>,
 }
 
-/// Every file a call needs, as `Open` carries them.
+/// Every file the engine loads, as `Open` carries them. Kokoro's voices are
+/// not among them: the main process reads the style row and sends it with
+/// each `Synthesize`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModelPaths {
     pub silero: PathBuf,
@@ -125,7 +134,6 @@ pub struct ModelPaths {
     pub asr_model: PathBuf,
     pub asr_mmproj: PathBuf,
     pub kokoro_model: PathBuf,
-    pub kokoro_voices: Vec<PathBuf>,
 }
 
 impl ModelPaths {
@@ -141,14 +149,12 @@ impl ModelPaths {
             asr_model: dir.join(asr::MODEL_FILE),
             asr_mmproj: dir.join(asr::MMPROJ_FILE),
             kokoro_model: kokoro.join(manifest::Variant::Fp32.file().path),
-            kokoro_voices: manifest::VOICES.iter().map(|(_, f)| kokoro.join(f.path)).collect(),
         }
     }
 
     pub fn missing(&self) -> Vec<PathBuf> {
         [&self.silero, &self.smart_turn, &self.asr_model, &self.asr_mmproj, &self.kokoro_model]
             .into_iter()
-            .chain(&self.kokoro_voices)
             .filter(|p| !p.is_file())
             .cloned()
             .collect()
@@ -239,6 +245,8 @@ struct State {
     /// The paths the kept models came from, and the recogniser among them.
     loaded: Option<ModelPaths>,
     recogniser: Option<Arc<dyn Recognise>>,
+    /// The Smart Turn worker's queue.
+    smart: Option<mpsc::Sender<SmartJob>>,
     shutdown: bool,
 }
 
@@ -275,7 +283,8 @@ struct Shared {
     samples: Condvar,
     /// The settler waits here for a turn to settle.
     settle: Condvar,
-    smart: Mutex<Option<(mpsc::Sender<SmartJob>, JoinHandle<()>)>>,
+    /// Only `install` and `drop` touch it, never with another lock held.
+    smart_worker: Mutex<Option<JoinHandle<()>>>,
     /// Smart Turn jobs not yet judged.
     judging: Mutex<usize>,
     judged: Condvar,
@@ -305,11 +314,12 @@ impl Engine {
                 audio: Audio::Closed,
                 loaded: None,
                 recogniser: None,
+                smart: None,
                 shutdown: false,
             }),
             samples: Condvar::new(),
             settle: Condvar::new(),
-            smart: Mutex::new(None),
+            smart_worker: Mutex::new(None),
             judging: Mutex::new(0),
             judged: Condvar::new(),
             kokoro: Mutex::new(Kokoro::Empty),
@@ -322,15 +332,18 @@ impl Engine {
 
     /// `Open`: load what is not loaded yet and start a call. Silero and Smart
     /// Turn load here; Qwen and Kokoro load behind it, and a turn that ends
-    /// before Qwen is up waits for it. Missing files refuse the call with
-    /// `NOT_DOWNLOADED`, as `state failed` and as the error.
+    /// before Qwen is up waits for it. A call still up is `released` first.
+    /// A failure is `state failed` and the error (`NOT_DOWNLOADED` for a
+    /// missing file), which the main process refuses `start_conversation`
+    /// with, as ConversationRun's start does.
     pub fn open(&self, paths: &ModelPaths, threads: Threads) -> Result<(), String> {
+        self.shared.end_call("released");
         if !paths.missing().is_empty() {
             return Err(self.fail(NOT_DOWNLOADED));
         }
         let kept = self.shared.state.lock().unwrap().loaded.as_ref() == Some(paths);
         if kept {
-            return self.shared.begin_call(None);
+            return self.shared.begin_call();
         }
         let vad = vad::Silero::load(&paths.silero).map_err(|e| self.fail(&e))?;
         let end = smart_turn::SmartTurn::load(&paths.smart_turn, threads.smart_turn).map_err(|e| self.fail(&e))?;
@@ -338,14 +351,15 @@ impl Engine {
         self.load_kokoro(paths.kokoro_model.clone(), threads.kokoro);
         self.shared.install(Listeners { vad: Box::new(vad), end_of_turn: Box::new(end), recogniser });
         self.shared.state.lock().unwrap().loaded = Some(paths.clone());
-        self.shared.begin_call(None)
+        self.shared.begin_call()
     }
 
     /// Start a call on models given here rather than loaded from files.
     pub fn open_with(&self, models: Listeners) -> Result<(), String> {
+        self.shared.end_call("released");
         self.shared.install(models);
         self.shared.state.lock().unwrap().loaded = None;
-        self.shared.begin_call(None)
+        self.shared.begin_call()
     }
 
     /// `Close`: hang up and let the microphone go; the models stay.
@@ -353,12 +367,14 @@ impl Engine {
         self.shared.end_call("closed");
     }
 
+    /// The start did not complete: `state failed` on turn 0, as
+    /// ConversationRun's `stop(reason: "failed")` sends it, without the
+    /// message, which is the error's.
     fn fail(&self, message: &str) -> String {
-        let st = self.shared.state.lock().unwrap();
-        let mut e = ConversationEvent::new("state", st.call.as_ref().map_or(0, |c| c.number));
+        let _st = self.shared.state.lock().unwrap();
+        let mut e = ConversationEvent::new("state", 0);
         e.running = Some(false);
         e.reason = Some("failed".into());
-        e.text = Some(message.into());
         (self.shared.emit)(Out::Conversation(e));
         message.to_string()
     }
@@ -514,11 +530,17 @@ impl Engine {
 impl Drop for Engine {
     fn drop(&mut self) {
         self.shared.end_call("closed");
-        self.shared.state.lock().unwrap().shutdown = true;
+        let smart = {
+            let mut st = self.shared.state.lock().unwrap();
+            st.shutdown = true;
+            st.smart.take()
+        };
+        drop(smart);
         self.shared.settle.notify_all();
-        if let Some((tx, worker)) = self.shared.smart.lock().unwrap().take() {
-            drop(tx);
-            let _ = worker.join();
+        self.shared.samples.notify_all();
+        let worker = self.shared.smart_worker.lock().unwrap().take();
+        if let Some(w) = worker {
+            let _ = w.join();
         }
         if let Some(s) = self.settler.take() {
             let _ = s.join();
@@ -647,7 +669,10 @@ impl Shared {
         st.audio = want;
     }
 
-    /// Keep these models for this and later calls.
+    /// Keep these models for this and later calls. The old Smart Turn worker
+    /// may be judging, and so about to take `state`: its sender comes out
+    /// under the lock, and the wait for it to finish holds none. The old
+    /// recogniser goes the same way, since dropping it joins its thread.
     fn install(self: &Arc<Self>, models: Listeners) {
         self.end_call("closed");
         self.front.lock().unwrap().vad = Some(models.vad);
@@ -672,15 +697,20 @@ impl Shared {
                 }
             })
             .expect("spawn smart turn");
-        if let Some((old, w)) = self.smart.lock().unwrap().replace((tx, worker)) {
-            drop(old);
+        let (old_tx, old_recogniser) = {
+            let mut st = self.state.lock().unwrap();
+            (st.smart.replace(tx), st.recogniser.replace(models.recogniser))
+        };
+        drop(old_tx);
+        drop(old_recogniser);
+        let old_worker = self.smart_worker.lock().unwrap().replace(worker);
+        if let Some(w) = old_worker {
             let _ = w.join();
         }
-        self.state.lock().unwrap().recogniser = Some(models.recogniser);
     }
 
-    fn begin_call(&self, _: Option<()>) -> Result<(), String> {
-        self.end_call("closed");
+    fn begin_call(&self) -> Result<(), String> {
+        self.end_call("released");
         let mut front = self.front.lock().unwrap();
         let mut st = self.state.lock().unwrap();
         let (Some(vad), Some(recogniser)) = (front.vad.as_mut(), st.recogniser.clone()) else {
@@ -832,7 +862,7 @@ impl Shared {
                 if let Some(open) = &call.open {
                     let audio = front.slice(open.start.saturating_sub(SMART_TURN_PREROLL), end);
                     let job = SmartJob { call: call.id, paused_at_ms: at_ms, audio };
-                    if let Some((tx, _)) = &*self.smart.lock().unwrap() {
+                    if let Some(tx) = &st.smart {
                         *self.judging.lock().unwrap() += 1;
                         if tx.send(job).is_err() {
                             *self.judging.lock().unwrap() -= 1;
