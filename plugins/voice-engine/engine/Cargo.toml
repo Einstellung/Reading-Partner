@@ -28,6 +28,9 @@ llama-cpp-sys-2 = { version = "=0.1.160", default-features = false, features = [
 realfft = "3.5.0"
 # CLOCK_MONOTONIC, the clock AudioRecord and AudioTrack stamp with.
 libc = "0.2"
+# The socket's control messages (serve.rs); the tests read their fixtures
+# with it too.
+serde_json = "1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 # llama.cpp links libc++ statically, as ONNX Runtime does (ORT_CXX_STDLIB in
@@ -35,6 +38,3 @@ libc = "0.2"
 llama-cpp-2 = { version = "=0.1.160", default-features = false, features = ["mtmd", "android-static-stdcxx"] }
 jni = "0.21.1"
 
-[dev-dependencies]
-# Reads the turn-detection fixtures (docs/assets, fixtures/reference.json).
-serde_json = "1"

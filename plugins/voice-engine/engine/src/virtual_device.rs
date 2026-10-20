@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::call::{Engine, Out};
+use crate::call::{Emit, Engine, Out};
 use crate::host::{AudioHost, Clock, HostControl};
 
 /// One microphone buffer: 512 samples at 16 kHz, one Silero frame.
@@ -141,6 +141,12 @@ impl Default for VirtualDevice {
 
 impl VirtualDevice {
     pub fn new() -> Self {
+        Self::with_emit(Box::new(|_| {}))
+    }
+
+    /// The device with every event handed on to `also` as well, after it is
+    /// recorded: the socket's outlet (serve.rs).
+    pub fn with_emit(also: Emit) -> Self {
         let clock = Arc::new(VirtualClock::new(1_000_000_000));
         let host = Arc::new(VirtualHost::new());
         let events = Arc::new(Events::default());
@@ -149,8 +155,9 @@ impl VirtualDevice {
             host.clone(),
             clock.clone(),
             Box::new(move |out| {
-                sink.list.lock().unwrap().push((at.now_ns(), out));
+                sink.list.lock().unwrap().push((at.now_ns(), out.clone()));
                 sink.more.notify_all();
+                also(out);
             }),
         );
         Self {

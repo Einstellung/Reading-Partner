@@ -10,6 +10,7 @@ pub mod call;
 pub mod host;
 pub mod mel;
 pub mod playback;
+pub mod serve;
 pub mod smart_turn;
 pub mod turn;
 pub mod vad;

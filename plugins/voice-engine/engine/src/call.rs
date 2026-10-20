@@ -193,6 +193,12 @@ enum Kokoro {
     Failed(String),
 }
 
+/// Kokoro and the file it is (being) loaded from.
+struct KokoroSlot {
+    model: Option<PathBuf>,
+    state: Kokoro,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Audio {
     Closed,
@@ -288,7 +294,7 @@ struct Shared {
     /// Smart Turn jobs not yet judged.
     judging: Mutex<usize>,
     judged: Condvar,
-    kokoro: Mutex<Kokoro>,
+    kokoro: Mutex<KokoroSlot>,
     kokoro_ready: Condvar,
 }
 
@@ -322,7 +328,7 @@ impl Engine {
             smart_worker: Mutex::new(None),
             judging: Mutex::new(0),
             judged: Condvar::new(),
-            kokoro: Mutex::new(Kokoro::Empty),
+            kokoro: Mutex::new(KokoroSlot { model: None, state: Kokoro::Empty }),
             kokoro_ready: Condvar::new(),
         });
         let weak = Arc::downgrade(&shared);
@@ -348,7 +354,7 @@ impl Engine {
         let vad = vad::Silero::load(&paths.silero).map_err(|e| self.fail(&e))?;
         let end = smart_turn::SmartTurn::load(&paths.smart_turn, threads.smart_turn).map_err(|e| self.fail(&e))?;
         let recogniser = Arc::new(asr::Recogniser::spawn(&paths.asr_model, &paths.asr_mmproj, threads.asr));
-        self.load_kokoro(paths.kokoro_model.clone(), threads.kokoro);
+        self.ensure_kokoro(&paths.kokoro_model, threads.kokoro);
         self.shared.install(Listeners { vad: Box::new(vad), end_of_turn: Box::new(end), recogniser });
         self.shared.state.lock().unwrap().loaded = Some(paths.clone());
         self.shared.begin_call()
@@ -379,18 +385,32 @@ impl Engine {
         message.to_string()
     }
 
-    fn load_kokoro(&self, model: PathBuf, threads: usize) {
-        *self.shared.kokoro.lock().unwrap() = Kokoro::Loading;
+    /// Load Kokoro from `model` on a thread of its own, unless it is loaded
+    /// or loading from there already.
+    fn ensure_kokoro(&self, model: &Path, threads: usize) {
+        {
+            let mut k = self.shared.kokoro.lock().unwrap();
+            if k.model.as_deref() == Some(model) && matches!(k.state, Kokoro::Loading | Kokoro::Ready(_)) {
+                return;
+            }
+            k.model = Some(model.to_path_buf());
+            k.state = Kokoro::Loading;
+        }
         let weak = Arc::downgrade(&self.shared);
+        let model = model.to_path_buf();
         thread::Builder::new()
             .name("kokoro-load".into())
             .spawn(move || {
                 let loaded = kokoro_onnx::engine::Engine::load(&model, threads);
                 if let Some(sh) = weak.upgrade() {
-                    *sh.kokoro.lock().unwrap() = match loaded {
-                        Ok(e) => Kokoro::Ready(Arc::new(Mutex::new(e))),
-                        Err(e) => Kokoro::Failed(e),
-                    };
+                    let mut k = sh.kokoro.lock().unwrap();
+                    if k.model.as_deref() == Some(model.as_path()) {
+                        k.state = match loaded {
+                            Ok(e) => Kokoro::Ready(Arc::new(Mutex::new(e))),
+                            Err(e) => Kokoro::Failed(e),
+                        };
+                    }
+                    drop(k);
                     sh.kokoro_ready.notify_all();
                 }
             })
@@ -401,13 +421,20 @@ impl Engine {
     pub fn kokoro(&self) -> Result<KokoroEngine, String> {
         let mut k = self.shared.kokoro.lock().unwrap();
         loop {
-            match &*k {
+            match &k.state {
                 Kokoro::Loading => k = self.shared.kokoro_ready.wait(k).unwrap(),
                 Kokoro::Ready(e) => return Ok(Arc::clone(e)),
                 Kokoro::Failed(e) => return Err(e.clone()),
                 Kokoro::Empty => return Err("Kokoro is not loaded: no call has opened.".into()),
             }
         }
+    }
+
+    /// Kokoro from `model`, loaded here when no `Open` has loaded it: speech
+    /// can come ahead of the call, as the cues primed while it opens do.
+    pub fn kokoro_at(&self, model: &Path, threads: usize) -> Result<KokoroEngine, String> {
+        self.ensure_kokoro(model, threads);
+        self.kokoro()
     }
 
     // --- The device side (host.rs's table) ---------------------------------
