@@ -22,9 +22,9 @@ export const VOICE_VARIANT: KokoroVariant = "fp32";
 export const FALLBACK_TOTAL_BYTES = 339_369_442 + 2 * 522_240;
 
 // Android downloads the listening models too (docs/companion/89, "Model
-// files"): Kokoro 340,413,922 + Qwen3-ASR 484,215,744 + its mmproj 214,392,480
+// files"): Kokoro 340,413,922 + Qwen3-ASR 484,216,288 + its mmproj 214,392,480
 // + Silero 2,327,524 + Smart Turn 32,411,198.
-export const ANDROID_FALLBACK_TOTAL_BYTES = 1_073_760_868;
+export const ANDROID_FALLBACK_TOTAL_BYTES = 1_073_761_412;
 
 // Whether this host's voice is a call (listening and speaking) rather than
 // speech alone.

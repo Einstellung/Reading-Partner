@@ -117,7 +117,7 @@ describe("voiceRowView", () => {
 });
 
 describe("Android: the call package", () => {
-  const QWEN = 484_215_744;
+  const QWEN = 484_216_288;
   const MMPROJ = 214_392_480;
   const SILERO = 2_327_524;
   const SMART_TURN = 32_411_198;
@@ -134,9 +134,9 @@ describe("Android: the call package", () => {
   const allListen = [QWEN, MMPROJ, SILERO, SMART_TURN];
 
   test("the fallback total is the five files of the design", () => {
-    expect(ANDROID_FALLBACK_TOTAL_BYTES).toBe(1_073_760_868);
+    expect(ANDROID_FALLBACK_TOTAL_BYTES).toBe(1_073_761_412);
     expect(ANDROID_FALLBACK_TOTAL_BYTES).toBe(FP32 + 2 * VOICE + QWEN + MMPROJ + SILERO + SMART_TURN);
-    expect(fallbackTotalBytes("android")).toBe(1_073_760_868);
+    expect(fallbackTotalBytes("android")).toBe(1_073_761_412);
     expect(fallbackTotalBytes("ios")).toBe(FALLBACK_TOTAL_BYTES);
     expect(fallbackTotalBytes("linux")).toBe(FALLBACK_TOTAL_BYTES);
     expect(isCallVoice("android")).toBe(true);
@@ -146,7 +146,7 @@ describe("Android: the call package", () => {
   test("no status reads as idle at the Android total", () => {
     spyOn(os, "platform").mockImplementation((() => "android") as typeof os.platform);
     expect(voiceRowView(null)).toEqual({ kind: "idle", totalMB: 1074, resumable: false, percent: 0 });
-    expect(variantBytes(status({ files: [] }), "fp32")).toEqual({ have: 0, total: 1_073_760_868 });
+    expect(variantBytes(status({ files: [] }), "fp32")).toEqual({ have: 0, total: 1_073_761_412 });
   });
 
   test("variantBytes adds the listening files to the Kokoro ones", () => {
