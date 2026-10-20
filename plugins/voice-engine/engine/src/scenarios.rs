@@ -418,10 +418,12 @@ fn f5_missing_files_refuse_the_call_as_ios_refuses_a_failed_start() {
     assert!(dev.host.controls().is_empty());
     std::fs::remove_dir_all(&dir).ok();
 
-    // The plugin's sentence, with the section Android shows the download under.
+    // The plugin's iOS sentence, with the section Android shows the download
+    // under.
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let kokoro = std::fs::read_to_string(root.join("plugins/voice/src/tts/kokoro.rs")).unwrap();
-    let plugin = kokoro.split("pub const NOT_DOWNLOADED: &str =").nth(1).unwrap().split('"').nth(1).unwrap();
+    let ios = kokoro.split("pub const NOT_DOWNLOADED: &str =").nth(1).unwrap().split("} else {").nth(1).unwrap();
+    let plugin = ios.split('"').nth(1).unwrap();
     let en = std::fs::read_to_string(root.join("src/i18n/messages/settings/en.ts")).unwrap();
     let label = |key: &str| en.split(&format!("\"{key}\": \"")).nth(1).unwrap().split('"').next().unwrap().to_string();
     assert_eq!(NOT_DOWNLOADED, plugin.replace(&label("optional.voiceOutput"), &label("optional.voiceCall")));
