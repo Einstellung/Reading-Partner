@@ -45,6 +45,7 @@ function AccountRowView({ row, accounts }: { row: AccountRow; accounts: Accounts
           <div className="text-[15px] font-medium text-foreground">{row.name}</div>
           <div className="text-[13px] text-muted-foreground">{view.line}</div>
           <div className="mt-0.5 text-[12px] text-faint-foreground">{view.detail}</div>
+          {row.caution && <div className="mt-1 text-[12px] leading-relaxed text-faint-foreground">{row.caution}</div>}
         </div>
         {view.action && (
           <div className="flex flex-none flex-wrap justify-end gap-2">

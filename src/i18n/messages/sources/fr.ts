@@ -11,6 +11,7 @@ export default {
   signOut: "Se déconnecter",
   signIn: "Se connecter",
   "account.benefitX": "Les recherches thématiques lisent la recherche de X avec votre compte.",
+  "account.cautionX": "La lecture automatique se fait avec le compte que vous connectez. Il y a une faible probabilité que les contrôles de risque de X réagissent ; nous vous suggérons donc de vous connecter avec un compte secondaire plutôt qu'avec votre compte principal.",
   "account.benefitBloomberg": "Les articles Bloomberg en entier dans la synthèse, au lieu de l'aperçu d'environ 500 caractères.",
   "account.usedBy": "Utilisé par {names}",
   "account.signInOnCollector": "Connectez-vous sur l'ordinateur qui collecte vos sources",

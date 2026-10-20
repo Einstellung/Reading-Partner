@@ -54,7 +54,7 @@ test("every call names the session it was opened with", async () => {
 	expect(await page.close()).toBe(true);
 
 	expect(calls).toEqual([
-		{ cmd: "browse_open", args: { idleTimeoutMs: 90_000, viewport: [1440, 2400] } },
+		{ cmd: "browse_open", args: { idleTimeoutMs: 90_000, viewport: [1440, 2400], initScript: null } },
 		{ cmd: "browse_navigate", args: { session: 4, url: "https://x.com/search?q=a", until: "1", timeoutMs: null } },
 		{ cmd: "browse_back", args: { session: 4, until: null, timeoutMs: null } },
 		{ cmd: "browse_eval", args: { session: 4, script: "document.title", timeoutMs: 2000 } },
@@ -69,4 +69,11 @@ test("a scroll that is not a distance never reaches the host", async () => {
 	if (opened.status !== "ok") throw new Error("not opened");
 	await expect(opened.session.scrollBy(Number.NaN)).rejects.toThrow("not a scroll distance");
 	expect(calls.map((c) => c.cmd)).toEqual(["browse_open"]);
+});
+
+test("a document-start script goes to the host with the open, and only then", async () => {
+	const { host, calls } = fakeHost({ browse_open: { status: "ok", session: 2, detail: null } });
+	await openBrowse({ initScript: "(() => 1)()" }, host);
+	await openBrowse({}, host);
+	expect(calls.map((c) => c.args.initScript)).toEqual(["(() => 1)()", null]);
 });

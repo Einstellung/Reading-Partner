@@ -11,6 +11,7 @@ export default {
   signOut: "Abmelden",
   signIn: "Anmelden",
   "account.benefitX": "Themensuchen lesen die X-Suche mit deinem Konto.",
+  "account.cautionX": "Das automatische Lesen läuft über das Konto, mit dem du dich anmeldest. Es besteht eine geringe Chance, dass die Risikokontrollen von X darauf reagieren. Wir empfehlen daher, dich mit einem Zweitkonto statt mit deinem Hauptkonto anzumelden.",
   "account.benefitBloomberg": "Vollständige Bloomberg-Artikel im Briefing statt der Vorschau von etwa 500 Zeichen.",
   "account.usedBy": "Genutzt von {names}",
   "account.signInOnCollector": "Melde dich auf dem Computer an, der deine Quellen sammelt",

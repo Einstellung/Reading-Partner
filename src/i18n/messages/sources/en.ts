@@ -17,6 +17,7 @@ export default {
   signOut: "Sign out",
   signIn: "Sign in",
   "account.benefitX": "Topic searches read X's search as you.",
+  "account.cautionX": "Automated reading happens in the account you sign in with. There is a small chance X's risk controls react to it, so we suggest signing in with a secondary account rather than your main one.",
   "account.benefitBloomberg": "Whole Bloomberg articles in the briefing instead of the ~500-character preview.",
   "account.usedBy": "Used by {names}",
   "account.signInOnCollector": "Sign in on the computer that collects your sources",

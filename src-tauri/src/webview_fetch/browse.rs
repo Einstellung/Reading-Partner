@@ -367,13 +367,21 @@ fn with_session<T>(
 /// `viewport` is the page's [width, height] in CSS pixels; the caller picks a
 /// size a real screen has, since the page can read it. Clamped to 800-3840 by
 /// 600-4320; absent, `policy::VIEWPORT`.
+///
+/// `init_script` is the session's document-start script (`build_window`'s
+/// `page_script`), there only when the caller passes one: the X reader's
+/// capture of its page's own answers. The session still knows no site; the
+/// script guards itself to the hosts it is for.
 #[tauri::command]
 pub async fn browse_open(
     app: AppHandle,
     idle_timeout_ms: Option<u64>,
     viewport: Option<[f64; 2]>,
+    init_script: Option<String>,
 ) -> Result<BrowseOpened, String> {
-    tauri::async_runtime::spawn_blocking(move || open_blocking(&app, idle_timeout_ms, viewport))
+    tauri::async_runtime::spawn_blocking(move || {
+        open_blocking(&app, idle_timeout_ms, viewport, init_script.as_deref())
+    })
         .await
         .map_err(|e| format!("browse open task failed: {e}"))
 }
@@ -386,7 +394,12 @@ fn viewport_size(asked: Option<[f64; 2]>) -> (f64, f64) {
     }
 }
 
-fn open_blocking(app: &AppHandle, idle_timeout_ms: Option<u64>, viewport: Option<[f64; 2]>) -> BrowseOpened {
+fn open_blocking(
+    app: &AppHandle,
+    idle_timeout_ms: Option<u64>,
+    viewport: Option<[f64; 2]>,
+    init_script: Option<&str>,
+) -> BrowseOpened {
     let refuse = |status: BrowseStatus, detail: String| BrowseOpened {
         status,
         session: None,
@@ -418,7 +431,8 @@ fn open_blocking(app: &AppHandle, idle_timeout_ms: Option<u64>, viewport: Option
         label: label.clone(),
     };
     let (tx, rx) = mpsc::channel::<LoadEvent>();
-    let window = match build_window(app, &label, &profile, tx.clone(), Chrome::hidden()) {
+    let init_script = init_script.filter(|s| !s.trim().is_empty());
+    let window = match build_window(app, &label, &profile, tx.clone(), Chrome::hidden(), init_script) {
         Ok(window) => window,
         Err(err) => return refuse(BrowseStatus::Network, format!("window failed: {err}")),
     };
@@ -989,6 +1003,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(plan.steps.len(), 7);
+        assert!(plan.init_script.is_none());
+        let with: ProbePlan = serde_json::from_str(r#"{"initScript":"(() => 1)()"}"#).unwrap();
+        assert_eq!(with.init_script.as_deref(), Some("(() => 1)()"));
         assert!(matches!(&plan.steps[1], ProbeStep::Eval { stop_if: Some(f), .. } if f == "halt"));
         assert!(matches!(&plan.steps[3], ProbeStep::Sleep { chars_from: Some(_), max_ms: Some(100), .. }));
     }
@@ -1039,6 +1056,8 @@ enum ProbeStep {
 struct ProbePlan {
     idle_timeout_ms: Option<u64>,
     viewport: Option<[f64; 2]>,
+    /// The session's document-start script, as `browse_open` takes it.
+    init_script: Option<String>,
     #[serde(default)]
     steps: Vec<ProbeStep>,
 }
@@ -1100,7 +1119,7 @@ pub fn run_probe_from_env(app: &AppHandle) {
 /// `RP_WEBVIEW_BROWSE_PROBE=-`: the plan comes in on stdin one JSON line at a
 /// time, so a driver can choose each step from the last answer
 /// (scripts/x-reader-live.ts runs the topic-search reader this way). The first
-/// line is the plan without steps (`idleTimeoutMs`, `viewport`); every line after
+/// line is the plan without steps (`idleTimeoutMs`, `viewport`, `initScript`); every line after
 /// it is one step, answered by one `RP-BROWSE` line. End of input closes the
 /// session.
 fn run_stdin(app: &AppHandle) {
@@ -1116,7 +1135,7 @@ fn run_stdin(app: &AppHandle) {
         },
         _ => return,
     };
-    let opened = open_blocking(app, header.idle_timeout_ms, header.viewport);
+    let opened = open_blocking(app, header.idle_timeout_ms, header.viewport, header.init_script.as_deref());
     probe_line(0, "open", serde_json::to_value(&opened).unwrap_or_default());
     let Some(id) = opened.session else {
         return;
@@ -1141,7 +1160,7 @@ fn run_stdin(app: &AppHandle) {
 }
 
 fn run_plan(app: &AppHandle, plan: ProbePlan) {
-    let opened = open_blocking(app, plan.idle_timeout_ms, plan.viewport);
+    let opened = open_blocking(app, plan.idle_timeout_ms, plan.viewport, plan.init_script.as_deref());
     probe_line(0, "open", serde_json::to_value(&opened).unwrap_or_default());
     let Some(id) = opened.session else {
         return;

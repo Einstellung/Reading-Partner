@@ -32,6 +32,8 @@ export type XStep = { n: number; at: number; activeMs: number } & (
       textChars: number;
       scrollY: number;
       height: number;
+      /** Of `fresh`, the posts whose text and links came from the page's own answers (search-capture.ts); absent before 2026-10-20 and when none did. */
+      captured?: string[];
     }
   | { kind: "stay"; line: string; ms: number; chars: number; why: "screen" | "long" | "sitting" | "between" }
   | { kind: "scroll"; line: string; asked: number; moved: number }
@@ -44,11 +46,17 @@ export type XStep = { n: number; at: number; activeMs: number } & (
       text: string | null;
       /** The post's links out on its own page, as read there; absent in files written before 2026-10-18. */
       links?: XLinkOut[];
+      /** Where the text came from: the page's DOM, or the page's own answer (TweetDetail). Absent means the DOM. */
+      source?: XPostSource;
     }
   | { kind: "expand"; tco: string; url: string | null }
   | { kind: "halt"; halt: XHalt }
   /** Nearly every post read so far scored 0 relevance (x-reader.ts relevanceCollapse); written once a run. */
   | { kind: "relevance-collapse"; posts: number; zero: number }
+  /** The search card and the captured answer disagree on a post (search-capture.ts captureMismatch); logged, the read goes on. */
+  | { kind: "capture-mismatch"; line: string; id: string; why: string }
+  /** Enough posts read and none of them covered by a captured answer; written once a run. */
+  | { kind: "capture-silent"; posts: number; bodies: number }
   | { kind: "end"; status: XRunStatus; why: string | null }
 );
 
@@ -61,6 +69,26 @@ export interface XRelevanceCollapse {
 /** The alarm as one line, for the run's status and the source health. */
 export function collapseNote(c: XRelevanceCollapse): string {
   return `relevance collapsed: ${c.zero} of ${c.posts} posts scored 0 against the queries, so post pages were opened in page order`;
+}
+
+/** Which reading filled a post: the search card's DOM, or the page's own answer. */
+export type XPostSource = "dom" | "captured";
+
+/** The capture alarm of a run: posts read off the page, and answers handed over, none of which covered a post. */
+export interface XCaptureSilent {
+  posts: number;
+  bodies: number;
+}
+
+/** The capture alarm as one line, for the run's status and the source health. */
+export function captureNote(c: XCaptureSilent): string {
+  return `no post was covered by X's own search answers (${c.posts} posts read off the page, ${c.bodies} answers handed over), so long posts were read from their post pages as before`;
+}
+
+/** The X row's warnings, one line, or null when there are none. */
+export function xReadNote(x: { collapse?: XRelevanceCollapse | null; captureSilent?: XCaptureSilent | null }): string | null {
+  const notes = [x.collapse ? collapseNote(x.collapse) : null, x.captureSilent ? captureNote(x.captureSilent) : null].filter((n) => n !== null);
+  return notes.length ? notes.join("; ") : null;
 }
 
 export type XRunStatus = "done" | "limit" | "quota" | "halted" | "interrupted" | "unavailable";
@@ -166,6 +194,9 @@ export interface XReplay {
   lastN: number;
   halt: XHalt | null;
   collapse: XRelevanceCollapse | null;
+  captureSilent: XCaptureSilent | null;
+  /** Kept posts whose text came from a captured answer, on the search page or on their own page. */
+  captured: Set<string>;
   end: { status: XRunStatus; why: string | null } | null;
   lineEnds: Map<string, { why: XLineStop; screens: number; kept: number }>;
 }
@@ -183,6 +214,8 @@ export function replay(steps: readonly XStep[]): XReplay {
     lastN: 0,
     halt: null,
     collapse: null,
+    captureSilent: null,
+    captured: new Set(),
     end: null,
     lineEnds: new Map(),
   };
@@ -198,6 +231,7 @@ export function replay(steps: readonly XStep[]): XReplay {
         break;
       case "read":
         for (const post of step.fresh) if (!out.posts.has(post.id)) out.posts.set(post.id, { line: step.line, post });
+        for (const id of step.captured ?? []) out.captured.add(id);
         break;
       case "line-end":
         out.ended.add(step.line);
@@ -206,6 +240,7 @@ export function replay(steps: readonly XStep[]): XReplay {
       case "permalink": {
         out.pages.permalink++;
         out.permalinked.add(step.id);
+        if (step.source === "captured") out.captured.add(step.id);
         const kept = out.posts.get(step.id);
         if (kept) out.posts.set(step.id, { ...kept, post: afterPermalink(kept.post, step.text, step.links ?? []) });
         break;
@@ -218,6 +253,9 @@ export function replay(steps: readonly XStep[]): XReplay {
         break;
       case "relevance-collapse":
         out.collapse = { posts: step.posts, zero: step.zero };
+        break;
+      case "capture-silent":
+        out.captureSilent = { posts: step.posts, bodies: step.bodies };
         break;
       case "end":
         out.end = { status: step.status, why: step.why };
@@ -256,6 +294,8 @@ export function xTally(): XTally {
   let permalinks = 0;
   let halt: string | null = null;
   let collapse: XRelevanceCollapse | null = null;
+  let silent: XCaptureSilent | null = null;
+  const captured = new Set<string>();
   let end: { status: XRunStatus; why: string | null } | null = null;
   let count = 0;
   return {
@@ -271,18 +311,23 @@ export function xTally(): XTally {
         case "read":
           screens++;
           for (const p of step.fresh) posts.add(p.id);
+          for (const id of step.captured ?? []) captured.add(id);
           break;
         case "line-end":
           ended.add(step.line);
           break;
         case "permalink":
           permalinks++;
+          if (step.source === "captured") captured.add(step.id);
           break;
         case "halt":
           halt = step.halt.kind;
           break;
         case "relevance-collapse":
           collapse = { posts: step.posts, zero: step.zero };
+          break;
+        case "capture-silent":
+          silent = { posts: step.posts, bodies: step.bodies };
           break;
         case "end":
           end = { status: step.status, why: step.why };
@@ -294,8 +339,10 @@ export function xTally(): XTally {
       const at = current && order ? order.indexOf(current) + 1 : 0;
       const counts =
         `${screens} screen${screens === 1 ? "" : "s"} read, ${posts.size} distinct post${posts.size === 1 ? "" : "s"} found` +
+        (captured.size ? ` (${captured.size} filled from X's own answers, ${Math.max(0, posts.size - captured.size)} from the page)` : "") +
         (permalinks ? `, ${permalinks} post page${permalinks === 1 ? "" : "s"} opened` : "");
-      const stopped = (halt ? `; X stopped it (${halt})` : "") + (collapse ? `; warning: ${collapseNote(collapse)}` : "");
+      const note = xReadNote({ collapse, captureSilent: silent });
+      const stopped = (halt ? `; X stopped it (${halt})` : "") + (note ? `; warning: ${note}` : "");
       if (end) {
         const queries = total !== null ? `${ended.size} of ${total} queries read to their end, ` : "";
         return `finished (${end.status}${end.why ? `: ${end.why}` : ""}): ${queries}${counts}${stopped}`;

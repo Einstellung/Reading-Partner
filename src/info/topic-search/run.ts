@@ -138,6 +138,7 @@ export function readFromSteps(steps: Parameters<typeof replay>[0], status: XRunS
     pages: { ...past.pages },
     activeMs: past.activeMs,
     collapse: past.collapse,
+    captureSilent: past.captureSilent,
   };
 }
 
@@ -217,7 +218,7 @@ export interface TopicSearchRunDeps {
   /** X said stop: the state file, the collector's state file and the box. */
   halted(halt: XHalt, about: { searchId: string; runId: string; night: string }): Promise<void>;
   keepAwake(reason: string): Promise<KeepAwakeLock>;
-  open(viewport: { width: number; height: number }): Promise<BrowseOpen>;
+  open(viewport: { width: number; height: number }, opts?: { initScript?: string }): Promise<BrowseOpen>;
   expandLink(tco: string): Promise<string | null>;
   /**
    * The run is over: the brief (info/issue) takes the result file, null when
@@ -334,7 +335,7 @@ export function topicSearchTask(
       return await readXSearch(
         { lines: searchLines(search, look, window.since, window.retry?.x), limits },
         {
-          open: (viewport) => deps.open(viewport),
+          open: (viewport, opts) => deps.open(viewport, opts),
           progress: watched,
           memory: deps.memory,
           expandLink: (tco) => deps.expandLink(tco),

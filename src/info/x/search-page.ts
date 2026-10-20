@@ -174,6 +174,8 @@ export interface XQuoted {
   text: string;
   postedAt: number | null;
   truncated: boolean;
+  /** Its own links out, when the page's answer gave them (search-capture.ts); never counted as the quoting post's. */
+  links?: string[];
 }
 
 /** One post off a search page: every field written by the program, none by a model. */

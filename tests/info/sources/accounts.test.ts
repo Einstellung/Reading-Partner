@@ -41,6 +41,8 @@ test("every registry account has a row, subscribed or not", () => {
   expect(x.site.sourceNames).toEqual([]);
   expect(row(rows, "bloomberg").site.checkUrl).toBe("https://www.bloomberg.com/");
   expect(x.benefit).toBeTruthy();
+  expect(x.caution).toContain("secondary account");
+  expect(row(rows, "bloomberg").caution).toBeNull();
 });
 
 test("a registry row takes the subscribed sources' site, so it knows what reads through it", () => {

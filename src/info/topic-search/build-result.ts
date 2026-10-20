@@ -78,7 +78,7 @@ import {
   type Target,
 } from "./verify";
 import { addDays } from "./windows";
-import { collapseNote } from "./x-progress";
+import { xReadNote } from "./x-progress";
 import type { XReadResult } from "./x-reader";
 
 /** Items a result lists: a first run's, and a day's (88 「打分」 7). */
@@ -173,7 +173,7 @@ export interface SourceHealthEntry {
   passedFloor: number;
   /** arXiv and Hugging Face only: how the query ladder ended and the steps it took. */
   ladder?: ArxivLadder;
-  /** X only: a warning about the read, such as the relevance alarm (x-progress.ts collapseNote). */
+  /** X only: warnings about the read, the relevance alarm and the capture alarm (x-progress.ts xReadNote). */
   note?: string;
 }
 
@@ -915,7 +915,7 @@ export function sourceHealth(
       read: s.read.length,
       fresh,
       passedFloor: s.kept.length,
-      ...(x.collapse && !failed ? { note: collapseNote(x.collapse) } : {}),
+      ...(xReadNote(x) && !failed ? { note: xReadNote(x)! } : {}),
     });
     for (const [source, found] of [["arxiv", arxiv], ["huggingface", huggingface]] as const) {
       const a = found.find((f) => f.query === q.id);

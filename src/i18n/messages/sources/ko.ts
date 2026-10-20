@@ -11,6 +11,7 @@ export default {
   signOut: "로그아웃",
   signIn: "로그인",
   "account.benefitX": "주제 검색이 내 계정으로 X 검색을 읽습니다.",
+  "account.cautionX": "자동 읽기는 로그인한 계정으로 이루어집니다. X의 위험 관리가 반응할 가능성이 조금 있으니, 주 계정보다는 보조 계정으로 로그인하는 것을 권장합니다.",
   "account.benefitBloomberg": "브리핑에서 약 500자 미리보기 대신 Bloomberg 전문을 받습니다.",
   "account.usedBy": "{names}에서 사용",
   "account.signInOnCollector": "소스를 수집하는 컴퓨터에서 로그인하세요",

@@ -1,5 +1,7 @@
 # X 搜索响应被动捕获可行性
 
+> 已实施（2026-10-20）：发起人定被动旁听不违反 88 硬规则 2，改写了那条的措辞。实现按第 4 节，差别：不做任何伪装（不改 `toString`、不藏全局），交回走一个具名全局 `window.__readingPartnerXCapture`，由读法用 `evaluate` 取走；页面里只存回答原文的副本，解析在 TypeScript 侧（`info/x/graphql-post.ts`），整段回答不落盘；`TweetDetail`、`TweetResultByRestId` 一并旁听。做法、降级和警告见 88「取材 / X」的「旁听回答」。真 WebKit 引擎上用本文的本地页面复验过发出的脚本：fetch、XHR、流式、3 MB 大体、pushState 之后都捕获到，页面行为与不挂时一致。
+
 2026-10-20。问题：能不能在我们自己的隐藏 webview 里，旁听 X 搜索页本身收到的 JSON 响应（`SearchTimeline` 等），拿到长帖全文（`note_tweet`）、展开后的外链、引用帖、计数、X Article，而不发任何额外请求、不改请求、不改节奏、不被 X 的脚本轻易认出。起因是坑 657：搜索页每条只显示约 275 字，多数帖子的链接在截掉的部分里，现在只能逐条开永久链接页补。
 
 方法：只读本仓代码、Cargo.lock 和依赖源码；实验只在本机自己起的 HTTP 服务和手写的、形状仿照公开 GraphQL 字段名的 JSON 上做，引擎用本机 WebKit2 4.1（2.52.6，就是 wry 在 Linux 上用的那个），xvfb 无窗口。全程没访问 x.com、没碰 X 的任何接口、没登录。twitter-web-exporter（MIT）只读了它的字段名和做法，没抄代码。

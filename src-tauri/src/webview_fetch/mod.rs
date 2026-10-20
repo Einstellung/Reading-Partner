@@ -418,7 +418,7 @@ pub(crate) fn with_page<R: Runtime, T>(
     };
 
     let (tx, rx) = mpsc::channel::<LoadEvent>();
-    let window = match build_window(app, &label, profile, tx.clone(), Chrome::hidden()) {
+    let window = match build_window(app, &label, profile, tx.clone(), Chrome::hidden(), None) {
         Ok(window) => window,
         Err(err) => {
             return Err(PageOutcome::failed(
@@ -593,12 +593,18 @@ impl Chrome<'_> {
     }
 }
 
+/// `page_script` is a document-start script for every page the window loads,
+/// main frame only, run before the page's own scripts. Only the browse session
+/// passes one, and only when its caller asks (the X reader's capture of the
+/// answers its page receives, src/info/x/search-capture.ts); every other window
+/// leaves the page as it comes.
 pub(crate) fn build_window<R: Runtime>(
     app: &AppHandle<R>,
     label: &str,
     profile: &PathBuf,
     tx: Sender<LoadEvent>,
     chrome: Chrome<'_>,
+    page_script: Option<&str>,
 ) -> tauri::Result<WebviewWindow<R>> {
     let sender = Mutex::new(tx);
     let visible = chrome.visible;
@@ -658,6 +664,11 @@ pub(crate) fn build_window<R: Runtime>(
             Some(ua) => builder.user_agent(ua),
             None => builder,
         },
+    };
+
+    let builder = match page_script {
+        Some(script) => builder.initialization_script(script),
+        None => builder,
     };
 
     // The same jar, named the way this platform names one (PROFILE_DATA_STORE).

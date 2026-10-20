@@ -10,6 +10,7 @@ export default {
   signOut: "退出登录",
   signIn: "登录",
   "account.benefitX": "主题搜索以你的身份读取 X 的搜索。",
+  "account.cautionX": "自动读取用的是你登录的这个账号。X 的风控有小概率对此作出反应，建议用小号登录，不要用主号。",
   "account.benefitBloomberg": "简报里拿到 Bloomberg 全文，而不是约 500 字的预览。",
   "account.usedBy": "供 {names} 使用",
   "account.signInOnCollector": "请在采集信息源的电脑上登录",

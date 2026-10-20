@@ -103,7 +103,7 @@ export class PipeHost implements BrowseHost {
 	async invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
 		if (cmd === "browse_open") {
 			this.start();
-			const line = await this.send({ idleTimeoutMs: args.idleTimeoutMs ?? 3_600_000, viewport: args.viewport });
+			const line = await this.send({ idleTimeoutMs: args.idleTimeoutMs ?? 3_600_000, viewport: args.viewport, initScript: args.initScript ?? null });
 			return line.result as T;
 		}
 		if (cmd === "browse_close") {

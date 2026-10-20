@@ -301,6 +301,7 @@ pub async fn open_site_sign_in(app: AppHandle, url: String) -> Result<SignInOutc
                 visible: true,
                 title: &title,
             },
+            None,
         )
         .map_err(|e| format!("could not open the sign-in window: {e}"))?;
 
@@ -402,7 +403,7 @@ pub async fn check_site_session(app: AppHandle, url: String) -> Result<SessionSt
         };
 
         let (tx, rx) = mpsc::channel();
-        let window = build_window(&app, &label, &profile, tx.clone(), Chrome::hidden())
+        let window = build_window(&app, &label, &profile, tx.clone(), Chrome::hidden(), None)
             .map_err(|e| format!("could not open the check window: {e}"))?;
         connect_engine_signals(&window, tx);
         window
@@ -492,7 +493,7 @@ pub async fn clear_site_cookies(app: AppHandle, host: String) -> Result<Vec<Stri
         // manager of the profile's web context, which is per data directory and
         // only reachable through a webview that uses it.
         let (tx, _rx) = mpsc::channel();
-        let window = build_window(&app, &label, &profile, tx, Chrome::hidden())
+        let window = build_window(&app, &label, &profile, tx, Chrome::hidden(), None)
             .map_err(|e| format!("could not open the cookie window: {e}"))?;
         // What came back is what was removed, which on macOS is more than the
         // spellings above could name and on Linux is exactly them.

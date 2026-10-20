@@ -39,6 +39,8 @@ export interface AccountDef {
 	signInUrl: string;
 	/** What signing in gives the reader, looked up when the row is built. */
 	benefit: () => string;
+	/** A plain word of advice about which account to sign in with, for a site the app reads on its own. */
+	caution?: () => string;
 }
 
 export const ACCOUNTS: readonly AccountDef[] = [
@@ -48,6 +50,7 @@ export const ACCOUNTS: readonly AccountDef[] = [
 		name: "X",
 		signInUrl: X_SIGN_IN_URL,
 		benefit: () => t("sources.account.benefitX"),
+		caution: () => t("sources.account.cautionX"),
 	},
 	{
 		id: "bloomberg",
@@ -66,6 +69,8 @@ export interface AccountRow {
 	site: SignInSite;
 	/** The registry's benefit line, translated; null for a row only a source names. */
 	benefit: string | null;
+	/** The registry's advice on which account to use, translated; null when it has none. */
+	caution: string | null;
 }
 
 function hostOf(url: string): string | null {
@@ -110,12 +115,13 @@ export function accountRows(subscribed: SourceDescriptor[], topicSearch: boolean
 			name: def.name,
 			site: byHost.get(host) ?? siteFor(def, host),
 			benefit: def.benefit(),
+			caution: def.caution?.() ?? null,
 		});
 	}
 	for (const site of derived) {
 		if (claimed.has(site.host)) continue;
 		claimed.add(site.host);
-		rows.push({ id: site.host, name: site.label, site, benefit: null });
+		rows.push({ id: site.host, name: site.label, site, benefit: null, caution: null });
 	}
 	return rows;
 }

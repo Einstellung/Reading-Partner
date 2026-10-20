@@ -107,17 +107,24 @@ interface Opened {
  * Open the browse page, blank. `idleTimeoutMs` is how long it may sit untouched
  * before it closes itself (host-side 1-60 min, default 15). `viewport` is the
  * page's size in CSS pixels (host-side default 1440x900); the page can read it,
- * so pick one a real screen has.
+ * so pick one a real screen has. `initScript` runs at document start in every
+ * page the session loads, in the main frame, before the page's own scripts; a
+ * caller that passes one guards it to the sites it is for. Without it the page
+ * is left as it comes.
  */
 export async function openBrowse(
-	opts: { idleTimeoutMs?: number; viewport?: { width: number; height: number } } = {},
+	opts: { idleTimeoutMs?: number; viewport?: { width: number; height: number }; initScript?: string } = {},
 	host: BrowseHost = tauriHost,
 ): Promise<BrowseOpen> {
 	if (!host.available()) {
 		return { status: "unsupported", detail: "no hidden-webview browser on this platform" };
 	}
 	const viewport = opts.viewport ? [opts.viewport.width, opts.viewport.height] : null;
-	const opened = await host.invoke<Opened>("browse_open", { idleTimeoutMs: opts.idleTimeoutMs ?? null, viewport });
+	const opened = await host.invoke<Opened>("browse_open", {
+		idleTimeoutMs: opts.idleTimeoutMs ?? null,
+		viewport,
+		initScript: opts.initScript ?? null,
+	});
 	if (opened.status !== "ok" || opened.session === null) {
 		const status = opened.status === "ok" ? "closed" : opened.status;
 		return { status, detail: opened.detail };

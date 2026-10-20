@@ -180,7 +180,7 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
     retryPlan: async (search) => planRetry(search, await loadSourceHealth()),
     halted,
     keepAwake: (reason) => keepAwake(reason),
-    open: (viewport) => openBrowse({ idleTimeoutMs: BROWSE_IDLE_MS, viewport }),
+    open: (viewport, opts) => openBrowse({ idleTimeoutMs: BROWSE_IDLE_MS, viewport, initScript: opts?.initScript }),
     expandLink: (tco) => resolveRedirect(tco),
     closed: async (run) => {
       await ports.closed?.(run);

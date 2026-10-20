@@ -12,6 +12,7 @@ export default {
   signOut: "Sair",
   signIn: "Entrar",
   "account.benefitX": "As pesquisas por tema leem a busca do X com a sua conta.",
+  "account.cautionX": "A leitura automática acontece na conta com que você entra. Há uma pequena chance de os controles de risco do X reagirem, por isso sugerimos entrar com uma conta secundária em vez da principal.",
   "account.benefitBloomberg": "Artigos completos da Bloomberg no resumo em vez da prévia de ~500 caracteres.",
   "account.usedBy": "Usado por {names}",
   "account.signInOnCollector": "Entre no computador que coleta suas fontes",

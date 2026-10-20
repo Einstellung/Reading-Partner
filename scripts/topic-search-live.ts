@@ -249,8 +249,8 @@ async function readX(): Promise<XReadResult> {
     const result = await readXSearch(
       { lines, pace, limits: LIMITS, allowance: { search: LIMITS.searchPages, permalink: LIMITS.permalinkPages } },
       {
-        open: async (v) => {
-          const opened = await openBrowse({ idleTimeoutMs: 3_600_000, viewport: v }, host);
+        open: async (v, opts) => {
+          const opened = await openBrowse({ idleTimeoutMs: 3_600_000, viewport: v, initScript: opts?.initScript }, host);
           if (opened.status === "ok") session = opened.session;
           log(`browse open ${opened.status}; binary pid ${host.pid()}`);
           return opened;

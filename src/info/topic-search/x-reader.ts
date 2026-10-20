@@ -19,6 +19,15 @@
 // stopped telling anything apart: the run writes a warning and opens the
 // first few cut-short posts of each line in page order instead.
 //
+// The session is opened with X's capture script (info/x/search-capture.ts):
+// the page's own GraphQL answers are copied as they arrive and drained after
+// every screen, nothing requested or changed. A kept post an answer covers
+// takes its whole text, links and counts from there, so its permalink page is
+// not opened; the DOM reading stays the primary path and the fallback, and the
+// two are cross-checked. When enough posts are read and no answer covered any
+// of them, the run writes a warning (the hook is gone or X changed the shape)
+// and reads on exactly as without it.
+//
 // Every step is a line in the progress file. Called again with the same file,
 // the run picks up where it was: finished lines are not read again, kept posts
 // come back from the file, and a run that already ended answers from the file
@@ -31,6 +40,7 @@
 
 import type { BrowseOpen, BrowseSession } from "../../workshop/extract/webview-browse";
 import { localRelevance, prepareQuery, RELEVANCE_FLOOR, type PreparedQuery } from "../rank/relevance";
+import type { XCapturedPost } from "../x/graphql-post";
 import { bodyText, focalPost, outboundLinks, parsePermalinkResult, PERMALINK_SCRIPT, postBodyLines } from "../x/permalink";
 import {
   noResults,
@@ -45,6 +55,7 @@ import {
   type XSearchLineSpec,
   type XSearchPost,
 } from "../x/search-page";
+import { captureMismatch, mergeLinks, parseCaptureDrain, withCaptured, X_CAPTURE_DRAIN, X_CAPTURE_SCRIPT } from "../x/search-capture";
 import { draw, drawInt, fitViewport, screenStayMs, scrollSteps, X_PACE, type XPace } from "./x-pace";
 import {
   afterPermalink,
@@ -53,6 +64,7 @@ import {
   markAfter,
   replay,
   today,
+  type XCaptureSilent,
   type XDailyCount,
   type XLineStop,
   type XProgressLog,
@@ -108,6 +120,9 @@ export const COLLAPSE_ZERO_SHARE = 0.9;
 /** Cut-short posts per line opened in page order once the alarm went off and the floor passes none. */
 export const COLLAPSE_FALLBACK = 3;
 
+/** Posts kept, across the run's lines since the page was opened, with none covered by a captured answer, before the capture alarm goes off. */
+export const CAPTURE_MIN_POSTS = 20;
+
 const PAGE_TIMEOUT_MS = 60_000;
 const PERMALINK_READY = `document.querySelectorAll("article").length > 0 || !location.pathname.includes("/status/")`;
 const SCREEN_SCRIPT = `({ availWidth: screen.availWidth, availHeight: screen.availHeight })`;
@@ -118,11 +133,13 @@ export interface XReadInput {
   pace?: XPace;
   allowance?: { search: number; permalink: number };
   relevanceFloor?: number;
+  /** Open the session with X's capture script (search-capture.ts). Default true. */
+  capture?: boolean;
 }
 
 export interface XReadDeps {
-  /** Open the browse session at this viewport (`openBrowse` with it). */
-  open(viewport: { width: number; height: number }): Promise<BrowseOpen>;
+  /** Open the browse session at this viewport, with this document-start script when given (`openBrowse` with both). */
+  open(viewport: { width: number; height: number }, opts?: { initScript?: string }): Promise<BrowseOpen>;
   progress: XProgressLog;
   memory: XReaderStore;
   /** Where a t.co link goes, read off its redirect (info/x/outbound.ts), or null. */
@@ -145,6 +162,8 @@ export interface XReadResult {
   activeMs: number;
   /** Set when nearly every post scored 0 relevance (relevanceCollapse). */
   collapse?: XRelevanceCollapse | null;
+  /** Set when enough posts were read and no captured answer covered any (CAPTURE_MIN_POSTS). */
+  captureSilent?: XCaptureSilent | null;
 }
 
 /** One line's part of what is left of the run's ceilings (Run.share). */
@@ -180,6 +199,12 @@ class Run {
   private sittingEnd = 0;
   private daily: XDailyCount;
   private halted: XHalt | null;
+  private readonly capture: boolean;
+  /** Posts out of the answers drained so far this session, by id. */
+  private readonly captured = new Map<string, XCapturedPost>();
+  private bodies = 0;
+  /** Posts kept since this call opened the page: a run picked up from a file written before capture existed has none captured. */
+  private keptHere = 0;
 
   constructor(
     private readonly input: XReadInput,
@@ -194,6 +219,7 @@ class Run {
     this.active = past.activeMs;
     this.daily = today(memory.daily, localDay(deps.now()));
     this.halted = past.halt;
+    this.capture = input.capture ?? true;
   }
 
   result(status: XRunStatus, why: string | null): XReadResult {
@@ -206,6 +232,7 @@ class Run {
       pages: { ...this.past.pages },
       activeMs: Math.round(this.active),
       collapse: this.past.collapse,
+      captureSilent: this.past.captureSilent,
     };
   }
 
@@ -266,7 +293,8 @@ class Run {
 
   /** Open the session at the pace's viewport, cut to what the screen it is on could show. */
   private async openPage(): Promise<BrowseSession | null> {
-    let opened = await this.deps.open(this.pace.viewport);
+    const opts = this.capture ? { initScript: X_CAPTURE_SCRIPT } : {};
+    let opened = await this.deps.open(this.pace.viewport, opts);
     if (opened.status !== "ok") return null;
     const probe = await opened.session.evaluate(SCREEN_SCRIPT);
     const screen = probe.value as { availWidth?: unknown; availHeight?: unknown } | null;
@@ -278,7 +306,7 @@ class Run {
     );
     if (fit.width === this.pace.viewport.width && fit.height === this.pace.viewport.height) return opened.session;
     await opened.session.close();
-    opened = await this.deps.open(fit);
+    opened = await this.deps.open(fit, opts);
     return opened.status === "ok" ? opened.session : null;
   }
 
@@ -339,6 +367,7 @@ class Run {
         const ev = await session.evaluate(SEARCH_PAGE_SCRIPT);
         if (ev.status !== "ok") throw new Stop("interrupted", `search page script: ${ev.status}`);
         const read = parseSearchRead(ev.value);
+        await this.drain(session);
         if (read) {
           const halt = pageHalt(read, "search");
           if (halt) await this.halt(halt);
@@ -360,6 +389,8 @@ class Run {
         }
 
         const fresh: XSearchPost[] = [];
+        const filled: string[] = [];
+        const mismatches: { id: string; why: string }[] = [];
         let arrived = 0;
         let caughtUp = false;
         for (const { post } of read?.posts ?? []) {
@@ -378,9 +409,20 @@ class Run {
           }
           seenRow = 0;
           if (this.past.posts.has(post.id)) continue;
-          this.past.posts.set(post.id, { line: key, post });
-          fresh.push(post);
+          const cap = this.captured.get(post.id);
+          const why = cap ? captureMismatch(post, cap) : null;
+          if (why) mismatches.push({ id: post.id, why });
+          // A different author means the answer is not this post: the card stands alone.
+          const usable = cap && (cap.handle === null || cap.handle.toLowerCase() === post.handle.toLowerCase());
+          const whole = usable ? withCaptured(post, cap) : post;
+          if (usable) {
+            filled.push(post.id);
+            this.past.captured.add(post.id);
+          }
+          this.past.posts.set(post.id, { line: key, post: whole });
+          fresh.push(whole);
           kept++;
+          this.keptHere++;
         }
         let chars = 0;
         for (const p of read?.posts ?? []) {
@@ -398,7 +440,10 @@ class Run {
           textChars: read?.textChars ?? 0,
           scrollY: read?.scrollY ?? 0,
           height: read?.height ?? 0,
+          ...(filled.length ? { captured: filled } : {}),
         });
+        for (const m of mismatches) await this.log({ kind: "capture-mismatch", line: key, ...m });
+        await this.watchCapture();
         if (caughtUp) {
           why = "caught-up";
           break;
@@ -511,17 +556,46 @@ class Run {
       }
       const ev = await session.evaluate(PERMALINK_SCRIPT);
       const read = permalinkRead(ev.value, post);
-      const whole = read?.text ?? null;
+      await this.drain(session);
+      const cap = this.captured.get(post.id);
+      const fromAnswer = cap && cap.text && !cap.article && !captureMismatch(post, cap) ? cap : null;
+      const whole = fromAnswer ? fromAnswer.text : (read?.text ?? null);
+      const links = fromAnswer ? mergeLinks(read?.links ?? [], fromAnswer.links) : (read?.links ?? []);
       // The links are written with the step, so a run picked up from the file keeps them.
-      await this.log({ kind: "permalink", line: line.key, id: post.id, status: whole ? "ok" : "unread", text: whole, links: read?.links ?? [] });
+      await this.log({
+        kind: "permalink",
+        line: line.key,
+        id: post.id,
+        status: whole ? "ok" : "unread",
+        text: whole,
+        links,
+        ...(fromAnswer ? { source: "captured" as const } : {}),
+      });
       const kept = this.past.posts.get(post.id)!;
-      this.past.posts.set(post.id, { ...kept, post: afterPermalink(kept.post, whole, read?.links ?? []) });
+      this.past.posts.set(post.id, { ...kept, post: afterPermalink(kept.post, whole, links) });
+      if (fromAnswer) this.past.captured.add(post.id);
       await this.expandLinks(post.id);
       if (whole) {
         const extra = Math.max(0, whole.length - post.text.length);
         await this.stay(screenStayMs(extra, this.pace, this.deps.random), extra, "screen", line.key);
       }
     }
+  }
+
+  /** Take the answers the page kept since the last drain. Capture is a help, never a reason to stop: a page that does not answer gives nothing. */
+  private async drain(session: BrowseSession): Promise<void> {
+    if (!this.capture) return;
+    const ev = await session.evaluate(X_CAPTURE_DRAIN);
+    if (ev.status !== "ok") return;
+    this.bodies += parseCaptureDrain(ev.value, this.captured).bodies;
+  }
+
+  /** The capture alarm: enough posts kept and none covered by an answer. Written once a run. */
+  private async watchCapture(): Promise<void> {
+    if (!this.capture || this.past.captureSilent || this.past.captured.size > 0) return;
+    if (this.keptHere < CAPTURE_MIN_POSTS) return;
+    this.past.captureSilent = { posts: this.keptHere, bodies: this.bodies };
+    await this.log({ kind: "capture-silent", ...this.past.captureSilent });
   }
 
   /** Where each t.co link of a kept post goes that the page did not spell out, asked once a run. */

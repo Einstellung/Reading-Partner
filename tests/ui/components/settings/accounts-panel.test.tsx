@@ -31,6 +31,7 @@ test("a device that signs in gets Check plus Sign in or Sign out on every row", 
   expect(html.match(/>Check</g)?.length).toBe(2);
   expect(html.match(/>Sign in</g)?.length).toBe(2);
   expect(html).toContain("your password never reaches this app");
+  expect(html.match(/secondary account rather than your main one/g)?.length).toBe(1);
 });
 
 test("a reader's rows are read-only and say where the session is", () => {

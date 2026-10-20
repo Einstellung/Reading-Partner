@@ -134,7 +134,7 @@ if (mode === "snapshot") {
 			},
 		},
 		{
-			open: (v) => openBrowse({ idleTimeoutMs: 3_600_000, viewport: v }, host),
+			open: (v, opts) => openBrowse({ idleTimeoutMs: 3_600_000, viewport: v, initScript: opts?.initScript }, host),
 			progress: {
 				load: async () =>
 					existsSync(progressPath)
