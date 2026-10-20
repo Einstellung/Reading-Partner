@@ -25,6 +25,9 @@ mod fallback;
 mod ios;
 
 mod commands;
+/// The main process's end of the socket to the Android voice process
+/// (docs/companion/89). Not behind a cfg: the protocol is tested on Linux.
+pub mod engine_link;
 mod error;
 /// The silent bench's clock and log (docs/platform/560). Debug builds only.
 mod harness;
@@ -125,6 +128,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             app.manage(session::SpeechSession::from_env(
                 Arc::new(speaker::DeviceSpeakers::new(app.clone())),
                 &models,
+                None,
             ));
             Ok(())
         })

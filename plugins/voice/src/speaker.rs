@@ -14,7 +14,8 @@ use std::time::Instant;
 use async_trait::async_trait;
 use tauri::{AppHandle, Runtime};
 
-use crate::tts::{Heard, PlaybackState, Player, SentenceAudio, TtsError};
+use crate::models::{SpeechEnqueued, SpeechPosition};
+use crate::tts::{Heard, PlaybackState, Player, SentenceAudio, SentenceMarks, TtsError};
 use crate::VoiceExt;
 
 /// The reason `stop()` gives Swift. `Player::stop` has no reason of its own —
@@ -22,8 +23,58 @@ use crate::VoiceExt;
 /// the same word.
 const STOP_REASON: &str = "interrupted";
 
-pub struct DevicePlayer<R: Runtime> {
-    app: AppHandle<R>,
+/// Where a `DevicePlayer`'s sentences go: Swift's player over the bridge (the
+/// `AppHandle`, through `Voice`), or the Android voice process over its socket
+/// (`Arc<EngineLink>`, engine_link.rs). The same three calls, the same answers.
+#[async_trait]
+pub trait SpeechOut: Send + Sync + 'static {
+    #[allow(clippy::too_many_arguments)]
+    async fn enqueue_speech(
+        &self,
+        utterance: u64,
+        index: u32,
+        chars: u32,
+        last: bool,
+        part: u32,
+        complete: bool,
+        marks: SentenceMarks,
+        sample_rate: u32,
+        pcm: Vec<u8>,
+    ) -> crate::Result<SpeechEnqueued>;
+    async fn finish_speech(&self, utterance: u64) -> crate::Result<()>;
+    async fn stop_speaking(&self, reason: String) -> crate::Result<SpeechPosition>;
+}
+
+#[async_trait]
+impl<R: Runtime> SpeechOut for AppHandle<R> {
+    async fn enqueue_speech(
+        &self,
+        utterance: u64,
+        index: u32,
+        chars: u32,
+        last: bool,
+        part: u32,
+        complete: bool,
+        marks: SentenceMarks,
+        sample_rate: u32,
+        pcm: Vec<u8>,
+    ) -> crate::Result<SpeechEnqueued> {
+        self.voice()
+            .enqueue_speech(utterance, index, chars, last, part, complete, marks, sample_rate, pcm)
+            .await
+    }
+
+    async fn finish_speech(&self, utterance: u64) -> crate::Result<()> {
+        self.voice().finish_speech(utterance).await
+    }
+
+    async fn stop_speaking(&self, reason: String) -> crate::Result<SpeechPosition> {
+        self.voice().stop_speaking(reason).await
+    }
+}
+
+pub struct DevicePlayer<O: SpeechOut> {
+    app: O,
     /// One number per turn of conversation, increasing. Swift drops a sentence
     /// whose utterance is not the one it is playing, which is how audio the
     /// vendor finished after a barge-in is thrown away rather than spoken into
@@ -51,8 +102,8 @@ struct Placed {
     duration_ms: f64,
 }
 
-impl<R: Runtime> DevicePlayer<R> {
-    pub fn new(app: AppHandle<R>, utterance: u64) -> Self {
+impl<O: SpeechOut> DevicePlayer<O> {
+    pub fn new(app: O, utterance: u64) -> Self {
         Self {
             app,
             utterance,
@@ -67,14 +118,13 @@ impl<R: Runtime> DevicePlayer<R> {
 }
 
 #[async_trait]
-impl<R: Runtime> Player for DevicePlayer<R> {
+impl<O: SpeechOut> Player for DevicePlayer<O> {
     async fn enqueue(&self, sentence: SentenceAudio) -> Result<PlaybackState, TtsError> {
         let duration_ms = sentence.format.duration_ms(sentence.pcm.len());
         // The lock is taken only after the await: a std MutexGuard held across
         // one would make this future non-Send and the trait object impossible.
         let ack = self
             .app
-            .voice()
             .enqueue_speech(
                 self.utterance,
                 sentence.id as u32,
@@ -149,7 +199,6 @@ impl<R: Runtime> Player for DevicePlayer<R> {
 
     async fn finish(&self) -> Result<(), TtsError> {
         self.app
-            .voice()
             .finish_speech(self.utterance)
             .await
             .map_err(|e| TtsError::Player(e.to_string()))
@@ -158,7 +207,6 @@ impl<R: Runtime> Player for DevicePlayer<R> {
     async fn stop(&self) -> Result<Heard, TtsError> {
         let at = self
             .app
-            .voice()
             .stop_speaking(STOP_REASON.to_string())
             .await
             .map_err(|e| TtsError::Player(e.to_string()))?;
@@ -209,17 +257,17 @@ pub trait Speakers: Send + Sync + 'static {
 }
 
 /// The phone's own speaker.
-pub struct DeviceSpeakers<R: Runtime> {
-    app: AppHandle<R>,
+pub struct DeviceSpeakers<O: SpeechOut + Clone> {
+    app: O,
 }
 
-impl<R: Runtime> DeviceSpeakers<R> {
-    pub fn new(app: AppHandle<R>) -> Self {
+impl<O: SpeechOut + Clone> DeviceSpeakers<O> {
+    pub fn new(app: O) -> Self {
         Self { app }
     }
 }
 
-impl<R: Runtime> Speakers for DeviceSpeakers<R> {
+impl<O: SpeechOut + Clone> Speakers for DeviceSpeakers<O> {
     fn player(&self, utterance: u64) -> Arc<dyn Player> {
         Arc::new(DevicePlayer::new(self.app.clone(), utterance))
     }

@@ -16,7 +16,6 @@
 // rest of this file builds everywhere, so the backend's behaviour is tested
 // against a stand-in model on any host.
 
-#[cfg(feature = "kokoro")]
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -48,8 +47,17 @@ pub const VARIANT: Variant = Variant::Fp32;
 pub const THREADS: usize = 4;
 
 /// What a turn is refused with before the files are on disk. Shown to the user.
-pub const NOT_DOWNLOADED: &str =
-    "The on-device voice is not downloaded yet: download it in Settings → Optional → Voice output.";
+/// On Android the voice only speaks in a call and comes with the call's
+/// download, so it names that switch.
+pub const NOT_DOWNLOADED: &str = if cfg!(target_os = "android") {
+    NOT_DOWNLOADED_CALL
+} else {
+    "The on-device voice is not downloaded yet: download it in Settings → Optional → Voice output."
+};
+/// The same sentence the Android voice process refuses `Open` with
+/// (voice-engine call.rs `NOT_DOWNLOADED`).
+pub const NOT_DOWNLOADED_CALL: &str =
+    "The on-device voice is not downloaded yet: download it in Settings → Optional → Voice call.";
 
 /// Which front end a sentence goes through.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,6 +226,24 @@ impl KokoroBackend {
         )
     }
 
+    /// Kokoro in the Android voice process (`:voice`, docs/companion/89): the
+    /// voices are read here and each sentence's style row goes over the
+    /// socket with its phonemes; the model loads and runs there.
+    pub fn remote(root: &Path, link: Arc<crate::engine_link::EngineLink>) -> Self {
+        let root = root.to_path_buf();
+        Self::new(
+            model_name(),
+            Box::new(move || {
+                let model = root.join(VARIANT.file().path);
+                Ok(Loaded {
+                    synth: Box::new(crate::engine_link::RemoteSynth::new(link.clone(), model)),
+                    zh: VoicePack::load(&voice_path(&root, VOICE))?,
+                    en: VoicePack::load(&voice_path(&root, EN_VOICE))?,
+                })
+            }),
+        )
+    }
+
     /// Load the model and the text front end's tables on a thread of their
     /// own, unless that is done or under way. Returns at once.
     pub fn warm(&self) {
@@ -255,7 +281,6 @@ pub fn model_name() -> String {
     )
 }
 
-#[cfg(feature = "kokoro")]
 fn voice_path(root: &Path, name: &str) -> PathBuf {
     let file = manifest::voice_file(name).expect("the voice constants are in the manifest");
     root.join(file.path)
@@ -350,6 +375,18 @@ impl KokoroVoice {
         Self::new(
             Box::new(move || models.is_ready(VARIANT)),
             Box::new(move || KokoroBackend::from_files(&root)),
+        )
+    }
+
+    /// Android's voice: ready on the same files, spoken by the voice process.
+    pub fn remote(
+        models: Arc<crate::kokoro::download::Downloader>,
+        link: Arc<crate::engine_link::EngineLink>,
+    ) -> Self {
+        let root = models.root().to_path_buf();
+        Self::new(
+            Box::new(move || models.is_ready(VARIANT)),
+            Box::new(move || KokoroBackend::remote(&root, link.clone())),
         )
     }
 }

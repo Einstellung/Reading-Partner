@@ -35,6 +35,8 @@ async-trait = "0.1"
 # with the Android voice engine (docs/companion/89); its `ort` feature brings in
 # ONNX Runtime (see that crate's manifest).
 kokoro-onnx = { path = "../voice-engine/kokoro-onnx" }
+# The messages to and from the Android voice process (docs/companion/89).
+voice-wire = { path = "../voice-engine/voice-wire" }
 # The downloader's check of every model file against the manifest.
 sha2 = "0.10"
 # Decodes the Kokoro frontend's embedded tables (src/kokoro_g2p/data). BSD-3-Clause/MIT, already in the
@@ -45,6 +47,9 @@ brotli-decompressor = "5"
 kokoro = ["kokoro-onnx/ort"]
 
 [dev-dependencies]
+# The far end of the Android socket, run in-process by the end-to-end tests
+# (android_e2e.rs) on a virtual device.
+voice-engine = { path = "../voice-engine/engine" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
 
 [build-dependencies]

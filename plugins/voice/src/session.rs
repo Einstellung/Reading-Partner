@@ -32,15 +32,20 @@ use crate::{Error, Result};
 /// without the `kokoro` feature.
 const NO_VOICE: &str = "There is no voice to speak with on this device.";
 
-/// Which voice speaks on this host: the one switch between the two engines.
+/// Which voice speaks on this host: the one switch between the engines.
 ///
 /// With the `kokoro` feature, which src-tauri turns on for iOS only, it is
 /// on-device Kokoro. Without it there is none: desktop and Android have no
 /// player either (fallback.rs). The network vendor that used to sit beside it,
-/// Xiaomi MiMo, was removed on 2026-10-18.
+/// Xiaomi MiMo, was removed on 2026-10-18. On Android, which has the link to
+/// its voice process, it is Kokoro run there (docs/companion/89).
 fn on_device_voice(
     models: &Arc<crate::kokoro::download::Downloader>,
+    link: Option<Arc<crate::engine_link::EngineLink>>,
 ) -> Option<Arc<dyn OnDeviceVoice>> {
+    if let Some(link) = link {
+        return Some(Arc::new(crate::tts::kokoro::KokoroVoice::remote(models.clone(), link)));
+    }
     #[cfg(feature = "kokoro")]
     {
         Some(Arc::new(crate::tts::kokoro::KokoroVoice::on_disk(models.clone())))
@@ -141,9 +146,10 @@ impl SpeechSession {
     pub fn from_env(
         speakers: Arc<dyn Speakers>,
         models: &Arc<crate::kokoro::download::Downloader>,
+        link: Option<Arc<crate::engine_link::EngineLink>>,
     ) -> Self {
         let mut session = Self::new(None, speakers, RelayConfig::default());
-        session.on_device = on_device_voice(models);
+        session.on_device = on_device_voice(models, link);
         session
     }
 
