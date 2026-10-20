@@ -68,7 +68,7 @@ describe("a search answer", () => {
     expect(posts.get("1800000000000000010")?.long).toBe(true);
   });
 
-  test("an X Article: id and title, its own article link left out of text and links", () => {
+  test("an X Article: id, title and preview, its own article link left out of text and links", () => {
     const raw = tweet({
       id: "1900000000000000005",
       text: "https://t.co/art",
@@ -76,7 +76,7 @@ describe("a search answer", () => {
       article: { id: "1900000000000000099", title: "How we built it" },
     });
     const post = postsOfAnswer(searchTimeline([entry(raw)])).get("1900000000000000005")!;
-    expect(post.article).toEqual({ id: "1900000000000000099", title: "How we built it" });
+    expect(post.article).toEqual({ id: "1900000000000000099", title: "How we built it", preview: "A preview." });
     expect(post.text).toBe("");
     expect(post.links).toEqual([]);
   });

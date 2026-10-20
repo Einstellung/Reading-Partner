@@ -194,6 +194,9 @@ export interface XSearchPost {
   /** The page shows only the start: a long post ("Show more") or an X Article. */
   truncated: boolean;
   article: boolean;
+  /** An X Article's id and title, when the page's own answer named them (search-capture.ts). */
+  articleId?: string;
+  articleTitle?: string;
   quoted: XQuoted | null;
   permalink: string;
 }

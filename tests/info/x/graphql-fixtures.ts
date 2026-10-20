@@ -12,7 +12,8 @@ export interface TweetOpts {
   urls?: { tco: string; url: string; display?: string; inNote?: boolean }[];
   card?: string;
   media?: boolean;
-  article?: { id: string; title: string };
+  /** An X Article; `preview` is `preview_text`, "A preview." when not given, left out when null. */
+  article?: { id: string; title: string; preview?: string | null };
   quoted?: Record<string, unknown>;
   retweeted?: Record<string, unknown>;
   replyTo?: { id: string; handle: string };
@@ -73,7 +74,17 @@ export function tweet(o: TweetOpts): Record<string, unknown> {
         }
       : {}),
     ...(o.card ? { card: { rest_id: o.card, legacy: { name: "summary_large_image", url: o.card, binding_values: [] } } } : {}),
-    ...(o.article ? { article: { article_results: { result: { rest_id: o.article.id, title: o.article.title, preview_text: "A preview." } } } } : {}),
+    ...(o.article ? {
+          article: {
+            article_results: {
+              result: {
+                rest_id: o.article.id,
+                title: o.article.title,
+                ...(o.article.preview === null ? {} : { preview_text: o.article.preview ?? "A preview." }),
+              },
+            },
+          },
+        } : {}),
     ...(o.quoted ? { quoted_status_result: { result: o.quoted } } : {}),
   };
 }

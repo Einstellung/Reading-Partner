@@ -13,7 +13,8 @@
 // the script does nothing.
 //
 // What the reader does with the posts: `withCaptured` puts the whole text,
-// the links and the exact counts over what the search card showed, and
+// the links and the exact counts over what the search card showed (for an X
+// Article, whose card shows no text, its title and preview), and
 // `captureMismatch` cross-checks the two. The DOM stays the primary reading
 // and the fallback; a post the answers do not cover is read exactly as before.
 
@@ -163,12 +164,25 @@ export function mergeLinks(links: readonly XLinkOut[], more: readonly XLinkOut[]
   return merged;
 }
 
+/**
+ * An X Article's text as far as the answer has it: the post's own words, the
+ * title, the preview, each left out when what comes before already holds it.
+ * Empty when there is none of them.
+ */
+function articleText(own: string, article: NonNullable<XCapturedPost["article"]>): string {
+  const parts: string[] = [];
+  for (const part of [own.trim(), article.title, article.preview]) {
+    if (part && !squash(parts.join(" ")).includes(squash(part))) parts.push(part);
+  }
+  return parts.join("\n\n");
+}
+
 function quotedFrom(dom: XQuoted | null, cap: XCapturedPost): XQuoted {
   return {
     id: cap.id,
     handle: cap.handle ?? dom?.handle ?? null,
     name: dom?.name || cap.name || "",
-    text: cap.text || dom?.text || "",
+    text: cap.text || dom?.text || (cap.article ? articleText("", cap.article) : ""),
     postedAt: snowflakeTime(cap.id) ?? dom?.postedAt ?? null,
     truncated: cap.article !== null,
     links: cap.links.filter((l) => l.url !== null).map((l) => l.url as string),
@@ -177,13 +191,15 @@ function quotedFrom(dom: XQuoted | null, cap: XCapturedPost): XQuoted {
 
 /**
  * A search card with what the page's own answer says about the same post: the
- * whole text, the links out, exact counts, the quoted post whole. Still cut
- * short after this only when it is an X Article, whose body is not in the
- * answer. The quoted post's links stay on the quoted post.
+ * whole text, the links out, exact counts, the quoted post whole. An X
+ * Article's card shows no text: it takes the article's title and preview from
+ * the answer, and its id and title are kept on the post. It is still cut short,
+ * since its body is not in the answer. The quoted post's links stay on the
+ * quoted post.
  */
 export function withCaptured(post: XSearchPost, cap: XCapturedPost): XSearchPost {
   const article = post.article || cap.article !== null;
-  const text = cap.text && !article ? cap.text : post.text;
+  const text = !article ? cap.text || post.text : cap.article ? articleText(cap.text || post.text, cap.article) : post.text;
   const counts = { ...post.counts };
   for (const k of Object.keys(counts) as (keyof typeof counts)[]) counts[k] = cap.counts[k] ?? counts[k];
   return {
@@ -192,24 +208,34 @@ export function withCaptured(post: XSearchPost, cap: XCapturedPost): XSearchPost
     text,
     truncated: article ? true : cap.text ? false : post.truncated,
     article,
+    ...(cap.article?.id ? { articleId: cap.article.id } : {}),
+    ...(cap.article?.title ? { articleTitle: cap.article.title } : {}),
     counts,
     links: mergeLinks(post.links, cap.links.map(linkOut)),
     quoted: cap.quoted ? quotedFrom(post.quoted, cap.quoted) : post.quoted,
   };
 }
 
-const squash = (s: string) =>
-  s
+/**
+ * Text as both readings can agree on it: links left out (the card spells a
+ * link as it shows it, the answer as it expands it), emoji variation selectors
+ * dropped (the page's text leaves out some the answer has: "❤️♾" for
+ * "❤️♾️"), whitespace collapsed, case ignored.
+ */
+function squash(s: string): string {
+  return s
     .replace(/https?:\/\/\S+/g, "")
+    .replace(/[\uFE0E\uFE0F]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
 
 /**
  * Why the search card and the captured answer do not look like the same post,
- * or null when they agree: the handle, and the start of the text with links
- * left out (the card spells a link as it shows it, the answer as it expands
- * it). An Article's card text is its title or preview, so it is not compared.
+ * or null when they agree: the handle, and the start of the text as `squash`
+ * leaves it. An Article's card text is not the post's text, so it is not
+ * compared.
  */
 export function captureMismatch(post: Pick<XSearchPost, "handle" | "text" | "article">, cap: XCapturedPost): string | null {
   if (cap.handle && cap.handle.toLowerCase() !== post.handle.toLowerCase()) return `handle @${post.handle} on the page, @${cap.handle} in the answer`;

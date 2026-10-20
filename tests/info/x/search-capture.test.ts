@@ -182,11 +182,45 @@ describe("a card with its answer", () => {
     expect(post.links).toEqual([{ tco: "https://t.co/p1", url: "https://arxiv.org/abs/2605.24043", card: false }]);
   });
 
-  test("an Article stays cut short: its body is not in the answer", () => {
-    const art = postsOfAnswer(searchTimeline([entry(tweet({ id: "1900000000000000002", text: "", article: { id: "9", title: "T" } }))])).get("1900000000000000002")!;
-    const post = withCaptured(card({ id: "1900000000000000002", text: "T\nA preview", article: true }), art);
+  // The search card of an X Article shows no text (the 2026-10-20 run: 31 of
+  // 138 posts read empty); the answer has the title and X's own preview.
+  const article = (id: string, opts: { text?: string; title: string; preview?: string | null }) =>
+    postsOfAnswer(
+      searchTimeline([
+        entry(
+          tweet({
+            id,
+            text: opts.text ? `${opts.text} https://t.co/art` : "https://t.co/art",
+            urls: [{ tco: "https://t.co/art", url: `https://x.com/i/article/${id}9` }],
+            article: { id: `${id}9`, title: opts.title, preview: opts.preview },
+          }),
+        ),
+      ]),
+    ).get(id)!;
+
+  test("an Article takes its title and preview as text, keeps its id and title, and stays cut short", () => {
+    const cap = article("1900000000000000002", { title: "🥇Top Papers of the Week", preview: "1. Circuit Discovery\n \nMany circuits rely on a small set of primitives, and compiling them is hard because the" });
+    const post = withCaptured(card({ id: "1900000000000000002", text: "", article: true }), cap);
+    expect(post.text).toBe("🥇Top Papers of the Week\n\n1. Circuit Discovery\n \nMany circuits rely on a small set of primitives, and compiling them is hard because the");
     expect(post.truncated).toBe(true);
-    expect(post.text).toBe("T\nA preview");
+    expect(post.article).toBe(true);
+    expect(post.articleId).toBe("19000000000000000029");
+    expect(post.articleTitle).toBe("🥇Top Papers of the Week");
+    expect(post.links).toEqual([]);
+  });
+
+  test("an Article's own words come first, and nothing is said twice", () => {
+    const words = withCaptured(card({ id: "1900000000000000007", text: "", article: true }), article("1900000000000000007", { text: "New write-up:", title: "How we built it", preview: null }));
+    expect(words.text).toBe("New write-up:\n\nHow we built it");
+    const shown = withCaptured(card({ id: "1900000000000000008", text: "How we built it", article: true }), article("1900000000000000008", { title: "How we built it", preview: "It started with a bug." }));
+    expect(shown.text).toBe("How we built it\n\nIt started with a bug.");
+  });
+
+  test("a card the page calls an Article but the answer does not keeps the card's text", () => {
+    const post = withCaptured(card({ id: "1900000000000000001", text: "seen on the page", article: true }), cap);
+    expect(post.text).toBe("seen on the page");
+    expect(post.truncated).toBe(true);
+    expect(post.articleTitle).toBeUndefined();
   });
 
   test("the quoted post takes its whole text and keeps its links apart", () => {
@@ -202,5 +236,16 @@ describe("a card with its answer", () => {
     expect(captureMismatch(card({ text: "Something else entirely here" }), cap)).toContain("text starts");
     expect(captureMismatch(card({ text: "WHOLE long text about protein https://t.co/x design" }), cap)).toBeNull();
     expect(captureMismatch(card({ text: "Whole   long text about protein design." }), cap)).toBeNull();
+  });
+
+  test("emoji variation selectors the page leaves out are not a mismatch", () => {
+    // The 2026-10-20 run: where the page showed "❤️♾" the answer had "❤️♾️".
+    const heart = postsOfAnswer(searchTimeline([entry(tweet({ id: "1900000000000000009", handle: "lab", text: "❤\uFE0F\u267E\uFE0F to everyone who came" }))])).get("1900000000000000009")!;
+    expect(captureMismatch(card({ id: "1900000000000000009", text: "❤\uFE0F\u267E to everyone who came" }), heart)).toBeNull();
+    const keycaps = postsOfAnswer(
+      searchTimeline([entry(tweet({ id: "1900000000000000010", handle: "lab", text: "COLM 2026: 10 posters.\n1\uFE0F\u20E3 Message passing\n2\uFE0F\u20E3 SuperCoder" }))]),
+    ).get("1900000000000000010")!;
+    expect(captureMismatch(card({ id: "1900000000000000010", text: "COLM 2026: 10 posters.\n1\u20E3 Message passing\n2\u20E3 SuperCoder" }), keycaps)).toBeNull();
+    expect(captureMismatch(card({ id: "1900000000000000010", text: "COLM 2025: 9 posters." }), keycaps)).toContain("text starts");
   });
 });

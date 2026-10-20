@@ -9,7 +9,8 @@
 // whole text (`note_tweet`, the page shows about 275 characters, pitfall 657),
 // every link already expanded (`expanded_url`, not t.co), the quoted post's
 // whole text and links, exact counts. An X Article's body is not in them, only
-// its id and title; that still takes the post's page.
+// its id, title and the start of its text (`preview_text`); the body still
+// takes the post's page.
 //
 // The shapes follow the public field names (twitter-web-exporter, MIT, was read
 // for them; no code is taken from it). Posts are found by walking the whole
@@ -44,8 +45,8 @@ export interface XCapturedPost {
   links: XCapturedLink[];
   counts: XCounts;
   media: boolean;
-  /** An X Article: its id and title. The body is not in these answers. */
-  article: { id: string | null; title: string } | null;
+  /** An X Article: its id, title and the start of its text as X cuts it (`preview_text`, empty when absent). The body is not in these answers. */
+  article: { id: string | null; title: string; preview: string } | null;
   /** The quoted post, whole; its links belong to it, not to this post. */
   quoted: XCapturedPost | null;
   /** The quoted post's id when the answer names it but leaves the post out. */
@@ -162,7 +163,9 @@ function readPost(post: Record<string, unknown>, depth: number): XCapturedPost {
     isObject(post.article) && isObject(post.article.article_results) && isObject(post.article.article_results.result)
       ? post.article.article_results.result
       : null;
-  const article = articleResult ? { id: str(articleResult.rest_id) || null, title: str(articleResult.title).trim() } : null;
+  const article = articleResult
+    ? { id: str(articleResult.rest_id) || null, title: str(articleResult.title).trim(), preview: str(articleResult.preview_text).trim() }
+    : null;
 
   const views = isObject(post.views) ? count(post.views.count) : null;
   const quotedPost = depth < 1 ? unwrap(isObject(post.quoted_status_result) ? post.quoted_status_result.result : null) : null;
