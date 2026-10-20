@@ -216,8 +216,8 @@ jobs:
           echo "$SERVICE"
           FAIL=0
           echo "$SERVICE" | grep -q 'android:process.*":voice"' || { echo "::error::VoiceService is not in the :voice process"; FAIL=1; }
-          # microphone is 0x80 in foregroundServiceType's flags.
-          echo "$SERVICE" | grep -Eq 'android:foregroundServiceType\([^)]*\)=.*(0x80|128|microphone)' || { echo "::error::VoiceService's foregroundServiceType is not microphone"; FAIL=1; }
+          # microphone is 0x80 in foregroundServiceType's flags; aapt2 prints it as 0x00000080.
+          echo "$SERVICE" | grep -Eq 'android:foregroundServiceType\([^)]*\)=(0x0*80|128|"?microphone)\b' || { echo "::error::VoiceService's foregroundServiceType is not microphone"; FAIL=1; }
           for PERM in RECORD_AUDIO MODIFY_AUDIO_SETTINGS FOREGROUND_SERVICE FOREGROUND_SERVICE_MICROPHONE; do
             echo "$TREE" | grep -q "\"android.permission.${PERM}\"" && echo "permission $PERM: present" || { echo "::error::android.permission.$PERM is not in the manifest"; FAIL=1; }
           done
