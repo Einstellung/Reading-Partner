@@ -12,16 +12,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Oldest supported glibc/webkit pair, so the AppImage and .deb run on
-          # more than the runner itself.
-          - platform: ubuntu-22.04
-            args: ""
           # Apple silicon only; Intel Macs are not built. latest.json then
           # carries darwin-aarch64 and darwin-aarch64-app, no x86_64 keys.
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
+          # One installer: the NSIS setup.exe. Tauri's "all" would also build
+          # the MSI. Linux is not built.
           - platform: windows-latest
-            args: ""
+            args: "--bundles nsis"
 
     runs-on: ${{ matrix.platform }}
     permissions:
@@ -39,12 +37,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      - name: Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev libasound2-dev
 
       - run: bun install --frozen-lockfile
 
@@ -97,9 +89,9 @@ jobs:
           # (PKCE is the protection), but it still lives in repo secrets.
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
-          # Signs every update bundle (.app.tar.gz, AppImage, deb, rpm, msi,
-          # setup.exe) with the updater key, whose public half is in
-          # tauri.conf.json (docs/76). The key has no password.
+          # Signs every update bundle (.app.tar.gz, setup.exe) with the updater
+          # key, whose public half is in tauri.conf.json (docs/76). The key has
+          # no password.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
@@ -108,11 +100,10 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          # latest.json carries a key per installer (linux-x86_64-deb, -rpm,
-          # -appimage, windows-x86_64-msi, -nsis, darwin-aarch64-app), and the updater
-          # looks up the one it was installed from first. This only picks what
-          # the bare windows-x86_64 fallback points at: the setup.exe, which is
-          # what the release page offers first.
+          # latest.json carries darwin-aarch64-app and windows-x86_64-nsis, and
+          # the updater looks up the one it was installed from first. This picks
+          # what the bare windows-x86_64 fallback points at: the setup.exe, the
+          # only Windows installer.
           updaterJsonPreferNsis: true
 
   # The fourth product of the same tag: a signed arm64 APK, built once by the
