@@ -14,6 +14,7 @@
 import appIcon from "../../assets/app-icon.png";
 import { useT } from "../../../i18n";
 import { lumenToggleTitle } from "../base/lumen-toggle";
+import { useCompanionName } from "../base/use-companion-name";
 import { IconBriefing, IconBriefs, IconBooks, IconMeals, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
 import { restartLabel, type UpdateState } from "../../../platform/app/update-policy";
 import { shellNavItems, type ShellNavId } from "../base/shell-nav";
@@ -105,6 +106,7 @@ export default function AppSidebar(props: {
   meals?: boolean;
 }) {
   const t = useT();
+  const companionName = useCompanionName();
   const collapsed = props.collapsed;
   const toggle = (
     <Button
@@ -127,8 +129,8 @@ export default function AppSidebar(props: {
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-transparent p-0 text-left"
-          title={lumenToggleTitle(props.lumenShown)}
-          aria-label={lumenToggleTitle(props.lumenShown)}
+          title={lumenToggleTitle(props.lumenShown, companionName)}
+          aria-label={lumenToggleTitle(props.lumenShown, companionName)}
           aria-pressed={props.lumenShown}
           onClick={props.onToggleLumen}
         >

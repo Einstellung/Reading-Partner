@@ -39,6 +39,7 @@ import {
   IconMarginsWide,
 } from "../../base/icons";
 import { cn } from "../../lib/utils";
+import { useCompanionName } from "../../base/use-companion-name";
 import { setLumenShown, useLumenShown } from "../../lumen/use-lumen-shown";
 import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
@@ -81,6 +82,7 @@ export default function PhoneDisplaySheet(props: {
 }) {
   const { display, onChange } = props;
   const t = useT();
+  const companionName = useCompanionName();
   const lumenShown = useLumenShown();
   const lineStep = stepIndexOf(LINE_VALUES, display.lineHeight, FLOW_DISPLAY_DEFAULT.lineHeight);
   const padStep = stepIndexOf(PAD_VALUES, display.padX, FLOW_DISPLAY_DEFAULT.padX);
@@ -172,10 +174,10 @@ export default function PhoneDisplaySheet(props: {
 
             <TabsContent value="more" forceMount className={cn(PANEL_CLASS, "px-4 pt-2")}>
               <div className="flex min-h-11 items-center justify-between gap-3 px-1">
-                <span className="text-[15px]">{t("phone.displaySheet.lumen")}</span>
+                <span className="text-[15px]">{t("phone.displaySheet.lumen", { name: companionName })}</span>
                 <Switch
                   className="data-[state=checked]:bg-foreground"
-                  aria-label={t("phone.displaySheet.lumen")}
+                  aria-label={t("phone.displaySheet.lumen", { name: companionName })}
                   checked={lumenShown}
                   onCheckedChange={setLumenShown}
                 />

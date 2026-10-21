@@ -104,7 +104,7 @@ export default {
   "displaySheet.lineSpacing": "行間",
   "displaySheet.margins": "余白",
   "displaySheet.paper": "用紙",
-  "displaySheet.lumen": "Lumen",
+  "displaySheet.lumen": "{name}",
   "displaySheet.layout": "レイアウト",
   "displaySheet.more": "その他",
   "displaySheet.tighterLines": "行間を狭く",

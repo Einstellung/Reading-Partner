@@ -93,9 +93,10 @@ export default {
   "features.paperHint":
     "Macht das Weiß hinter der ganzen App – Chats, Regale, Seitenleisten, dieses Fenster und die Seiten eines Buchs – zu einem gebrochenen Papierweiß. Es gibt nur diesen einen Ton und keine dunklere Stufe; das ist kein Dunkelmodus. Die Wahl bleibt auf diesem Gerät.",
   "features.reading": "Lesen",
-  "features.lumen": "Lumen anzeigen",
+  "features.lumen": "{name} anzeigen",
   "features.lumenHint":
-    "Lumen steht in der Ecke jedes Bildschirms, auch im Reader. Aus bleibt die Ecke leer; der Lumen-Knopf in der Seitenleiste, auf dem Startbildschirm des Handys und im Mehr-Menü des Readers holt es zurück. Die Wahl bleibt auf diesem Gerät.",
+    "{name} steht in der Ecke jedes Bildschirms, auch im Reader. Aus bleibt die Ecke leer; der Knopf in der Seitenleiste, auf dem Startbildschirm des Handys und im Mehr-Menü des Readers holt {name} zurück. Die Wahl bleibt auf diesem Gerät.",
+  "features.companionName": "Name des Begleiters",
   "features.briefing": "Briefing",
   "features.collect": "Quellen auf diesem Computer sammeln",
   "features.collectHint":

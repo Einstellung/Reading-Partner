@@ -58,7 +58,7 @@ function lumenBox(): string {
       onDeviceChange={() => {}}
     />,
   );
-  const label = html.indexOf("Show Lumen");
+  const label = html.indexOf("Show Kris");
   expect(label).toBeGreaterThan(-1);
   return html.slice(html.lastIndexOf("<button", label), label);
 }

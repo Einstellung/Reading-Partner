@@ -142,7 +142,7 @@ export default {
   "displaySheet.scroll": "Scroll",
   "displaySheet.pages": "Pages",
   "displaySheet.paper": "Paper",
-  "displaySheet.lumen": "Lumen",
+  "displaySheet.lumen": "{name}",
   "displaySheet.layout": "Layout",
   "displaySheet.more": "More",
   "displaySheet.tighterLines": "Tighter lines",

@@ -93,9 +93,10 @@ export default {
   "features.paperHint":
     "Convierte el blanco de toda la app (chats, estanterías, barras laterales, este cuadro de diálogo y las páginas de los libros) en un color de papel hueso. Hay un solo tono y ninguno más oscuro; no es un modo oscuro. La elección se guarda solo en este dispositivo.",
   "features.reading": "Lectura",
-  "features.lumen": "Mostrar a Lumen",
+  "features.lumen": "Mostrar a {name}",
   "features.lumenHint":
-    "Lumen está en la esquina de cada pantalla, también en el lector. Desactivado, la esquina queda vacía; el botón de Lumen en la barra lateral, en la pantalla de inicio del móvil y en el menú Más del lector lo trae de vuelta. La elección se queda en este dispositivo.",
+    "{name} está en la esquina de cada pantalla, también en el lector. Desactivado, la esquina queda vacía; el botón de {name} en la barra lateral, en la pantalla de inicio del móvil y en el menú Más del lector hace que reaparezca. La elección se queda en este dispositivo.",
+  "features.companionName": "Nombre del acompañante",
   "features.briefing": "Resumen de noticias",
   "features.collect": "Recopilar de tus fuentes en este ordenador",
   "features.collectHint":

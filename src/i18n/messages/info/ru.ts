@@ -130,7 +130,7 @@ export default {
   "shelf.issueTitle": "Выпуск № {number}",
   "shelf.items": { one: "{count} пункт", few: "{count} пункта", many: "{count} пунктов", other: "{count} пункта" },
   "shelf.new": "Новый",
-  "shelf.empty": "Выпусков пока нет. Расскажите Lumen о теме, за которой следите, и первый выпуск придёт на следующее утро.",
+  "shelf.empty": "Выпусков пока нет. Расскажите {name} о теме, за которой следите, и первый выпуск придёт на следующее утро.",
   "shelf.volumesEmpty": "Тематических томов пока нет.",
   "shelf.menu": "Ещё",
   "shelf.open": "Открыть",

@@ -62,6 +62,7 @@ import { itemIdOfBoxCard, timelineItems, withBoxCards } from "./box-timeline";
 import { doorFocusSelector, type DoorFocus } from "./box-jump";
 import lumenIcon from "./lumen-icon.webp";
 import type { IntakeOpenDocument } from "./intake-view";
+import { useCompanionName } from "../base/use-companion-name";
 import { useDoorChat } from "./use-door-chat";
 import { voiceOffLine, voicePhaseLine, type VoiceEntry } from "./door-voice";
 import type { SessionPhase } from "../../../soul/voice/voice-session";
@@ -134,6 +135,7 @@ export function DoorChat({
 	onClose: () => void;
 }) {
 	const t = useT();
+	const companionName = useCompanionName();
 	const shellKeyboard = useShellKeyboard();
 	const chat = useDoorChat({
 		...(date ? { date } : {}),
@@ -349,7 +351,7 @@ export function DoorChat({
 			{form === "sheet" && <span aria-hidden="true" className="mx-auto mt-1.5 h-1 w-9 rounded-full bg-border" />}
 			<div className="flex items-center gap-2 py-1.5 pl-3.5 pr-1.5">
 			<img src={lumenIcon} alt="" draggable={false} className="h-6.5 w-6.5 select-none" />
-			<span className="flex-1 text-[15px] font-semibold text-foreground">{t("shell.door.title")}</span>
+			<span className="flex-1 text-[15px] font-semibold text-foreground">{t("shell.door.title", { name: companionName })}</span>
 			{form === "panel" && onToggleFull && (
 				<Button
 					type="button"
@@ -426,7 +428,7 @@ export function DoorChat({
 			streaming={chat.streaming}
 			onStop={chat.stop}
 			emptyTitle={t("shell.door.empty")}
-			placeholder={t("shell.door.placeholder")}
+			placeholder={t("shell.door.placeholder", { name: companionName })}
 			// Dictation waits for voice to be designed across every surface.
 			voice={false}
 			onCardAction={onCardAction}
@@ -450,7 +452,7 @@ export function DoorChat({
 				    transform would win over the pull's inline one under it. */}
 				<div
 					role="dialog"
-					aria-label={t("shell.door.title")}
+					aria-label={t("shell.door.title", { name: companionName })}
 					className={cn(
 						"absolute inset-0 motion-safe:animate-in motion-safe:slide-in-from-bottom motion-safe:duration-300",
 						OVERLAY_Z.floating,
@@ -480,7 +482,7 @@ export function DoorChat({
 			>
 				<div
 					role="dialog"
-					aria-label={t("shell.door.title")}
+					aria-label={t("shell.door.title", { name: companionName })}
 					className={cn(
 						"pointer-events-auto flex min-h-0 flex-col overflow-hidden bg-chat-surface",
 						full

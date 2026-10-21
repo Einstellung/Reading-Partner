@@ -8,6 +8,7 @@ import PeerUpdateNotice from "../common/PeerUpdateNotice";
 import SettingsButton from "../common/SettingsButton";
 import type { ContinueBook } from "./shelf-list";
 import { lumenToggleTitle } from "../base/lumen-toggle";
+import { useCompanionName } from "../base/use-companion-name";
 import { BriefingCardBody, Card, CardBodyPlaceholder, CardLabel } from "../info/HomeCard";
 import type { LaunchProps } from "../info/InfoHome";
 
@@ -47,6 +48,7 @@ export default function PhoneHome({
   onToggleLumen: () => void;
 }) {
   const t = useT();
+  const companionName = useCompanionName();
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col px-4 py-6">
       <div className="flex items-start gap-3">
@@ -55,8 +57,8 @@ export default function PhoneHome({
             <button
               type="button"
               className="bg-transparent p-0 text-left font-display text-[24px] font-semibold text-foreground"
-              title={lumenToggleTitle(lumenShown)}
-              aria-label={lumenToggleTitle(lumenShown)}
+              title={lumenToggleTitle(lumenShown, companionName)}
+              aria-label={lumenToggleTitle(lumenShown, companionName)}
               aria-pressed={lumenShown}
               onClick={onToggleLumen}
             >

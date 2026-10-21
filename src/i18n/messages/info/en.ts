@@ -140,7 +140,7 @@ export default {
   "shelf.issueTitle": "Brief No. {number}",
   "shelf.items": { one: "{count} item", other: "{count} items" },
   "shelf.new": "New",
-  "shelf.empty": "No brief yet. Tell Lumen a topic you follow and the first issue comes the morning after.",
+  "shelf.empty": "No brief yet. Tell {name} a topic you follow and the first issue comes the morning after.",
   "shelf.volumesEmpty": "No topic volumes yet.",
   "shelf.menu": "More",
   "shelf.open": "Open",

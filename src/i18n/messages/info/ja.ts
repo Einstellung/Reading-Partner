@@ -130,7 +130,7 @@ export default {
   "shelf.issueTitle": "第 {number} 号",
   "shelf.items": { other: "{count} 件" },
   "shelf.new": "新着",
-  "shelf.empty": "まだブリーフはありません。追いたいトピックを Lumen に伝えると、翌朝に第 1 号が届きます。",
+  "shelf.empty": "まだブリーフはありません。追いたいトピックを {name} に伝えると、翌朝に第 1 号が届きます。",
   "shelf.volumesEmpty": "トピック合本はまだありません。",
   "shelf.menu": "その他",
   "shelf.open": "開く",

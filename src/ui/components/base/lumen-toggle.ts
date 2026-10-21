@@ -8,6 +8,6 @@ import { t } from "../../../i18n";
 // What the logo does next, not what it is looking at. The wordmark and the
 // phone's title both say the same thing. Not the reader, where the switch is a
 // row in the "More" menu and the On/Off beside it carries the state instead.
-export function lumenToggleTitle(shown: boolean): string {
-  return t(shown ? "shell.lumen.hide" : "shell.lumen.show");
+export function lumenToggleTitle(shown: boolean, name: string): string {
+  return shown ? t("shell.lumen.hide", { name }) : t("shell.lumen.show", { name });
 }

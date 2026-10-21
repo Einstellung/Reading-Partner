@@ -24,7 +24,7 @@ export default {
   "top.zoomIn": "확대",
   "top.zoomOut": "축소",
   "top.pagedFlip": "페이지 넘김",
-  "top.lumen": "Lumen",
+  "top.lumen": "{name}",
   "top.settings": "설정",
   "top.closePanel": "패널 닫기",
   "top.openPanel": "패널 열기",

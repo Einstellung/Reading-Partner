@@ -130,7 +130,7 @@ export default {
   "shelf.issueTitle": "Brief Nr. {number}",
   "shelf.items": { one: "{count} Eintrag", other: "{count} Einträge" },
   "shelf.new": "Neu",
-  "shelf.empty": "Noch kein Brief. Nenne Lumen ein Thema, das du verfolgst, und die erste Ausgabe kommt am nächsten Morgen.",
+  "shelf.empty": "Noch kein Brief. Nenne {name} ein Thema, das du verfolgst, und die erste Ausgabe kommt am nächsten Morgen.",
   "shelf.volumesEmpty": "Noch keine Themenbände.",
   "shelf.menu": "Mehr",
   "shelf.open": "Öffnen",

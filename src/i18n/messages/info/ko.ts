@@ -130,7 +130,7 @@ export default {
   "shelf.issueTitle": "제 {number}호",
   "shelf.items": { other: "{count}건" },
   "shelf.new": "새 호",
-  "shelf.empty": "아직 브리프가 없습니다. 관심 있는 주제를 Lumen에게 말하면 다음 날 아침 첫 호가 나옵니다.",
+  "shelf.empty": "아직 브리프가 없습니다. 관심 있는 주제를 {name}에게 말하면 다음 날 아침 첫 호가 나옵니다.",
   "shelf.volumesEmpty": "아직 주제 합본이 없습니다.",
   "shelf.menu": "더 보기",
   "shelf.open": "열기",

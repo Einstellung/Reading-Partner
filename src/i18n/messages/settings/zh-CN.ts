@@ -90,9 +90,10 @@ export default {
   "features.paperHint":
     "把整个应用背后的白色——对话、书架、侧栏、这个窗口和书页——换成米白的纸张色。只有这一种颜色，没有更深的档位；这不是深色模式。该选择只保存在这台设备上。",
   "features.reading": "阅读",
-  "features.lumen": "显示 Lumen",
+  "features.lumen": "显示 {name}",
   "features.lumenHint":
-    "Lumen 站在每个界面的角落，阅读时也在。关掉后角落空着；侧栏、手机首页和阅读器「更多」菜单里的 Lumen 按钮可以再叫它出来。这个选择只留在这台设备上。",
+    "{name} 站在每个界面的角落，阅读时也在。关掉后角落空着；侧栏、手机首页和阅读器「更多」菜单里的 {name} 按钮可以再叫它出来。这个选择只留在这台设备上。",
+  "features.companionName": "伙伴的名字",
   "features.briefing": "新闻简报",
   "features.collect": "在这台电脑上从你的来源收集",
   "features.collectHint":

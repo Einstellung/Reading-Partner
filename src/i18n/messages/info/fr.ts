@@ -130,7 +130,7 @@ export default {
   "shelf.issueTitle": "Bulletin n° {number}",
   "shelf.items": { one: "{count} élément", other: "{count} éléments" },
   "shelf.new": "Nouveau",
-  "shelf.empty": "Pas encore de bulletin. Dites à Lumen un sujet que vous suivez et le premier numéro arrive le lendemain matin.",
+  "shelf.empty": "Pas encore de bulletin. Dites à {name} un sujet que vous suivez et le premier numéro arrive le lendemain matin.",
   "shelf.volumesEmpty": "Pas encore de volume thématique.",
   "shelf.menu": "Plus",
   "shelf.open": "Ouvrir",

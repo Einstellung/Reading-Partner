@@ -24,7 +24,7 @@ export default {
   "top.zoomIn": "Zoomer",
   "top.zoomOut": "Dézoomer",
   "top.pagedFlip": "Défilement par page",
-  "top.lumen": "Lumen",
+  "top.lumen": "{name}",
   "top.settings": "Réglages",
   "top.closePanel": "Fermer le panneau",
   "top.openPanel": "Ouvrir le panneau",

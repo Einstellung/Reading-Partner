@@ -6,6 +6,10 @@
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  applyCompanionNameSetting,
+  resetCompanionNameForTest,
+} from "../../../../src/ui/components/base/use-companion-name";
 import AppSidebar from "../../../../src/ui/components/common/AppSidebar";
 
 function render(
@@ -146,4 +150,17 @@ test("the restart-to-update row appears only with an update waiting", () => {
   expect(installing).toContain(">Updating…<");
   expect(installing).toContain('title="Updating to v0.21.0…"');
   expect(installing).toContain('disabled=""');
+});
+
+// The logo is the companion's switch, named for what pressing it does, with the
+// companion's own name (docs/companion/90).
+test("the logo's title says the companion's name", () => {
+  try {
+    expect(render()).toContain('title="Hide Kris"');
+    applyCompanionNameSetting({ companionName: "Mira" });
+    expect(render()).toContain('title="Hide Mira"');
+    expect(render()).toContain('aria-label="Hide Mira"');
+  } finally {
+    resetCompanionNameForTest();
+  }
 });

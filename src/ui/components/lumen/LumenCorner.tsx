@@ -81,6 +81,7 @@ import { useVoiceCall, voiceCallHandle } from "./use-voice-call";
 import { getVoiceContext, subscribeVoiceContext, type VoiceContext } from "./voice-context";
 import { badgeCount, caseLabel } from "./box-cards";
 import { useBoxItems } from "./use-box-items";
+import { useCompanionName } from "../base/use-companion-name";
 import { arrivedItem, carriesCard, voiceEntry } from "./door-voice";
 import { onThreadMessage } from "../../../platform/app/threads";
 import { doorDate, doorKey } from "../../../soul";
@@ -186,6 +187,7 @@ export function LumenCorner({
 	const entry = voiceEntry(speaks);
 	const handle = voiceCallHandle(call);
 	const t = useT();
+	const companionName = useCompanionName();
 	const [door, setDoor] = useState<DoorOpen | null>(null);
 	const [full, setFull] = useState(false);
 	// Only where the host can call: elsewhere there is no call of theirs to have
@@ -465,7 +467,7 @@ export function LumenCorner({
 					still={inReader && !live}
 					reach={motion.reach}
 					reaching={motion.moving}
-					label={live ? t("shell.lumen.inCall") : t("shell.lumen.tapToChat")}
+					label={live ? t("shell.lumen.inCall", { name: companionName }) : t("shell.lumen.tapToChat", { name: companionName })}
 					aria-haspopup="dialog"
 					aria-expanded={door !== null}
 					// The tap. A keyboard's Enter lands here too, with no press

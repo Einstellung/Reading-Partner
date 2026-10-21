@@ -31,7 +31,7 @@ export default {
   "top.zoomIn": "Zoom in",
   "top.zoomOut": "Zoom out",
   "top.pagedFlip": "Paged flip",
-  "top.lumen": "Lumen",
+  "top.lumen": "{name}",
   "top.settings": "Settings",
   "top.closePanel": "Close panel",
   "top.openPanel": "Open panel",

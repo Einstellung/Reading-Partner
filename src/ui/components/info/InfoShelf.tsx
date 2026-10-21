@@ -12,6 +12,7 @@ import { getViewState } from "../../../platform/app/storage";
 import { addFileToTopic, listTopics, type Topic } from "../../../platform/app/topics";
 import { deleteBook } from "../../../reading/delete/delete-book";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
+import { useCompanionName } from "../base/use-companion-name";
 import CardMenu from "../shelf/CardMenu";
 import MoveToTopicDialog from "../shelf/MoveToTopicDialog";
 import { moveFailedLine, moveTargets } from "../shelf/move-to";
@@ -49,6 +50,7 @@ export default function InfoShelf(props: {
   io?: InfoShelfIo;
 }) {
   const t = useT();
+  const companionName = useCompanionName();
   const io = props.io ?? liveIo;
   const [data, setData] = useState<InfoShelfData | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -88,7 +90,7 @@ export default function InfoShelf(props: {
           {t("info.shelf.issues")}
         </h2>
         {view && view.issues.length === 0 && (
-          <p className="m-0 mb-6 text-[14px] leading-relaxed text-faint-foreground">{t("info.shelf.empty")}</p>
+          <p className="m-0 mb-6 text-[14px] leading-relaxed text-faint-foreground">{t("info.shelf.empty", { name: companionName })}</p>
         )}
         <ul className="m-0 mb-8 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3 lg:grid-cols-4">
           {view?.issues.map((issue) => (

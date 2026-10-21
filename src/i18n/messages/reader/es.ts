@@ -24,7 +24,7 @@ export default {
   "top.zoomIn": "Acercar",
   "top.zoomOut": "Alejar",
   "top.pagedFlip": "Paginación por páginas",
-  "top.lumen": "Lumen",
+  "top.lumen": "{name}",
   "top.settings": "Ajustes",
   "top.closePanel": "Cerrar panel",
   "top.openPanel": "Abrir panel",

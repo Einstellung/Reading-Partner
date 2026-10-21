@@ -6,6 +6,7 @@
 import { useMemo, type RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
 import type { LevelGate } from "../../../reading/turn/call-state";
+import { useCompanionName } from "../base/use-companion-name";
 import { useT } from "../../../i18n";
 import type { ToolType } from "./types";
 import {
@@ -70,6 +71,7 @@ export default function ReaderTopBar(props: {
   mode?: ReaderMode;
 }) {
   const t = useT();
+  const companionName = useCompanionName();
   const { view, stats, sidebarOpen, gate } = props;
   // Read once: the pointers a device has do not change under a reading session.
   const issue = props.mode === "issue";
@@ -116,10 +118,10 @@ export default function ReaderTopBar(props: {
       onClick: () => view.current?.setLayout(paged ? "vertical" : "paged"),
     },
     {
-      // "Lumen", not lumenToggleTitle's "Hide Lumen": the row names the thing
+      // The name alone, not lumenToggleTitle's "Hide <name>": the row names the thing
       // and the On/Off on its right says which way it stands.
       kind: "toggle",
-      label: t("reader.top.lumen"),
+      label: t("reader.top.lumen", { name: companionName }),
       icon: IconLumen,
       on: props.lumenShown,
       onClick: props.onToggleLumen,

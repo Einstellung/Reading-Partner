@@ -47,22 +47,22 @@ export default {
   "sidebar.restartToUpdate": "Restart to update",
 
   // Lumen, the corner companion, and the case she carries the box in.
-  "lumen.show": "Show Lumen",
-  "lumen.hide": "Hide Lumen",
+  "lumen.show": "Show {name}",
+  "lumen.hide": "Hide {name}",
   "lumen.needsDecision": "Needs a decision",
   "lumen.callCardClose": "Close",
-  "lumen.tapToChat": "Lumen: tap to chat",
-  "lumen.inCall": "Lumen: open the conversation (the voice chat goes on)",
+  "lumen.tapToChat": "{name}: tap to chat",
+  "lumen.inCall": "{name}: open the conversation (the voice chat goes on)",
   "lumen.hangUp": "End voice chat",
 
   // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
-  "door.title": "Lumen",
+  "door.title": "{name}",
   "door.close": "Close",
   "door.expand": "Larger",
   "door.shrink": "Smaller",
   "door.dropQuote": "Remove the passage",
   "door.empty": "What's on your mind?",
-  "door.placeholder": "Message Lumen…",
+  "door.placeholder": "Message {name}…",
   "door.voiceStart": "Voice chat",
   "door.voiceEnd": "End voice chat",
   "door.voiceNoDevice": "This device can't hold a voice chat.",

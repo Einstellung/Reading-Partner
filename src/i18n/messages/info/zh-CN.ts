@@ -130,7 +130,7 @@ export default {
   "shelf.issueTitle": "第 {number} 期",
   "shelf.items": { other: "{count} 条" },
   "shelf.new": "新",
-  "shelf.empty": "还没有简报。跟卢明说你关注的主题，第二天早上出第一期。",
+  "shelf.empty": "还没有简报。跟 {name} 说你关注的主题，第二天早上出第一期。",
   "shelf.volumesEmpty": "还没有专题册。",
   "shelf.menu": "更多",
   "shelf.open": "打开",

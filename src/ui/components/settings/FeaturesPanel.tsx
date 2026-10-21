@@ -11,9 +11,10 @@
 
 import { hasAutostart } from "../../../platform/app/autostart";
 import { roleIsChoosable, type DeviceRole, type DeviceSettings } from "../../../platform/app/device";
-import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings } from "../../../platform/app/settings";
+import { AI_LANGUAGE_OPTIONS, companionNameOf, type AiLanguage, type Settings } from "../../../platform/app/settings";
 import { useT } from "../../../i18n";
 import { setPaperTint, usePaperTint } from "../base/usePaperTint";
+import CompanionNameField from "./CompanionNameField";
 import { setLumenShown, useLumenShown } from "../lumen/use-lumen-shown";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
@@ -43,6 +44,7 @@ export default function FeaturesPanel({
   // wordmark and the reader's More menu switch (lumen/use-lumen-shown.ts).
   const lumenShown = useLumenShown();
   const t = useT();
+  const companionName = companionNameOf(settings);
   // The languages are named in themselves, as a language picker does; only
   // "auto" is a sentence and needs translating.
   const languageChoices = AI_LANGUAGE_OPTIONS.map((o) => ({
@@ -82,10 +84,12 @@ export default function FeaturesPanel({
         <div className={CARD}>
           <Label>
             <Checkbox checked={lumenShown} onCheckedChange={(v) => setLumenShown(v === true)} />
-            {t("settings.features.lumen")}
+            {t("settings.features.lumen", { name: companionName })}
           </Label>
-          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.lumenHint")}</p>
+          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.lumenHint", { name: companionName })}</p>
         </div>
+
+        <CompanionNameField settings={settings} onSettingsChange={onSettingsChange} />
       </SettingsSection>
 
       {/* A reader collects nothing, so there is no schedule to switch off. */}

@@ -24,7 +24,7 @@ export default {
   "top.zoomIn": "Vergrößern",
   "top.zoomOut": "Verkleinern",
   "top.pagedFlip": "Seitenweise blättern",
-  "top.lumen": "Lumen",
+  "top.lumen": "{name}",
   "top.settings": "Einstellungen",
   "top.closePanel": "Bereich schließen",
   "top.openPanel": "Bereich öffnen",

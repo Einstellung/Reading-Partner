@@ -93,6 +93,7 @@ test("a storage that refuses leaves the corner where it has always been", () => 
 });
 
 test("the label says what the press will do", () => {
-  expect(lumenToggleTitle(true)).toBe("Hide Lumen");
-  expect(lumenToggleTitle(false)).toBe("Show Lumen");
+  expect(lumenToggleTitle(true, "Kris")).toBe("Hide Kris");
+  expect(lumenToggleTitle(false, "Kris")).toBe("Show Kris");
+  expect(lumenToggleTitle(false, "Mira")).toBe("Show Mira");
 });

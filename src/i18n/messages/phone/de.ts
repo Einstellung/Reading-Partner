@@ -109,7 +109,7 @@ export default {
   "displaySheet.lineSpacing": "Zeilenabstand",
   "displaySheet.margins": "Ränder",
   "displaySheet.paper": "Papier",
-  "displaySheet.lumen": "Lumen",
+  "displaySheet.lumen": "{name}",
   "displaySheet.layout": "Layout",
   "displaySheet.more": "Mehr",
   "displaySheet.tighterLines": "Engere Zeilen",
