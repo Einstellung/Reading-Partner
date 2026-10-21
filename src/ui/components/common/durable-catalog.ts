@@ -14,6 +14,7 @@ import { buildStatementTools } from "../../../memory/statements/tools";
 import { buildProposeTopicTool } from "../../../memory/filing/propose";
 import { buildDelegateTools } from "../../../soul/delegate";
 import { buildPlaceTools } from "../../../soul/places";
+import { buildAboutAppTool } from "../../../soul/intro";
 import { buildCatalogueTools } from "../../../soul/catalogue";
 import { buildConversationTools } from "../../../conversations/tools";
 import { buildReadingTools } from "../../../reading/context";
@@ -53,6 +54,7 @@ export function appToolCatalog(): AgentTool[] {
     buildProposeTopicTool(inert({ topics: async () => [], onTopicCard: () => {}, threadId: "" })),
     ...buildDelegateTools({}),
     ...buildPlaceTools(),
+    buildAboutAppTool({ name: "", places: [], tools: [] }),
     ...buildCatalogueTools(inert({})),
     ...buildConversationTools(inert({}), inert({})),
     ...buildReadingTools(

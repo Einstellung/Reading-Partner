@@ -43,6 +43,7 @@ export default {
   "places.goingTo": "Going to {place}",
   "places.goingSomewhere": "Going somewhere in the app",
   "places.wentSomewhere": "Went somewhere",
+  "aboutApp.looking": "Looking up what this app can do",
 
   "statements.writingSelf": "Writing down what you said about yourself",
   "statements.wroteKind": "Wrote down a {kind}",

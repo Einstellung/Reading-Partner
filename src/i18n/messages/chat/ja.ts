@@ -41,6 +41,7 @@ export default {
   "places.goingTo": "{place} へ移動しています",
   "places.goingSomewhere": "アプリ内を移動しています",
   "places.wentSomewhere": "移動しました",
+  "aboutApp.looking": "このアプリでできることを確認しています",
 
   "statements.writingSelf": "あなたが自分について言ったことを書き留めています",
   "statements.wroteKind": "{kind} を書き留めました",

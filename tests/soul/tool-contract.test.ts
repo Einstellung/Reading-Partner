@@ -15,6 +15,7 @@ import { buildStatementTools } from "../../src/memory/statements/tools";
 import { buildProposeTopicTool } from "../../src/memory/filing/propose";
 import { buildDelegateTools } from "../../src/soul/delegate";
 import { buildPlaceTools } from "../../src/soul/places";
+import { buildAboutAppTool } from "../../src/soul/intro";
 import { registerPlaces } from "../../src/desk";
 import { buildCatalogueTools } from "../../src/soul/catalogue";
 import { buildConversationTools } from "../../src/conversations/tools";
@@ -83,6 +84,11 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     names: ["delegate"],
   },
   { where: "soul/places", tools: buildPlaceTools(), names: ["go_to"] },
+  {
+    where: "soul/intro",
+    tools: [buildAboutAppTool({ name: "Kris", places: [], tools: [] })],
+    names: ["about_app"], safe: ["about_app"],
+  },
   { where: "soul/catalogue", tools: buildCatalogueTools(any({})), names: ["list_palace", "list_kind"], safe: ["list_palace", "list_kind"] },
   {
     where: "conversations",

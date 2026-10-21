@@ -41,6 +41,7 @@ export default {
   "places.goingTo": "Yendo a {place}",
   "places.goingSomewhere": "Moviéndose dentro de la app",
   "places.wentSomewhere": "Se movió",
+  "aboutApp.looking": "Consultando qué puede hacer la app",
 
   "statements.writingSelf": "Anotando lo que dijiste sobre ti",
   "statements.wroteKind": "Se anotó un {kind}",

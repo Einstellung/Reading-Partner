@@ -56,8 +56,9 @@ export interface Soul {
   // What the capabilities the soul mounted publish into the system prompt —
   // today the topic roster filing prints beside propose_topic, and nothing else.
   // Empty where nothing was mounted. Who the soul is — its name, the places,
-  // what its tools let it do — is not here: the assembly prints that ahead of
-  // everything (intro.ts, docs/companion/90). This is only what the mounted
+  // what its tools let it do — is not here: the assembly prints its name ahead
+  // of everything and hands the rest out through about_app (intro.ts,
+  // docs/companion/90). This is only what the mounted
   // capabilities publish; it belongs to no item on the desk, so the assembly
   // prints it too (turn.ts).
   prompt: string;

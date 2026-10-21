@@ -220,6 +220,7 @@ test("the tools are the soul's and then each item's", async () => {
     "propose_topic",
     "observation_search",
     "observation_read",
+    "about_app",
     "read_pages",
     "list_saved_articles",
   ]);
@@ -304,6 +305,7 @@ test("an item is told every tool name on the desk, the soul's included", async (
     "propose_topic",
     "observation_search",
     "observation_read",
+    "about_app",
     "read_pages",
     "list_saved_articles",
   ]);

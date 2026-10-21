@@ -41,6 +41,7 @@ export default {
   "places.goingTo": "正在前往{place}",
   "places.goingSomewhere": "正在应用内移动",
   "places.wentSomewhere": "已经去过了",
+  "aboutApp.looking": "正在查看这个应用能做什么",
 
   "statements.writingSelf": "正在记下你对自己说的话",
   "statements.wroteKind": "记下了一条{kind}",

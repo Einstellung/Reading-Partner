@@ -175,6 +175,7 @@ test("companion turn: reading tools only, kickoff as the first message", async (
   const turn = await buildReadingTurn(input());
   expect(turn).not.toBeNull();
   expect(names(turn!.tools)).toEqual([
+    "about_app",
     "delegate",
     "find_paper",
     "ingest_url",
@@ -224,6 +225,7 @@ test("the web-search paragraph rides only where web_search is mounted", async ()
 test("a book with no text layer gets no read_pages tool", async () => {
   const turn = await buildReadingTurn(input({ fulltext: fulltext("no-text-layer") }));
   expect(names(turn!.tools)).toEqual([
+    "about_app",
     "delegate",
     "find_paper",
     "ingest_url",
@@ -246,6 +248,7 @@ test("a topic id mounts the tool that writes an observation", async () => {
     input({ context: { ...input().context, topicId: "topic-1" } }),
   );
   expect(names(turn!.tools)).toEqual([
+    "about_app",
     "delegate",
     "find_paper",
     "ingest_url",
@@ -271,6 +274,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
   const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", source: { kind: "pdf" as const, bbox: null } }];
   const turn = await buildReadingTurn(input({ figures }));
   expect(names(turn!.tools)).toEqual([
+    "about_app",
     "delegate",
     "find_paper",
     "ingest_url",
@@ -299,6 +303,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
 test("a live pipeline mounts the source and paper tools, once", async () => {
   const turn = await buildReadingTurn(input({ getPipeline: () => pipeline(prepState()) }));
   expect(names(turn!.tools)).toEqual([
+    "about_app",
     "delegate",
     "find_paper",
     "ingest_url",
@@ -327,6 +332,7 @@ test("a pipeline with no plan yet mounts no paper tools", async () => {
     input({ getPipeline: () => pipeline(null) }),
   );
   expect(names(turn!.tools)).toEqual([
+    "about_app",
     "delegate",
     "find_paper",
     "ingest_url",
@@ -357,6 +363,7 @@ test("kept articles mount the saved-article tools and their prompt line", async 
     }),
   );
   expect(names(turn!.tools)).toEqual([
+    "about_app",
     "add_saved_article",
     "delegate",
     "find_paper",

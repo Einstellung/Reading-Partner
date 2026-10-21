@@ -18,7 +18,7 @@ import { providers, toPiMessages } from "../ai/providers";
 import { modelIdFor, type ModelTier } from "../ai/model-tier";
 import type { AgentTool } from "../legion/durable/contract";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
-import { introBlock } from "./intro";
+import { buildAboutAppTool, introBlock } from "./intro";
 import type { BoxOrigin, BoxStore } from "../box";
 import type { CatalogueIo } from "./catalogue";
 import { logUsage, type TopicProposalSurface } from "../memory";
@@ -118,7 +118,17 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // reader of this list would expect: what is always there, then what this desk
   // happens to hold.
   const surfaceTools = input.tools ?? [];
-  const tools = [...soul.tools, ...surfaceTools, ...items.flatMap((i) => i.tools)];
+  // Who is speaking (docs/companion/90): the prompt leads with the short intro,
+  // and about_app hands back the rest when the reader asks — the places the
+  // shell registered and the companion's own tools, the role's and the soul's
+  // (which soul.tools holds in that order), then the surface's (the door's
+  // topic search). What an item on the desk brings is explained by the item.
+  // The intro's bytes depend on the name alone and about_app's description is
+  // fixed, so the cache prefix holds whatever this turn's roster is.
+  const name = companionNameOf(env.settings);
+  const intro = introBlock(name);
+  const aboutApp = buildAboutAppTool({ name, places: listPlaces(), tools: [...soul.tools, ...surfaceTools] });
+  const tools = [...soul.tools, aboutApp, ...surfaceTools, ...items.flatMap((i) => i.tools)];
   const toolNames = tools.map((t) => t.name);
   // Two tools answering to one name is the mistake openDesk refuses between two
   // items, and the assembly can make it in more ways than that: the soul's own
@@ -134,6 +144,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
       tool,
       by: roleLabel !== "" && roleTools.has(tool) ? roleLabel : "the soul's own set",
     })),
+    { tool: aboutApp, by: "the soul's own set" },
     ...surfaceTools.map((tool) => ({ tool, by: "the surface" })),
     ...items.flatMap((item) =>
       item.tools.map((tool) => ({ tool, by: `the "${item.kind}" desk item` })),
@@ -154,19 +165,6 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   );
   const report: Record<string, unknown> = {};
   for (const item of items) Object.assign(report, item.report ?? {});
-
-  // Who is speaking, ahead of everything (docs/companion/90): the name the
-  // reader gave the companion, the places the shell registered and the
-  // companion's own tools — the role's and the soul's, which soul.tools holds in
-  // that order, then the surface's (the door's topic search). What an item on
-  // the desk brings is explained by the item. Built once per turn and never
-  // dropped by the ladder; the same settings, shell and roster give the same
-  // bytes, so the cache prefix holds across a conversation.
-  const intro = introBlock({
-    name: companionNameOf(env.settings),
-    places: listPlaces(),
-    tools: [...soul.tools, ...surfaceTools],
-  });
 
   // The prompt as a function of what this pass gave up: the intro, then each
   // item's own text, in desk order, and the memory paragraph handed to the one

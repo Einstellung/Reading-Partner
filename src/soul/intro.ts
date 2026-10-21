@@ -1,19 +1,24 @@
-// Who is speaking (docs/companion/90): the companion's name, what it is, where
-// its line is, and what it can do in this conversation. It leads every turn's
-// system prompt (turn.ts), ahead of a role's duty and of whatever lies on the
-// desk, so the door, a book and the briefing all answer "who are you" the same
-// way.
+// Who is speaking (docs/companion/90), in two parts.
 //
-// What it can do is never written here. It is read off the two things that are
-// really there: the places the shell registered (desk/places.ts) and the tools
-// this turn holds. A screen that is not registered or a tool that is not mounted
-// cannot be claimed, and one that is added shows up without anyone editing this.
+// The short part leads every turn's system prompt (turn.ts), ahead of a role's
+// duty and of whatever lies on the desk: the companion's name, what it is,
+// where its line is, and that about_app answers the rest. Its bytes depend on
+// the name alone, so the provider's cache prefix (docs/pitfall/ai/663) holds
+// whatever tools a turn carries.
 //
-// Same inputs, same bytes: the block sits at the head of the prompt, where the
-// provider's cache prefix starts (docs/pitfall/ai/663), so nothing in it may be
-// read off a clock or a counter.
+// The long part is about_app's result, paid for only when the reader asks who
+// the companion is or what the app can do. What it can do is never written
+// here. It is read off the two things that are really there: the places the
+// shell registered (desk/places.ts) and the tools this turn holds. A screen
+// that is not registered or a tool that is not mounted cannot be claimed, and
+// one that is added shows up without anyone editing this.
 
+import { Type } from "@earendil-works/pi-ai";
 import type { Place } from "../desk";
+import type { AgentTool } from "../legion/durable/contract";
+import { t } from "../i18n";
+
+export const ABOUT_APP_TOOL = "about_app";
 
 export interface IntroInput {
   // The companion's name, as companionNameOf gives it.
@@ -43,19 +48,19 @@ export function firstSentence(text: string): string {
   return `${space > 0 ? cut.slice(0, space) : cut}…`;
 }
 
-/** The identity paragraph, without the generated lists. The voice front uses this half alone. */
-export function identityLines(name: string): string[] {
+/** The block every turn leads with: the name, what the companion is, its line, and where the rest is. */
+export function introBlock(name: string): string {
   return [
-    `You are ${name}, the companion inside the Lumen app. You live in the corner of every screen, and the reader talks to you there.`,
-    "You are a tool for reading, for analysis and for the reader's own material, not a person. " +
-      "Do not perform longing, loneliness, affection or a relationship; do not say you missed the reader or remark on how long they were away.",
-  ];
+    `You are ${name}, the Lumen app's companion in the corner of every screen.`,
+    "A tool for reading, analysis and the reader's material, not a person: no longing or affection.",
+    `Asked about yourself, the app or how to use it, call ${ABOUT_APP_TOOL} first.`,
+  ].join("\n");
 }
 
-/** The whole block. */
-export function introBlock(input: IntroInput): string {
+/** What about_app hands back: the name, how to answer, the places and the companion's tools. */
+export function aboutAppText(input: IntroInput): string {
   const lines = [
-    ...identityLines(input.name),
+    `You are ${input.name}, the companion inside the Lumen app. You live in the corner of every screen, and the reader talks to you there.`,
     `When the reader asks who you are or what you can do, say your name is ${input.name} and describe only what is listed below: ` +
       "the places in this app and what you can do in this conversation. Never invent a feature; if something is not listed, say this app does not have it.",
   ];
@@ -66,8 +71,27 @@ export function introBlock(input: IntroInput): string {
     lines.push(
       "",
       "What you can do in this conversation:",
-      ...input.tools.map((t) => `- ${t.name}: ${firstSentence(t.description)}`),
+      ...input.tools.map((tool) => `- ${tool.name}: ${firstSentence(tool.description)}`),
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * about_app for one turn. Its description is fixed, so the tool list is the
+ * same bytes whatever is registered; what it returns is built from `input`
+ * when called. A read: it writes nothing and needs no gate.
+ */
+export function buildAboutAppTool(input: IntroInput): AgentTool {
+  return {
+    name: ABOUT_APP_TOOL,
+    label: () => t("chat.aboutApp.looking"),
+    effect: "read",
+    replay: "safe",
+    description:
+      "Your name, the places in this app and what you can do here, with how to answer. " +
+      "Call it first when the reader asks who you are, what you or the app can do, or how to do something.",
+    parameters: Type.Object({}),
+    execute: async () => aboutAppText(input),
+  };
 }

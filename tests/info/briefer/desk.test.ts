@@ -182,6 +182,7 @@ test("the companion tools are the secretary's, and come ahead of the soul's own"
     "observation_search",
     "observation_read",
     "observation_update",
+    "about_app",
   ]);
 });
 
@@ -223,10 +224,10 @@ test("a desk item offering one of the secretary's tool names is refused", async 
 test("the secretary's duty opens the prompt, and the briefing's own sections follow in order", async () => {
   const turn = await assemble([briefingRef], [tool("probe_source")]);
   // Only the companion's intro (docs/companion/90) comes ahead of the duty.
-  expect(turn.systemPrompt.startsWith("You are Kris, the companion inside the Lumen app.")).toBe(true);
+  expect(turn.systemPrompt.startsWith("You are Kris, the Lumen app's companion")).toBe(true);
   expect(turn.systemPrompt).toContain(`\n\n${SECRETARY_DUTY}\n\n`);
   const order = [
-    "You are Kris, the companion inside the Lumen app.",
+    "You are Kris, the Lumen app's companion",
     SECRETARY_DUTY,
     "You have tools, shared across every info chat:",
     "What is known about this reader (what triage keeps or filters for):",

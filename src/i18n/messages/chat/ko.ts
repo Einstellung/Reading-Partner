@@ -41,6 +41,7 @@ export default {
   "places.goingTo": "{place}(으)로 이동하는 중",
   "places.goingSomewhere": "앱 안에서 이동하는 중",
   "places.wentSomewhere": "이동했습니다",
+  "aboutApp.looking": "이 앱으로 할 수 있는 일을 확인하는 중",
 
   "statements.writingSelf": "당신이 자신에 대해 한 말을 적는 중",
   "statements.wroteKind": "{kind}을(를) 적었습니다",

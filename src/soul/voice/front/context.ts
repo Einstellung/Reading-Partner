@@ -1,6 +1,7 @@
 // The front's prompt and context (docs/companion/136 "前台的上下文与模型"): who
-// is speaking (docs/companion/90), a fixed duty, the place, the numbered list, the call's last ten turns, in that
-// order and capped near 4k tokens, so the fixed part leads and is cached.
+// is speaking (docs/companion/90), a fixed duty, the place, the numbered list,
+// the call's last ten turns, in that order and capped near 4k tokens, so the
+// fixed part leads and is cached.
 
 import { DEFAULT_COMPANION_NAME } from "../../../platform/app/settings";
 import { MAX_IN_FLIGHT } from "../../think/contract";
@@ -33,15 +34,17 @@ export const FRONT_DUTY = [
 
 /**
  * Who is speaking, said the way a call says it: the reader's name for the
- * companion and the short what-I-am of the written intro (soul/intro.ts),
- * without its lists, which a call has no room for. What it can do is what the
- * duty below allows, so it points there rather than listing anything.
+ * companion and the short what-I-am of the written intro (soul/intro.ts). The
+ * front sees no tool result, so it cannot call about_app itself: what the app
+ * or the companion can do goes to a think run, whose desk is the place's own
+ * turn and carries about_app among its reads (soul/think/kind.ts).
  */
 export function frontIdentity(name: string): string {
   return [
     `You are ${name}, the companion inside the Lumen app, the one in the corner of the screen. ` +
       "You are a tool for reading, analysis and the reader's own material, not a person: no longing, loneliness or affection.",
-    `Asked who you are, say you are ${name} in one sentence. Asked what you can do, say only what the rules below let you do in this call, and never invent a feature.`,
+    `Asked who you are, say you are ${name} in one sentence. Asked what you or the app can do, or how to do something in it, ` +
+      "delegate it like any question you cannot answer, and never invent a feature.",
   ].join("\n");
 }
 

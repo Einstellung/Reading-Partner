@@ -4,9 +4,8 @@
 // The map is the tool's own description, built when the turn is assembled out
 // of what the shell has registered (src/desk/places.ts), so a shell that grows a
 // screen teaches the model about it by registering one more line. The same
-// lines also lead the system prompt, in the companion's introduction
-// (intro.ts, docs/companion/90), which is what the soul reads out when the
-// reader asks what is here.
+// lines are in what about_app hands back (intro.ts, docs/companion/90), which
+// is what the soul reads out when the reader asks what is here.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/durable/contract";

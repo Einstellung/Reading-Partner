@@ -41,6 +41,7 @@ export default {
   "places.goingTo": "Переходит в {place}",
   "places.goingSomewhere": "Перемещается по приложению",
   "places.wentSomewhere": "Переместился",
+  "aboutApp.looking": "Смотрит, что умеет приложение",
 
   "statements.writingSelf": "Записывает, что вы сказали о себе",
   "statements.wroteKind": "Записано: {kind}",
