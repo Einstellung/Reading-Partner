@@ -69,6 +69,8 @@ import {
   dayIndexOf,
   dayOn,
   isoWeekday,
+  lastDate,
+  planExhausted,
   type DayDraft,
   type MealDraft,
   type PotDraft,
@@ -247,7 +249,7 @@ export function mealsGuidance(
   }
   out.push("");
 
-  if (state.plan) {
+  if (state.plan && !planExhausted(state.plan, today)) {
     const plan = state.plan;
     out.push("This week:");
     for (let i = 0; i < plan.days.length; i++) {
@@ -285,6 +287,13 @@ export function mealsGuidance(
       "",
       "Refer to a meal by its day number and which meal it is. Never write a date yourself — the",
       "program owns every date, every gram and the shopping list, and it will contradict you.",
+    );
+  } else if (state.plan) {
+    out.push(
+      `The week they had ended on ${lastDate(state.plan)}. Nothing is planned from today on.`,
+      "To plan, call propose_meals_plan without adjustment and send a whole fresh week of 7 days that",
+      "starts today, even when they ask for fewer days; say in your reply that the plan covers the week",
+      "from today. Never use adjustment while no current week exists.",
     );
   } else {
     out.push("No week is planned. Call propose_meals_plan when they ask what to eat this week.");
@@ -523,6 +532,14 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
           text: "There is no week planned yet, so there is nothing to adjust. Propose a whole week instead.",
         };
       }
+      if (adjustment && planExhausted(state.plan, deps.today())) {
+        return {
+          receipt: null,
+          text:
+            "Their week is over, so there is nothing current to adjust. Call propose_meals_plan again " +
+            "without adjustment and send a whole fresh week of 7 days; it starts today.",
+        };
+      }
       const days = toDayDrafts(args.days);
       const pots = toPotDrafts(args.pots);
       if (days.length === 0) throw new Error("propose_meals_plan needs at least one day.");
@@ -556,6 +573,17 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
           previous: adjustment ? state.plan : patching ? pending : null,
         },
       );
+      if (adjustment && !assembled.problems.length && assembled.changedDates.length) {
+        const today = deps.today();
+        if (assembled.changedDates.every((date) => date < today)) {
+          return {
+            receipt: null,
+            text:
+              "Those meals are on days that have passed, and meals on past days cannot be changed. " +
+              "Adjust a meal of today or a later day, or propose a whole fresh week without adjustment.",
+          };
+        }
+      }
       const checked = assembled.problems.length
         ? { plan: assembled.plan, problems: assembled.problems }
         : checkPlan({

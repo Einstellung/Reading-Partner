@@ -306,7 +306,6 @@ export function MealsHome(props: MealsHomeProps) {
   const lines = linesInOrder(shopping, orderShoppingLines(shopping));
   const preview = shoppingPreview(shopping, lines);
   const exhausted = planExhausted(plan, today);
-  const planLabel = plan ? t("meals.planNextWeek") : t("meals.planThisWeek");
 
   return (
     <MealsColumn>
@@ -338,7 +337,7 @@ export function MealsHome(props: MealsHomeProps) {
           </p>
           <div className="mt-4">
             <Button variant="cta" onClick={props.onPlanWeek}>
-              {planLabel}
+              {t("meals.planThisWeek")}
             </Button>
           </div>
         </div>

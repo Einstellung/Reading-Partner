@@ -26,6 +26,7 @@ import type { MealsPorts } from "../../../src/info/meals/apply";
 import type { MealsCard, MealsPlanCardData } from "../../../src/info/meals/cards";
 import { currentList, deriveShoppingList } from "../../../src/info/meals/plan/shopping";
 import { solvePlan, targetsOf } from "../../../src/info/meals/plan/solve-week";
+import { addDays } from "../../../src/info/meals/plan/week";
 import {
   EMPTY_MEALS,
   type MealKey,
@@ -378,6 +379,74 @@ test("an adjustment with no week to adjust is refused", async () => {
   const d = deps(state({ plan: null }));
   const out = await buildProposeMealsPlanTool(d).execute({ adjustment: true, days: [{ day: 1, lunch: { mode: "out" } }] });
   expect(said(out)).toContain("no week planned yet");
+});
+
+// --- a week that has run out ------------------------------------------------------
+
+const NOW = "2026-10-21";
+
+/** The fixture week moved to start on another date. */
+function weekFrom(start: string): WeekPlan {
+  const plan = week();
+  return { ...plan, id: `week-${start}`, startDate: start, days: plan.days.map((d, i) => ({ ...d, date: addDays(start, i) })) };
+}
+
+function depsOn(current: MealsState, today: string): MealsToolDeps & { cards: MealsCard[] } {
+  return { ...deps(current), today: () => today };
+}
+
+test("an exhausted week is not listed as this week; the instruction says it ended and to plan a fresh one", () => {
+  const old = state({ plan: weekFrom("2026-10-09") });
+  const text = mealsGuidance(old, NOW).replace(/\n/g, " ");
+  expect(text).not.toContain("This week:");
+  expect(text).not.toContain("Day 1 (2026-10-09");
+  expect(text).toContain("The week they had ended on 2026-10-15. Nothing is planned from today on.");
+  expect(text).toContain("without adjustment and send a whole fresh week of 7 days that starts today");
+  expect(text).toContain("Never use adjustment while no current week exists.");
+
+  // On its last day the week still stands.
+  const live = mealsGuidance(old, "2026-10-15");
+  expect(live).toContain("This week:");
+  expect(live).not.toContain("had ended on");
+});
+
+test("an adjustment on an exhausted week is refused, whether or not the days are past", async () => {
+  const d = depsOn(state({ plan: weekFrom("2026-10-09") }), NOW);
+  const tool = buildProposeMealsPlanTool(d);
+  // The real case: days 1 to 3 of the week that began 2026-10-09, asked on 2026-10-21.
+  const days = [1, 2, 3].map((day) => ({ day, lunch: sent(week())[4]!.dinner }));
+  const out = said(await tool.execute({ adjustment: true, days }));
+  expect(out).toContain("Their week is over");
+  expect(out).toContain("without adjustment and send a whole fresh week of 7 days; it starts today");
+  expect(d.cards).toEqual([]);
+});
+
+test("a fresh week on an exhausted plan starts today", async () => {
+  const d = depsOn(state({ plan: weekFrom("2026-10-09") }), NOW);
+  const out = await buildProposeMealsPlanTool(d).execute({ days: sent(week()) });
+  expect(said(out)).toContain("Proposed the week's meals");
+  const card = d.cards[0] as MealsPlanCardData;
+  expect(card.adjustment).toBe(false);
+  expect(card.startDate).toBe(NOW);
+  expect(card.days.map((x) => x.date)).toEqual([0, 1, 2, 3, 4, 5, 6].map((i) => addDays(NOW, i)));
+});
+
+test("an adjustment of past days only is refused; one touching today or later still works", async () => {
+  const today = addDays(MON, 3);
+  const swap = (day: number) => ({ day, lunch: sent(week())[4]!.dinner });
+
+  const past = depsOn(state(), today);
+  const refused = said(await buildProposeMealsPlanTool(past).execute({ adjustment: true, days: [swap(1), swap(2)] }));
+  expect(refused).toContain("meals on past days cannot be changed");
+  expect(past.cards).toEqual([]);
+
+  const edge = depsOn(state(), today);
+  const mixed = await buildProposeMealsPlanTool(edge).execute({ adjustment: true, days: [swap(2), swap(4)] });
+  expect(said(mixed)).toContain("Proposed a change to 2 meal(s)");
+
+  const later = depsOn(state(), MON);
+  const ok = await buildProposeMealsPlanTool(later).execute({ adjustment: true, days: [swap(2)] });
+  expect(said(ok)).toContain("Proposed a change to 1 meal(s)");
 });
 
 // --- the profile ----------------------------------------------------------------
