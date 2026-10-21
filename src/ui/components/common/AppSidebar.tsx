@@ -13,7 +13,7 @@
 
 import appIcon from "../../assets/app-icon.png";
 import { useT } from "../../../i18n";
-import { lumenToggleTitle } from "../base/lumen-toggle";
+import { lumenToggleTitle } from "../base/companion-toggle";
 import { useCompanionName } from "../base/use-companion-name";
 import { IconBriefing, IconBriefs, IconBooks, IconMeals, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
 import { restartLabel, type UpdateState } from "../../../platform/app/update-policy";

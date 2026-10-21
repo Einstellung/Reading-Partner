@@ -1,5 +1,5 @@
 // The Red Box item a link intake keeps while no topic is picked
-// (src/reading/ingest/intake-box.ts, topic-intake.ts, lumen/box-jump.ts and
+// (src/reading/ingest/intake-box.ts, topic-intake.ts, companion/box-jump.ts and
 // box-cards.ts): put when the run is handed over, still there after the reader
 // follows it, out on the pick, and out at once when the pick came before the
 // fetch finished. The intake store and the box both run for real over memory.
@@ -14,8 +14,8 @@ import {
   intakeIdOfItem,
 } from "../../../src/reading/ingest/intake-box";
 import { chooseIntakeTopic, startTopicIntake } from "../../../src/reading/ingest/topic-intake";
-import { planItemJump, stateAfterFollow, staysUntilDecided } from "../../../src/ui/components/lumen/box-jump";
-import { cardsHere } from "../../../src/ui/components/lumen/box-cards";
+import { planItemJump, stateAfterFollow, staysUntilDecided } from "../../../src/ui/components/companion/box-jump";
+import { cardsHere } from "../../../src/ui/components/companion/box-cards";
 import { mapDisk } from "../../support/map-disk";
 import { memoryIntakes } from "./intake-fixtures";
 

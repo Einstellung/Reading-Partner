@@ -257,7 +257,7 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 
 **Tooltip**。全项目 32 个 `title=`，都是图标按钮的悬停提示。触摸上不触发，所以每个需要说明的控件本来就有 `aria-label`，激活态还会把文字显出来（侧栏标签、MoreMenu 的行）。加一层 Radix Tooltip 只对鼠标有用，且要处理它自己的 Portal 和安全区。
 
-**Popover**。第三版说了没用上，第五版也没有新的锚定型浮层，之后引了（`23eeb7cc`），`LumenCorner.tsx` 和 `PhoneLesson.tsx` 在用。现存的 `CallBubble` / `AnnotationPopup` 仍在不迁清单里，没有换过去。
+**Popover**。第三版说了没用上，第五版也没有新的锚定型浮层，之后引了（`23eeb7cc`），`CompanionCorner.tsx` 和 `PhoneLesson.tsx` 在用。现存的 `CallBubble` / `AnnotationPopup` 仍在不迁清单里，没有换过去。
 
 ## 最终还剩的手写控件
 

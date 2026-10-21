@@ -3,7 +3,7 @@
 // `window.__orbStub`.
 //
 // The way into a real session is Lumen in the corner now, held rather than
-// tapped (ui/components/lumen/LumenCorner.tsx, docs/68). What is left here is
+// tapped (ui/components/companion/CompanionCorner.tsx, docs/68). What is left here is
 // the stub layer the orb spike mounts, because the iOS simulator's audio stack
 // cannot start at all and this is the only way to look at the four acts.
 //
@@ -12,9 +12,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ErrorLine } from "../lumen/ErrorLine";
-import { Lumen } from "../lumen/Lumen";
-import type { Attention } from "../lumen/lumen-motion";
+import { ErrorLine } from "../companion/ErrorLine";
+import { Lumen } from "../companion/Companion";
+import type { Attention } from "../companion/companion-motion";
 import { orbErrorLine, type OrbPhase, type SpeechEnvelope, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
@@ -66,10 +66,10 @@ function OrbLayer({
 function useStubCall(): { handle: VoiceCallHandle; rest: boolean; attention: Attention } {
 	const [phase, setPhase] = useState<OrbPhase>("idle");
 	const [error, setError] = useState<string | null>(null);
-	// Asleep is not a phase (src/ui/components/lumen/lumen-motion.ts) and nothing in the
+	// Asleep is not a phase (src/ui/components/companion/companion-motion.ts) and nothing in the
 	// app sets it yet, so the harness is the only thing that can show it.
 	const [rest, setRest] = useState(false);
-	// A live call gets this from its turns' tool calls (lumen/use-voice-call.ts); here
+	// A live call gets this from its turns' tool calls (companion/use-voice-call.ts); here
 	// it is a knob, so the check act can be seen without a turn behind it.
 	const [attention, setAttention] = useState<Attention>("reader");
 	const subscribers = useRef(new Set<(value: number) => void>());

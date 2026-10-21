@@ -11,7 +11,7 @@
 // saying it twice.
 //
 // The door calls this once the day's conversation is loaded for an issue that
-// was just opened (ui/components/lumen/use-door-chat.ts); the rows land through
+// was just opened (ui/components/companion/use-door-chat.ts); the rows land through
 // the thread store, which the open conversation listens to.
 
 import { formatDateTime, t } from "../../i18n";

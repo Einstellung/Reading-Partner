@@ -15,7 +15,7 @@ import { AI_LANGUAGE_OPTIONS, companionNameOf, type AiLanguage, type Settings } 
 import { useT } from "../../../i18n";
 import { setPaperTint, usePaperTint } from "../base/usePaperTint";
 import CompanionNameField from "./CompanionNameField";
-import { setLumenShown, useLumenShown } from "../lumen/use-lumen-shown";
+import { setLumenShown, useLumenShown } from "../companion/use-companion-shown";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import AutostartCard from "./AutostartCard";
@@ -41,7 +41,7 @@ export default function FeaturesPanel({
   // beside the other switches that belong to this machine.
   const paperTint = usePaperTint();
   // Also localStorage and also this device's: the same value the sidebar's
-  // wordmark and the reader's More menu switch (lumen/use-lumen-shown.ts).
+  // wordmark and the reader's More menu switch (lumen/use-companion-shown.ts).
   const lumenShown = useLumenShown();
   const t = useT();
   const companionName = companionNameOf(settings);

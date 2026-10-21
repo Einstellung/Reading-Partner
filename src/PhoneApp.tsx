@@ -38,10 +38,10 @@ import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import InfoShelf from "./ui/components/info/InfoShelf";
 import PhoneHome from "./ui/components/phone/PhoneHome";
-import { LumenCorner } from "./ui/components/lumen/LumenCorner";
-import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
+import { LumenCorner } from "./ui/components/companion/CompanionCorner";
+import { useCornerLift } from "./ui/components/companion/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
-import { toggleLumenShown, useLumenShown } from "./ui/components/lumen/use-lumen-shown";
+import { toggleLumenShown, useLumenShown } from "./ui/components/companion/use-companion-shown";
 import { PullToAsk } from "./ui/components/phone/gesture/PullToAsk";
 import PhoneReader from "./ui/components/phone/reader/PhoneReader";
 import PhoneLessonScreen from "./ui/components/phone/lesson/PhoneLessonScreen";
@@ -545,7 +545,7 @@ export default function PhoneApp({
 
       {/* Lumen, bottom right, on every screen this shell draws (docs/68). A card
           born over a book opens that book's conversation: a paper's lesson, an
-          EPUB's thread over its page (lumen/box-jump.ts). One born in the
+          EPUB's thread over its page (companion/box-jump.ts). One born in the
           coach or a retell cannot jump here and says so. Typing to Lumen opens a chat of its own here,
           which draws cards like every other chat, so it gets the card table
           too. */}

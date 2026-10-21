@@ -7,8 +7,8 @@
 // its receipt says where.
 //
 // Payload and pure helpers only; the door chat does the saying
-// (ui/components/lumen/use-door-chat.ts), the card component the drawing
-// (ui/components/lumen/IssueQuestionCard.tsx).
+// (ui/components/companion/use-door-chat.ts), the card component the drawing
+// (ui/components/companion/IssueQuestionCard.tsx).
 
 import { t } from "../../i18n";
 import type { OpeningQuestion } from "./opening-record";

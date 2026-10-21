@@ -229,7 +229,7 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "ui/components/phone/lesson/lesson-view.ts",
   // An intake card's 「打开阅读」 hands the shell the topic the document was just
   // attached to, so it opens there. The record is the intake's (intake-store.ts).
-  "ui/components/lumen/intake-view.ts",
+  "ui/components/companion/intake-view.ts",
   // A box card followed to a coaching conversation or a retell names the topic
   // it is drawn in, read off the talk or the retell (App.tsx). Nothing is stored.
   "ui/components/library/LibraryScreen.tsx",

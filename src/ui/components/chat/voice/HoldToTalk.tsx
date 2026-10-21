@@ -202,7 +202,7 @@ export function HoldToTalk({
 	}, [holding]);
 
 	// Said out loud, for the corner that has to stand down while the overlay is
-	// up (ui/components/lumen/corner-placement.ts). The release is in the cleanup
+	// up (ui/components/companion/corner-placement.ts). The release is in the cleanup
 	// as well, so a composer unmounted mid-press does not leave the flag set.
 	useEffect(() => {
 		setHolding(holding);

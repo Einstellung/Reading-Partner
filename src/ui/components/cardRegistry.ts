@@ -14,11 +14,11 @@
 import { ASIDE_CARD_REGISTRY } from "./reader/AsideCard";
 import type { CardRegistry } from "./chat/chatParts";
 import { INFO_CARD_REGISTRY } from "./info/InfoCards";
-import { BOX_CARD_REGISTRY } from "./lumen/BoxCard";
-import { LUMEN_CARD_REGISTRY } from "./lumen/IntakeCard";
+import { BOX_CARD_REGISTRY } from "./companion/BoxCard";
+import { LUMEN_CARD_REGISTRY } from "./companion/IntakeCard";
 import { READING_CARD_REGISTRY } from "./reader/RetellCard";
-import { TOPIC_SEARCH_CARD_REGISTRY } from "./lumen/TopicSearchCard";
-import { ISSUE_QUESTION_CARD_REGISTRY } from "./lumen/IssueQuestionCard";
+import { TOPIC_SEARCH_CARD_REGISTRY } from "./companion/TopicSearchCard";
+import { ISSUE_QUESTION_CARD_REGISTRY } from "./companion/IssueQuestionCard";
 
 export const CARD_REGISTRY: CardRegistry = {
   ...INFO_CARD_REGISTRY,

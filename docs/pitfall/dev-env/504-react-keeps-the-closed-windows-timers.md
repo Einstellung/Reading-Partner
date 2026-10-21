@@ -2,7 +2,7 @@
 
 ## 现象
 
-`tests/ui/components/lumen/intake-card-render.test.tsx` 单跑全绿，排在 `tests/reading` 后面跑就红：每张卡都停在加载态，`findByText` 一秒超时。记录的读写全部完成，`watchIntake` 也调了 notify，`setLoaded(true)` 也调了，组件就是不再渲染。没有报错。哪些前置文件会触发看时机：`tests/reading/session` 里一半的 `use-*.test.tsx` 会，另一半不会。
+`tests/ui/components/companion/intake-card-render.test.tsx` 单跑全绿，排在 `tests/reading` 后面跑就红：每张卡都停在加载态，`findByText` 一秒超时。记录的读写全部完成，`watchIntake` 也调了 notify，`setLoaded(true)` 也调了，组件就是不再渲染。没有报错。哪些前置文件会触发看时机：`tests/reading/session` 里一半的 `use-*.test.tsx` 会，另一半不会。
 
 ## 原因
 

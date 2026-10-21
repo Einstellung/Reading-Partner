@@ -248,7 +248,7 @@ const LAYER: Record<string, Layer> = {
   // runs briefer -> tasking and never back.
   "info/tasking": "domain",
   // Topic searches (docs/info/88): the config, the drafting card and the door
-  // tools' logic. Mounted at the door by ui/components/lumen/door-tools.ts.
+  // tools' logic. Mounted at the door by ui/components/companion/door-tools.ts.
   "info/topic-search": "domain",
   // AI-driven link intake (docs/86): the link agent's prompt, tools, candidate
   // table and caps, the reader registry, the receipt and the source records.
@@ -361,8 +361,8 @@ const LAYER: Record<string, Layer> = {
   "ui/components/info": "ui",
   "ui/components/info/meals": "ui",
   "ui/components/lib": "ui",
-  // Lumen: the companion's body, its motion maths and its two raster layers.
-  "ui/components/lumen": "ui",
+  // The companion: its body, its motion maths and its two raster layers.
+  "ui/components/companion": "ui",
   "ui/components/library": "ui",
   "ui/components/library/topic": "ui",
   "ui/components/markdown": "ui",

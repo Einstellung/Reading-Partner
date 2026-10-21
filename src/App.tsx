@@ -45,7 +45,7 @@ import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import { displaySource, getLibraryEntry, readLibraryBook, type BookFormat } from "./platform/app/library";
 import { readerModeOf, type ReaderMode } from "./reading/issue";
-import { askLumen, publishOpenIssue } from "./ui/components/lumen/issue-context";
+import { askLumen, publishOpenIssue } from "./ui/components/companion/issue-context";
 import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -111,10 +111,10 @@ import LibraryScreen, { type StudyOpen } from "./ui/components/library/LibrarySc
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
-import { LumenCorner } from "./ui/components/lumen/LumenCorner";
-import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
+import { LumenCorner } from "./ui/components/companion/CompanionCorner";
+import { useCornerLift } from "./ui/components/companion/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
-import { toggleLumenShown, useLumenShown } from "./ui/components/lumen/use-lumen-shown";
+import { toggleLumenShown, useLumenShown } from "./ui/components/companion/use-companion-shown";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -1237,7 +1237,7 @@ export default function App() {
 
   const inReader = !!title;
 
-  // What a card in Lumen's column can reach in this shell (lumen/box-jump.ts
+  // What a card in Lumen's column can reach in this shell (companion/box-jump.ts
   // decides which of these a given card needs, and in what order).
   const lumenTargets = useMemo(
     () => ({

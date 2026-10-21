@@ -2,7 +2,7 @@
 
 ## 现象
 
-iPhone 上 Lumen 的打字对话（`lumen/DoorChat.tsx` 手机形态，`fixed inset-0`）点输入框：顶栏和关闭键出了屏幕，输入框顶到状态栏和灵动岛底下，键盘上方空一大截。点发送只收起键盘，消息没发出去。
+iPhone 上 Lumen 的打字对话（`companion/DoorChat.tsx` 手机形态，`fixed inset-0`）点输入框：顶栏和关闭键出了屏幕，输入框顶到状态栏和灵动岛底下，键盘上方空一大截。点发送只收起键盘，消息没发出去。
 
 实测（iPhone 16，393 宽，iOS 26.5 模拟器）：聚焦后 `scrollY` 281（有历史时 403），`visualViewport.offsetTop` 280、`height` 449，`innerHeight` 571，整屏层的 top 在 -281。
 

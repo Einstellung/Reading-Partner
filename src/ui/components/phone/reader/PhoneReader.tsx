@@ -65,7 +65,7 @@ import { logEvent } from "../../../../platform/app/events";
 import { deleteThreadImages } from "../../../../platform/app/thread-images";
 import type { ReaderMode } from "../../../../reading/issue";
 import { markExcerpt } from "../../../../reading/turn/reopen";
-import { askLumen, publishOpenIssue } from "../../lumen/issue-context";
+import { askLumen, publishOpenIssue } from "../../companion/issue-context";
 import { jumpInBook } from "../lesson/epub-lesson";
 
 const markDeleteIo: MarkDeleteIo = {

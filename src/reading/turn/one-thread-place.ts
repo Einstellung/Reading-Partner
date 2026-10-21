@@ -9,7 +9,7 @@
 // card-raising ones among them — is used while it is there, as at the door
 // (soul/door-durable.ts). Closing the view does not stop its turn (the place
 // session's detach): a reply that lands with nobody looking puts Lumen's box
-// card, which opens the view again (lumen/box-jump.ts).
+// card, which opens the view again (companion/box-jump.ts).
 
 import type { Context } from "@earendil-works/chord";
 import { appBox, type BoxOrigin, type BoxStore } from "../../box";

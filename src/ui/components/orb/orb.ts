@@ -6,7 +6,7 @@
 // A ui-layer display module with no React in it, the way hold-zones.ts is: the
 // numbers below decide what the companion looks like, and eyeballing them on a
 // device is not a way to find out whether they are right. The renderer is now
-// ui/components/lumen/Lumen.tsx, which draws a body rather than a disc and adds
+// ui/components/companion/Companion.tsx, which draws a body rather than a disc and adds
 // its own arithmetic in lumen.ts; everything here is what the two share.
 //
 // One colour for the whole conversation loop, four kinds of motion. Every orb
@@ -26,7 +26,7 @@ export type { SpeechEnvelope };
 export type OrbPhase = "idle" | "listening" | "thinking" | "speaking";
 
 // What the orb needs from the session driving it. The hook that implements this
-// lives in ui/components/lumen/use-voice-call.ts; the type is declared here so
+// lives in ui/components/companion/use-voice-call.ts; the type is declared here so
 // the orb depends on the shape and not on the hook.
 //
 // `subscribeLevel` and not a `level` field: the level arrives about ten times a

@@ -77,7 +77,7 @@ import { DEFAULT_SECTION, type TopicSection } from "../base/topic-nav";
 
 const GRID = `${LIBRARY_GRID} ${TOPIC_GRID_COLUMNS_CLASS}`;
 
-/** A coaching conversation or a retell to open in its topic: a box card followed (lumen/box-jump.ts). */
+/** A coaching conversation or a retell to open in its topic: a box card followed (companion/box-jump.ts). */
 export interface StudyOpen {
   kind: "coach" | "retell";
   topicId: string;

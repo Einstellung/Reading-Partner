@@ -1,7 +1,7 @@
 // confirm_topic_search (docs/info/88 起草：来回问): the reader said yes to the
 // drafting card in words. It does what the card's Follow button does: the
 // newest card in this conversation is applied (apply.ts) and drawn as applied.
-// The door chat finds the card and marks it (ui/components/lumen/use-door-chat.ts);
+// The door chat finds the card and marks it (ui/components/companion/use-door-chat.ts);
 // this file only decides what to tell the model.
 
 import { Type } from "@earendil-works/pi-ai";

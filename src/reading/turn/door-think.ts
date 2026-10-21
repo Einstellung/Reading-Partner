@@ -2,7 +2,7 @@
 // (docs/companion/136, docs/68): the door conversation's own desk, reads only.
 // The soul's set as a door turn lays it — its past conversations, the
 // catalogue, the observations it recalls — plus the reads the door mounts
-// beside it (ui/components/lumen/door-tools.ts): web_search with read_page,
+// beside it (ui/components/companion/door-tools.ts): web_search with read_page,
 // and background_status. The door's card-raising tools need a conversation on
 // screen and are writes; soul/think kind.ts drops every write anyway.
 //

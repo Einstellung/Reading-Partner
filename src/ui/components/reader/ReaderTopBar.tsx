@@ -25,7 +25,7 @@ import PenToolbar from "./PenToolbar";
 import { hasTouchInput, rackOmits } from "./reader-tool";
 import type { ReaderMode } from "../../../reading/issue";
 import { Button } from "../ui/button";
-import lumenIcon from "../lumen/lumen-icon.webp";
+import lumenIcon from "../companion/companion-icon.webp";
 import { Separator } from "../ui/separator";
 
 // Lumen's row in the overflow menu wears Lumen's own face: the hand-drawn

@@ -12,7 +12,7 @@
 // brings its statements and its tools, no item brings a prompt, and the
 // conversation is replayed from the messages the caller passes in. Two things
 // hold it: a bell that lands here (bell.ts), and the reader typing to Lumen from
-// its menu (door-chat.ts, ui/components/lumen/DoorChat.tsx).
+// its menu (door-chat.ts, ui/components/companion/DoorChat.tsx).
 
 import { openDesk, type DeskEnv, type DeskMessage, type DeskRef } from "../desk";
 import { type SourceUnit } from "../memory";

@@ -12,7 +12,7 @@ import { issueDeskKind } from "../../src/reading/issue-desk";
 import { doorKey, openDoorThread, openDoorTurn, prepareDoorTurn } from "../../src/soul";
 import { doorAssemblies } from "../../src/soul/door-durable";
 import { quotedQuestion } from "../../src/ui/components/chat/quoted-question";
-import { issueDoorTurn, noteOnLastLine, type OpenIssue } from "../../src/ui/components/lumen/issue-context";
+import { issueDoorTurn, noteOnLastLine, type OpenIssue } from "../../src/ui/components/companion/issue-context";
 import { installAppData } from "../support/appdata-fake";
 
 const settings: Settings = {

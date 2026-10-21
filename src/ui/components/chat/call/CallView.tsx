@@ -35,7 +35,7 @@ interface CallViewProps {
 	pendingImages?: PendingImage[];
 	onRemoveImage?(id: string): void;
 	// The element the composer sits in, for whatever has to keep out of its way
-	// on the bottom edge — Lumen's corner (ui/components/lumen/corner-placement).
+	// on the bottom edge — Lumen's corner (ui/components/companion/corner-placement).
 	// Both states report it: the empty conversation's composer is in the middle
 	// of the screen, and the rule reads that off the box it measures.
 	// Absent = whatever the shell hung over this screen (composer-slot.ts), which

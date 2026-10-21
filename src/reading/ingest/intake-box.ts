@@ -8,7 +8,7 @@
 // leaves the box `saved` when a topic is picked, whether or not the fetch has
 // finished (the documents attach on filing), and `dismissed` when the intake
 // failed, because there is nothing left to pick for and the run's own bell says
-// why. Tapping it does not move it (lumen/box-jump.ts).
+// why. Tapping it does not move it (companion/box-jump.ts).
 //
 // The id is derived from the intake id, so the pick finds the item without the
 // intake record having to remember it.

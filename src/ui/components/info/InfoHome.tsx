@@ -33,7 +33,7 @@ import { useMeals } from "./meals/use-meals";
 import type { MealsFocus } from "../../../info/meals/tools";
 import { weekdayName } from "../../../info/meals/screen/view";
 import { useInfoHome } from "./use-info-home";
-import { useRegisterVoiceContext } from "../lumen/voice-context";
+import { useRegisterVoiceContext } from "../companion/voice-context";
 import { noLabsOpen } from "./no-labs";
 import { useT } from "../../../i18n";
 
@@ -266,7 +266,7 @@ export default function InfoHome(props: {
           <>
             {wrapped}
             {/* The corner entry is Lumen's, in every shell and on every screen
-                (ui/components/lumen/LumenCorner, docs/68): a long press there
+                (ui/components/companion/CompanionCorner, docs/68): a long press there
                 opens the session and a second one ends it. This screen draws
                 none of it and only says what it would be about, above. */}
           </>

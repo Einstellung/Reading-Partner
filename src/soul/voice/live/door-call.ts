@@ -1,6 +1,6 @@
 // A voice call held at the door (docs/68): what the waveform button starts on
 // every screen that has not published something to talk about
-// (ui/components/lumen/voice-context.ts). The call is the door conversation in
+// (ui/components/companion/voice-context.ts). The call is the door conversation in
 // another modality: the day's one conversation at the door is its thread, its
 // lines are written there and nowhere else, and a run it hands off is answered
 // at the door (soul/think kind.ts gives that run the door's read tools).

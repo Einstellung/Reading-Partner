@@ -19,14 +19,14 @@ import { createRoot } from "react-dom/client";
 import "../styles.css";
 import { cn } from "../ui/components/lib/utils";
 import type { VoiceCallHandle } from "../ui/components/orb/orb";
-import { Lumen, LumenCase } from "../ui/components/lumen/Lumen";
+import { Lumen, LumenCase } from "../ui/components/companion/Companion";
 import {
   caseLeanDeg,
   caseLookGaze,
   caseReach,
   caseTriggerStyle,
-} from "../ui/components/lumen/case-motion";
-import { useCaseMotion } from "../ui/components/lumen/use-case-motion";
+} from "../ui/components/companion/case-motion";
+import { useCaseMotion } from "../ui/components/companion/use-case-motion";
 
 const SILENT: VoiceCallHandle = {
   phase: "idle",

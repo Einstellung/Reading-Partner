@@ -40,7 +40,7 @@ import {
 } from "../../base/icons";
 import { cn } from "../../lib/utils";
 import { useCompanionName } from "../../base/use-companion-name";
-import { setLumenShown, useLumenShown } from "../../lumen/use-lumen-shown";
+import { setLumenShown, useLumenShown } from "../../companion/use-companion-shown";
 import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
 import { Switch } from "../../ui/switch";

@@ -68,7 +68,7 @@ const LITERALS_ALLOWED: Record<string, string> = {
   "smoke/spike-harness.tsx": "a dev harness, not a screen anyone ships",
   "smoke/aside-spike-harness.tsx": "a dev harness, not a screen anyone ships",
   "ui/components/base/icons.tsx": "an illustration's own palette",
-  "ui/components/lumen/Lumen.tsx": "the companion's own palette (docs/66), which is a character and not a theme",
+  "ui/components/companion/Companion.tsx": "the companion's own palette (docs/66), which is a character and not a theme",
   "smoke/dictation-bench.tsx": "a bench page, and a crash net that cannot count on the stylesheet",
   "smoke/speech-bench.tsx": "a bench page with no stylesheet of its own",
 };
