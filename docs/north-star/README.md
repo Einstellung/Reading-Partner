@@ -32,3 +32,4 @@ webview 渲染管子（隐藏 WebviewWindow 当渲染引擎）已经落地并随
 - [accounts](./accounts.md) — 账户登录统一放在设置的 Accounts 页（2026-10-17 落地，X、Bloomberg 两个浏览器会话）；信息源页已从界面去掉；以后加 Instagram/微博或 GitHub 等 API 凭据各是注册表一项
 - [topic-search-followups](./topic-search-followups.md) — 主题搜索第一次 run 之后的待办：重跑第一次全景（只补失败项）、门口补重跑动作并让卢明说准话、signed-out 停手记录能否自清、查询梯子与按需读深度的验收点
 - [release-hosting](./release-hosting.md) — 发布产物托管：源码仓库改私有后更新和下载仍可用；安装包放 Cloudflare R2、下载页放 Pages，先做下载链接托管再迁 updater 地址；等域名定了再做，现在仓库公开、更新走 GitHub Releases 不会坏
+- [commercialization](./commercialization.md) — 商业化方向：盈利靠用户数据和其上的 agent 社交网络（找人、问答、聚合趋势），托管 AI 订阅是入口；仓库将来转私有，做注册体系和服务端存数据，同意分必需层与按人对第三方两层；2026-09-25 起搁置，等一两个用户变成有密度的圈子
