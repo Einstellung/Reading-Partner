@@ -70,7 +70,14 @@ import {
   type LabelAnswer,
 } from "../../../info/issue/question-card";
 import { headingPage } from "../../../reading/issue";
-import { TOPIC_SEARCH_APPLY_OP, topicSearchAppliedNote } from "../../../info/topic-search/cards";
+import {
+  seedVerdictNote,
+  STUDY_SEED_VERDICT_OP,
+  TOPIC_SEARCH_APPLY_OP,
+  topicSearchAppliedNote,
+  withSeedVerdict,
+  type StudySeedsCardData,
+} from "../../../info/topic-search/cards";
 import type { ApplyResult } from "../../../info/topic-search/apply";
 import { applyTopicSearchCard, loadTopicSearchGuidance } from "../../../info/topic-search/live";
 import { BACKGROUND_STATUS_RULE } from "../../../legion/status/tool";
@@ -111,6 +118,10 @@ export interface DoorChatOptions {
 }
 
 const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
+
+// The seed cards find_seed_paper drew (docs/info/91), in the order they stand.
+const seedCards = (rows: readonly UiMessage[]): StudySeedsCardData[] =>
+  rows.flatMap((m) => (m.parts ?? []).flatMap((part) => (part.type === "card" && part.card.kind === "study-seeds" ? [part.card] : [])));
 
 // The questions the companion asked when a brief opened, in the order they stand.
 const issueCards = (rows: readonly UiMessage[]): { cardId: string; card: IssueQuestionCard }[] =>
@@ -227,6 +238,8 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
             return found ? { cardId: found.cardId, card: found.payload } : null;
           },
           applyTopicSearchCard: (cardId) => applyTopicSearchRef.current(cardId),
+          // Read when called: a verdict pressed while the turn runs counts.
+          seedCards: () => seedCards(messagesRef.current),
         });
         const prepared = await prepareDoorTurn({
           threadId: id,
@@ -423,6 +436,23 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     [threadId, putIssueCard],
   );
 
+  // A seed card's 「是这篇」/「不是」: the card keeps the verdict, on screen and in the
+  // thread file, and a line says it so the next turn knows (docs/info/91).
+  const markSeed = useCallback(
+    (cardId: string, arg: string) => {
+      if (!threadId) return;
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "study-seeds") return;
+      const next = withSeedVerdict(found.payload, arg);
+      if (next === found.payload) return;
+      setMessages((prev) => patchCardPayload(prev, cardId, { candidates: next.candidates }));
+      patchThreadMessage(key, threadId, found.ts, { parts: [toPersistedCardPart(cardId, next)] });
+      const line = seedVerdictNote(found.payload, arg);
+      if (line) note(line);
+    },
+    [key, threadId, setMessages, note],
+  );
+
   const stop = useCallback(() => sessionRef.current?.stop(), []);
 
   // Filing the conversation under a topic is what lets it be distilled at all:
@@ -530,6 +560,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           else if (action.op === ISSUE_OWN_OP) awaitWords(cardId);
           else if (action.op === ISSUE_LABEL_OP && LABEL_ANSWERS.includes(action.arg as LabelAnswer)) labelAnswer(cardId, action.arg as LabelAnswer);
           else if (action.op === ISSUE_SKIP_OP) skipReason(cardId);
+          else if (action.op === STUDY_SEED_VERDICT_OP && action.arg) markSeed(cardId, action.arg);
           break;
         case "local":
           setMessages((prev) => patchCardPayload(prev, cardId, action.patch));
@@ -544,7 +575,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           break;
       }
     },
-    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages, say, awaitWords, labelAnswer, skipReason],
+    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages, say, awaitWords, labelAnswer, skipReason, markSeed],
   );
 
   return { messages, stickKey, ready: threadId !== null, streaming, send, stop, onCardAction };

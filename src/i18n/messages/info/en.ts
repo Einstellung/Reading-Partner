@@ -131,7 +131,15 @@ export default {
   "cards.topicSearchEtaSoon": "A computer is on: first results in about half an hour.",
   "cards.topicSearchEtaTonight": "First results when a computer is on, by tonight at the latest.",
   "cards.topicSearchSlowSources": "arXiv comes first. X is read slowly, the way a person browses, often for an hour or more; what it finds follows in a second brief.",
-  "cards.topicSearchOnce": "Just this once: one first look, then it stops.",
+  "cards.topicSearchOnce": "A study: not followed nightly. One brief, revised as we talk; when you say it is done, it moves into your reading.",
+  "cards.topicSearchSeeds": "Seeds · pinned",
+  "cards.topicSearchSources": "Sources: {names}.",
+  "cards.topicSearchSkipped": "Not read: {names}.",
+  "cards.topicSearchSkippedAcademic": "Not read: {names}, an academic topic.",
+  "cards.studySeedsTitle": "Is this the paper?",
+  "cards.studySeedsSaid": "You said: {said}",
+  "cards.studySeedYes": "This one",
+  "cards.studySeedNo": "Not it",
 
   // --- The info shelf (InfoShelf.tsx, docs/info/88) ------------------------------
   "shelf.title": "Briefs",
@@ -216,6 +224,8 @@ export default {
   "call.note.labFiledWithSources": 'Opened the "{name}" lab. It reads {sources}.',
   "call.note.labFiledNoSources": 'Opened the "{name}" lab. It claims no sources of its own yet.',
   "call.note.topicSearchApplied": "Following \"{name}\" now.",
+  "call.note.studySeedYes": "That is the one: {title} ({handle}).",
+  "call.note.studySeedNo": "Not that one: {title} ({handle}).",
   "call.note.labArchived": 'Closed the "{name}" lab. Stop treating it as something being followed.',
   "call.note.topicFiled": 'Filed this conversation under "{name}".',
 
@@ -236,6 +246,7 @@ export default {
   "tool.draftedLabLabel": "Drafted a lab",
   "tool.draftedLabSummary": "{name} — {scope}",
   "tool.draftingTopicSearch": "Drafting {name}",
+  "tool.findingSeedPaper": "Looking up {name}",
   "tool.draftedTopicSearchLabel": "Drafted a topic search",
   "tool.draftedTopicSearchSummary": "{name} — {scope}",
   "tool.updatingTopicSearch": "Updating {name}",

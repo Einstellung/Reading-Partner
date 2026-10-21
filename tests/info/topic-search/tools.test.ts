@@ -123,6 +123,7 @@ test("propose draws a card and writes nothing; a taken name is refused", async (
     searches: async () => [search("ts-1", { name: "Chips" })],
     statements: async () => [],
     claims: async () => [],
+    seedCards: () => [],
     now: () => OCT_14,
     raiseCard: (c: TopicSearchProposalCardData) => cards.push(c),
   };
@@ -189,7 +190,8 @@ test("Apply writes the config with a new topic and the concern, then hands off t
     concern: store,
     load: file.load,
     put: file.put,
-    dispatchFirstRun: async (s) => {
+    addLabels: async () => {},
+        dispatchFirstRun: async (s) => {
       dispatched.push(s.id);
     },
     now: () => OCT_14,
@@ -236,7 +238,8 @@ test("stopping marks the search stopped and its concern lapsed; re-drafting it f
     concern: store,
     load: file.load,
     put: file.put,
-    dispatchFirstRun: async () => {},
+    addLabels: async () => {},
+        dispatchFirstRun: async () => {},
     now: () => OCT_14 + 1000,
   });
   expect(result.ok).toBe(true);
@@ -320,6 +323,7 @@ function door() {
     searches: file.load,
     statements: async () => [],
     claims: async () => [],
+    seedCards: () => [],
     now: () => OCT_14,
     raiseCard: (c) => cards.push({ cardId: `topic-search-${cards.length + 1}`, card: c }),
   });
@@ -331,6 +335,7 @@ function door() {
         concern: store,
         load: file.load,
         put: file.put,
+        addLabels: async () => {},
         dispatchFirstRun: async (s) => {
           dispatched.push(s.id);
         },
@@ -385,7 +390,7 @@ test("once rides from propose through Apply onto the config", async () => {
   const d = door();
   await d.propose.execute({ ...PROPOSE_ARGS, once: true });
   expect(d.cards[0].card.once).toBe(true);
-  expect(textOf(await d.confirm.execute({ name: "AI for science" }))).toContain("Just this once");
+  expect(textOf(await d.confirm.execute({ name: "AI for science" }))).toContain("A study");
   expect(d.file.all[0].once).toBe(true);
 
   const plain = door();

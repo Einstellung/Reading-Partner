@@ -156,11 +156,11 @@ const SEARCH: TopicSearch = {
 
 const HEALTH_FILE = "info-source-health.json";
 
-function world(opts: { papers?: InfoItem[] } = {}) {
+function world(opts: { papers?: InfoItem[]; search?: Partial<TopicSearch> } = {}) {
   const fs = memFs();
   const store = createStateStore(fs, "state.json");
   let now = local(2026, 10, 14, 14);
-  let search = { ...SEARCH };
+  let search: TopicSearch = { ...SEARCH, ...opts.search };
   let screen: unknown = OLDER;
   const browse = { navigations: [] as string[] };
   const opened: string[] = [];
@@ -519,6 +519,58 @@ describe("a first look in two parts: arXiv first, then X", () => {
     const made = await assembleIssue(w.issueDeps, `first:${SEARCH.id}`, "2026-10-14", [firstFile]);
     expect(made.issue?.items).toBe(atLane!.items);
     w.fs.files.set(INFO_SHELF_FILE, shelfBefore!);
+  });
+});
+
+describe("a first look of a topic that does not read X (docs/info/91 来源开关)", () => {
+  const paper: InfoItem = {
+    id: "arxiv-2610.00001",
+    source: "arxiv",
+    sourceName: "arXiv",
+    sourceKey: "2610.00001",
+    title: "AI for science in an autonomous materials lab",
+    url: "https://arxiv.org/abs/2610.00001",
+    publishedAt: "2026-10-10",
+    summary: "AI for science in an autonomous materials lab. We show how AI speeds up science in the lab.",
+    authors: ["A. Author"],
+  };
+  const w = world({ papers: [paper], search: { sources: ["arxiv", "huggingface"], once: true } });
+  const firstFile = "topic-search-ts-0a1b2c3d-2026-10-14.json";
+  const touched: string[] = [];
+  w.deps.lane = async (work) => {
+    touched.push("lane");
+    return work();
+  };
+  w.deps.keepAwake = async () => {
+    touched.push("keepAwake");
+    return { held: true, detail: null, release: async () => {} };
+  };
+  w.deps.checkSession = async () => {
+    touched.push("checkSession");
+    return "ok";
+  };
+  const said: string[] = [];
+  w.deps.report = (_runId, text) => void said.push(text);
+
+  test("it reads in one go: no X lane, lock or session check, one issue, nothing awaited", async () => {
+    const result = await run(w, "r-first", { searchId: SEARCH.id, kind: "first", night: null });
+    expect(touched).toEqual([]);
+    expect(w.browse.navigations).toEqual([]);
+    expect(result.status).toBe("delivered");
+    expect(result.x).toBeNull();
+    const file = parseResultFile(w.fs.files.get(firstFile)!)!;
+    expect(file.awaiting).toBeUndefined();
+    expect(file.retries ?? []).toEqual([]);
+    expect(parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null).issues.map((i) => i.key)).toEqual([`first:${SEARCH.id}`]);
+    expect(w.box.length).toBe(1);
+    expect(said.filter((line) => /\bX\b/.test(line))).toEqual([]);
+  });
+
+  test("its source health has no X line, and a retry plans no X", () => {
+    const health = JSON.parse(w.fs.files.get(HEALTH_FILE)!) as Record<string, SourceHealth>;
+    expect(health["topic-search:ts-0a1b2c3d:q1:x"]).toBeUndefined();
+    expect(health["topic-search:ts-0a1b2c3d:q1:arxiv"]?.topicSearch?.status).toBe("ok");
+    expect(planRetry(w.search(), {}).x).toEqual([]);
   });
 });
 

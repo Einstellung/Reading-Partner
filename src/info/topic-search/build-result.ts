@@ -27,7 +27,7 @@ import type { ArxivLadder } from "./arxiv-ladder";
 import { doiArxiv, heldDois, poolDois, type DoiLookup } from "./doi-arxiv";
 import { composeResult, deepenableMaterial, EARLIER_LINES, studyReadOrder, type DeeperReads, type DeeperReport, type EarlierLine } from "./compose";
 import { abortableSleep, parseJsonReply, retryingModel, type TopicModel } from "./model-io";
-import type { RunSource } from "./pace";
+import { readsSource, type RunSource } from "./pace";
 import { latestLabels, type TopicLabel } from "./labels";
 import {
   enqueue,
@@ -621,6 +621,8 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     }
     // A first part speaks only for its fast sources; the slow part writes the rest.
     if (later) health.entries = health.entries.filter((e) => !later.includes(e.source));
+    // A source the topic does not read has no health to speak of (docs/info/91 来源开关).
+    health.entries = health.entries.filter((e) => readsSource(topic, e.source));
     await deps.files.write(`${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`, `${JSON.stringify(health, null, 2)}\n`);
   };
   const statsOf = (subtopicItems: Record<string, number>, avoidBlocked: Record<string, number>): ResultStats => ({

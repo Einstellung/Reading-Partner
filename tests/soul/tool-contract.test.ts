@@ -231,6 +231,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     where: "info/topic-search",
     tools: topicSearchDoorTools(any({ threadId: "t" })),
     names: [
+      "find_seed_paper",
       "propose_topic_search",
       "confirm_topic_search",
       "update_topic_search",

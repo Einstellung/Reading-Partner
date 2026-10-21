@@ -8,13 +8,15 @@
 // file (source-health.ts): a (query, source) the last run of the search failed
 // on or never read, and an arXiv query that came back empty before the query
 // ladder existed (no ladder recorded), since widening may find it something.
-// Hugging Face is read like arXiv, for the queries with arXiv words. An
+// Hugging Face is read like arXiv, for the queries with arXiv words. A source
+// the topic does not read is never planned (docs/info/91 来源开关). An
 // X query that read and found nothing new is left alone, as is everything ok.
 // Reads no model judged (the rerank failed) are not read again: the plan names
 // their runs, and the build takes them in from those runs' directories.
 // Pure.
 
 import type { SourceHealth } from "../sources/engine";
+import { topicSources } from "./pace";
 import { topicSearchHealthKey } from "./source-health";
 import type { TopicSearch } from "./types";
 
@@ -49,14 +51,16 @@ export function readQueries(search: TopicSearch): TopicSearch["queries"] {
  */
 export function planRetry(search: TopicSearch, health: Readonly<Record<string, SourceHealth>>, waiting: readonly string[] = []): RetryPlan {
   const plan: RetryPlan = { x: [], arxiv: [], huggingface: [] };
+  // Only the sources the topic reads (docs/info/91 来源开关).
+  const reads = topicSources(search);
   for (const q of readQueries(search)) {
     const x = health[topicSearchHealthKey(search.id, q.id, "x")]?.topicSearch;
-    if (!x || x.status === "failed") plan.x.push(q.id);
+    if (reads.includes("x") && (!x || x.status === "failed")) plan.x.push(q.id);
     if (!q.arxiv) continue;
     const a = health[topicSearchHealthKey(search.id, q.id, "arxiv")]?.topicSearch;
-    if (!a || a.status === "failed" || (a.status === "empty" && !a.ladder)) plan.arxiv.push(q.id);
+    if (reads.includes("arxiv") && (!a || a.status === "failed" || (a.status === "empty" && !a.ladder))) plan.arxiv.push(q.id);
     const h = health[topicSearchHealthKey(search.id, q.id, "huggingface")]?.topicSearch;
-    if (!h || h.status === "failed") plan.huggingface!.push(q.id);
+    if (reads.includes("huggingface") && (!h || h.status === "failed")) plan.huggingface!.push(q.id);
   }
   return waiting.length ? { ...plan, judge: [...waiting] } : plan;
 }

@@ -17,8 +17,8 @@
 //            from both files, opening X pages only from what is left of the
 //            day's allowance and the run's ceiling; then the source health it
 //            wrote goes into the collector's state file
-//   deliver  the search's last run time; a search the reader wanted to see
-//            only once stops after its first
+//   deliver  the search's last run time; a study (`once`) is not stopped
+//            by it, only by the reader ending it (docs/info/91)
 //   wrap     the lock let go, and the run told closed (`closed`): the nightly
 //            brief (info/issue) waits for every search's run of the night and
 //            gives a first look an issue of its own. A run puts nothing in the
@@ -33,6 +33,11 @@
 // (`first:<id>#<runId>`). The checkpoints carry `part`; one without it (the
 // other kinds, and a first look started before the split) reads everything in
 // one go.
+//
+// Every run reads only the sources the topic's config names (pace.ts
+// topicSources; a config without `sources` reads all, docs/info/91 来源开关).
+// A topic without X is not split: its first look reads in one go, takes no
+// keep-awake lock and waits on no X gate.
 //
 // Every phase writes before it commits, and reads what an earlier attempt of
 // it wrote, so a phase run again after a kill does not read X twice, build
@@ -51,7 +56,7 @@ import type { BuildTopicSearchResult, BuildTopicSearchResultOutput, XPageBudget 
 import type { HfSearch } from "./hf-ladder";
 import { hfProgressLine, readHf } from "./hf-read";
 import { lastNightAnchor, nightEndAt } from "./nightly";
-import { sourceNames, sourcesOf, sourcesOfPace, splitsFirstLook, type RunPart } from "./pace";
+import { readsSource, sourceNames, sourcesOf, splitsFirstLook, type RunPart } from "./pace";
 import { relevanceBasis } from "./rank-pool";
 import type { FirstPartOnFile } from "./run-state";
 import type { TopicSearch } from "./types";
@@ -168,6 +173,9 @@ type Checkpoint =
 
 /** Why X is not read in a split first look's first part. */
 export const READ_LATER = "read after the first part";
+
+/** Why X is not read for a topic whose config leaves it out (docs/info/91 来源开关). */
+export const NOT_A_SOURCE = "not one of the topic's sources";
 
 export interface TopicSearchRunResult {
   status: "delivered" | "empty" | "skipped";
@@ -411,7 +419,8 @@ export function topicSearchTask(
         const night = brief.night ?? lastNightAnchor(now);
         const search = await deps.loadSearch(brief.searchId);
         // A split first look tried again after its first part was out (a failure later) goes on to X.
-        const delivered = splitsFirstLook(brief.kind) ? await deps.loadFirstPart(await deps.runDir(runId)) : null;
+        const split = splitsFirstLook(brief.kind, search);
+        const delivered = split ? await deps.loadFirstPart(await deps.runDir(runId)) : null;
         const part = delivered ? ("slow" as const) : undefined;
         if (!search) return skip(runtime, "the topic search is gone", context, part);
         // A study ended by the reader, or a one-look search an older build stopped after its
@@ -426,20 +435,23 @@ export function topicSearchTask(
         if (brief.kind === "daily" && now >= nightEndAt(night)) return skip(runtime, "the night is over", context);
         const retry = brief.kind === "retry" ? await deps.retryPlan(search) : null;
         if (retry && isEmptyPlan(retry)) return skip(runtime, "nothing the first look missed is left to read again", context);
-        if (splitsFirstLook(brief.kind)) {
+        if (split) {
           // The fast sources first; X is checked when its part starts (`later`).
-          say(runId, `${sourceNames(sourcesOfPace("fast"))}: starting; ${sourceNames(sourcesOfPace("slow"))}: ${READ_LATER}`);
+          say(runId, `${sourceNames(sourcesOf("fast", search))}: starting; ${sourceNames(sourcesOf("slow", search))}: ${READ_LATER}`);
           const window: Window = { startedAt: now, since: now - FIRST_LOOK_BACK_MS, night, retry: null, part: "fast" };
           return next(runtime, { phase: "read", blocked: null, ...window }, context);
         }
-        const blocked = retry && retry.x.length === 0 ? "no X query to read again" : await xBlocked(night, search.id, runId);
+        // A topic that does not read X neither waits for it nor takes the lock (docs/info/91 来源开关).
+        const readsX = readsSource(search, "x");
+        const blocked = !readsX ? null : retry && retry.x.length === 0 ? "no X query to read again" : await xBlocked(night, search.id, runId);
         // A night's increment is X alone, and so is a retry with no paper query to read again
         // and no unjudged reads to judge; the first look still builds from what else it has.
         const papersLeft = retry ? retry.arxiv.length + (retry.huggingface?.length ?? 0) + (retry.judge?.length ?? 0) : 0;
         if (blocked && (brief.kind === "daily" || (retry && papersLeft === 0))) return skip(runtime, blocked, context);
-        if (!blocked) await hold(runId);
+        if (readsX && !blocked) await hold(runId);
         const since = brief.kind === "daily" ? (search.lastRunAt ?? now - FIRST_LOOK_BACK_MS) : now - FIRST_LOOK_BACK_MS;
-        say(runId, `${blocked ? `not reading X: ${blocked}` : "waiting to read X"}; ${sourceNames(sourcesOfPace("fast"))}: starting`);
+        const xNow = readsX ? `${blocked ? `not reading X: ${blocked}` : "waiting to read X"}; ` : "";
+        say(runId, `${xNow}${sourceNames(sourcesOf("fast", search))}: starting`);
         await next(runtime, { phase: "read", blocked, startedAt: now, since, night, retry }, context);
       }),
       read: guarded<Extract<Checkpoint, { phase: "read" }>>(async (task, runtime, context) => {
@@ -447,10 +459,10 @@ export function topicSearchTask(
         const cp = task.state.checkpoint;
         const window = windowOf(cp);
         const part = cp.part ?? null;
-        const reads = sourcesOf(part);
         const dir = await deps.runDir(runId);
         const search = await deps.loadSearch(brief.searchId);
         if (!search) return skip(runtime, "the topic search is gone", context, part ?? undefined);
+        const reads = sourcesOf(part, search);
         // The run's line says where each source is: "reading X: ...; arXiv done: ...; Hugging Face done: ...".
         const line = {
           x: cp.blocked ? `not reading X: ${cp.blocked}` : "waiting to read X",
@@ -462,10 +474,10 @@ export function topicSearchTask(
           say(
             runId,
             part === "fast"
-              ? `${papersLine()}; ${sourceNames(sourcesOfPace("slow"))}: ${READ_LATER}`
+              ? `${papersLine()}; ${sourceNames(sourcesOf("slow", search))}: ${READ_LATER}`
               : part === "slow"
                 ? `first part delivered; ${line.x}`
-                : `${line.x}; ${papersLine()}`,
+                : [reads.includes("x") ? line.x : "", papersLine()].filter(Boolean).join("; "),
           );
         const arxivWork = reads.includes("arxiv")
           ? readArxivOf(search, brief, window, dir, runtime.signal, (read) => {
@@ -480,8 +492,8 @@ export function topicSearchTask(
             })
           : Promise.resolve(null);
         const xWork = (async () => {
-          // A first part leaves X to the slow part, and writes nothing for it.
-          if (!reads.includes("x")) return unread("unavailable", READ_LATER);
+          // A first part leaves X to the slow part, and writes nothing for it; nor does a topic that does not read X.
+          if (!reads.includes("x")) return unread("unavailable", part === "fast" ? READ_LATER : NOT_A_SOURCE);
           let read = await deps.loadRead(dir);
           if (!read) {
             if (cp.blocked) read = unread("unavailable", cp.blocked);
@@ -524,7 +536,9 @@ export function topicSearchTask(
             ? `read ${papers}; building the first part`
             : part === "slow"
               ? `read ${x.posts.length} posts (${x.status}); adding them to the first part`
-              : `read ${x.posts.length} posts (${x.status}) and ${papers}; building the result`,
+              : reads.includes("x")
+                ? `read ${x.posts.length} posts (${x.status}) and ${papers}; building the result`
+                : `read ${papers}; building the result`,
         );
         await next(runtime, { phase: "build", ...window }, context);
       }),
@@ -541,7 +555,11 @@ export function topicSearchTask(
         if (!search) return skip(runtime, "the topic search is gone", context, part ?? undefined);
         const dir = await deps.runDir(runId);
         const x =
-          part === "fast" ? unread("unavailable", READ_LATER) : ((await deps.loadRead(dir)) ?? unread("unavailable", "what was read is missing"));
+          part === "fast"
+            ? unread("unavailable", READ_LATER)
+            : !readsSource(search, "x")
+              ? unread("unavailable", NOT_A_SOURCE)
+              : ((await deps.loadRead(dir)) ?? unread("unavailable", "what was read is missing"));
         let built = await runtime.memo<BuiltTopicSearchResult>(memo("built"), context);
         if (!built) {
           const look = lookOf(brief.kind);
@@ -553,9 +571,10 @@ export function topicSearchTask(
               ? { runId, x: readQueries(search).map((q) => q.id), arxiv: [], huggingface: [], part: "slow" as const }
               : null;
           // On file since the read phase; a run whose read phase came before a paper source moved (or was added) there searches it here.
-          const arxiv = part === "slow" ? [] : (await readArxivOf(search, brief, window, dir, runtime.signal)).found;
-          const huggingface = part === "slow" ? [] : (await readHfOf(search, brief, window, dir, runtime.signal)).found;
-          const later = part === "fast" ? sourcesOfPace("slow") : undefined;
+          const arxiv = part === "slow" || !readsSource(search, "arxiv") ? [] : (await readArxivOf(search, brief, window, dir, runtime.signal)).found;
+          const huggingface =
+            part === "slow" || !readsSource(search, "huggingface") ? [] : (await readHfOf(search, brief, window, dir, runtime.signal)).found;
+          const later = part === "fast" ? sourcesOf("slow", search) : undefined;
           const made = await build({
             topic: search,
             kind: look,
@@ -634,7 +653,7 @@ export function topicSearchTask(
           say(
             runId,
             `first part ${result.unjudged ? `not judged (${result.unjudged} candidates kept for the next run)` : `delivered: ${result.itemCount} items`}; ` +
-              `waiting to read ${sourceNames(sourcesOfPace("slow"))}`,
+              `waiting to read ${sourceNames(sourcesOf("slow", search))}`,
           );
           return next(runtime, { phase: "later", ...windowOf(cp) }, context);
         }

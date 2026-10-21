@@ -3,13 +3,15 @@
 // order and the failure cases are tested without a disk.
 //
 // Apply: the concern first, because the config names it; then the config; then
-// the first run is handed off. No reading topic is made: a search's results are
+// a study's seeds go into its label file, each pinned (docs/info/91 起草与种子);
+// then the first run is handed off. No reading topic is made: a search's results are
 // the nightly brief (info/issue), which sits on no reading shelf. A concern that could not be written leaves the
 // config with no concern rather than no config: the search is what the reader
 // asked for, and the concern can be pointed at later.
 
 import type { CreateStatementInput, Statement } from "../../memory";
-import type { TopicSearchProposalCardData } from "./cards";
+import type { ProposedSeed, TopicSearchProposalCardData } from "./cards";
+import { newTopicLabelId, type TopicLabel } from "./labels";
 import { newTopicSearchId, stopTopicSearch } from "./topic-searches";
 import type { TopicSearch } from "./types";
 
@@ -64,9 +66,35 @@ export interface ApplyPorts {
   concern: ConcernPorts;
   load(): Promise<TopicSearch[]>;
   put(search: TopicSearch): Promise<unknown>;
+  /** Append to the search's label file (labels.ts addTopicLabels). */
+  addLabels(searchId: string, labels: readonly TopicLabel[]): Promise<unknown>;
   dispatchFirstRun(search: TopicSearch): Promise<void>;
   now(): number;
   random?(): number;
+}
+
+/**
+ * The labels a study's seeds start its label file with: for each, `yes` and
+ * then `pinned` at the same moment, so `pinned` is the one in force
+ * (labels.ts latestLabels) and both are on record. The reader's words are the
+ * reason; no brief exists yet.
+ */
+export function seedLabels(search: TopicSearch, seeds: readonly ProposedSeed[], at: number, random?: () => number): TopicLabel[] {
+  return seeds.flatMap((seed) =>
+    (["yes", "pinned"] as const).map((label) => ({
+      id: newTopicLabelId(random),
+      searchId: search.id,
+      item: seed.key,
+      title: seed.title,
+      label,
+      reason: seed.said,
+      source: "seed" as const,
+      evidence: seed.evidence ?? "",
+      at,
+      brief: null,
+      criteria: search.revision,
+    })),
+  );
 }
 
 export type ApplyResult = { ok: true; search: TopicSearch } | { ok: false };
@@ -99,6 +127,10 @@ export async function applyTopicSearchProposal(
     answers: [...(before?.answers ?? []), ...card.answers.map((a) => ({ ...a, at: now }))],
     status: "active",
     ...(card.once ? { once: true } : {}),
+    ...(card.sources?.length ? { sources: [...card.sources] } : {}),
+    ...(card.once && card.seeds?.length
+      ? { seeds: card.seeds.map(({ key, title, said, at }) => ({ key, title, said, at })) }
+      : {}),
     revision: (before?.revision ?? 0) + 1,
     createdAt: before?.createdAt ?? now,
     lastRunAt: before?.lastRunAt ?? null,
@@ -107,6 +139,14 @@ export async function applyTopicSearchProposal(
     await ports.put(search);
   } catch {
     return { ok: false };
+  }
+  // Before the run, so its first brief can pin them. A label that could not be written leaves the seeds on the config.
+  if (search.seeds?.length) {
+    try {
+      await ports.addLabels(search.id, seedLabels(search, card.seeds ?? [], now, ports.random));
+    } catch (e) {
+      console.warn("the study's seed labels could not be written", e);
+    }
   }
   try {
     await ports.dispatchFirstRun(search);

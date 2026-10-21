@@ -16,7 +16,7 @@ import type { RunAbout, RunDescriber, RunView } from "../../legion/status/regist
 import type { SourceHealth } from "../sources/engine";
 import { X_SIGN_IN_URL } from "../sources/x-search";
 import { paperProgressLine, type ArxivRead } from "./arxiv-read";
-import { SOURCE_NAME, sourceNames, sourcesOfPace, splitsFirstLook, type RunSource } from "./pace";
+import { readsSource, SOURCE_NAME, sourceNames, sourcesOfPace, splitsFirstLook, type RunSource } from "./pace";
 import type { SourceHealthEntry, SourceHealthFile } from "./build-result";
 import type { XHaltRecord } from "./halt";
 import type { TopicSearchResult } from "./result-types";
@@ -143,7 +143,7 @@ function claimEntries(claim: CollectorView, searchId: string) {
 const startOf = (run: Run) => run.startedAt ?? run.createdAt;
 const unfinished = (run: Run) => run.state === "pending" || run.state === "running";
 
-export function resultLine(run: Run, brief: TopicSearchBrief, results: readonly TopicSearchResult[]): string {
+export function resultLine(run: Run, brief: TopicSearchBrief, results: readonly TopicSearchResult[], search?: TopicSearch): string {
   const open = unfinished(run);
   if (brief.kind === "retry") {
     for (const r of results) {
@@ -158,7 +158,7 @@ export function resultLine(run: Run, brief: TopicSearchBrief, results: readonly 
   const mine = results
     .filter((r) => r.kind === brief.kind && (file ? r.id === file : r.createdAt >= startOf(run)))
     .sort((a, b) => b.createdAt - a.createdAt)[0];
-  const split = splitsFirstLook(brief.kind);
+  const split = splitsFirstLook(brief.kind, search);
   if (!mine) {
     if (!open) return "Result: no result file on this device (yet).";
     return split
@@ -181,9 +181,15 @@ export function resultLine(run: Run, brief: TopicSearchBrief, results: readonly 
   return `Result: ${items(own)}${retried}.`;
 }
 
-export function issueLine(run: Run, brief: TopicSearchBrief, issues: readonly ShelfIssue[], results: readonly TopicSearchResult[]): string {
+export function issueLine(
+  run: Run,
+  brief: TopicSearchBrief,
+  issues: readonly ShelfIssue[],
+  results: readonly TopicSearchResult[],
+  search?: TopicSearch,
+): string {
   const open = unfinished(run);
-  if (splitsFirstLook(brief.kind)) {
+  if (splitsFirstLook(brief.kind, search)) {
     // Two issues: the first part's, and what the slow part added (keyed like a retry's).
     const first = issues.find((i) => i.key === `first:${brief.searchId}`);
     const later = issues.find((i) => i.key === `first:${brief.searchId}#${run.id}`);
@@ -247,10 +253,11 @@ export function topicSearchDescriber(deps: TopicSearchStatusDeps): RunDescriber 
       const search = (await deps.searches()).find((s) => s.id === brief.searchId);
       const open = unfinished(run);
       const lines: string[] = [];
-      const split = splitsFirstLook(brief.kind);
+      const split = splitsFirstLook(brief.kind, search);
       if (view.here) {
         const steps = await deps.steps(run.id);
         if (steps?.length) lines.push(`X: ${tallySteps(steps).line()}.`);
+        else if (search && !readsSource(search, "x")) lines.push("X: not read; the topic leaves it out of its sources.");
         else if (run.state === "running") lines.push(split ? "X: not started; it is read after the first part is delivered." : "X: nothing read yet on this device.");
         const health = await deps.runHealth(run.id);
         // A split first look's slow part rewrites the run's health with X alone; the paper sources' are then on their read files.
@@ -275,8 +282,8 @@ export function topicSearchDescriber(deps: TopicSearchStatusDeps): RunDescriber 
         }
       }
       const results = search ? await deps.results(brief.searchId) : [];
-      lines.push(resultLine(run, brief, results));
-      lines.push(issueLine(run, brief, await deps.issues(), results));
+      lines.push(resultLine(run, brief, results, search));
+      lines.push(issueLine(run, brief, await deps.issues(), results, search));
       const mine = view.claims.find((c) => c.deviceId === view.deviceId);
       const localSide = view.here || (!run.claimant && !!mine?.capabilities.includes(WEBVIEW_FETCH));
       if (open || run.state === "failed" || aboutTopicSearchRun(run, []).skipped) {

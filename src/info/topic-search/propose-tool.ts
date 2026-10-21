@@ -15,8 +15,10 @@ import type { DeviceClaim } from "../../legion/claim";
 import { messageAnchor, type Statement } from "../../memory";
 import { asArray, asString, asStrings, isObject } from "../../platform/std/json";
 import { t } from "../../i18n";
-import type { TopicSearchProposalCardData } from "./cards";
+import type { StudySeedsCardData, TopicSearchProposalCardData } from "./cards";
 import { firstRunEta } from "./eta";
+import { ALL_SOURCES, sourceNames, topicSources, type RunSource } from "./pace";
+import { pickSeeds, seedRefs } from "./seeds";
 import {
   activeNameTaken,
   numberQueries,
@@ -41,8 +43,19 @@ export interface ProposeToolDeps {
   searches(): Promise<TopicSearch[]>;
   statements(): Promise<readonly Statement[]>;
   claims(): Promise<readonly DeviceClaim[]>;
+  /** The seed cards find_seed_paper drew in this conversation, oldest first, read when the tool is called. */
+  seedCards(): readonly StudySeedsCardData[];
   now(): number;
   raiseCard(card: TopicSearchProposalCardData): void;
+}
+
+/** The sources a draft names, in run order; undefined for every source (what an absent field means). */
+export function draftSources(raw: unknown, academic: boolean): RunSource[] | undefined {
+  const named = asStrings(raw).map((s) => s.trim().toLowerCase().replace(/[\s_-]+/g, ""));
+  const picked = ALL_SOURCES.filter((s) => named.includes(s));
+  // An academic topic left without a list reads the paper sources (docs/info/91 来源开关).
+  const sources = picked.length > 0 ? picked : academic ? ALL_SOURCES.filter((s) => s !== "x") : [];
+  return sources.length > 0 && sources.length < ALL_SOURCES.length ? sources : undefined;
 }
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
@@ -119,7 +132,8 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
     gate: "card",
     description:
       "Propose a topic search once you and the reader have talked it through: a topic followed on " +
-      "X, arXiv, Hugging Face's paper search and GitHub, with a first overview and then what is new each day. It draws a card " +
+      "X, arXiv, Hugging Face's paper search and GitHub, with a first overview and then what is new each day; " +
+      "with once, a study: one brief, revised in conversation until the reader ends it. It draws a card " +
       "and files nothing; the reader applies it. Call it again with the changes when they correct " +
       "the draft. The card shows name, scope, subtopics, want/avoid, your judgements and the " +
       "topic it files into; the queries and anchors are never shown.",
@@ -156,7 +170,26 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
       }),
       once: Type.Optional(
         Type.Boolean({
-          description: "True when the reader wants one look only, not a daily follow: it stops after the first result.",
+          description:
+            "True when the reader wants to look into it once, not follow it daily: a study, one brief revised " +
+            "in conversation, which goes on until the reader ends it.",
+        }),
+      ),
+      academic: Type.Optional(
+        Type.Boolean({ description: "True when you judge the topic academic (research papers are what it is about)." }),
+      ),
+      sources: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "The sources to read, of x, arxiv, huggingface. Leave out to read all; an academic topic left out reads " +
+            "arxiv and huggingface, not x. The card says so, so the reader can correct it.",
+        }),
+      ),
+      seeds: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Only with once: the keys (from find_seed_paper) of papers the reader confirmed in words. Ones they " +
+            "confirmed on the seed card are taken without being listed; ones they marked 'not it' are never taken.",
         }),
       ),
     }),
@@ -184,6 +217,10 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
         );
       }
       const concern = resolveConcern(asString(args.existingConcern), await deps.statements());
+      const once = args.once === true;
+      const academic = args.academic === true;
+      const sources = draftSources(args.sources, academic);
+      const picked = once ? pickSeeds(deps.seedCards(), seedRefs(args.seeds), deps.now()) : null;
       const card: TopicSearchProposalCardData = {
         kind: "topic-search-proposal",
         threadId: deps.threadId,
@@ -195,7 +232,10 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
         avoid: asStrings(args.avoid),
         judgments: asStrings(args.judgments),
         eta: firstRunEta(await deps.claims(), deps.now()),
-        ...(args.once === true ? { once: true } : {}),
+        ...(once ? { once: true } : {}),
+        ...(sources ? { sources } : {}),
+        ...(academic ? { academic: true } : {}),
+        ...(picked?.seeds.length ? { seeds: picked.seeds } : {}),
         anchors: asStrings(args.anchors),
         queries,
         answers: draftAnswers(args.answers),
@@ -208,11 +248,18 @@ export function buildProposeTopicSearchTool(deps: ProposeToolDeps): AgentTool {
       };
       deps.raiseCard(card);
       const unpicked = subtopics.filter((s) => !s.picked).length;
+      const seedNotes = [
+        ...(picked?.seeds.length ? [`Seeds on the card: ${picked.seeds.map((s) => `${s.title} (${s.key})`).join("; ")}.`] : []),
+        ...(picked?.refused.length ? [`Not taken, the reader marked them not it: ${picked.refused.join(", ")}.`] : []),
+        ...(picked?.unknown.length ? [`Not taken, no seed card holds them: ${picked.unknown.join(", ")}.`] : []),
+        ...(!once && seedRefs(args.seeds).length ? ["Seeds are only for a study (once); none were taken."] : []),
+      ];
       return {
         text:
           `Drew the card for "${name}": ${subtopics.length - unpicked} picked subtopics, ${queries.length} ` +
-          `queries${concern ? `, hung on concern ${concern.id}` : ""}${card.once ? ", once only" : ""}. ` +
-          `Nothing is filed until the reader applies it.`,
+          `queries${concern ? `, hung on concern ${concern.id}` : ""}${card.once ? ", a study" : ""}; ` +
+          `reads ${sourceNames(topicSources(card))}. ` +
+          `${seedNotes.length ? `${seedNotes.join(" ")} ` : ""}Nothing is filed until the reader applies it.`,
         receipt: {
           label: t("info.tool.draftedTopicSearchLabel"),
           summary: t("info.tool.draftedTopicSearchSummary", { name, scope }),

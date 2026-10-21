@@ -32,14 +32,40 @@ export function sourcesOfPace(pace: Pace): RunSource[] {
   return (Object.keys(SOURCE_PACE) as RunSource[]).filter((s) => SOURCE_PACE[s] === pace);
 }
 
-/** The sources a part reads; every source when the run is not split (null). */
-export function sourcesOf(part: RunPart | null): RunSource[] {
-  return part ? sourcesOfPace(part) : (Object.keys(SOURCE_PACE) as RunSource[]);
+/** Every source, in the order runs name them. */
+export const ALL_SOURCES: readonly RunSource[] = Object.keys(SOURCE_PACE) as RunSource[];
+
+/** What a topic says it reads (docs/info/91 来源开关); its config is read through this alone. */
+export interface TopicSources {
+  sources?: readonly RunSource[];
 }
 
-/** Whether a run of this kind is a split first look. */
-export function splitsFirstLook(kind: string): boolean {
-  return SPLIT_FIRST_LOOK && kind === "first";
+/** The sources a topic's runs read: those its config names, every source for a config without the field. */
+export function topicSources(topic: TopicSources | null | undefined): RunSource[] {
+  if (!topic?.sources) return [...ALL_SOURCES];
+  return ALL_SOURCES.filter((s) => topic.sources!.includes(s));
+}
+
+/** Whether a topic's runs read this source. */
+export function readsSource(topic: TopicSources | null | undefined, source: RunSource): boolean {
+  return topicSources(topic).includes(source);
+}
+
+/** The sources a part reads, of those the topic reads; all of the topic's when the run is not split (null). */
+export function sourcesOf(part: RunPart | null, topic?: TopicSources | null): RunSource[] {
+  const own = topicSources(topic);
+  return part ? sourcesOfPace(part).filter((s) => own.includes(s)) : own;
+}
+
+/**
+ * Whether a run of this kind is a split first look. Only a topic that reads
+ * both a fast and a slow source is split; one without X reads in one go.
+ * Without the topic (a caller that has none at hand), every source is assumed.
+ */
+export function splitsFirstLook(kind: string, topic?: TopicSources | null): boolean {
+  if (!SPLIT_FIRST_LOOK || kind !== "first") return false;
+  const own = topicSources(topic);
+  return own.some((s) => SOURCE_PACE[s] === "fast") && own.some((s) => SOURCE_PACE[s] === "slow");
 }
 
 /** "X", "X and Bluesky", "X, Bluesky and Reddit". */

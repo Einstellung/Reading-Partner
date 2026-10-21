@@ -11,6 +11,7 @@ import { t } from "../../i18n";
 import type { ApplyResult } from "./apply";
 import type { TopicSearchProposalCardData } from "./cards";
 import { FIRST_LOOK_IN_TWO_PARTS } from "./guidance";
+import { sourceNames, splitsFirstLook, topicSources } from "./pace";
 
 export interface ConfirmToolDeps {
   /** The newest drafting card in this conversation, or null when it has none. */
@@ -59,11 +60,16 @@ export function buildConfirmTopicSearchTool(deps: ConfirmToolDeps): AgentTool {
           receipt: null,
         };
       }
+      const { search } = result;
+      const arrives = splitsFirstLook("first", search)
+        ? FIRST_LOOK_IN_TWO_PARTS
+        : `The first look reads ${sourceNames(topicSources(search))} in one go.`;
       return {
         text:
-          `Applied "${result.search.name}" (id: ${result.search.id}); its first run is sent.` +
-          `${result.search.once ? " Just this once: it stops after the first result." : ""} ` +
-          `${FIRST_LOOK_IN_TWO_PARTS} Tell the reader in one or two lines, this included.`,
+          `Applied "${search.name}" (id: ${search.id}); its first run is sent.` +
+          `${search.once ? " A study: one brief, revised in conversation; it goes on until the reader ends it." : ""}` +
+          `${search.seeds?.length ? ` Its ${search.seeds.length} seed paper${search.seeds.length === 1 ? " is" : "s are"} pinned first.` : ""} ` +
+          `${arrives} Tell the reader in one or two lines, this included.`,
         receipt: { label: t("info.tool.confirmedTopicSearch"), summary: result.search.name },
       };
     },

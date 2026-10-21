@@ -8,7 +8,7 @@
 // search hangs on one, so following it again can find it.
 
 import type { Statement } from "../../memory";
-import { sourceNames, sourcesOfPace, SPLIT_FIRST_LOOK } from "./pace";
+import { ALL_SOURCES, sourceNames, sourcesOfPace, SPLIT_FIRST_LOOK, topicSources } from "./pace";
 import { X_READ_RULE } from "./retry";
 import type { TopicSearch } from "./types";
 
@@ -42,7 +42,9 @@ export function topicSearchGuidance({ searches, statements, xPaused = null }: Gu
     (s) => s.kind === "concern" && !s.supersededBy && s.text.trim() !== "" && (!s.lapsed || stoppedConcerns.has(s.id)),
   );
   const roster = searches.map((s) => {
-    return `- ${s.name} (id: ${s.id}, ${s.status}) — ${line(s.scope)}`;
+    const reads = topicSources(s);
+    const tags = [s.status, ...(s.once ? ["a study"] : []), ...(reads.length < ALL_SOURCES.length ? [`reads ${sourceNames(reads)}`] : [])];
+    return `- ${s.name} (id: ${s.id}, ${tags.join(", ")}) — ${line(s.scope)}`;
   });
   return [
     "TOPIC SEARCHES",
@@ -76,10 +78,19 @@ export function topicSearchGuidance({ searches, statements, xPaused = null }: Gu
       "  files nothing until they apply it; if they correct it in words, propose again.",
       "- When they say yes to the card in words (\"ok\", \"好\", \"go ahead\"), call",
       "  confirm_topic_search: it does what the card's Follow button does.",
-      "- When they want one look only, not a daily follow (\"just this once\", \"只看这一次\"),",
-      "  propose with once: the first overview comes, then it stops by itself.",
+      "- When they want to look into it once, not follow it daily (\"just this once\", \"只看这一次\"),",
+      "  propose with once: a study. One brief comes, you revise it together in conversation, and it",
+      "  goes on until they end it; nothing runs nightly.",
+      "- Judge whether the topic is academic (research papers are what it is about). For an academic",
+      "  topic propose with academic: true and sources arxiv and huggingface, without x; the card says",
+      "  X is not read, so they can correct it. Otherwise leave sources out: every source is read.",
+      "- For a study of an academic topic, ask once whether they already have a paper or two they know",
+      "  is on target. Look each name up with find_seed_paper, one call per name. Have them confirm each",
+      "  candidate (the card's buttons or in words) and pass the keys they confirmed as seeds. Never",
+      "  present a candidate as their paper before they confirm it, and say nothing about it beyond what",
+      "  the card shows. When nothing is found, say so and ask for a link or the fuller title.",
       ...(FIRST_LOOK_IN_TWO_PARTS
-        ? [`- ${FIRST_LOOK_IN_TWO_PARTS} Say so in a line when you propose a search and when its first run starts.`]
+        ? [`- ${FIRST_LOOK_IN_TWO_PARTS} Say so in a line when you propose a search that reads X and when its first run starts.`]
         : []),
       "- Name an existing concern above that says the same thing as existingConcern, and a stopped",
       "  search they want back as searchId.",
