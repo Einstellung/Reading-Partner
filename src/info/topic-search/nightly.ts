@@ -9,6 +9,7 @@
 //
 // Pure; the timer and the files are runs-live.ts's.
 
+import { nightlyTopicSearches } from "./topic-searches";
 import type { TopicSearch } from "./types";
 import { localDay } from "./x-progress";
 
@@ -74,13 +75,13 @@ export interface NightConditions {
 
 export type NightPlan = { dispatch: TopicSearch[] } | { wait: string };
 
-/** The night's increments, one per active search in the order they were made, or why none. */
+/** The night's increments, one per active search that is not a study, in the order they were made, or why none. */
 export function planNight(c: NightConditions): NightPlan {
   if (!c.collecting) return { wait: "not the collector" };
   if (!c.webview) return { wait: "no webview fetch here" };
   if (c.gate) return { wait: c.gate };
   if (!c.sessionValid) return { wait: "no X session" };
-  const active = c.searches.filter((s) => s.status === "active").sort((a, b) => a.createdAt - b.createdAt);
+  const active = nightlyTopicSearches(c.searches).sort((a, b) => a.createdAt - b.createdAt);
   if (active.length === 0) return { wait: "no active topic search" };
   return { dispatch: active };
 }

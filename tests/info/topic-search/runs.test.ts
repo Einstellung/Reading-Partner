@@ -120,6 +120,12 @@ test("the night plan asks every condition and orders the searches as they were m
   const c = search({ id: "ts-c", status: "stopped" });
   const plan = planNight({ ...base, searches: [a, b, c] });
   expect("dispatch" in plan && plan.dispatch.map((s) => s.id)).toEqual(["ts-b", "ts-a"]);
+  // A study stays active but gets no nightly run (docs/info/91); a search with once: false does.
+  const study = search({ id: "ts-d", createdAt: 1, once: true });
+  const notOnce = search({ id: "ts-e", createdAt: 9, once: false });
+  const withStudy = planNight({ ...base, searches: [a, b, c, study, notOnce] });
+  expect("dispatch" in withStudy && withStudy.dispatch.map((s) => s.id)).toEqual(["ts-b", "ts-a", "ts-e"]);
+  expect(planNight({ ...base, searches: [study] })).toEqual({ wait: "no active topic search" });
 });
 
 test("a challenge skips the next night, the one after is tried, a second one pauses until resumed", () => {
@@ -210,7 +216,6 @@ test("briefs, keys and lines", () => {
 interface Trace {
   closed: { searchId: string; kind: string; night: string | null; resultFile: string | null }[];
   ran: number[];
-  stopped: string[];
   locks: { taken: number; released: number };
   built: number;
   opened: number;
@@ -224,14 +229,13 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
 } {
   const fs = memFs();
   const store = createStateStore(fs, "state.json");
-  const trace: Trace = { closed: [], ran: [], stopped: [], locks: { taken: 0, released: 0 }, built: 0, opened: 0, halts: [] };
+  const trace: Trace = { closed: [], ran: [], locks: { taken: 0, released: 0 }, built: 0, opened: 0, halts: [] };
   const { search: given, now: at, ...rest } = over;
   const the = given ?? search();
   const now = at ?? local(2026, 10, 14, 14);
   const deps: TopicSearchRunDeps = {
     loadSearch: async (id) => (id === the.id ? the : null),
     ran: async (_s, at) => void trace.ran.push(at),
-    stopOnce: async (s) => void trace.stopped.push(s.id),
     builder: () => async () => {
       trace.built++;
       return { resultFile: "topic-search-ts-0000aaaa-2026-10-14.json", itemCount: 3, empty: false };
@@ -307,7 +311,6 @@ test("a first run delivers its first part, then reads X and adds to it: the brie
   ]);
   expect(trace.ran.length).toBe(1);
   expect(trace.locks).toEqual({ taken: 1, released: 1 });
-  expect(trace.stopped).toEqual([]);
 });
 
 test("while it reads X a run reports counts off its progress file, so the synced run record says how far it got", async () => {
@@ -319,10 +322,14 @@ test("while it reads X a run reports counts off its progress file, so the synced
   expect(reading[reading.length - 1]).toContain("0 screens read, 0 distinct posts found");
 });
 
-test("a once-only search stops after its first delivery; an empty daily run hands the brief nothing", async () => {
+test("a study's first delivery hands the brief its result and leaves it followed; an empty daily run hands the brief nothing", async () => {
+  // Nothing in the run can stop a study (docs/info/91): it ends only through end_study.
   const once = fakeDeps({ search: search({ once: true }) });
-  await runTask(once.deps, { runId: "r-2", brief: { searchId: "ts-0000aaaa", kind: "first", night: null } });
-  expect(once.trace.stopped).toEqual(["ts-0000aaaa"]);
+  const first = await runTask(once.deps, { runId: "r-2", brief: { searchId: "ts-0000aaaa", kind: "first", night: null } });
+  expect((first as { result: TopicSearchRunResult }).result.status).toBe("delivered");
+  expect(once.trace.ran.length).toBe(1);
+  // Its X part (a study reading X splits like any first look) is told after, and the search is still there to read it.
+  expect(once.trace.closed.map((c) => c.kind)).toEqual(["first", "retry"]);
 
   const empty: BuildTopicSearchResult = async () => ({ resultFile: "r.json", itemCount: 0, empty: true });
   const daily = fakeDeps({ builder: () => empty, now: local(2026, 10, 14, 2) });
@@ -375,12 +382,11 @@ test("a retry reads X only for what it reads again, and skips when X is signed o
   const c = await runTask(none.deps, { runId: "r-r3", brief: retry });
   expect((c as { result: TopicSearchRunResult }).result.why).toBe("nothing the first look missed is left to read again");
 
-  // A one-look search stopped itself after its first run; its retry still runs, and does not stop it again.
+  // A one-look search an older build stopped after its first run, or a study the reader ended: its retry still runs.
   const once = fakeDeps({ search: search({ once: true, status: "stopped" }), builder: () => builder, retryPlan: async () => ({ x: ["q1"], arxiv: [] }) });
   const d = await runTask(once.deps, { runId: "r-r4", brief: retry });
   expect((d as { result: TopicSearchRunResult }).result.status).toBe("delivered");
   expect(once.trace.opened).toBe(1);
-  expect(once.trace.stopped).toEqual([]);
 });
 
 // --- arXiv beside X --------------------------------------------------------------
@@ -734,13 +740,15 @@ test("a once-only search stopped after its first part still has X read", async (
   const { deps, trace } = fakeDeps({
     builder: () => builder,
     loadSearch: async () => the,
-    stopOnce: async () => void (the = { ...the, status: "stopped" }),
     lane: async () => {
       throw new Error("the browse window crashed");
     },
   });
   await runTask(deps, { runId: "r-s4", brief: FIRST_LOOK });
-  expect(the.status).toBe("stopped");
+  // The delivery of the first part did not stop the study.
+  expect(the.status).toBe("active");
+  // Ended meanwhile (end_study), or stopped by an older build: the first look's X part is still read.
+  the = { ...the, status: "stopped" };
   deps.lane = (work) => work();
   const again = await runTask(deps, { runId: "r-s4", brief: FIRST_LOOK });
   expect((again as { result: TopicSearchRunResult }).result.status).toBe("delivered");

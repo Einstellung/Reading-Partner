@@ -252,6 +252,42 @@ export interface TopicSearchResult {
   unjudged?: ResultUnjudged;
   /** Runs whose waiting reads this file's run took in and judged (`pendingJudging`). Absent when none. */
   judged?: string[];
+  /**
+   * A study's file only (docs/info/91 数据): its versions, the first look's
+   * being version 1. Absent on every other result.
+   */
+  study?: { versions: StudyVersion[] };
+  /** Not in the file: the study version this is a view of (`versionPart` sets it). */
+  studyVersion?: StudyVersion;
+}
+
+/** Where an item sits in a version of a study's brief. */
+export type StudyPlace = "pinned" | "main" | "note";
+
+/** One version of a study's brief: a view of the study's one result file (docs/info/91 数据). */
+export interface StudyVersion {
+  /** 1, 2, 3 … */
+  n: number;
+  at: number;
+  /** The run that made it: the first look's for version 1, an update's after. */
+  runId: string;
+  /** The version it was revised from; null for the first. */
+  base: number | null;
+  /**
+   * Its items in book order (pinned, main, notes). `item` is the file's item
+   * id ("E7"): a rewritten item is a new id under the same key, so each
+   * version names the text it shows. `tag` is what changed in this version.
+   */
+  entries: { item: string; place: StudyPlace; tag: "new" | "rewritten" | "demoted" | "pinned" | null }[];
+  /** Items of the base version not in this one, by key; `line` is the study line ("L2") that took them out. */
+  removed: { key: string; title: string; line: string | null }[];
+  /** What changed from the base, by item key, each with the line that made it (null: the model gave none). */
+  changes: { kind: "add" | "remove" | "demote" | "rewrite" | "pin"; item: string; line: string | null }[];
+  /** The confirmed study lines ("L1" …) this version was made from. */
+  lines: string[];
+  /** Search query ids an update could not run (a cooldown), left for the next one. */
+  skipped?: string[];
+  overview: TopicSearchResult["overview"];
 }
 
 /** A run's reads that no model judged, kept for the next run of the topic. */
@@ -267,8 +303,14 @@ export interface ResultUnjudged {
 /** What one retry of a first look, or its slow part, added to its file: its items, its write-up and questions, its own counts. */
 export interface ResultRetry {
   runId: string;
-  /** "slow": the first look's own slow part (pace.ts), under the first run's id. Absent on a retry. */
-  part?: "slow";
+  /**
+   * "slow": the first look's own slow part (pace.ts), under the first run's id.
+   * "update": a study's update run (docs/info/91 更新), with the version it made
+   * in `version`. Absent on a retry.
+   */
+  part?: "slow" | "update";
+  /** The study version an update made. Only with part "update". */
+  version?: number;
   at: number;
   /** Item ids it added, in the file's numbering. */
   items: string[];
@@ -458,6 +500,45 @@ export function firstPart(result: TopicSearchResult): TopicSearchResult {
     items,
     materials: result.materials.filter((m) => used.has(m.id)),
     questions: result.questions.filter((q) => !addedQuestions.has(q.id)),
+  };
+}
+
+/**
+ * Version `n` of a study's brief, as a result of its own (docs/info/91 数据):
+ * the version's items in its book order, the materials they cite, its
+ * overview, and the questions the run that made it asked (the first look's
+ * own for version 1, the update's after). `studyVersion` carries the entries'
+ * places and tags. Null when the file has no such version. Pure.
+ */
+export function versionPart(result: TopicSearchResult, n: number): TopicSearchResult | null {
+  const version = result.study?.versions.find((v) => v.n === n);
+  if (!version) return null;
+  const byId = new Map(result.items.map((i) => [i.id, i]));
+  const items = version.entries.map((e) => byId.get(e.item)).filter((i): i is TopicSearchResultItem => i !== undefined);
+  const used = new Set(items.flatMap((i) => i.materials));
+  // An update's own record; version 1 is the first look's (its slow part, under the same run id, is not an update).
+  const record = (result.retries ?? []).find((r) => r.part === "update" && r.version === n);
+  const own = record ? null : firstPart(result);
+  const questions = record
+    ? result.questions.filter((q) => record.questions.includes(q.id))
+    : (own as TopicSearchResult).questions;
+  return {
+    ...result,
+    createdAt: version.at,
+    empty: items.length === 0,
+    writeup: record ? record.writeup : (own as TopicSearchResult).writeup,
+    overview: version.overview,
+    groups: regroup(items.map((i) => ({ subtopic: i.subtopic, items: [i.id] }))),
+    items,
+    materials: result.materials.filter((m) => used.has(m.id)),
+    questions,
+    stats: record ? record.stats : (own as TopicSearchResult).stats,
+    retries: undefined,
+    awaiting: undefined,
+    firstLook: undefined,
+    citable: undefined,
+    study: undefined,
+    studyVersion: version,
   };
 }
 

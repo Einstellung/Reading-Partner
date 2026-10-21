@@ -1,6 +1,7 @@
 // Assembling an issue of the nightly brief (docs/info/88 「简报书的实现」), and
 // deciding when. Each topic-search run tells this file it has closed; a night's
-// issue is assembled once every active search's run of that night has closed,
+// issue is assembled once the run of that night of every search the night
+// follows (active, and not a study: docs/info/91) has closed,
 // or at the night's end (04:40) from whatever closed by then. A first look
 // (kind "first") gets an issue of its own as soon as it closes, and so does what
 // a retry of it, or its own slow part, added (keyed `first:<search>#<run>`). A
@@ -146,7 +147,7 @@ export interface IssueDeps {
   files: IssueFiles;
   /** The topic searches, for names and subtopic names. */
   topics(): Promise<IssueTopic[]>;
-  /** Ids of the searches still followed: a night waits for each of their runs. */
+  /** Ids of the searches the night follows (active, not a study): a night waits for each of their runs. */
   activeSearchIds(): Promise<string[]>;
   buildEpub(input: SectionedEpubInput): Promise<Uint8Array>;
   /** File the issue in the library as kind "issue", on no topic. Injected (reading or the shell). */

@@ -4,6 +4,8 @@
 // says the reader is following it (docs/soul/48), and nothing below goes into
 // a statement.
 
+import type { RunSource } from "./pace";
+
 export const TOPIC_SEARCHES_VERSION = 1;
 
 export type TopicSearchStatus = "active" | "stopped";
@@ -35,6 +37,17 @@ export interface TopicAnswer {
   at: number;
 }
 
+// A paper the reader said was on the mark, as the program found it.
+export interface TopicSeed {
+  // The link-identity key: "arxiv:<id>" or "doi:<doi>".
+  key: string;
+  // The title the lookup found, never the reader's wording.
+  title: string;
+  // The name the reader gave, word for word.
+  said: string;
+  at: number;
+}
+
 export interface TopicSearch {
   // "ts-" + 8 hex.
   id: string;
@@ -53,9 +66,15 @@ export interface TopicSearch {
   queries: TopicQuery[];
   answers: TopicAnswer[];
   status: TopicSearchStatus;
-  // The reader wanted one look only: the first run's delivery stops the search
-  // and lapses its concern (88 定下的细节).
+  // A study (docs/info/91): one brief, revised in conversation. No nightly
+  // run and no nightly issue; the first delivery does not stop it. It stays
+  // active until the reader ends it (end_study), which stops it the way
+  // stop_topic_search does.
   once?: boolean;
+  // The sources its runs read (91 来源开关). Absent: every source.
+  sources?: RunSource[];
+  // Papers the reader named while drafting and confirmed (91 起草与种子).
+  seeds?: TopicSeed[];
   // Bumped on every write of the record.
   revision: number;
   createdAt: number;

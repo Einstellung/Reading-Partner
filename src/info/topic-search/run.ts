@@ -188,8 +188,6 @@ export interface TopicSearchRunDeps {
   loadSearch(id: string): Promise<TopicSearch | null>;
   /** Record that the search ran, at the moment its read started. */
   ran(search: TopicSearch, at: number): Promise<void>;
-  /** Stop a search the reader wanted to see once (apply.ts stopFollowing). */
-  stopOnce(search: TopicSearch): Promise<void>;
   builder(): BuildTopicSearchResult | null;
   /** The X pages the build may open after a read that used `x` (the daily allowance, the run's or night's ceiling). */
   xPages(about: { kind: "first" | "daily"; night: string; x: XReadResult }): XPageBudget;
@@ -416,7 +414,8 @@ export function topicSearchTask(
         const delivered = splitsFirstLook(brief.kind) ? await deps.loadFirstPart(await deps.runDir(runId)) : null;
         const part = delivered ? ("slow" as const) : undefined;
         if (!search) return skip(runtime, "the topic search is gone", context, part);
-        // A one-look search stops itself after its first run (part); reading again what that run missed is still its first look.
+        // A study ended by the reader, or a one-look search an older build stopped after its
+        // first run (part): reading again what that run missed is still its first look.
         const open = search.status === "active" || ((brief.kind === "retry" || delivered !== null) && search.once === true);
         if (!open) return skip(runtime, "the topic search was stopped", context, part);
         if (delivered) {
@@ -597,10 +596,9 @@ export function topicSearchTask(
         const part = cp.part ?? null;
         const search = await deps.loadSearch(brief.searchId);
         if (!search) return skip(runtime, "the topic search is gone", context, part ?? undefined);
-        if (part !== "slow") {
-          await deps.ran(search, startedAt);
-          if (brief.kind === "first" && search.once) await deps.stopOnce(search);
-        }
+        // A study (`once`) is not stopped by its delivery: it ends only when the reader
+        // ends it (docs/info/91 结束, end_study), which calls apply.ts stopFollowing.
+        if (part !== "slow") await deps.ran(search, startedAt);
         const dir = await deps.runDir(runId);
         const x = part === "fast" ? null : await deps.loadRead(dir);
         const result: TopicSearchRunResult = {

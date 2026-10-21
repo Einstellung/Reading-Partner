@@ -56,6 +56,8 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-labs.json": "the roster is read from disk each time it is wanted — a run, a prompt, a card",
   "info-topic-searches.json": "read from disk each time it is wanted — a door turn, a tool call, an Apply",
   "topic-search-ts-": "a topic search result is written once at the end of a run and read from disk each time it is wanted — the next run's history, the result card",
+  "topic-search-labels-": "a topic's labels are read from disk each time they are wanted — an update's examples, a question's answer — and appended to in one go",
+  "topic-study-": "a study's record is read from disk each time it is wanted — a card, the version list, an update — and written back in one go",
   "info-topic-search-questions.json": "read from disk at the start of a run's write phase and written back at its end, never held between runs",
   "info-shelf.json": "read from disk each time an issue is assembled, and appended to once per issue; nothing holds it between",
   "info-issue-spoken.json": "read from disk each time a brief is opened, to see whether Lumen has said its opening; nothing holds it between",

@@ -3,6 +3,7 @@
 // store.ts next door.
 
 import { isObject } from "../../platform/std/json";
+import { SOURCE_PACE, type RunSource } from "./pace";
 import {
   TOPIC_SEARCHES_VERSION,
   type TopicAnswer,
@@ -29,7 +30,22 @@ export function parseTopicSearchesFile(raw: unknown): ParsedTopicSearches | null
   if (!isObject(raw)) return null;
   const list = raw.searches;
   if (!Array.isArray(list)) return null;
-  const searches: TopicSearch[] = [];
+  const { records, foreign, repaired } = splitRecords(list, validateTopicSearch);
+  return { searches: records, foreign, repaired };
+}
+
+/**
+ * One records-merged list read by this build: the records it understands, the
+ * entries it does not (carried through on the next write: they still carry the
+ * id the merge keys on), and whether an entry with no id or a taken one was
+ * dropped (the bytes are then set aside before the next write). The topic
+ * searches, the labels (labels.ts) and the study lines (study.ts) read this way.
+ */
+export function splitRecords<T>(
+  list: readonly unknown[],
+  validate: (entry: unknown) => T | null,
+): { records: T[]; foreign: unknown[]; repaired: boolean } {
+  const records: T[] = [];
   const foreign: unknown[] = [];
   const seen = new Set<string>();
   let repaired = false;
@@ -40,11 +56,11 @@ export function parseTopicSearchesFile(raw: unknown): ParsedTopicSearches | null
       continue;
     }
     seen.add(id);
-    const search = validateTopicSearch(entry);
-    if (search) searches.push(search);
+    const record = validate(entry);
+    if (record) records.push(record);
     else foreign.push(entry);
   }
-  return { searches, foreign, repaired };
+  return { records, foreign, repaired };
 }
 
 export function entryId(entry: unknown): string {
@@ -73,11 +89,32 @@ export function validateTopicSearch(entry: unknown): TopicSearch | null {
   if (!Array.isArray(entry.subtopics) || !Array.isArray(entry.queries) || !Array.isArray(entry.answers)) {
     return null;
   }
+  if (entry.once !== undefined && typeof entry.once !== "boolean") return null;
+  if (entry.sources !== undefined && !isSources(entry.sources)) return null;
+  if (entry.seeds !== undefined && !(Array.isArray(entry.seeds) && entry.seeds.every(isSeed))) return null;
   return entry as unknown as TopicSearch;
 }
 
+const isSources = (v: unknown): v is RunSource[] => isStrings(v) && v.every((s) => s in SOURCE_PACE);
+
+const isSeed = (v: unknown): boolean =>
+  isObject(v) && typeof v.key === "string" && typeof v.title === "string" && typeof v.said === "string" && typeof v.at === "number";
+
 export function activeTopicSearches(searches: readonly TopicSearch[]): TopicSearch[] {
   return searches.filter((s) => s.status === "active");
+}
+
+/**
+ * The searches the night follows: active and not a study. A study (`once`,
+ * docs/info/91) gets no nightly run, so the night's issue does not wait for one.
+ */
+export function nightlyTopicSearches(searches: readonly TopicSearch[]): TopicSearch[] {
+  return activeTopicSearches(searches).filter((s) => s.once !== true);
+}
+
+/** A study still being revised: `once` and not yet ended (docs/info/91). */
+export function isOpenStudy(search: TopicSearch): boolean {
+  return search.once === true && search.status === "active";
 }
 
 /** The body to write for a list of searches. */

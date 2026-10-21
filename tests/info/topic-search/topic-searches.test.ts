@@ -13,7 +13,9 @@ import {
 import {
   applyTopicSearchUpdate,
   isEmptyUpdate,
+  isOpenStudy,
   newTopicSearchId,
+  nightlyTopicSearches,
   numberQueries,
   numberSubtopics,
   parseTopicSearchesFile,
@@ -78,6 +80,28 @@ test("parse refuses what is not the shape and sets duplicates aside", () => {
   expect(parsed?.searches.map((s) => s.id)).toEqual(["ts-1"]);
   expect(parsed?.repaired).toBe(true);
   expect(newTopicSearchId(() => 0)).toBe("ts-00000000");
+});
+
+test("a study's sources and seeds are read; a malformed one leaves the entry to be carried through", () => {
+  const seed = { key: "arxiv:2501.00001", title: "KeplerAgent", said: "the Kepler one", at: 5 };
+  const study = search("ts-2", { once: true, sources: ["arxiv", "huggingface"], seeds: [seed] });
+  const parsed = parseTopicSearchesFile({
+    searches: [
+      search("ts-1"),
+      study,
+      search("ts-3", { sources: ["x", "mastodon"] as never }),
+      search("ts-4", { seeds: [{ key: "arxiv:1" }] as never }),
+    ],
+  });
+  expect(parsed?.searches.map((s) => s.id)).toEqual(["ts-1", "ts-2"]);
+  expect(parsed?.searches[1]).toMatchObject({ once: true, sources: ["arxiv", "huggingface"], seeds: [seed] });
+  expect(parsed?.foreign.map((e) => (e as { id: string }).id)).toEqual(["ts-3", "ts-4"]);
+  // Old records without the fields still read, and are followed nightly.
+  expect(parsed?.searches[0].sources).toBeUndefined();
+  expect(nightlyTopicSearches(parsed?.searches ?? []).map((s) => s.id)).toEqual(["ts-1"]);
+  expect(isOpenStudy(study)).toBe(true);
+  expect(isOpenStudy(stopTopicSearch(study))).toBe(false);
+  expect(isOpenStudy(search("ts-1"))).toBe(false);
 });
 
 test("drafted subtopics and queries are numbered and weighed by the program", () => {

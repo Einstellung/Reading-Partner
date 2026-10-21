@@ -97,6 +97,7 @@ export type PalaceId =
   | "labId"
   | "boxItemId"
   | "resultId"
+  | "searchId"
   | "fixed";
 
 // What a record does when the thing it points at is deleted (docs/61). The
@@ -1133,6 +1134,42 @@ export const PALACE = [
     deleteWith: "never",
     retention: NEVER,
     note: "written once by the collecting desktop at the end of a run and never changed; the next runs read the last 30 days of them back as the topic's history (dedupe, continuation, the metric questions)",
+  },
+  {
+    kind: "info-topic-search-labels",
+    about: "What the reader said of single items a topic search found: on the mark, off it, borderline or pinned, in their own words.",
+    domain: "info",
+    match: keyed(/^topic-search-labels-(ts-[0-9a-f]+)\.json$/),
+    pathFor: (id: string) => `topic-search-labels-${id}.json`,
+    samples: ["topic-search-labels-ts-0a1b2c3d.json"],
+    id: "searchId",
+    refs: [
+      { kind: "info-topic-searches", via: "searchId", onDelete: "keep" },
+    ],
+    sync: "data",
+    merge: "records",
+    shape: { kind: "array", container: "labels", idField: "id" },
+    deleteWith: "never",
+    retention: NEVER,
+    note: "a topic's gold set (src/info/topic-search/labels.ts, docs/info/91 标签): append-only, records-merged on the label id, a later label of an item outranking an earlier one by time; kept when the search stops; never uploaded from here (docs/north-star/decision-data.md)",
+  },
+  {
+    kind: "info-topic-study",
+    about: "A study's record: the lines the reader confirmed or dropped while talking its brief over, and each return to an older version.",
+    domain: "info",
+    match: keyed(/^topic-study-(ts-[0-9a-f]+)\.json$/),
+    pathFor: (id: string) => `topic-study-${id}.json`,
+    samples: ["topic-study-ts-0a1b2c3d.json"],
+    id: "searchId",
+    refs: [
+      { kind: "info-topic-searches", via: "searchId", onDelete: "keep" },
+    ],
+    sync: "data",
+    merge: "records",
+    shape: { kind: "array", container: "lines", idField: "id" },
+    deleteWith: "never",
+    retention: NEVER,
+    note: "written by any device (src/info/topic-search/study.ts, docs/info/91 数据): lines records-merged on their id; the returns to older versions are a map keyed by the moment beside them, which the records merge settles per key, so two devices' returns both stay",
   },
   {
     kind: "info-shelf",

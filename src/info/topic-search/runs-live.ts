@@ -13,7 +13,6 @@ import { registerProgramTask } from "../../legion/durable/program-task";
 import { appRunner } from "../../legion/runner/runner";
 import { registerWorker } from "../../legion/runner/worker";
 import { registerRunDescriber } from "../../legion/status/registry";
-import { statementStore } from "../../memory";
 import { appData } from "../../platform/app/appdata";
 import { currentDeviceId } from "../../platform/app/device";
 import { keepAwake } from "../../platform/app/keep-awake";
@@ -25,7 +24,6 @@ import { loadSiteSessions, loadSourceHealth, saveSiteSessions, saveSourceHealth 
 import { X_SIGN_IN_URL } from "../sources/x-search";
 import type { XHalt } from "../x/search-page";
 import { resolveRedirect } from "../x/live";
-import { stopFollowing } from "./apply";
 import { SOURCE_HEALTH_FILE, type BuildTopicSearchResult } from "./build-result";
 import { parseResultFile, pendingJudging, RESULT_FILE_PREFIX, type TopicSearchResult } from "./result-types";
 import { topicSearchDescriber, type ShelfIssue, type TopicSearchStatusDeps } from "./run-status";
@@ -137,12 +135,6 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
     loadSearch: async (id) => (await loadTopicSearches()).find((s) => s.id === id) ?? null,
     ran: async (search, at) => {
       await changeTopicSearch(search.id, (s) => ({ ...s, lastRunAt: Math.max(s.lastRunAt ?? 0, at), revision: s.revision + 1 }));
-    },
-    stopOnce: async (search) => {
-      await stopFollowing(search.id, {
-        change: (id, change) => changeTopicSearch(id, change),
-        setLapsed: (id, lapsed) => statementStore.setLapsed(id, lapsed),
-      });
     },
     builder: () => ports.build ?? builder,
     xPages: (about) => permalinkBudget(state, about, () => Date.now()),

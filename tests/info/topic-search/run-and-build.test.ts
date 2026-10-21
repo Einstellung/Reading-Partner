@@ -203,7 +203,6 @@ function world(opts: { papers?: InfoItem[] } = {}) {
   const deps: TopicSearchRunDeps = {
     loadSearch: async (id) => (id === search.id ? search : null),
     ran: async (_s, at) => void (search = { ...search, lastRunAt: Math.max(search.lastRunAt ?? 0, at) }),
-    stopOnce: async () => {},
     builder: () => makeResultBuilder(buildDeps),
     xPages: (about) => permalinkBudget(store, about, () => now),
     // As runs-live.ts does it, on this test's files.
