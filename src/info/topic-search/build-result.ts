@@ -28,7 +28,19 @@ import { doiArxiv, heldDois, poolDois, type DoiLookup } from "./doi-arxiv";
 import { composeResult, deepenableMaterial, EARLIER_LINES, type DeeperReads, type EarlierLine } from "./compose";
 import { abortableSleep, parseJsonReply, retryingModel, type TopicModel } from "./model-io";
 import type { RunSource } from "./pace";
-import { enqueue, loadQueue, metricQuestions, pickQuestions, questionCap, saveQueue, waiting, type NewQuestion } from "./questions";
+import { latestLabels, type TopicLabel } from "./labels";
+import {
+  enqueue,
+  labelQuestion,
+  loadQueue,
+  metricQuestions,
+  pickQuestions,
+  questionCap,
+  saveQueue,
+  waiting,
+  withLabelQuestion,
+  type NewQuestion,
+} from "./questions";
 import {
   fusePool,
   gatherCandidates,
@@ -243,6 +255,8 @@ export interface BuildResultDeps {
    * host). Absent: `language`.
    */
   bookLanguage?(): Promise<string>;
+  /** A search's labels (labels.ts), for a study's label question. Absent: a study asks none. */
+  labels?(searchId: string): Promise<TopicLabel[]>;
   now(): number;
   /** Local date, YYYY-MM-DD. */
   today(): string;
@@ -903,7 +917,13 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       );
     } else writeup = "fallback";
   }
-  const picked = empty ? { asked: [], queue } : pickQuestions(queue, repeats, questionCap(history.length), resultId, now);
+  // A study asks about one item of the brief in one of the places (docs/info/91 「攒着问」).
+  // Labels that cannot be read ask nothing rather than fail the brief.
+  const labelled = topic.once && !empty && deps.labels ? await deps.labels(topic.id).catch(() => null) : null;
+  const labelAsk = labelled ? labelQuestion(items, new Set(latestLabels(labelled).keys()), queue, { version: 1, criteria: topic.revision }) : null;
+  const picked = empty
+    ? { asked: [], queue }
+    : withLabelQuestion(pickQuestions(queue, repeats, questionCap(history.length) - (labelAsk ? 1 : 0), resultId, now), labelAsk, resultId, now);
   stats.modelCalls = modelCalls;
 
   const groups: TopicSearchResult["groups"] = [];

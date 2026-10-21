@@ -12,7 +12,9 @@
 // within its topic's cap, topic-search/questions.ts), at most three an issue,
 // taken a topic at a time. The ones that do not fit go back to their queue as
 // not asked. Quick answers: the model's for its own questions; a metric
-// question's come from its template, worded when spoken.
+// question's come from its template, worded when spoken. A study's label
+// question (topic-search/questions.ts labelQuestion) learns here where its
+// item stands in the book: entry or Note, and its number.
 
 import type { QuestionsFile } from "../topic-search/questions";
 import type { ResultQuestion, TopicSearchResult } from "../topic-search/result-types";
@@ -146,6 +148,18 @@ function firstJsonObject(text: string): Record<string, unknown> | null {
 }
 
 /**
+ * A label question with where its item stands in the planned book: `place`
+ * "main" for an entry, "note" for a Note, "absent" when the plan left it out,
+ * and `rank`, its number in the book (0 when absent). Any other question as it is.
+ */
+export function placedQuestion(plan: IssuePlan, q: OpeningQuestion): OpeningQuestion {
+  if (q.template?.code !== "label-item") return q;
+  const found = openingItems(plan).find((p) => p.resultId === q.resultId && p.item.key === q.template!.params.item);
+  const place = !found ? "absent" : found.n <= plan.entries.length ? "main" : "note";
+  return { ...q, template: { ...q.template, params: { ...q.template.params, place, rank: found?.n ?? 0 } } };
+}
+
+/**
  * The record from the model's reply (null for none, or one that would not
  * parse): numbers past the items dropped, quick answers trimmed and capped.
  */
@@ -171,7 +185,7 @@ export function openingRecord(plan: IssuePlan, questions: readonly OpeningQuesti
             .map((s) => s.trim())
             .filter((s) => s && [...s].length <= QUICK_CHARS)
             .slice(0, QUICK_MAX);
-      return { ...q, quick: replies };
+      return { ...placedQuestion(plan, q), quick: replies };
     }),
   };
 }

@@ -15,8 +15,9 @@ import { parseSearchRead, SEARCH_PAGE_SCRIPT, type XSearchPost } from "../../../
 import { makeResultBuilder as makeBuilder, SOURCE_HEALTH_FILE, type BuildResultDeps, type BuildTopicSearchResultArgs, type SourceHealthFile } from "../../../src/info/topic-search/build-result";
 import type { ArxivSearch } from "../../../src/info/topic-search/arxiv-ladder";
 import { readArxiv } from "../../../src/info/topic-search/arxiv-read";
-import { missingNumbers, numbersIn, type TopicModelCall } from "../../../src/info/topic-search/model-io";
-import { QUESTIONS_FILE, enqueue, metricQuestions, pickQuestions, questionCap, type PendingQuestion } from "../../../src/info/topic-search/questions";
+import { missingNumbers, numbersIn, type TopicModel, type TopicModelCall } from "../../../src/info/topic-search/model-io";
+import { QUESTIONS_FILE, enqueue, labelQuestion, metricQuestions, pickQuestions, questionCap, type PendingQuestion } from "../../../src/info/topic-search/questions";
+import type { TopicLabel } from "../../../src/info/topic-search/labels";
 import { numberPool, parseRerank, type Candidate } from "../../../src/info/topic-search/rank-pool";
 import { firstPart, parseResultFile, pendingJudging, type ResultStats, type TopicSearchResult } from "../../../src/info/topic-search/result-types";
 import { ITEM_FLOOR } from "../../../src/info/topic-search/select";
@@ -664,4 +665,49 @@ test("the write-up asks to read papers in full: one is read whole, one cannot be
   expect(writes[1].tail?.join("\n")).toContain(`Could not be read: ${materials.id}`);
   expect(writes[1].system).not.toContain("you may ask to read");
   expect(result.writeup).toBe("model");
+});
+
+describe("a study asks about one item of its brief (docs/info/91 「攒着问」)", () => {
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  async function build(topic: TopicSearch, labels: TopicLabel[] | null) {
+    const files = memoryFiles();
+    const scripted = deps({ files, log: [], today: "2026-10-14" });
+    // The materials paper scores near the line between entry and Note.
+    const model: TopicModel = async (call) => {
+      const answer = await scripted.model(call);
+      if (call.site !== "rerank") return answer;
+      const parsed = JSON.parse(answer) as { items: { score: number }[] };
+      for (const i of parsed.items) if (i.score === 70) i.score = 47;
+      return JSON.stringify(parsed);
+    };
+    const d = { ...scripted, model };
+    const out = await makeResultBuilder(labels ? { ...d, labels: async () => labels } : d)({
+      topic, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal,
+    });
+    const result = parseResultFile(files.files.get(out.resultFile!)!)!;
+    const queue = JSON.parse(files.files.get(QUESTIONS_FILE)!).topics[topic.id].questions as PendingQuestion[];
+    return { result, queue };
+  }
+  const labelled = (key: string): TopicLabel => ({
+    id: `tl-${key.length.toString(16).padStart(8, "0")}`, searchId: TOPIC.id, item: key, title: key, label: "yes", reason: "it is", source: "line", evidence: "", at: 1, brief: null, criteria: 1,
+  });
+
+  test("a study's result carries it last, from its items, and the queue has it as asked", async () => {
+    const { result, queue } = await build({ ...TOPIC, once: true }, []);
+    const expected = labelQuestion(result.items, new Set(), [], { version: 1, criteria: TOPIC.revision });
+    expect(expected!.about).toEqual(["arxiv:2610.00001"]);
+    const last = result.questions[result.questions.length - 1];
+    expect(last.template).toEqual(expected!.template);
+    expect(result.questions.length).toBeLessThanOrEqual(3);
+    expect(queue.find((q) => q.template?.code === "label-item")?.askedIn).toBe(result.id);
+  });
+
+  test("an item labelled already is not asked about; a search that is not a study asks none", async () => {
+    const first = await build({ ...TOPIC, once: true }, []);
+    const asked = first.result.questions.find((q) => q.template?.code === "label-item")!.template!.params.item as string;
+    const again = await build({ ...TOPIC, once: true }, [labelled(asked)]);
+    expect(again.result.questions.some((q) => q.template?.code === "label-item" && q.template.params.item === asked)).toBe(false);
+    const daily = await build(TOPIC, []);
+    expect(daily.result.questions.some((q) => q.template?.code === "label-item")).toBe(false);
+  });
 });

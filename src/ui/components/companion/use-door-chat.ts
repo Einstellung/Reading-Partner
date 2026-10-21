@@ -56,10 +56,18 @@ import { quotedQuestion } from "../chat/quoted-question";
 import { speakIssueOpening } from "../../../info/issue/opening";
 import {
   ISSUE_ANSWER_OP,
+  ISSUE_LABEL_OP,
   ISSUE_OWN_OP,
+  ISSUE_SKIP_OP,
+  LABEL_ANSWERS,
   cardAwaitingWords,
+  cardLabelled,
+  cardWithWords,
   issueAnswerNote,
+  labelWords,
+  recordLabelAnswer,
   type IssueQuestionCard,
+  type LabelAnswer,
 } from "../../../info/issue/question-card";
 import { headingPage } from "../../../reading/issue";
 import { TOPIC_SEARCH_APPLY_OP, topicSearchAppliedNote } from "../../../info/topic-search/cards";
@@ -310,18 +318,76 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     [key, threadId, setMessages, stamp],
   );
 
+  // A question card redrawn, on screen and in the thread file.
+  const putIssueCard = useCallback(
+    (cardId: string, rowTs: number, next: IssueQuestionCard) => {
+      if (!threadId) return;
+      setMessages((prev) => patchCardPayload(prev, cardId, { ...next }));
+      patchThreadMessage(key, threadId, rowTs, { parts: [toPersistedCardPart(cardId, next)] });
+    },
+    [key, threadId, setMessages],
+  );
+
   // A question of the brief's answered by the line said at `ts`: the card shows
-  // the answer, on screen and in the thread file.
+  // the answer. A label question's reason is written into the topic's labels;
+  // its own words wait on the card to be filed (info/issue/question-card.ts).
   const markAnswered = useCallback(
     (cardId: string, answer: string, ts: number) => {
       if (!threadId) return;
       const found = findCardPart(messagesRef.current, cardId);
       if (!found || found.payload.kind !== "issue-question") return;
-      const patch = { phase: "answered" as const, answer, answerTs: ts };
-      setMessages((prev) => patchCardPayload(prev, cardId, patch));
-      patchThreadMessage(key, threadId, found.ts, { parts: [toPersistedCardPart(cardId, { ...found.payload, ...patch })] });
+      const card = found.payload;
+      if (card.label) {
+        const next = cardWithWords(card, answer, ts);
+        if (!next) return;
+        putIssueCard(cardId, found.ts, next);
+        if (card.phase === "reason") {
+          void recordLabelAnswer(card, "no", answer, { ts, threadId }, Date.now()).catch((e: unknown) =>
+            console.warn("the label's reason could not be written", e),
+          );
+        }
+        return;
+      }
+      putIssueCard(cardId, found.ts, { ...card, phase: "answered", answer, answerTs: ts });
     },
-    [key, threadId, setMessages],
+    [threadId, putIssueCard],
+  );
+
+  // A label question's answer pressed (docs/info/91 「攒着问」): written into the
+  // topic's labels by the app, no turn. On an open card the pressed words are
+  // said as the reader's line; on a card holding own words, those are filed.
+  const labelAnswer = useCallback(
+    (cardId: string, label: LabelAnswer) => {
+      if (!threadId) return;
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "issue-question") return;
+      const card = found.payload;
+      const held = card.phase === "file" ? card.label?.said : undefined;
+      const heldTs = card.label?.saidTs;
+      const ts = held !== undefined && heldTs !== undefined ? heldTs : stamp();
+      const next = cardLabelled(card, label, ts);
+      if (!next) return;
+      const reason = held ?? labelWords(label);
+      if (held === undefined) {
+        setMessages((prev) => [...prev, { role: "user", text: reason, ts }]);
+        appendMessage(key, threadId, { role: "user", text: reason, ts });
+      }
+      putIssueCard(cardId, found.ts, next);
+      void recordLabelAnswer(card, label, reason, { ts, threadId }, Date.now()).catch((e: unknown) =>
+        console.warn("the label could not be written", e),
+      );
+    },
+    [key, threadId, setMessages, stamp, putIssueCard],
+  );
+
+  // No reason given for an item off the mark: the label written already stands.
+  const skipReason = useCallback(
+    (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "issue-question" || found.payload.phase !== "reason") return;
+      putIssueCard(cardId, found.ts, { ...found.payload, phase: "answered" });
+    },
+    [putIssueCard],
   );
 
   const say = useCallback(
@@ -351,11 +417,10 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     (cardId: string) => {
       if (!threadId) return;
       const found = findCardPart(messagesRef.current, cardId);
-      if (!found || found.payload.kind !== "issue-question" || found.payload.phase === "answered") return;
-      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "own" }));
-      patchThreadMessage(key, threadId, found.ts, { parts: [toPersistedCardPart(cardId, { ...found.payload, phase: "own" })] });
+      if (!found || found.payload.kind !== "issue-question" || found.payload.phase !== "open") return;
+      putIssueCard(cardId, found.ts, { ...found.payload, phase: "own" });
     },
-    [key, threadId, setMessages],
+    [threadId, putIssueCard],
   );
 
   const stop = useCallback(() => sessionRef.current?.stop(), []);
@@ -463,6 +528,8 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           else if (action.op === INTAKE_NEW_TOPIC_OP && action.arg) void pickIntakeTopic(cardId, { name: action.arg });
           else if (action.op === ISSUE_ANSWER_OP && action.arg) void say(action.arg, undefined, cardId);
           else if (action.op === ISSUE_OWN_OP) awaitWords(cardId);
+          else if (action.op === ISSUE_LABEL_OP && LABEL_ANSWERS.includes(action.arg as LabelAnswer)) labelAnswer(cardId, action.arg as LabelAnswer);
+          else if (action.op === ISSUE_SKIP_OP) skipReason(cardId);
           break;
         case "local":
           setMessages((prev) => patchCardPayload(prev, cardId, action.patch));
@@ -477,7 +544,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           break;
       }
     },
-    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages, say, awaitWords],
+    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages, say, awaitWords, labelAnswer, skipReason],
   );
 
   return { messages, stickKey, ready: threadId !== null, streaming, send, stop, onCardAction };

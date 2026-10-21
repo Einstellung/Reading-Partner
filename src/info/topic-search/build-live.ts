@@ -33,6 +33,7 @@ import { resolveRedirect } from "../x/live";
 import type { ArxivSearch } from "./arxiv-ladder";
 import type { HfSearch } from "./hf-ladder";
 import { memoArxivFetchText } from "./fetch-memo";
+import { loadTopicLabels } from "./labels";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResult } from "./build-result";
 import { openOriginal } from "./open-link";
 import { localDay } from "./windows";
@@ -113,6 +114,7 @@ export const liveResultDeps: BuildResultDeps = {
   profile: async () =>
     (await listStatements()).filter((s) => s.kind === "profile" && !s.supersededBy).map((s) => s.text),
   // Reader's own words first: they beat what dream concluded (docs/48).
+  labels: (searchId) => loadTopicLabels(searchId),
   known: async () => standingStatements(await listStatements(), "known").map((s) => s.text.trim()),
   language: async () => languageInstruction((await resolveModel("prep")).aiLanguage),
   bookLanguage: async () => bookLanguageInstruction((await resolveModel("prep")).aiLanguage),

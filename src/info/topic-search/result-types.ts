@@ -175,8 +175,11 @@ export interface ResultQuestion {
   id: string;
   text: string;
   source: "model" | "metric";
-  /** For a metric question: which template and its values, so a page can word it in the reader's language. */
-  template: { code: "subtopic-quiet" | "anchor-miss" | "avoid-blocks"; params: Record<string, string | number> } | null;
+  /**
+   * For a metric question: which template and its values, so a page can word it in the reader's language.
+   * "label-item" is a study's question about one item (questions.ts labelQuestion).
+   */
+  template: { code: "subtopic-quiet" | "anchor-miss" | "avoid-blocks" | "label-item"; params: Record<string, string | number> } | null;
 }
 
 export interface ResultStats {

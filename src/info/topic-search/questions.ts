@@ -16,9 +16,15 @@
 // the search id like info-topic-searches.json beside it: only the collecting
 // desktop writes it, but the next run may be claimed by another desktop, and
 // what was asked must follow the topic there, not stay on one machine.
+//
+// A study (a search with `once`, docs/info/91 「攒着问」) also asks about one
+// item of each version: is it on the mark? The answer goes into the topic's
+// labels (labels.ts), not the queue's write-back. It takes one of the result's
+// places, and it is made fresh for the version it is about: it never waits in
+// the queue for a later result.
 
 import { headlineTokens } from "../rank/dedupe";
-import type { ResultQuestion, ResultStats, TopicSearchResult } from "./result-types";
+import type { ResultQuestion, ResultStats, TopicSearchResult, TopicSearchResultItem } from "./result-types";
 import type { TopicSearch } from "./types";
 
 export const QUESTIONS_FILE = "info-topic-search-questions.json";
@@ -209,10 +215,12 @@ export function questionCap(earlierResults: number): number {
   return earlierResults < EARLY_RESULTS ? QUESTIONS_EARLY : QUESTIONS_LATER;
 }
 
-/** Waiting questions, oldest first, the program's before the model's at the same age. */
+const isLabelQuestion = (q: Pick<PendingQuestion, "template">) => q.template?.code === "label-item";
+
+/** Waiting questions, oldest first, the program's before the model's at the same age. A study's label question never waits. */
 export function waiting(queue: readonly PendingQuestion[]): PendingQuestion[] {
   return queue
-    .filter((q) => q.askedIn === null)
+    .filter((q) => q.askedIn === null && !isLabelQuestion(q))
     .sort((a, b) => a.raisedAt - b.raisedAt || (a.source === b.source ? 0 : a.source === "metric" ? -1 : 1));
 }
 
@@ -233,6 +241,73 @@ export function pickQuestions(
     .filter((q) => !(q.askedIn === null && repeats.has(q.id)))
     .map((q) => (chosen.has(q.id) ? { ...q, askedIn: resultId, askedAt: now } : q));
   return { asked: next.filter((q) => chosen.has(q.id)), queue: next };
+}
+
+/** A label question asks about items scoring in this band (initial values, docs/info/91 「攒着问」). */
+export const LABEL_BAND = { low: 40, high: 60 } as const;
+/**
+ * The score where an item stops being an entry and becomes a Note: the one in
+ * info/issue/plan.ts (NOTE_BELOW), not imported because the issue builds on
+ * this directory, not the other way; a test holds the two equal.
+ */
+export const LABEL_BOUNDARY = 45;
+
+/**
+ * A study's label question for one version of its brief (docs/info/91 「攒着问」),
+ * or null when no item qualifies. The item asked about has no label yet, was
+ * not asked about before, and scores within LABEL_BAND; of those, the one
+ * nearest LABEL_BOUNDARY, earlier in the file on a tie. Whether the reader
+ * wants an item near the line between entry and Note is what the score knows
+ * least, so the answer there tells the most. `version` is the version the
+ * item is in, `criteria` the search's revision when it was made.
+ */
+export function labelQuestion(
+  items: readonly Pick<TopicSearchResultItem, "key" | "title" | "summary" | "score">[],
+  labelled: ReadonlySet<string>,
+  queue: readonly PendingQuestion[],
+  context: { version: number; criteria: number },
+): NewQuestion | null {
+  const asked = new Set(queue.filter((q) => isLabelQuestion(q) && q.askedIn !== null).flatMap((q) => q.about));
+  let best: (typeof items)[number] | null = null;
+  for (const item of items) {
+    if (labelled.has(item.key) || asked.has(item.key)) continue;
+    if (item.score < LABEL_BAND.low || item.score > LABEL_BAND.high) continue;
+    if (!best || Math.abs(item.score - LABEL_BOUNDARY) < Math.abs(best.score - LABEL_BOUNDARY)) best = item;
+  }
+  if (!best) return null;
+  return {
+    text: `Is "${best.title}" on the mark for this topic?`,
+    source: "metric",
+    template: {
+      code: "label-item",
+      params: {
+        item: best.key,
+        title: best.title,
+        line: best.summary ?? "",
+        score: best.score,
+        version: context.version,
+        criteria: context.criteria,
+      },
+    },
+    about: [best.key],
+  };
+}
+
+/**
+ * What goes out with a result once a label question is added to it: the
+ * question last among the result's, and in the queue as asked so the item is
+ * not asked about again (an earlier entry with its id is replaced: one the
+ * issue had no room for and returned).
+ */
+export function withLabelQuestion(
+  picked: { asked: PendingQuestion[]; queue: PendingQuestion[] },
+  question: NewQuestion | null,
+  resultId: string,
+  now: number,
+): { asked: PendingQuestion[]; queue: PendingQuestion[] } {
+  if (!question) return picked;
+  const q: PendingQuestion = { ...question, id: questionId(question.text), raisedAt: now, askedIn: resultId, askedAt: now };
+  return { asked: [...picked.asked, q], queue: [...picked.queue.filter((p) => p.id !== q.id), q] };
 }
 
 export async function loadQueue(io: QuestionsIo, searchId: string): Promise<{ file: QuestionsFile; queue: PendingQuestion[] }> {
