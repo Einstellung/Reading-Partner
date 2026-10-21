@@ -3,7 +3,10 @@
 
 import { expect, test } from "bun:test";
 import {
+  CALL_HIGHLIGHT_MAX,
   HIGHLIGHT_MAX,
+  issueCallPlace,
+  issueContents,
   issueHighlights,
   issueTurnNote,
   pageOfQuote,
@@ -71,4 +74,62 @@ test("the note says where the reader is, what they marked and where the quote is
   expect(bare).toContain('the brief "B" open.');
   expect(bare).toContain("They have marked nothing in it.");
   expect(bare).not.toContain("quoted");
+});
+
+// --- what a voice call's front is told (docs/info/88 「简报的对话」) ---------
+
+const PAGES = {
+  pages: [
+    "Contents\nOpen weights for all\nChips get cheaper\nNotes",
+    "Open weights for all\nThe lab released its weights.",
+    "Chips get cheaper\nPrices fell again.",
+    "Notes\nA small one: the conference moved online.",
+  ],
+};
+
+test("the contents are the items' headings with the page each stands on", () => {
+  expect(issueContents(PAGES, ["Open weights for all", "Chips get cheaper", "A small one", "Missing"])).toEqual([
+    { heading: "Open weights for all", page: 2 },
+    { heading: "Chips get cheaper", page: 3 },
+    { heading: "A small one", page: 4 },
+    { heading: "Missing", page: null },
+  ]);
+  // Text still being read out: the headings, no pages.
+  expect(issueContents(null, ["Open weights for all"])).toEqual([{ heading: "Open weights for all", page: null }]);
+});
+
+test("the front is told which brief, where the reader is, what they marked and what is in it", () => {
+  const place = issueCallPlace({
+    title: "Brief No. 7",
+    page: 3,
+    pageCount: 4,
+    highlights: [{ page: 3, text: "Prices fell again." }],
+    contents: issueContents(PAGES, ["Open weights for all", "Chips get cheaper"]),
+  });
+  expect(place).toBe(
+    [
+      'They have the brief "Brief No. 7" open in the reader, on page 3 of 4.',
+      "You have its headings, not its text: delegate anything about what an item says.",
+      'They marked: p.3 "Prices fell again.".',
+      "In it: p.2 Open weights for all; p.3 Chips get cheaper.",
+    ].join("\n"),
+  );
+});
+
+test("the front's place moves with the reader and stays short", () => {
+  const base = { title: "B", pageCount: 9, highlights: [], contents: [] };
+  expect(issueCallPlace({ ...base, page: 2 })).toContain("on page 2 of 9.");
+  expect(issueCallPlace({ ...base, page: 7 })).toContain("on page 7 of 9.");
+  const bare = issueCallPlace({ ...base, page: null, pageCount: null });
+  expect(bare).toContain('the brief "B" open in the reader.');
+  expect(bare).not.toContain("marked");
+  expect(bare).not.toContain("In it");
+
+  const long = "x".repeat(300);
+  const many = Array.from({ length: 10 }, (_, i) => ({ page: i + 1, text: long }));
+  const place = issueCallPlace({ ...base, page: 1, highlights: many, contents: [{ heading: long, page: 2 }] });
+  const marked = place.split("\n").find((l) => l.startsWith("They marked"))!;
+  expect(marked.split("; ")).toHaveLength(CALL_HIGHLIGHT_MAX);
+  expect(marked.length).toBeLessThan(CALL_HIGHLIGHT_MAX * 95);
+  expect(place.split("\n").find((l) => l.startsWith("In it"))!.length).toBeLessThan(80);
 });

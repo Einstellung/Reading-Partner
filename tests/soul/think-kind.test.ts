@@ -115,6 +115,34 @@ test("a think run gets the reads of the desk it is delivered to, the talk model,
   expect(seen!.task).toBe("Why did the yen fall?");
 });
 
+test("a desk that lays material adds its prompt after the think prompt, and still gives reads only", async () => {
+  undo.push(
+    registerThinkDesk("door", async () => ({
+      tools: [tool("read_pages", "read"), tool("raise_card", "write")],
+      prompt: "The reader has a brief open beside this conversation.",
+    })),
+  );
+  let seen: SubagentTurnRequest | null = null;
+  const run = thinkWorker({
+    model: async () => ({ providerId: "anthropic", modelId: "m" }),
+    readBrief: async () => "What does page 3 say?",
+    writeOutput: async (id) => `legion/outputs/${id}.md`,
+    turn: async (request) => {
+      seen = request;
+      return { kind: "answer", text: "A." };
+    },
+  });
+  const ctx = {
+    run: { id: "r-3", kind: THINK_KIND, deliverTo: JSON.stringify({ place: "door", date: DATE }) } as unknown as Run,
+    report: async () => {},
+    reportTool: async () => {},
+    delegate: async () => ({ ok: false as const, reason: "no" }),
+  } satisfies WorkerContext;
+  await run("b", ctx).done;
+  expect(seen!.tools.map((t) => t.name)).toEqual(["read_pages"]);
+  expect(seen!.systemPrompt).toBe(`${THINK_PROMPT}\n\nThe reader has a brief open beside this conversation.`);
+});
+
 test("a place with no desk registered gives a think run no tools", async () => {
   let names: string[] = ["unset"];
   const run = thinkWorker({

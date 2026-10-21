@@ -45,8 +45,17 @@ export const THINK_PROMPT = [
   "the language the task is written in.",
 ].join("\n");
 
+/**
+ * What one place lays on a think run's desk: its tools, and what the run is
+ * told about the material beside them (the door's brief, reading/turn/door-think.ts).
+ */
+export interface ThinkDeskLaid {
+  tools: AgentTool[];
+  prompt: string;
+}
+
 /** The read-only tools of one place's desk, for a think run delivered back there. */
-export type ThinkDesk = (origin: BoxOrigin) => Promise<AgentTool[]>;
+export type ThinkDesk = (origin: BoxOrigin) => Promise<AgentTool[] | ThinkDeskLaid>;
 
 const DESKS = new Map<BoxOrigin["place"], ThinkDesk>();
 
@@ -59,23 +68,30 @@ export function registerThinkDesk(place: BoxOrigin["place"], desk: ThinkDesk): (
 }
 
 /**
- * The tools a think run at this place is given: what the place registered,
- * reads only. A place that registered nothing gives none, and the run reasons
- * without lookups.
+ * What a think run at this place is given: the tools the place registered,
+ * reads only, and the prompt it added. A place that registered nothing gives
+ * none, and the run reasons without lookups.
  */
-export async function thinkTools(origin: BoxOrigin | null): Promise<AgentTool[]> {
+export async function thinkDesk(origin: BoxOrigin | null): Promise<ThinkDeskLaid> {
   const desk = origin ? DESKS.get(origin.place) : undefined;
-  if (!desk || !origin) return [];
-  return (await desk(origin)).filter((tool) => tool.effect === "read");
+  if (!desk || !origin) return { tools: [], prompt: "" };
+  const laid = await desk(origin);
+  const { tools, prompt } = Array.isArray(laid) ? { tools: laid, prompt: "" } : laid;
+  return { tools: tools.filter((tool) => tool.effect === "read"), prompt };
 }
 
-/** The sub-agent one think run is. */
-export function thinkAgent(tools: AgentTool[], model?: SubagentModel): SubagentDefinition {
+/** The tools a think run at this place is given. */
+export async function thinkTools(origin: BoxOrigin | null): Promise<AgentTool[]> {
+  return (await thinkDesk(origin)).tools;
+}
+
+/** The sub-agent one think run is; `prompt` is what its desk adds to the think prompt. */
+export function thinkAgent(tools: AgentTool[], model?: SubagentModel, prompt = ""): SubagentDefinition {
   return {
     name: THINK_KIND,
     description: "Think one question through and write the answer to be read aloud.",
     label: "Thinking it over",
-    systemPrompt: THINK_PROMPT,
+    systemPrompt: prompt ? `${THINK_PROMPT}\n\n${prompt}` : THINK_PROMPT,
     // The prompt above is the whole contract: the output is the answer itself.
     briefContract: false,
     tools,
@@ -105,7 +121,10 @@ async function talkModel(): Promise<SubagentModel> {
 export function thinkWorker(deps: ThinkWorkerDeps = {}): Worker {
   return (brief, ctx) => {
     const origin = parseOrigin(ctx.run.deliverTo);
-    const agent = async () => thinkAgent(await thinkTools(origin), await (deps.model ?? talkModel)());
+    const agent = async () => {
+      const desk = await thinkDesk(origin);
+      return thinkAgent(desk.tools, await (deps.model ?? talkModel)(), desk.prompt);
+    };
     return agentWorker({ agent, rounds: THINK_ROUNDS }, { ...deps, agent })(brief, ctx);
   };
 }

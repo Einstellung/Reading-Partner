@@ -22,6 +22,7 @@ import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 import type { VoiceCallHandle } from "../orb/orb";
 import type { TurnActivity } from "../../../ai/turn-view/activity";
 import { attentionWithScan, backgroundScan } from "./background-scan";
+import { issueCallMaterial } from "./issue-call";
 import { useAttention } from "./use-attention";
 import type { Attention } from "./lumen-motion";
 import { voiceCallMode, type VoiceCallMode } from "./voice-call-mode";
@@ -40,7 +41,8 @@ export interface VoiceCallOptions {
 function createModeCall(mode: VoiceCallMode, hooks: LiveCallHooks): Promise<VoiceCall | null> {
   return mode.kind === "briefing"
     ? createLiveVoiceCall({ dateKey: mode.dateKey, briefing: mode.briefing, ...hooks })
-    : createDoorVoiceCall({ date: mode.date, inReader: mode.inReader, ...hooks });
+    : // With a brief open in the reader, the call is about it (issue-call.ts).
+      createDoorVoiceCall({ date: mode.date, inReader: mode.inReader, material: issueCallMaterial(), ...hooks });
 }
 
 export type { VoiceCallView };

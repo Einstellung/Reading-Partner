@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { buildSectionedEpub } from "../../../src/workshop/bindery/build-article";
 import { assembleIssue, type IssueDeps } from "../../../src/info/issue/assemble";
 import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type OpeningQuestion } from "../../../src/info/issue/opening-record";
-import { openingText, parseSpoken, speakOpening, SPOKEN_FILE, type OpeningDeps } from "../../../src/info/issue/opening";
+import { issueHeadingsIn, openingText, parseSpoken, speakOpening, SPOKEN_FILE, type OpeningDeps } from "../../../src/info/issue/opening";
 import { cardAwaitingWords, issueAnswerNote, questionCard, questionWords, type IssueQuestionCard } from "../../../src/info/issue/question-card";
 import { planIssue } from "../../../src/info/issue/plan";
 import { INFO_SHELF_FILE, parseShelf } from "../../../src/info/issue/types";
@@ -250,4 +250,28 @@ test("an item's page in the open brief: the page that opens with its heading, el
   expect(headingPage(text, "Small thing")).toBe(3);
   expect(headingPage(text, "Absent heading here")).toBeNull();
   expect(headingPage(null, "x")).toBeNull();
+});
+
+test("an issue's headings are its opening record's items; none without a record or off the shelf", () => {
+  const entry = (bookId: string, items?: { n: number; heading: string }[]) => ({
+    key: `night:${bookId}`,
+    number: 1,
+    date: "2026-10-15",
+    topics: [],
+    results: [],
+    items: 2,
+    bookId,
+    boxItemId: "x",
+    createdAt: 1,
+    ...(items ? { opening: { text: null, items, questions: [] } } : {}),
+  });
+  const shelf = JSON.stringify({
+    version: 1,
+    issues: [entry("b1", [{ n: 1, heading: "Open weights" }, { n: 2, heading: "Small thing" }]), entry("b0")],
+    volumes: [],
+  });
+  expect(issueHeadingsIn(shelf, "b1")).toEqual(["Open weights", "Small thing"]);
+  expect(issueHeadingsIn(shelf, "b0")).toEqual([]);
+  expect(issueHeadingsIn(shelf, "absent")).toEqual([]);
+  expect(issueHeadingsIn(null, "b1")).toEqual([]);
 });

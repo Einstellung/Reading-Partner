@@ -158,6 +158,9 @@ export function normalizeForSpeech(input: string): string {
   // 1. Markdown residue. The model is told to write prose and mostly does, but
   // emphasis and inline links leak through and get read aloud as punctuation.
   t = t.replace(/```+[^\n]*\n?/g, "");
+  // A page citation, [p.3 "words from the page"], is for the eye: the written
+  // answer keeps it to tap (docs/info/88), and said aloud it is noise.
+  t = t.replace(/[^\S\n]*\[pp?\.\s*\d+[^[\]\n]*\]/gi, "");
   t = t.replace(/\[([^\]\n]+)\]\([^)\n]*\)/g, "$1");
   t = t.replace(/\*\*([^*\n]+)\*\*/g, "$1");
   t = t.replace(/(^|[^\w*])\*([^*\n]+)\*/g, "$1$2");

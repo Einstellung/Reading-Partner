@@ -43,8 +43,13 @@ export interface LiveCallHooks {
 export interface LiveCallSpec extends LiveCallHooks {
   /** What the recogniser is biased towards: the proper names the reader is about to say. */
   contextualStrings: string[];
-  /** The front's "where this call is held". It does not change during the call. */
-  place: string;
+  /**
+   * The front's "where this call is held": a fixed text, or one read again at
+   * every turn (the door's, with a brief open: door-call.ts).
+   */
+  place: string | (() => string | Promise<string>);
+  /** The opening note the call is kicked with, in the recogniser's language; voiceOpeningKickoff by default. */
+  kickoff?: (locale: string) => string;
   /** Where the back half answers a run handed off from this call. */
   deliverTo: BoxOrigin;
   /**
@@ -77,7 +82,8 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
     patch: patchThreadMessage,
     now: Date.now,
   });
-  const place = spec.place;
+  const fixed = spec.place;
+  const place = typeof fixed === "string" ? () => fixed : fixed;
   const back = bindCallBack({
     backend: callBackend(),
     callId: crypto.randomUUID(),
@@ -89,7 +95,7 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
   const front = createCascadeFront({
     model: liveFrontModel(),
     backend: back,
-    place: () => place,
+    place,
     write,
     filler,
     locale,
@@ -99,7 +105,8 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
   });
   await front.open({
     prompt: FRONT_DUTY,
-    context: () => ({ place, list: front.list(), lines: [] }),
+    // The cascade reads its own context per turn (deps.place); this one is not read.
+    context: () => ({ place: typeof fixed === "string" ? fixed : "", list: front.list(), lines: [] }),
     tools: [],
     audio: { subscribe: () => () => {} },
     record: () => {},
@@ -110,7 +117,7 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
     model: traceModel(front.model),
     transcript: front.transcript,
     front,
-    kickoff: voiceOpeningKickoff(locale),
+    kickoff: (spec.kickoff ?? voiceOpeningKickoff)(locale),
   });
   const report = () => spec.onRunning?.(front.list().filter((row) => row.status === "running").length);
   const reporting = [call.subscribePhase(report), back.subscribe(report)];

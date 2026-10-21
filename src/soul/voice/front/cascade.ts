@@ -18,7 +18,7 @@ import { KICKOFF_TURN, type VoiceCallModel, type VoiceCallTranscript } from "../
 import type { CallNote } from "../../think/contract";
 import type { CallBack } from "./backend";
 import { frontRequest } from "./context";
-import type { CallLine, FrontCall, FrontListRow, FrontNote, HeardUpTo, VoiceFront } from "./contract";
+import type { CallLine, FrontCall, FrontContext, FrontListRow, FrontNote, HeardUpTo, VoiceFront } from "./contract";
 import { ackLine, fillerLine, type FillerPort } from "./filler";
 import { frontMarks, monotonicNow, type MarkSink } from "./marks";
 import type { FrontModel, FrontModelRequest } from "./model";
@@ -68,8 +68,8 @@ export interface FrontCard {
 export interface CascadeFrontDeps {
   model: FrontModel;
   backend: CallBack;
-  /** Where the call is held, as the front is told it. */
-  place: () => string;
+  /** Where the call is held, as the front is told it. Read at every turn. */
+  place: () => string | Promise<string>;
   /** The conversation file. Read-outs are not written: the result is in it already. */
   write: FrontWriter;
   filler: FillerPort;
@@ -158,8 +158,14 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
       }));
   }
 
-  function context() {
-    return { place: deps.place(), list: list(), lines };
+  // A place read off a promise is waited for; a fixed one is not, so the
+  // request goes out in the same tick the turn is asked in. Either way the list
+  // and the lines are the ones standing when the turn was asked.
+  function context(): FrontContext | Promise<FrontContext> {
+    const place = deps.place();
+    if (typeof place === "string") return { place, list: list(), lines };
+    const now = { list: list(), lines: [...lines] };
+    return place.then((p) => ({ place: p, ...now }));
   }
 
   // The floor is free for a read-out at once, and for a notice after the gap.
@@ -303,7 +309,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
 
   async function notify(turn: number, program: Extract<Program, { kind: "notify" }>, req: Parameters<VoiceCallModel["ask"]>[0]): Promise<void> {
     const ctx = context();
-    const { system, messages } = frontRequest(ctx);
+    const { system, messages } = frontRequest(ctx instanceof Promise ? await ctx : ctx);
     const about = program.notes
       .map((n) => `#${n.number} (${n.task}) ${n.outcome === "done" ? "is ready" : `failed: ${n.cover}`}`)
       .join("; ");
@@ -329,7 +335,8 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
 
   async function answer(req: Parameters<VoiceCallModel["ask"]>[0]): Promise<void> {
     const { turn } = req;
-    const { system, messages } = frontRequest(context());
+    const ctx = context();
+    const { system, messages } = frontRequest(ctx instanceof Promise ? await ctx : ctx);
     // The opening line is asked with a note the driver never records.
     if (messages[messages.length - 1]?.role !== "user") messages.push({ role: "user", text: req.text });
     let said = false;

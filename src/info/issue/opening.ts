@@ -121,3 +121,17 @@ const liveDeps: OpeningDeps = {
 export async function speakIssueOpening(opening: IssueOpening): Promise<void> {
   await speakOpening(liveDeps, opening);
 }
+
+/**
+ * The headings of an issue's items, entries then Notes, as its opening record
+ * names them; none for an issue made before the record, or not on the shelf.
+ */
+export function issueHeadingsIn(shelf: string | null, bookId: string): string[] {
+  const entry = parseShelf(shelf).issues.find((i) => i.bookId === bookId);
+  return entry?.opening?.items.map((i) => i.heading) ?? [];
+}
+
+/** The headings of the issue with this book id, read off the shelf on disk. */
+export async function issueHeadings(bookId: string): Promise<string[]> {
+  return issueHeadingsIn(await liveDeps.readShelf(), bookId);
+}

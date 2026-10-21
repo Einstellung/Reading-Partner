@@ -62,7 +62,7 @@ export function listText(rows: readonly FrontListRow[]): string {
     .join("\n");
 }
 
-/** The system prompt: duty, place, list. Duty and place do not change during a call. */
+/** The system prompt: duty, place, list. The duty does not change during a call; the place may, turn to turn. */
 export function frontSystemPrompt(place: string, rows: readonly FrontListRow[]): string {
   return [
     FRONT_DUTY,

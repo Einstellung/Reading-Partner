@@ -248,3 +248,13 @@ test("chineseInteger reads a number by its places", () => {
 test("a leading zero means an identifier, not a quantity", () => {
   expect(normalizeForSpeech("编号 007")).toBe("编号零零七");
 });
+
+// --- a brief's page citations (docs/info/88) --------------------------------
+
+test("a page citation is not said; other brackets still are", () => {
+  // Without the rule this came out as "costs less，p.三 costs 五美元 per month."
+  expect(normalizeForSpeech('It costs less [p.3 "costs $5 per month"]. Next.')).toBe("It costs less. Next.");
+  expect(normalizeForSpeech("见 [p.2]。")).toBe("见。");
+  expect(normalizeForSpeech('See [pp. 4 "a"] and [P.12 "b"].')).toBe("See and.");
+  expect(normalizeForSpeech("[1] 第一条")).toBe("一，第一条");
+});

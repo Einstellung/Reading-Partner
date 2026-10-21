@@ -124,3 +124,69 @@ export function issueTurnNote(input: IssueNoteInput): string {
     `${marks}${quoted} Bring the marks up only where they bear on what is asked.]`
   );
 }
+
+/** An item of the brief and the page (1-based) it stands on; null when no page holds its heading. */
+export interface IssueContentsLine {
+  heading: string;
+  page: number | null;
+}
+
+/** The brief's items by their headings, each with the page it stands on. */
+export function issueContents(
+  fulltext: { pages: readonly string[] } | null,
+  headings: readonly string[],
+): IssueContentsLine[] {
+  return headings.map((heading) => ({ heading, page: headingPage(fulltext, heading) }));
+}
+
+// A voice call's front has a short context by design (docs/companion/136), so
+// it gets fewer and shorter marks than the door's note, and headings cut short.
+export const CALL_HIGHLIGHT_MAX = 4;
+const CALL_HIGHLIGHT_CHARS = 80;
+const CALL_HEADING_CHARS = 60;
+
+function cut(text: string, n: number): string {
+  return text.length <= n ? text : `${text.slice(0, n - 1)}…`;
+}
+
+export interface IssueCallPlaceInput {
+  title: string;
+  page: number | null;
+  pageCount: number | null;
+  highlights: readonly IssueHighlight[];
+  contents: readonly IssueContentsLine[];
+}
+
+/**
+ * What a voice call's front is told while a brief is open (docs/info/88
+ * 「简报的对话」): which one, where the reader is in it, what they marked, and
+ * what is in it. The contents go last because the front's place is cut from
+ * the end. The text itself is not here; a question about what an item says
+ * goes to a think run, whose desk has the brief.
+ */
+export function issueCallPlace(input: IssueCallPlaceInput): string {
+  const where =
+    input.page !== null
+      ? input.pageCount !== null
+        ? `, on page ${input.page} of ${input.pageCount}`
+        : `, on page ${input.page}`
+      : "";
+  const lines = [
+    `They have the brief "${input.title}" open in the reader${where}.`,
+    "You have its headings, not its text: delegate anything about what an item says.",
+  ];
+  if (input.highlights.length > 0) {
+    const shown = input.highlights
+      .slice(0, CALL_HIGHLIGHT_MAX)
+      .map((h) => `${h.page !== null ? `p.${h.page} ` : ""}"${cut(h.text, CALL_HIGHLIGHT_CHARS)}"`);
+    lines.push(`They marked: ${shown.join("; ")}.`);
+  }
+  if (input.contents.length > 0) {
+    const items = input.contents.map((c) => {
+      const heading = cut(c.heading, CALL_HEADING_CHARS);
+      return c.page !== null ? `p.${c.page} ${heading}` : heading;
+    });
+    lines.push(`In it: ${items.join("; ")}.`);
+  }
+  return lines.join("\n");
+}

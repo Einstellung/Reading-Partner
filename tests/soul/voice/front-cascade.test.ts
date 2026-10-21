@@ -54,7 +54,11 @@ class Back {
   };
 }
 
-function setup(script: (req: FrontModelRequest) => Promise<void>, filler: FillerPort = { play: async () => false }) {
+function setup(
+  script: (req: FrontModelRequest) => Promise<void>,
+  filler: FillerPort = { play: async () => false },
+  place: () => string | Promise<string> = () => "Today: three labs.",
+) {
   const back = new Back();
   const told: number[] = [];
   const backend: CallBack = {
@@ -82,7 +86,7 @@ function setup(script: (req: FrontModelRequest) => Promise<void>, filler: Filler
   const front = createCascadeFront({
     model,
     backend,
-    place: () => "Today: three labs.",
+    place,
     write: (l) => written.push({ key: l.key, text: l.text }),
     filler,
     locale: "zh-CN",
@@ -258,6 +262,19 @@ test("the request is the duty, the place and the list first, then the call's tur
   expect(sys.startsWith(FRONT_DUTY)).toBe(true);
   expect(sys.indexOf("Today: three labs.")).toBeLessThan(sys.indexOf("#1 | running | Find X | progress: reading two papers"));
   expect(h.requests[0]!.messages).toEqual([{ role: "user", text: "好了没" }]);
+});
+
+test("a place read off a promise is read again at every turn (the door's, with a brief open)", async () => {
+  let page = 2;
+  const h = setup(async (req) => req.onText("嗯。"), undefined, async () => `On page ${page} of 9.`);
+  h.front.transcript.record({ role: "user", turn: 1, text: "这是什么", interrupted: false });
+  await ask(h.front, 1, "这是什么");
+  page = 5;
+  h.front.transcript.record({ role: "user", turn: 2, text: "这页呢", interrupted: false });
+  await ask(h.front, 2, "这页呢");
+  expect(h.requests[0]!.system).toContain("On page 2 of 9.");
+  expect(h.requests[1]!.system).toContain("On page 5 of 9.");
+  expect(h.requests[1]!.system).not.toContain("On page 2 of 9.");
 });
 
 test("a result back is said in the next gap, not while anyone is talking", async () => {

@@ -802,3 +802,22 @@ test("the greeting is never folded into the reader's first words", async () => {
   const asks = h.of("ask");
   expect(asks[asks.length - 1]).toEqual({ type: "ask", turn: 1, text: "你好" });
 });
+
+// --- a brief's page citations (docs/info/88) --------------------------------
+
+test("a page citation in an answer is not said, and the transcript keeps it", async () => {
+  // A think run's answer is read out as one delta of a program turn
+  // (front/cascade.ts readOut); the front's own reply streams in pieces.
+  const answer = '融资额是两千万美元 [p.4 "raised $20M in a Series A"]。下一条更值得看 [p.5 "open weights"]。';
+  for (const size of [answer.length, 3]) {
+    const h = new Harness();
+    await h.open();
+    await h.userSaid(1, "念一下");
+    await h.stream(1, answer, size);
+    await h.done(1);
+    const said = h.calls.filter((c) => c.args?.text).map((c) => String(c.args?.text));
+    expect(said.join("")).toBe("融资额是两千万美元。下一条更值得看。");
+    await h.event({ kind: "spoken", turn: 1, utterance: 1, reason: "done" });
+    expect(h.ai(1)?.text).toBe(answer);
+  }
+});

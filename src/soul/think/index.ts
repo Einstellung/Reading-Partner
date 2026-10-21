@@ -22,9 +22,11 @@ export {
   callKinds,
   registerThinkWorker,
   thinkAgent,
+  thinkDesk,
   thinkTools,
   thinkWorker,
   type ThinkDesk,
+  type ThinkDeskLaid,
   type ThinkWorkerDeps,
 } from "./kind";
 export { buildCallDelegateTool, type CallDelegateDeps } from "./tool";
