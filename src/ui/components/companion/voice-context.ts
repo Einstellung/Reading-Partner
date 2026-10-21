@@ -1,4 +1,4 @@
-// What a voice call with Lumen would talk about, published by whichever screen
+// What a voice call with the companion would talk about, published by whichever screen
 // has it.
 //
 // The corner is mounted at shell level, outside every screen (App.tsx,

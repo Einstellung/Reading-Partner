@@ -1,4 +1,4 @@
-// The conversation typed to Lumen: the day's conversation at the door (docs/61,
+// The conversation typed to the companion: the day's conversation at the door (docs/61,
 // soul/door.ts), as the chat surface holds it. Loaded and replayed when it
 // opens, every line written to the day's thread file as it is said, and the
 // turns run on the device's durable runtime (docs/soul/87): assembled by
@@ -89,14 +89,14 @@ export interface DoorChat {
 
 export interface DoorChatOptions {
   /**
-   * The day whose conversation to open: a card in Lumen's box goes back to the
+   * The day whose conversation to open: a card in the companion's box goes back to the
    * conversation it came from, which may be an earlier day's. Today otherwise.
    */
   date?: string;
   /** Open a document an intake card filed (its 「打开阅读」), in this shell's reader. */
   onOpenDocument?: (doc: IntakeOpenDocument) => void;
   /**
-   * The brief whose opening brought the conversation up (docs/info/88): Lumen's
+   * The brief whose opening brought the conversation up (docs/info/88): the companion's
    * first words about it go in once the day's conversation is loaded. Read once.
    */
   openedFor?: string;
@@ -104,7 +104,7 @@ export interface DoorChatOptions {
 
 const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
 
-// The questions Lumen asked when a brief opened, in the order they stand.
+// The questions the companion asked when a brief opened, in the order they stand.
 const issueCards = (rows: readonly UiMessage[]): { cardId: string; card: IssueQuestionCard }[] =>
   rows.flatMap((m) =>
     (m.parts ?? []).flatMap((part) =>
@@ -278,7 +278,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
         unwatchDoor();
       };
       lookingRef.current = session.resume().catch((e: unknown) => console.warn("door turn could not be resumed", e));
-      // An issue just opened: Lumen speaks first about it (info/issue/opening.ts),
+      // An issue just opened: the companion speaks first about it (info/issue/opening.ts),
       // its items cited by the page they stand on in the book that is open.
       if (openedFor) {
         void lookingRef.current

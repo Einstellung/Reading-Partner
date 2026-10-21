@@ -1,5 +1,5 @@
 // Where the conversation's composer is, for whatever has to keep off the bottom
-// edge of the screen — Lumen's corner (lumen/corner-placement.ts).
+// edge of the screen — the companion's corner (companion/corner-placement.ts).
 //
 // A context rather than a prop, because on the phone every conversation is the
 // whole screen and its composer is always on that edge: the briefing's call,

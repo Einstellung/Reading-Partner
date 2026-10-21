@@ -8,7 +8,7 @@
 // The turn this process assembled — its history and its desk's tools, the
 // card-raising ones among them — is used while it is there, as at the door
 // (soul/door-durable.ts). Closing the view does not stop its turn (the place
-// session's detach): a reply that lands with nobody looking puts Lumen's box
+// session's detach): a reply that lands with nobody looking puts the companion's box
 // card, which opens the view again (companion/box-jump.ts).
 
 import type { Context } from "@earendil-works/chord";

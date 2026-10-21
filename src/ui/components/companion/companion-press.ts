@@ -1,4 +1,4 @@
-// What a press on Lumen means (docs/68): a tap opens his conversation, during a
+// What a press on the companion means (docs/68): a tap opens his conversation, during a
 // voice call too; a press that travels is the corner being dragged.
 //
 // The tap is the release of a press that did not travel past the drag's slop,
@@ -9,14 +9,14 @@
 //
 // Pure arithmetic over the press's timeline, so the corner only binds events.
 
-export interface LumenPressState {
+export interface CompanionPressState {
   /** The press on the body in progress: whether it became a drag. */
   readonly press: { readonly dragged: boolean } | null;
   /** The click the last release brings is that press's, and means nothing. */
   readonly swallowClick: boolean;
 }
 
-export type LumenPressInput =
+export type CompanionPressInput =
   | { kind: "down" }
   | { kind: "dragged" }
   | { kind: "up" }
@@ -24,16 +24,16 @@ export type LumenPressInput =
   | { kind: "click" };
 
 /** What the corner has to do about a step. */
-export type LumenPressEffect = "open-door" | null;
+export type CompanionPressEffect = "open-door" | null;
 
-export interface LumenPressStep {
-  readonly state: LumenPressState;
-  readonly effect: LumenPressEffect;
+export interface CompanionPressStep {
+  readonly state: CompanionPressState;
+  readonly effect: CompanionPressEffect;
 }
 
-export const PRESS_REST: LumenPressState = { press: null, swallowClick: false };
+export const PRESS_REST: CompanionPressState = { press: null, swallowClick: false };
 
-export function lumenPressStep(state: LumenPressState, input: LumenPressInput): LumenPressStep {
+export function companionPressStep(state: CompanionPressState, input: CompanionPressInput): CompanionPressStep {
   switch (input.kind) {
     case "down":
       // A second finger is not a second press.
@@ -63,6 +63,6 @@ export function startsPress(pointerType: string, button: number): boolean {
   return pointerType !== "mouse" || button === 0;
 }
 
-function still(state: LumenPressState): LumenPressStep {
+function still(state: CompanionPressState): CompanionPressStep {
   return { state, effect: null };
 }

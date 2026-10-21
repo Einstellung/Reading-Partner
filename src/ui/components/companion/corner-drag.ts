@@ -1,4 +1,4 @@
-// Where Lumen stands once the reader has moved it (docs/68).
+// Where the companion stands once the reader has moved it (docs/68).
 //
 // The corner is the bottom right until it is dragged. A drag ends at whichever
 // side edge the body is nearer, at the height the finger let go at, and the

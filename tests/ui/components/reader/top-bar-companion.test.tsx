@@ -1,4 +1,4 @@
-// Lumen's switch in the reader (docs/68). It used to be the app icon at the far
+// The companion's switch in the reader (docs/68). It used to be the app icon at the far
 // left of the bar, where it read as "back to the home screen" and was the one
 // control in the bar that is not about the open book. It is a row in the "More"
 // menu now, beside Paged flip, with On/Off on its right.
@@ -21,7 +21,7 @@ afterEach(() => {
   resetCompanionNameForTest();
 });
 
-function bar(lumenShown: boolean) {
+function bar(companionShown: boolean) {
   const toggled: true[] = [];
   const view = render(
     <ReaderTopBar
@@ -39,8 +39,8 @@ function bar(lumenShown: boolean) {
       gate={{ aiPen: null, bookThread: null }}
       onOpenSettings={() => {}}
       settingsAlert={false}
-      lumenShown={lumenShown}
-      onToggleLumen={() => void toggled.push(true)}
+      companionShown={companionShown}
+      onToggleCompanion={() => void toggled.push(true)}
     />,
   );
   const openMenu = () => {
@@ -66,11 +66,11 @@ test("the menu holds the companion beside Paged flip, and says which way it stan
   const { openMenu, row } = bar(false);
   openMenu();
 
-  const lumen = row("Kris");
-  expect(lumen).not.toBeUndefined();
+  const companion = row("Kris");
+  expect(companion).not.toBeUndefined();
   // The label is the thing, not the action: "Hide Kris" is the button title
   // elsewhere, and here the state is the On/Off on the right.
-  expect(lumen?.textContent).toBe("KrisOff");
+  expect(companion?.textContent).toBe("KrisOff");
   expect(row("Paged flip")).not.toBeUndefined();
 });
 
@@ -78,9 +78,9 @@ test("it reads On when the companion is out, and pressing it reports up", () => 
   const { toggled, openMenu, row } = bar(true);
   openMenu();
 
-  const lumen = row("Kris");
-  expect(lumen?.textContent).toBe("KrisOn");
-  fireEvent.click(lumen as HTMLElement);
+  const companion = row("Kris");
+  expect(companion?.textContent).toBe("KrisOn");
+  fireEvent.click(companion as HTMLElement);
   expect(toggled).toEqual([true]);
 });
 

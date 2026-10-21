@@ -1,4 +1,4 @@
-// Lumen (docs/45): the companion with a body. A chubby round thing made of
+// The companion (docs/45), with a body. A chubby round thing made of
 // translucent blue-white light, a flame-shaped tuft curling off the top, two
 // glossy deep-blue eyes and a closed-mouth smile, resting on the desk in a pool
 // of its own light.
@@ -69,14 +69,14 @@ import {
 	easeGaze,
 	gazeToward,
 	initBlink,
-	lumenVisual,
+	companionVisual,
 	mouthOpenness,
 	stepBlink,
 	stepMouth,
 	wanderGaze,
 	type Attention,
 	type Gaze,
-	type LumenAct,
+	type CompanionAct,
 	type MouthState,
 } from "./companion-motion";
 import {
@@ -124,28 +124,28 @@ const RECT_STALE_MS = 500;
 
 // Every property the loop writes inline, over the root's resting defaults.
 const LOOP_PROPERTIES = [
-	"--lumen-sx",
-	"--lumen-sy",
-	"--lumen-glow",
-	"--lumen-core",
-	"--lumen-pool",
-	"--lumen-pool-x",
+	"--companion-sx",
+	"--companion-sy",
+	"--companion-glow",
+	"--companion-core",
+	"--companion-pool",
+	"--companion-pool-x",
 	"--companion-tuft-y",
-	"--lumen-eye",
-	"--lumen-eye-scale",
-	"--lumen-gx",
-	"--lumen-gy",
-	"--lumen-brow",
-	"--lumen-mouth-curve",
-	"--lumen-mouth-mix",
-	"--lumen-mouth-open",
-	"--lumen-x",
-	"--lumen-y",
-	"--lumen-tilt",
+	"--companion-eye",
+	"--companion-eye-scale",
+	"--companion-gx",
+	"--companion-gy",
+	"--companion-brow",
+	"--companion-mouth-curve",
+	"--companion-mouth-mix",
+	"--companion-mouth-open",
+	"--companion-x",
+	"--companion-y",
+	"--companion-tilt",
 	"--companion-tuft-lean",
 ] as const;
 
-export interface LumenProps extends Omit<ComponentProps<"button">, "children"> {
+export interface CompanionProps extends Omit<ComponentProps<"button">, "children"> {
 	handle: VoiceCallHandle;
 	attention?: Attention;
 	rest?: boolean;
@@ -159,13 +159,13 @@ export interface LumenProps extends Omit<ComponentProps<"button">, "children"> {
 	overlay?: ReactNode;
 }
 
-export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
+export const Companion = forwardRef<HTMLButtonElement, CompanionProps>(function Companion({
 	handle,
 	// Where the soul's attention is (docs/66). It splits thinking into two acts:
 	// looking up with the attention on the reader, and glancing down at the
 	// desk with it on the work.
 	attention = "reader",
-	// Asleep. Not an OrbPhase: the voice pipeline never reports it (lumen.ts),
+	// Asleep. Not an OrbPhase: the voice pipeline never reports it (companion-motion.ts),
 	// so it comes in as its own input and nothing is wired to it yet.
 	rest = false,
 	// The body's box, as the caller's own classes. Everything inside is a
@@ -185,13 +185,13 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	reach,
 	reaching = false,
 	// Whether something above is drawing the body in a mirror — which the
-	// corner does when it is docked at the left edge (LumenCorner). Everything
+	// corner does when it is docked at the left edge (CompanionCorner). Everything
 	// scripted is mirrored with it and right to be: the glance at the case
 	// follows the case. The pointer is the one thing that is not in the picture,
 	// so the gaze that goes to it is turned back over here.
 	mirrored = false,
 	// What a press does, where that is not starting and stopping a call. The
-	// corner wires it to opening Lumen's conversation (docs/68); the call is
+	// corner wires it to opening the companion's conversation (docs/68); the call is
 	// started from there and ended by the hang-up on the body.
 	onActivate,
 	// The button's accessible name, where the call's four phases are not what
@@ -282,8 +282,8 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 		// outgoing act goes on running on its own clock for the length of the
 		// crossfade, so a body caught mid-sway does not jump to the sway's zero
 		// on its way out.
-		let shown: LumenAct = actFor(phaseRef.current, attentionRef.current);
-		let leaving: LumenAct = shown;
+		let shown: CompanionAct = actFor(phaseRef.current, attentionRef.current);
+		let leaving: CompanionAct = shown;
 		let actAt = -1;
 		let leavingAt = -1;
 
@@ -315,7 +315,7 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 			// Speaking reads the envelope; everything else reads the microphone. The
 			// microphone is open through the whole call, so during an answer it is
 			// the room and not the voice — a mouth on it would open at whoever is
-			// nearest rather than at what Lumen is saying.
+			// nearest rather than at what the companion is saying.
 			const source = levelFor(shown, targetRef.current, voice.level);
 			levelRef.current = smoothLevel(levelRef.current, source, dt);
 			mouth = stepMouth(mouth, shown, levelRef.current, now);
@@ -378,35 +378,35 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 			};
 			const v =
 				mix >= 1 || leaving === shown
-					? lumenVisual({ act: shown, elapsedMs: actMs, ...common })
+					? companionVisual({ act: shown, elapsedMs: actMs, ...common })
 					: blendVisual(
-							lumenVisual({ act: leaving, elapsedMs: now - leavingAt, ...common }),
-							lumenVisual({ act: shown, elapsedMs: actMs, ...common }),
+							companionVisual({ act: leaving, elapsedMs: now - leavingAt, ...common }),
+							companionVisual({ act: shown, elapsedMs: actMs, ...common }),
 							mix,
 						);
 
 			const set = (name: string, value: number) => el.style.setProperty(name, value.toFixed(4));
-			set("--lumen-sx", v.scaleX);
-			set("--lumen-sy", v.scaleY * bounceScaleY(now - bounceAt, reduced));
-			set("--lumen-glow", v.glow);
-			set("--lumen-core", v.core);
-			set("--lumen-pool", v.poolOpacity);
-			set("--lumen-pool-x", v.poolScaleX);
+			set("--companion-sx", v.scaleX);
+			set("--companion-sy", v.scaleY * bounceScaleY(now - bounceAt, reduced));
+			set("--companion-glow", v.glow);
+			set("--companion-core", v.core);
+			set("--companion-pool", v.poolOpacity);
+			set("--companion-pool-x", v.poolScaleX);
 			set("--companion-tuft-y", v.tuftScaleY);
-			set("--lumen-eye", v.eyeOpen);
-			set("--lumen-eye-scale", v.eyeScale);
-			set("--lumen-gx", v.gaze.x);
-			set("--lumen-gy", v.gaze.y);
-			set("--lumen-brow", v.browOpacity);
-			set("--lumen-mouth-curve", v.mouthCurve);
-			set("--lumen-mouth-mix", v.mouthMix);
-			set("--lumen-mouth-open", v.mouthOpen);
-			el.style.setProperty("--lumen-x", `${(v.shiftX * 100).toFixed(3)}%`);
-			el.style.setProperty("--lumen-y", `${(v.shiftY * 100).toFixed(3)}%`);
+			set("--companion-eye", v.eyeOpen);
+			set("--companion-eye-scale", v.eyeScale);
+			set("--companion-gx", v.gaze.x);
+			set("--companion-gy", v.gaze.y);
+			set("--companion-brow", v.browOpacity);
+			set("--companion-mouth-curve", v.mouthCurve);
+			set("--companion-mouth-mix", v.mouthMix);
+			set("--companion-mouth-open", v.mouthOpen);
+			el.style.setProperty("--companion-x", `${(v.shiftX * 100).toFixed(3)}%`);
+			el.style.setProperty("--companion-y", `${(v.shiftY * 100).toFixed(3)}%`);
 			// The lean over the case rides on top of the act's own tilt: it is a
 			// body reaching past itself, not a fifth act.
 			el.style.setProperty(
-				"--lumen-tilt",
+				"--companion-tilt",
 				`${(v.tiltDeg + caseLeanDeg(reachW)).toFixed(3)}deg`,
 			);
 			el.style.setProperty("--companion-tuft-lean", `${v.tuftLeanDeg.toFixed(3)}deg`);
@@ -469,9 +469,9 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 		let last = performance.now();
 		let frame = 0;
 		const write = () => {
-			el.style.setProperty("--lumen-gx", stillGazeRef.current.x.toFixed(4));
-			el.style.setProperty("--lumen-gy", stillGazeRef.current.y.toFixed(4));
-			el.style.setProperty("--lumen-tilt", `${stillLeanRef.current.toFixed(3)}deg`);
+			el.style.setProperty("--companion-gx", stillGazeRef.current.x.toFixed(4));
+			el.style.setProperty("--companion-gy", stillGazeRef.current.y.toFixed(4));
+			el.style.setProperty("--companion-tilt", `${stillLeanRef.current.toFixed(3)}deg`);
 		};
 		const step = (now: number) => {
 			const dt = now - last;
@@ -534,24 +534,24 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 				aria-hidden="true"
 				// Named so the simulator bridge can read the properties back out of
 				// a running app (scripts/ios-sim.sh eval), as data-orb was.
-				data-lumen=""
-				className="pointer-events-none absolute inset-0 block [--lumen-brow:0] [--lumen-core:0.42] [--lumen-eye-scale:1] [--lumen-eye:1] [--lumen-glow:0.3] [--lumen-gx:0] [--lumen-gy:0] [--lumen-mouth-curve:1] [--lumen-mouth-mix:0] [--lumen-mouth-open:0] [--lumen-pool-x:1] [--lumen-pool:0.42] [--lumen-sx:1] [--lumen-sy:1] [--lumen-tilt:0deg] [--companion-tuft-lean:0deg] [--companion-tuft-y:1] [--lumen-x:0%] [--lumen-y:0%]"
+				data-companion=""
+				className="pointer-events-none absolute inset-0 block [--companion-brow:0] [--companion-core:0.42] [--companion-eye-scale:1] [--companion-eye:1] [--companion-glow:0.3] [--companion-gx:0] [--companion-gy:0] [--companion-mouth-curve:1] [--companion-mouth-mix:0] [--companion-mouth-open:0] [--companion-pool-x:1] [--companion-pool:0.42] [--companion-sx:1] [--companion-sy:1] [--companion-tilt:0deg] [--companion-tuft-lean:0deg] [--companion-tuft-y:1] [--companion-x:0%] [--companion-y:0%]"
 			>
 				{/* The pool of light it is standing in. An ellipse under the body,
-				    not a shadow: the light comes from Lumen, so the desk is brighter
+				    not a shadow: the light comes from the companion, so the desk is brighter
 				    where it sits, not darker. A radial gradient and not a blur —
 				    iOS WebKit clips a filter to the element's own box and the
 				    blurred version is a hard-edged square (docs/pitfall/219). */}
-				<span className="absolute bottom-[9%] left-1/2 h-[12%] w-[72%] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(closest-side,#7ba9ff,transparent)] [opacity:calc(var(--lumen-pool)*0.62)] scale-x-(--lumen-pool-x)" />
+				<span className="absolute bottom-[9%] left-1/2 h-[12%] w-[72%] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(closest-side,#7ba9ff,transparent)] [opacity:calc(var(--companion-pool)*0.62)] scale-x-(--companion-pool-x)" />
 				{/* The halo. The level's second reading, the way the orb's was — but
-				    not in the app's accent green: Lumen is blue light, and the token
+				    not in the app's accent green: the companion is blue light, and the token
 				    is the ink of a control. Faint on purpose. The page is paper, and
 				    on paper a glow can only be a cool tint; anything strong enough to
 				    read as light reads instead as a dirty ring. */}
-				<span className="absolute inset-[-16%] rounded-full bg-[radial-gradient(circle,#8fb8ff_16%,transparent_60%)] [opacity:calc(var(--lumen-glow)*0.34)] [scale:var(--lumen-sx)_var(--lumen-sy)]" />
+				<span className="absolute inset-[-16%] rounded-full bg-[radial-gradient(circle,#8fb8ff_16%,transparent_60%)] [opacity:calc(var(--companion-glow)*0.34)] [scale:var(--companion-sx)_var(--companion-sy)]" />
 				{/* The body group: one transform for the whole character, so the
 				    tuft, the light inside it and the face all breathe together. */}
-				<span className="absolute inset-0 block [transform-origin:50%_86%] translate-x-(--lumen-x) translate-y-(--lumen-y) rotate-(--lumen-tilt) [scale:var(--lumen-sx)_var(--lumen-sy)] motion-reduce:rotate-0">
+				<span className="absolute inset-0 block [transform-origin:50%_86%] translate-x-(--companion-x) translate-y-(--companion-y) rotate-(--companion-tilt) [scale:var(--companion-sx)_var(--companion-sy)] motion-reduce:rotate-0">
 					{/* The tuft, above the body in paint order because that is how it
 					    was cut. Its pivot is the middle of the feather band. */}
 					<img
@@ -564,8 +564,8 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 					{/* The core: the bright middle that says how hard it is working.
 					    Screened over the body so it lights the paint rather than
 					    covering it. */}
-					<span className="absolute left-1/2 top-[54%] h-[46%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,#f6faff,transparent)] opacity-(--lumen-core) mix-blend-screen" />
-					<LumenFace />
+					<span className="absolute left-1/2 top-[54%] h-[46%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,#f6faff,transparent)] opacity-(--companion-core) mix-blend-screen" />
+					<CompanionFace />
 				</span>
 			</span>
 			{overlay}
@@ -573,8 +573,8 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	);
 });
 
-// The case (docs/68). A red dispatch box standing beside Lumen in the same pool
-// of light, not a thing in its hands: it is the box, and Lumen is who tells you
+// The case (docs/68). A red dispatch box standing beside the companion in the same pool
+// of light, not a thing in its hands: it is the box, and the companion is who tells you
 // what is in it.
 //
 // The raster is cut out of the one generation where the two were drawn
@@ -585,7 +585,7 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 // is why the two read as standing in one place, and why the cut keeps it.
 
 /** The case itself, filling whatever box it is given (case-motion.ts sets it). */
-export function LumenCase() {
+export function CompanionCase() {
 	return (
 		<img
 			src={caseUrl}
@@ -600,7 +600,7 @@ export function LumenCase() {
 // with. Every transform below is written in the SVG's own user units rather than
 // through `transform-box`, so nothing depends on how a WebKit build resolves a
 // percentage origin inside an SVG.
-function LumenFace() {
+function CompanionFace() {
 	return (
 		<svg
 			viewBox={`0 0 ${BOX} ${BOX}`}
@@ -608,12 +608,12 @@ function LumenFace() {
 			aria-hidden="true"
 		>
 			<defs>
-				<radialGradient id="lumen-iris" cx="38%" cy="28%" r="82%">
+				<radialGradient id="companion-iris" cx="38%" cy="28%" r="82%">
 					<stop offset="0%" stopColor="#4f7ff5" />
 					<stop offset="45%" stopColor="#1c33c8" />
 					<stop offset="100%" stopColor="#0b1470" />
 				</radialGradient>
-				<linearGradient id="lumen-sclera" x1="0" y1="0" x2="0" y2="1">
+				<linearGradient id="companion-sclera" x1="0" y1="0" x2="0" y2="1">
 					<stop offset="0%" stopColor="#f9fcff" />
 					<stop offset="100%" stopColor="#dce9ff" />
 				</linearGradient>
@@ -622,7 +622,7 @@ function LumenFace() {
 			    two irises 2 px off centre into a head looking somewhere. */}
 			<g
 				style={{
-					transform: `translate(calc(var(--lumen-gx) * ${FACE_TX}px), calc(var(--lumen-gy) * ${FACE_TY}px))`,
+					transform: `translate(calc(var(--companion-gx) * ${FACE_TX}px), calc(var(--companion-gy) * ${FACE_TY}px))`,
 				}}
 			>
 				<Brow cx={EYE_CX - EYE_DX} sign={1} />
@@ -651,7 +651,7 @@ function Mouth() {
 	const y = FACE.mouthY * BOX;
 	const half = FACE.mouthWidth * BOX;
 	const flat = half * 0.82;
-	const open = `translate(0px, ${y}px) scaleY(calc(0.24 + 0.76 * var(--lumen-mouth-open))) translate(0px, ${-y}px)`;
+	const open = `translate(0px, ${y}px) scaleY(calc(0.24 + 0.76 * var(--companion-mouth-open))) translate(0px, ${-y}px)`;
 	return (
 		<>
 			<path
@@ -660,7 +660,7 @@ function Mouth() {
 				stroke="#152a86"
 				strokeWidth={9}
 				strokeLinecap="round"
-				style={{ opacity: "calc(0.82 * var(--lumen-mouth-curve) * (1 - var(--lumen-mouth-mix)))" }}
+				style={{ opacity: "calc(0.82 * var(--companion-mouth-curve) * (1 - var(--companion-mouth-mix)))" }}
 			/>
 			<path
 				d={`M ${EYE_CX - flat} ${y} L ${EYE_CX + flat} ${y}`}
@@ -669,7 +669,7 @@ function Mouth() {
 				strokeWidth={9}
 				strokeLinecap="round"
 				style={{
-					opacity: "calc(0.82 * (1 - var(--lumen-mouth-curve)) * (1 - var(--lumen-mouth-mix)))",
+					opacity: "calc(0.82 * (1 - var(--companion-mouth-curve)) * (1 - var(--companion-mouth-mix)))",
 				}}
 			/>
 			<ellipse
@@ -678,7 +678,7 @@ function Mouth() {
 				rx={FACE.mouthOpenRx * BOX}
 				ry={FACE.mouthOpenRy * BOX}
 				fill="#152a86"
-				style={{ transform: open, opacity: "calc(0.86 * var(--lumen-mouth-mix))" }}
+				style={{ transform: open, opacity: "calc(0.86 * var(--companion-mouth-mix))" }}
 			/>
 		</>
 	);
@@ -701,7 +701,7 @@ function Brow({ cx, sign }: { cx: number; sign: 1 | -1 }) {
 			strokeLinecap="round"
 			style={{
 				transform: `translate(${cx}px, ${y}px) ${tilt} translate(${-cx}px, ${-y}px)`,
-				opacity: "calc(0.78 * var(--lumen-brow))",
+				opacity: "calc(0.78 * var(--companion-brow))",
 			}}
 		/>
 	);
@@ -713,14 +713,14 @@ function Brow({ cx, sign }: { cx: number; sign: 1 | -1 }) {
 function Eye({ cx }: { cx: number }) {
 	// The lid and how wide the eye is held, about the eye's own centre: the two
 	// multiply, so a blink during the wide-eyed listening act still shuts.
-	const lid = `translate(${cx}px, ${EYE_CY}px) scale(var(--lumen-eye-scale), calc(var(--lumen-eye) * var(--lumen-eye-scale))) translate(${-cx}px, ${-EYE_CY}px)`;
-	const gaze = `translate(calc(var(--lumen-gx) * ${IRIS_TX}px), calc(var(--lumen-gy) * ${IRIS_TY}px))`;
+	const lid = `translate(${cx}px, ${EYE_CY}px) scale(var(--companion-eye-scale), calc(var(--companion-eye) * var(--companion-eye-scale))) translate(${-cx}px, ${-EYE_CY}px)`;
+	const gaze = `translate(calc(var(--companion-gx) * ${IRIS_TX}px), calc(var(--companion-gy) * ${IRIS_TY}px))`;
 	return (
 		<>
 			<g style={{ transform: lid }}>
-				<ellipse cx={cx} cy={EYE_CY} rx={EYE_RX} ry={EYE_RY} fill="url(#lumen-sclera)" />
+				<ellipse cx={cx} cy={EYE_CY} rx={EYE_RX} ry={EYE_RY} fill="url(#companion-sclera)" />
 				<g style={{ transform: gaze }}>
-					<ellipse cx={cx} cy={EYE_CY} rx={EYE_RX * 0.88} ry={EYE_RY * 0.9} fill="url(#lumen-iris)" />
+					<ellipse cx={cx} cy={EYE_CY} rx={EYE_RX * 0.88} ry={EYE_RY * 0.9} fill="url(#companion-iris)" />
 					<ellipse cx={cx} cy={EYE_CY + EYE_RY * 0.06} rx={EYE_RX * 0.44} ry={EYE_RY * 0.46} fill="#070d4a" />
 					{/* Two catchlights, one big and one small: one alone reads as a
 					    highlight, two read as a wet eye. Cool near-white rather than
@@ -750,13 +750,13 @@ function Eye({ cx }: { cx: number }) {
 				stroke="#152a86"
 				strokeWidth={9}
 				strokeLinecap="round"
-				style={{ opacity: "calc((0.35 - var(--lumen-eye)) / 0.35)" }}
+				style={{ opacity: "calc((0.35 - var(--companion-eye)) / 0.35)" }}
 			/>
 		</>
 	);
 }
 
-// The phase Lumen shows: the session's, except that it leaves `speaking` late
+// The phase the companion shows: the session's, except that it leaves `speaking` late
 // (orb.ts). A handful of events in a call, so re-rendering on one is free.
 function useHeldPhase(source: OrbPhase): OrbPhase {
 	const [held, setHeld] = useState(INITIAL_HOLD);

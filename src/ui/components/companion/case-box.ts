@@ -1,4 +1,4 @@
-// Where the red case stands beside Lumen (docs/68), measured off the generation
+// Where the red case stands beside the companion (docs/68), measured off the generation
 // the raster was cut from rather than described in prose.
 //
 // The two pictures are the evidence. In `docs/assets/lumen/lumen-with-case.png`
@@ -59,7 +59,7 @@ export interface CaseRect {
   height: number;
 }
 
-/** The case's box, as fractions of the box Lumen is drawn in. */
+/** The case's box, as fractions of the box the companion is drawn in. */
 export function caseRect(): CaseRect {
   const height = (CASE_OF_BODY.height * INK.h) / BODY_RASTER_PX;
   const width = height * CASE_ASPECT;

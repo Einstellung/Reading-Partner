@@ -1,4 +1,4 @@
-// What a press on Lumen means (src/ui/components/companion/companion-press.ts, docs/68):
+// What a press on the companion means (src/ui/components/companion/companion-press.ts, docs/68):
 // a tap opens the conversation, a press that travels is a drag and opens nothing.
 // Run: scripts/t.sh tests/ui/components/companion/companion-press.test.ts
 
@@ -6,18 +6,18 @@ import { expect, test } from "bun:test";
 
 import {
   PRESS_REST,
-  lumenPressStep,
+  companionPressStep,
   startsPress,
-  type LumenPressEffect,
-  type LumenPressInput,
-  type LumenPressState,
+  type CompanionPressEffect,
+  type CompanionPressInput,
+  type CompanionPressState,
 } from "../../../../src/ui/components/companion/companion-press";
 
-function run(inputs: LumenPressInput[], from: LumenPressState = PRESS_REST) {
+function run(inputs: CompanionPressInput[], from: CompanionPressState = PRESS_REST) {
   let state = from;
-  const effects: LumenPressEffect[] = [];
+  const effects: CompanionPressEffect[] = [];
   for (const input of inputs) {
-    const step = lumenPressStep(state, input);
+    const step = companionPressStep(state, input);
     state = step.state;
     if (step.effect) effects.push(step.effect);
   }

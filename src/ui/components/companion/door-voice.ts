@@ -1,7 +1,7 @@
-// Voice chat with Lumen, as the door conversation and the corner read it
+// Voice chat with the companion, as the door conversation and the corner read it
 // (docs/68, 2026-10-20). Entered from the round waveform button beside the
 // door's composer; the call itself is soul/voice/voice-call.ts and is held at
-// shell level (LumenCorner), so it outlives the panel it was started from.
+// shell level (CompanionCorner), so it outlives the panel it was started from.
 //
 // No React here: what the button says, what the voice bar reads, and when a
 // card that needs a tap pulls the panel up mid-call.

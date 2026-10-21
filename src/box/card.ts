@@ -1,5 +1,5 @@
-// A box item as a card in Lumen's conversation (docs/68, 2026-10-15). The
-// program puts it there, not Lumen: it is drawn as a card and never written to
+// A box item as a card in the companion's conversation (docs/68, 2026-10-15). The
+// program puts it there, not the companion: it is drawn as a card and never written to
 // the conversation's file, and the model never sees it — the cover list in the
 // system prompt is all it knows of the box.
 //

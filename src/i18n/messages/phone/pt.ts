@@ -108,7 +108,7 @@ export default {
   "displaySheet.lineSpacing": "Espaçamento",
   "displaySheet.margins": "Margens",
   "displaySheet.paper": "Papel",
-  "displaySheet.lumen": "{name}",
+  "displaySheet.companion": "{name}",
   "displaySheet.layout": "Layout",
   "displaySheet.more": "Mais",
   "displaySheet.tighterLines": "Espaçamento menor",

@@ -1,10 +1,10 @@
-// Which topic the intake card marks as Lumen's suggestion (topic-intake.ts).
+// Which topic the intake card marks as the companion's suggestion (topic-intake.ts).
 //
 // A suggestion needs a basis, and there are two: the model's pick, made from the
 // numbered list (topicMenu) and named by its number, never by an id; or, when
 // the model named none, a topic whose name appears in the link or in what the
 // reader said about it. With neither, nothing is suggested: a guess the card
-// marks is one the reader has to read as Lumen's opinion.
+// marks is one the reader has to read as the companion's opinion.
 //
 // Pure: the topics are handed in.
 

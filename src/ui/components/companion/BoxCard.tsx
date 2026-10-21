@@ -1,12 +1,12 @@
-// A box item in Lumen's conversation (docs/68, 2026-10-15): a card the program
-// put there, drawn as a card and not as something Lumen said. One cover line
+// A box item in the companion's conversation (docs/68, 2026-10-15): a card the program
+// put there, drawn as a card and not as something the companion said. One cover line
 // over where it came from. A press follows it back to where it belongs; a
 // sideways swipe of a finger presses it away, and where there is a pointer the
 // same thing is an × that appears under the cursor. An item that waits for the
 // reader's decision has neither.
 //
 // Presentational: both gestures only raise intent, and the corner does the
-// following and the writing (LumenCorner.tsx).
+// following and the writing (CompanionCorner.tsx).
 
 import { useRef, useState } from "react";
 
@@ -60,7 +60,7 @@ export function BoxCard({ payload, dispatch }: CardComponentProps<BoxItemCard>) 
 						item.needsDecision ? "text-accent-line" : "text-faint-foreground",
 					)}
 				>
-					{item.needsDecision ? t("shell.lumen.needsDecision") : t("shell.box.cardKicker")}
+					{item.needsDecision ? t("shell.companion.needsDecision") : t("shell.box.cardKicker")}
 				</span>
 				<span className="line-clamp-3 pr-5 text-[14px] leading-snug text-foreground">{item.cover}</span>
 				<span className="text-[12px] text-muted-foreground">{originLabel(item.origin, payload.bookTitle)}</span>

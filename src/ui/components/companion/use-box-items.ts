@@ -1,5 +1,5 @@
 // The open items this device shows (box-cards.ts cardsHere), kept current: the
-// count on the badge and the cards in Lumen's conversation are both read off
+// count on the badge and the cards in the companion's conversation are both read off
 // this. `appBox()` caches nothing, so the list is read twice over: the store's
 // own subscribe covers a write made in this process, and the sync tick covers
 // an item that arrived from the other device.

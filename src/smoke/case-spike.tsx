@@ -10,7 +10,7 @@
 // for a browser to drive from outside.
 //
 // `?mirror` is the corner docked at the left edge: the same one transform on
-// the box the two stand in that LumenCorner writes there, and the badge turning
+// the box the two stand in that CompanionCorner writes there, and the badge turning
 // itself back over under it.
 
 import { useEffect, useRef, useState } from "react";
@@ -19,7 +19,7 @@ import { createRoot } from "react-dom/client";
 import "../styles.css";
 import { cn } from "../ui/components/lib/utils";
 import type { VoiceCallHandle } from "../ui/components/orb/orb";
-import { Lumen, LumenCase } from "../ui/components/companion/Companion";
+import { Companion, CompanionCase } from "../ui/components/companion/Companion";
 import {
   caseLeanDeg,
   caseLookGaze,
@@ -53,10 +53,10 @@ function Badge({ count }: { count: number }) {
 
 function Body() {
   return (
-    <Lumen
+    <Companion
       handle={SILENT}
       still
-      label="Lumen"
+      label="Companion"
       aria-hidden="true"
       tabIndex={-1}
       role="presentation"
@@ -70,13 +70,13 @@ function Body() {
 function Frame({ p }: { p: number }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const el = ref.current?.querySelector("[data-lumen]") as HTMLElement | null;
+    const el = ref.current?.querySelector("[data-companion]") as HTMLElement | null;
     if (!el) return;
     const w = caseReach(p);
     const gaze = caseLookGaze(w);
-    el.style.setProperty("--lumen-tilt", `${caseLeanDeg(w).toFixed(3)}deg`);
-    el.style.setProperty("--lumen-gx", gaze.x.toFixed(4));
-    el.style.setProperty("--lumen-gy", gaze.y.toFixed(4));
+    el.style.setProperty("--companion-tilt", `${caseLeanDeg(w).toFixed(3)}deg`);
+    el.style.setProperty("--companion-gx", gaze.x.toFixed(4));
+    el.style.setProperty("--companion-gy", gaze.y.toFixed(4));
   }, [p]);
   return (
     <div className="flex flex-col items-center gap-1">
@@ -95,7 +95,7 @@ function Frame({ p }: { p: number }) {
             <Body />
             <button type="button" className="absolute box-content block" style={caseTriggerStyle(p)}>
               <span className="relative block h-full w-full">
-                <LumenCase />
+                <CompanionCase />
                 {p === 1 && <Badge count={2} />}
               </span>
             </button>
@@ -137,12 +137,12 @@ function Live() {
       </p>
       <div className={cn("absolute bottom-2 h-18 w-18", MIRROR ? "left-2" : "right-2")}>
         <div className="relative isolate h-18 w-18" style={MIRRORED}>
-          <Lumen
+          <Companion
             handle={SILENT}
             still
             reach={box.reach}
             reaching={box.moving}
-            label="Lumen"
+            label="Companion"
             aria-hidden="true"
             tabIndex={-1}
             role="presentation"
@@ -157,7 +157,7 @@ function Live() {
               style={box.style}
             >
               <span className="relative block h-full w-full">
-                <LumenCase />
+                <CompanionCase />
                 {box.atRest && <Badge count={count} />}
               </span>
             </button>

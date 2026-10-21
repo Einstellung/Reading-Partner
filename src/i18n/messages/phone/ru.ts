@@ -123,7 +123,7 @@ export default {
   "displaySheet.lineSpacing": "Интервал",
   "displaySheet.margins": "Поля",
   "displaySheet.paper": "Бумага",
-  "displaySheet.lumen": "{name}",
+  "displaySheet.companion": "{name}",
   "displaySheet.layout": "Макет",
   "displaySheet.more": "Ещё",
   "displaySheet.tighterLines": "Плотнее строки",

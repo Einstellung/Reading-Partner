@@ -1,4 +1,4 @@
-// The box in Lumen's conversation (docs/68, 2026-10-15): which open items are
+// The box in the companion's conversation (docs/68, 2026-10-15): which open items are
 // drawn as cards in the day's timeline, and where among the rows.
 //
 // Today's conversation shows every item still in the box, the ones left from

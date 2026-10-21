@@ -1,4 +1,4 @@
-// Where Lumen stands when a conversation has the whole window (docs/68).
+// Where the companion stands when a conversation has the whole window (docs/68).
 //
 // The corner sits on the bottom edge everywhere else. In the full-window chat
 // the composer is on that edge, so the corner rises above it by however tall
@@ -8,7 +8,7 @@
 // The one thing it stands down for is a hold-to-talk press. The landing zones
 // float in a panel over the full width of the composer, exactly in the band the
 // lifted corner occupies, and the right-hand zone (Edit) is under the corner
-// itself: a thumb travelling to it must not find Lumen in the way.
+// itself: a thumb travelling to it must not find the companion in the way.
 
 /** The gap between the top of the composer and the bottom of the corner. */
 export const CORNER_GAP_PX = 8;
@@ -83,7 +83,7 @@ export function composerLift(
   return Math.max(0, Math.round(viewportHeight - composer.top + CORNER_GAP_PX));
 }
 
-/** Whether Lumen is drawn at all, and how high. */
+/** Whether the companion is drawn at all, and how high. */
 export function cornerPlacement(input: CornerPlacementInput): CornerPlacement {
   if (!input.shown) return HIDDEN;
   if (!input.chatMain) return { shown: true, liftPx: 0 };

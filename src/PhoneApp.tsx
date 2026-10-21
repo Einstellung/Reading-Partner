@@ -38,10 +38,10 @@ import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import InfoShelf from "./ui/components/info/InfoShelf";
 import PhoneHome from "./ui/components/phone/PhoneHome";
-import { LumenCorner } from "./ui/components/companion/CompanionCorner";
+import { CompanionCorner } from "./ui/components/companion/CompanionCorner";
 import { useCornerLift } from "./ui/components/companion/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
-import { toggleLumenShown, useLumenShown } from "./ui/components/companion/use-companion-shown";
+import { toggleCompanionShown, useCompanionShown } from "./ui/components/companion/use-companion-shown";
 import { PullToAsk } from "./ui/components/phone/gesture/PullToAsk";
 import PhoneReader from "./ui/components/phone/reader/PhoneReader";
 import PhoneLessonScreen from "./ui/components/phone/lesson/PhoneLessonScreen";
@@ -116,15 +116,15 @@ export default function PhoneApp({
   const t = useT();
   const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
   // The corner companion, per device (docs/68). The phone keeps its own answer:
-  // a reader who put Lumen away here has not put it away on the desk.
-  const lumenShown = useLumenShown();
+  // a reader who put the companion away here has not put it away on the desk.
+  const companionShown = useCompanionShown();
   // Where it stands. Every conversation on this shell is the whole screen, so
   // any composer that reports itself is one sitting on the bottom edge, and the
-  // corner rises above it (lumen/corner-placement.ts) — the briefing's call, the
+  // corner rises above it (companion/corner-placement.ts) — the briefing's call, the
   // lesson and the lesson's aside alike. On the screens that hold no
   // conversation nothing is measured and the corner keeps the corner.
-  const { composerRef: composerSlot, placement: lumen } = useCornerLift(lumenShown, true);
-  const toggleLumen = toggleLumenShown;
+  const { composerRef: composerSlot, placement: companion } = useCornerLift(companionShown, true);
+  const toggleCompanion = toggleCompanionShown;
   // The kept articles (docs/21). Fixed to the Brief topic: the phone has no
   // other place to file one from. The one being read is a stack entry.
   // Null until saved-articles.json has been read: "Nothing kept yet" is a claim
@@ -419,8 +419,8 @@ export default function PhoneApp({
                 settingsAlert={syncReport.alert !== "none"}
                 meals={settings.meals}
                 onOpenMeals={() => onNavigate("meals")}
-                lumenShown={lumenShown}
-                onToggleLumen={toggleLumen}
+                companionShown={companionShown}
+                onToggleCompanion={toggleCompanion}
               />
             )}
           />
@@ -543,19 +543,19 @@ export default function PhoneApp({
         )}
       </div>
 
-      {/* Lumen, bottom right, on every screen this shell draws (docs/68). A card
+      {/* The companion, bottom right, on every screen this shell draws (docs/68). A card
           born over a book opens that book's conversation: a paper's lesson, an
           EPUB's thread over its page (companion/box-jump.ts). One born in the
-          coach or a retell cannot jump here and says so. Typing to Lumen opens a chat of its own here,
+          coach or a retell cannot jump here and says so. Typing to the companion opens a chat of its own here,
           which draws cards like every other chat, so it gets the card table
           too. */}
       <CardRegistryProvider>
-      <LumenCorner
+      <CompanionCorner
         shell="phone"
-        shown={lumen.shown}
-        liftPx={lumen.liftPx}
+        shown={companion.shown}
+        liftPx={companion.liftPx}
         // The lesson's replies are read and held where the lifted corner
-        // would stand, so Lumen stands down for that screen (docs/74).
+        // would stand, so the companion stands down for that screen (docs/74).
         stoodDown={base.kind === "lesson"}
         targets={{
           // A brief (docs/info/88): on no topic, opened straight in the reader.
@@ -577,7 +577,7 @@ export default function PhoneApp({
               return;
             }
           },
-          // An intake card's 「打开阅读」 (lumen/IntakeCard.tsx).
+          // An intake card's 「打开阅读」 (companion/IntakeCard.tsx).
           openDocument: (doc) =>
             openReader({ bookId: doc.hash, name: doc.title, topicId: doc.topicId, path: doc.path }),
         }}

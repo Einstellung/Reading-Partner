@@ -3,7 +3,7 @@
 // Every thread the call names gets every line. A call held on the briefing
 // writes to the day's info thread, the model history the briefing page's Ask
 // reads and the distillation that runs on hang-up, and copies each line into
-// today's door conversation, where Lumen's panel shows what was said (docs/68),
+// today's door conversation, where the companion's panel shows what was said (docs/68),
 // live through the thread store's append event. A call held at the door writes
 // only to the door conversation. One stamp per line, shared by every copy, so a
 // line that settles again is patched in place everywhere.

@@ -11,7 +11,7 @@
 // Two text tabs and no title bar. Layout is scrolling or turning pages
 // (docs/79), then text size, line spacing and margins as stepped tracks
 // (SteppedTrack.tsx) whose end icons stand in for row labels, then the paper.
-// More is the Lumen switch, the same one as Settings and the home screen's
+// More is the companion switch, the same one as Settings and the home screen's
 // title (docs/68). Both panels share one grid cell, so the sheet is as tall on
 // More as on Layout and the tabs stay under the finger; it opens on Layout
 // every time because the content unmounts on close.
@@ -40,7 +40,7 @@ import {
 } from "../../base/icons";
 import { cn } from "../../lib/utils";
 import { useCompanionName } from "../../base/use-companion-name";
-import { setLumenShown, useLumenShown } from "../../companion/use-companion-shown";
+import { setCompanionShown, useCompanionShown } from "../../companion/use-companion-shown";
 import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
 import { Switch } from "../../ui/switch";
@@ -83,7 +83,7 @@ export default function PhoneDisplaySheet(props: {
   const { display, onChange } = props;
   const t = useT();
   const companionName = useCompanionName();
-  const lumenShown = useLumenShown();
+  const companionShown = useCompanionShown();
   const lineStep = stepIndexOf(LINE_VALUES, display.lineHeight, FLOW_DISPLAY_DEFAULT.lineHeight);
   const padStep = stepIndexOf(PAD_VALUES, display.padX, FLOW_DISPLAY_DEFAULT.padX);
   return (
@@ -174,12 +174,12 @@ export default function PhoneDisplaySheet(props: {
 
             <TabsContent value="more" forceMount className={cn(PANEL_CLASS, "px-4 pt-2")}>
               <div className="flex min-h-11 items-center justify-between gap-3 px-1">
-                <span className="text-[15px]">{t("phone.displaySheet.lumen", { name: companionName })}</span>
+                <span className="text-[15px]">{t("phone.displaySheet.companion", { name: companionName })}</span>
                 <Switch
                   className="data-[state=checked]:bg-foreground"
-                  aria-label={t("phone.displaySheet.lumen", { name: companionName })}
-                  checked={lumenShown}
-                  onCheckedChange={setLumenShown}
+                  aria-label={t("phone.displaySheet.companion", { name: companionName })}
+                  checked={companionShown}
+                  onCheckedChange={setCompanionShown}
                 />
               </div>
             </TabsContent>

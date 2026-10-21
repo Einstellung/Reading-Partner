@@ -90,7 +90,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     place,
     deliverTo: { place: "briefing", date: opts.dateKey },
     // The call's home is the day's thread, and every line is copied into
-    // today's door conversation, where Lumen's panel shows it. The thread has
+    // today's door conversation, where the companion's panel shows it. The thread has
     // to be in memory before the first turn reads its history off it, and
     // before the first line is appended to it.
     threads: async () => {

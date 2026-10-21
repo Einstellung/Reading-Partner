@@ -7,7 +7,7 @@ export interface IntakeCard {
   kind: "link-intake";
   intakeId: string;
   /**
-   * The topic Lumen suggested when it raised the card, by id. Absent when the
+   * The topic the companion suggested when it raised the card, by id. Absent when the
    * model named none; the card then marks the program's own suggestion.
    */
   suggestedTopicId?: string;

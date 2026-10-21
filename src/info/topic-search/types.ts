@@ -1,5 +1,5 @@
 // A topic search (docs/info/88): what the reader is following, drafted with
-// Lumen at the door and kept in info-topic-searches.json. The config is the
+// The companion at the door and kept in info-topic-searches.json. The config is the
 // whole of what the search knows about the topic; the concern statement only
 // says the reader is following it (docs/soul/48), and nothing below goes into
 // a statement.

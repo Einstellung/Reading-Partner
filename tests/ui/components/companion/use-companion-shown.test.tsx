@@ -1,4 +1,4 @@
-// Lumen's switch as one value for every place that shows it (docs/68): the
+// The companion's switch as one value for every place that shows it (docs/68): the
 // shells' buttons, Settings and the phone reader's Display sheet.
 //
 // Run: bun test.
@@ -10,13 +10,13 @@ import { useDom } from "../../../support/dom";
 
 await useDom();
 
-const { LUMEN_CORNER_KEY } = await import("../../../../src/ui/components/companion/corner-pref");
+const { COMPANION_CORNER_KEY } = await import("../../../../src/ui/components/companion/corner-pref");
 const {
-  currentLumenShown,
-  resetLumenShownForTest,
-  setLumenShown,
-  subscribeLumenShown,
-  toggleLumenShown,
+  currentCompanionShown,
+  resetCompanionShownForTest,
+  setCompanionShown,
+  subscribeCompanionShown,
+  toggleCompanionShown,
 } = await import("../../../../src/ui/components/companion/use-companion-shown");
 const { default: FeaturesPanel } = await import(
   "../../../../src/ui/components/settings/FeaturesPanel"
@@ -26,30 +26,30 @@ const { DEFAULT_SETTINGS } = await import("../../../../src/platform/app/settings
 // Other files in the same run have read the store already.
 beforeEach(() => {
   window.localStorage.clear();
-  resetLumenShownForTest();
+  resetCompanionShownForTest();
 });
 
 test("reads what this device last chose", () => {
-  window.localStorage.setItem(LUMEN_CORNER_KEY, "0");
-  expect(currentLumenShown()).toBe(false);
+  window.localStorage.setItem(COMPANION_CORNER_KEY, "0");
+  expect(currentCompanionShown()).toBe(false);
 });
 
 test("a change is written and reaches every subscriber", () => {
   let heard = 0;
-  const stop = subscribeLumenShown(() => heard++);
-  setLumenShown(false);
-  expect(window.localStorage.getItem(LUMEN_CORNER_KEY)).toBe("0");
-  expect(currentLumenShown()).toBe(false);
-  toggleLumenShown();
-  expect(currentLumenShown()).toBe(true);
+  const stop = subscribeCompanionShown(() => heard++);
+  setCompanionShown(false);
+  expect(window.localStorage.getItem(COMPANION_CORNER_KEY)).toBe("0");
+  expect(currentCompanionShown()).toBe(false);
+  toggleCompanionShown();
+  expect(currentCompanionShown()).toBe(true);
   // Setting what is already there is no change.
-  setLumenShown(true);
+  setCompanionShown(true);
   stop();
   expect(heard).toBe(2);
 });
 
 // The checkbox that sits just before the card's label.
-function lumenBox(): string {
+function companionBox(): string {
   const html = renderToStaticMarkup(
     <FeaturesPanel
       settings={{ ...DEFAULT_SETTINGS }}
@@ -64,7 +64,7 @@ function lumenBox(): string {
 }
 
 test("Settings draws the switch on every shell, checked as the store says", () => {
-  expect(lumenBox()).toContain('aria-checked="true"');
-  setLumenShown(false);
-  expect(lumenBox()).toContain('aria-checked="false"');
+  expect(companionBox()).toContain('aria-checked="true"');
+  setCompanionShown(false);
+  expect(companionBox()).toContain('aria-checked="false"');
 });

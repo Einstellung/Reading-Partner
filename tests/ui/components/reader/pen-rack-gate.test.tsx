@@ -125,8 +125,8 @@ function topBar(gate: LevelGate) {
       gate={gate}
       onOpenSettings={() => {}}
       settingsAlert={false}
-      lumenShown={true}
-      onToggleLumen={() => {}}
+      companionShown={true}
+      onToggleCompanion={() => {}}
     />,
   );
   const button = (label: string) =>

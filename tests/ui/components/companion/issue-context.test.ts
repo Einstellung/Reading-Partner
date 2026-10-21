@@ -1,9 +1,9 @@
-// The brief open in the reader, as Lumen's conversation sees it
+// The brief open in the reader, as the companion's conversation sees it
 // (src/ui/components/companion/issue-context.ts, docs/info/88).
 
 import { beforeEach, expect, test } from "bun:test";
 import {
-  askLumen,
+  askCompanion,
   doorCitationJump,
   getOpenIssue,
   noteOnLastLine,
@@ -11,7 +11,7 @@ import {
   opensDoor,
   publishOpenIssue,
   resetIssueContext,
-  subscribeAskLumen,
+  subscribeAskCompanion,
   subscribeOpenIssue,
   type OpenIssue,
 } from "../../../../src/ui/components/companion/issue-context";
@@ -53,11 +53,11 @@ test("the door comes up for a brief being opened, not for the same one published
 
 test("an Ask hands the passage over squeezed, and an empty one hands nothing", () => {
   const asked: string[] = [];
-  const off = subscribeAskLumen((q) => asked.push(q.text));
-  askLumen({ text: "  a model\n writes proofs " });
-  askLumen({ text: "   " });
+  const off = subscribeAskCompanion((q) => asked.push(q.text));
+  askCompanion({ text: "  a model\n writes proofs " });
+  askCompanion({ text: "   " });
   off();
-  askLumen({ text: "after" });
+  askCompanion({ text: "after" });
   expect(asked).toEqual(["a model writes proofs"]);
 });
 
@@ -89,7 +89,7 @@ test("a brief's rack has no AI pen; a book's keeps it", () => {
   expect(rackOmits(true)).toEqual([]);
 });
 
-test("the opening is the first line of Lumen's at or after the conversation came up", () => {
+test("the opening is the first line of the companion's at or after the conversation came up", () => {
   const talk = [
     { role: "user", ts: 100 },
     { role: "ai", ts: 101 },

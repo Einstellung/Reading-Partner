@@ -14,19 +14,19 @@
 // open through the whole call (docs/33 M-voice-3), so while the companion talks
 // the level it reports is the room plus whatever of the voice leaks back before
 // the echo canceller converges. A mouth on that signal opens at the loudest
-// thing nearby, which is often not Lumen.
+// thing nearby, which is often not the companion.
 
 import { clampLevel } from "../orb/orb";
-import type { LumenAct } from "./companion-motion";
+import type { CompanionAct } from "./companion-motion";
 import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 
 /**
  * Which of the two signals the body is drawn from this frame. Speaking reads
  * the voice, everything else reads the room — see the note above for why a
- * microphone that is open through the whole call cannot be asked what Lumen is
+ * microphone that is open through the whole call cannot be asked what the companion is
  * saying.
  */
-export function levelFor(act: LumenAct, micLevel: number, voiceLevel: number): number {
+export function levelFor(act: CompanionAct, micLevel: number, voiceLevel: number): number {
 	return clampLevel(act === "speak" ? voiceLevel : micLevel);
 }
 

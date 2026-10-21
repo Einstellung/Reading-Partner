@@ -7,7 +7,7 @@ import { issueBookOfItem } from "./types";
 /**
  * The reader has the issue open, so the box has nothing more to say about it:
  * its item moves to told, which takes the card out of the corner and out of the
- * door's conversation, where Lumen's opening already says it. Whichever way the
+ * door's conversation, where the companion's opening already says it. Whichever way the
  * issue was opened: from the card, the shelf or a link.
  */
 export async function markIssueTold(box: Pick<BoxStore, "list" | "setState">, bookId: string): Promise<void> {

@@ -35,7 +35,7 @@ export type JumpStep =
   | { step: "open-coach"; outlineId: string }
   | { step: "open-retell"; retellId: string }
   // The door conversation of that day, opened over whatever is on screen
-  // (lumen/DoorChat.tsx), at the row the card is about when there is one.
+  // (companion/DoorChat.tsx), at the row the card is about when there is one.
   | { step: "open-door-chat"; date: string; focus?: DoorFocus };
 
 /**

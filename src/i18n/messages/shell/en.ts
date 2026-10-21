@@ -1,6 +1,6 @@
 // Shell: App.tsx and PhoneApp.tsx, the sidebar and header controls around
-// them (ui/components/common, ui/components/base), the Lumen corner and its
-// box of cards (ui/components/lumen, voice text excepted), the figure cards
+// them (ui/components/common, ui/components/base), the companion corner and its
+// box of cards (ui/components/companion, voice text excepted), the figure cards
 // in a reply (ui/components/markdown), and the sentences a few platform
 // modules hand up to be shown as a toast (platform/sync/health.ts,
 // platform/sync/auth.ts, ai/image-utils.ts). The source every other locale is
@@ -46,16 +46,16 @@ export default {
   "sidebar.updating": "Updating…",
   "sidebar.restartToUpdate": "Restart to update",
 
-  // Lumen, the corner companion, and the case she carries the box in.
-  "lumen.show": "Show {name}",
-  "lumen.hide": "Hide {name}",
-  "lumen.needsDecision": "Needs a decision",
-  "lumen.callCardClose": "Close",
-  "lumen.tapToChat": "{name}: tap to chat",
-  "lumen.inCall": "{name}: open the conversation (the voice chat goes on)",
-  "lumen.hangUp": "End voice chat",
+  // The companion in the corner, and the case she carries the box in.
+  "companion.show": "Show {name}",
+  "companion.hide": "Hide {name}",
+  "companion.needsDecision": "Needs a decision",
+  "companion.callCardClose": "Close",
+  "companion.tapToChat": "{name}: tap to chat",
+  "companion.inCall": "{name}: open the conversation (the voice chat goes on)",
+  "companion.hangUp": "End voice chat",
 
-  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  // Typing to the companion: the day's conversation at the door (companion/DoorChat.tsx).
   "door.title": "{name}",
   "door.close": "Close",
   "door.expand": "Larger",

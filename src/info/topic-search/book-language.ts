@@ -3,7 +3,7 @@
 // `languageInstruction("auto")` is empty on purpose for chat, which mirrors the
 // reader's words; a book has no reader words in its prompt, so left to itself
 // the model picked a language at random (docs/pitfall/647). Everything that
-// ends up in an issue — the write-up, the doubts, Lumen's opening, the
+// ends up in an issue — the write-up, the doubts, the companion's opening, the
 // program's own labels — goes through here and agrees.
 
 import { localeForSetting, type Locale } from "../../i18n/locale";

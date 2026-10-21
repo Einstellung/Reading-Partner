@@ -7,7 +7,7 @@
 // numbers below decide what the companion looks like, and eyeballing them on a
 // device is not a way to find out whether they are right. The renderer is now
 // ui/components/companion/Companion.tsx, which draws a body rather than a disc and adds
-// its own arithmetic in lumen.ts; everything here is what the two share.
+// its own arithmetic in companion-motion.ts; everything here is what the two share.
 //
 // One colour for the whole conversation loop, four kinds of motion. Every orb
 // with a published state list says the same thing — the states are pipeline
@@ -32,7 +32,7 @@ export type OrbPhase = "idle" | "listening" | "thinking" | "speaking";
 // `subscribeLevel` and not a `level` field: the level arrives about ten times a
 // second for as long as the call lasts, and a twenty-minute call is not a
 // re-render budget. The subscriber writes to a ref and a single rAF loop reads
-// it (Lumen.tsx).
+// it (Companion.tsx).
 export interface VoiceCallHandle {
 	phase: OrbPhase;
 	start: () => void;
@@ -43,7 +43,7 @@ export interface VoiceCallHandle {
 	subscribeLevel: (cb: (value: number) => void) => () => void;
 	// The shape of the sentence about to be spoken (docs/45), one event per
 	// sentence, and `null` for "nothing queued will be heard". The mouth reads
-	// this while Lumen speaks and the microphone the rest of the time: during
+	// this while the companion speaks and the microphone the rest of the time: during
 	// `speaking` the microphone carries the room, not the voice.
 	subscribeEnvelope: (cb: (envelope: SpeechEnvelope | null) => void) => () => void;
 }

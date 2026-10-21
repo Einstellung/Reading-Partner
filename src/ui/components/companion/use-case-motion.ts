@@ -3,11 +3,11 @@
 //
 // Three things re-render the corner — the case appearing, the case setting
 // down, and the case starting to leave — and nothing else does. The frames in
-// between are style writes, the way Lumen's own loop paints its properties, so
+// between are style writes, the way the companion's own loop paints its properties, so
 // a pull-out is not sixty renders of a popover.
 //
 // The body's half of the act leaves through `reach`: one mutable number the
-// corner hands to Lumen, which reads it on its own frames. A prop would be a
+// corner hands to the companion, which reads it on its own frames. A prop would be a
 // render per frame, which is the thing this is avoiding.
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
@@ -69,7 +69,7 @@ function viewOf(state: CaseMotion) {
 
 /**
  * The case's whole life, from a count. The count's first reading is not an act
- * (case-motion.ts), so the corner does not pull a case out of Lumen's back the
+ * (case-motion.ts), so the corner does not pull a case out of the companion's back the
  * moment the app opens on a box that was already full.
  */
 export function useCaseMotion(count: number): CornerCase {

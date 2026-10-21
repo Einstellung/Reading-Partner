@@ -24,7 +24,7 @@ export default {
   "top.zoomIn": "Увеличить",
   "top.zoomOut": "Уменьшить",
   "top.pagedFlip": "Постраничный режим",
-  "top.lumen": "{name}",
+  "top.companion": "{name}",
   "top.settings": "Настройки",
   "top.closePanel": "Закрыть панель",
   "top.openPanel": "Открыть панель",

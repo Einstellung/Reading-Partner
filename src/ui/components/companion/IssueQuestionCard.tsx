@@ -1,4 +1,4 @@
-// A question Lumen asks when a brief opens (info/issue/question-card.ts): the
+// A question the companion asks when a brief opens (info/issue/question-card.ts): the
 // question, its quick answers, and "in my own words". Presentational: a press
 // only raises intent, and the door chat says the answer (use-door-chat.ts).
 

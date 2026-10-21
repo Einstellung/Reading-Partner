@@ -93,8 +93,8 @@ export default {
   "features.paperHint":
     "Turns the white behind the whole app — chats, shelves, sidebars, this dialog, and the pages of a book — into an off-white paper colour. There is one shade and no darker step; this is not a dark mode. The choice stays on this device.",
   "features.reading": "Reading",
-  "features.lumen": "Show {name}",
-  "features.lumenHint":
+  "features.companionShow": "Show {name}",
+  "features.companionShowHint":
     "{name} stands in the corner of every screen, the reader included. Off, the corner is empty; the {name} button in the sidebar, on the phone's home screen and in the reader's More menu brings it back. The choice stays on this device.",
   "features.companionName": "Companion name",
   "features.briefing": "Briefing",

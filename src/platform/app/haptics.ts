@@ -1,5 +1,5 @@
 // The taps the hand feels, for the gestures that have no other confirmation on
-// a phone: a hold on Lumen opening the voice session and a hold ending it
+// a phone: a hold on the companion opening the voice session and a hold ending it
 // (docs/68), and a hold on the lesson's reply landing (docs/74).
 //
 // One medium impact to start, two light ones to end. Two directions that must

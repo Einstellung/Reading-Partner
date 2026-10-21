@@ -1,4 +1,4 @@
-// Where Lumen is looking, from what the turn is doing (docs/66 "四段"). The
+// Where the companion is looking, from what the turn is doing (docs/66 "四段"). The
 // check act — eyes down on the desk, two quick scans, then back up — is driven
 // by a real event and nothing else: a tool call in flight. No model output is
 // involved, which is why this can run today while SoulIntent's `attention`
@@ -29,7 +29,7 @@ export const WORK_LINGER_MS = 250;
  * What has happened on the turn so far, folded down to the three numbers the
  * answer needs. Not a list of events: a long call would grow one forever.
  */
-export interface LumenActivity {
+export interface CompanionActivity {
   /** Tool calls started and not yet finished. */
   running: number;
   /** When the current stretch of work began, or null when there is none. */
@@ -39,12 +39,12 @@ export interface LumenActivity {
 }
 
 /** Nothing has happened. */
-export function noActivity(): LumenActivity {
+export function noActivity(): CompanionActivity {
   return { running: 0, workSince: null, lastEndAt: null };
 }
 
 /** When the glance would end, were nothing else to happen. */
-function workUntil(state: LumenActivity): number {
+function workUntil(state: CompanionActivity): number {
   const since = state.workSince ?? 0;
   const end = state.lastEndAt ?? since;
   return Math.max(since + WORK_DWELL_MS, end + WORK_LINGER_MS);
@@ -57,7 +57,7 @@ function workUntil(state: LumenActivity): number {
  * `away` is not produced here. It is a thing the soul would have to say about
  * itself, and this file only reads what the app can see.
  */
-export function attentionFrom(state: LumenActivity, now: number): Attention {
+export function attentionFrom(state: CompanionActivity, now: number): Attention {
   if (state.workSince === null) return "reader";
   if (state.running > 0) return "work";
   return now < workUntil(state) ? "work" : "reader";
@@ -70,10 +70,10 @@ export function attentionFrom(state: LumenActivity, now: number): Attention {
  * dropped turn twice cannot push the count below zero.
  */
 export function applyActivity(
-  state: LumenActivity,
+  state: CompanionActivity,
   event: TurnActivity,
   now: number,
-): LumenActivity {
+): CompanionActivity {
   if (event.kind !== "tool") return state;
   if (event.phase === "start") {
     // A stretch that has already ended is not extended: the next glance is a
@@ -94,7 +94,7 @@ export function applyActivity(
  * rather than polling. Null while a tool is still out (the next event decides)
  * and null once the eyes are back on the reader.
  */
-export function attentionEndsAt(state: LumenActivity, now: number): number | null {
+export function attentionEndsAt(state: CompanionActivity, now: number): number | null {
   if (state.workSince === null || state.running > 0) return null;
   const until = workUntil(state);
   return until > now ? until : null;

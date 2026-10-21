@@ -1,5 +1,5 @@
 // The bottom-edge register (src/ui/components/base/bottom-sheet.ts): a sheet
-// says it is standing there and Lumen's corner reads it. Run: bun test.
+// says it is standing there and the companion's corner reads it. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
 import {

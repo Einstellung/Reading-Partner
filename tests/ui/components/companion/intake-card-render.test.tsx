@@ -98,7 +98,7 @@ test("every state reads off its record: list, pick, ready, receipt, failure, ano
   expect(view.getByText("Not taken: it has no text of its own (x.com/robotbird01/status/2107026689935200274)")).toBeTruthy();
   expect(view.getByText("it was read, but nothing in it could be filed")).toBeTruthy();
   expect(view.getByText("This link was taken in on another device. Pick its topic there.")).toBeTruthy();
-  // Lumen's suggestion is marked on the first card only (the others fall back to the program's).
+  // The companion's suggestion is marked on the first card only (the others fall back to the program's).
   expect(view.getAllByText("Suggested").length).toBeGreaterThan(0);
 
   // Tapping a topic asks for the pick; Open asks for the document.

@@ -7,7 +7,7 @@ import { useT } from "../../../i18n";
 import PeerUpdateNotice from "../common/PeerUpdateNotice";
 import SettingsButton from "../common/SettingsButton";
 import type { ContinueBook } from "./shelf-list";
-import { lumenToggleTitle } from "../base/companion-toggle";
+import { companionToggleTitle } from "../base/companion-toggle";
 import { useCompanionName } from "../base/use-companion-name";
 import { BriefingCardBody, Card, CardBodyPlaceholder, CardLabel } from "../info/HomeCard";
 import type { LaunchProps } from "../info/InfoHome";
@@ -23,8 +23,8 @@ export default function PhoneHome({
   settingsAlert,
   meals,
   onOpenMeals,
-  lumenShown,
-  onToggleLumen,
+  companionShown,
+  onToggleCompanion,
 }: {
   launch: LaunchProps;
   // How many articles are kept, or null while saved-articles.json is being read.
@@ -44,8 +44,8 @@ export default function PhoneHome({
   onOpenMeals: () => void;
   // The corner companion's switch (docs/68). The phone has no sidebar, so the
   // app's own name on the home screen is what carries it.
-  lumenShown: boolean;
-  onToggleLumen: () => void;
+  companionShown: boolean;
+  onToggleCompanion: () => void;
 }) {
   const t = useT();
   const companionName = useCompanionName();
@@ -57,10 +57,10 @@ export default function PhoneHome({
             <button
               type="button"
               className="bg-transparent p-0 text-left font-display text-[24px] font-semibold text-foreground"
-              title={lumenToggleTitle(lumenShown, companionName)}
-              aria-label={lumenToggleTitle(lumenShown, companionName)}
-              aria-pressed={lumenShown}
-              onClick={onToggleLumen}
+              title={companionToggleTitle(companionShown, companionName)}
+              aria-label={companionToggleTitle(companionShown, companionName)}
+              aria-pressed={companionShown}
+              onClick={onToggleCompanion}
             >
               Reading Partner
             </button>

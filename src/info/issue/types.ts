@@ -32,7 +32,7 @@ export interface IssueEntry {
   bookId: string;
   boxItemId: string;
   createdAt: number;
-  /** What Lumen says when the issue is first opened (opening-record.ts); absent on issues made before it. */
+  /** What the companion says when the issue is first opened (opening-record.ts); absent on issues made before it. */
   opening?: IssueOpeningRecord;
 }
 

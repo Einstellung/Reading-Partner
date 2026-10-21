@@ -27,8 +27,8 @@ function render(
       settingsAlert={over.alert ?? false}
       collapsed={over.collapsed ?? false}
       onToggleCollapsed={() => {}}
-      lumenShown={true}
-      onToggleLumen={() => {}}
+      companionShown={true}
+      onToggleCompanion={() => {}}
     />,
   );
 }
@@ -132,8 +132,8 @@ test("the restart-to-update row appears only with an update waiting", () => {
         settingsAlert={false}
         collapsed={false}
         onToggleCollapsed={() => {}}
-        lumenShown={true}
-        onToggleLumen={() => {}}
+        companionShown={true}
+        onToggleCompanion={() => {}}
         update={update}
         onApplyUpdate={() => {}}
       />,

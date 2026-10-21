@@ -1,4 +1,4 @@
-// The binding half of corner-drag.ts: the pointer's timeline on Lumen's body,
+// The binding half of corner-drag.ts: the pointer's timeline on the companion's body,
 // the window it is being dragged in, and the one slot that remembers where it
 // was left (docs/68).
 //
@@ -42,7 +42,7 @@ import {
   type DragAnchor,
   type DragOffset,
 } from "./corner-drag";
-import { readLumenCornerSpot, writeLumenCornerSpot } from "./corner-pref";
+import { readCompanionCornerSpot, writeCompanionCornerSpot } from "./corner-pref";
 
 export interface CornerDrag {
   /** Which edge the corner is docked at. */
@@ -87,7 +87,7 @@ export function useCornerDrag(composerLiftPx: number): CornerDrag {
   const [spot, setSpot] = useState<CornerSpot>(() =>
     typeof window === "undefined"
       ? CORNER_SPOT_DEFAULT
-      : readLumenCornerSpot(browserPrefStore(window)),
+      : readCompanionCornerSpot(browserPrefStore(window)),
   );
   const [frame, setFrame] = useState<CornerFrame>(() =>
     typeof window === "undefined"
@@ -170,7 +170,7 @@ export function useCornerDrag(composerLiftPx: number): CornerDrag {
   const commit = useCallback((next: CornerSpot) => {
     spotRef.current = next;
     setSpot(next);
-    writeLumenCornerSpot(browserPrefStore(window), next);
+    writeCompanionCornerSpot(browserPrefStore(window), next);
   }, []);
 
   const frameRef = useCallback((el: HTMLElement | null) => {

@@ -24,7 +24,7 @@ export default {
   "top.zoomIn": "拡大",
   "top.zoomOut": "縮小",
   "top.pagedFlip": "ページめくり表示",
-  "top.lumen": "{name}",
+  "top.companion": "{name}",
   "top.settings": "設定",
   "top.closePanel": "パネルを閉じる",
   "top.openPanel": "パネルを開く",

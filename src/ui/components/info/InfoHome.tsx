@@ -182,7 +182,7 @@ export default function InfoHome(props: {
     onOverlayChange: props.onOverlayChange,
   });
 
-  // What a hold on Lumen would be about (docs/68). The briefing screen is the
+  // What a hold on the companion would be about (docs/68). The briefing screen is the
   // one place with a day's thread to talk about, so it publishes it for the
   // corner, which is a sibling of both shells and cannot be handed it as a
   // prop. Not while the text call is up: that is the same conversation in the
@@ -265,7 +265,7 @@ export default function InfoHome(props: {
         return (
           <>
             {wrapped}
-            {/* The corner entry is Lumen's, in every shell and on every screen
+            {/* The corner entry is the companion's, in every shell and on every screen
                 (ui/components/companion/CompanionCorner, docs/68): a long press there
                 opens the session and a second one ends it. This screen draws
                 none of it and only says what it would be about, above. */}

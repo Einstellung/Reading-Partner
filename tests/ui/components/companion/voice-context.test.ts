@@ -1,4 +1,4 @@
-// What a hold on Lumen would talk about (src/ui/components/companion/voice-context.ts):
+// What a hold on the companion would talk about (src/ui/components/companion/voice-context.ts):
 // one screen's context at a time, announced to the corner, and an unmount that
 // arrives late does not take the next screen's context down with it.
 //

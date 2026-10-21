@@ -11,8 +11,8 @@
 // screen, faint, and a dot at the top right when Learn has a reply waiting.
 //
 // While the bottom bar is up it fills the shell's composer slot, the way a
-// conversation's composer does, so Lumen's corner stands above it instead of on
-// Learn (lumen/corner-placement.ts).
+// conversation's composer does, so the companion's corner stands above it instead of on
+// Learn (companion/corner-placement.ts).
 
 import { useT } from "../../../../i18n";
 import type { ViewStats } from "../../../../platform/app/reader-contract";

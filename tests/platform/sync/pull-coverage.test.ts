@@ -60,7 +60,7 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "topic-study-": "a study's record is read from disk each time it is wanted — a card, the version list, an update — and written back in one go",
   "info-topic-search-questions.json": "read from disk at the start of a run's write phase and written back at its end, never held between runs",
   "info-shelf.json": "read from disk each time an issue is assembled, and appended to once per issue; nothing holds it between",
-  "info-issue-spoken.json": "read from disk each time a brief is opened, to see whether Lumen has said its opening; nothing holds it between",
+  "info-issue-spoken.json": "read from disk each time a brief is opened, to see whether the companion has said its opening; nothing holds it between",
   "info-meals-recipes.json": "a recipe is read from disk when its page opens, and written once under its own key",
   "info-link-records.json": "the link records are read from disk and written back in one go, at the end of an ingest",
   "info-picture-":

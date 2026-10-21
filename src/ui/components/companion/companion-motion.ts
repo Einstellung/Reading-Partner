@@ -1,4 +1,4 @@
-// Lumen's arithmetic (docs/45): what a body made of light does with time, with
+// The companion's arithmetic (docs/45): what a body made of light does with time, with
 // the microphone level, and with a pointer it can look at. The orb's four
 // pipeline states are unchanged and its smoothing is unchanged — orb.ts owns
 // both, and this module imports them rather than restating them. What is new is
@@ -7,8 +7,8 @@
 //
 // A ui-layer display module with no React in it, the same way orb.ts is. Every
 // number a frame writes comes from here, so a test can state a time and read the
-// frame back instead of watching for it. Named companion-motion and not lumen: bun
-// resolves an import case-insensitively and `./lumen` next to `Lumen.tsx` loads
+// frame back instead of watching for it. Named companion-motion and not companion: bun
+// resolves an import case-insensitively and `./companion` next to `Companion.tsx` loads
 // the component (docs/pitfall/218), which is the same trap orb.ts sidestepped by
 // calling its renderer VoiceOrb.
 //
@@ -212,7 +212,7 @@ export const GAZE_RELEASE_MS = 3000;
 
 // --- the four acts --------------------------------------------------------
 //
-// Lumen does not animate states, it performs four acts: watch you, look up,
+// The companion does not animate states, it performs four acts: watch you, look up,
 // glance down at the desk and scan it, look back and talk. The eye direction
 // and the three mouth shapes carry the story; everything else stays small
 // enough that the whole thing still reads at 72 px.
@@ -225,9 +225,9 @@ export type Attention = "reader" | "work" | "away";
 // The act, which is the phase crossed with the attention. `rest` is idle —
 // named for what the body is doing rather than for the pipeline, because the
 // table below is about a body.
-export type LumenAct = "rest" | "listen" | "think" | "check" | "speak";
+export type CompanionAct = "rest" | "listen" | "think" | "check" | "speak";
 
-export function actFor(phase: OrbPhase, attention: Attention = "reader"): LumenAct {
+export function actFor(phase: OrbPhase, attention: Attention = "reader"): CompanionAct {
 	switch (phase) {
 		// A call waiting on the reader while its background work runs: the
 		// attention is on the desk (background-scan.ts).
@@ -288,7 +288,7 @@ export interface ActBody {
 	mouthOpen: number;
 }
 
-export const ACT: Record<LumenAct, ActBody> = {
+export const ACT: Record<CompanionAct, ActBody> = {
 	// Nothing is happening. One slow breath, the blink, the drift: alive, not
 	// inflating.
 	rest: {
@@ -409,7 +409,7 @@ export const ACT: Record<LumenAct, ActBody> = {
 
 // Where each act points the eyes, in the same eye-widths `gazeToward` returns.
 // Positive y is down.
-export const EYE_TARGET: Record<LumenAct, Gaze> = {
+export const EYE_TARGET: Record<CompanionAct, Gaze> = {
 	rest: { x: 0, y: 0 },
 	listen: { x: 0, y: 0.08 },
 	// Up and to one side, as in docs/assets/lumen/lumen-thinking.png.
@@ -421,7 +421,7 @@ export const EYE_TARGET: Record<LumenAct, Gaze> = {
 // How hard each act pulls the eyes toward their target, per frame at 60 fps.
 // The scan is the one place an eye is allowed to snap: a hop that eased would
 // still be halfway across when the next one started.
-export const GAZE_K_ACT: Record<LumenAct, number> = {
+export const GAZE_K_ACT: Record<CompanionAct, number> = {
 	rest: GAZE_K,
 	listen: 0.16,
 	think: 0.14,
@@ -451,7 +451,7 @@ export function scanGaze(actMs: number): Gaze {
 // The gaze an act asks for at a moment in it. Everything but the scan is a
 // fixed direction — the story is told by where the eyes are, not by how they
 // travel.
-export function actGaze(act: LumenAct, actMs: number): Gaze {
+export function actGaze(act: CompanionAct, actMs: number): Gaze {
 	return act === "check" ? scanGaze(actMs) : EYE_TARGET[act];
 }
 
@@ -478,7 +478,7 @@ export interface MouthState {
 
 export const MOUTH_SHUT: MouthState = { voicedAt: null };
 
-export function stepMouth(state: MouthState, act: LumenAct, level: number, now: number): MouthState {
+export function stepMouth(state: MouthState, act: CompanionAct, level: number, now: number): MouthState {
 	if (act !== "speak") return state.voicedAt === null ? state : MOUTH_SHUT;
 	if (clampLevel(level) > MOUTH_VOICE_LEVEL) return { voicedAt: now };
 	return state;
@@ -486,7 +486,7 @@ export function stepMouth(state: MouthState, act: LumenAct, level: number, now: 
 
 // 0 shut, MOUTH_MIN_OPEN barely open, 1 wide. Shut in every act but speaking,
 // and shut in speaking only once the hold has run out.
-export function mouthOpenness(state: MouthState, act: LumenAct, level: number, now: number): number {
+export function mouthOpenness(state: MouthState, act: CompanionAct, level: number, now: number): number {
 	if (act !== "speak") return 0;
 	const value = clampLevel(level);
 	const voiced = value > MOUTH_VOICE_LEVEL;
@@ -551,7 +551,7 @@ export const REST = {
 
 // Everything one frame writes. All of it dimensionless: the component turns
 // these into CSS custom properties and the stylesheet decides what a unit is.
-export interface LumenVisual {
+export interface CompanionVisual {
 	scaleX: number;
 	scaleY: number;
 	// Fractions of the body's own box; the component writes them as percentages.
@@ -581,8 +581,8 @@ export interface LumenVisual {
 	mouthOpen: number;
 }
 
-export interface LumenInput {
-	act: LumenAct;
+export interface CompanionInput {
+	act: CompanionAct;
 	// 0..1, already smoothed by orb.ts's smoothLevel.
 	level: number;
 	// Since this phase began, for the breath's own zero.
@@ -604,7 +604,7 @@ export interface LumenInput {
 	seed?: number;
 }
 
-export function lumenVisual(input: LumenInput): LumenVisual {
+export function companionVisual(input: CompanionInput): CompanionVisual {
 	const a = ACT[input.act];
 	const level = clampLevel(input.level);
 	const rest = clamp(input.rest, 0, 1);
@@ -612,7 +612,7 @@ export function lumenVisual(input: LumenInput): LumenVisual {
 
 	const breath = breathAt(input.tMs, input.seed ?? 1);
 	// Reduced motion keeps a tenth of the amplitude rather than none. A body that
-	// is perfectly still on a desk reads as a picture of Lumen, and the point of
+	// is perfectly still on a desk reads as a picture of the companion, and the point of
 	// the setting is to stop motion pulling an eye, not to kill the character.
 	const damp = input.reduced ? 0.1 : 1;
 
@@ -679,11 +679,11 @@ export function lumenVisual(input: LumenInput): LumenVisual {
 // One act dissolving into the next. Every field is a number and every number
 // is linear in the mix, so the whole pose crossfades: the eyes travel, the
 // brows fade, the mouth goes from one shape to the other, and nothing cuts.
-export function blendVisual(from: LumenVisual, to: LumenVisual, t: number): LumenVisual {
+export function blendVisual(from: CompanionVisual, to: CompanionVisual, t: number): CompanionVisual {
 	const k = clamp(t, 0, 1);
 	if (k <= 0) return from;
 	if (k >= 1) return to;
-	const mix = (key: keyof LumenVisual) => lerp(from[key] as number, to[key] as number, k);
+	const mix = (key: keyof CompanionVisual) => lerp(from[key] as number, to[key] as number, k);
 	return {
 		scaleX: mix("scaleX"),
 		scaleY: mix("scaleY"),
@@ -710,7 +710,7 @@ export function blendVisual(from: LumenVisual, to: LumenVisual, t: number): Lume
 // (m-noring.png, 1254 px square) and expressed as fractions of the rendered box
 // so the SVG face lands where the painted one was at any size. The pair is
 // symmetric about the face's centre even though the painting's is not — the
-// painting is a little three-quarter and Lumen is drawn straight on.
+// painting is a little three-quarter and the companion is drawn straight on.
 export const FACE = {
 	centreX: 0.503,
 	centreY: 0.583,

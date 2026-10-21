@@ -94,8 +94,8 @@ export default {
   "features.paperHint":
     "Troca o branco por trás de todo o app (chats, estantes, barras laterais, esta janela e as páginas dos livros) por uma cor de papel off-white. Há um só tom e nenhum mais escuro; não é um modo escuro. A escolha fica neste dispositivo.",
   "features.reading": "Leitura",
-  "features.lumen": "Mostrar {name}",
-  "features.lumenHint":
+  "features.companionShow": "Mostrar {name}",
+  "features.companionShowHint":
     "{name} fica no canto de todas as telas, inclusive no leitor. Desativado, o canto fica vazio; o botão na barra lateral, na tela inicial do celular e no menu Mais do leitor traz {name} de volta. A escolha fica neste dispositivo.",
   "features.companionName": "Nome do companheiro",
   "features.briefing": "Resumo de notícias",

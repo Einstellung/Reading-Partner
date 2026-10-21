@@ -24,7 +24,7 @@ export default {
   "top.zoomIn": "Aumentar zoom",
   "top.zoomOut": "Diminuir zoom",
   "top.pagedFlip": "Virar por página",
-  "top.lumen": "{name}",
+  "top.companion": "{name}",
   "top.settings": "Ajustes",
   "top.closePanel": "Fechar painel",
   "top.openPanel": "Abrir painel",

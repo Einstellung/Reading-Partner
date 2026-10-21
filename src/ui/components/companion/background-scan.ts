@@ -1,4 +1,4 @@
-// Lumen's glance at the desk while the call's background work runs
+// The companion's glance at the desk while the call's background work runs
 // (docs/companion/136 prototype, the `scanning` state): a run is in flight and
 // nobody is being spoken to, so the eyes go down and scan. Display logic with no
 // React in it, beside attention.ts.

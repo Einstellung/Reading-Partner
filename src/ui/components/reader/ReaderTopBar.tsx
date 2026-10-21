@@ -25,16 +25,16 @@ import PenToolbar from "./PenToolbar";
 import { hasTouchInput, rackOmits } from "./reader-tool";
 import type { ReaderMode } from "../../../reading/issue";
 import { Button } from "../ui/button";
-import lumenIcon from "../companion/companion-icon.webp";
+import companionIcon from "../companion/companion-icon.webp";
 import { Separator } from "../ui/separator";
 
-// Lumen's row in the overflow menu wears Lumen's own face: the hand-drawn
+// The companion's row in the overflow menu wears the companion's own face: the hand-drawn
 // water drop on a transparent ground, strokes thickened so they hold up at
 // menu size. Every other row there carries a line glyph.
-function IconLumen({ size = 20 }: { size?: number }) {
+function IconCompanion({ size = 20 }: { size?: number }) {
   return (
     <img
-      src={lumenIcon}
+      src={companionIcon}
       alt=""
       width={size}
       height={size}
@@ -65,8 +65,8 @@ export default function ReaderTopBar(props: {
   // The corner companion's switch (docs/68). In the reader it is a row in the
   // "More" menu, not a control in the bar: it is the one thing here that is not
   // about the open book.
-  lumenShown: boolean;
-  onToggleLumen: () => void;
+  companionShown: boolean;
+  onToggleCompanion: () => void;
   // A brief opens without the lesson and the AI pen (reading/issue.ts).
   mode?: ReaderMode;
 }) {
@@ -85,7 +85,7 @@ export default function ReaderTopBar(props: {
   const paged = stats?.layout === "paged";
 
   // The "More" overflow: low-frequency view controls collapsed out of the main
-  // bar (zoom, fit, the paged-flip opt-in, Lumen's switch).
+  // bar (zoom, fit, the paged-flip opt-in, the companion's switch).
   const moreItems: MoreItem[] = [
     {
       kind: "action",
@@ -118,13 +118,13 @@ export default function ReaderTopBar(props: {
       onClick: () => view.current?.setLayout(paged ? "vertical" : "paged"),
     },
     {
-      // The name alone, not lumenToggleTitle's "Hide <name>": the row names the thing
+      // The name alone, not companionToggleTitle's "Hide <name>": the row names the thing
       // and the On/Off on its right says which way it stands.
       kind: "toggle",
-      label: t("reader.top.lumen", { name: companionName }),
-      icon: IconLumen,
-      on: props.lumenShown,
-      onClick: props.onToggleLumen,
+      label: t("reader.top.companion", { name: companionName }),
+      icon: IconCompanion,
+      on: props.companionShown,
+      onClick: props.onToggleCompanion,
     },
     { kind: "divider" },
     {
@@ -199,7 +199,7 @@ export default function ReaderTopBar(props: {
 
       {/* RIGHT: AI entry + overflow */}
       <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
-        {/* A brief has no lesson: Lumen is the one who talks about it, and
+        {/* A brief has no lesson: the companion is the one who talks about it, and
             nothing takes the button's place (docs/info/88). */}
         {!issue && (
           <Button

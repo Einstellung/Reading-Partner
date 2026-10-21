@@ -2,7 +2,7 @@
 // on which (docs/75).
 //
 //   talk      calls the reader is waiting on, watching the reply come in —
-//             reading chat, Lumen, the info companion. settings.defaultModelId.
+//             reading chat, the companion, the info companion. settings.defaultModelId.
 //   everyday  background calls nobody is waiting on. settings.everydayModelId,
 //             which follows the talk model until the reader picks one.
 //

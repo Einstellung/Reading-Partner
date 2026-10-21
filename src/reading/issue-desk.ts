@@ -1,5 +1,5 @@
 // The brief on the desk (docs/info/88 「简报的对话」). When the reader talks to
-// Lumen with an issue open, the door's turn lays the issue on the desk as
+// The companion with an issue open, the door's turn lays the issue on the desk as
 // material: the conversation stays the door's (soul/door.ts), and this item
 // brings the book's text, the tools to read it and its originals, and how to
 // cite it. It carries no history, no memory anchor and no place of its own.

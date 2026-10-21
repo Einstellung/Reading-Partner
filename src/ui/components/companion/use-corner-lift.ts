@@ -35,7 +35,7 @@ function readFrame(): Frame {
 }
 
 /**
- * Where Lumen stands right now. The ref goes on the element that wraps the
+ * Where the companion stands right now. The ref goes on the element that wraps the
  * composer; it is re-measured when that element resizes (the bar grows with the
  * text in it) and when the window does (rotation, the soft keyboard).
  *

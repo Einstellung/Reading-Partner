@@ -1197,7 +1197,7 @@ export const PALACE = [
     shape: { kind: "map", container: "issues", idField: null },
     deleteWith: "never",
     retention: NEVER,
-    note: "the briefs whose opening Lumen has said (src/info/issue/opening.ts, docs/info/88 「简报的对话」), records-merged on the book id, so an issue is opened with Lumen's words once across devices; written by whichever device opens the issue first",
+    note: "the briefs whose opening the companion has said (src/info/issue/opening.ts, docs/info/88 「简报的对话」), records-merged on the book id, so an issue is opened with the companion's words once across devices; written by whichever device opens the issue first",
   },
   {
     kind: "info-topic-search-questions",

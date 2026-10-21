@@ -1,7 +1,7 @@
 // A link taken in with no book, for a topic the reader picks afterwards: the
 // door conversation's intake card (docs/86 「回执」 for what the receipt says).
 //
-// The reader pastes a link to Lumen. The tool starts this at once: an intake
+// The reader pastes a link to the companion. The tool starts this at once: an intake
 // record, and an ingest-url run whose ask names the intake instead of a book.
 // The run files what it takes in into the library attached nowhere and records
 // it on the intake; the card lists the topics with one suggested, and the

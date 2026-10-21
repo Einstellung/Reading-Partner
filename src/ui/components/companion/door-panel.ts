@@ -2,14 +2,14 @@
 // here: the panel's layer covers the shell, and its padding is what it keeps
 // clear below and above the panel.
 //
-// With no keyboard up the panel stands on Lumen: the corner's margin from the
-// bottom edge (LumenCorner, pb-safe-6), however far the corner was lifted, the
+// With no keyboard up the panel stands on the companion: the corner's margin from the
+// bottom edge (CompanionCorner, pb-safe-6), however far the corner was lifted, the
 // body and the column's gap. With a keyboard up the shell has moved to what is
 // visible and the keyboard covers the bottom of it (KeyboardShell); the panel
-// stands on the keyboard instead, and Lumen stands down under it.
+// stands on the keyboard instead, and the companion stands down under it.
 //
 // The panel's expand button fills the shell with it (docs/68, 2026-10-15): edge
-// to edge inside the safe area, over the page and over Lumen, down to the
+// to edge inside the safe area, over the page and over the companion, down to the
 // keyboard when one is up. The page under it does not move either way.
 
 import type { ShellKeyboard } from "../common/useKeyboardInset";
@@ -21,7 +21,7 @@ export const PANEL_KEYBOARD_GAP_PX = 8;
 /** What it leaves between itself and the top of the screen. */
 export const PANEL_TOP_PX = 16;
 
-/** Whether the panel stands on the keyboard rather than on Lumen. */
+/** Whether the panel stands on the keyboard rather than on the companion. */
 export function panelOnKeyboard(keyboard: ShellKeyboard | null): boolean {
 	return keyboard !== null && keyboard.covered > 0;
 }

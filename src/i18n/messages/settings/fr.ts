@@ -93,8 +93,8 @@ export default {
   "features.paperHint":
     "Remplace le blanc derrière toute l'app (chats, étagères, barres latérales, cette fenêtre et les pages d'un livre) par une couleur de papier crème. Il n'y a qu'une teinte, sans niveau plus sombre ; ce n'est pas un mode sombre. Le choix reste sur cet appareil.",
   "features.reading": "Lecture",
-  "features.lumen": "Afficher {name}",
-  "features.lumenHint":
+  "features.companionShow": "Afficher {name}",
+  "features.companionShowHint":
     "{name} se tient dans le coin de chaque écran, lecteur compris. Désactivé, le coin reste vide ; le bouton de la barre latérale, de l'écran d'accueil du téléphone et du menu Plus du lecteur ramène {name}. Ce choix reste sur cet appareil.",
   "features.companionName": "Nom du compagnon",
   "features.briefing": "Briefing",

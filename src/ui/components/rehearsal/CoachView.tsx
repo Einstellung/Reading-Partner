@@ -38,7 +38,7 @@ export default function CoachView(props: {
   const coach = useCoach(props.outlineId, props.topicName, props.passKey ?? 0);
   // The composer is docked at the bottom, so the keyboard would cover it.
   const keyboard = useKeyboardRoom();
-  // Lumen's corner stands above this composer rather than on its Send button.
+  // The companion's corner stands above this composer rather than on its Send button.
   // The slot measures the box when it mounts and again only when it resizes,
   // so the loading line below fills the column and the composer never moves off
   // the bottom edge (docs/pitfall/386).

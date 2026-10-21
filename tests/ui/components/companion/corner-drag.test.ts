@@ -1,4 +1,4 @@
-// Where a dragged Lumen ends up (docs/68): the slop that tells a drag from a
+// Where a dragged companion ends up (docs/68): the slop that tells a drag from a
 // hold, the two docks, the band it may be lifted into, and the shape the spot
 // is remembered in.
 //

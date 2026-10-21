@@ -1,5 +1,5 @@
 // The door's place on the device's durable runtime (docs/soul/87, 第二阶段;
-// docs/61): a conversation typed to Lumen at the door is a thread in the day's
+// docs/61): a conversation typed to the companion at the door is a thread in the day's
 // file (door.ts), and its turns run, land and recover the way a book's do
 // (legion/durable/device.ts).
 //

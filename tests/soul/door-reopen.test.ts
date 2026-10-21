@@ -96,7 +96,7 @@ function session(
           conversation: ORIGIN.threadId,
           surface: "door",
           line: { text: LINE.text, ts: LINE.ts },
-          systemPrompt: "You are Lumen.",
+          systemPrompt: "You are Kris.",
           tools: [],
           model: { provider: "faux", modelId: "faux-1" },
         },

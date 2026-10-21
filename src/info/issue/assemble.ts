@@ -157,7 +157,7 @@ export interface IssueDeps {
   putBox(item: { id: string; boxId: string; kind: string; cover: string; body: string; origin: { place: "door"; date: string } }): Promise<void>;
   newBoxItemId(): string;
   /**
-   * The everyday-tier model writing Lumen's opening (opening-record.ts); null
+   * The everyday-tier model writing the companion's opening (opening-record.ts); null
    * or a throw leaves the program's line alone. Absent: no model is asked.
    */
   writeOpening?(prompt: { system: string; user: string }): Promise<string | null>;
@@ -259,7 +259,7 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
 }
 
 /**
- * Lumen's opening and the issue's questions. The questions it had no room for
+ * The companion's opening and the issue's questions. The questions it had no room for
  * wait in their queue again. A model that fails or is absent leaves the text
  * null: the program's line and the questions are said all the same.
  */
@@ -283,7 +283,7 @@ async function writeOpening(deps: IssueDeps, plan: IssuePlan, results: readonly 
       const name = deps.companionName ? await deps.companionName() : DEFAULT_COMPANION_NAME;
       reply = await deps.writeOpening(openingPrompt(plan, asked, languageInstruction(locale), name));
     } catch (e) {
-      console.warn("Lumen's opening for the brief could not be written", e);
+      console.warn("The companion's opening for the brief could not be written", e);
     }
   }
   return openingRecord(plan, asked, reply);

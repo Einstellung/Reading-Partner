@@ -1,4 +1,4 @@
-// What Lumen's render layer owes the maths (src/ui/components/companion/Companion.tsx):
+// What the companion's render layer owes the maths (src/ui/components/companion/Companion.tsx):
 // one rAF loop writing custom properties onto one element, a loop that stops
 // when nobody can see it, a subscription that comes down with the component,
 // and — the reason any of it is shaped this way — not one re-render per level
@@ -22,7 +22,7 @@ import { useDom } from "../../../support/dom";
 const { cleanup, fireEvent, render } = await useDom();
 afterEach(cleanup);
 
-const { Lumen } = await import("../../../../src/ui/components/companion/Companion");
+const { Companion } = await import("../../../../src/ui/components/companion/Companion");
 
 // The frame queue, standing in for the browser's.
 let pending: FrameRequestCallback[] = [];
@@ -121,7 +121,7 @@ function session(phase: OrbPhase) {
 }
 
 function body(container: HTMLElement): HTMLElement {
-	const el = container.querySelector("[data-lumen]");
+	const el = container.querySelector("[data-companion]");
 	expect(el).toBeTruthy();
 	return el as HTMLElement;
 }
@@ -130,25 +130,25 @@ const num = (el: HTMLElement, name: string) => Number(el.style.getPropertyValue(
 
 test("a frame writes the whole pose onto one element", () => {
 	const s = session("listening");
-	const { container } = render(<Lumen handle={s.handle} />);
+	const { container } = render(<Companion handle={s.handle} />);
 	frame(0);
 	const el = body(container);
 	for (const name of [
-		"--lumen-sx",
-		"--lumen-sy",
-		"--lumen-glow",
-		"--lumen-core",
-		"--lumen-pool",
+		"--companion-sx",
+		"--companion-sy",
+		"--companion-glow",
+		"--companion-core",
+		"--companion-pool",
 		"--companion-tuft-y",
-		"--lumen-eye",
-		"--lumen-gx",
+		"--companion-eye",
+		"--companion-gx",
 	]) {
 		expect(Number.isFinite(num(el, name))).toBe(true);
 	}
-	expect(el.style.getPropertyValue("--lumen-tilt")).toMatch(/deg$/);
-	expect(el.style.getPropertyValue("--lumen-x")).toMatch(/%$/);
-	expect(num(el, "--lumen-sx")).toBeCloseTo(ACT.listen.base, 1);
-	expect(num(el, "--lumen-glow")).toBeCloseTo(ACT.listen.glowBase, 2);
+	expect(el.style.getPropertyValue("--companion-tilt")).toMatch(/deg$/);
+	expect(el.style.getPropertyValue("--companion-x")).toMatch(/%$/);
+	expect(num(el, "--companion-sx")).toBeCloseTo(ACT.listen.base, 1);
+	expect(num(el, "--companion-glow")).toBeCloseTo(ACT.listen.glowBase, 2);
 });
 
 test("the acts reach the element: brows, mouth and where the eyes are", () => {
@@ -160,91 +160,91 @@ test("the acts reach the element: brows, mouth and where the eyes are", () => {
 	};
 
 	const listening = session("listening");
-	const listen = render(<Lumen handle={listening.handle} />);
+	const listen = render(<Companion handle={listening.handle} />);
 	let now = settle(0);
 	const a = body(listen.container);
-	expect(num(a, "--lumen-brow")).toBe(0);
-	expect(num(a, "--lumen-mouth-curve")).toBe(1);
-	expect(num(a, "--lumen-mouth-mix")).toBe(0);
-	expect(num(a, "--lumen-eye-scale")).toBeGreaterThan(1);
+	expect(num(a, "--companion-brow")).toBe(0);
+	expect(num(a, "--companion-mouth-curve")).toBe(1);
+	expect(num(a, "--companion-mouth-mix")).toBe(0);
+	expect(num(a, "--companion-eye-scale")).toBeGreaterThan(1);
 
 	const thinking = session("thinking");
-	const think = render(<Lumen handle={thinking.handle} />);
+	const think = render(<Companion handle={thinking.handle} />);
 	now = settle(now);
 	const b = body(think.container);
-	expect(num(b, "--lumen-brow")).toBeCloseTo(1, 3);
-	expect(num(b, "--lumen-mouth-curve")).toBeCloseTo(0, 3);
+	expect(num(b, "--companion-brow")).toBeCloseTo(1, 3);
+	expect(num(b, "--companion-mouth-curve")).toBeCloseTo(0, 3);
 	// Up and to one side.
-	expect(num(b, "--lumen-gy")).toBeLessThan(-0.3);
+	expect(num(b, "--companion-gy")).toBeLessThan(-0.3);
 
 	const checking = session("thinking");
-	const check = render(<Lumen handle={checking.handle} attention="work" />);
+	const check = render(<Companion handle={checking.handle} attention="work" />);
 	// The scan snaps, so a couple of hops is enough to have the eyes down.
 	for (let i = 0; i <= 30; i++) frame(now + i * SCAN_HOP_MS / 4);
 	const c = body(check.container);
-	expect(num(c, "--lumen-brow")).toBeCloseTo(1, 3);
-	expect(num(c, "--lumen-gy")).toBeGreaterThan(0.3);
+	expect(num(c, "--companion-brow")).toBeCloseTo(1, 3);
+	expect(num(c, "--companion-gy")).toBeGreaterThan(0.3);
 
 	const talking = session("speaking");
-	const speak = render(<Lumen handle={talking.handle} />);
+	const speak = render(<Companion handle={talking.handle} />);
 	now = settle(now + 4000);
 	talking.level(0.9);
 	for (let i = 0; i <= 30; i++) frame(now + i * (1000 / 60));
 	const d = body(speak.container);
-	expect(num(d, "--lumen-brow")).toBeCloseTo(0, 3);
-	expect(num(d, "--lumen-mouth-mix")).toBeCloseTo(1, 3);
+	expect(num(d, "--companion-brow")).toBeCloseTo(0, 3);
+	expect(num(d, "--companion-mouth-mix")).toBeCloseTo(1, 3);
 	// The round mouth is the act's; how far it opens is the voice's. This call
 	// has handed no sentence over, and a loud room does not open it — see
 	// "speaking draws the mouth from the voice and not from the microphone".
-	expect(num(d, "--lumen-mouth-open")).toBe(0);
+	expect(num(d, "--companion-mouth-open")).toBe(0);
 });
 
 test("listening holds one size however loud the room is", () => {
 	const s = session("listening");
-	const { container } = render(<Lumen handle={s.handle} />);
+	const { container } = render(<Companion handle={s.handle} />);
 	const el = body(container);
 	for (let i = 0; i <= 40; i++) frame(i * 20);
-	const still = num(el, "--lumen-sx");
+	const still = num(el, "--companion-sx");
 	s.level(1);
 	for (let i = 41; i <= 160; i++) frame(i * 20);
-	expect(num(el, "--lumen-sx")).toBeCloseTo(still, 4);
-	expect(num(el, "--lumen-sy")).toBeCloseTo(num(el, "--lumen-sx"), 4);
+	expect(num(el, "--companion-sx")).toBeCloseTo(still, 4);
+	expect(num(el, "--companion-sy")).toBeCloseTo(num(el, "--companion-sx"), 4);
 	// The tuft is where the room goes instead.
 	expect(num(el, "--companion-tuft-y")).toBeGreaterThan(ACT.listen.tuftBase);
 });
 
 test("the level reaches the body through the frame loop", () => {
 	const s = session("listening");
-	const { container } = render(<Lumen handle={s.handle} />);
+	const { container } = render(<Companion handle={s.handle} />);
 	const el = body(container);
 	frame(0);
-	const quiet = num(el, "--lumen-glow");
+	const quiet = num(el, "--companion-glow");
 	s.level(1);
 	for (let i = 1; i <= 20; i++) frame(i * (1000 / 60));
-	expect(num(el, "--lumen-glow")).toBeGreaterThan(quiet);
-	const loud = num(el, "--lumen-glow");
+	expect(num(el, "--companion-glow")).toBeGreaterThan(quiet);
+	const loud = num(el, "--companion-glow");
 	s.level(0);
 	for (let i = 21; i <= 80; i++) frame(i * (1000 / 60));
-	expect(num(el, "--lumen-glow")).toBeLessThan(loud);
+	expect(num(el, "--companion-glow")).toBeLessThan(loud);
 });
 
 test("the body keeps moving with no level at all", () => {
-	// The breath is the clock's, not the microphone's: an idle Lumen with a
+	// The breath is the clock's, not the microphone's: an idle companion with a
 	// closed microphone is still alive.
 	const s = session("idle");
-	const { container } = render(<Lumen handle={s.handle} />);
+	const { container } = render(<Companion handle={s.handle} />);
 	const el = body(container);
 	frame(0);
-	const first = el.style.getPropertyValue("--lumen-tilt");
+	const first = el.style.getPropertyValue("--companion-tilt");
 	for (let i = 1; i <= 90; i++) frame(i * (1000 / 60));
-	expect(el.style.getPropertyValue("--lumen-tilt")).not.toBe(first);
+	expect(el.style.getPropertyValue("--companion-tilt")).not.toBe(first);
 });
 
 test("no level event and no frame re-renders anything", () => {
 	// The whole reason the level is a subscription and the pose is a custom
 	// property: this runs at 60 Hz for the length of a reading session.
 	const s = session("listening");
-	render(<Lumen handle={s.handle} />);
+	render(<Companion handle={s.handle} />);
 	frame(0);
 	const settled = s.renders;
 	for (let i = 1; i <= 120; i++) {
@@ -257,12 +257,12 @@ test("no level event and no frame re-renders anything", () => {
 test("reduced motion keeps the body nearly still", () => {
 	reducedMotion(true);
 	const s = session("idle");
-	const { container } = render(<Lumen handle={s.handle} />);
+	const { container } = render(<Companion handle={s.handle} />);
 	const el = body(container);
 	let worst = 0;
 	for (let i = 0; i <= 240; i++) {
 		frame(i * (1000 / 60));
-		worst = Math.max(worst, Math.abs(parseFloat(el.style.getPropertyValue("--lumen-tilt"))));
+		worst = Math.max(worst, Math.abs(parseFloat(el.style.getPropertyValue("--companion-tilt"))));
 	}
 	expect(worst).toBeGreaterThan(0);
 	expect(worst).toBeLessThan(0.3);
@@ -270,23 +270,23 @@ test("reduced motion keeps the body nearly still", () => {
 
 test("asleep shuts the eyes and settles the body", () => {
 	const s = session("idle");
-	const { container, rerender } = render(<Lumen handle={s.handle} />);
+	const { container, rerender } = render(<Companion handle={s.handle} />);
 	const el = body(container);
 	frame(0);
-	const awakeY = num(el, "--lumen-sy");
-	expect(num(el, "--lumen-eye")).toBeGreaterThan(0.9);
+	const awakeY = num(el, "--companion-sy");
+	expect(num(el, "--companion-eye")).toBeGreaterThan(0.9);
 
-	rerender(<Lumen handle={s.handle} rest />);
+	rerender(<Companion handle={s.handle} rest />);
 	// Past the settle ramp.
 	for (let i = 1; i <= 120; i++) frame(i * (1000 / 60));
-	expect(num(el, "--lumen-eye")).toBe(0);
-	expect(num(el, "--lumen-sy")).toBeLessThan(awakeY);
-	expect(num(el, "--lumen-sx")).toBeGreaterThan(1);
+	expect(num(el, "--companion-eye")).toBe(0);
+	expect(num(el, "--companion-sy")).toBeLessThan(awakeY);
+	expect(num(el, "--companion-sx")).toBeGreaterThan(1);
 });
 
 test("unmounting takes the subscription and the loop with it", () => {
 	const s = session("listening");
-	const view = render(<Lumen handle={s.handle} />);
+	const view = render(<Companion handle={s.handle} />);
 	frame(0);
 	view.unmount();
 	expect(s.unsubscribed).toBe(1);
@@ -296,12 +296,12 @@ test("unmounting takes the subscription and the loop with it", () => {
 
 test("a tap opens the call, and the next one ends it", () => {
 	const idle = session("idle");
-	const first = render(<Lumen handle={idle.handle} />);
+	const first = render(<Companion handle={idle.handle} />);
 	fireEvent.click(first.container.querySelector("button")!);
 	expect(idle.calls).toEqual(["start"]);
 
 	const live = session("speaking");
-	const second = render(<Lumen handle={live.handle} />);
+	const second = render(<Companion handle={live.handle} />);
 	fireEvent.click(second.container.querySelector("button")!);
 	expect(live.calls).toEqual(["stop"]);
 });
@@ -311,7 +311,7 @@ test("a tap opens the call, and the next one ends it", () => {
 // these drive frames from `performance.now()` rather than from zero.
 function speak(values: number[], startsInMs: number) {
 	const s = session("speaking");
-	const view = render(<Lumen handle={s.handle} />);
+	const view = render(<Companion handle={s.handle} />);
 	const envelope: SpeechEnvelope = {
 		utterance: 1,
 		sentence: 0,
@@ -331,13 +331,13 @@ test("speaking draws the mouth from the voice and not from the microphone", () =
 	const quiet = speak(new Array(40).fill(0), 400);
 	quiet.s.level(1);
 	for (let i = 0; i <= 30; i++) frame(quiet.startAt + i * 16);
-	expect(num(quiet.el, "--lumen-mouth-open")).toBe(0);
+	expect(num(quiet.el, "--companion-mouth-open")).toBe(0);
 
 	// And the other way round: a silent room and a loud sentence opens it.
 	const loud = speak(new Array(40).fill(1), 400);
 	loud.s.level(0);
 	for (let i = 0; i <= 30; i++) frame(loud.startAt + i * 16);
-	expect(num(loud.el, "--lumen-mouth-open")).toBeGreaterThan(0.6);
+	expect(num(loud.el, "--companion-mouth-open")).toBeGreaterThan(0.6);
 });
 
 test("the sentence is not read before it is heard", () => {
@@ -345,7 +345,7 @@ test("the sentence is not read before it is heard", () => {
 	// Frames inside the delay: the audio has not started, so neither has the
 	// mouth.
 	for (let i = 0; i <= 10; i++) frame(later.startAt - 400 + i * 16);
-	expect(num(later.el, "--lumen-mouth-open")).toBe(0);
+	expect(num(later.el, "--companion-mouth-open")).toBe(0);
 });
 
 test("the body dips and comes back at the start of a sentence", () => {
@@ -356,7 +356,7 @@ test("the body dips and comes back at the start of a sentence", () => {
 	const sy: number[] = [];
 	for (let i = -5; i <= 40; i++) {
 		frame(s.startAt + i * 10);
-		sy.push(num(s.el, "--lumen-sy"));
+		sy.push(num(s.el, "--companion-sy"));
 	}
 	const before = sy[0]!;
 	expect(Math.min(...sy)).toBeLessThan(before * 0.99);
@@ -369,24 +369,24 @@ test("a barge-in takes the queued sentence away", () => {
 	const s = speak(new Array(40).fill(1), 400);
 	s.s.envelope(null);
 	for (let i = 0; i <= 30; i++) frame(s.startAt + i * 16);
-	expect(num(s.el, "--lumen-mouth-open")).toBe(0);
+	expect(num(s.el, "--companion-mouth-open")).toBe(0);
 });
 
 // The case (docs/68). Beside an open book the breath loop never starts, so the
 // reach has to bring a frame loop of its own — and hand the body back upright
 // when the case is down.
 test("a call beside a book moves the face, and hanging up puts the resting pose back", () => {
-	// The corner passes `still={inReader && !live}` (LumenCorner): a live call
+	// The corner passes `still={inReader && !live}` (CompanionCorner): a live call
 	// runs the loop even in the reader, and the end of it makes the body still.
 	const s = session("speaking");
-	const view = render(<Lumen handle={s.handle} still={false} />);
+	const view = render(<Companion handle={s.handle} still={false} />);
 	frame(0);
 	frame(400);
 	const el = body(view.container);
-	expect(el.style.getPropertyValue("--lumen-mouth-open")).not.toBe("");
-	expect(el.style.getPropertyValue("--lumen-brow")).not.toBe("");
-	view.rerender(<Lumen handle={s.handle} still />);
-	for (const name of ["--lumen-mouth-open", "--lumen-brow", "--lumen-gx", "--lumen-sx", "--lumen-tilt"]) {
+	expect(el.style.getPropertyValue("--companion-mouth-open")).not.toBe("");
+	expect(el.style.getPropertyValue("--companion-brow")).not.toBe("");
+	view.rerender(<Companion handle={s.handle} still />);
+	for (const name of ["--companion-mouth-open", "--companion-brow", "--companion-gx", "--companion-sx", "--companion-tilt"]) {
 		expect(el.style.getPropertyValue(name)).toBe("");
 	}
 	// And the loop that wrote them is cancelled, not left to write them again.
@@ -396,7 +396,7 @@ test("a call beside a book moves the face, and hanging up puts the resting pose 
 test("a still body goes with the case and comes back", () => {
 	const s = session("idle");
 	const reach = { w: 0 };
-	const view = render(<Lumen handle={s.handle} still reach={reach} reaching />);
+	const view = render(<Companion handle={s.handle} still reach={reach} reaching />);
 	const el = body(view.container);
 	let t = performance.now();
 	const run = (frames: number) => {
@@ -408,28 +408,28 @@ test("a still body goes with the case and comes back", () => {
 
 	// Nothing has moved yet: the reach is zero and the pose is the default.
 	run(2);
-	expect(num(el, "--lumen-gx")).toBeCloseTo(0, 3);
+	expect(num(el, "--companion-gx")).toBeCloseTo(0, 3);
 
 	reach.w = 1;
 	run(40);
 	// Eyes down at the case on the lower left, and the body leaning over it.
-	expect(num(el, "--lumen-gx")).toBeLessThan(-0.4);
-	expect(num(el, "--lumen-gy")).toBeGreaterThan(0.4);
-	expect(Number.parseFloat(el.style.getPropertyValue("--lumen-tilt"))).toBeLessThan(-2);
+	expect(num(el, "--companion-gx")).toBeLessThan(-0.4);
+	expect(num(el, "--companion-gy")).toBeGreaterThan(0.4);
+	expect(Number.parseFloat(el.style.getPropertyValue("--companion-tilt"))).toBeLessThan(-2);
 
 	// The case is down: the corner drops the reach and stops asking.
 	reach.w = 0;
-	view.rerender(<Lumen handle={s.handle} still reach={reach} reaching={false} />);
+	view.rerender(<Companion handle={s.handle} still reach={reach} reaching={false} />);
 	run(80);
-	expect(num(el, "--lumen-gx")).toBe(0);
-	expect(num(el, "--lumen-gy")).toBe(0);
-	expect(Number.parseFloat(el.style.getPropertyValue("--lumen-tilt"))).toBe(0);
+	expect(num(el, "--companion-gx")).toBe(0);
+	expect(num(el, "--companion-gy")).toBe(0);
+	expect(Number.parseFloat(el.style.getPropertyValue("--companion-tilt"))).toBe(0);
 });
 
 test("a body with a loop of its own reads the reach on its own frames", () => {
 	const s = session("idle");
 	const reach = { w: 0 };
-	const { container } = render(<Lumen handle={s.handle} reach={reach} reaching />);
+	const { container } = render(<Companion handle={s.handle} reach={reach} reaching />);
 	const el = body(container);
 	let t = performance.now();
 	const run = (frames: number) => {
@@ -439,9 +439,9 @@ test("a body with a loop of its own reads the reach on its own frames", () => {
 		}
 	};
 	run(10);
-	const straight = Number.parseFloat(el.style.getPropertyValue("--lumen-tilt"));
+	const straight = Number.parseFloat(el.style.getPropertyValue("--companion-tilt"));
 	reach.w = 1;
 	run(20);
-	expect(num(el, "--lumen-gx")).toBeLessThan(-0.4);
-	expect(Number.parseFloat(el.style.getPropertyValue("--lumen-tilt"))).toBeLessThan(straight - 2);
+	expect(num(el, "--companion-gx")).toBeLessThan(-0.4);
+	expect(Number.parseFloat(el.style.getPropertyValue("--companion-tilt"))).toBeLessThan(straight - 2);
 });

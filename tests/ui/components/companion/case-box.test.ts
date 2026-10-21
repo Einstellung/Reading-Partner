@@ -1,4 +1,4 @@
-// Where the case stands beside Lumen (docs/68), which is a set of ratios read
+// Where the case stands beside the companion (docs/68), which is a set of ratios read
 // off the generation the two were drawn in together rather than a number
 // somebody liked. The test states the composition: about half the body's
 // height, leaning in over the body's lower left, feet on the same line, and a

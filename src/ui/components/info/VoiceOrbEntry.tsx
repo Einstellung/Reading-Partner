@@ -2,18 +2,18 @@
 // body the corner draws, with a call that has no audio under it, driven from
 // `window.__orbStub`.
 //
-// The way into a real session is Lumen in the corner now, held rather than
+// The way into a real session is the companion in the corner now, held rather than
 // tapped (ui/components/companion/CompanionCorner.tsx, docs/68). What is left here is
 // the stub layer the orb spike mounts, because the iOS simulator's audio stack
 // cannot start at all and this is the only way to look at the four acts.
 //
-// Rendering and event binding only; the numbers are ui/components/lumen and
+// Rendering and event binding only; the numbers are ui/components/companion and
 // ui/components/orb.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ErrorLine } from "../companion/ErrorLine";
-import { Lumen } from "../companion/Companion";
+import { Companion } from "../companion/Companion";
 import type { Attention } from "../companion/companion-motion";
 import { orbErrorLine, type OrbPhase, type SpeechEnvelope, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
@@ -48,7 +48,7 @@ function OrbLayer({
 			)}
 		>
 			{line && <ErrorLine line={line} />}
-			<Lumen
+			<Companion
 				handle={call}
 				rest={rest}
 				attention={attention}

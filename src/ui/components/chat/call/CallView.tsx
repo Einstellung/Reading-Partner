@@ -35,7 +35,7 @@ interface CallViewProps {
 	pendingImages?: PendingImage[];
 	onRemoveImage?(id: string): void;
 	// The element the composer sits in, for whatever has to keep out of its way
-	// on the bottom edge — Lumen's corner (ui/components/companion/corner-placement).
+	// on the bottom edge — the companion's corner (ui/components/companion/corner-placement).
 	// Both states report it: the empty conversation's composer is in the middle
 	// of the screen, and the rule reads that off the box it measures.
 	// Absent = whatever the shell hung over this screen (composer-slot.ts), which
@@ -137,7 +137,7 @@ export default function CallView({
 	// <div> in the same slot of the same parent: React would reuse the one node,
 	// leave the stable ref alone and never say it had moved, and a ResizeObserver
 	// does not fire on a box that only changed position. So the first reply moved
-	// the composer to the bottom edge and Lumen went on standing on it.
+	// the composer to the bottom edge and the companion went on standing on it.
 	const composerKey = empty ? "composer-centred" : "composer-edge";
 	const Scope = scalable ? ChatScaleScope : PlainScope;
 	const t = useT();

@@ -45,7 +45,7 @@ import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import { displaySource, getLibraryEntry, readLibraryBook, type BookFormat } from "./platform/app/library";
 import { readerModeOf, type ReaderMode } from "./reading/issue";
-import { askLumen, publishOpenIssue } from "./ui/components/companion/issue-context";
+import { askCompanion, publishOpenIssue } from "./ui/components/companion/issue-context";
 import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -111,10 +111,10 @@ import LibraryScreen, { type StudyOpen } from "./ui/components/library/LibrarySc
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
-import { LumenCorner } from "./ui/components/companion/CompanionCorner";
+import { CompanionCorner } from "./ui/components/companion/CompanionCorner";
 import { useCornerLift } from "./ui/components/companion/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
-import { toggleLumenShown, useLumenShown } from "./ui/components/companion/use-companion-shown";
+import { toggleCompanionShown, useCompanionShown } from "./ui/components/companion/use-companion-shown";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -194,7 +194,7 @@ export default function App() {
   // Which document is on screen, as something that renders: the Outline lights
   // the row the reader is in. A ref cannot do that.
   const [docId, setDocId] = useState<string | null>(null);
-  // A brief opens without the lesson and the reader's own conversation; Lumen
+  // A brief opens without the lesson and the reader's own conversation; the companion
   // talks about it in the door (reading/issue.ts, docs/info/88).
   const [readerMode, setReaderMode] = useState<ReaderMode>("book");
 
@@ -302,8 +302,8 @@ export default function App() {
   // The corner companion, per device (docs/68). Read synchronously for the
   // same reason the sidebar's width is: the first frame should already be the
   // screen the reader left.
-  const lumenShown = useLumenShown();
-  const toggleLumen = toggleLumenShown;
+  const companionShown = useCompanionShown();
+  const toggleCompanion = toggleCompanionShown;
 
   const toggleShellSidebar = useCallback(() => {
     setShellSidebarCollapsed((collapsed) => {
@@ -651,7 +651,7 @@ export default function App() {
     await viewRef.current?.highlightQuote(pageIndex, { searchText, displayText: quote });
   }, []);
 
-  // The brief open in this reader, for Lumen's conversation (lumen/issue-context.ts):
+  // The brief open in this reader, for the companion's conversation (companion/issue-context.ts):
   // published while it is open, which also brings the conversation up.
   const issueBookId = readerMode === "issue" && docId !== null ? bookIdRef.current : null;
   useEffect(() => {
@@ -1123,23 +1123,23 @@ export default function App() {
     closeBook(readerShell, bookIdRef.current, docIdRef.current);
   }, [readerShell]);
 
-  // Where Lumen stands, and whether at all. Everywhere but a conversation that
+  // Where the companion stands, and whether at all. Everywhere but a conversation that
   // has the whole window the bottom-right corner is hers; there the composer is
   // on that edge and she stands above it, off the composer's measured box
-  // (lumen/corner-placement.ts). Two such conversations here: the full-window
+  // (companion/corner-placement.ts). Two such conversations here: the full-window
   // chat over the reader, and a talk's coaching or a retell in the library,
   // which says it is up by filling the composer slot.
   const [studyComposer, setStudyComposer] = useState(false);
-  const { composerRef: lumenComposerRef, placement: lumenPlacement } = useCornerLift(
-    lumenShown,
+  const { composerRef: companionComposerRef, placement: companionPlacement } = useCornerLift(
+    companionShown,
     call?.view === "chat-main" || studyComposer,
   );
   const studyComposerSlot = useCallback(
     (el: HTMLElement | null) => {
       setStudyComposer(el !== null);
-      lumenComposerRef(el);
+      companionComposerRef(el);
     },
-    [lumenComposerRef],
+    [companionComposerRef],
   );
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
@@ -1237,9 +1237,9 @@ export default function App() {
 
   const inReader = !!title;
 
-  // What a card in Lumen's column can reach in this shell (companion/box-jump.ts
+  // What a card in the companion's column can reach in this shell (companion/box-jump.ts
   // decides which of these a given card needs, and in what order).
-  const lumenTargets = useMemo(
+  const companionTargets = useMemo(
     () => ({
       openBook: async (bookId: string) => {
         for (const topic of topics ?? []) {
@@ -1304,7 +1304,7 @@ export default function App() {
 
   // The same shelf lookup a receipt's book link needs. One way in, so a card and
   // a receipt cannot open a book two different ways.
-  openBookRef.current = lumenTargets.openBook;
+  openBookRef.current = companionTargets.openBook;
 
   // Where the soul may take the reader (docs/71, ui/components/base/places.ts).
   // The table is registered here because the moves are this shell's state; it
@@ -1473,8 +1473,8 @@ export default function App() {
             tool={{ type: toolType, color: HIGHLIGHT_COLOR }}
             onToolChange={(t) => setPickedTool(t.type)}
             gate={gate}
-            lumenShown={lumenShown}
-            onToggleLumen={toggleLumen}
+            companionShown={companionShown}
+            onToggleCompanion={toggleCompanion}
             onOpenBookThread={openBookThread}
             mode={readerMode}
             onOpenSettings={openSettings}
@@ -1497,8 +1497,8 @@ export default function App() {
             settingsAlert={syncReport.alert !== "none"}
             collapsed={shellSidebarCollapsed}
             onToggleCollapsed={toggleShellSidebar}
-            lumenShown={lumenShown}
-            onToggleLumen={toggleLumen}
+            companionShown={companionShown}
+            onToggleCompanion={toggleCompanion}
             update={appUpdateState}
             onApplyUpdate={applyAppUpdate}
             meals={settings.meals}
@@ -1589,9 +1589,9 @@ export default function App() {
               onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
               onHighlight={highlightSelection}
               onAsk={() => {
-                // In a brief the passage goes to Lumen's conversation (docs/info/88).
+                // In a brief the passage goes to the companion's conversation (docs/info/88).
                 if (readerMode === "issue") {
-                  askLumen({ text: fingerSel.selection.text });
+                  askCompanion({ text: fingerSel.selection.text });
                   viewRef.current?.clearSelection();
                   setFingerSel(null);
                   return;
@@ -1757,7 +1757,7 @@ export default function App() {
                 onDelete={deleteOpenThread}
                 pendingImages={pendingImages}
                 onRemoveImage={removePendingImage}
-                composerRef={lumenComposerRef}
+                composerRef={companionComposerRef}
                 hint={imageHint}
                 streaming={streaming}
                 onStop={stopTurn}
@@ -1866,20 +1866,20 @@ export default function App() {
         onReopen={reopenReplacement}
       />
 
-      {/* Lumen, bottom right, on every screen this shell draws — the shelf, the
+      {/* The companion, bottom right, on every screen this shell draws — the shelf, the
           briefing, the open book and the full-window chat alike (docs/68).
           Nothing else lives in that corner here: the reader's controls are all
           in the top bar, the translation's count is centred, and the call's
           corner card is top right. The chat's composer does own the bottom
           edge, so there the corner stands above it, measured
-          (lumen/corner-placement.ts). */}
-      <LumenCorner
+          (companion/corner-placement.ts). */}
+      <CompanionCorner
         shell="desktop"
-        shown={lumenPlacement.shown}
-        liftPx={lumenPlacement.liftPx}
+        shown={companionPlacement.shown}
+        liftPx={companionPlacement.liftPx}
         inReader={inReader}
         openBookId={bookIdRef.current}
-        targets={lumenTargets}
+        targets={companionTargets}
       />
 
       {readerSettings && (

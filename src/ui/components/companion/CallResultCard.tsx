@@ -12,7 +12,7 @@ export function CallResultCard({ card, onClose }: { card: FrontCard; onClose: ()
 			<div className="flex items-center justify-between gap-2">
 				<span className="text-xs text-muted-foreground">#{card.number}</span>
 				<Button variant="ghost" size="sm" onClick={onClose}>
-					{t("shell.lumen.callCardClose")}
+					{t("shell.companion.callCardClose")}
 				</Button>
 			</div>
 			<div className="overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">{card.text}</div>

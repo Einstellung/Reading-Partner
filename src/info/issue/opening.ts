@@ -1,5 +1,5 @@
-// Lumen's first words when a brief is opened (docs/info/88 「简报的对话」): the
-// program's line (the date, how many items), Lumen's judgement written when the
+// The companion's first words when a brief is opened (docs/info/88 「简报的对话」): the
+// program's line (the date, how many items), the companion's judgement written when the
 // issue was assembled (opening-record.ts) with its item numbers turned into
 // page citations of the items' headings, and up to three questions saved up
 // for the reader, each a card with quick answers (question-card.ts).
@@ -54,7 +54,7 @@ function citeOf(heading: string, page: number | null | undefined): string {
   return page ? `[p.${page} "${heading.replace(/"/g, "'")}"]` : `“${heading}”`;
 }
 
-/** The opening's words: the program's line, then Lumen's, items as page citations where the page is known. */
+/** The opening's words: the program's line, then the companion's, items as page citations where the page is known. */
 export function openingText(entry: Pick<IssueEntry, "date" | "items">, record: IssueOpeningRecord | undefined, pageOf?: (heading: string) => number | null): string {
   const day = formatDateTime(new Date(`${entry.date}T12:00:00`), { month: "short", day: "numeric" });
   const fact = t("info.issue.openingFact", { date: day, count: String(entry.items) });
@@ -67,7 +67,7 @@ export function openingText(entry: Pick<IssueEntry, "date" | "items">, record: I
   return `${fact} ${said}`;
 }
 
-/** The rows the opening adds to the day's conversation: Lumen's words, then a card per question. */
+/** The rows the opening adds to the day's conversation: the companion's words, then a card per question. */
 export function openingMessages(entry: IssueEntry, pageOf: IssueOpening["pageOf"], now: number): ThreadMessage[] {
   const words: ThreadMessage = { role: "ai", text: openingText(entry, entry.opening, pageOf), ts: now };
   const cards: ThreadMessage[] = (entry.opening?.questions ?? []).map((q, i) => ({

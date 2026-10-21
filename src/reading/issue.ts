@@ -2,7 +2,7 @@
 // opens in, and what the door's turn tells the model while one is open.
 //
 // An issue reads without the lesson and without the reader's own conversation;
-// the one who talks about it is Lumen, in the day's conversation at the door.
+// the one who talks about it is the companion, in the day's conversation at the door.
 // Where the reader is in it, what they marked and which page a quoted question
 // came from go to the model as an app note on the reader's line, the way
 // take_link's numbering does (reading/ingest/take-link-tool.ts): never into the

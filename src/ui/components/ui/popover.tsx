@@ -17,7 +17,7 @@
 //   hangs off the case's own right edge, 40-odd pixels in from the margin the
 //   corner keeps.
 // - `align` defaults to "end" rather than "center". The one caller is the
-//   corner companion (lumen/LumenCorner), whose column rises from the corner it
+//   corner companion (companion/CompanionCorner), whose column rises from the corner it
 //   stands in.
 
 import * as React from "react"

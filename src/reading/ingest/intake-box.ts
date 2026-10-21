@@ -1,4 +1,4 @@
-// The Red Box item a link intake keeps in Lumen's case while its topic is not
+// The Red Box item a link intake keeps in the companion's case while its topic is not
 // picked (docs/68 「收链接」). Documents filed by an intake are attached nowhere
 // until the reader picks a topic, so nothing on the shelf leads to them; this
 // item is the one thing that does.

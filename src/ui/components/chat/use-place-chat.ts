@@ -8,7 +8,7 @@
 // sentence and the receipts. A card raised during a turn goes above the
 // turn's rows and into the file. Leaving does not stop the turn (the place
 // session's detach): it runs on out of sight and lands, a reply nobody had
-// open puts Lumen's box card (reading/turn/one-thread-place.ts), and opening
+// open puts the companion's box card (reading/turn/one-thread-place.ts), and opening
 // the conversation again follows the turn. Only Stop stops.
 
 import { useCallback, useEffect, useRef, useState } from "react";

@@ -32,15 +32,15 @@ export default {
   "sidebar.updating": "更新中…",
   "sidebar.restartToUpdate": "再起動して更新",
 
-  "lumen.show": "{name} を表示",
-  "lumen.hide": "{name} を隠す",
-  "lumen.needsDecision": "判断が必要です",
-  "lumen.callCardClose": "閉じる",
-  "lumen.tapToChat": "{name}：タップでチャット",
-  "lumen.inCall": "{name}：会話を開く（音声チャットは続きます）",
-  "lumen.hangUp": "音声チャットを終了",
+  "companion.show": "{name} を表示",
+  "companion.hide": "{name} を隠す",
+  "companion.needsDecision": "判断が必要です",
+  "companion.callCardClose": "閉じる",
+  "companion.tapToChat": "{name}：タップでチャット",
+  "companion.inCall": "{name}：会話を開く（音声チャットは続きます）",
+  "companion.hangUp": "音声チャットを終了",
 
-  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  // Typing to the companion: the day's conversation at the door (companion/DoorChat.tsx).
   "door.title": "{name}",
   "door.close": "閉じる",
   "door.expand": "拡大",

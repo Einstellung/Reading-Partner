@@ -82,7 +82,7 @@ export function IconArea({ size = 20 }: IconProps) {
 	);
 }
 
-// An audio waveform: five rounded vertical bars. Voice chat with Lumen.
+// An audio waveform: five rounded vertical bars. Voice chat with the companion.
 export function IconWave({ size = 22 }: IconProps) {
 	return (
 		<svg

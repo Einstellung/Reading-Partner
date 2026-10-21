@@ -2,7 +2,7 @@
 //
 // The turn is never cut by leaving — the view, the page, the book and the
 // reader all let it run (docs/03) — so an answer can land in a conversation
-// that is not on screen. When it does, Lumen's case is how the reader hears
+// that is not on screen. When it does, the companion's case is how the reader hears
 // about it: one item, whose cover is the first sentence of the reply and whose
 // origin points back at the thread it was written into.
 //

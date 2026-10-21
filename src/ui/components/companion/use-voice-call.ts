@@ -50,7 +50,7 @@ export type { VoiceCallView };
 /**
  * What the view is plus where the body is looking. `attention` is not on
  * VoiceCallView because the call is a domain and the word belongs to the
- * component that draws it (ui/components/lumen).
+ * component that draws it (ui/components/companion).
  */
 export interface VoiceCallState extends VoiceCallView {
   attention: Attention;

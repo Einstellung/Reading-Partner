@@ -1,4 +1,4 @@
-// Lumen's arithmetic (src/ui/components/companion/companion-motion.ts): the breath that must
+// The companion's arithmetic (src/ui/components/companion/companion-motion.ts): the breath that must
 // never repeat, the blink schedule, the gaze and its clamp, and what each phase
 // and the rest state do to the body. None of it can be checked by looking at a
 // device — "it looks alive" is not an assertion, and "it repeated after ninety
@@ -43,17 +43,17 @@ import {
 	easeGaze,
 	gazeToward,
 	initBlink,
-	lumenVisual,
+	companionVisual,
 	mouthOpenness,
 	noiseAt,
 	scanGaze,
 	stepBlink,
 	stepMouth,
 	wanderGaze,
-	type LumenInput,
+	type CompanionInput,
 } from "../../../../src/ui/components/companion/companion-motion";
 
-const AWAKE: LumenInput = {
+const AWAKE: CompanionInput = {
 	act: "rest",
 	level: 0,
 	elapsedMs: 0,
@@ -244,23 +244,23 @@ test("listening goes still and does not pulse with the room", () => {
 	expect(ACT.listen.drive).toBe(0);
 	expect(ACT.listen.breath).toBe(0);
 	expect(ACT.listen.idleMix).toBe(0);
-	const quiet = lumenVisual({ ...AWAKE, act: "listen" });
+	const quiet = companionVisual({ ...AWAKE, act: "listen" });
 	for (let t = 0; t < 4000; t += 40) {
-		const loud = lumenVisual({ ...AWAKE, act: "listen", tMs: t, elapsedMs: t, level: 1 });
-		const still = lumenVisual({ ...AWAKE, act: "listen", tMs: t, elapsedMs: t });
+		const loud = companionVisual({ ...AWAKE, act: "listen", tMs: t, elapsedMs: t, level: 1 });
+		const still = companionVisual({ ...AWAKE, act: "listen", tMs: t, elapsedMs: t });
 		expect(loud.scaleX).toBeCloseTo(quiet.scaleX, 6);
 		expect(loud.scaleY).toBeCloseTo(quiet.scaleY, 6);
 		expect(still.scaleX).toBeCloseTo(quiet.scaleX, 6);
 		expect(still.shiftX).toBeCloseTo(quiet.shiftX, 6);
 	}
-	expect(lumenVisual({ ...AWAKE, act: "listen", level: 1 }).tuftScaleY).toBeGreaterThan(
+	expect(companionVisual({ ...AWAKE, act: "listen", level: 1 }).tuftScaleY).toBeGreaterThan(
 		quiet.tuftScaleY,
 	);
 });
 
 test("listening leans toward the reader and widens the eyes", () => {
-	const rest = lumenVisual(AWAKE);
-	const listen = lumenVisual({ ...AWAKE, act: "listen" });
+	const rest = companionVisual(AWAKE);
+	const listen = companionVisual({ ...AWAKE, act: "listen" });
 	expect(listen.tiltDeg).toBeGreaterThan(rest.tiltDeg);
 	expect(listen.shiftY).toBeGreaterThan(rest.shiftY);
 	expect(listen.scaleX).toBeGreaterThan(rest.scaleX);
@@ -268,8 +268,8 @@ test("listening leans toward the reader and widens the eyes", () => {
 });
 
 test("only the acts with something to listen to let the level in", () => {
-	const loud = (act: LumenInput["act"]) =>
-		lumenVisual({ ...AWAKE, act, level: 1 }).glow - lumenVisual({ ...AWAKE, act }).glow;
+	const loud = (act: CompanionInput["act"]) =>
+		companionVisual({ ...AWAKE, act, level: 1 }).glow - companionVisual({ ...AWAKE, act }).glow;
 	expect(loud("speak")).toBeGreaterThan(0.2);
 	expect(loud("listen")).toBeGreaterThan(0.1);
 	expect(loud("rest")).toBeCloseTo(0, 6);
@@ -278,8 +278,8 @@ test("only the acts with something to listen to let the level in", () => {
 });
 
 test("a level that is not a number leaves the body where it was", () => {
-	const v = lumenVisual({ ...AWAKE, act: "listen", level: NaN });
-	expect(v.scaleX).toBeCloseTo(lumenVisual({ ...AWAKE, act: "listen" }).scaleX, 6);
+	const v = companionVisual({ ...AWAKE, act: "listen", level: NaN });
+	expect(v.scaleX).toBeCloseTo(companionVisual({ ...AWAKE, act: "listen" }).scaleX, 6);
 	expect(Number.isFinite(v.glow)).toBe(true);
 });
 
@@ -317,24 +317,24 @@ test("the scan is the one place the eyes are allowed to snap", () => {
 });
 
 test("the brows are there for the work and nowhere else", () => {
-	expect(lumenVisual({ ...AWAKE, act: "think" }).browOpacity).toBe(1);
-	expect(lumenVisual({ ...AWAKE, act: "check" }).browOpacity).toBe(1);
+	expect(companionVisual({ ...AWAKE, act: "think" }).browOpacity).toBe(1);
+	expect(companionVisual({ ...AWAKE, act: "check" }).browOpacity).toBe(1);
 	for (const act of ["rest", "listen", "speak"] as const) {
-		expect(lumenVisual({ ...AWAKE, act }).browOpacity).toBe(0);
+		expect(companionVisual({ ...AWAKE, act }).browOpacity).toBe(0);
 	}
 	// Asleep has no brows either, however it got there.
-	expect(lumenVisual({ ...AWAKE, act: "think", rest: 1 }).browOpacity).toBe(0);
+	expect(companionVisual({ ...AWAKE, act: "think", rest: 1 }).browOpacity).toBe(0);
 });
 
 test("the mouth has three shapes and thinking is the flat one", () => {
-	expect(lumenVisual({ ...AWAKE, act: "rest" }).mouthCurve).toBe(1);
-	expect(lumenVisual({ ...AWAKE, act: "listen" }).mouthCurve).toBe(1);
-	expect(lumenVisual({ ...AWAKE, act: "think" }).mouthCurve).toBe(0);
-	expect(lumenVisual({ ...AWAKE, act: "check" }).mouthCurve).toBe(0);
+	expect(companionVisual({ ...AWAKE, act: "rest" }).mouthCurve).toBe(1);
+	expect(companionVisual({ ...AWAKE, act: "listen" }).mouthCurve).toBe(1);
+	expect(companionVisual({ ...AWAKE, act: "think" }).mouthCurve).toBe(0);
+	expect(companionVisual({ ...AWAKE, act: "check" }).mouthCurve).toBe(0);
 	// Speaking is the round one: the stroke gives way to it entirely.
-	expect(lumenVisual({ ...AWAKE, act: "speak" }).mouthMix).toBe(1);
+	expect(companionVisual({ ...AWAKE, act: "speak" }).mouthMix).toBe(1);
 	for (const act of ["rest", "listen", "think", "check"] as const) {
-		expect(lumenVisual({ ...AWAKE, act }).mouthMix).toBe(0);
+		expect(companionVisual({ ...AWAKE, act }).mouthMix).toBe(0);
 	}
 });
 
@@ -371,8 +371,8 @@ test("the mouth holds through the gap between two words and then closes", () => 
 });
 
 test("one act dissolves into the next over its own ramp", () => {
-	const from = lumenVisual({ ...AWAKE, act: "think" });
-	const to = lumenVisual({ ...AWAKE, act: "speak" });
+	const from = companionVisual({ ...AWAKE, act: "think" });
+	const to = companionVisual({ ...AWAKE, act: "speak" });
 	expect(blendVisual(from, to, 0)).toEqual(from);
 	expect(blendVisual(from, to, 1)).toEqual(to);
 	const half = blendVisual(from, to, 0.5);
@@ -407,7 +407,7 @@ test("the breath conserves volume: what widens does not also rise", () => {
 	let sawWider = false;
 	let sawTaller = false;
 	for (let t = 0; t < 3300; t += 60) {
-		const v = lumenVisual({ ...AWAKE, tMs: t });
+		const v = companionVisual({ ...AWAKE, tMs: t });
 		if (v.scaleX > v.scaleY + 1e-6) sawWider = true;
 		if (v.scaleY > v.scaleX + 1e-6) sawTaller = true;
 	}
@@ -420,8 +420,8 @@ test("reduced motion keeps a tenth of the breath and none of the drift", () => {
 	let full = 0;
 	let damped = 0;
 	for (let t = 0; t < 6000; t += 40) {
-		const a = lumenVisual({ ...AWAKE, tMs: t, elapsedMs: t });
-		const b = lumenVisual({ ...AWAKE, tMs: t, elapsedMs: t, reduced: true });
+		const a = companionVisual({ ...AWAKE, tMs: t, elapsedMs: t });
+		const b = companionVisual({ ...AWAKE, tMs: t, elapsedMs: t, reduced: true });
 		full = Math.max(full, Math.abs(a.shiftX), Math.abs(a.tiltDeg));
 		damped = Math.max(damped, Math.abs(b.shiftX), Math.abs(b.tiltDeg));
 	}
@@ -430,8 +430,8 @@ test("reduced motion keeps a tenth of the breath and none of the drift", () => {
 });
 
 test("asleep settles wider, lower, dimmer and shut", () => {
-	const awake = lumenVisual(AWAKE);
-	const asleep = lumenVisual({ ...AWAKE, rest: 1 });
+	const awake = companionVisual(AWAKE);
+	const asleep = companionVisual({ ...AWAKE, rest: 1 });
 	expect(asleep.scaleX).toBeGreaterThan(awake.scaleX);
 	expect(asleep.scaleY).toBeLessThan(awake.scaleY);
 	expect(asleep.shiftY).toBeCloseTo(REST.sink, 6);
@@ -446,13 +446,13 @@ test("asleep settles wider, lower, dimmer and shut", () => {
 test("the eyes are shut before the body has finished settling", () => {
 	// Eyes still open on a body already lying flat looked like the animation
 	// had broken, so they close at twice the rate of everything else.
-	expect(lumenVisual({ ...AWAKE, rest: 0.5 }).eyeOpen).toBe(0);
-	expect(lumenVisual({ ...AWAKE, rest: 0.25 }).eyeOpen).toBeCloseTo(0.5, 6);
+	expect(companionVisual({ ...AWAKE, rest: 0.5 }).eyeOpen).toBe(0);
+	expect(companionVisual({ ...AWAKE, rest: 0.25 }).eyeOpen).toBeCloseTo(0.5, 6);
 });
 
 test("a blink half-closes the eyes without touching the body", () => {
-	const open = lumenVisual(AWAKE);
-	const mid = lumenVisual({ ...AWAKE, eyeOpen: 0.4 });
+	const open = companionVisual(AWAKE);
+	const mid = companionVisual({ ...AWAKE, eyeOpen: 0.4 });
 	expect(mid.eyeOpen).toBeCloseTo(0.4, 6);
 	expect(mid.scaleX).toBeCloseTo(open.scaleX, 6);
 });
@@ -462,7 +462,7 @@ test("every field a frame writes is a finite number", () => {
 	// stops moving with nothing on screen to say why.
 	for (const act of ["rest", "listen", "think", "check", "speak"] as const) {
 		for (const rest of [0, 0.5, 1]) {
-			const v = lumenVisual({ ...AWAKE, act, rest, tMs: 12_345, elapsedMs: 678, level: 0.6, mouthOpen: 0.7 });
+			const v = companionVisual({ ...AWAKE, act, rest, tMs: 12_345, elapsedMs: 678, level: 0.6, mouthOpen: 0.7 });
 			for (const value of [
 				v.scaleX,
 				v.scaleY,

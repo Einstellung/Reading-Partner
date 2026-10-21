@@ -1,5 +1,5 @@
 // Where the door panel stands on the iPad and the desktop
-// (src/ui/components/companion/door-panel.ts): on Lumen with no keyboard, on the
+// (src/ui/components/companion/door-panel.ts): on the companion with no keyboard, on the
 // keyboard with one up (docs/pitfall/506).
 // Run: scripts/t.sh tests/ui/components/companion/door-panel.test.ts
 
@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { NO_KEYBOARD } from "../../../../src/ui/components/common/useKeyboardInset";
 import { fullPadding, panelOnKeyboard, panelPadding } from "../../../../src/ui/components/companion/door-panel";
 
-test("with no keyboard the panel stands on Lumen, above the corner's margin and its lift", () => {
+test("with no keyboard the panel stands on the companion, above the corner's margin and its lift", () => {
   expect(panelPadding(NO_KEYBOARD, 0).paddingBottom).toBe("calc(max(24px, env(safe-area-inset-bottom)) + 80px)");
   expect(panelPadding(null, 40).paddingBottom).toBe("calc(max(24px, env(safe-area-inset-bottom)) + 120px)");
   expect(panelOnKeyboard(NO_KEYBOARD)).toBe(false);

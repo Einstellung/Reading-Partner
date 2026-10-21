@@ -201,7 +201,7 @@ test("the shell has moved when the document's scroll event returns", () => {
 	keyboard(1210, 1210, 0);
 	const { shell, chat } = drawShell();
 	// Outside act, the way WebKit delivers it: React would render a scroll
-	// event's update in a task of its own, after the frame in which Lumen
+	// event's update in a task of its own, after the frame in which the companion
 	// measures the composer (docs/pitfall/458).
 	const flags = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 	const actWas = flags.IS_REACT_ACT_ENVIRONMENT;

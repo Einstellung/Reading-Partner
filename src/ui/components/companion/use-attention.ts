@@ -10,7 +10,7 @@ import {
   attentionEndsAt,
   attentionFrom,
   noActivity,
-  type LumenActivity,
+  type CompanionActivity,
 } from "./attention";
 import type { Attention } from "./companion-motion";
 
@@ -23,7 +23,7 @@ export function useAttention(
   subscribe: (cb: (event: TurnActivity) => void) => () => void,
 ): Attention {
   const [attention, setAttention] = useState<Attention>("reader");
-  const stateRef = useRef<LumenActivity>(noActivity());
+  const stateRef = useRef<CompanionActivity>(noActivity());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {

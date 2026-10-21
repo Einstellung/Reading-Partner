@@ -1,4 +1,4 @@
-// take_link, the door's tool for a link the reader pastes to Lumen (docs/68
+// take_link, the door's tool for a link the reader pastes to the companion (docs/68
 // 「收链接」): start a topic intake for it and put the intake card up, then end.
 // The fetch runs on as an ingest-url run; the reader picks the topic on the card.
 //

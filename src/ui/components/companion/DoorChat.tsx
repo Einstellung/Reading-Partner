@@ -1,4 +1,4 @@
-// Lumen's conversation (docs/68): the day's conversation at the door, drawn with
+// The companion's conversation (docs/68): the day's conversation at the door, drawn with
 // the chat every other conversation uses (CallView, its cards included).
 //
 // Rendering and event binding only; the conversation is use-door-chat.ts, which
@@ -10,25 +10,25 @@
 // never written — the hook's own rows are what the model and the file see.
 //
 // Two forms, by shell. On the phone it is the whole screen, risen from the
-// bottom and pulled back down by its top bar, and Lumen stands down while it is
+// bottom and pulled back down by its top bar, and the companion stands down while it is
 // up: the sheet registers as one (BottomSheetLayer), which is what the corner
 // already gets out of the way for. The sheet is `absolute` in
 // the phone shell, not `fixed`: the shell moves to what the keyboard leaves
 // visible (KeyboardShell, docs/pitfall/443) and the sheet has to move with it,
 // as every other phone conversation does by being drawn inside it. On the iPad and the desktop
-// it is a panel standing on top of Lumen at the corner's edge, so it follows the
-// corner to whichever edge it was dragged to and Lumen stays where it was, under
+// it is a panel standing on top of the companion at the corner's edge, so it follows the
+// corner to whichever edge it was dragged to and the companion stays where it was, under
 // it. The panel is drawn in the shell too, in a layer of its own and not in the
 // corner's `fixed` column, for the same reason as the sheet (docs/pitfall/506):
 // the iPad's first keyboard scrolls the document and a `fixed` column goes with
-// it. With a keyboard up the panel stands on the keyboard instead of on Lumen,
-// which stands down for it (LumenCorner). The panel's expand button fills the
+// it. With a keyboard up the panel stands on the keyboard instead of on the companion,
+// which stands down for it (CompanionCorner). The panel's expand button fills the
 // shell with it and the same button brings it back; the page under it never
 // moves.
 //
 // Voice chat is entered here (2026-10-20): the round waveform button beside the
 // composer starts a hands-free call and puts the conversation away, and the
-// reader talks to Lumen in the corner. The call is the corner's, not this
+// reader talks to the companion in the corner. The call is the corner's, not this
 // view's, so closing this leaves it running. Opened during a call, the composer
 // is a bar that says what the call is doing and the button beside it ends the
 // call; there is no typing while one is up. What is said in the call is written
@@ -60,7 +60,7 @@ import { fullPadding, panelPadding } from "./door-panel";
 import { sheetCloses, sheetOffset } from "./door-sheet";
 import { itemIdOfBoxCard, timelineItems, withBoxCards } from "./box-timeline";
 import { doorFocusSelector, type DoorFocus } from "./box-jump";
-import lumenIcon from "./companion-icon.webp";
+import companionIcon from "./companion-icon.webp";
 import type { IntakeOpenDocument } from "./intake-view";
 import { useCompanionName } from "../base/use-companion-name";
 import { useDoorChat } from "./use-door-chat";
@@ -78,7 +78,7 @@ export interface DoorBox {
 	note: string | null;
 }
 
-/** Voice chat with Lumen, as the corner holds it (LumenCorner). */
+/** Voice chat with the companion, as the corner holds it (CompanionCorner). */
 export interface DoorVoice {
 	/** A call is up. */
 	live: boolean;
@@ -143,7 +143,7 @@ export function DoorChat({
 		...(openedFor ? { openedFor } : {}),
 	});
 
-	// With a brief open, Lumen's page citations are the brief's: checked against
+	// With a brief open, the companion's page citations are the brief's: checked against
 	// its text, and a tap puts the conversation away and takes the reader to the
 	// passage (issue-context.ts). Otherwise whatever the shell provides stands.
 	const issue = useOpenIssue();
@@ -350,7 +350,7 @@ export function DoorChat({
 			{/* The sheet's grip: what says the bar can be pulled down. */}
 			{form === "sheet" && <span aria-hidden="true" className="mx-auto mt-1.5 h-1 w-9 rounded-full bg-border" />}
 			<div className="flex items-center gap-2 py-1.5 pl-3.5 pr-1.5">
-			<img src={lumenIcon} alt="" draggable={false} className="h-6.5 w-6.5 select-none" />
+			<img src={companionIcon} alt="" draggable={false} className="h-6.5 w-6.5 select-none" />
 			<span className="flex-1 text-[15px] font-semibold text-foreground">{t("shell.door.title", { name: companionName })}</span>
 			{form === "panel" && onToggleFull && (
 				<Button

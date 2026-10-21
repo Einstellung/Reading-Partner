@@ -1,4 +1,4 @@
-// The brief open in the reader, as Lumen's conversation sees it (docs/info/88
+// The brief open in the reader, as the companion's conversation sees it (docs/info/88
 // 「简报的对话」). Whichever reader holds an issue publishes it here, the way a
 // screen publishes what a voice call would be about (voice-context.ts), and the
 // corner and the door read it: the door comes up when an issue is opened, the
@@ -73,14 +73,14 @@ export function useOpenIssue(): OpenIssue | null {
   return issue;
 }
 
-/** An Ask on a selection in the issue: the passage goes to Lumen's conversation. */
-export function askLumen(quote: IssueQuote): void {
+/** An Ask on a selection in the issue: the passage goes to the companion's conversation. */
+export function askCompanion(quote: IssueQuote): void {
   const text = quote.text.replace(/\s+/g, " ").trim();
   if (!text) return;
   for (const asker of [...askers]) asker({ text });
 }
 
-export function subscribeAskLumen(asker: (quote: IssueQuote) => void): () => void {
+export function subscribeAskCompanion(asker: (quote: IssueQuote) => void): () => void {
   askers.add(asker);
   return () => {
     askers.delete(asker);
@@ -104,8 +104,8 @@ export function opensDoor(shownFor: string | null, issue: OpenIssue | null): boo
 }
 
 /**
- * The line Lumen opened a brief with, once it has landed in the conversation:
- * the first message of Lumen's at or after `since` (when the conversation came
+ * The line the companion opened a brief with, once it has landed in the conversation:
+ * the first message of the companion's at or after `since` (when the conversation came
  * up). Earlier ones are the day's older talk. A brief opened a second time says
  * nothing new, so no message comes after `since` and nothing is placed.
  */

@@ -227,7 +227,7 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
   const asks = new Map<number, AbortController>();
   // The tools each turn has open. A turn dropped mid-tool would otherwise leave
   // a start with no end, and the body reading this counts one against the other
-  // — Lumen would go on staring at the desk for the rest of the call.
+  // — the companion would go on staring at the desk for the rest of the call.
   const openTools = new Map<number, string[]>();
 
   let tail: Promise<void> = Promise.resolve();

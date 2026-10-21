@@ -110,7 +110,7 @@ export default {
   "displaySheet.lineSpacing": "Interlineado",
   "displaySheet.margins": "Márgenes",
   "displaySheet.paper": "Papel",
-  "displaySheet.lumen": "{name}",
+  "displaySheet.companion": "{name}",
   "displaySheet.layout": "Diseño",
   "displaySheet.more": "Más",
   "displaySheet.tighterLines": "Interlineado más compacto",

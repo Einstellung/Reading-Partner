@@ -1,4 +1,4 @@
-// Where Lumen looks while a turn runs (src/ui/components/companion/attention.ts).
+// Where the companion looks while a turn runs (src/ui/components/companion/attention.ts).
 // The two numbers under test are the ones an eye cannot check: a 50 ms tool
 // call has to produce a glance long enough to read, and three tools in a row
 // have to read as one glance rather than three.
@@ -14,7 +14,7 @@ import {
 	attentionEndsAt,
 	attentionFrom,
 	noActivity,
-	type LumenActivity,
+	type CompanionActivity,
 } from "../../../../src/ui/components/companion/attention";
 import type { TurnActivity } from "../../../../src/ai/turn-view/activity";
 
@@ -22,7 +22,7 @@ const start = (name: string): TurnActivity => ({ kind: "tool", name, phase: "sta
 const end = (name: string): TurnActivity => ({ kind: "tool", name, phase: "end" });
 
 /** Fold a script of [event, when] pairs, as the hook does. */
-function run(script: [TurnActivity, number][]): LumenActivity {
+function run(script: [TurnActivity, number][]): CompanionActivity {
 	let state = noActivity();
 	for (const [event, at] of script) state = applyActivity(state, event, at);
 	return state;

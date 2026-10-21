@@ -1,5 +1,5 @@
 // propose_topic_search (docs/info/88 起草：来回问): the door tool that draws the
-// drafting card once Lumen and the reader have talked a topic through. Same
+// drafting card once the companion and the reader have talked a topic through. Same
 // shape as propose_lab (info/briefer/lab-tool.ts): the tool draws a card and
 // writes nothing; the card's Apply writes the config and the concern
 // (apply.ts), answered in the door chat's onCardAction.

@@ -92,8 +92,8 @@ export default {
   "features.paperHint":
     "앱 전체의 흰 바탕(채팅, 책장, 사이드바, 이 창, 책 페이지)을 미색 종이 색으로 바꿉니다. 색은 한 가지뿐이고 더 어두운 단계는 없습니다. 다크 모드가 아닙니다. 이 선택은 이 기기에만 저장됩니다.",
   "features.reading": "읽기",
-  "features.lumen": "{name} 표시",
-  "features.lumenHint":
+  "features.companionShow": "{name} 표시",
+  "features.companionShowHint":
     "{name}: 리더를 포함한 모든 화면의 모서리에 있습니다. 끄면 모서리가 비고, 사이드바, 휴대폰 홈 화면, 리더의 더 보기 메뉴에 있는 {name} 버튼으로 다시 불러올 수 있습니다. 이 설정은 이 기기에만 저장됩니다.",
   "features.companionName": "동반자 이름",
   "features.briefing": "브리핑",

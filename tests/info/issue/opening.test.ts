@@ -1,4 +1,4 @@
-// Lumen's opening for a brief (docs/info/88 「简报的对话」「攒着问」): written at
+// The companion's opening for a brief (docs/info/88 「简报的对话」「攒着问」): written at
 // assembly, said once when the issue is opened, the questions as cards.
 
 import { describe, expect, test } from "bun:test";
@@ -212,7 +212,7 @@ describe("opening an issue: said once, into the day's conversation", () => {
     now: () => 1000,
   };
 
-  test("the first opening adds Lumen's words, items cited by page, and a card per question", async () => {
+  test("the first opening adds the companion's words, items cited by page, and a card per question", async () => {
     const pages = (h: string) => (h.startsWith("A tool") ? 3 : null);
     expect(await speakOpening(deps, { bookId: "hbook0001", date: "2026-10-16", threadId: "t1", pageOf: pages })).toBe(true);
     expect(appended.map((a) => `${a.date} ${a.threadId} ${a.message.ts}`)).toEqual(["2026-10-16 t1 1000", "2026-10-16 t1 1001", "2026-10-16 t1 1002"]);

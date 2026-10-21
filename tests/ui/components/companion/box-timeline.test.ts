@@ -1,4 +1,4 @@
-// The box in Lumen's conversation (src/ui/components/companion/box-timeline.ts,
+// The box in the companion's conversation (src/ui/components/companion/box-timeline.ts,
 // docs/68 2026-10-15): which items are drawn, where among the rows, and that an
 // item whose own card is already a row is not drawn twice.
 // Run: scripts/t.sh tests/ui/components/companion/box-timeline.test.ts

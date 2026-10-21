@@ -1,6 +1,6 @@
 // What the door mounts beside the soul's own set (soul/door.ts). The soul brings
 // its statements, conversations, catalogue, delegation and places on every turn;
-// this is for what only a conversation typed to Lumen at the door needs.
+// this is for what only a conversation typed to the companion at the door needs.
 //
 // One line per tool. A tool that draws a card raises it through `raiseCard`,
 // and the card's kind is registered in ui/components/cardRegistry.ts like every

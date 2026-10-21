@@ -32,15 +32,15 @@ export default {
   "sidebar.updating": "업데이트 중…",
   "sidebar.restartToUpdate": "재시작하여 업데이트",
 
-  "lumen.show": "{name} 표시",
-  "lumen.hide": "{name} 숨기기",
-  "lumen.needsDecision": "결정이 필요합니다",
-  "lumen.callCardClose": "닫기",
-  "lumen.tapToChat": "{name}: 탭하면 채팅",
-  "lumen.inCall": "{name}: 대화 열기 (음성 채팅은 계속됩니다)",
-  "lumen.hangUp": "음성 채팅 종료",
+  "companion.show": "{name} 표시",
+  "companion.hide": "{name} 숨기기",
+  "companion.needsDecision": "결정이 필요합니다",
+  "companion.callCardClose": "닫기",
+  "companion.tapToChat": "{name}: 탭하면 채팅",
+  "companion.inCall": "{name}: 대화 열기 (음성 채팅은 계속됩니다)",
+  "companion.hangUp": "음성 채팅 종료",
 
-  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  // Typing to the companion: the day's conversation at the door (companion/DoorChat.tsx).
   "door.title": "{name}",
   "door.close": "닫기",
   "door.expand": "크게",

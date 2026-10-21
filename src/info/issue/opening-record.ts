@@ -1,4 +1,4 @@
-// Lumen's opening for one issue, written when the issue is assembled (docs/info/88
+// The companion's opening for one issue, written when the issue is assembled (docs/info/88
 // 「简报的对话」「攒着问」) and kept on the issue's row of info-shelf.json. Pure.
 //
 // What the opening says splits the usual way: the program says the facts (the
@@ -39,7 +39,7 @@ export interface OpeningQuestion {
 }
 
 export interface IssueOpeningRecord {
-  /** Lumen's judgement, items as [1], [2] …; null when the model wrote nothing usable. */
+  /** The companion's judgement, items as [1], [2] …; null when the model wrote nothing usable. */
   text: string | null;
   /** What [n] stands for: the heading its page is found by when the issue is opened. */
   items: { n: number; heading: string }[];

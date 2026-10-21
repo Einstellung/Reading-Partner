@@ -1,4 +1,4 @@
-// How the case arrives and how it leaves (docs/68). Lumen pulls it out from
+// How the case arrives and how it leaves (docs/68). The companion pulls it out from
 // behind itself and sets it down; when the box is empty it puts it back and the
 // case is gone. A case that appeared on its own and a body that only looked at
 // it were two things, not one act.
@@ -211,7 +211,7 @@ export function caseAtRest(state: CaseMotion): boolean {
 
 /**
  * How much of the act the body is in right now: one mutable number the corner
- * writes every frame and Lumen reads on its own, because a prop would be a
+ * writes every frame and the companion reads on its own, because a prop would be a
  * render per frame.
  */
 export interface CaseReach {
@@ -256,7 +256,7 @@ export function caseLookGaze(reach: number): Gaze {
   return { x: CASE_LOOK.x * w, y: CASE_LOOK.y * w };
 }
 
-/** The lean at that much reach, in degrees on `--lumen-tilt`. */
+/** The lean at that much reach, in degrees on `--companion-tilt`. */
 export function caseLeanDeg(reach: number): number {
   return CASE_LEAN_DEG * clamp01(reach);
 }

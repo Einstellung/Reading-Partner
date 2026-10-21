@@ -59,7 +59,7 @@ export interface IntakeTopicRow {
 }
 
 /**
- * The list: the shelf's topics in order, the reader's pick, and Lumen's
+ * The list: the shelf's topics in order, the reader's pick, and the companion's
  * suggestion marked: the topic it named when it raised the card, while that
  * topic still exists, and only when it named none a topic the link names
  * (topic-choice.ts). Nothing is marked without either.

@@ -1,7 +1,7 @@
 // Whether a finger is down on the hold-to-talk bar.
 //
 // The bar is deep inside the composer and the thing that has to get out of its
-// way — Lumen in the corner (docs/68) — is a sibling of the whole chat, so this
+// way — the companion in the corner (docs/68) — is a sibling of the whole chat, so this
 // is a signal rather than six props of plumbing. One press at a time: there is
 // one microphone and one composer holding it.
 

@@ -1,7 +1,7 @@
 // The box as the corner and the conversation see it (docs/68): which items this
 // device shows, the count on the badge, and the line under each cover.
 //
-// Here and not in LumenCorner.tsx because all of it is arithmetic and strings,
+// Here and not in CompanionCorner.tsx because all of it is arithmetic and strings,
 // and none of it needs React to be read. Where the cards stand in the
 // conversation is box-timeline.ts.
 
@@ -11,7 +11,7 @@ import { intakeIdOfItem } from "../../../reading/ingest/intake-box";
 
 /**
  * Whether the case stands in the corner. Anything open at all and it does;
- * empty and it is gone, leaving Lumen alone there (docs/68). Not a pose of the
+ * empty and it is gone, leaving the companion alone there (docs/68). Not a pose of the
  * body: the case is its own layer beside it, and this is the whole of what the
  * count decides about the picture.
  */

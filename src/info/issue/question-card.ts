@@ -1,4 +1,4 @@
-// A question Lumen asks when a brief is opened (docs/info/88 「攒着问」「记忆回写」),
+// A question the companion asks when a brief is opened (docs/info/88 「攒着问」「记忆回写」),
 // drawn as a card in the door conversation: the question, two or three quick
 // answers, and "in my own words". A quick answer is said as the reader's line;
 // "in my own words" leaves the card waiting for the next line typed. Either

@@ -104,7 +104,7 @@ export default {
   "displaySheet.lineSpacing": "行距",
   "displaySheet.margins": "页边距",
   "displaySheet.paper": "纸张",
-  "displaySheet.lumen": "{name}",
+  "displaySheet.companion": "{name}",
   "displaySheet.layout": "排版",
   "displaySheet.more": "更多",
   "displaySheet.tighterLines": "行距更紧",

@@ -1,4 +1,4 @@
-// Whether Lumen is on this device's screen, as one value every switch for it
+// Whether the companion is on this device's screen, as one value every switch for it
 // shows and changes: the wordmark, the phone's title, the reader's More menu,
 // the phone reader's Display sheet and Settings (docs/68). The value lives in
 // localStorage (corner-pref.ts); this module only lets a change made in one
@@ -6,7 +6,7 @@
 
 import { useSyncExternalStore } from "react";
 import { browserPrefStore } from "../base/pref-store";
-import { readLumenCornerShown, writeLumenCornerShown } from "./corner-pref";
+import { readCompanionCornerShown, writeCompanionCornerShown } from "./corner-pref";
 
 let shown = true;
 let hydrated = false;
@@ -17,39 +17,39 @@ function store() {
 }
 
 // Read on demand, not at import: a test file with no window imports this too.
-export function currentLumenShown(): boolean {
+export function currentCompanionShown(): boolean {
   if (!hydrated) {
     hydrated = true;
-    shown = readLumenCornerShown(store());
+    shown = readCompanionCornerShown(store());
   }
   return shown;
 }
 
-export function subscribeLumenShown(listener: () => void): () => void {
+export function subscribeCompanionShown(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
   };
 }
 
-export function useLumenShown(): boolean {
-  return useSyncExternalStore(subscribeLumenShown, currentLumenShown, currentLumenShown);
+export function useCompanionShown(): boolean {
+  return useSyncExternalStore(subscribeCompanionShown, currentCompanionShown, currentCompanionShown);
 }
 
-export function setLumenShown(next: boolean): void {
+export function setCompanionShown(next: boolean): void {
   hydrated = true;
-  writeLumenCornerShown(store(), next);
+  writeCompanionCornerShown(store(), next);
   if (next === shown) return;
   shown = next;
   for (const listener of listeners) listener();
 }
 
-export function toggleLumenShown(): void {
-  setLumenShown(!currentLumenShown());
+export function toggleCompanionShown(): void {
+  setCompanionShown(!currentCompanionShown());
 }
 
 // Tests only: forget the cached value so the next read goes back to storage.
-export function resetLumenShownForTest(): void {
+export function resetCompanionShownForTest(): void {
   hydrated = false;
   shown = true;
 }

@@ -24,7 +24,7 @@ export default {
   "top.zoomIn": "放大",
   "top.zoomOut": "缩小",
   "top.pagedFlip": "分页翻页",
-  "top.lumen": "{name}",
+  "top.companion": "{name}",
   "top.settings": "设置",
   "top.closePanel": "关闭侧栏",
   "top.openPanel": "打开侧栏",

@@ -1,4 +1,4 @@
-// Lumen in the corner of every place, and the way into his conversation
+// The companion in the corner of every place, and the way into his conversation
 // (docs/68).
 //
 // Rendering and event binding only. What a press means is companion-press.ts, which
@@ -12,21 +12,21 @@
 //
 // Beside a book it is still: `still` stops the loop dead, and the resting pose
 // the custom-property defaults paint is what stands there. The one thing that
-// moves in the reader is the case: something arrives and Lumen pulls it out
+// moves in the reader is the case: something arrives and the companion pulls it out
 // from behind itself and sets it down, the box empties and it puts it back
 // (case-motion.ts). The eyes and the lean go with it, in the reader too. A live
 // voice call is the exception: the reader is talking to him, so his face moves
 // with the call beside a book as it does everywhere else.
 //
-// The corner is only a way in (2026-10-15). A tap on Lumen or on the case opens
+// The corner is only a way in (2026-10-15). A tap on the companion or on the case opens
 // his conversation, the day's conversation at the door (DoorChat.tsx): the
-// whole screen on the phone, with Lumen standing down, and a panel standing on
-// Lumen everywhere else, which its expand button fills the shell with. What is
+// whole screen on the phone, with the companion standing down, and a panel standing on
+// The companion everywhere else, which its expand button fills the shell with. What is
 // in the box is drawn there as cards among the day's rows.
 //
 // Voice chat (2026-10-20) starts from the waveform button beside the door's
 // composer and is hands-free: the conversation goes away and the reader talks
-// to Lumen here, whose brows, eyes and mouth follow the call. While it is up a
+// to the companion here, whose brows, eyes and mouth follow the call. While it is up a
 // small X hangs on the body's corner away from the case, and one tap on it ends
 // the call. A tap on the body or the case opens the conversation without ending
 // it; there the composer is the call's state and its End button. A card that
@@ -74,9 +74,9 @@ import { OVERLAY_Z, useBottomSheetOpen } from "../ui/overlay";
 import { useShellKeyboard } from "../common/useKeyboardInset";
 import { panelOnKeyboard } from "./door-panel";
 import { ErrorLine } from "./ErrorLine";
-import { Lumen, LumenCase } from "./Companion";
+import { Companion, CompanionCase } from "./Companion";
 import { DoorChat, type DoorBox } from "./DoorChat";
-import { PRESS_REST, lumenPressStep, startsPress, type LumenPressInput } from "./companion-press";
+import { PRESS_REST, companionPressStep, startsPress, type CompanionPressInput } from "./companion-press";
 import { useVoiceCall, voiceCallHandle } from "./use-voice-call";
 import { getVoiceContext, subscribeVoiceContext, type VoiceContext } from "./voice-context";
 import { badgeCount, caseLabel } from "./box-cards";
@@ -91,10 +91,10 @@ import { useCaseMotion } from "./use-case-motion";
 import { useCornerDrag } from "./use-corner-drag";
 import { doorFocusKey, planItemJump, stateAfterFollow, staysUntilDecided, type DoorFocus, type Place, type Shell } from "./box-jump";
 import type { IntakeOpenDocument } from "./intake-view";
-import { getOpenIssue, opensDoor, subscribeAskLumen, subscribeOpenIssue, type IssueQuote } from "./issue-context";
+import { getOpenIssue, opensDoor, subscribeAskCompanion, subscribeOpenIssue, type IssueQuote } from "./issue-context";
 
 /** What the shell can do about a card, in the shell's own terms. */
-export interface LumenJumpTargets {
+export interface CompanionJumpTargets {
 	/** Open a book in the reader. The phone has it only for a brief; a book's conversation opens in one step there (openBookConversation). */
 	openBook?: (bookId: string) => void | Promise<void>;
 	goToPage?: (page: number) => void;
@@ -119,7 +119,7 @@ interface DoorOpen {
 	issue?: string;
 }
 
-export function LumenCorner({
+export function CompanionCorner({
 	shell,
 	shown,
 	liftPx = 0,
@@ -146,7 +146,7 @@ export function LumenCorner({
 	stoodDown?: boolean;
 	inReader?: boolean;
 	openBookId?: string | null;
-	targets: LumenJumpTargets;
+	targets: CompanionJumpTargets;
 }) {
 	// Which edge the corner is docked at and how high, from this device's own
 	// slot; `liftPx` is the composer's claim on the bottom edge and only wins
@@ -199,7 +199,7 @@ export function LumenCorner({
 	liveRef.current = live;
 
 	// A brief opened in the reader brings the conversation up with it, whether
-	// or not Lumen is shown (docs/info/88 「简报的对话」); the same brief
+	// or not the companion is shown (docs/info/88 「简报的对话」); the same brief
 	// published again does not. An Ask on a passage in it brings today's
 	// conversation up with the passage above the composer.
 	const [quote, setQuote] = useState<IssueQuote | null>(null);
@@ -223,7 +223,7 @@ export function LumenCorner({
 		};
 		opened();
 		const offIssue = subscribeOpenIssue(opened);
-		const offAsk = subscribeAskLumen((asked) => {
+		const offAsk = subscribeAskCompanion((asked) => {
 			setNote(null);
 			setQuote(asked);
 			setDoor((open) => (open && !open.date ? open : {}));
@@ -246,7 +246,7 @@ export function LumenCorner({
 	}, []);
 
 	// Voice chat, from the door's button: the call starts and the conversation
-	// goes away, so the reader talks to Lumen in the corner. Where the corner is
+	// goes away, so the reader talks to the companion in the corner. Where the corner is
 	// hidden there is no body to talk to, and the conversation stays up with
 	// the call's End in it.
 	const startVoice = useCallback(() => {
@@ -281,8 +281,8 @@ export function LumenCorner({
 	// follows it arrive in one event.
 	const pressState = useRef(PRESS_REST);
 	const press = useCallback(
-		(input: LumenPressInput) => {
-			const step = lumenPressStep(pressState.current, input);
+		(input: CompanionPressInput) => {
+			const step = companionPressStep(pressState.current, input);
 			pressState.current = step.state;
 			if (step.effect === "open-door") openDoor();
 		},
@@ -414,8 +414,8 @@ export function LumenCorner({
 	// conversation still comes up for a brief (docs/68), on its own.
 	if (!shown) return <>{doorChat}</>;
 
-	// The panel stands on the keyboard while one is up, over where Lumen would be
-	// (door-panel.ts), and filled it stands over the whole shell; Lumen stands
+	// The panel stands on the keyboard while one is up, over where the companion would be
+	// (door-panel.ts), and filled it stands over the whole shell; the companion stands
 	// down under it either way.
 	const underPanel = !asSheet && door !== null && (full || panelOnKeyboard(shellKeyboard));
 	return (
@@ -459,7 +459,7 @@ export function LumenCorner({
 				// thing that must not read backwards, so it turns itself back over.
 				style={mirrored ? { transform: "scaleX(-1)" } : undefined}
 			>
-				<Lumen
+				<Companion
 					handle={handle}
 					attention={call.attention}
 					// Beside an open book nothing moves but the case and the hands on
@@ -467,7 +467,7 @@ export function LumenCorner({
 					still={inReader && !live}
 					reach={motion.reach}
 					reaching={motion.moving}
-					label={live ? t("shell.lumen.inCall", { name: companionName }) : t("shell.lumen.tapToChat", { name: companionName })}
+					label={live ? t("shell.companion.inCall", { name: companionName }) : t("shell.companion.tapToChat", { name: companionName })}
 					aria-haspopup="dialog"
 					aria-expanded={door !== null}
 					// The tap. A keyboard's Enter lands here too, with no press
@@ -493,8 +493,8 @@ export function LumenCorner({
 						type="button"
 						variant="end"
 						size="badge"
-						aria-label={t("shell.lumen.hangUp")}
-						title={t("shell.lumen.hangUp")}
+						aria-label={t("shell.companion.hangUp")}
+						title={t("shell.companion.hangUp")}
 						onClick={endVoice}
 						className="pointer-events-auto absolute -right-1.5 -top-1.5 z-10 border-2 border-background"
 					>
@@ -507,7 +507,7 @@ export function LumenCorner({
 						type="button"
 						aria-label={caseLabel(count)}
 						aria-haspopup="dialog"
-						// A case in Lumen's hands is not a button: no press, no tab stop
+						// A case in the companion's hands is not a button: no press, no tab stop
 						// and nothing announced until it is standing in its place.
 						aria-hidden={motion.atRest ? undefined : true}
 						tabIndex={motion.atRest ? undefined : -1}
@@ -522,11 +522,11 @@ export function LumenCorner({
 						// style between renders, and every render it does make lands on
 						// the same numbers.
 						style={motion.style}
-						// The same as a tap on Lumen: his conversation, with the box in it.
+						// The same as a tap on the companion: his conversation, with the box in it.
 						onClick={openDoor}
 					>
 						<span className="relative block h-full w-full">
-							<LumenCase />
+							<CompanionCase />
 							{/* The number rides the case, it does not travel with it: it
 							    appears once the case is down. */}
 							{motion.atRest && <CountBadge count={count} mirrored={mirrored} />}
@@ -545,7 +545,7 @@ export function LumenCorner({
 //
 // The outer corner and not the inner one. The case leans in over the body's
 // lower left and its top edge comes up to the eyes, so a badge on the inside
-// corner sits on Lumen's face; on the outside it has the corner of the screen
+// corner sits on the companion's face; on the outside it has the corner of the screen
 // to itself.
 function CountBadge({ count, mirrored }: { count: number; mirrored: boolean }) {
 	const shown = badgeCount(count);

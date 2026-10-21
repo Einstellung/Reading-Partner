@@ -93,8 +93,8 @@ export default {
   "features.paperHint":
     "アプリ全体の背後の白――チャット、本棚、サイドバー、このダイアログ、本のページ――を生成り色の紙の色にします。色は一種類で、より暗い段階はありません。ダークモードではありません。この選択はこのデバイスにだけ保存されます。",
   "features.reading": "読書",
-  "features.lumen": "{name} を表示",
-  "features.lumenHint":
+  "features.companionShow": "{name} を表示",
+  "features.companionShowHint":
     "{name} はリーダーを含むすべての画面の隅にいます。オフにすると隅は空になり、サイドバー、スマートフォンのホーム画面、リーダーの「その他」メニューにある {name} ボタンで戻せます。この設定はこのデバイスにだけ保存されます。",
   "features.companionName": "コンパニオンの名前",
   "features.briefing": "ブリーフィング",

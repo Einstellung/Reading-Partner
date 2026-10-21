@@ -3,7 +3,7 @@
 // fresh one (docs/33).
 //
 // It lives beside the corner rather than beside the briefing's old entry
-// because the corner is the way into a session now (LumenCorner.tsx), and the
+// because the corner is the way into a session now (CompanionCorner.tsx), and the
 // harness that still draws the old layer (info/VoiceOrbEntry.tsx) reads it from
 // here so there is one line and not two.
 //

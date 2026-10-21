@@ -140,7 +140,7 @@ test("a document's line is its sections or pages and where it came from", () => 
   expect(documentMeta({ ...DOC, sections: undefined, pages: 0, sourceUrl: undefined })).toBe("");
 });
 
-test("the list is the shelf in order, Lumen's suggestion marked while it exists, else a name in the link, else none", () => {
+test("the list is the shelf in order, the companion's suggestion marked while it exists, else a name in the link, else none", () => {
   const topics = [topic("t-brief", "Brief", 5), topic("t-pi", "pi", 1), topic("t-edge", "Edge models", 2)];
   const rows = intakeTopicRows(topics, { url: "https://example.test/post" }, "t-edge", "t-pi");
   expect(rows.map((r) => [r.id, r.suggested, r.picked])).toEqual([
@@ -148,7 +148,7 @@ test("the list is the shelf in order, Lumen's suggestion marked while it exists,
     ["t-pi", true, false],
     ["t-edge", false, true],
   ]);
-  // A topic named in the link wins once Lumen's pick is gone from the shelf.
+  // A topic named in the link wins once the companion's pick is gone from the shelf.
   const fallback = intakeTopicRows(topics, { url: "https://github.com/robotbird/pi" }, null, "t-deleted");
   expect(fallback.find((r) => r.suggested)?.id).toBe("t-pi");
   // No pick and no name: nothing is marked, however recently a topic was used.

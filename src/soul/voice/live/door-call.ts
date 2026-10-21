@@ -46,7 +46,7 @@ export function doorCallPlace(opts: { inReader?: boolean }, material = ""): stri
   return lines.join("\n");
 }
 
-// The opening line when the call starts with a brief open. Lumen opened the
+// The opening line when the call starts with a brief open. The companion opened the
 // brief in the text conversation already (info/issue/opening.ts), so the call
 // greets and asks instead of summing it up again.
 const BRIEF_OPENING =

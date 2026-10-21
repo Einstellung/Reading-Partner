@@ -1,7 +1,7 @@
 // Whether a sheet is standing on the bottom edge of the screen right now.
 //
 // The phone's sheets are portalled to <body> and pinned across that edge
-// (ui/dialog.tsx DialogSheetContent). So is Lumen's corner, nine hundred layers
+// (ui/dialog.tsx DialogSheetContent). So is the companion's corner, nine hundred layers
 // lower (ui/overlay.tsx OVERLAY_Z), which is how the companion ends up painted
 // over the last row of a list. Nothing in the tree relates the two — a sheet is
 // opened deep inside a screen and the corner is drawn by the shell — so the

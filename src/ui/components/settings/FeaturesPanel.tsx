@@ -15,7 +15,7 @@ import { AI_LANGUAGE_OPTIONS, companionNameOf, type AiLanguage, type Settings } 
 import { useT } from "../../../i18n";
 import { setPaperTint, usePaperTint } from "../base/usePaperTint";
 import CompanionNameField from "./CompanionNameField";
-import { setLumenShown, useLumenShown } from "../companion/use-companion-shown";
+import { setCompanionShown, useCompanionShown } from "../companion/use-companion-shown";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import AutostartCard from "./AutostartCard";
@@ -41,8 +41,8 @@ export default function FeaturesPanel({
   // beside the other switches that belong to this machine.
   const paperTint = usePaperTint();
   // Also localStorage and also this device's: the same value the sidebar's
-  // wordmark and the reader's More menu switch (lumen/use-companion-shown.ts).
-  const lumenShown = useLumenShown();
+  // wordmark and the reader's More menu switch (companion/use-companion-shown.ts).
+  const companionShown = useCompanionShown();
   const t = useT();
   const companionName = companionNameOf(settings);
   // The languages are named in themselves, as a language picker does; only
@@ -83,10 +83,10 @@ export default function FeaturesPanel({
       <SettingsSection title={t("settings.features.reading")}>
         <div className={CARD}>
           <Label>
-            <Checkbox checked={lumenShown} onCheckedChange={(v) => setLumenShown(v === true)} />
-            {t("settings.features.lumen", { name: companionName })}
+            <Checkbox checked={companionShown} onCheckedChange={(v) => setCompanionShown(v === true)} />
+            {t("settings.features.companionShow", { name: companionName })}
           </Label>
-          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.lumenHint", { name: companionName })}</p>
+          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.companionShowHint", { name: companionName })}</p>
         </div>
 
         <CompanionNameField settings={settings} onSettingsChange={onSettingsChange} />

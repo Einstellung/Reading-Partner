@@ -19,7 +19,7 @@ export type Pace = "fast" | "slow";
 
 export const SOURCE_PACE: Readonly<Record<RunSource, Pace>> = { x: "slow", arxiv: "fast", huggingface: "fast" };
 
-/** How a source is named to the reader and to Lumen. */
+/** How a source is named to the reader and to the companion. */
 export const SOURCE_NAME: Readonly<Record<RunSource, string>> = { x: "X", arxiv: "arXiv", huggingface: "Hugging Face" };
 
 /** Whether the first look delivers its fast sources first and adds the slow ones after. */

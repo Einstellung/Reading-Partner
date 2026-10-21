@@ -85,7 +85,7 @@ export function useKeyboardFrame(shell: RefObject<HTMLElement | null>): Keyboard
 		// Rendered before the event returns. React renders an update from a
 		// `scroll` event in a task of its own, after the frame's animation
 		// callbacks: the page would paint one frame scrolled with the shell not
-		// yet moved, and Lumen, which measures the composer on the event and again
+		// yet moved, and the companion, which measures the composer on the event and again
 		// on that frame, measured it unmoved and stood on it (docs/pitfall/458).
 		return onViewportChange(update, () => flushSync(update));
 	}, [shell]);

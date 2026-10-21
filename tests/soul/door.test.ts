@@ -84,7 +84,7 @@ test("a turn at the door assembles over an empty desk", async () => {
   expect(turn!.refusal).toBe("");
 });
 
-// The chat typed to Lumen draws cards, so it offers to file the conversation,
+// The chat typed to the companion draws cards, so it offers to file the conversation,
 // and what the door mounts of its own rides beside the soul's set.
 test("the chat at the door mounts its own tools and a topic offer", async () => {
   const tool = { name: "door_tool", description: "", parameters: {}, execute: async () => "" } as never;

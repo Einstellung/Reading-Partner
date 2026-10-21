@@ -13,7 +13,7 @@
 
 import appIcon from "../../assets/app-icon.png";
 import { useT } from "../../../i18n";
-import { lumenToggleTitle } from "../base/companion-toggle";
+import { companionToggleTitle } from "../base/companion-toggle";
 import { useCompanionName } from "../base/use-companion-name";
 import { IconBriefing, IconBriefs, IconBooks, IconMeals, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
 import { restartLabel, type UpdateState } from "../../../platform/app/update-policy";
@@ -93,8 +93,8 @@ export default function AppSidebar(props: {
   // The corner companion's switch (docs/68). The app icon and its name are the
   // one thing on every shell that is not a destination, which is why the toggle
   // hangs off them rather than off a control of its own.
-  lumenShown: boolean;
-  onToggleLumen: () => void;
+  companionShown: boolean;
+  onToggleCompanion: () => void;
   // A new desktop version downloaded and waiting (docs/76). The row appears
   // only then, above Settings, and restarts into it on a click. Omitted, or
   // "none", draws nothing — which is every phone and every check that found
@@ -129,10 +129,10 @@ export default function AppSidebar(props: {
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-transparent p-0 text-left"
-          title={lumenToggleTitle(props.lumenShown, companionName)}
-          aria-label={lumenToggleTitle(props.lumenShown, companionName)}
-          aria-pressed={props.lumenShown}
-          onClick={props.onToggleLumen}
+          title={companionToggleTitle(props.companionShown, companionName)}
+          aria-label={companionToggleTitle(props.companionShown, companionName)}
+          aria-pressed={props.companionShown}
+          onClick={props.onToggleCompanion}
         >
           <img
             src={appIcon}

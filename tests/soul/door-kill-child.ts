@@ -32,7 +32,7 @@ const turn = await startTurn(
     key: doorThreadKey(DOOR),
     origin: DOOR,
     content: DOOR_LINE.text,
-    sections: { [TURN_SECTION]: "You are Lumen." },
+    sections: { [TURN_SECTION]: "You are Kris." },
     tools: [],
     model: { provider: "faux", modelId: "faux-1" },
     excludeTs: DOOR_LINE.ts,

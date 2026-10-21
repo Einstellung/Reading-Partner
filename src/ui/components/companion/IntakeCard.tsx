@@ -227,6 +227,6 @@ export function IntakeCard({ payload, dispatch }: CardComponentProps<IntakeCardP
 	);
 }
 
-export const LUMEN_CARD_REGISTRY: CardRegistryFor<IntakeCardPayload["kind"]> = {
+export const COMPANION_CARD_REGISTRY: CardRegistryFor<IntakeCardPayload["kind"]> = {
 	"link-intake": IntakeCard,
 };

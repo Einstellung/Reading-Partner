@@ -75,7 +75,7 @@ export async function runVoiceHarness(
     await report(id, { state: "starting", script: scriptName });
     const script = parseScript(await (await fetchOk(`${FIXTURES}${scriptName}.json`)).json());
     name = script.name;
-    if (!host) throw new Error("No voice call on screen: open the info page so Lumen is showing.");
+    if (!host) throw new Error("No voice call on screen: open the info page so the companion is showing.");
 
     // A call an earlier run left up would swallow this run's start.
     await hangUp(host, sleep);

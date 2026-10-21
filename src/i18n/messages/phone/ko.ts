@@ -104,7 +104,7 @@ export default {
   "displaySheet.lineSpacing": "줄 간격",
   "displaySheet.margins": "여백",
   "displaySheet.paper": "용지",
-  "displaySheet.lumen": "{name}",
+  "displaySheet.companion": "{name}",
   "displaySheet.layout": "레이아웃",
   "displaySheet.more": "더 보기",
   "displaySheet.tighterLines": "줄 간격 좁게",

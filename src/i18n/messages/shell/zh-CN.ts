@@ -32,15 +32,15 @@ export default {
   "sidebar.updating": "正在更新…",
   "sidebar.restartToUpdate": "重启以更新",
 
-  "lumen.show": "显示 {name}",
-  "lumen.hide": "隐藏 {name}",
-  "lumen.needsDecision": "需要你定",
-  "lumen.callCardClose": "关闭",
-  "lumen.tapToChat": "{name}：点一下聊天",
-  "lumen.inCall": "{name}：打开对话（语音聊天继续）",
-  "lumen.hangUp": "结束语音聊天",
+  "companion.show": "显示 {name}",
+  "companion.hide": "隐藏 {name}",
+  "companion.needsDecision": "需要你定",
+  "companion.callCardClose": "关闭",
+  "companion.tapToChat": "{name}：点一下聊天",
+  "companion.inCall": "{name}：打开对话（语音聊天继续）",
+  "companion.hangUp": "结束语音聊天",
 
-  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  // Typing to the companion: the day's conversation at the door (companion/DoorChat.tsx).
   "door.title": "{name}",
   "door.close": "关闭",
   "door.expand": "放大",

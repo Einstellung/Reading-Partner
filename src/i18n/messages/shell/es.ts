@@ -32,15 +32,15 @@ export default {
   "sidebar.updating": "Actualizando…",
   "sidebar.restartToUpdate": "Reiniciar para actualizar",
 
-  "lumen.show": "Mostrar {name}",
-  "lumen.hide": "Ocultar {name}",
-  "lumen.needsDecision": "Necesita una decisión",
-  "lumen.callCardClose": "Cerrar",
-  "lumen.tapToChat": "{name}: toca para escribir",
-  "lumen.inCall": "{name}: abrir la conversación (el chat de voz sigue)",
-  "lumen.hangUp": "Terminar chat de voz",
+  "companion.show": "Mostrar {name}",
+  "companion.hide": "Ocultar {name}",
+  "companion.needsDecision": "Necesita una decisión",
+  "companion.callCardClose": "Cerrar",
+  "companion.tapToChat": "{name}: toca para escribir",
+  "companion.inCall": "{name}: abrir la conversación (el chat de voz sigue)",
+  "companion.hangUp": "Terminar chat de voz",
 
-  // Typing to Lumen: the day's conversation at the door (lumen/DoorChat.tsx).
+  // Typing to the companion: the day's conversation at the door (companion/DoorChat.tsx).
   "door.title": "{name}",
   "door.close": "Cerrar",
   "door.expand": "Ampliar",

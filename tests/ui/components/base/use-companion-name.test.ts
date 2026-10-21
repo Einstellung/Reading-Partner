@@ -39,16 +39,16 @@ test("a set name is read through companionNameOf and reaches subscribers once", 
 });
 
 const COMPANION_KEYS = [
-  "shell.lumen.show",
-  "shell.lumen.hide",
-  "shell.lumen.tapToChat",
-  "shell.lumen.inCall",
+  "shell.companion.show",
+  "shell.companion.hide",
+  "shell.companion.tapToChat",
+  "shell.companion.inCall",
   "shell.door.title",
   "shell.door.placeholder",
-  "settings.features.lumen",
-  "settings.features.lumenHint",
-  "reader.top.lumen",
-  "phone.displaySheet.lumen",
+  "settings.features.companionShow",
+  "settings.features.companionShowHint",
+  "reader.top.companion",
+  "phone.displaySheet.companion",
   "info.shelf.empty",
 ];
 

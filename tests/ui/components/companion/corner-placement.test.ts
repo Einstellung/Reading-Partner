@@ -1,4 +1,4 @@
-// Where Lumen stands in the full-window chat (src/ui/components/companion/
+// Where the companion stands in the full-window chat (src/ui/components/companion/
 // corner-placement). Run: scripts/t.sh.
 
 import { expect, test } from "bun:test";
