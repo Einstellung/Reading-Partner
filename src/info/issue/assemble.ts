@@ -17,6 +17,13 @@
 // and the box item id is written on the row before the item is put. A crash
 // at any point is repaired by assembling the same key again.
 //
+// A study (docs/info/91) has one brief in versions, each a book of its own:
+// version 1 is its first look's issue (`first:<search>`), each later version
+// an update run's (`study:<search>:v<n>`). Every version is filed on the same
+// shelf row, `first:<search>`, whose `study` lists them; the row keeps its
+// number and points at the newest version's book. A study's versions carry
+// every original as a supplement, with no cap.
+//
 // Everything outside — files, the library, the bindery, the box, the clock —
 // comes in through IssueDeps; live.ts wires the real ones. This directory
 // imports topic-search's types, never the other way round, and nothing of
@@ -26,12 +33,15 @@ import type { Locale } from "../../i18n/locale";
 import { DEFAULT_COMPANION_NAME, languageInstruction } from "../../platform/app/settings";
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
-import { firstPart, parseResultFile, retryPart, type TopicSearchResult } from "../topic-search/result-types";
+import { firstPart, parseResultFile, retryPart, versionPart, type TopicSearchResult } from "../topic-search/result-types";
 import { QUESTIONS_FILE, parseQuestionsFile } from "../topic-search/questions";
+import { parseStudyFile, studyFileName } from "../topic-search/study";
 import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type IssueOpeningRecord } from "./opening-record";
 import { planIssue, type IssuePlan, type IssueTopic, type PlannedItem } from "./plan";
 import { issueBookName, issueCoverLine, issueEpubInput, issueFileName } from "./render";
-import { INFO_SHELF_FILE, ISSUE_BOX_KIND, nextIssueNumber, parseShelf, type IssueEntry } from "./types";
+import { studyBookFile, studyBookName, studyBoxLine, studyChangeLine, studyEpubInput } from "./render-study";
+import { planStudyIssue, withStudyVersions } from "./study-plan";
+import { INFO_SHELF_FILE, ISSUE_BOX_KIND, nextIssueNumber, parseShelf, type IssueEntry, type IssueStudyVersion } from "./types";
 
 /** This device's record of which runs closed on which night (local, collector only). */
 export const ISSUE_STATE_FILE = "info-issue-state.json";
@@ -46,12 +56,14 @@ export interface IssueState {
   nights: Record<string, Record<string, string | null>>;
   /** First looks that closed and are waiting for their own issue: search id to result file. */
   firsts: Record<string, string | null>;
+  /** Study versions an update run made, waiting for their book: "<searchId>:v<n>" to result file. */
+  studies: Record<string, string | null>;
   /** Keys assembled, or found to need no issue. */
   done: string[];
 }
 
 export function emptyIssueState(): IssueState {
-  return { version: 1, nights: {}, firsts: {}, done: [] };
+  return { version: 1, nights: {}, firsts: {}, studies: {}, done: [] };
 }
 
 export function parseIssueState(text: string | null): IssueState {
@@ -62,6 +74,7 @@ export function parseIssueState(text: string | null): IssueState {
       version: 1,
       nights: v.nights && typeof v.nights === "object" ? v.nights : {},
       firsts: v.firsts && typeof v.firsts === "object" ? v.firsts : {},
+      studies: v.studies && typeof v.studies === "object" ? v.studies : {},
       done: Array.isArray(v.done) ? v.done : [],
     };
   } catch {
@@ -75,14 +88,17 @@ export interface ClosedRun {
    * "retry": what was added to a first look's file afterwards, an issue of its
    * own: a retry's (topic-search/retry.ts), or the first look's slow part
    * (topic-search/pace.ts), under the first run's id.
+   * "update": a study's update run (docs/info/91 更新), which made `version`.
    */
-  kind: "first" | "daily" | "retry";
+  kind: "first" | "daily" | "retry" | "update";
   /** The night's anchor date, for a daily run. */
   night: string | null;
   /** The result file, relative to AppData; null when the run left none. */
   resultFile: string | null;
   /** The run's id; a retry's issue is keyed by it. */
   runId?: string;
+  /** The study version an update run made. Only with kind "update". */
+  version?: number;
 }
 
 const RETRY_MARK = "#";
@@ -90,6 +106,10 @@ const RETRY_MARK = "#";
 /** The ledger with one more run closed. Pure. */
 export function noteClosed(state: IssueState, run: ClosedRun): IssueState {
   if (run.kind === "first") return { ...state, firsts: { ...state.firsts, [run.searchId]: run.resultFile } };
+  if (run.kind === "update") {
+    if (!run.version) return state;
+    return { ...state, studies: { ...state.studies, [`${run.searchId}${VERSION_MARK}${run.version}`]: run.resultFile } };
+  }
   // Keyed `first:<search>#<run>`: the first look's own key is long done.
   if (run.kind === "retry") {
     return { ...state, firsts: { ...state.firsts, [`${run.searchId}${RETRY_MARK}${run.runId ?? ""}`]: run.resultFile } };
@@ -105,6 +125,19 @@ export function nightKey(night: string): string {
 
 export function firstKey(searchId: string): string {
   return `first:${searchId}`;
+}
+
+const VERSION_MARK = ":v";
+
+/** The key a study version after the first is assembled under: "study:<searchId>:v<n>". */
+export function studyKey(searchId: string, n: number): string {
+  return `study:${searchId}${VERSION_MARK}${n}`;
+}
+
+/** The search and version a study key names; null for any other key. */
+export function parseStudyKey(key: string): { searchId: string; n: number } | null {
+  const m = /^study:(.+):v(\d+)$/.exec(key);
+  return m ? { searchId: m[1], n: Number(m[2]) } : null;
 }
 
 /** What is ready to assemble now. Pure: `endAt` is the night's 04:40. */
@@ -126,16 +159,22 @@ export function dueIssues(
     const key = firstKey(searchId);
     if (!state.done.includes(key)) out.push({ key, date: null, files: file ? [file] : [] });
   }
+  for (const [version, file] of Object.entries(state.studies)) {
+    const key = `study:${version}`;
+    if (!state.done.includes(key)) out.push({ key, date: null, files: file ? [file] : [] });
+  }
   return out;
 }
 
-function markDone(state: IssueState, key: string): IssueState {
+export function markDone(state: IssueState, key: string): IssueState {
   const done = [...state.done.filter((k) => k !== key), key].slice(-DONE_KEPT);
   const nights = { ...state.nights };
   if (key.startsWith("night:")) delete nights[key.slice("night:".length)];
   const firsts = { ...state.firsts };
   if (key.startsWith("first:")) delete firsts[key.slice("first:".length)];
-  return { ...state, nights, firsts, done };
+  const studies = { ...state.studies };
+  if (key.startsWith("study:")) delete studies[key.slice("study:".length)];
+  return { ...state, nights, firsts, studies, done };
 }
 
 export interface IssueFiles {
@@ -182,15 +221,15 @@ async function saveState(deps: IssueDeps, state: IssueState): Promise<void> {
   await deps.files.write(ISSUE_STATE_FILE, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-/** The originals of an issue worth attaching: each item's first non-X material, entries first. */
-export function supplementCandidates(plan: IssuePlan, results: readonly TopicSearchResult[]): RegisteredMaterial[] {
+/** The originals of an issue worth attaching: each item's first non-X material, entries first, at most `max`. */
+export function supplementCandidates(plan: IssuePlan, results: readonly TopicSearchResult[], max = SUPPLEMENTS_MAX): RegisteredMaterial[] {
   const byResult = new Map(results.map((r) => [r.id, r]));
   const out: RegisteredMaterial[] = [];
   const seen = new Set<string>();
   const pick = (p: PlannedItem) => {
     const r = byResult.get(p.resultId);
     const m = p.item.materials.map((id) => r?.materials.find((x) => x.id === id)).find((x) => x && x.reader !== "x");
-    if (m && !seen.has(m.canonicalUrl) && out.length < SUPPLEMENTS_MAX) {
+    if (m && !seen.has(m.canonicalUrl) && out.length < max) {
       seen.add(m.canonicalUrl);
       out.push(m);
     }
@@ -202,6 +241,8 @@ export function supplementCandidates(plan: IssuePlan, results: readonly TopicSea
 
 /** Assemble one issue (or find that none is due). Idempotent by key. */
 export async function assembleIssue(deps: IssueDeps, key: string, date: string, files: readonly string[]): Promise<AssembleOutcome> {
+  const study = await studyVersionOf(deps, key, files);
+  if (study) return assembleStudy(deps, key, study, date, files);
   const shelf = parseShelf(await deps.files.read(INFO_SHELF_FILE));
   const existing = shelf.issues.find((i) => i.key === key);
   const locale = deps.locale ? await deps.locale() : "en";
@@ -256,6 +297,135 @@ export async function assembleIssue(deps: IssueDeps, key: string, date: string, 
   await deps.files.write(INFO_SHELF_FILE, `${JSON.stringify({ ...latest, issues: [...latest.issues, issue] }, null, 2)}\n`);
   await deps.putBox(boxItem(issue, locale));
   return { key, issue, supplements };
+}
+
+/** The study version a key assembles: `study:<search>:v<n>`, or a study's first look (version 1); null for any other. */
+async function studyVersionOf(deps: IssueDeps, key: string, files: readonly string[]): Promise<{ searchId: string; n: number } | null> {
+  const later = parseStudyKey(key);
+  if (later) return later;
+  if (!key.startsWith("first:") || key.includes(RETRY_MARK)) return null;
+  const searchId = key.slice("first:".length);
+  const topic = (await deps.topics()).find((t) => t.searchId === searchId);
+  if (topic) return topic.study ? { searchId, n: 1 } : null;
+  // A topic no longer in the store: its file still says whether it was a study.
+  const result = files[0] ? parseResultFile((await deps.files.read(files[0])) ?? "") : null;
+  return result?.study ? { searchId, n: 1 } : null;
+}
+
+/** The reader's words behind each confirmed study line, from the study's record; empty when there is none. */
+async function studySaid(deps: IssueDeps, searchId: string): Promise<Record<string, string>> {
+  try {
+    const text = await deps.files.read(studyFileName(searchId));
+    const file = text ? parseStudyFile(JSON.parse(text)) : null;
+    return Object.fromEntries((file?.lines ?? []).filter((l) => l.state === "confirmed").map((l) => [l.id, l.said]));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * One version of a study's brief: its book, its originals, its record on the
+ * study's shelf row and its box item. Idempotent by version: a version already
+ * on the row only has its box item put again.
+ */
+async function assembleStudy(deps: IssueDeps, key: string, target: { searchId: string; n: number }, date: string, files: readonly string[]): Promise<AssembleOutcome> {
+  const rowKey = firstKey(target.searchId);
+  const shelf = parseShelf(await deps.files.read(INFO_SHELF_FILE));
+  const row = shelf.issues.find((i) => i.key === rowKey);
+  const locale = deps.locale ? await deps.locale() : "en";
+  const made = row?.study?.versions.find((v) => v.n === target.n);
+  if (row && made) {
+    await deps.putBox(studyBoxItem(row, made, locale));
+    return { key, issue: row, supplements: 0 };
+  }
+  // A study's first look filed before its brief had versions: that issue stands.
+  if (row && !row.study && target.n === 1) {
+    await deps.putBox(boxItem(row, locale));
+    return { key, issue: row, supplements: 0 };
+  }
+  const raw = files[0] ? parseResultFile((await deps.files.read(files[0])) ?? "") : null;
+  if (!raw) return { key, issue: null, supplements: 0 };
+  const topics = await deps.topics();
+  const topic = topics.find((t) => t.searchId === target.searchId);
+  const part = versionPart(withStudyVersions(raw, topics, topic?.study?.seeds ?? []), target.n);
+  const plan = part ? planStudyIssue(part, topic, await studySaid(deps, target.searchId)) : null;
+  if (!part || !plan?.study) return { key, issue: null, supplements: 0 };
+  const number = row?.number ?? nextIssueNumber(shelf);
+  const name = plan.topics[0].name;
+  const companionName = deps.companionName ? await deps.companionName() : DEFAULT_COMPANION_NAME;
+  const bytes = await deps.buildEpub(studyEpubInput(plan, { number, date, locale, companionName }));
+  const { hash } = await deps.importBook(bytes, studyBookFile(target.searchId, target.n), {
+    kind: "issue",
+    publishedAt: date,
+    filename: studyBookName(name, target.n, locale),
+  });
+  const opening = await writeOpening(deps, plan, [part], locale);
+  let supplements = 0;
+  // Every item's original, not the nightly cap (docs/info/91 「一份简报」).
+  for (const m of supplementCandidates(plan, [part], Number.POSITIVE_INFINITY)) {
+    try {
+      if (await deps.attachOriginal(hash, m)) supplements++;
+    } catch (e) {
+      console.warn(`an original of the study's brief could not be attached (${m.url})`, e);
+    }
+  }
+  const items = plan.entries.length + plan.notes.length;
+  const version: IssueStudyVersion = {
+    n: target.n,
+    bookId: hash,
+    at: plan.study.version.at,
+    date,
+    line: studyChangeLine(plan.study.version, items, locale),
+    items,
+    boxItemId: deps.newBoxItemId(),
+  };
+  // Read again: an issue or a volume may have been written meanwhile.
+  const latest = parseShelf(await deps.files.read(INFO_SHELF_FILE));
+  const current = latest.issues.find((i) => i.key === rowKey);
+  // A row filed before its brief had versions holds the first look's book: it is version 1.
+  const before: IssueStudyVersion[] =
+    current?.study?.versions ??
+    (current
+      ? [{ n: 1, bookId: current.bookId, at: current.createdAt, date: current.date, line: "", items: current.items, boxItemId: current.boxItemId }]
+      : []);
+  const versions = [...before.filter((v) => v.n !== target.n), version].sort((a, b) => a.n - b.n);
+  const newest = versions[versions.length - 1].n === target.n;
+  const issue: IssueEntry = current
+    ? {
+        ...current,
+        ...(newest ? { bookId: hash, items, opening, topics: plan.topics } : {}),
+        study: { current: versions[versions.length - 1].n, versions },
+      }
+    : {
+        key: rowKey,
+        number,
+        date,
+        topics: plan.topics,
+        results: [raw.id],
+        items,
+        bookId: hash,
+        boxItemId: version.boxItemId,
+        createdAt: deps.now(),
+        opening,
+        study: { current: target.n, versions },
+      };
+  const issues = current ? latest.issues.map((i) => (i.key === rowKey ? issue : i)) : [...latest.issues, issue];
+  await deps.files.write(INFO_SHELF_FILE, `${JSON.stringify({ ...latest, issues }, null, 2)}\n`);
+  await deps.putBox(studyBoxItem(issue, version, locale));
+  return { key, issue, supplements };
+}
+
+/** The box item that hands the reader one version of a study's brief. */
+function studyBoxItem(issue: IssueEntry, v: IssueStudyVersion, locale: Locale) {
+  const searchId = issue.key.slice("first:".length);
+  return {
+    id: v.boxItemId,
+    boxId: v.n === 1 ? `issue:${issue.key}` : `issue:${studyKey(searchId, v.n)}`,
+    kind: ISSUE_BOX_KIND,
+    cover: studyBoxLine(issue.topics[0]?.name ?? "", v.n, v.line, locale),
+    body: v.bookId,
+    origin: { place: "door" as const, date: v.date },
+  };
 }
 
 /**

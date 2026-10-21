@@ -155,8 +155,11 @@ function firstJsonObject(text: string): Record<string, unknown> | null {
 export function placedQuestion(plan: IssuePlan, q: OpeningQuestion): OpeningQuestion {
   if (q.template?.code !== "label-item") return q;
   const found = openingItems(plan).find((p) => p.resultId === q.resultId && p.item.key === q.template!.params.item);
-  const place = !found ? "absent" : found.n <= plan.entries.length ? "main" : "note";
-  return { ...q, template: { ...q.template, params: { ...q.template.params, place, rank: found?.n ?? 0 } } };
+  const pinned = found ? plan.study?.places[found.item.id]?.place === "pinned" : false;
+  const place = !found ? "absent" : pinned ? "pinned" : found.n <= plan.entries.length ? "main" : "note";
+  const params: Record<string, string | number> = { ...q.template.params, place, rank: found?.n ?? 0 };
+  if (plan.study) params.version = plan.study.version.n;
+  return { ...q, template: { ...q.template, params } };
 }
 
 /**

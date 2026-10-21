@@ -7,10 +7,16 @@
 // and the topics instead: a book deleted is no longer in the library, and a
 // volume moved into a reading topic is on that topic, and either way its row
 // is left out here.
+//
+// A study's brief (docs/info/91) is one card ahead of the issues, under its
+// own cover, opening its current version: the newest, unless the reader went
+// back to an earlier one (the study's record, topic-search/study.ts). Once any
+// of its versions is filed into reading, the card is gone from here.
 
 import { t } from "../../../i18n";
 import { getLocale } from "../../../i18n/locale";
-import { INFO_SHELF_FILE, parseShelf, type InfoShelf, type VolumeEntry } from "../../../info/issue/types";
+import { INFO_SHELF_FILE, parseShelf, type InfoShelf, type IssueEntry, type VolumeEntry } from "../../../info/issue/types";
+import { currentVersion, parseStudyFile, studyFileName, type StudyRollback } from "../../../info/topic-search/study";
 import { documentPath, type LibraryEntry } from "../../../platform/app/library";
 import type { FiledElsewhere, Topic } from "../../../platform/app/topics";
 import { alreadyInLine, movedLine } from "../shelf/move-to";
@@ -28,6 +34,8 @@ export interface IssueCard {
   itemsLine: string;
   /** Today's, or never opened on this device. */
   isNew: boolean;
+  /** A study's brief: the topic, which the cover shows in place of the date; null on an issue of the nightly brief. */
+  study: { name: string; version: number } | null;
 }
 
 export interface VolumeCard {
@@ -50,6 +58,8 @@ export interface ShelfContext {
   opened: ReadonlySet<string>;
   /** Local date, YYYY-MM-DD. */
   today: string;
+  /** Each study's rollbacks by search id, from its record; absent for none. */
+  rollbacks?: Readonly<Record<string, readonly StudyRollback[]>>;
 }
 
 /** Every book id on some reading topic. */
@@ -71,9 +81,37 @@ export function issueDateLabel(date: string, locale: string = getLocale()): stri
   }
 }
 
+function studySearchId(issue: IssueEntry): string {
+  return issue.key.startsWith("first:") ? issue.key.slice("first:".length) : issue.key;
+}
+
+/** A study's card: its current version's book; null once a version is in reading or no version's book is here. */
+function studyCard(issue: IssueEntry, ctx: ShelfContext): IssueCard | null {
+  const versions = (issue.study?.versions ?? []).filter((v) => ctx.library[v.bookId]);
+  if (versions.length === 0 || issue.study!.versions.some((v) => ctx.filed.has(v.bookId))) return null;
+  const n = currentVersion(versions, ctx.rollbacks?.[studySearchId(issue)] ?? []);
+  const v = versions.find((x) => x.n === n) ?? versions[versions.length - 1];
+  const name = issue.topics[0]?.name ?? "";
+  return {
+    key: issue.key,
+    bookId: v.bookId,
+    title: t("info.issue.book.study.kicker"),
+    dateLabel: issueDateLabel(v.date),
+    topicsLine: name,
+    itemsLine: t("info.shelf.studyLine", { n: v.n, count: v.items }),
+    isNew: !ctx.opened.has(v.bookId),
+    study: { name, version: v.n },
+  };
+}
+
 export function infoShelfView(shelf: InfoShelf, ctx: ShelfContext): InfoShelfView {
+  const studies = shelf.issues
+    .filter((issue) => issue.study)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((issue) => studyCard(issue, ctx))
+    .filter((card): card is IssueCard => card !== null);
   const issues = shelf.issues
-    .filter((issue) => ctx.library[issue.bookId])
+    .filter((issue) => !issue.study && ctx.library[issue.bookId])
     .sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number)
     .map(
       (issue): IssueCard => ({
@@ -84,13 +122,14 @@ export function infoShelfView(shelf: InfoShelf, ctx: ShelfContext): InfoShelfVie
         topicsLine: issue.topics.map((tp) => tp.name).join(", "),
         itemsLine: t("info.shelf.items", { count: issue.items }),
         isNew: issue.date === ctx.today || !ctx.opened.has(issue.bookId),
+        study: null,
       }),
     );
   const volumes = shelf.volumes
     .filter((v) => ctx.library[v.bookId] && !ctx.filed.has(v.bookId))
     .sort((a, b) => b.createdAt - a.createdAt)
     .map((v): VolumeCard => ({ id: v.id, bookId: v.bookId, title: v.title }));
-  return { issues, volumes };
+  return { issues: [...studies, ...issues], volumes };
 }
 
 /** The book a card opens, under the name the reader shows. */
@@ -136,11 +175,27 @@ export interface InfoShelfData {
 export async function loadInfoShelf(io: InfoShelfIo): Promise<InfoShelfData> {
   const [text, library, topics] = await Promise.all([io.readText(INFO_SHELF_FILE), io.library(), io.topics()]);
   const shelf = parseShelf(text);
+  const books = shelf.issues.flatMap((issue) => [issue.bookId, ...(issue.study?.versions.map((v) => v.bookId) ?? [])]);
   const opened = new Set<string>();
   await Promise.all(
-    shelf.issues.map(async (issue) => {
-      if (await io.opened(issue.bookId).catch(() => false)) opened.add(issue.bookId);
+    [...new Set(books)].map(async (bookId) => {
+      if (await io.opened(bookId).catch(() => false)) opened.add(bookId);
     }),
   );
-  return { shelf, ctx: { library, filed: filedBookIds(topics), opened, today: io.today() } };
+  const rollbacks: Record<string, readonly StudyRollback[]> = {};
+  await Promise.all(
+    shelf.issues
+      .filter((issue) => issue.study)
+      .map(async (issue) => {
+        const searchId = studySearchId(issue);
+        try {
+          const text = await io.readText(studyFileName(searchId));
+          const file = text ? parseStudyFile(JSON.parse(text)) : null;
+          if (file?.rollbacks.length) rollbacks[searchId] = file.rollbacks;
+        } catch {
+          // No record, or one that does not read: the newest version.
+        }
+      }),
+  );
+  return { shelf, ctx: { library, filed: filedBookIds(topics), opened, today: io.today(), rollbacks } };
 }

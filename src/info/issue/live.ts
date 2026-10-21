@@ -25,6 +25,7 @@ import { infoFetch } from "../../workshop/extract/http";
 import type { RegisteredMaterial } from "../dossier/registry";
 import { bookLocale } from "../topic-search/book-language";
 import { nightEndAt } from "../topic-search/nightly";
+import { topicSources } from "../topic-search/pace";
 import { loadTopicSearches } from "../topic-search/store";
 import { nightlyTopicSearches } from "../topic-search/topic-searches";
 import { localDay } from "../topic-search/x-progress";
@@ -72,7 +73,13 @@ const deps: IssueDeps = {
     read: async (path) => ((await appData.exists(path)) ? await appData.readText(path) : null),
     write: (path, content) => writeTextAtomic(path, content),
   },
-  topics: async () => (await loadTopicSearches()).map((s) => ({ searchId: s.id, name: s.name, subtopics: s.subtopics })),
+  topics: async () =>
+    (await loadTopicSearches()).map((s) => ({
+      searchId: s.id,
+      name: s.name,
+      subtopics: s.subtopics,
+      ...(s.once ? { study: { scope: s.scope, sources: topicSources(s), seeds: (s.seeds ?? []).map((k) => k.key) } } : {}),
+    })),
   // A study has no nightly run, so the night's issue does not wait for one (docs/info/91).
   activeSearchIds: async () => nightlyTopicSearches(await loadTopicSearches()).map((s) => s.id),
   buildEpub: (input) => buildSectionedEpub(input),

@@ -117,3 +117,50 @@ test("the screen's data: the index, the library, what is filed and what was open
   expect([...data.ctx.opened]).toEqual(["issue-2"]);
   expect([...data.ctx.filed]).toEqual(["vol-3"]);
 });
+
+function studyRow(): IssueEntry {
+  const v = (n: number) => ({ n, bookId: `study-${n}`, at: n * 10, date: `2026-10-2${n}`, line: "", items: n + 3, boxItemId: `sb-${n}` });
+  return {
+    key: "first:ts-s",
+    number: 4,
+    date: "2026-10-21",
+    topics: [{ searchId: "ts-s", name: "AI mechanism discovery" }],
+    results: [],
+    items: 5,
+    bookId: "study-2",
+    boxItemId: "sb-1",
+    createdAt: 9,
+    study: { current: 2, versions: [v(1), v(2)] },
+  };
+}
+
+test("a study's brief comes first under its own cover, opening its current version", () => {
+  const library = { ...LIBRARY, "study-1": entry("study-1"), "study-2": entry("study-2") };
+  const withStudy = { ...shelf(), issues: [...shelf().issues, studyRow()] };
+  const ctx = { library, filed: new Set<string>(), opened: new Set(["study-1"]), today: "2026-10-15" };
+  const [card] = infoShelfView(withStudy, ctx).issues;
+  expect(card).toMatchObject({ key: "first:ts-s", bookId: "study-2", title: "Study · just this once", itemsLine: "Researching · version 2 · 5 items", isNew: true });
+  expect(card.study).toEqual({ name: "AI mechanism discovery", version: 2 });
+  expect(infoShelfView(withStudy, ctx).issues.slice(1).every((i) => i.study === null)).toBe(true);
+  // The reader went back to version 1 after version 2 came.
+  const back = infoShelfView(withStudy, { ...ctx, rollbacks: { "ts-s": [{ to: 1, at: 99 }] } }).issues[0];
+  expect([back.bookId, back.itemsLine, back.isNew]).toEqual(["study-1", "Researching · version 1 · 4 items", false]);
+  // A version filed into reading takes the card off this shelf.
+  expect(infoShelfView(withStudy, { ...ctx, filed: new Set(["study-1"]) }).issues[0].study).toBeNull();
+});
+
+test("the screen's data reads each study's rollbacks from its record", async () => {
+  const files: Record<string, string> = {
+    "info-shelf.json": JSON.stringify({ ...emptyShelf(), issues: [studyRow()] }),
+    "topic-study-ts-s.json": JSON.stringify({ version: 1, searchId: "ts-s", lines: [], rollbacks: { "rb-99": { to: 1, at: 99 } } }),
+  };
+  const data = await loadInfoShelf({
+    readText: async (p) => files[p] ?? null,
+    library: async () => ({}),
+    topics: async () => [],
+    opened: async (bookId) => bookId === "study-1",
+    today: () => "2026-10-21",
+  });
+  expect(data.ctx.rollbacks).toEqual({ "ts-s": [{ to: 1, at: 99 }] });
+  expect([...data.ctx.opened]).toEqual(["study-1"]);
+});

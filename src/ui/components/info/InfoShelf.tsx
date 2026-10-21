@@ -96,15 +96,31 @@ export default function InfoShelf(props: {
           {view?.issues.map((issue) => (
             <li key={issue.key}>
               <button
-                className="relative flex aspect-[4/5] w-full flex-col rounded-xl border border-border-soft bg-card p-4 text-left can-hover:hover:border-secondary-border active:bg-muted"
+                className={cn(
+                  "relative flex aspect-[4/5] w-full flex-col rounded-xl border bg-card p-4 text-left active:bg-muted",
+                  issue.study ? "border-accent-line" : "border-border-soft can-hover:hover:border-secondary-border",
+                )}
                 onClick={() => open(issue)}
               >
-                <span className="text-[11px] font-medium tracking-[0.08em] text-faint-foreground uppercase">
+                <span
+                  className={cn(
+                    "text-[11px] font-medium tracking-[0.08em] uppercase",
+                    issue.study ? "text-accent-line" : "text-faint-foreground",
+                  )}
+                >
                   {issue.title}
                 </span>
-                <span className="flex flex-1 items-center font-serif text-[30px] leading-tight text-foreground">{issue.dateLabel}</span>
+                {issue.study ? (
+                  <span className="flex flex-1 items-center">
+                    <span className="line-clamp-4 font-serif text-[20px] leading-snug text-foreground">{issue.study.name}</span>
+                  </span>
+                ) : (
+                  <span className="flex flex-1 items-center font-serif text-[30px] leading-tight text-foreground">{issue.dateLabel}</span>
+                )}
                 <span className="flex flex-col gap-1">
-                  <span className="line-clamp-2 text-[13px] leading-snug text-muted-foreground">{issue.topicsLine}</span>
+                  {!issue.study && (
+                    <span className="line-clamp-2 text-[13px] leading-snug text-muted-foreground">{issue.topicsLine}</span>
+                  )}
                   <span className="text-[12px] text-faint-foreground">{issue.itemsLine}</span>
                 </span>
                 {issue.isNew && (

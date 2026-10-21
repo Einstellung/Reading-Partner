@@ -16,8 +16,9 @@
 //   - a run whose candidates no model judged lists none of them and gets a
 //     line saying so, which alone still makes an issue.
 
-import { SOURCE_NAME } from "../topic-search/pace";
+import { SOURCE_NAME, type RunSource } from "../topic-search/pace";
 import type { TopicSearchResult, TopicSearchResultItem } from "../topic-search/result-types";
+import type { StudyIssuePlan } from "./study-plan";
 
 /** Entries in the body of one issue (initial value). */
 export const MAIN_MAX = 6;
@@ -31,6 +32,8 @@ export interface IssueTopic {
   searchId: string;
   name: string;
   subtopics: readonly { id: string; name: string }[];
+  /** A study (docs/info/91): what its book's front page says. Absent on every other topic. */
+  study?: { scope: string; sources: readonly RunSource[]; seeds: readonly string[] };
 }
 
 export interface PlannedItem {
@@ -60,6 +63,11 @@ export interface IssuePlan {
   awaiting: { searchId: string; topic: string; sources: string[] }[];
   /** Runs whose candidates no model judged (topic-search 88 「判不了」): nothing of theirs is listed, by topic. */
   unjudged: { searchId: string; topic: string; candidates: number }[];
+  /**
+   * A study's version (docs/info/91, study-plan.ts): `entries` are its pinned
+   * items first, then its main ones. Absent on every other issue.
+   */
+  study?: StudyIssuePlan;
 }
 
 function written(item: TopicSearchResultItem): boolean {

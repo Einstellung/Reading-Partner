@@ -13,7 +13,8 @@
 // Only the collector runs it: info-shelf.json has one writer, the device that
 // assembles the issues, and the book's tombstone carries the deletion to the
 // others. Topic volumes are never marked, and an issue nobody opened goes all
-// the same.
+// the same. Neither is a study's brief (docs/info/91): its versions stay while
+// the study is open, and after it closes the reader keeps or files them.
 
 import type { GarbageMarker, Mark } from "../../housekeeper";
 import { INFO_SHELF_FILE, parseShelf, type InfoShelf, type IssueEntry } from "./types";
@@ -30,12 +31,13 @@ function dayNumber(date: string): number | null {
   return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / DAY_MS : null;
 }
 
-/** The issues dated more than `days` days before `today` (YYYY-MM-DD), oldest first. */
+/** The issues dated more than `days` days before `today` (YYYY-MM-DD), oldest first; never a study's brief. */
 export function expiredIssues(shelf: InfoShelf, today: string, days = ISSUE_KEEP_DAYS): IssueEntry[] {
   const now = dayNumber(today);
   if (now === null) return [];
   return shelf.issues
     .filter((issue) => {
+      if (issue.study) return false;
       const at = dayNumber(issue.date);
       return at !== null && now - at > days;
     })

@@ -128,7 +128,7 @@ export function nextLineId(ids: readonly string[]): string {
  * file does not have (yet: the result file syncs separately) is passed over.
  * Null when there is no version. Pure.
  */
-export function currentVersion(versions: readonly StudyVersion[], rollbacks: readonly StudyRollback[]): number | null {
+export function currentVersion(versions: readonly Pick<StudyVersion, "n" | "at">[], rollbacks: readonly StudyRollback[]): number | null {
   if (versions.length === 0) return null;
   const newest = versions.reduce((a, b) => (b.at > a.at || (b.at === a.at && b.n > a.n) ? b : a));
   const known = new Set(versions.map((v) => v.n));

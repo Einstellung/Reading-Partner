@@ -34,6 +34,44 @@ export interface IssueEntry {
   createdAt: number;
   /** What the companion says when the issue is first opened (opening-record.ts); absent on issues made before it. */
   opening?: IssueOpeningRecord;
+  /**
+   * A study's brief (docs/info/91): every version made, oldest first. The row
+   * is the study's first look's (`first:<searchId>`); its `bookId`, `items`
+   * and `opening` are the newest version's. Absent on any other issue.
+   */
+  study?: IssueStudy;
+}
+
+export interface IssueStudy {
+  /** The newest version made. Which one the shelf opens also heeds the study's rollbacks (topic-search/study.ts currentVersion). */
+  current: number;
+  versions: IssueStudyVersion[];
+}
+
+export interface IssueStudyVersion {
+  /** The version's number in the study's result file (StudyVersion.n). */
+  n: number;
+  /** The library entry (content hash) of this version's book. */
+  bookId: string;
+  /** StudyVersion.at, epoch ms. */
+  at: number;
+  /** Local date the version's book is dated, YYYY-MM-DD. */
+  date: string;
+  /** The one line of what changed ("2 added · 1 rewritten"), in the locale it was made in. */
+  line: string;
+  /** Entries plus notes in this version. */
+  items: number;
+  /** The box item that handed this version over. */
+  boxItemId: string;
+}
+
+/** The study row and version a book belongs to; null when the book is no study version. */
+export function studyOfBook(shelf: InfoShelf, bookId: string): { issue: IssueEntry; version: IssueStudyVersion } | null {
+  for (const issue of shelf.issues) {
+    const version = issue.study?.versions.find((v) => v.bookId === bookId);
+    if (version) return { issue, version };
+  }
+  return null;
 }
 
 /** A topic volume (合订本) on the info shelf. Filled by the volume slice. */

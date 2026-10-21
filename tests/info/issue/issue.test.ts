@@ -308,3 +308,27 @@ describe("a run whose candidates no model judged (topic-search 88 「判不了�
     expect(planIssue([part], TOPICS)!.unjudged.map((u) => u.candidates)).toEqual([7]);
   });
 });
+
+// Taken on the code before the study path existed (2026-10-21).
+const PINNED = ["bea2fad002b5da33", "27231d7f6da3b332", "5b56bb47fdc77fb7", "b0dc384cd3281ebf", "3204bf3cc53d512b", "0f7e72c173edf42e", "73d5ef1b0da23473", "fc611c60c3aecffe", "8eb4b158fcdcec08", "b607ace087461c91", "81927f6a6cc55f8e", "905121ed4f983188", "1e4792ca0619596c", "e822ddf58236c2c0", "38957b783aa417ff", "a8ae1a12628df25e"];
+
+describe("a non-study issue's bytes do not move (docs/info/91 G: the study path is apart)", () => {
+  test("the night's issue, a first look's, a split first look's and an unjudged run's, in English and Chinese", async () => {
+    const { contentHash } = await import("../../../src/platform/app/content-hash");
+    const plans = [
+      planIssue(nightResults(), TOPICS)!,
+      planIssue([nightResults()[1]], TOPICS)!,
+      planIssue([result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [item("E1", 80), item("E2", 70)], { awaiting: ["x"] })], TOPICS)!,
+      planIssue([result("ts-0000aaaa", "AI for science", "2026-10-15", "first", [], { empty: true, unjudged: { runId: "r", at: 9, why: "x", candidates: 7 } })], TOPICS)!,
+    ];
+    const hashes: string[] = [];
+    for (const plan of plans) {
+      for (const locale of ["en", "zh-CN"] as const) {
+        const input = issueEpubInput(plan, { number: 3, date: "2026-10-15", locale });
+        hashes.push(await contentHash(new TextEncoder().encode(JSON.stringify(input))));
+        hashes.push(await contentHash(await buildSectionedEpub(input)));
+      }
+    }
+    expect(hashes.map((h) => h.slice(0, 16))).toEqual(PINNED);
+  });
+});

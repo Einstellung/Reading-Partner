@@ -4,6 +4,9 @@
 // buildSectionedEpub gives the same bytes and a rebuilt issue is the same
 // library entry.
 //
+// A study's book (docs/info/91) is drawn by render-study.ts with the helpers
+// exported here; nothing in this file knows about studies.
+//
 // Every label here is the program's, in the book's language (the locale the
 // issue was assembled under, fixed in the EPUB: an issue is immutable). Only
 // the conclusions, paragraphs, unknowns and panoramas are a model's, and the
@@ -18,7 +21,7 @@ import type { TopicSearchResultItem } from "../topic-search/result-types";
 import { itemLabel, type IssuePlan, type PlannedAnnex, type PlannedItem } from "./plan";
 
 /** Characters of a title kept as an entry's heading. */
-const HEADING_CHARS = 100;
+export const HEADING_CHARS = 100;
 
 export interface IssueMeta {
   number: number;
@@ -38,7 +41,7 @@ export function longDate(date: string, locale: Locale): string {
   return dateIn(date, locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
-function shortDate(date: string, locale: Locale): string {
+export function shortDate(date: string, locale: Locale): string {
   return dateIn(date, locale, { month: "short", day: "numeric" });
 }
 
@@ -61,16 +64,16 @@ export function issueFileName(meta: Pick<IssueMeta, "number" | "date">): string 
   return `Daily Brief ${meta.date} No. ${meta.number}.epub`;
 }
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function cut(s: string, n: number): string {
+export function cut(s: string, n: number): string {
   const chars = [...s];
   return chars.length <= n ? s : `${chars.slice(0, n - 1).join("")}…`;
 }
 
-function link(url: string, text: string): string {
+export function link(url: string, text: string): string {
   return `<a href="${esc(url)}">${esc(text)}</a>`;
 }
 
@@ -79,7 +82,7 @@ function link(url: string, text: string): string {
  * a link) put in where the message has {name}. The markup goes in after the
  * escaping, so a translation cannot reorder it into something broken.
  */
-function fill(locale: Locale, key: string, params: Params = {}, slots: Record<string, string> = {}): string {
+export function fill(locale: Locale, key: string, params: Params = {}, slots: Record<string, string> = {}): string {
   const marks = Object.fromEntries(Object.keys(slots).map((k) => [k, `\u0001${k}\u0002`]));
   let out = esc(translate(locale, key, { ...params, ...marks }));
   for (const [k, html] of Object.entries(slots)) out = out.replace(`\u0001${k}\u0002`, () => html);
@@ -87,11 +90,11 @@ function fill(locale: Locale, key: string, params: Params = {}, slots: Record<st
 }
 
 // Spine documents are text/section-NNN.xhtml, one per section, in order (bindery).
-function sectionHref(index: number): string {
+export function sectionHref(index: number): string {
   return `section-${String(index + 1).padStart(3, "0")}.xhtml`;
 }
 
-function linksLine(item: TopicSearchResultItem, locale: Locale): string {
+export function linksLine(item: TopicSearchResultItem, locale: Locale): string {
   const out: string[] = [];
   if (item.links.original) out.push(fill(locale, "info.issue.book.original", {}, { link: link(item.links.original, item.title) }));
   const posts = item.links.posts.slice(0, 3).map((p) => link(p.url, `@${p.handle}`));
@@ -99,7 +102,7 @@ function linksLine(item: TopicSearchResultItem, locale: Locale): string {
   return out.length ? `<p><small>${out.join(" · ")}</small></p>` : "";
 }
 
-function verifyLines(item: TopicSearchResultItem, locale: Locale): string[] {
+export function verifyLines(item: TopicSearchResultItem, locale: Locale): string[] {
   const out: string[] = [];
   for (const d of item.verify.discrepancies) {
     out.push(
@@ -161,7 +164,7 @@ function noteHtml(p: PlannedItem, locale: Locale): string {
     .join("\n");
 }
 
-function annexHtml(a: PlannedAnnex): string {
+export function annexHtml(a: PlannedAnnex): string {
   // The panorama names items E1, E2 …; in the book they are numbered notes.
   const order: string[] = [];
   const text = a.text.replace(/\bE\d+\b/g, (id) => {
