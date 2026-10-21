@@ -36,7 +36,7 @@ import { createSpineTexts } from "../mark-write";
 import { createPageResources, readingFontsReady } from "../page-mount";
 import type { Pagination } from "../paginate";
 import type { EpubBook } from "../file/parse";
-import { bookLinkTarget, labelForBlock, locateQuote, pageIndexOfCfi, spineStartsOf } from "../reader-logic";
+import { bookLinkTarget, takeBookLink, labelForBlock, locateQuote, pageIndexOfCfi, spineStartsOf } from "../reader-logic";
 import { topEdgeSteps } from "./top-edge";
 import { hrefFragment, resolveZipPath } from "../../../workshop/bindery/zip";
 
@@ -454,6 +454,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     const inner = doc.shadow.elementFromPoint(clientX, clientY);
     const anchor = inner?.closest?.("a[href]");
     if (!anchor) return false;
+    if (takeBookLink(anchor)) return true;
     const link = bookLinkTarget(anchor.getAttribute("href"));
     if (!link) return false;
     if (link.kind === "external") {

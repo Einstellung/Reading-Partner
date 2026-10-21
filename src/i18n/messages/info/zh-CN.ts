@@ -396,4 +396,28 @@ export default {
 
   "errors.noProvider": "未配置 AI 服务商（请在设置中配置）。",
   "errors.extractorFailed": "无法加载文章提取器，请重试。",
+
+  // --- A study's brief in the reader (docs/info/91 版本) ---
+  "study.versionButton": "第 {n} 版",
+  "study.versionsTitle": "版本",
+  "study.versionsSub": "同一份简报的各版，最新的在上。打开只是看看；回到某一版会把这本书换回那一版。",
+  "study.current": "当前",
+  "study.viewing": "正在看",
+  "study.open": "打开",
+  "study.rollBack": "回到这一版",
+  "study.rollBackConfirm": "回到第 {n} 版？这本书换回那一版的内容，别的版本留在列表里。你确认过的几条不撤，要撤跟 {name} 说。",
+  "study.rollBackGo": "回到第 {n} 版",
+  "study.cancel": "取消",
+  "study.rolledBack": "已回到第 {n} 版。版本列表里其他版还在。",
+  "study.stripOld": "你在看第 {n} 版，不是当前的第 {current} 版。",
+  "study.viewCurrent": "看当前",
+  "study.stripUpdating": "正在更新到第 {to} 版，几分钟。现在看的是第 {n} 版，可以接着看。",
+  "study.stripLanded": "第 {n} 版好了。",
+  "study.switch": "换过去",
+  "study.citeKicker": "原文 · {label}",
+  "study.citeGist": "要点",
+  "study.citeNoText": "这一节的正文存在跑这次调研的电脑上。打开原文看。",
+  "study.citeOpen": "打开原文",
+  "study.marksLeft": { other: "{count} 处划线留在第 {n} 版：新版里没有那句了。" },
+  "study.close": "关上",
 } satisfies Translation<typeof en>;

@@ -67,6 +67,8 @@ import type { ReaderMode } from "../../../../reading/issue";
 import { markExcerpt } from "../../../../reading/turn/reopen";
 import { askCompanion, publishOpenIssue } from "../../companion/issue-context";
 import { jumpInBook } from "../lesson/epub-lesson";
+import { StudyCiteSheet, StudyStripBar, StudyVersionButton } from "../../reader/study/StudyChrome";
+import { useStudyReader } from "../../reader/study/use-study-reader";
 
 const markDeleteIo: MarkDeleteIo = {
   loadThreads,
@@ -94,7 +96,9 @@ export default function PhoneReader(props: {
   // filed (turn-context.ts). Null until the shelf has been read.
   topic: LessonTopic | null;
   settingsRef: { readonly current: Settings };
-  pushToast(kind: "warn" | "error", message: string): void;
+  pushToast(kind: "warn" | "error" | "info", message: string): void;
+  // Open another book in this reader's place: a study's other version (docs/info/91 「版本」).
+  onSwitchBook?: (bookId: string, name: string) => void;
   // The lesson is drawn over the reader rather than pushed on the stack, so the
   // shell's back has to be told to close it first (nav-stack.ts).
   onOverlayChange?(dismiss: (() => void) | null): void;
@@ -315,6 +319,21 @@ export default function PhoneReader(props: {
     });
   }, [issue, book, bookId, name, gate]);
 
+  // A study's brief: its versions, the update strip and the section sheet (docs/info/91 「版本」).
+  const [viewReady, setViewReady] = useState(false);
+  const movedAtRef = useRef(0);
+  const study = useStudyReader({
+    bookId,
+    isIssue: issue,
+    ready: viewReady,
+    openBook: (id, bookName) => props.onSwitchBook?.(id, bookName),
+    page: () => (statsRef.current ? statsRef.current.pageIndex + 1 : null),
+    fulltext: () => book?.fulltext ?? Promise.resolve(null),
+    goToPage: (pageIndex) => gate.run((view) => view.goToPage(pageIndex)),
+    lastMovedAt: () => movedAtRef.current,
+    toast: (text) => props.pushToast("info", text),
+  });
+
   const openConversation = useCallback(
     (id: string) => {
       const mark = marksRef.current.find((a) => a.id === id);
@@ -372,6 +391,7 @@ export default function PhoneReader(props: {
               gate.attach(view);
             }}
             onInitialized={() => {
+              setViewReady(true);
               setStatus(null);
               gate.ready();
             }}
@@ -382,7 +402,10 @@ export default function PhoneReader(props: {
             onChangeViewState={(s) => {
               // A turn or a scroll puts the bars away.
               const was = lastStateRef.current;
-              if (was && (was.cfi !== s.cfi || was.pageIndex !== s.pageIndex)) setChrome(false);
+              if (was && (was.cfi !== s.cfi || was.pageIndex !== s.pageIndex)) {
+                setChrome(false);
+                movedAtRef.current = Date.now();
+              }
               lastStateRef.current = s;
               io.keepReadingPosition(bookId, s);
             }}
@@ -461,7 +484,20 @@ export default function PhoneReader(props: {
         learnDot={lesson.dot}
         covered={covered}
         noLearn={issue}
+        {...(study ? { extra: <StudyVersionButton study={study} /> } : {})}
       />
+
+      {study?.strip && (
+        // Under the bar when the bar is up, at the top edge of the page when it is not.
+        <StudyStripBar
+          study={study}
+          className={cn(
+            "absolute inset-x-0 z-5 rounded-none",
+            chrome ? "top-[calc(env(safe-area-inset-top,0px)+48px)]" : "top-[env(safe-area-inset-top,0px)]",
+          )}
+        />
+      )}
+      {study && <StudyCiteSheet study={study} />}
 
       {confirming && (
         // Opened after the popup has closed, so it sits on the dialog layer

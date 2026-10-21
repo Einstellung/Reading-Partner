@@ -11,6 +11,8 @@
 //   an item:  <div class="rp-study-item" id="rp-item-E7"> around an entry's
 //             page, and around each note in the Notes
 
+import type { EntryPartName, EntryParts, EntrySentence } from "../topic-search/result-types";
+
 /** The class of a tappable section reference. */
 export const CITE_CLASS = "rp-cite";
 /** The class of the block holding one item's page or note. */
@@ -84,4 +86,42 @@ export function citeLabel(heading: string | null | undefined, section: number | 
 export function splitAnchor(anchor: string): { material: string; section: number | null } | null {
   const m = ANCHOR.exec(anchor);
   return m ? { material: m[1], section: m[2] ? Number(m[2]) : null } : null;
+}
+
+/** "rp-cite-E7-3": the item and the cite's place on its page, from 1; null for any other id. */
+export function citeOfId(id: string): { item: string; n: number } | null {
+  const m = /^rp-cite-(E\d+)-(\d+)$/.exec(id);
+  return m ? { item: m[1], n: Number(m[2]) } : null;
+}
+
+/** An entry's sentences in the order its page draws them (render-study.ts partsHtml), which is the order its cites are counted in. */
+export function entrySentences(parts: EntryParts): { part: EntryPartName; sentence: EntrySentence }[] {
+  const of = (part: EntryPartName, xs: readonly EntrySentence[]) => xs.map((sentence) => ({ part, sentence }));
+  return [
+    ...of("background", parts.background),
+    ...of("prior", parts.prior),
+    ...of("gap", parts.gap),
+    ...of("method", parts.method.flat()),
+    ...of("results", parts.results),
+    ...of("helps", parts.relevance.helps),
+    ...of("cannot", parts.relevance.cannot),
+    ...of("admitted", parts.confidence.admitted),
+    ...of("ours", parts.confidence.ours),
+  ];
+}
+
+/**
+ * The sentence the n-th cite on an entry's page belongs to, and the anchor it
+ * names. Counted the way the page numbered them: only anchors that make a link.
+ */
+export function citeAt(parts: EntryParts, n: number): { part: EntryPartName; sentence: EntrySentence; anchor: string } | null {
+  let k = 0;
+  for (const { part, sentence } of entrySentences(parts)) {
+    for (const anchor of sentence.cites) {
+      if (citeHref(anchor) === null) continue;
+      k++;
+      if (k === n) return { part, sentence, anchor };
+    }
+  }
+  return null;
 }

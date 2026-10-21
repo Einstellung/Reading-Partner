@@ -506,6 +506,10 @@ export default function PhoneApp({
               onBack={goBack}
               {...(openedBook.threadId ? { threadId: openedBook.threadId } : {})}
               mode={readerModeOf(entries[openedBook.bookId])}
+              onSwitchBook={(bookId, name) => {
+                setOpenedBook({ bookId, name, topicId: openedBook.topicId, path: "" });
+                setStack((s) => [...s.slice(0, -1), { kind: "reader", bookId, name }]);
+              }}
             />
           )}
           </ComposerSlotContext.Provider>

@@ -63,6 +63,7 @@ import type { EpubBook } from "../file/parse";
 import {
   blockIndexAt,
   bookLinkTarget,
+  takeBookLink,
   locateQuote,
   pageScroll,
   restoreTarget,
@@ -690,6 +691,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
       const inner = card.shadow.elementFromPoint(clientX, clientY);
       const anchor = inner?.closest?.("a[href]");
       if (!anchor) return false;
+      if (takeBookLink(anchor)) return true;
       const link = bookLinkTarget(anchor.getAttribute("href"));
       if (!link) return false;
       if (link.kind === "external") {

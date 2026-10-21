@@ -396,4 +396,28 @@ export default {
 
   "errors.noProvider": "Kein KI-Anbieter eingerichtet (Einstellungen).",
   "errors.extractorFailed": "Der Artikel-Extraktor konnte nicht geladen werden. Versuche es erneut.",
+
+  // --- A study's brief in the reader (docs/info/91 版本) ---
+  "study.versionButton": "Version {n}",
+  "study.versionsTitle": "Versionen",
+  "study.versionsSub": "Alle Versionen dieses Briefings, die neueste oben. Öffnen zeigt sie nur; Zurückgehen macht sie wieder zum Briefing.",
+  "study.current": "Aktuell",
+  "study.viewing": "Angezeigt",
+  "study.open": "Öffnen",
+  "study.rollBack": "Zu dieser Version zurück",
+  "study.rollBackConfirm": "Zu Version {n} zurück? Dieses Buch bekommt wieder deren Inhalt, die anderen Versionen bleiben in der Liste. Bestätigte Punkte werden nicht zurückgenommen; dafür sag es {name}.",
+  "study.rollBackGo": "Zu Version {n} zurück",
+  "study.cancel": "Abbrechen",
+  "study.rolledBack": "Wieder auf Version {n}. Die anderen Versionen sind noch in der Liste.",
+  "study.stripOld": "Du siehst Version {n}, nicht die aktuelle Version {current}.",
+  "study.viewCurrent": "Aktuelle ansehen",
+  "study.stripUpdating": "Aktualisierung auf Version {to}, ein paar Minuten. Du siehst Version {n} und kannst weiterlesen.",
+  "study.stripLanded": "Version {n} ist fertig.",
+  "study.switch": "Wechseln",
+  "study.citeKicker": "Original · {label}",
+  "study.citeGist": "Kern",
+  "study.citeNoText": "Der Text dieses Abschnitts liegt auf dem Computer, der die Recherche ausgeführt hat. Öffne das Original, um ihn zu lesen.",
+  "study.citeOpen": "Original öffnen",
+  "study.marksLeft": { one: "{count} Markierung blieb in Version {n}: Ihre Worte stehen nicht in der neuen.", other: "{count} Markierungen blieben in Version {n}: Ihre Worte stehen nicht in der neuen." },
+  "study.close": "Schließen",
 } satisfies Translation<typeof en>;

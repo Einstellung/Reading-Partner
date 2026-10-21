@@ -396,4 +396,28 @@ export default {
 
   "errors.noProvider": "AI プロバイダーが設定されていません（設定を確認してください）。",
   "errors.extractorFailed": "記事抽出機能を読み込めませんでした。もう一度お試しください。",
+
+  // --- A study's brief in the reader (docs/info/91 版本) ---
+  "study.versionButton": "第 {n} 版",
+  "study.versionsTitle": "版",
+  "study.versionsSub": "このブリーフの各版、新しい順。開くのは見るだけ。ある版に戻すと、この本がその版の内容に戻ります。",
+  "study.current": "現在",
+  "study.viewing": "表示中",
+  "study.open": "開く",
+  "study.rollBack": "この版に戻す",
+  "study.rollBackConfirm": "第 {n} 版に戻しますか？この本はその版の内容に戻り、ほかの版はリストに残ります。確認済みの項目は取り消されません。取り消すときは {name} に伝えてください。",
+  "study.rollBackGo": "第 {n} 版に戻す",
+  "study.cancel": "キャンセル",
+  "study.rolledBack": "第 {n} 版に戻しました。ほかの版はリストに残っています。",
+  "study.stripOld": "第 {n} 版を表示中です。現在の版は第 {current} 版です。",
+  "study.viewCurrent": "現在の版を見る",
+  "study.stripUpdating": "第 {to} 版に更新中、数分かかります。今は第 {n} 版で、このまま読めます。",
+  "study.stripLanded": "第 {n} 版ができました。",
+  "study.switch": "切り替える",
+  "study.citeKicker": "原文 · {label}",
+  "study.citeGist": "要旨",
+  "study.citeNoText": "この節の本文は調査を実行したコンピューターにあります。原文を開いて読んでください。",
+  "study.citeOpen": "原文を開く",
+  "study.marksLeft": { other: "{count} 件のハイライトは第 {n} 版に残りました。新しい版にその文がありません。" },
+  "study.close": "閉じる",
 } satisfies Translation<typeof en>;

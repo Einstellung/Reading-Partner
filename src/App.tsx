@@ -46,6 +46,8 @@ import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import { displaySource, getLibraryEntry, readLibraryBook, type BookFormat } from "./platform/app/library";
 import { readerModeOf, type ReaderMode } from "./reading/issue";
 import { askCompanion, publishOpenIssue } from "./ui/components/companion/issue-context";
+import { StudyCiteSheet, StudyStripBar, StudyVersionButton } from "./ui/components/reader/study/StudyChrome";
+import { useStudyReader } from "./ui/components/reader/study/use-study-reader";
 import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -671,6 +673,23 @@ export default function App() {
       },
     });
   }, [issueBookId, bookTitle, jumpToQuote, annsRef]);
+
+  // A study's brief: its versions, the update strip and the section sheet (docs/info/91 「版本」).
+  const studyMovedAtRef = useRef(0);
+  useEffect(() => {
+    studyMovedAtRef.current = Date.now();
+  }, [stats?.pageIndex]);
+  const study = useStudyReader({
+    bookId: issueBookId ?? "",
+    isIssue: issueBookId !== null,
+    ready: viewReady,
+    openBook: (id) => void openBookRef.current(id),
+    page: () => (statsRef.current ? statsRef.current.pageIndex + 1 : null),
+    fulltext: () => currentFulltextRef.current ?? Promise.resolve(null),
+    goToPage: (pageIndex) => viewRef.current?.navigate({ pageIndex }),
+    lastMovedAt: () => studyMovedAtRef.current,
+    toast: (text) => pushToast("info", text),
+  });
 
   // A clicked citation chip in a chat reply. Survey pages jump the reader (and
   // un-cover it when chat is full-window); paper citations open that paper's
@@ -1470,6 +1489,7 @@ export default function App() {
             onToggleSidebar={() => setSidebarOpen((v) => !v)}
             onCloseReader={closeReader}
             status={status}
+            {...(study ? { study: <StudyVersionButton study={study} /> } : {})}
             tool={{ type: toolType, color: HIGHLIGHT_COLOR }}
             onToolChange={(t) => setPickedTool(t.type)}
             gate={gate}
@@ -1483,6 +1503,8 @@ export default function App() {
         </header>
       )}
 
+      {inReader && study?.strip && <StudyStripBar study={study} className="flex-none" />}
+      {inReader && study && <StudyCiteSheet study={study} />}
       <main className="relative flex-1 min-h-0 flex">
         {!inReader && (
           <AppSidebar

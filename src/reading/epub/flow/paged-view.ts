@@ -62,6 +62,7 @@ import type { Pagination } from "../paginate";
 import type { EpubBook } from "../file/parse";
 import {
   bookLinkTarget,
+  takeBookLink,
   claimsTouch,
   labelForBlock,
   locateQuote,
@@ -509,6 +510,7 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     const inner = leaf.shadow.elementFromPoint(clientX, clientY);
     const a = inner?.closest?.("a[href]");
     if (!a) return false;
+    if (takeBookLink(a)) return true;
     const link = bookLinkTarget(a.getAttribute("href"));
     if (!link) return false;
     if (link.kind === "external") {

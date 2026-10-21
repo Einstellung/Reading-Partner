@@ -266,6 +266,37 @@ const SCHEME = /^([a-zA-Z][a-zA-Z0-9+.\-]*):/;
  * reader wants to be taken: an empty href, a protocol-relative URL, and every
  * scheme that is neither the book nor the web.
  */
+/**
+ * A link in the book that something outside the view takes before the view
+ * follows it: a study's section references (docs/info/91, info/issue/study-cites.ts),
+ * which open a sheet instead of going anywhere in the book. One taker at a
+ * time, set by the screen that has such a book open; it answers whether it took
+ * the tap.
+ */
+export interface BookLinkTap {
+  href: string;
+  id: string | null;
+  text: string;
+}
+
+let linkTaker: ((tap: BookLinkTap) => boolean) | null = null;
+
+/** Set the taker; returns the undo. */
+export function setBookLinkTaker(taker: (tap: BookLinkTap) => boolean): () => void {
+  linkTaker = taker;
+  return () => {
+    if (linkTaker === taker) linkTaker = null;
+  };
+}
+
+/** Hand a tapped link to the taker first; true when it took it. */
+export function takeBookLink(anchor: Element): boolean {
+  if (!linkTaker) return false;
+  const href = anchor.getAttribute("href");
+  if (!href) return false;
+  return linkTaker({ href, id: anchor.getAttribute("id"), text: anchor.textContent ?? "" });
+}
+
 export function bookLinkTarget(raw: string | null | undefined): BookLink | null {
   const href = raw?.trim();
   if (!href) return null;

@@ -396,4 +396,28 @@ export default {
 
   "errors.noProvider": "Aucun fournisseur d'IA configuré (Réglages).",
   "errors.extractorFailed": "Impossible de charger l'extracteur d'articles. Réessayez.",
+
+  // --- A study's brief in the reader (docs/info/91 版本) ---
+  "study.versionButton": "Version {n}",
+  "study.versionsTitle": "Versions",
+  "study.versionsSub": "Toutes les versions de ce briefing, la plus récente en haut. Ouvrir ne fait que l'afficher ; revenir à une version en refait le briefing.",
+  "study.current": "Actuelle",
+  "study.viewing": "Affichée",
+  "study.open": "Ouvrir",
+  "study.rollBack": "Revenir à cette version",
+  "study.rollBackConfirm": "Revenir à la version {n} ? Ce livre reprend son contenu, les autres versions restent dans la liste. Les points que vous avez confirmés ne sont pas annulés ; pour en annuler un, dites-le à {name}.",
+  "study.rollBackGo": "Revenir à la version {n}",
+  "study.cancel": "Annuler",
+  "study.rolledBack": "De retour à la version {n}. Les autres versions sont toujours dans la liste.",
+  "study.stripOld": "Vous regardez la version {n}, pas la version actuelle {current}.",
+  "study.viewCurrent": "Voir l'actuelle",
+  "study.stripUpdating": "Mise à jour vers la version {to}, quelques minutes. Vous regardez la version {n} et pouvez continuer à lire.",
+  "study.stripLanded": "La version {n} est prête.",
+  "study.switch": "Passer",
+  "study.citeKicker": "Original · {label}",
+  "study.citeGist": "Idée",
+  "study.citeNoText": "Le texte de cette section est conservé sur l'ordinateur qui a mené l'étude. Ouvrez l'original pour le lire.",
+  "study.citeOpen": "Ouvrir l'original",
+  "study.marksLeft": { one: "{count} surlignage est resté sur la version {n} : ses mots ne sont plus dans la nouvelle.", other: "{count} surlignages sont restés sur la version {n} : leurs mots ne sont plus dans la nouvelle." },
+  "study.close": "Fermer",
 } satisfies Translation<typeof en>;

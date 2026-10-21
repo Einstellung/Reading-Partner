@@ -396,4 +396,28 @@ export default {
 
   "errors.noProvider": "Nenhum provedor de IA configurado (Ajustes).",
   "errors.extractorFailed": "Não foi possível carregar o extrator de artigos. Tente novamente.",
+
+  // --- A study's brief in the reader (docs/info/91 版本) ---
+  "study.versionButton": "Versão {n}",
+  "study.versionsTitle": "Versões",
+  "study.versionsSub": "Todas as versões deste briefing, a mais recente no topo. Abrir só mostra; voltar a uma faz dela o briefing outra vez.",
+  "study.current": "Atual",
+  "study.viewing": "Vendo",
+  "study.open": "Abrir",
+  "study.rollBack": "Voltar a esta versão",
+  "study.rollBackConfirm": "Voltar à versão {n}? Este livro volta ao conteúdo dela e as outras versões ficam na lista. Os pontos que você confirmou não são desfeitos; para desfazer um, diga a {name}.",
+  "study.rollBackGo": "Voltar à versão {n}",
+  "study.cancel": "Cancelar",
+  "study.rolledBack": "De volta à versão {n}. As outras versões continuam na lista.",
+  "study.stripOld": "Você está vendo a versão {n}, não a versão atual {current}.",
+  "study.viewCurrent": "Ver a atual",
+  "study.stripUpdating": "Atualizando para a versão {to}, alguns minutos. Você está vendo a versão {n} e pode continuar lendo.",
+  "study.stripLanded": "A versão {n} está pronta.",
+  "study.switch": "Trocar",
+  "study.citeKicker": "Original · {label}",
+  "study.citeGist": "Essência",
+  "study.citeNoText": "O texto desta seção fica no computador que fez o estudo. Abra o original para lê-lo.",
+  "study.citeOpen": "Abrir o original",
+  "study.marksLeft": { one: "{count} destaque ficou na versão {n}: as palavras não estão na nova.", other: "{count} destaques ficaram na versão {n}: as palavras não estão na nova." },
+  "study.close": "Fechar",
 } satisfies Translation<typeof en>;

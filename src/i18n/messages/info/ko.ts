@@ -396,4 +396,28 @@ export default {
 
   "errors.noProvider": "AI 제공자가 설정되지 않았습니다 (설정에서 확인).",
   "errors.extractorFailed": "기사 추출기를 불러오지 못했습니다. 다시 시도하세요.",
+
+  // --- A study's brief in the reader (docs/info/91 版本) ---
+  "study.versionButton": "{n}판",
+  "study.versionsTitle": "판",
+  "study.versionsSub": "이 브리핑의 모든 판, 최신순. 열기는 보기만 합니다. 어떤 판으로 되돌리면 이 책이 그 판의 내용으로 돌아갑니다.",
+  "study.current": "현재",
+  "study.viewing": "보는 중",
+  "study.open": "열기",
+  "study.rollBack": "이 판으로 되돌리기",
+  "study.rollBackConfirm": "{n}판으로 되돌릴까요? 이 책은 그 판의 내용으로 돌아가고 다른 판은 목록에 남습니다. 확인한 항목은 취소되지 않습니다. 취소하려면 {name}에게 말하세요.",
+  "study.rollBackGo": "{n}판으로 되돌리기",
+  "study.cancel": "취소",
+  "study.rolledBack": "{n}판으로 돌아왔습니다. 다른 판은 목록에 남아 있습니다.",
+  "study.stripOld": "{n}판을 보고 있습니다. 현재 판은 {current}판입니다.",
+  "study.viewCurrent": "현재 판 보기",
+  "study.stripUpdating": "{to}판으로 업데이트 중, 몇 분 걸립니다. 지금은 {n}판이며 계속 읽을 수 있습니다.",
+  "study.stripLanded": "{n}판이 준비되었습니다.",
+  "study.switch": "바꾸기",
+  "study.citeKicker": "원문 · {label}",
+  "study.citeGist": "요지",
+  "study.citeNoText": "이 절의 본문은 조사를 실행한 컴퓨터에 있습니다. 원문을 열어 읽으세요.",
+  "study.citeOpen": "원문 열기",
+  "study.marksLeft": { other: "하이라이트 {count}개는 {n}판에 남았습니다. 새 판에 그 문장이 없습니다." },
+  "study.close": "닫기",
 } satisfies Translation<typeof en>;

@@ -69,6 +69,8 @@ export default function ReaderTopBar(props: {
   onToggleCompanion: () => void;
   // A brief opens without the lesson and the AI pen (reading/issue.ts).
   mode?: ReaderMode;
+  // A study's version button (docs/info/91 「版本」), after the way back.
+  study?: React.ReactNode;
 }) {
   const t = useT();
   const companionName = useCompanionName();
@@ -171,6 +173,7 @@ export default function ReaderTopBar(props: {
         {/* No title breadcrumb: the book is open in front of the reader, so
             its name carries no information and the width is better spent on
             the tool group (tight on a phone). */}
+        {props.study}
         {props.status && (
           <span className="ml-1 flex-none text-xs text-[#b45309] sm:ml-3">{props.status}</span>
         )}

@@ -25,6 +25,7 @@ import { buildEpub } from "../epub/fixture";
 import { parseEpub, type SpineDocument } from "../../../src/reading/epub/file/parse";
 import {
   carryMarks,
+  carryMarksByBlock,
   carryPosition,
   carryTargetsOf,
   type MarkRecord,
@@ -259,4 +260,37 @@ test("a position whose words are gone keeps its page number and drops the old CF
   // A PDF's position has no CFI and is handed back untouched.
   const pdf: ViewState = { pageIndex: 2, scale: 1, scrollMode: 0 };
   expect(carryPosition(pdf, v1, carryTargetsOf(other))).toBe(pdf);
+});
+
+// A study's brief (docs/info/91 「版本」): a mark stays with its item.
+test("carryMarksByBlock moves a mark only into its item's block in the new version", () => {
+  const item = (id: string, words: string) => `<div class="rp-study-item" id="${id}"><p>${words}</p></div>`;
+  const v1 = parseEpub(
+    buildEpub({
+      docs: [
+        { name: "a.xhtml", body: `<p>The front page.</p>${item("rp-item-E1", "The agent picks the next experiment.")}` },
+        { name: "b.xhtml", body: item("rp-item-E2", "A survey of symbolic regression.") },
+      ],
+    }),
+  );
+  const v2 = parseEpub(
+    buildEpub({
+      docs: [
+        { name: "a.xhtml", body: `<p>The front page.</p>${item("rp-item-E9", "The agent picks the next experiment.")}` },
+        { name: "b.xhtml", body: item("rp-item-E5", "Rewritten: the agent picks the next experiment, then runs it.") },
+      ],
+    }),
+  );
+  const inE1 = { ...markOver(v1.docs[0], "picks the next experiment"), id: "m-e1" };
+  const inE2 = { ...markOver(v1.docs[1], "symbolic regression"), id: "m-e2" };
+  const front = { ...markOver(v1.docs[0], "front page"), id: "m-front" };
+  // E1 was rewritten as E5 (same key); E2 has no counterpart.
+  const map: Record<string, string> = { "rp-item-E1": "rp-item-E5" };
+  const out = carryMarksByBlock([inE1, inE2, front], v1, v2, "rp-study-item", (id) => map[id] ?? null);
+  expect(out.unmatched.map((m) => m.id)).toEqual(["m-e2"]);
+  const moved = Object.fromEntries(out.moved.map((m) => [m.id as string, m]));
+  // Found in E5's block in b.xhtml, not in E9's identical words in a.xhtml.
+  expect(String(moved["m-e1"].sortIndex).startsWith(makeEpubSortIndex(v2.docs[1].index, 0).split("|")[0])).toBe(true);
+  expect(moved["m-e1"].text).toBe("picks the next experiment");
+  expect(moved["m-front"].text).toBe("front page");
 });

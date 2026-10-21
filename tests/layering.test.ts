@@ -379,6 +379,8 @@ const LAYER: Record<string, Layer> = {
   "ui/components/phone/lesson": "ui",
   "ui/components/phone/reader": "ui",
   "ui/components/reader": "ui",
+  // A study's brief in the reader (docs/info/91 版本): versions, update strip, section sheet.
+  "ui/components/reader/study": "ui",
   "ui/components/reader/sidebar": "ui",
   "ui/components/rehearsal": "ui",
   "ui/components/retell": "ui",

@@ -413,4 +413,28 @@ export default {
   // --- Misc (use-info-home.ts) -------------------------------------------------
   "errors.noProvider": "No AI provider configured (Settings).",
   "errors.extractorFailed": "The article extractor could not be loaded. Try again.",
+
+  // --- A study's brief in the reader (docs/info/91 版本) ---
+  "study.versionButton": "Version {n}",
+  "study.versionsTitle": "Versions",
+  "study.versionsSub": "Every version of this brief, newest first. Opening one only shows it; going back to one makes it the brief again.",
+  "study.current": "Current",
+  "study.viewing": "Viewing",
+  "study.open": "Open",
+  "study.rollBack": "Go back to this version",
+  "study.rollBackConfirm": "Go back to version {n}? This book takes that version's content again, and the other versions stay in the list. The lines you confirmed are not undone; to undo one, tell {name}.",
+  "study.rollBackGo": "Go back to version {n}",
+  "study.cancel": "Cancel",
+  "study.rolledBack": "Back on version {n}. The other versions are still in the list.",
+  "study.stripOld": "You are looking at version {n}, not the current version {current}.",
+  "study.viewCurrent": "View current",
+  "study.stripUpdating": "Updating to version {to}, a few minutes. You are looking at version {n} and can keep reading.",
+  "study.stripLanded": "Version {n} is ready.",
+  "study.switch": "Switch",
+  "study.citeKicker": "Original · {label}",
+  "study.citeGist": "Gist",
+  "study.citeNoText": "This section's text is kept on the computer that ran the study. Open the original to read it.",
+  "study.citeOpen": "Open the original",
+  "study.marksLeft": { one: "{count} highlight stayed on version {n}: its words are not in the new one.", other: "{count} highlights stayed on version {n}: their words are not in the new one." },
+  "study.close": "Close",
 } as const;

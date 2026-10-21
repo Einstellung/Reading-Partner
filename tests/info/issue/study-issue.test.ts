@@ -15,7 +15,8 @@ import { expiredIssues } from "../../../src/info/issue/expiry";
 import type { IssueTopic } from "../../../src/info/issue/plan";
 import { openingRecord } from "../../../src/info/issue/opening-record";
 import { studyBookName, studyChangeLine, studyEpubInput } from "../../../src/info/issue/render-study";
-import { anchorOfHref, citeHref, citeLabel, itemAnchorId, itemOfAnchorId, splitAnchor } from "../../../src/info/issue/study-cites";
+import { anchorOfHref, citeAt, citeHref, citeLabel, citeOfId, itemAnchorId, itemOfAnchorId, splitAnchor } from "../../../src/info/issue/study-cites";
+import { citeSheet, excerptFor, itemAtPage, landedAction, materialBodyPaths, sameItemIn, SETTLED_MS, studyBookContext, studyStrip, updatingTo, versionItems, versionRows } from "../../../src/info/issue/study-reader";
 import { planStudyIssue, withStudyVersions } from "../../../src/info/issue/study-plan";
 import { INFO_SHELF_FILE, ISSUE_BOX_KIND, parseShelf, studyOfBook } from "../../../src/info/issue/types";
 import type { RegisteredMaterial } from "../../../src/info/dossier/registry";
@@ -437,4 +438,108 @@ test("a topic that is no study takes the old path; a study's first look filed be
   const made = await assembleIssue(w.deps, `first:${SEARCH}`, "2026-10-21", ["plain.json"]);
   expect(made.issue?.study).toBeUndefined();
   expect(w.library.get("h1")!.fileName).toBe(`Daily Brief 2026-10-21 No. 1.epub`);
+});
+
+// --- slice H: the reader's side (study-reader.ts) ---------------------------------
+
+describe("the reader's study chrome (study-reader.ts)", () => {
+  test("every cite id on a page names the sentence and anchor citeAt finds", () => {
+    const result = studyResult();
+    const input = studyEpubInput(planOf(2), { number: 4, date: "2026-10-21", locale: "en", companionName: "Lumen" });
+    const html = input.sections.map((s) => s.html).join("\n");
+    const links = [...html.matchAll(/<a class="rp-cite" id="(rp-cite-E\d+-\d+)" href="([^"]+)">/g)];
+    expect(links.length).toBeGreaterThan(5);
+    for (const [, id, href] of links) {
+      const place = citeOfId(id)!;
+      const item = result.items.find((i) => i.id === place.item)!;
+      expect(citeAt(item.parts!, place.n)?.anchor).toBe(anchorOfHref(href)!);
+    }
+    expect(citeOfId("rp-item-E7")).toBeNull();
+  });
+
+  test("the sheet: the tapped sentence as the gist, its quote, and the section's paragraphs when the body is here", () => {
+    const result = studyResult();
+    // E1's cites: background M1.§1 (1), prior M1 (2), method M1.§2 (3), M1.§3 (4), M1.§4 (5), results M1.§1 (6).
+    const tap = { href: "text/section-003.xhtml#rp-cite-M1-1", id: "rp-cite-E1-6", text: "§3.3" };
+    const bare = citeSheet(result, tap, null)!;
+    expect(bare).toMatchObject({ anchor: "M1.§1", label: "§3.3", heading: "3.3 Results", gist: "It found 3 of 4 rules.", quote: "found three of four", excerpt: [], part: "results" });
+    const body = {
+      id: "M1",
+      url: "https://arxiv.org/abs/M1",
+      sections: [{ id: "M1.§1", heading: "3.3 Results", text: "We ran four systems.\n\nThe agent found three of four rules.\n\nOurs 3 4 75.0\n\nPySR 1 4 25.0" }],
+    };
+    const full = citeSheet(result, tap, body)!;
+    expect(full.excerptBy).toBe("quote");
+    expect(full.excerpt).toEqual(["The agent found three of four rules."]);
+    // No quote: the rows holding the sentence's figures.
+    expect(excerptFor(body.sections[0].text, { text: "75% against 25%", quote: undefined })).toEqual({ paras: ["Ours 3 4 75.0", "PySR 1 4 25.0"], by: "figures" });
+    expect(excerptFor("Opening words.\n\nMore.", { text: "Nothing to match." }).by).toBe("opening");
+    // A link that is no cite is not taken.
+    expect(citeSheet(result, { href: "#rp-item-E1", id: null, text: "" }, null)).toBeNull();
+  });
+
+  test("the same item in another version is the one with its key; the item the reader is on is the last one before the page", () => {
+    const result = studyResult();
+    expect(sameItemIn(result, "E2", 2)?.id).toBe("E6");
+    expect(sameItemIn(result, "E4", 2)).toBeNull();
+    const items = versionItems(result, 1);
+    expect(items.map((i) => i.id)).toEqual(["E1", "E2", "E3", "E4"]);
+    const pages: Record<string, number> = { "Paper titled E1": 3, "Paper titled E2": 4, "Paper titled E3": 5, "Paper titled E4": 6 };
+    const pageOf = (title: string) => pages[title] ?? null;
+    expect(itemAtPage(items, pageOf, 2)).toBeNull();
+    expect(itemAtPage(items, pageOf, 4)?.id).toBe("E2");
+    expect(itemAtPage(items, pageOf, 9)?.id).toBe("E4");
+  });
+
+  test("versions, the current one after a return, and the list's actions", () => {
+    const shelf = parseShelf(
+      JSON.stringify({
+        version: 1,
+        issues: [
+          {
+            key: `first:${SEARCH}`, number: 4, date: "2026-10-21", topics: [{ searchId: SEARCH, name: NAME }], results: ["r"], items: 5,
+            bookId: "b2", boxItemId: "x", createdAt: 1,
+            study: { current: 2, versions: [
+              { n: 1, bookId: "b1", at: 100, date: "2026-10-21", line: "first", items: 4, boxItemId: "x1" },
+              { n: 2, bookId: "b2", at: 200, date: "2026-10-21", line: "2 added", items: 5, boxItemId: "x2" },
+            ] },
+          },
+        ],
+        volumes: [],
+      }),
+    );
+    const ctx = studyBookContext(shelf, "b1", [])!;
+    expect(ctx).toMatchObject({ searchId: SEARCH, current: 2, newest: 2 });
+    expect(ctx.viewing.n).toBe(1);
+    expect(versionRows(ctx).map((r) => [r.n, r.current, r.viewing, r.canOpen, r.canRollBack])).toEqual([
+      [2, true, false, true, false],
+      [1, false, true, false, true],
+    ]);
+    expect(studyBookContext(shelf, "b2", [{ to: 1, at: 300 }])!.current).toBe(1);
+    expect(studyBookContext(shelf, "other", [])).toBeNull();
+  });
+
+  test("the strip, the update in flight and what a landing version does", () => {
+    expect(studyStrip({ viewing: 1, current: 2, updating: 3, landed: null })).toEqual({ kind: "old", viewing: 1, current: 2 });
+    expect(studyStrip({ viewing: 2, current: 2, updating: 3, landed: null })).toEqual({ kind: "updating", to: 3, viewing: 2 });
+    expect(studyStrip({ viewing: 2, current: 3, updating: null, landed: 3 })).toEqual({ kind: "landed", n: 3 });
+    expect(studyStrip({ viewing: 2, current: 2, updating: null, landed: null })).toBeNull();
+    const runs = [
+      { idempotencyKey: `topic-search:${SEARCH}:update:7`, state: "running" },
+      { idempotencyKey: `topic-search:${SEARCH}:update:2`, state: "done" },
+      { idempotencyKey: `topic-search:other:update:5`, state: "pending" },
+      { idempotencyKey: `topic-search:${SEARCH}:first`, state: "running" },
+    ];
+    expect(updatingTo(runs, SEARCH, 2)).toBe(3);
+    expect(updatingTo(runs.slice(1), SEARCH, 2)).toBeNull();
+    expect(landedAction({ wasCurrent: false, hidden: false, lastMovedAt: 0, now: 1e6 })).toBe("none");
+    expect(landedAction({ wasCurrent: true, hidden: false, lastMovedAt: 1e6 - 5_000, now: 1e6 })).toBe("chip");
+    expect(landedAction({ wasCurrent: true, hidden: false, lastMovedAt: 1e6 - SETTLED_MS, now: 1e6 })).toBe("switch");
+    expect(landedAction({ wasCurrent: true, hidden: true, lastMovedAt: 1e6, now: 1e6 })).toBe("switch");
+  });
+
+  test("a material's body is looked for in the first run's directory, then in each later run's", () => {
+    const result = { runDir: "topic-search-runs/r1", retries: [{ runId: "r2", at: 1, added: 0 } as never] };
+    expect(materialBodyPaths(result, "M3")).toEqual(["topic-search-runs/r1/materials/M3.json", "topic-search-runs/r2/materials/M3.json"]);
+  });
 });

@@ -144,6 +144,88 @@ export function carryMarks(
   return result;
 }
 
+// --- marks kept to their block ------------------------------------------------
+
+/** The element a mark starts in, in the file it was drawn on; null when its CFI does not resolve there. */
+function startElement(mark: MarkRecord, from: EpubBook): Element | null {
+  const value = (mark.position as { value?: unknown } | undefined)?.value;
+  if (typeof value !== "string") return null;
+  const parsed = parseCfiStart(value);
+  const doc = parsed ? from.docs[parsed.spineIndex] : undefined;
+  const at = parsed && doc ? resolvePoint(doc.doc.documentElement, parsed) : null;
+  if (!at) return null;
+  return at.node.nodeType === 1 ? (at.node as Element) : at.node.parentElement;
+}
+
+/** The span of an element's words in its document's text: from its start to the end of its last text. */
+function spanOfElement(target: CarryTarget, el: Element): TextSpan {
+  const runs = indexRuns(target.text);
+  const start = offsetOfPoint(target.text, runs, el, 0);
+  let end = start;
+  const walk = (node: Node) => {
+    const run = runs.get(node);
+    if (run) end = Math.max(end, run.start + run.length);
+    for (const child of Array.from(node.childNodes)) walk(child);
+  };
+  walk(el);
+  return { start, end };
+}
+
+/**
+ * Marks carried onto a new version of a book whose blocks are items (a study's
+ * brief, docs/info/91 「版本」: each entry and note in an element of
+ * `blockClass` with an id). A mark inside such a block moves only into the block
+ * `blockFor` names for it in the new file, found there by its words; a mark in
+ * a block with no counterpart, or whose words are not in it any more, is
+ * reported. A mark outside every block (the front page, the contents) is
+ * carried by its words alone, as `carryMarks` does.
+ */
+export function carryMarksByBlock(
+  marks: readonly MarkRecord[],
+  from: EpubBook,
+  into: EpubBook,
+  blockClass: string,
+  blockFor: (oldBlockId: string) => string | null,
+): CarryResult {
+  const targets = carryTargetsOf(into);
+  const result: CarryResult = { moved: [], unmatched: [] };
+  for (const mark of marks) {
+    const block = startElement(mark, from)?.closest(`.${blockClass}[id]`) ?? null;
+    if (!block) {
+      const one = carryMarks([mark], targets);
+      result.moved.push(...one.moved);
+      result.unmatched.push(...one.unmatched);
+      continue;
+    }
+    const want = blockFor(block.id);
+    const target = want ? targets.find((t) => t.doc.getElementById(want)) : undefined;
+    const el = want && target ? target.doc.getElementById(want) : null;
+    const quote = quoteSelectorOf(mark);
+    if (!target || !el || !quote) {
+      result.unmatched.push(mark);
+      continue;
+    }
+    const within = spanOfElement(target, el);
+    const local = spanIn(target.text.text.slice(within.start, within.end), quote, undefined);
+    const span = local ? { start: within.start + local.start, end: within.start + local.end } : null;
+    const range = span ? rangeAtSpan(target.doc, target.text, span) : null;
+    const cfi = range ? rangeToCfi(range, target.spineIndex, target.idref) : null;
+    if (!span || !cfi) {
+      result.unmatched.push(mark);
+      continue;
+    }
+    const moved = quoteSelectorAt(target.text.text, span);
+    result.moved.push({
+      ...mark,
+      text: moved.exact,
+      quote: moved,
+      sortIndex: makeEpubSortIndex(target.spineIndex, span.start),
+      position: { type: "FragmentSelector", conformsTo: CFI_CONFORMS_TO, value: cfi, pageIndex: 0 },
+    });
+  }
+  return result;
+}
+
 // --- the reading position ----------------------------------------------------
 
 // How many characters after the saved point are looked for in the new file. Long

@@ -3,6 +3,7 @@
 // shells; the phone gives it a back and a bottom sheet for Move to…. What is on
 // it and what Move to… does are in info-shelf.ts.
 
+import { prepareStudyBook } from "../reader/study/study-live";
 import { useCallback, useEffect, useState } from "react";
 import { useT } from "../../../i18n";
 import { todayLocal } from "../../../info/collect/store";
@@ -72,7 +73,12 @@ export default function InfoShelf(props: {
   }, [reload]);
 
   const view = data ? infoShelfView(data.shelf, data.ctx) : null;
-  const open = (card: IssueCard | VolumeCard) => props.onOpenBook(card.bookId, cardBookName(card, data?.ctx.library ?? {}));
+  // A study's newest version takes the reader's marks from the one before it first (docs/info/91 「版本」).
+  const open = (card: IssueCard | VolumeCard) => {
+    const go = () => props.onOpenBook(card.bookId, cardBookName(card, data?.ctx.library ?? {}));
+    if ("study" in card && card.study) void prepareStudyBook(card.bookId).catch(() => null).finally(go);
+    else go();
+  };
 
   return (
     <div className="absolute inset-0 overflow-y-auto bg-background">
