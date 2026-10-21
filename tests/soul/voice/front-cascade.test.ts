@@ -6,12 +6,14 @@ import type { CallBack } from "../../../src/soul/voice/front/backend";
 import { createCascadeFront, resumeOffset, type FrontCard } from "../../../src/soul/voice/front/cascade";
 import {
   FRONT_DUTY,
+  frontIdentity,
   FRONT_TOKEN_CAP,
   estimateTokens,
   frontMessages,
   frontRequest,
 } from "../../../src/soul/voice/front/context";
 import type { FillerPort } from "../../../src/soul/voice/front/filler";
+import { DEFAULT_COMPANION_NAME } from "../../../src/platform/app/settings";
 import { buildFrontTools } from "../../../src/soul/voice/front/tools";
 import type { FrontTurnMarks } from "../../../src/soul/voice/front/marks";
 import type { FrontModel, FrontModelRequest } from "../../../src/soul/voice/front/model";
@@ -253,13 +255,14 @@ test("a barge-in cuts the sentence but not the run it handed off", async () => {
   expect(h.back.dispatched).toEqual(["Z"]);
 });
 
-test("the request is the duty, the place and the list first, then the call's turns", async () => {
+test("the request is the identity and duty, the place and the list first, then the call's turns", async () => {
   const h = setup(async (req) => req.onText("嗯。"));
   h.back.list.push({ n: 1, runId: "r1", kind: "think", task: "Find X", state: "running", progress: "reading two papers", told: false });
   h.front.transcript.record({ role: "user", turn: 1, text: "好了没", interrupted: false });
   await ask(h.front, 1, "好了没");
   const sys = h.requests[0]!.system;
-  expect(sys.startsWith(FRONT_DUTY)).toBe(true);
+  // Who is speaking leads (docs/companion/90); this front was given no name.
+  expect(sys.startsWith(`${frontIdentity(DEFAULT_COMPANION_NAME)}\n${FRONT_DUTY}`)).toBe(true);
   expect(sys.indexOf("Today: three labs.")).toBeLessThan(sys.indexOf("#1 | running | Find X | progress: reading two papers"));
   expect(h.requests[0]!.messages).toEqual([{ role: "user", text: "好了没" }]);
 });

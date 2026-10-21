@@ -222,8 +222,11 @@ test("a desk item offering one of the secretary's tool names is refused", async 
 // line of the item's own text.
 test("the secretary's duty opens the prompt, and the briefing's own sections follow in order", async () => {
   const turn = await assemble([briefingRef], [tool("probe_source")]);
-  expect(turn.systemPrompt.startsWith(`${SECRETARY_DUTY}\n\n`)).toBe(true);
+  // Only the companion's intro (docs/companion/90) comes ahead of the duty.
+  expect(turn.systemPrompt.startsWith("You are Kris, the companion inside the Lumen app.")).toBe(true);
+  expect(turn.systemPrompt).toContain(`\n\n${SECRETARY_DUTY}\n\n`);
   const order = [
+    "You are Kris, the companion inside the Lumen app.",
     SECRETARY_DUTY,
     "You have tools, shared across every info chat:",
     "What is known about this reader (what triage keeps or filters for):",

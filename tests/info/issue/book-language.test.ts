@@ -39,7 +39,7 @@ describe("the book's language", () => {
 
   test("the opening prompt gets the same explicit language, with no fallback to the items' own", () => {
     const plan = planIssue([resultOf([pageItem("E1", { summary: "S.", body: ["B."] })])], TOPICS)!;
-    const system = openingPrompt(plan, [], bookLanguageInstruction("auto", ["ko"])).system;
+    const system = openingPrompt(plan, [], bookLanguageInstruction("auto", ["ko"]), "Kris").system;
     expect(system).toContain("한국어");
     expect(system).not.toContain("the language the items");
   });

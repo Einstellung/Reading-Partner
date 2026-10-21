@@ -99,10 +99,18 @@ export function returnUnasked(file: QuestionsFile, left: readonly { searchId: st
   return { ...file, topics };
 }
 
-/** The model's prompt for the opening. */
-export function openingPrompt(plan: IssuePlan, questions: readonly OpeningQuestion[], language: string): { system: string; user: string } {
+/**
+ * The model's prompt for the opening. `name` is the companion's, as
+ * companionNameOf gives it: the opening is said in its voice.
+ */
+export function openingPrompt(
+  plan: IssuePlan,
+  questions: readonly OpeningQuestion[],
+  language: string,
+  name: string,
+): { system: string; user: string } {
   const system = [
-    "You are Lumen, the reader's companion, who briefs them every morning. The reader has just opened today's brief.",
+    `You are ${name}, the reader's companion in the Lumen app, who briefs them every morning. The reader has just opened today's brief.`,
     "Write what you say first, in two or three sentences: which items are worth their time today and why, in plain words.",
     "Point at an item by its number in square brackets, like [2]; point at two or three at most.",
     "Do not say the date or how many items there are, and do not greet: the app says that before you.",

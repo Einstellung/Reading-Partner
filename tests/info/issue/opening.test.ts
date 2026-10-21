@@ -85,8 +85,17 @@ test("an issue asks at most three questions, a topic at a time; the rest wait ag
 
 test("the prompt carries the language it is given, and no fallback of its own", () => {
   const plan = planIssue(night(), TOPICS)!;
-  expect(openingPrompt(plan, [], "Respond in Deutsch.").system).toContain("Respond in Deutsch.");
-  expect(openingPrompt(plan, [], "Respond in Deutsch.").system).not.toContain("the language the items");
+  expect(openingPrompt(plan, [], "Respond in Deutsch.", "Kris").system).toContain("Respond in Deutsch.");
+  expect(openingPrompt(plan, [], "Respond in Deutsch.", "Kris").system).not.toContain("the language the items");
+});
+
+// The opening is said in the companion's voice, under the name the reader gave
+// it (docs/companion/90), and never under the app's name.
+test("the opening speaks under the companion's name it is handed", () => {
+  const plan = planIssue(night(), TOPICS)!;
+  const system = openingPrompt(plan, [], "", "Momo").system;
+  expect(system.startsWith("You are Momo, the reader's companion in the Lumen app")).toBe(true);
+  expect(system).not.toContain("You are Lumen");
 });
 
 test("the record: the model's numbers past the items dropped, quick answers kept for its own questions only", () => {

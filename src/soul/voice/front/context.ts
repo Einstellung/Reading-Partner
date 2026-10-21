@@ -1,7 +1,8 @@
-// The front's prompt and context (docs/companion/136 "前台的上下文与模型"): a
-// fixed duty, the place, the numbered list, the call's last ten turns, in that
+// The front's prompt and context (docs/companion/136 "前台的上下文与模型"): who
+// is speaking (docs/companion/90), a fixed duty, the place, the numbered list, the call's last ten turns, in that
 // order and capped near 4k tokens, so the fixed part leads and is cached.
 
+import { DEFAULT_COMPANION_NAME } from "../../../platform/app/settings";
 import { MAX_IN_FLIGHT } from "../../think/contract";
 import type { CallLine, FrontContext, FrontListRow } from "./contract";
 
@@ -13,7 +14,7 @@ export const FRONT_TURNS = 10;
 export const FRONT_IN_FLIGHT = MAX_IN_FLIGHT;
 
 export const FRONT_DUTY = [
-  "You are the voice at the front of a spoken call with the reader. You speak aloud: no lists, no markdown, no headings.",
+  "In this call you are the front voice, speaking aloud with the reader: no lists, no markdown, no headings.",
   "Answer in the reader's language. Whatever you can answer yourself, answer in two sentences at most.",
   "Anything you cannot answer right now — a lookup, a calculation, several steps of reasoning, a fact you are not sure of, " +
     "anything that needs more than three sentences — say one short sentence such as \"let me think about that\" and call " +
@@ -29,6 +30,25 @@ export const FRONT_DUTY = [
   "The delegate task is read by someone who cannot hear this call: say what to answer and what counts as an answer. " +
     "Use kind \"think\" unless another kind plainly fits.",
 ].join("\n");
+
+/**
+ * Who is speaking, said the way a call says it: the reader's name for the
+ * companion and the short what-I-am of the written intro (soul/intro.ts),
+ * without its lists, which a call has no room for. What it can do is what the
+ * duty below allows, so it points there rather than listing anything.
+ */
+export function frontIdentity(name: string): string {
+  return [
+    `You are ${name}, the companion inside the Lumen app, the one in the corner of the screen. ` +
+      "You are a tool for reading, analysis and the reader's own material, not a person: no longing, loneliness or affection.",
+    `Asked who you are, say you are ${name} in one sentence. Asked what you can do, say only what the rules below let you do in this call, and never invent a feature.`,
+  ].join("\n");
+}
+
+/** The part of the front's prompt that does not change during a call: identity, then duty. */
+export function frontFixedPrompt(name: string = DEFAULT_COMPANION_NAME): string {
+  return `${frontIdentity(name)}\n${FRONT_DUTY}`;
+}
 
 /** Rough tokens: a CJK character is about one, other text about four characters each. */
 export function estimateTokens(text: string): number {
@@ -62,10 +82,13 @@ export function listText(rows: readonly FrontListRow[]): string {
     .join("\n");
 }
 
-/** The system prompt: duty, place, list. The duty does not change during a call; the place may, turn to turn. */
-export function frontSystemPrompt(place: string, rows: readonly FrontListRow[]): string {
+/**
+ * The system prompt: identity and duty, place, list. The first two do not
+ * change during a call; the place may, turn to turn.
+ */
+export function frontSystemPrompt(place: string, rows: readonly FrontListRow[], name: string = DEFAULT_COMPANION_NAME): string {
   return [
-    FRONT_DUTY,
+    frontFixedPrompt(name),
     `Where this call is held:\n${clip(place, FRONT_PLACE_CAP)}`,
     `The numbered list (what this call handed off):\n${listText(rows)}`,
   ].join("\n\n");
@@ -113,6 +136,6 @@ export function frontMessages(lines: readonly CallLine[], budget: number): Front
 
 /** Everything one front call is sent: within FRONT_TOKEN_CAP, the fixed part first. */
 export function frontRequest(ctx: FrontContext): { system: string; messages: FrontMessage[] } {
-  const system = frontSystemPrompt(ctx.place, ctx.list);
+  const system = frontSystemPrompt(ctx.place, ctx.list, ctx.name);
   return { system, messages: frontMessages(ctx.lines, FRONT_TOKEN_CAP - estimateTokens(system)) };
 }

@@ -11,13 +11,14 @@
 
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { fitToBudget, type BudgetPurpose, type Rung } from "../budget";
-import type { DeskItem, DeskMemory, DeskMessage, OpenedDesk } from "../desk";
-import type { Settings } from "../platform/app/settings";
+import { listPlaces, type DeskItem, type DeskMemory, type DeskMessage, type OpenedDesk } from "../desk";
+import { companionNameOf, type Settings } from "../platform/app/settings";
 import type { ProviderId } from "../ai/auth/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
 import { modelIdFor, type ModelTier } from "../ai/model-tier";
 import type { AgentTool } from "../legion/durable/contract";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
+import { introBlock } from "./intro";
 import type { BoxOrigin, BoxStore } from "../box";
 import type { CatalogueIo } from "./catalogue";
 import { logUsage, type TopicProposalSurface } from "../memory";
@@ -154,10 +155,24 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   const report: Record<string, unknown> = {};
   for (const item of items) Object.assign(report, item.report ?? {});
 
-  // The prompt as a function of what this pass gave up: each item's own text, in
-  // desk order, and the memory paragraph handed to the one item that anchors it.
-  // A desk with one item on it produces that item's prompt byte for byte, which
-  // is what keeps the provider's cache prefix where it was (docs/09).
+  // Who is speaking, ahead of everything (docs/companion/90): the name the
+  // reader gave the companion, the places the shell registered and the
+  // companion's own tools — the role's and the soul's, which soul.tools holds in
+  // that order, then the surface's (the door's topic search). What an item on
+  // the desk brings is explained by the item. Built once per turn and never
+  // dropped by the ladder; the same settings, shell and roster give the same
+  // bytes, so the cache prefix holds across a conversation.
+  const intro = introBlock({
+    name: companionNameOf(env.settings),
+    places: listPlaces(),
+    tools: [...soul.tools, ...surfaceTools],
+  });
+
+  // The prompt as a function of what this pass gave up: the intro, then each
+  // item's own text, in desk order, and the memory paragraph handed to the one
+  // item that anchors it. A desk with one item on it produces the intro and
+  // then that item's prompt byte for byte, which is what keeps the provider's
+  // cache prefix where it was (docs/09).
   function composePrompt(dropped: ReadonlySet<string>): string {
     const memory = soulMemorySection(soul, anchor?.memory, dropped);
     // The duty of whoever is at the desk, ahead of what lies on it (docs/71):
@@ -181,7 +196,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
     if (!anchor) blocks.push(memory);
     blocks.push(soul.prompt);
     blocks.push(input.prompt ?? "");
-    return [duty, ...blocks].filter((p) => p !== "").join("\n\n");
+    return [intro, duty, ...blocks].filter((p) => p !== "").join("\n\n");
   }
 
   // A turn replays only the conversation it is held in: the item carrying the

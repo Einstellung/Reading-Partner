@@ -1,15 +1,12 @@
 // The one tool that moves the reader (docs/71): the soul takes them to a place,
 // and the desk becomes whatever is there.
 //
-// The map is not written anywhere in the system prompt. It is the tool's own
-// description, built when the turn is assembled out of what the shell has
-// registered (src/desk/places.ts), so a shell that grows a screen teaches the
-// model about it by registering one more line — and the anchored reading desk's
-// prompt stays the byte-identical text docs/09 pins.
-//
-// An introduction is the same tool read out loud: the reader asks what is here,
-// and the sentences are already in front of the model. Nothing else is needed
-// for the soul to show a first-time reader around, which is what this replaces.
+// The map is the tool's own description, built when the turn is assembled out
+// of what the shell has registered (src/desk/places.ts), so a shell that grows a
+// screen teaches the model about it by registering one more line. The same
+// lines also lead the system prompt, in the companion's introduction
+// (intro.ts, docs/companion/90), which is what the soul reads out when the
+// reader asks what is here.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/durable/contract";

@@ -70,6 +70,8 @@ export interface CascadeFrontDeps {
   backend: CallBack;
   /** Where the call is held, as the front is told it. Read at every turn. */
   place: () => string | Promise<string>;
+  /** The companion's name (companionNameOf), fixed for the call; the default when absent. */
+  name?: string;
   /** The conversation file. Read-outs are not written: the result is in it already. */
   write: FrontWriter;
   filler: FillerPort;
@@ -163,8 +165,9 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   // and the lines are the ones standing when the turn was asked.
   function context(): FrontContext | Promise<FrontContext> {
     const place = deps.place();
-    if (typeof place === "string") return { place, list: list(), lines };
-    const now = { list: list(), lines: [...lines] };
+    const named = deps.name === undefined ? {} : { name: deps.name };
+    if (typeof place === "string") return { ...named, place, list: list(), lines };
+    const now = { ...named, list: list(), lines: [...lines] };
     return place.then((p) => ({ place: p, ...now }));
   }
 

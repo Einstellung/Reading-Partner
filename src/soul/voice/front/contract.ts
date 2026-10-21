@@ -49,6 +49,8 @@ export interface FrontListRow {
 
 /** What each turn is assembled from, read fresh every turn. */
 export interface FrontContext {
+  /** The companion's name (companionNameOf); the default when absent. */
+  name?: string;
   /** Where the call is held: today's lab headlines, or a book and its chapter. */
   place: string;
   list: FrontListRow[];
@@ -57,7 +59,7 @@ export interface FrontContext {
 }
 
 export interface FrontCall {
-  /** The fixed prefix: duty and place. Kept first for the prompt cache. */
+  /** The fixed prefix: identity, duty and place. Kept first for the prompt cache. */
   prompt: string;
   context(): FrontContext;
   tools: AgentTool[];

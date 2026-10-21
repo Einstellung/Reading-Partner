@@ -21,6 +21,7 @@ import {
   setThreadTopic,
 } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
+import { afterIntro } from "../support/intro";
 import { BOX_COVER_CAP } from "../../src/soul";
 import { createBoxStore, type BoxStore } from "../../src/box";
 import { mapDisk } from "../support/map-disk";
@@ -121,7 +122,7 @@ test("one item's prompt is the whole prompt, byte for byte", async () => {
     [item("only", { ...anchoring, prompt: () => "the only block\n\nand its second line" })],
   );
   const turn = await assembleTurn({ desk: laid });
-  expect(turn!.systemPrompt).toBe("the only block\n\nand its second line");
+  expect(afterIntro(turn!)).toBe("the only block\n\nand its second line");
 });
 
 // The soul's own paragraphs go to the item that anchors the retrieval, and the
@@ -142,7 +143,7 @@ test("an anchored desk hands the memory paragraph to the item and prints nothing
   );
   const turn = await assembleTurn({ desk: laid });
   expect(handed).toContain("Observation tools:");
-  expect(turn!.systemPrompt).toBe("THE BOOK");
+  expect(afterIntro(turn!)).toBe("THE BOOK");
 });
 
 // And where nothing anchors it, the same paragraph rides the turn all the same:
@@ -152,7 +153,7 @@ test("with nothing anchoring the retrieval the soul prints the memory paragraph 
   fileThread("t-1");
   const laid = await desk([item("guest", { prompt: () => "GUEST" })]);
   const turn = await assembleTurn({ desk: laid });
-  expect(turn!.systemPrompt.startsWith("GUEST\n\n")).toBe(true);
+  expect(afterIntro(turn!).startsWith("GUEST\n\n")).toBe(true);
   expect(turn!.systemPrompt).toContain("Observation tools:");
 });
 
@@ -162,7 +163,7 @@ test("with nothing anchoring the retrieval the soul prints the memory paragraph 
 test("a conversation with no topic carries the offer to give it one", async () => {
   const laid = await desk([item("only", { prompt: () => "ONLY" })]);
   const turn = await assembleTurn({ desk: laid, topic: CARD_SURFACE });
-  expect(turn!.systemPrompt).toBe(`ONLY\n\n${WHERE_THIS_BELONGS}`);
+  expect(afterIntro(turn!)).toBe(`ONLY\n\n${WHERE_THIS_BELONGS}`);
   expect(turn!.tools.map((t) => t.name)).toContain("propose_topic");
 
   // What settles it is the conversation being filed, not the material carrying a
@@ -172,7 +173,7 @@ test("a conversation with no topic carries the offer to give it one", async () =
     [item("only", { ...anchoring, prompt: () => "ONLY" })],
   );
   const scoped = await assembleTurn({ desk: settled, topic: CARD_SURFACE });
-  expect(scoped!.systemPrompt).toBe("ONLY");
+  expect(afterIntro(scoped!)).toBe("ONLY");
   expect(scoped!.tools.map((t) => t.name)).not.toContain("propose_topic");
 });
 
@@ -183,7 +184,7 @@ test("a conversation with no topic carries the offer to give it one", async () =
 test("a caller with nowhere to draw the card is offered no way to propose", async () => {
   const laid = await desk([item("only", { prompt: () => "ONLY" })]);
   const turn = await assembleTurn({ desk: laid });
-  expect(turn!.systemPrompt).toBe("ONLY");
+  expect(afterIntro(turn!)).toBe("ONLY");
   expect(turn!.systemPrompt).not.toContain("WHERE THIS BELONGS");
   expect(turn!.tools.map((t) => t.name)).not.toContain("propose_topic");
 });
@@ -197,7 +198,7 @@ test("the items' prompts come out in desk order, and an empty one leaves no gap"
     ],
   );
   const turn = await assembleTurn({ desk: laid });
-  expect(turn!.systemPrompt).toBe("FIRST\n\nLAST");
+  expect(afterIntro(turn!)).toBe("FIRST\n\nLAST");
 });
 
 // What is always there, then what this desk happens to hold.
@@ -412,7 +413,7 @@ test("an empty desk assembles", async () => {
   expect(turn).not.toBeNull();
   // No material, so no prompt but the soul's own: this conversation has no topic
   // and the offer to give it one is what filing publishes (memory/filing).
-  expect(turn!.systemPrompt).toBe(WHERE_THIS_BELONGS);
+  expect(afterIntro(turn!)).toBe(WHERE_THIS_BELONGS);
   expect(turn!.messages).toEqual([{ role: "user", text: "hello" }]);
   expect(turn!.refusal).toBe("");
 });
@@ -459,7 +460,7 @@ test("the ladder walked is the one on the item carrying the history", async () =
     ],
   );
   const turn = await assembleTurn({ desk: laid });
-  expect(turn!.systemPrompt).toBe("small\n\nguest");
+  expect(afterIntro(turn!)).toBe("small\n\nguest");
   expect(turn!.notice).toBe("Note: the big block was left out.");
 });
 
@@ -473,7 +474,7 @@ test("an unknown model assembles the turn at full size", async () => {
     env({ settings: unknown }),
   );
   const turn = await assembleTurn({ desk: laid });
-  expect(turn!.systemPrompt).toBe("full size");
+  expect(afterIntro(turn!)).toBe("full size");
   expect(turn!.notice).toBe("");
   expect(turn!.refusal).toBe("");
 });

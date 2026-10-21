@@ -64,6 +64,7 @@
 - [66 Lumen](./companion/66-Lumen.md) — Lumen 的形象与常驻位置
 - [68 Lumen与盒子的交互](./companion/68-Lumen与盒子的交互.md) — Lumen、公文盒与派工的交互；角落只当入口，盒里的项和简报都进卢明的对话窗
 - [89 安卓语音](./companion/89-安卓语音.md) — 安卓上和 iOS 一样的通话：独立 `:voice` 进程跑共享 Rust 引擎（Silero、Smart Turn、Qwen3-ASR、Kokoro），8 GB 以下不给入口；七个切片
+- [90 桌宠的名字与自我介绍](./companion/90-桌宠的名字与自我介绍.md) — 可设的名字（默认 Kris）随账号同步；每回合 prompt 开头的自我介绍块，能做什么从 places 和工具清单生成
 - [136 混合语音架构](./companion/136-混合语音架构.md) — 快的前台陪聊、难题 delegate 给后台，结果落盒再念
 
 ## ui

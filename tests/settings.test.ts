@@ -97,6 +97,7 @@ test("loadSettings round-trips a fully persisted object", async () => {
     dictationLocale: "en-US",
     aiLanguage: "zh-CN",
     meals: true,
+    companionName: "Momo",
   };
   persist(saved as unknown as Record<string, unknown>);
   const s = await loadSettings();

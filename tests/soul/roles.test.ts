@@ -9,6 +9,7 @@ import { openDesk, registerDeskItemKind, type DeskEnv, type DeskItem } from "../
 import { DEFAULT_SETTINGS } from "../../src/platform/app/settings";
 import { rebuildThreadStoreForTests } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
+import { afterIntro } from "../support/intro";
 import type { AgentTool } from "../../src/legion/durable/contract";
 
 // A kind no domain would ever ask for (pitfall 287: a test kind named like a
@@ -96,7 +97,10 @@ test("the duty opens the prompt and the role's tools ride the turn", async () =>
   mount("archivist", "You keep the record.", [tool("file_it")]);
   const desk = await laid([tool("read_the_shelf")]);
   const turn = await assembleTurn({ desk, role: "archivist" });
-  expect(turn!.systemPrompt.startsWith("You keep the record.\n\n")).toBe(true);
+  // After the companion's intro, which lists the role's tool and not the desk's.
+  expect(afterIntro(turn!, ["read_the_shelf"]).startsWith("You keep the record.\n\n")).toBe(true);
+  expect(turn!.systemPrompt).toContain("\n- file_it: ");
+  expect(turn!.systemPrompt).not.toContain("\n- read_the_shelf: ");
   expect(turn!.systemPrompt).toContain("WHAT LIES ON THE DESK");
   const names = turn!.tools.map((t) => t.name);
   expect(names[0]).toBe("file_it");

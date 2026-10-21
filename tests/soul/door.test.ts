@@ -20,6 +20,7 @@ import {
   type Thread,
 } from "../../src/platform/app/threads";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
+import { afterIntro } from "../support/intro";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
@@ -76,7 +77,8 @@ test("a conversation at the door is filed under its own topic, or under none", a
 // (the bell) gets no propose_topic (soul/self.ts).
 test("a turn at the door assembles over an empty desk", async () => {
   const turn = await openDoorTurn({ settings, threadId: "d1", date: "2026-09-10" });
-  expect(turn!.systemPrompt).toBe("");
+  // Nothing but who is speaking (docs/companion/90).
+  expect(afterIntro(turn!)).toBe("");
   expect(turn!.tools.map((t) => t.name)).not.toContain("propose_topic");
   expect(turn!.messages).toEqual([]);
   expect(turn!.refusal).toBe("");

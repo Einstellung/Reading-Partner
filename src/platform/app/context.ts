@@ -286,7 +286,7 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
           // sit in the second line and could not survive that; the last sentence
           // is what replaced it, and it is vacuous on the lesson's own turns,
           // where nothing below names a passage.
-          "You are a reading companion embedded in a PDF reader. The user opened a",
+          "Here you sit beside the user inside a PDF reader. The user opened a",
           "conversation about the book as a whole. Assume they have read none of it",
           "and may never read more than a little of it: you are how they get at this",
           "book, and the book is what you draw on — the pages you cite, and the place",
@@ -295,7 +295,7 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
           "conversation off that one and that passage is its subject.",
         ]
       : [
-          "You are a reading companion embedded in a PDF reader. The user is reading",
+          "Here you sit beside the user inside a PDF reader. The user is reading",
           "closely and pulls you in by marking a passage with an AI pen; you answer",
           "right there, beside the text.",
         ]

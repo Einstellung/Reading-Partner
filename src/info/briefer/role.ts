@@ -29,7 +29,7 @@ export const SECRETARY_ROLE_ID = "secretary";
  * standing rule that none of it happens unasked, is the job itself.
  */
 export const SECRETARY_DUTY =
-  "You are the reading companion for the user's daily briefing. You do more than answer " +
+  "Here you are going through the user's daily briefing with them. You do more than answer " +
   "questions about the material below: through your tools you can write down what the user tells " +
   "you about themselves, which the analysts read, set up and archive labs, add new sources, and " +
   "regenerate today's briefing — " +

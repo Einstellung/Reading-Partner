@@ -30,7 +30,7 @@ soul 是一等公民。常驻的那个面对用户，legion 派出去的是同�
 
 一张表，外壳登记进 desk，每个 place 一句话说明它是干什么的，外加一个 `go()`。soul 拿到一个 `go_to` 工具，它去哪里，桌上就换成什么。
 
-这取代新手引导浮层：soul 带着读者转一圈，之后任何时候都能再介绍一遍。登记表在 `desk/places.ts`，壳注册 today、briefing、topics、sources、settings（手机壳没有书架），一句话写在 `go_to` 的工具描述里，不进 prompt。
+这取代新手引导浮层：soul 带着读者转一圈，之后任何时候都能再介绍一遍。登记表在 `desk/places.ts`，壳注册 today、briefing、topics、sources、settings（手机壳没有书架），一句话写在 `go_to` 的工具描述里，同样的几行也进每回合开头的自我介绍块（`soul/intro.ts`，[90](../companion/90-桌宠的名字与自我介绍.md)）。soul 以自己的名字说话：名字是用户设的，默认 Kris。
 
 ## topic 不是 soul 的
 

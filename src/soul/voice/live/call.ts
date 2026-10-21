@@ -9,14 +9,14 @@
 // the place the front is told, where the back delivers, and what hanging up
 // starts — and everything else is one wiring.
 
-import { loadSettings } from "../../../platform/app/settings";
+import { companionNameOf, loadSettings } from "../../../platform/app/settings";
 import { appendMessage, patchThreadMessage } from "../../../platform/app/threads";
 import type { BoxOrigin } from "../../../box";
 import { delegableWorkerKinds } from "../../../legion/runner/worker";
 import { callBackend, THINK_KIND } from "../../think";
 import { bindCallBack } from "../front/backend";
 import { createCascadeFront, type FrontCard } from "../front/cascade";
-import { FRONT_DUTY } from "../front/context";
+import { frontFixedPrompt } from "../front/context";
 import { nativeFiller } from "../front/filler";
 import { logMarks } from "../front/marks";
 import { liveFrontModel } from "../front/model";
@@ -68,6 +68,8 @@ export interface LiveCallSpec extends LiveCallHooks {
  */
 export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | null> {
   const settings = await loadSettings();
+  // Fixed for the call: a rename lands on the next one (docs/companion/90).
+  const name = companionNameOf(settings);
   // The silent bench's script names the recogniser's language for its run.
   const locale = harnessLocale() ?? settings.dictationLocale;
   const bridge = nativeConversation({ locale, contextualStrings: spec.contextualStrings });
@@ -96,6 +98,7 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
     model: liveFrontModel(),
     backend: back,
     place,
+    name,
     write,
     filler,
     locale,
@@ -104,9 +107,9 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
     onShow: spec.onShow ?? (() => {}),
   });
   await front.open({
-    prompt: FRONT_DUTY,
+    prompt: frontFixedPrompt(name),
     // The cascade reads its own context per turn (deps.place); this one is not read.
-    context: () => ({ place: typeof fixed === "string" ? fixed : "", list: front.list(), lines: [] }),
+    context: () => ({ name, place: typeof fixed === "string" ? fixed : "", list: front.list(), lines: [] }),
     tools: [],
     audio: { subscribe: () => () => {} },
     record: () => {},

@@ -22,7 +22,7 @@
 // reading.
 
 import type { Locale } from "../../i18n/locale";
-import { languageInstruction } from "../../platform/app/settings";
+import { DEFAULT_COMPANION_NAME, languageInstruction } from "../../platform/app/settings";
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
 import { firstPart, parseResultFile, retryPart, type TopicSearchResult } from "../topic-search/result-types";
@@ -160,6 +160,8 @@ export interface IssueDeps {
    * or a throw leaves the program's line alone. Absent: no model is asked.
    */
   writeOpening?(prompt: { system: string; user: string }): Promise<string | null>;
+  /** The companion's name the opening is said under (companionNameOf); the default when absent. */
+  companionName?(): Promise<string>;
   /** The language the issue is written in (topic-search/book-language.ts); English when absent. */
   locale?(): Promise<Locale>;
   /** The night's end, epoch ms. */
@@ -277,7 +279,8 @@ async function writeOpening(deps: IssueDeps, plan: IssuePlan, results: readonly 
   if (deps.writeOpening && plan.entries.length + plan.notes.length > 0) {
     try {
       // The book's language, so the opening and the book agree (docs/pitfall/647).
-      reply = await deps.writeOpening(openingPrompt(plan, asked, languageInstruction(locale)));
+      const name = deps.companionName ? await deps.companionName() : DEFAULT_COMPANION_NAME;
+      reply = await deps.writeOpening(openingPrompt(plan, asked, languageInstruction(locale), name));
     } catch (e) {
       console.warn("Lumen's opening for the brief could not be written", e);
     }

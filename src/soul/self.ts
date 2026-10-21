@@ -55,10 +55,11 @@ export interface Soul {
   writesObservations: boolean;
   // What the capabilities the soul mounted publish into the system prompt —
   // today the topic roster filing prints beside propose_topic, and nothing else.
-  // Empty where nothing was mounted. The soul says nothing in its own name: it
-  // belongs to no topic and to no material, so it has no paragraph of its own.
-  // It belongs to no item on the desk either, so the assembly prints it
-  // (turn.ts).
+  // Empty where nothing was mounted. Who the soul is — its name, the places,
+  // what its tools let it do — is not here: the assembly prints that ahead of
+  // everything (intro.ts, docs/companion/90). This is only what the mounted
+  // capabilities publish; it belongs to no item on the desk, so the assembly
+  // prints it too (turn.ts).
   prompt: string;
   // The role this turn was assembled with (roles.ts), with the tools it brought
   // already among `tools`. Null where no role was loaded: the door, a book, a

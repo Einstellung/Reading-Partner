@@ -29,7 +29,7 @@ const FINDING = [
 ].join("\n");
 
 const ONBOARDING = [
-  "This is the user's first run and they have no sources yet. Open by briefly introducing yourself as their reading companion, then ask what they care about — one or two questions, not a survey — and mention they can name any outlet or paste a link.",
+  "This is the user's first run and they have no sources yet. Open by briefly introducing yourself by your name, then ask what they care about — one or two questions, not a survey — and mention they can name any outlet or paste a link.",
   "As soon as a concrete interest takes shape, call statement_write to write down what they told you, in their own words — one statement per thing they said, nothing you inferred and no invented taste.",
   "After they add their first source, a briefing is generated in the background and appears as a card. When it does, tell them the first briefing is thin because it draws on one source, and it gets richer as they add more.",
 ].join("\n");

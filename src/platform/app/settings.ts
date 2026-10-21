@@ -179,6 +179,13 @@ export interface Settings {
   // answer the account gives, not one each device gives (unlike
   // backgroundCollect, which moved to device.json for the opposite reason).
   meals: boolean;
+  // What the companion in the corner is called (docs/companion/90). The
+  // reader's choice; "" (or only whitespace) means DEFAULT_COMPANION_NAME. Read
+  // it through companionNameOf, never raw: the value goes into prompts.
+  //
+  // Synced, like meals: the companion is the account's, the same one on every
+  // device.
+  companionName: string;
   // illustrationApiBase and illustrationModel used to be here: the base URL and
   // model of the image relay the deck drew its illustrations from. The deck is
   // gone (docs/44) and nothing spends that key any more. Left in the file for
@@ -216,7 +223,26 @@ export const DEFAULT_SETTINGS: Settings = {
   dictationLocale: "zh-CN",
   aiLanguage: "auto",
   meals: false,
+  companionName: "",
 };
+
+/** The companion's name when the reader has not given it one. */
+export const DEFAULT_COMPANION_NAME = "Kris";
+
+/** The longest name a prompt is handed, in characters. */
+export const COMPANION_NAME_CAP = 24;
+
+/**
+ * The companion's name as prompts use it: whitespace collapsed (a newline in a
+ * name would be a line of prompt), capped, and the default where nothing is
+ * left. A non-string value from a hand-edited or damaged file reads as unset.
+ */
+export function companionNameOf(settings: Pick<Settings, "companionName">): string {
+  const raw: unknown = settings.companionName;
+  if (typeof raw !== "string") return DEFAULT_COMPANION_NAME;
+  const name = Array.from(raw.replace(/\s+/g, " ").trim()).slice(0, COMPANION_NAME_CAP).join("").trim();
+  return name === "" ? DEFAULT_COMPANION_NAME : name;
+}
 
 const DEFAULTS = DEFAULT_SETTINGS;
 
@@ -271,8 +297,12 @@ const LEGACY_BRIEFING_MODEL = "briefingModelId";
 // the fields merge a sync does (sync/merge/fields.ts) would carry a dropped key
 // to it as a deletion — the same reason autoNotes and backgroundCollect are
 // still in the file.
+//
+// A companionName that is not a string (a hand edit, a damaged file) loads as
+// unset rather than reaching a text field that expects one.
 export function migrateSettings(raw: Partial<Settings>): Settings {
   const merged = { ...DEFAULTS, ...raw };
+  if (typeof merged.companionName !== "string") merged.companionName = "";
   if (raw.everydayModelId !== undefined) return merged;
   const legacy = (raw as Record<string, unknown>)[LEGACY_BRIEFING_MODEL];
   return typeof legacy === "string" ? { ...merged, everydayModelId: legacy } : merged;
