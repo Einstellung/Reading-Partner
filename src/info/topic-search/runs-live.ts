@@ -359,6 +359,11 @@ export function askStudyUpdate(searchId: string, ask: { lines?: readonly string[
   return askUpdateRun(searchId, ask, { runs: () => runner.list({ kind: TOPIC_SEARCH_KIND }), delegate: (input) => runner.delegate(input) });
 }
 
+/** A study's result file on this device: its first look's, which its versions are added to; null when none is here yet. */
+export async function loadStudyResult(searchId: string): Promise<TopicSearchResult | null> {
+  return studyTarget(sortedResults(await loadResults(searchId)));
+}
+
 /** Why X is not read on this device tonight, or null. */
 export async function xReadingPaused(): Promise<string | null> {
   return xGate((await state.load()).halt, lastNightAnchor(Date.now()));

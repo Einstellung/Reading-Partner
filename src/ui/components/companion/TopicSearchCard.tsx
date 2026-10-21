@@ -13,6 +13,8 @@ import {
 import { splitsFirstLook } from "../../../info/topic-search/pace";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";
+import { StudyLinesCard } from "./StudyLinesCard";
+import { StudyMoveCard } from "./StudyMoveCard";
 import { StudySeedsCard } from "./StudySeedsCard";
 
 function Bullets({ items }: { items: readonly string[] }) {
@@ -114,4 +116,6 @@ export function TopicSearchProposalCard({ payload, dispatch }: CardComponentProp
 export const TOPIC_SEARCH_CARD_REGISTRY: CardRegistryFor<TopicSearchCardPayload["kind"]> = {
   "topic-search-proposal": TopicSearchProposalCard,
   "study-seeds": StudySeedsCard,
+  "study-lines": StudyLinesCard,
+  "study-move": StudyMoveCard,
 };

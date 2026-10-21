@@ -72,14 +72,24 @@ import {
 import { headingPage } from "../../../reading/issue";
 import {
   seedVerdictNote,
+  STUDY_LINE_EDIT_OP,
+  STUDY_LINE_VERDICT_OP,
+  STUDY_LINES_SEND_OP,
+  STUDY_MOVE_LATER_OP,
+  STUDY_MOVE_OP,
   STUDY_SEED_VERDICT_OP,
   TOPIC_SEARCH_APPLY_OP,
   topicSearchAppliedNote,
   withSeedVerdict,
+  type StudyLinesCardData,
+  type StudyMoveCardData,
   type StudySeedsCardData,
 } from "../../../info/topic-search/cards";
 import type { ApplyResult } from "../../../info/topic-search/apply";
-import { applyTopicSearchCard, loadTopicSearchGuidance } from "../../../info/topic-search/live";
+import { applyTopicSearchCard, loadTopicSearchGuidance, sendStudyLinesCard } from "../../../info/topic-search/live";
+import { parseMoveTarget, withLineEdit, withLineVerdict, type SendResult } from "../../../info/topic-search/study-lines";
+import type { DraftQuery } from "../../../info/topic-search/topic-searches";
+import { endStudyLive, liveStudyBook } from "./study-end";
 import { BACKGROUND_STATUS_RULE } from "../../../legion/status/tool";
 import {
   INTAKE_CHOOSE_OP,
@@ -185,6 +195,11 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
   raiseCardRef.current = raiseCard;
   // The drafting card's Apply, for confirm_topic_search in a turn assembled earlier.
   const applyTopicSearchRef = useRef<(cardId: string) => Promise<ApplyResult>>(async () => ({ ok: false }));
+  // The confirm-lines card's button, for update_study_brief in a turn assembled earlier.
+  const sendLinesRef = useRef<(cardId: string, queries: readonly DraftQuery[]) => Promise<SendResult>>(async () => ({
+    ok: false,
+    why: "ended",
+  }));
 
   useEffect(() => {
     let live = true;
@@ -240,6 +255,13 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           applyTopicSearchCard: (cardId) => applyTopicSearchRef.current(cardId),
           // Read when called: a verdict pressed while the turn runs counts.
           seedCards: () => seedCards(messagesRef.current),
+          // Read when called: the marks pressed while the turn runs count.
+          latestLinesCard: () => {
+            const found = latestCardOf(messagesRef.current, "study-lines");
+            return found ? { cardId: found.cardId, card: found.payload } : null;
+          },
+          sendLines: (cardId, queries) => sendLinesRef.current(cardId, queries),
+          studyBook: liveStudyBook,
         });
         const prepared = await prepareDoorTurn({
           threadId: id,
@@ -453,6 +475,87 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     [key, threadId, setMessages, note],
   );
 
+  // A study card redrawn, on screen and in the thread file (docs/info/91).
+  const putStudyCard = useCallback(
+    (cardId: string, rowTs: number, next: StudyLinesCardData | StudyMoveCardData) => {
+      if (!threadId) return;
+      setMessages((prev) => patchCardPayload(prev, cardId, { ...next }));
+      patchThreadMessage(key, threadId, rowTs, { parts: [toPersistedCardPart(cardId, next)] });
+    },
+    [key, threadId, setMessages],
+  );
+
+  // A confirm card's 对 / 别记, or a line reworded: kept on the card only; nothing is written until the send.
+  const markLine = useCallback(
+    (cardId: string, arg: string, edit: boolean) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "study-lines") return;
+      const next = edit ? withLineEdit(found.payload, arg) : withLineVerdict(found.payload, arg);
+      if (next !== found.payload) putStudyCard(cardId, found.ts, next);
+    },
+    [putStudyCard],
+  );
+
+  // 「按这几条更新简报」, the button and update_study_brief alike: the lines written,
+  // then the update asked (info/topic-search/study-lines.ts). A second press while
+  // one is in flight waits for it instead of writing the lines twice.
+  const sendingRef = useRef(new Map<string, Promise<SendResult>>());
+  const sendLines = useCallback(
+    (cardId: string, queries: readonly DraftQuery[]): Promise<SendResult> => {
+      const inFlight = sendingRef.current.get(cardId);
+      if (inFlight) return inFlight;
+      const run = async (): Promise<SendResult> => {
+        const found = findCardPart(messagesRef.current, cardId);
+        if (!found || found.payload.kind !== "study-lines") return { ok: false, why: "ended" };
+        const result = await sendStudyLinesCard(found.payload, queries);
+        if (result.ok) putStudyCard(cardId, found.ts, result.card);
+        return result;
+      };
+      const pending = run().finally(() => sendingRef.current.delete(cardId));
+      sendingRef.current.set(cardId, pending);
+      return pending;
+    },
+    [putStudyCard],
+  );
+  sendLinesRef.current = sendLines;
+
+  // The button leaves a line in the conversation; update_study_brief's receipt stands for it.
+  const pressSend = useCallback(
+    async (cardId: string) => {
+      const result = await sendLines(cardId, []);
+      if (result.ok) note(t("info.call.note.studyLinesSent"));
+    },
+    [sendLines, note],
+  );
+
+  // The move card's 「移进阅读，结束调研」 (study-end.ts), and its 「再看看」.
+  const movingRef = useRef(new Set<string>());
+  const moveStudy = useCallback(
+    async (cardId: string, arg: string | undefined) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      const target = parseMoveTarget(arg);
+      if (!found || found.payload.kind !== "study-move" || !target || movingRef.current.has(cardId)) return;
+      movingRef.current.add(cardId);
+      try {
+        const moved = await endStudyLive(found.payload, target);
+        putStudyCard(cardId, found.ts, moved ?? { ...found.payload, failed: true });
+        if (moved?.moved) note(t("info.call.note.studyMoved", { name: moved.name, topic: moved.moved.topic }));
+      } finally {
+        movingRef.current.delete(cardId);
+      }
+    },
+    [putStudyCard, note],
+  );
+  const studyLater = useCallback(
+    (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "study-move" || found.payload.phase === "moved") return;
+      putStudyCard(cardId, found.ts, { ...found.payload, phase: "later" });
+      note(t("info.call.note.studyMoveLater"));
+    },
+    [putStudyCard, note],
+  );
+
   const stop = useCallback(() => sessionRef.current?.stop(), []);
 
   // Filing the conversation under a topic is what lets it be distilled at all:
@@ -561,6 +664,11 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           else if (action.op === ISSUE_LABEL_OP && LABEL_ANSWERS.includes(action.arg as LabelAnswer)) labelAnswer(cardId, action.arg as LabelAnswer);
           else if (action.op === ISSUE_SKIP_OP) skipReason(cardId);
           else if (action.op === STUDY_SEED_VERDICT_OP && action.arg) markSeed(cardId, action.arg);
+          else if (action.op === STUDY_LINE_VERDICT_OP && action.arg) markLine(cardId, action.arg, false);
+          else if (action.op === STUDY_LINE_EDIT_OP && action.arg) markLine(cardId, action.arg, true);
+          else if (action.op === STUDY_LINES_SEND_OP) void pressSend(cardId);
+          else if (action.op === STUDY_MOVE_OP) void moveStudy(cardId, action.arg);
+          else if (action.op === STUDY_MOVE_LATER_OP) studyLater(cardId);
           break;
         case "local":
           setMessages((prev) => patchCardPayload(prev, cardId, action.patch));
@@ -575,7 +683,23 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           break;
       }
     },
-    [applyTopic, followTopicSearch, pickIntakeTopic, openIntakeDocument, note, setMessages, say, awaitWords, labelAnswer, skipReason, markSeed],
+    [
+      applyTopic,
+      followTopicSearch,
+      pickIntakeTopic,
+      openIntakeDocument,
+      note,
+      setMessages,
+      say,
+      awaitWords,
+      labelAnswer,
+      skipReason,
+      markSeed,
+      markLine,
+      pressSend,
+      moveStudy,
+      studyLater,
+    ],
   );
 
   return { messages, stickKey, ready: threadId !== null, streaming, send, stop, onCardAction };

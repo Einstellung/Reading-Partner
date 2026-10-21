@@ -36,6 +36,10 @@ export interface DoorToolPorts {
   applyTopicSearchCard: TopicSearchDoorPorts["applyCard"];
   /** The seed cards on screen, oldest first: propose_topic_search takes the confirmed ones (docs/info/91). */
   seedCards: TopicSearchDoorPorts["seedCards"];
+  /** The newest confirm-lines card on screen and its button, and where a study's book is: the study tools (docs/info/91). */
+  latestLinesCard: TopicSearchDoorPorts["latestLinesCard"];
+  sendLines: TopicSearchDoorPorts["sendLines"];
+  studyBook: TopicSearchDoorPorts["studyBook"];
 }
 
 export function doorTools(ports: DoorToolPorts): AgentTool[] {
@@ -52,8 +56,8 @@ export function doorTools(ports: DoorToolPorts): AgentTool[] {
       topics: () => listTopics(),
       raiseCard: (card) => ports.raiseCard("intake", card),
     }),
-    // Looking up a study's seed papers, drafting, confirming, changing and stopping a topic search, and resuming X (docs/info/88, 91);
-    // the card's Apply is in use-door-chat.ts.
+    // Looking up a study's seed papers, drafting, confirming, changing and stopping a topic search, resuming X, and
+    // revising and ending a study (docs/info/88, 91); the cards' presses are in use-door-chat.ts.
     ...topicSearchDoorTools({
       threadId: ports.threadId,
       readerLines: ports.readerLines,
@@ -61,6 +65,9 @@ export function doorTools(ports: DoorToolPorts): AgentTool[] {
       latestCard: ports.latestTopicSearchCard,
       applyCard: ports.applyTopicSearchCard,
       seedCards: ports.seedCards,
+      latestLinesCard: ports.latestLinesCard,
+      sendLines: ports.sendLines,
+      studyBook: ports.studyBook,
     }),
     // How background work is getting on: queued, running, finished, on which device (legion/status).
     liveBackgroundStatusTool(),

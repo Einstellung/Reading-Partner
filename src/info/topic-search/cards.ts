@@ -6,6 +6,7 @@
 
 import { t } from "../../i18n";
 import { ALL_SOURCES, SOURCE_NAME, topicSources, type RunSource } from "./pace";
+import type { StudyLineKind } from "./study";
 import type { TopicQuery, TopicSeed, TopicSubtopic } from "./types";
 
 /** The card's Apply, as a mutate op the door chat answers. */
@@ -90,7 +91,76 @@ export interface StudySeedsCardData {
   candidates: StudySeedCandidate[];
 }
 
-export type TopicSearchCard = TopicSearchProposalCardData | StudySeedsCardData;
+/** A line's 对 or 别记 on the confirm card, as a mutate op whose arg is "<line index>:ok" or ":drop". */
+export const STUDY_LINE_VERDICT_OP = "study-line-verdict";
+/** A line's 改一下 saved, as a mutate op whose arg is "<line index>:<the new text>". */
+export const STUDY_LINE_EDIT_OP = "study-line-edit";
+/** The confirm card's 「按这几条更新简报」, as a mutate op. */
+export const STUDY_LINES_SEND_OP = "study-lines-send";
+
+export type StudyLineVerdict = "ok" | "edit" | "drop";
+
+/** One line on the confirm card (docs/info/91 对话里改). */
+export interface StudyLineDraft {
+  kind: StudyLineKind;
+  // The line as Lumen put it; the reader's wording once they changed it.
+  text: string;
+  // The reader's words it came from.
+  said: string;
+  // The anchor of that message, found by the program; null when no line of theirs matched.
+  evidence: string | null;
+  // The item key a pin, a demotion or a rewrite is about, and its title (the program's); null otherwise.
+  item: string | null;
+  itemTitle: string | null;
+  verdict: StudyLineVerdict | null;
+}
+
+/**
+ * propose_study_lines' card. `open` while the reader decides each line;
+ * `recorded` once the confirmed lines are written but the update was not
+ * asked (one still running, or the ask refused); `asked` once it was.
+ */
+export interface StudyLinesCardData {
+  kind: "study-lines";
+  threadId: string;
+  searchId: string;
+  name: string;
+  at: number;
+  lines: StudyLineDraft[];
+  phase: "open" | "recorded" | "asked";
+  // From `recorded` on: the study line id each line was written under, null for a dropped one,
+  // and the extra query ids the update searches.
+  ids?: (string | null)[];
+  queries?: string[];
+  // The last ask: still busy, refused, or asked as run `runId`.
+  ask?: { status: "busy" } | { status: "refused"; reason: string } | { status: "asked"; runId: string; n: number };
+}
+
+/** The move card's 「移进阅读，结束调研」, as a mutate op whose arg is `{"topicId": …}` or `{"newName": …}`. */
+export const STUDY_MOVE_OP = "study-move";
+/** The move card's 「再看看」. */
+export const STUDY_MOVE_LATER_OP = "study-move-later";
+
+/** end_study's card (docs/info/91 结束): the current version's book, and the reading topic it goes to. */
+export interface StudyMoveCardData {
+  kind: "study-move";
+  threadId: string;
+  searchId: string;
+  name: string;
+  version: number;
+  bookId: string;
+  // The reading topics as they stood when drawn; the suggested one's id, or null.
+  topics: { id: string; name: string }[];
+  suggested: string | null;
+  at: number;
+  phase: "open" | "later" | "moved";
+  // After the move: where it went, and what is kept.
+  moved?: { topic: string; pins: number; marks: number };
+  // The last press failed: nothing was stopped.
+  failed?: boolean;
+}
+
+export type TopicSearchCard = TopicSearchProposalCardData | StudySeedsCardData | StudyLinesCardData | StudyMoveCardData;
 
 /** A seed card with one candidate's verdict set; the same card when the index or the verdict is not one. */
 export function withSeedVerdict(card: StudySeedsCardData, arg: string): StudySeedsCardData {

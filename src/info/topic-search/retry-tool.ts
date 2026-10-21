@@ -73,8 +73,10 @@ export function buildRetryFirstRunTool(deps: RetryToolDeps): AgentTool {
         const names = searches.map((s) => `- ${s.name} (id: ${s.id}, ${s.status})`).join("\n");
         return { text: `"${raw}" is not one of the reader's topic searches; nothing was asked.${names ? `\nThey have:\n${names}` : ""}`, receipt: null };
       }
-      if (search.status !== "active" && !search.once) {
-        return { text: `"${search.name}" is stopped, so nothing is read for it; nothing was asked.`, receipt: null };
+      // A stopped study is an ended one (docs/info/91 结束): its brief is in reading and never revised again.
+      if (search.status !== "active") {
+        const what = search.once ? "is a study that has ended" : "is stopped";
+        return { text: `"${search.name}" ${what}, so nothing is read for it; nothing was asked.`, receipt: null };
       }
       const plan = await deps.plan(search);
       if (isEmptyPlan(plan)) {

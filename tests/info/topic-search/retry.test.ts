@@ -311,6 +311,11 @@ test("retry_topic_search_first_run asks only when something is left, and says on
   expect(textOf(await stopped.run({ searchId: SEARCH.id }))).toContain("is stopped");
   expect(stopped.asked).toEqual([]);
 
+  // A stopped study is an ended one (docs/info/91 结束): never read again.
+  const ended = tool({ searches: async () => [{ ...SEARCH, status: "stopped", once: true }] });
+  expect(textOf(await ended.run({ searchId: SEARCH.id }))).toContain("a study that has ended");
+  expect(ended.asked).toEqual([]);
+
   expect(textOf(await ok.run({ searchId: "nope" }))).toContain("is not one of the reader's topic searches");
   expect(askedText("T", { x: [], arxiv: ["q1"] }, false)).not.toContain("signed out");
 });
