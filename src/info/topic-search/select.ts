@@ -12,6 +12,11 @@
 //     what the rerank called promotion or off-topic (2026-10-17: three items
 //     at score 0 in a retry).
 //
+// A study (docs/info/91 一份简报) lists its pinned items first, whatever their
+// score and over the count, then selects the rest the same way
+// (`selectStudy`); where each one sits — pinned, main or a Note — is the
+// update's (update.ts placeOf), a demoted one going straight to the Notes.
+//
 // A post item is an event cluster with a post among its members whose own final
 // score passes the floor. A post merged into the event of the paper (repo,
 // page) it quotes counts, though the paper leads: the item lists the post and
@@ -85,4 +90,20 @@ export function shortlist<T>(ranked: readonly T[], top: number, picked: readonly
     const s = view.subtopic(t);
     return s !== null && pickedSet.has(s) && view.score(t) >= RESERVE_FLOOR;
   });
+}
+
+/**
+ * A study's items (docs/info/91 更新): every pinned one first, in `ranked`
+ * order and never dropped, then `selectItems` over the rest for what is left
+ * of `want`.
+ */
+export function selectStudy<T>(
+  ranked: readonly T[],
+  want: number,
+  picked: readonly string[],
+  view: SelectView<T> & { pinned(t: T): boolean },
+): T[] {
+  const pinned = ranked.filter((t) => view.pinned(t));
+  const rest = ranked.filter((t) => !view.pinned(t));
+  return [...pinned, ...selectItems(rest, Math.max(0, want - pinned.length), picked, view)];
 }

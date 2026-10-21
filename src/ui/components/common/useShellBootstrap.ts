@@ -276,7 +276,7 @@ export function bootDomains(): void {
   // nightly brief (info/issue), which files the issue through the platform.
   registerTopicSearchRuns({
     noteHalt: noteCollectorHalt,
-    closed: ({ runId, searchId, kind, night, resultFile }) => issueRunClosed({ runId, searchId, kind, night, resultFile }),
+    closed: ({ runId, searchId, kind, night, resultFile, version }) => issueRunClosed({ runId, searchId, kind, night, resultFile, ...(version ? { version } : {}) }),
   });
   // Settling a prose file sync parked a conflict copy of, with a model (docs/59
   // §6). Registered on every device for the same reason as collect: the

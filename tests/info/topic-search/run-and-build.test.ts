@@ -124,6 +124,14 @@ function model(log: TopicModelCall[]) {
     }
     if (call.site === "verify") return JSON.stringify({ claims: [] });
     if (call.site === "dedupe") return JSON.stringify({ verdicts: [] });
+    // A study's entries in their parts (docs/info/91 条目格式), each citing its own first section; none for the entries kept alongside.
+    if (call.system.includes("background: why this work is worth doing.")) {
+      const blocks = [...call.user.split("Already in this result (no entries):")[0].matchAll(/<material id="(E\d+)">\n[\s\S]*?<\/material>/g)];
+      return JSON.stringify({
+        overview: { text: `Work on AI for science this window; see ${blocks[0][1]}.`, cites: [blocks[0][1]] },
+        items: blocks.map((b) => ({ e: b[1], conclusion: "Work relevant to the topic.", method: [[{ text: "A model reads the data.", cite: [/^(M\d+\.§\d+) /m.exec(b[0])?.[1] ?? "M0.§1"] }]], results: [] })),
+      });
+    }
     const ids = [...new Set([...call.user.matchAll(/<material id="(E\d+)">/g)].map((m) => m[1]))];
     return JSON.stringify({
       overview: { text: `Work on AI for science this window; see ${ids[0]}.`, cites: [ids[0]] },
@@ -233,12 +241,14 @@ function world(opts: { papers?: InfoItem[]; search?: Partial<TopicSearch> } = {}
     readClean: async () => void (await store.update((s) => ({ ...s, halt: null }))),
     checkSession: async () => "ok",
     // As runs-live.ts does it, over this test's health file and result files.
+    updatePlan: async () => [],
     retryPlan: async (s) => planRetry(s, JSON.parse(fs.files.get(HEALTH_FILE) ?? "{}") as Record<string, SourceHealth>, waitingRuns(fs, s.id)),
     halted: async (halt, about) => void (await store.update((s) => ({ ...s, halt: recordHalt(s.halt, halt, now, about.night) }))),
     keepAwake: async () => ({ held: true, detail: null, release: async () => {} }),
     open: async () => ({ status: "ok", session: fakeSession(screen, browse) }),
     expandLink: async () => null,
-    closed: (closedRun) => runClosed(issueDeps, closedRun).then(() => {}),
+    // As runs-live.ts hands it on: an update's version only when it made one.
+    closed: async ({ version, ...closedRun }) => void (await runClosed(issueDeps, { ...closedRun, ...(typeof version === "number" ? { version } : {}) })),
     lane: (work) => work(),
     now: () => now,
     random: () => 0.5,
@@ -571,6 +581,31 @@ describe("a first look of a topic that does not read X (docs/info/91 来源开�
     expect(health["topic-search:ts-0a1b2c3d:q1:x"]).toBeUndefined();
     expect(health["topic-search:ts-0a1b2c3d:q1:arxiv"]?.topicSearch?.status).toBe("ok");
     expect(planRetry(w.search(), {}).x).toEqual([]);
+  });
+
+  test("an update makes version 2, and the brief assembles it on the same shelf row (docs/info/91 更新)", async () => {
+    const second: InfoItem = {
+      ...paper,
+      id: "arxiv-2610.00002",
+      sourceKey: "2610.00002",
+      title: "Equation-finding agents",
+      url: "https://arxiv.org/abs/2610.00002",
+      summary: "Agents that find equations, for AI for science.",
+    };
+    w.deps.updatePlan = async () => ["q1"];
+    w.deps.searchArxiv = async () => [paper, second];
+    const result = await run(w, "r-update", { searchId: SEARCH.id, kind: "update", night: null, n: 1 });
+    expect(result).toMatchObject({ status: "delivered", version: 2, changes: "add 1" });
+    const file = parseResultFile(w.fs.files.get(firstFile)!)!;
+    expect(file.study!.versions.map((v) => [v.n, v.base])).toEqual([
+      [1, null],
+      [2, 1],
+    ]);
+    const shelf = parseShelf(w.fs.files.get(INFO_SHELF_FILE) ?? null);
+    expect(shelf.issues.map((i) => i.key)).toEqual([`first:${SEARCH.id}`]);
+    expect(shelf.issues[0].study?.current).toBe(2);
+    expect(shelf.issues[0].study?.versions.map((v) => v.n)).toEqual([1, 2]);
+    expect(w.box.length).toBe(2);
   });
 });
 

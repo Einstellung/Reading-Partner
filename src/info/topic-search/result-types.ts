@@ -381,7 +381,7 @@ export interface ResultRetry {
    * in `version`. Absent on a retry.
    */
   part?: "slow" | "update";
-  /** The study version an update made. Only with part "update". */
+  /** The study version the run made: an update's, or a study's slow part's or retry's (docs/info/91 数据). */
   version?: number;
   at: number;
   /** Item ids it added, in the file's numbering. */
@@ -462,12 +462,23 @@ function regroup(groups: readonly TopicSearchResult["groups"][number][]): TopicS
  * file's; a part whose write-up fell back leaves none. The counts are the
  * first look's and every part's added up. What the first look had of its own
  * is kept in `firstLook`. The first look's slow part (`slow`) merges the same
- * way and settles what the file was awaiting. Pure.
+ * way and settles what the file was awaiting. A study's update (`update`,
+ * docs/info/91 更新), and a study's slow part or retry, is recorded with the
+ * version it made, absent when it made none. Pure.
  */
-export function mergeRetry(target: TopicSearchResult, part: TopicSearchResult, runId: string, slow = false): TopicSearchResult {
+export function mergeRetry(
+  target: TopicSearchResult,
+  part: TopicSearchResult,
+  runId: string,
+  how: boolean | { part?: "slow" | "update"; version?: number } = false,
+): TopicSearchResult {
+  const kind = how === true ? "slow" : how === false ? null : (how.part ?? null);
+  const slow = kind === "slow";
+  const version = typeof how === "object" && how.version !== undefined ? how.version : null;
   const record: ResultRetry = {
     runId,
-    ...(slow ? { part: "slow" as const } : {}),
+    ...(kind ? { part: kind } : {}),
+    ...(version !== null ? { version } : {}),
     at: part.createdAt,
     items: part.items.map((i) => i.id),
     overview: part.overview,
@@ -588,8 +599,8 @@ export function versionPart(result: TopicSearchResult, n: number): TopicSearchRe
   const byId = new Map(result.items.map((i) => [i.id, i]));
   const items = version.entries.map((e) => byId.get(e.item)).filter((i): i is TopicSearchResultItem => i !== undefined);
   const used = new Set(items.flatMap((i) => i.materials));
-  // An update's own record; version 1 is the first look's (its slow part, under the same run id, is not an update).
-  const record = (result.retries ?? []).find((r) => r.part === "update" && r.version === n);
+  // The record of the run that made the version (an update, or a study's slow part or retry); version 1 is the first look's.
+  const record = (result.retries ?? []).find((r) => r.version === n);
   const own = record ? null : firstPart(result);
   const questions = record
     ? result.questions.filter((q) => record.questions.includes(q.id))

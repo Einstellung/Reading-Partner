@@ -22,6 +22,7 @@ import type { XHaltRecord } from "./halt";
 import type { TopicSearchResult } from "./result-types";
 import { parseBrief, TOPIC_SEARCH_KIND, type TopicSearchBrief } from "./run";
 import { TOPIC_SEARCH_HEALTH_PREFIX } from "./source-health";
+import { changeCounts } from "./update";
 import type { TopicSearch } from "./types";
 import { tallySteps, type XStep } from "./x-progress";
 
@@ -61,7 +62,9 @@ function titleOf(brief: TopicSearchBrief, name: string): string {
       ? "first look"
       : brief.kind === "retry"
         ? `retry #${brief.n ?? 1} of the first look`
-        : `nightly run for the night of ${brief.night}`;
+        : brief.kind === "update"
+          ? `update of the study's brief (ask #${brief.n ?? 1})`
+          : `nightly run for the night of ${brief.night}`;
   return `topic search "${name}": ${what}`;
 }
 
@@ -143,8 +146,26 @@ function claimEntries(claim: CollectorView, searchId: string) {
 const startOf = (run: Run) => run.startedAt ?? run.createdAt;
 const unfinished = (run: Run) => run.state === "pending" || run.state === "running";
 
+/** A study's update (docs/info/91 更新): the version it made from the result file's record of it. */
+function updateLine(run: Run, results: readonly TopicSearchResult[]): string {
+  for (const r of results) {
+    const rec = r.retries?.find((x) => x.runId === run.id && x.part === "update");
+    if (!rec) continue;
+    if (rec.version == null) {
+      const n = rec.unjudged?.candidates ?? 0;
+      return `Result: no new version; ${n} candidate${n === 1 ? "" : "s"} went unjudged and wait for the next update, and the brief stays as it was.`;
+    }
+    const made = r.study?.versions.find((v) => v.n === rec.version);
+    return `Result: version ${rec.version} of the brief made${made ? ` (${changeCounts(made.changes)})` : ""}.`;
+  }
+  return unfinished(run)
+    ? "Result: being revised; the new version is written to the study's result file when the build finishes."
+    : "Result: this device's copy of the study's result file shows no version from this update.";
+}
+
 export function resultLine(run: Run, brief: TopicSearchBrief, results: readonly TopicSearchResult[], search?: TopicSearch): string {
   const open = unfinished(run);
+  if (brief.kind === "update") return updateLine(run, results);
   if (brief.kind === "retry") {
     for (const r of results) {
       const rec = r.retries?.find((x) => x.runId === run.id);
@@ -209,6 +230,15 @@ export function issueLine(
           : `${slow}'s part is not on this device's shelf yet`;
     return `Brief issue: ${head}; ${tail}.`;
   }
+  if (brief.kind === "update") {
+    const rec = results.flatMap((r) => r.retries ?? []).find((x) => x.runId === run.id && x.part === "update");
+    if (open) return "Brief issue: not yet; the new version's book is made after the run closes.";
+    if (rec && rec.version == null) return "Brief issue: none, since this update made no version; the current book stays.";
+    const shelf = issues.find((i) => i.key === `first:${brief.searchId}`);
+    return shelf
+      ? `Brief issue: the study's row is No. ${shelf.number}; version ${rec?.version ?? "?"} becomes its current book once assembled.`
+      : "Brief issue: not on this device's shelf yet (the computer makes it after the run closes; then it syncs).";
+  }
   const key = brief.kind === "first" ? `first:${brief.searchId}` : brief.kind === "retry" ? `first:${brief.searchId}#${run.id}` : `night:${brief.night}`;
   const issue = issues.find((i) => i.key === key);
   if (issue) {
@@ -256,7 +286,9 @@ export function topicSearchDescriber(deps: TopicSearchStatusDeps): RunDescriber 
       const split = splitsFirstLook(brief.kind, search);
       if (view.here) {
         const steps = await deps.steps(run.id);
-        if (steps?.length) lines.push(`X: ${tallySteps(steps).line()}.`);
+        const update = brief.kind === "update";
+        if (update) lines.push("X: not read; an update searches the paper sources for its extra queries only.");
+        else if (steps?.length) lines.push(`X: ${tallySteps(steps).line()}.`);
         else if (search && !readsSource(search, "x")) lines.push("X: not read; the topic leaves it out of its sources.");
         else if (run.state === "running") lines.push(split ? "X: not started; it is read after the first part is delivered." : "X: nothing read yet on this device.");
         const health = await deps.runHealth(run.id);
@@ -267,6 +299,7 @@ export function topicSearchDescriber(deps: TopicSearchStatusDeps): RunDescriber 
           const read = onFile ? await (source === "arxiv" ? deps.arxivRead(run.id) : deps.hfRead(run.id)) : null;
           const name = SOURCE_NAME[source];
           if (read) lines.push(...arxivLines(read, search, open && !health, split, source));
+          else if (!health && open && update) lines.push(`${name}: nothing on file yet for the update's queries.`);
           else if (!health && open) lines.push(split ? `${name}: searched first; nothing on file yet.` : `${name}: searched beside X while X is read; nothing on file yet.`);
         }
       } else if (run.claimant) {
@@ -286,7 +319,7 @@ export function topicSearchDescriber(deps: TopicSearchStatusDeps): RunDescriber 
       lines.push(issueLine(run, brief, await deps.issues(), results, search));
       const mine = view.claims.find((c) => c.deviceId === view.deviceId);
       const localSide = view.here || (!run.claimant && !!mine?.capabilities.includes(WEBVIEW_FETCH));
-      if (open || run.state === "failed" || aboutTopicSearchRun(run, []).skipped) {
+      if (brief.kind !== "update" && (open || run.state === "failed" || aboutTopicSearchRun(run, []).skipped)) {
         if (localSide) lines.push(localXLine(await deps.localX(), view));
         else {
           const collector = (view.claimant ??

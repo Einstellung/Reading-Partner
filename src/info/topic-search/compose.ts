@@ -154,6 +154,13 @@ export interface ComposeInput {
    * entry. Absent on a run that writes its own file.
    */
   alongside?: readonly TopicSearchResultItem[];
+  /**
+   * A study's update (docs/info/91 更新): the version written, the lines the
+   * reader confirmed for it, and the entries written again with the line that
+   * asks for it. The entries kept as they were go in `alongside`. Absent on
+   * every other run.
+   */
+  revision?: { version: number; lines: readonly { id: string; text: string }[]; rewrite: readonly { item: string; line: string }[] };
 }
 
 /**
@@ -247,6 +254,12 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
           'Items listed under "Already in this result" were written up earlier in the same result. The overview covers them together with the new items and may name them by number; write no entries for them.',
         ]
       : []),
+    ...(input.revision
+      ? [
+          `This is version ${input.revision.version} of a study's brief, revised after the reader confirmed the lines under "Lines the reader confirmed". The overview is written again for the whole version: the items below and those under "Already in this result".`,
+          'An item with a "Rewrite as the reader asked" line is one the reader wants written again: write its entry anew and follow that line.',
+        ]
+      : []),
     "Rules: skip promotion, event hype and engagement bait; tell a thread as one piece; tell a quoting post together with what it quotes; where an item lists a discrepancy, say what the original actually shows, not what the post claimed.",
     'A technical term the reader is not known to understand (see "What the reader understands") is explained in a short clause the first time it appears; a term they are known to understand is not. When unsure, explain it. Where two lines there disagree, the earlier one holds.',
     study
@@ -278,6 +291,8 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
       const a = item.continuing.after;
       lines.push(`Since the last report: likes ${b.likes ?? 0} -> ${a.likes ?? 0}, reposts ${b.reposts ?? 0} -> ${a.reposts ?? 0}`);
     }
+    const rewrite = input.revision?.rewrite.find((r) => r.item === item.id);
+    if (rewrite) lines.push(`Rewrite as the reader asked: ${rewrite.line}`);
     if (item.verify.status === "unread") lines.push(`The original was not read: ${item.verify.reason ?? ""}`);
     if (item.verify.status === "self" && item.verify.reason) lines.push(`What the post links to could not be read: ${item.verify.reason}`);
     const depth = paperDepth(item, input.registry);
@@ -325,6 +340,7 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     "",
     "What the reader understands:",
     ...(input.known?.length ? input.known.map((k) => `- ${k}`) : ["- (nothing recorded)"]),
+    ...(input.revision?.lines.length ? ["", "Lines the reader confirmed:", ...input.revision.lines.map((l) => `- ${l.id}: ${l.text}`)] : []),
     "",
     "Items:",
     ...blocks,

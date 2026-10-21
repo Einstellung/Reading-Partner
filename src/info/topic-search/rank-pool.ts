@@ -343,6 +343,21 @@ export interface RerankAnswer {
   main: string;
   subtopic: string | null;
   doubt: string | null;
+  /**
+   * A study update's rerank only (docs/info/91 更新): the confirmed line ("L2")
+   * that put this candidate in or kept it out; null when none did.
+   */
+  because?: string | null;
+}
+
+/**
+ * What a study update's rerank sees besides the topic (docs/info/91 更新): the
+ * lines the reader confirmed, numbered L1 …, and items the reader labelled on
+ * or off the mark, as examples.
+ */
+export interface StudyRerank {
+  lines: readonly { id: string; kind: string; text: string }[];
+  examples: readonly { label: "yes" | "no"; title: string; reason: string }[];
 }
 
 function day(ms: number): string {
@@ -389,15 +404,22 @@ export function rerankPrompt(
   profile: readonly string[],
   language: string,
   raised: readonly string[] = [],
+  study: StudyRerank | null = null,
 ): { system: string; user: string } {
+  const lines = study?.lines ?? [];
   const system = [
     "You rank what a topic search found for a reader: posts from X and papers from arXiv and Hugging Face.",
-    "For every candidate answer one object {c, score, main, subtopic, doubt}:",
+    `For every candidate answer one object {c, score, main, subtopic, doubt${lines.length ? ", because" : ""}}:`,
     "- c: the candidate's number as given (c1, c2 …).",
     "- score: 0-100, how well it serves the topic as the reader defined it (scope, subtopics, wants, does-not-wants, the query questions). Promotion, event hype, giveaways and engagement bait score under 20.",
     '- main: what the candidate really is. "self" when the post itself (or the paper) is the content; the number of one of its links (c3.a) when the post points at the real thing — a paper, a repository, an article. Most posts are lead-ins.',
     "- subtopic: the id of the subtopic it belongs to, or null.",
     "- doubt: only when you cannot tell whether the reader wants this kind of thing, one short question to ask them (\"Do you want funding news about AI chip design?\"); otherwise null.",
+    ...(lines.length
+      ? [
+          '- because: the id of the line the reader confirmed (L1 …) that decided this score, raising it or lowering it, when one did; otherwise null. Judge every candidate by those lines first: they are the reader\'s latest word on the topic.',
+        ]
+      : []),
     SETTLED_RULE,
     "Use only the numbers given. Answer with JSON only: {\"items\": [ … ]}.",
     HUB_RULE,
@@ -429,12 +451,28 @@ export function rerankPrompt(
     return material(n.c, body.join("\n"));
   });
   const settled = settledBlock(topic, raised);
-  const user = [topicBlock(topic, profile), ...(settled ? [settled] : []), "Query questions:", ...queries, "", "Candidates:", ...blocks].join("\n");
+  const confirmed = lines.map((l) => `- ${l.id} (${l.kind}): ${l.text}`);
+  const examples = (study?.examples ?? []).map((e) => `- ${e.label === "yes" ? "On the mark" : "Off the mark"}: ${e.title}${e.reason ? ` (the reader: ${e.reason})` : ""}`);
+  const user = [
+    topicBlock(topic, profile),
+    ...(settled ? [settled] : []),
+    ...(confirmed.length ? ["Lines the reader confirmed:", ...confirmed] : []),
+    ...(examples.length ? ["Items the reader labelled (examples, not candidates):", ...examples] : []),
+    "Query questions:",
+    ...queries,
+    "",
+    "Candidates:",
+    ...blocks,
+  ].join("\n");
   return { system, user };
 }
 
-/** The rerank's answers by number; answers naming no candidate, or malformed, are dropped. */
-export function parseRerank(text: string, numbered: readonly Numbered[], topic: TopicSearch): Map<string, RerankAnswer> {
+/**
+ * The rerank's answers by number; answers naming no candidate, or malformed,
+ * are dropped. `lines`: the line ids a study update's rerank was given; a
+ * `because` naming any other is dropped. Absent: answers carry no `because`.
+ */
+export function parseRerank(text: string, numbered: readonly Numbered[], topic: TopicSearch, lines?: ReadonlySet<string>): Map<string, RerankAnswer> {
   const raw = parseJsonReply(text);
   const list = Array.isArray(raw) ? raw : (raw as { items?: unknown }).items;
   if (!Array.isArray(list)) throw new Error("the rerank reply has no items");
@@ -450,7 +488,8 @@ export function parseRerank(text: string, numbered: readonly Numbered[], topic: 
     const main = typeof o.main === "string" && n.links.some((l) => l.id === o.main) ? o.main : "self";
     const subtopic = typeof o.subtopic === "string" && subtopics.has(o.subtopic) ? o.subtopic : null;
     const doubt = typeof o.doubt === "string" && o.doubt.trim() ? o.doubt.trim().slice(0, 240) : null;
-    out.set(c, { score: Math.max(0, Math.min(100, o.score)), main, subtopic, doubt });
+    const because = lines ? (typeof o.because === "string" && lines.has(o.because.trim()) ? o.because.trim() : null) : undefined;
+    out.set(c, { score: Math.max(0, Math.min(100, o.score)), main, subtopic, doubt, ...(because !== undefined ? { because } : {}) });
   }
   return out;
 }

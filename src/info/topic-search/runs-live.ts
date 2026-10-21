@@ -57,7 +57,9 @@ import {
   saveRead,
   spendNight,
 } from "./run-state";
-import { askRetryRun, createNightTick, firstRunDispatcher, topicSearchWorker } from "./run-worker";
+import { askRetryRun, askUpdateRun, createNightTick, firstRunDispatcher, topicSearchWorker, type UpdateAsk } from "./run-worker";
+import { planUpdate, studyTarget } from "./update";
+import { hostGate, HF_PAPER_SEARCH_LANE } from "../../platform/http/host-gate";
 import { foldTopicSearchHealth, parseSourceHealthFile } from "./source-health";
 import { changeTopicSearch, loadTopicSearches } from "./store";
 import { localDay } from "./x-progress";
@@ -76,10 +78,18 @@ export function setTopicSearchResultBuilder(build: BuildTopicSearchResult | null
   builder = build;
 }
 
+/**
+ * A run closed, as the brief takes it (info/issue assemble.ts ClosedRun). A
+ * study's update, slow part or retry closes as kind "update" with the version
+ * it made (docs/info/91 数据); without one nothing is assembled and the
+ * current version stays.
+ */
+export type ClosedTopicSearchRun = Omit<Parameters<TopicSearchRunDeps["closed"]>[0], "version"> & { version?: number };
+
 export interface TopicSearchRunPorts {
   build?: BuildTopicSearchResult;
   /** A run closed: the nightly brief (info/issue/live.ts issueRunClosed) takes it from here. */
-  closed?: TopicSearchRunDeps["closed"];
+  closed?: (run: ClosedTopicSearchRun) => Promise<void>;
   /** Put the halt line on this machine's collector state file (docs/info/36 `halt`). */
   noteHalt(text: string): Promise<void>;
 }
@@ -171,12 +181,14 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
     },
     checkSession: xSessionState,
     retryPlan: retryPlanOf,
+    updatePlan: async (search, asked) => planUpdate(search, studyTarget(sortedResults(await loadResults(search.id))), asked),
+    paperCooldown: (source) => hostGate.coolingDown(source === "arxiv" ? "export.arxiv.org" : HF_PAPER_SEARCH_LANE)?.until ?? null,
     halted,
     keepAwake: (reason) => keepAwake(reason),
     open: (viewport, opts) => openBrowse({ idleTimeoutMs: BROWSE_IDLE_MS, viewport, initScript: opts?.initScript }),
     expandLink: (tco) => resolveRedirect(tco),
-    closed: async (run) => {
-      await ports.closed?.(run);
+    closed: async ({ version, ...run }) => {
+      await ports.closed?.({ ...run, ...(typeof version === "number" ? { version } : {}) });
     },
     lane: inXLane,
     report: (runId, text) => reporters.get(runId)?.(text),
@@ -196,6 +208,11 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
         signal.addEventListener("abort", abort, { once: true });
       }),
   };
+}
+
+/** Result files oldest first, by date then the same day's sequence. */
+function sortedResults(results: readonly TopicSearchResult[]): TopicSearchResult[] {
+  return [...results].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** A search's result files on this device. */
@@ -331,6 +348,16 @@ export const retryDeps: Omit<RetryToolDeps, "searches" | "known"> = {
     return askRetryRun(searchId, { runs: () => runner.list({ kind: TOPIC_SEARCH_KIND }), delegate: (input) => runner.delegate(input) });
   },
 };
+
+/**
+ * Ask for a study's update (run-worker.ts askUpdateRun) on this device's
+ * runner: the seam the door's update_study_brief (slice F) calls after it has
+ * written the confirmed lines, the config and the labels.
+ */
+export function askStudyUpdate(searchId: string, ask: { lines?: readonly string[]; queries?: readonly string[] } = {}): Promise<UpdateAsk> {
+  const runner = appRunner();
+  return askUpdateRun(searchId, ask, { runs: () => runner.list({ kind: TOPIC_SEARCH_KIND }), delegate: (input) => runner.delegate(input) });
+}
 
 /** Why X is not read on this device tonight, or null. */
 export async function xReadingPaused(): Promise<string | null> {

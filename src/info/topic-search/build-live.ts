@@ -34,6 +34,8 @@ import type { ArxivSearch } from "./arxiv-ladder";
 import type { HfSearch } from "./hf-ladder";
 import { memoArxivFetchText } from "./fetch-memo";
 import { loadTopicLabels } from "./labels";
+import { liveSeedSearches } from "./seed-live";
+import { loadStudy, putStudyLines } from "./study";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResult } from "./build-result";
 import { openOriginal } from "./open-link";
 import { localDay } from "./windows";
@@ -115,6 +117,12 @@ export const liveResultDeps: BuildResultDeps = {
     (await listStatements()).filter((s) => s.kind === "profile" && !s.supersededBy).map((s) => s.text),
   // Reader's own words first: they beat what dream concluded (docs/48).
   labels: (searchId) => loadTopicLabels(searchId),
+  // A study's update (docs/info/91 更新): the confirmed lines it revises by,
+  // and the mark that a version used them.
+  study: (searchId) => loadStudy(searchId),
+  useLines: async (searchId, lines) => void (await putStudyLines(searchId, lines)),
+  // A study's seed no read found, looked up as find_seed_paper looks it up (docs/info/91 起草与种子).
+  seedPaper: (arxivId) => liveSeedSearches.byArxivId(arxivId),
   known: async () => standingStatements(await listStatements(), "known").map((s) => s.text.trim()),
   language: async () => languageInstruction((await resolveModel("prep")).aiLanguage),
   bookLanguage: async () => bookLanguageInstruction((await resolveModel("prep")).aiLanguage),

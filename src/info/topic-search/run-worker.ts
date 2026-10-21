@@ -7,7 +7,7 @@
 // run's id, so a retry or a restart finds the task already there and waits for
 // it. The gates are on this side (docs/pitfall/210): each ask is keyed
 // (`topic-search:<id>:first`, `topic-search:<id>:<night>`,
-// `topic-search:<id>:retry:<n>`) and the run store
+// `topic-search:<id>:retry:<n>`, `topic-search:<id>:update:<n>`) and the run store
 // hands back the run already under the key; the nightly tick also refuses to
 // overlap itself and remembers the night it asked for.
 
@@ -44,6 +44,12 @@ export interface TopicSearchWorkerPorts {
 
 function line(result: TopicSearchRunResult): string {
   if (result.status === "skipped") return `skipped: ${result.why ?? ""}`.trim();
+  // A study's update: the version it made, or why the brief stays as it was.
+  if (result.version !== undefined) {
+    return result.version === null
+      ? `no new version: ${result.unjudged ?? 0} candidates not judged, kept for the next update; the brief stays as it was`
+      : `version ${result.version} made: ${result.changes ?? "no change"}`;
+  }
   const x = result.x ? `${result.x.posts} posts read (${result.x.status}); ` : "";
   const unjudged = result.unjudged ? `${result.status === "delivered" ? "; " : ""}${result.unjudged} candidates not judged, kept for the next run` : "";
   if (result.status === "empty") return `${x}${unjudged || "nothing new"}`;
@@ -97,7 +103,12 @@ export function askTopicSearchRun(
   });
 }
 
-const DELEGATOR = { first: "topic-search first run", daily: "topic-search nightly", retry: "topic-search retry" } as const;
+const DELEGATOR = {
+  first: "topic-search first run",
+  daily: "topic-search nightly",
+  retry: "topic-search retry",
+  update: "topic-search study update",
+} as const;
 
 /** What asking for a retry of a first look came to. */
 export type RetryAsk =
@@ -126,6 +137,65 @@ export async function askRetryRun(
     searchId,
   );
   const asked = await askTopicSearchRun({ searchId, kind: "retry", night: null, n }, ports.delegate);
+  if (!asked.ok) return { status: "refused", reason: asked.reason };
+  return { status: "asked", run: asked.run, n };
+}
+
+/** What asking for a study's update came to. */
+export type UpdateAsk =
+  | { status: "asked"; run: Run; n: number }
+  /** The first look, a retry or an earlier update of the study is still pending or running. */
+  | { status: "busy"; run: Run; what: "first" | "retry" | "update" }
+  | { status: "refused"; reason: string };
+
+const UPDATE_KEY = /^topic-search:(.+):update:(\d+)$/;
+
+/** The number the next update ask of a study is keyed by: one past the highest still on file. */
+export function nextUpdateNumber(keys: readonly (string | undefined)[], searchId: string): number {
+  let most = 0;
+  for (const key of keys) {
+    const m = key ? UPDATE_KEY.exec(key) : null;
+    if (m && m[1] === searchId) most = Math.max(most, Number(m[2]));
+  }
+  return most + 1;
+}
+
+/**
+ * Ask for a study's update (docs/info/91 更新): the next version of its brief,
+ * from the confirmed lines (`lines`, ids; absent: every confirmed line no
+ * version used yet) and with the extra queries (`queries`, ids already in the
+ * topic's config). Not made while the first look, a retry or an update of the
+ * study is pending or running: the reader is told it is still being revised.
+ * Keyed by the number one past the study's update asks on file, so two asks
+ * racing from two devices reach one run; the version number is the build's
+ * (one past the file's newest), since a failed ask makes none.
+ *
+ * The seam the door's update_study_brief (slice F) calls once it has written
+ * the lines, the config and the labels.
+ */
+export async function askUpdateRun(
+  searchId: string,
+  ask: { lines?: readonly string[]; queries?: readonly string[] },
+  ports: { runs(): Promise<Run[]>; delegate(input: DelegateInput): Promise<Delegated> },
+): Promise<UpdateAsk> {
+  const mine = (await ports.runs())
+    .map((run) => ({ run, brief: parseBrief(run.brief) }))
+    .filter((r) => r.brief?.searchId === searchId);
+  const busy = mine.find((r) => r.brief!.kind !== "daily" && (r.run.state === "pending" || r.run.state === "running"));
+  if (busy) return { status: "busy", run: busy.run, what: busy.brief!.kind as "first" | "retry" | "update" };
+  const n = nextUpdateNumber(
+    mine.map((r) => r.run.idempotencyKey),
+    searchId,
+  );
+  const brief: TopicSearchBrief = {
+    searchId,
+    kind: "update",
+    night: null,
+    n,
+    ...(ask.lines ? { lines: [...ask.lines] } : {}),
+    ...(ask.queries?.length ? { queries: [...ask.queries] } : {}),
+  };
+  const asked = await askTopicSearchRun(brief, ports.delegate);
   if (!asked.ok) return { status: "refused", reason: asked.reason };
   return { status: "asked", run: asked.run, n };
 }

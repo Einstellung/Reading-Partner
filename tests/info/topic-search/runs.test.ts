@@ -38,6 +38,8 @@ import {
   type StateFs,
 } from "../../../src/info/topic-search/run-state";
 import { createNightTick, topicSearchWorker } from "../../../src/info/topic-search/run-worker";
+import { skippedQueries } from "../../../src/info/topic-search/build-update";
+import { UPDATE_READ_ROUNDS } from "../../../src/info/topic-search/update";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import { unread } from "../../../src/info/topic-search/run";
 import type { BrowseOpen } from "../../../src/workshop/extract/webview-browse";
@@ -261,6 +263,7 @@ function fakeDeps(over: Partial<Omit<TopicSearchRunDeps, "now">> & { search?: To
     readClean: async () => {},
     checkSession: async () => "ok",
     retryPlan: async () => ({ x: [], arxiv: [] }),
+    updatePlan: async () => [],
     halted: async (halt) => void trace.halts.push(halt.kind),
     keepAwake: async () => {
       trace.locks.taken++;
@@ -809,4 +812,90 @@ test("the night tick asks once a night, inside the window, one keyed run per act
   expect(asks.map((a) => a.idempotencyKey)).toEqual(["topic-search:ts-b:2026-10-14", "topic-search:ts-a:2026-10-14"]);
   expect(await tick()).toEqual([]);
   expect(asks.length).toBe(2);
+});
+
+// --- a study's update (docs/info/91 更新) ---------------------------------------------
+
+const UPDATE: TopicSearchBrief = { searchId: "ts-0000aaaa", kind: "update", night: null, n: 1 };
+const STUDY_FILE = "topic-search-ts-0000aaaa-2026-10-14.json";
+
+/** An update over arXiv cooling down for `cooldownMs`; a wait ends the cooldown unless it is endless. */
+function updating(cooldownMs: number, endless = false) {
+  const seen: BuildTopicSearchResultArgs[] = [];
+  const closed: unknown[] = [];
+  const slept: number[] = [];
+  const said: string[] = [];
+  const now = local(2026, 10, 21, 15);
+  let cooling = true;
+  const fake = fakeDeps({
+    search: withArxiv({ once: true, sources: ["arxiv"] }),
+    now,
+    builder: () => async (args) => {
+      seen.push(args);
+      return { resultFile: STUDY_FILE, itemCount: 3, empty: false, version: 2, changes: "add 2" };
+    },
+    updatePlan: async (_s, asked) => [...asked, "q2"],
+    paperCooldown: () => (cooling ? now + cooldownMs : null),
+    searchArxiv: async (text) => {
+      if (cooling) throw new HostCoolingDownError("export.arxiv.org", now + cooldownMs, now);
+      return three(text);
+    },
+    sleep: async (ms) => {
+      slept.push(ms);
+      if (!endless) cooling = false;
+    },
+    closed: async (run) => void closed.push(run),
+    report: (_id, text) => void said.push(text),
+  });
+  return { ...fake, seen, closed, slept, said };
+}
+
+test("an update waits out a short cooldown, searches again what it held back, reads no X and tells the brief its version", async () => {
+  const u = updating(20 * 60_000);
+  const outcome = await runTask(u.deps, { runId: "r-u1", brief: { ...UPDATE, queries: ["q1"] } });
+  expect((outcome as { result: TopicSearchRunResult }).result).toMatchObject({ status: "delivered", version: 2, changes: "add 2" });
+  expect(u.slept).toEqual([20 * 60_000]);
+  expect(u.seen[0].update).toEqual({ runId: "r-u1", lines: null, queries: ["q1", "q2"] });
+  expect(u.seen[0].arxiv.map((f) => [f.query, f.ladder?.outcome])).toEqual([
+    ["q1", "direct"],
+    ["q2", "direct"],
+  ]);
+  expect(skippedQueries(["q1", "q2"], u.seen[0].arxiv, [])).toEqual([]);
+  expect(u.said).toContain("arXiv rate-limit cooldown; searching again in about 20 minutes");
+  // No X, no lock; the search's last run time is left alone.
+  expect(u.trace.opened + u.trace.locks.taken).toBe(0);
+  expect(u.trace.ran).toEqual([]);
+  expect(u.closed).toEqual([{ runId: "r-u1", searchId: "ts-0000aaaa", kind: "update", night: null, resultFile: STUDY_FILE, version: 2 }]);
+});
+
+test("past the longest wait an update makes its version without what is left, which the next update searches first", async () => {
+  const u = updating(90 * 60_000);
+  await runTask(u.deps, { runId: "r-u2", brief: UPDATE });
+  expect(u.slept).toEqual([]);
+  expect(u.seen[0].arxiv.map((f) => [f.query, f.ladder?.outcome])).toEqual([["q2", "cooling_down"]]);
+  expect(skippedQueries(["q2"], u.seen[0].arxiv, [])).toEqual(["q2"]);
+  expect(u.said).toContain("arXiv rate-limit cooldown, about 90 minutes: this version is made without 1 query, which the next update searches first");
+});
+
+test("an update waits a cooldown out at most UPDATE_READ_ROUNDS - 1 times, then builds with what it has", async () => {
+  const u = updating(10 * 60_000, true);
+  await runTask(u.deps, { runId: "r-u3", brief: UPDATE });
+  expect(u.slept.length).toBe(UPDATE_READ_ROUNDS - 1);
+  expect(u.seen.length).toBe(1);
+  expect(u.seen[0].arxiv.map((f) => f.ladder?.outcome)).toEqual(["cooling_down"]);
+});
+
+test("only a study is updated; a study's slow part that made a version is told as an update", async () => {
+  const plain = fakeDeps();
+  const skipped = await runTask(plain.deps, { runId: "r-u4", brief: UPDATE });
+  expect((skipped as { result: TopicSearchRunResult }).result).toMatchObject({ status: "skipped", why: "not a study: only a study's brief is updated" });
+
+  const closed: { kind: string; version?: number | null }[] = [];
+  const study = fakeDeps({
+    search: search({ once: true }),
+    builder: () => async (args) => ({ resultFile: STUDY_FILE, itemCount: 3, empty: false, ...(args.retry?.part === "slow" ? { version: 2 } : {}) }),
+    closed: async (run) => void closed.push({ kind: run.kind, ...(run.version !== undefined ? { version: run.version } : {}) }),
+  });
+  await runTask(study.deps, { runId: "r-u5", brief: FIRST_LOOK });
+  expect(closed).toEqual([{ kind: "first" }, { kind: "update", version: 2 }]);
 });

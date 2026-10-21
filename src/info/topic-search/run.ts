@@ -34,6 +34,14 @@
 // other kinds, and a first look started before the split) reads everything in
 // one go.
 //
+// A study's update (`update`, docs/info/91 更新, update.ts) makes the next
+// version of its one brief: it reads no X, only the extra paper queries it was
+// asked for and those the last version left unrun; a cooldown on arXiv or
+// Hugging Face is waited out in `read` (up to UPDATE_COOLDOWN_WAIT_MS, then the
+// version is made without what is left, which the next update searches first).
+// Its build judges every candidate the study ever read again (build-update.ts)
+// and `wrap` tells the brief the version it made.
+//
 // Every run reads only the sources the topic's config names (pace.ts
 // topicSources; a config without `sources` reads all, docs/info/91 来源开关).
 // A topic without X is not split: its first look reads in one go, takes no
@@ -61,6 +69,7 @@ import { relevanceBasis } from "./rank-pool";
 import type { FirstPartOnFile } from "./run-state";
 import type { TopicSearch } from "./types";
 import { isEmptyPlan, readQueries, type RetryPlan } from "./retry";
+import { UPDATE_COOLDOWN_WAIT_MS, UPDATE_READ_ROUNDS } from "./update";
 import { FIRST_LOOK_BACK_MS } from "./windows";
 import { localDay, replay, xTally, type XProgressLog, type XReaderStore, type XRunStatus } from "./x-progress";
 import { readXSearch, X_FIRST_RUN_LIMITS, type XReadLimits, type XReadLine, type XReadResult } from "./x-reader";
@@ -72,25 +81,38 @@ export const TOPIC_SEARCH_TASK = "rp.topicsearch";
 export const TOPIC_SEARCH_HALT_BOX_KIND = "topic-search-halt";
 export const NO_BUILDER = "no topic-search result builder is registered on this device";
 
-/** The first look, a night's increment, or reading again what the first look missed (retry.ts). */
-export type TopicSearchRunKind = "first" | "daily" | "retry";
+/** The first look, a night's increment, reading again what the first look missed (retry.ts), or a study's next version (update.ts). */
+export type TopicSearchRunKind = "first" | "daily" | "retry" | "update";
 
 /** How a run reads: a retry reads the way the first look does. */
 export function lookOf(kind: TopicSearchRunKind): "first" | "daily" {
   return kind === "daily" ? "daily" : "first";
 }
 
-/** What a run is asked to do. `night` is the anchor date of a daily run; `n` numbers a search's retries. */
+/**
+ * What a run is asked to do. `night` is the anchor date of a daily run; `n`
+ * numbers a search's retries, and a study's update asks. An update's `lines`
+ * are the confirmed study lines (ids) it makes its version from, absent for
+ * every confirmed line no version used yet; its `queries` are the extra query
+ * ids (already in the topic's config) it searches.
+ */
 export interface TopicSearchBrief {
   searchId: string;
   kind: TopicSearchRunKind;
   night: string | null;
   n?: number;
+  lines?: string[];
+  queries?: string[];
 }
 
-/** 88: `topic-search:<id>:first`, `topic-search:<id>:<anchor date>`, or `topic-search:<id>:retry:<n>`. */
+/**
+ * 88: `topic-search:<id>:first`, `topic-search:<id>:<anchor date>`,
+ * `topic-search:<id>:retry:<n>`; 91: `topic-search:<id>:update:<n>`, where n
+ * counts the asks, not the versions (a failed update leaves no version).
+ */
 export function topicSearchRunKey(brief: TopicSearchBrief): string {
-  const tail = brief.kind === "first" ? "first" : brief.kind === "retry" ? `retry:${brief.n ?? 1}` : brief.night;
+  const tail =
+    brief.kind === "first" ? "first" : brief.kind === "retry" ? `retry:${brief.n ?? 1}` : brief.kind === "update" ? `update:${brief.n ?? 1}` : brief.night;
   return `topic-search:${brief.searchId}:${tail}`;
 }
 
@@ -106,6 +128,12 @@ export function parseBrief(text: string): TopicSearchBrief | null {
     if (raw.kind === "daily" && typeof raw.night === "string") return { searchId: raw.searchId, kind: "daily", night: raw.night };
     if (raw.kind === "retry" && Number.isInteger(raw.n) && (raw.n as number) > 0) {
       return { searchId: raw.searchId, kind: "retry", night: null, n: raw.n };
+    }
+    if (raw.kind === "update" && Number.isInteger(raw.n) && (raw.n as number) > 0) {
+      const ids = (v: unknown) => (Array.isArray(v) && v.every((x) => typeof x === "string") ? (v as string[]) : undefined);
+      const lines = ids(raw.lines);
+      const queries = ids(raw.queries);
+      return { searchId: raw.searchId, kind: "update", night: null, n: raw.n, ...(lines ? { lines } : {}), ...(queries ? { queries } : {}) };
     }
     return null;
   } catch {
@@ -160,6 +188,8 @@ interface Window {
   retry?: RetryPlan | null;
   /** A split first look's part (pace.ts). Absent: the run reads every source in one go. */
   part?: RunPart;
+  /** A study update's: the paper query ids it searches (update.ts planUpdate). Absent on the other kinds. */
+  update?: { queries: string[] } | null;
 }
 
 type Checkpoint =
@@ -177,6 +207,9 @@ export const READ_LATER = "read after the first part";
 /** Why X is not read for a topic whose config leaves it out (docs/info/91 来源开关). */
 export const NOT_A_SOURCE = "not one of the topic's sources";
 
+/** Why an update reads no X (docs/info/91 更新). */
+export const UPDATE_NO_X = "a study's update does not read X";
+
 export interface TopicSearchRunResult {
   status: "delivered" | "empty" | "skipped";
   why: string | null;
@@ -185,6 +218,10 @@ export interface TopicSearchRunResult {
   x: { status: XRunStatus; why: string | null; posts: number; searchPages: number; permalinkPages: number } | null;
   /** Candidates no model judged (88 「判不了」): nothing listed, the file says so, the next run judges them. Absent otherwise. */
   unjudged?: number;
+  /** An update's: the version it made, null when it made none. Absent on the other kinds. */
+  version?: number | null;
+  /** An update's changes counted ("add 2 · remove 1"). */
+  changes?: string;
 }
 
 /** The result file the brief takes from a run: one that lists something or says what waits to be judged. */
@@ -228,6 +265,10 @@ export interface TopicSearchRunDeps {
   checkSession(): Promise<"ok" | "signed-out" | "unknown">;
   /** What a retry reads again (retry.ts planRetry over the collector's source health). */
   retryPlan(search: TopicSearch): Promise<RetryPlan>;
+  /** The paper queries a study's update searches: those asked and those its newest version left unrun (update.ts planUpdate). */
+  updatePlan(search: TopicSearch, asked: readonly string[]): Promise<string[]>;
+  /** When a paper source's host gate lets requests go again after a rate limit (epoch ms); null when it is not cooling down. Absent: never known. */
+  paperCooldown?(source: "arxiv" | "huggingface"): number | null;
   /** X said stop: the state file, the collector's state file and the box. */
   halted(halt: XHalt, about: { searchId: string; runId: string; night: string }): Promise<void>;
   keepAwake(reason: string): Promise<KeepAwakeLock>;
@@ -238,7 +279,15 @@ export interface TopicSearchRunDeps {
    * the run left nothing new. Called once per run, skipped runs included, so a
    * night's issue does not wait for a run that will never deliver.
    */
-  closed(run: { runId: string; searchId: string; kind: TopicSearchRunKind; night: string | null; resultFile: string | null }): Promise<void>;
+  closed(run: {
+    runId: string;
+    searchId: string;
+    kind: TopicSearchRunKind;
+    night: string | null;
+    resultFile: string | null;
+    /** An update's: the study version it made, null when it made none (the base version stays current). */
+    version?: number | null;
+  }): Promise<void>;
   /** One piece of X work at a time (x-lane.ts). */
   lane<T>(work: () => Promise<T>): Promise<T>;
   report?(runId: string, text: string): void;
@@ -286,6 +335,7 @@ export function topicSearchTask(
     night: cp.night,
     retry: cp.retry ?? null,
     ...(cp.part ? { part: cp.part } : {}),
+    ...(cp.update ? { update: cp.update } : {}),
   });
 
   // Why X may not be read now (the stop rules, then the session), or null.
@@ -389,7 +439,7 @@ export function topicSearchTask(
     readHf(
       search,
       // A retry planned before Hugging Face was a source has no list for it: it reads it where it reads arXiv.
-      paperPlan(brief, window, window.retry ? (window.retry.huggingface ?? window.retry.arxiv) : null),
+      paperPlan(brief, window, window.update ? window.update.queries : window.retry ? (window.retry.huggingface ?? window.retry.arxiv) : null),
       { search: deps.searchHf, load: () => deps.loadHf(dir), save: (read) => deps.saveHf(dir, read), onChange },
       signal,
     );
@@ -403,10 +453,61 @@ export function topicSearchTask(
   ) =>
     readArxiv(
       search,
-      paperPlan(brief, window, window.retry?.arxiv ?? null),
+      paperPlan(brief, window, window.update ? window.update.queries : (window.retry?.arxiv ?? null)),
       { search: deps.searchArxiv, load: () => deps.loadArxiv(dir), save: (read) => deps.saveArxiv(dir, read), onChange },
       signal,
     );
+
+  // A study update's paper queries (docs/info/91 更新). A query a rate limit or
+  // a cooldown held back is searched again once the host gate lets requests go,
+  // waited out here up to UPDATE_COOLDOWN_WAIT_MS; past that, or after
+  // UPDATE_READ_ROUNDS waits, it is left on file as held, and the build records
+  // it as skipped on the version. Never sent while the gate is cooling down.
+  const readUpdate = async (search: TopicSearch, brief: TopicSearchBrief, window: Window, dir: string, signal: AbortSignal, runId: string) => {
+    const sources = (["arxiv", "huggingface"] as const).filter((s) => readsSource(search, s));
+    const planned = window.update?.queries.length ?? 0;
+    const line: Record<(typeof sources)[number], string> = { arxiv: "arXiv: starting", huggingface: "Hugging Face: starting" };
+    const tell = () => say(runId, `searching ${planned} quer${planned === 1 ? "y" : "ies"} for the update: ${sources.map((s) => line[s]).join("; ")}`);
+    const readOne = (source: (typeof sources)[number]) =>
+      source === "arxiv"
+        ? readArxivOf(search, brief, window, dir, signal, (read) => {
+            line.arxiv = arxivProgressLine(read);
+            tell();
+          })
+        : readHfOf(search, brief, window, dir, signal, (read) => {
+            line.huggingface = hfProgressLine(read);
+            tell();
+          });
+    for (let round = 1; ; round++) {
+      const reads = await Promise.all(sources.map(readOne));
+      const held = sources
+        .map((source, i) => ({
+          source,
+          read: reads[i],
+          queries: reads[i].found.filter((f) => f.ladder?.outcome === "cooling_down" || f.ladder?.outcome === "rate_limited").map((f) => f.query),
+        }))
+        .filter((h) => h.queries.length > 0);
+      if (held.length === 0 || round >= UPDATE_READ_ROUNDS) return;
+      const now = deps.now();
+      const wait = Math.max(0, ...held.map((h) => (deps.paperCooldown?.(h.source) ?? now) - now));
+      const names = sourceNames(held.map((h) => h.source));
+      const minutes = Math.max(1, Math.ceil(wait / 60_000));
+      if (wait > UPDATE_COOLDOWN_WAIT_MS) {
+        const left = new Set(held.flatMap((h) => h.queries)).size;
+        say(runId, `${names} rate-limit cooldown, about ${minutes} minutes: this version is made without ${left} quer${left === 1 ? "y" : "ies"}, which the next update searches first`);
+        return;
+      }
+      if (wait > 0) {
+        say(runId, `${names} rate-limit cooldown; searching again in about ${minutes} minutes`);
+        await deps.sleep(wait, signal);
+      }
+      // What was held back is taken off the file, so the walk searches it again.
+      for (const h of held) {
+        const read = { ...h.read, found: h.read.found.filter((f) => !h.queries.includes(f.query)), done: false };
+        await (h.source === "arxiv" ? deps.saveArxiv(dir, read) : deps.saveHf(dir, read));
+      }
+    }
+  };
 
   return defineTask<TopicSearchTaskInput, Checkpoint, TopicSearchRunResult>({
     name: TOPIC_SEARCH_TASK,
@@ -431,6 +532,14 @@ export function topicSearchTask(
           say(runId, "first part delivered; waiting to read X");
           const window: Window = { startedAt: delivered.startedAt, since: delivered.since, night: delivered.night, retry: null, part: "fast" };
           return next(runtime, { phase: "later", ...window }, context);
+        }
+        if (brief.kind === "update") {
+          // A study's next version (docs/info/91 更新): no X, no lock, only the paper queries planned.
+          if (search.once !== true) return skip(runtime, "not a study: only a study's brief is updated", context);
+          const queries = await deps.updatePlan(search, brief.queries ?? []);
+          const window: Window = { startedAt: now, since: now - FIRST_LOOK_BACK_MS, night, retry: null, update: { queries } };
+          say(runId, `updating the brief: ${queries.length} extra quer${queries.length === 1 ? "y" : "ies"} to search, then re-judging the candidates`);
+          return next(runtime, { phase: "read", blocked: UPDATE_NO_X, ...window }, context);
         }
         if (brief.kind === "daily" && now >= nightEndAt(night)) return skip(runtime, "the night is over", context);
         const retry = brief.kind === "retry" ? await deps.retryPlan(search) : null;
@@ -462,6 +571,11 @@ export function topicSearchTask(
         const dir = await deps.runDir(runId);
         const search = await deps.loadSearch(brief.searchId);
         if (!search) return skip(runtime, "the topic search is gone", context, part ?? undefined);
+        if (cp.update) {
+          await readUpdate(search, brief, window, dir, runtime.signal, runId);
+          say(runId, "searched; re-judging the study's candidates");
+          return next(runtime, { phase: "build", ...window }, context);
+        }
         const reads = sourcesOf(part, search);
         // The run's line says where each source is: "reading X: ...; arXiv done: ...; Hugging Face done: ...".
         const line = {
@@ -554,8 +668,9 @@ export function topicSearchTask(
         const search = await deps.loadSearch(brief.searchId);
         if (!search) return skip(runtime, "the topic search is gone", context, part ?? undefined);
         const dir = await deps.runDir(runId);
-        const x =
-          part === "fast"
+        const x = window.update
+          ? unread("unavailable", UPDATE_NO_X)
+          : part === "fast"
             ? unread("unavailable", READ_LATER)
             : !readsSource(search, "x")
               ? unread("unavailable", NOT_A_SOURCE)
@@ -587,6 +702,7 @@ export function topicSearchTask(
             signal: runtime.signal,
             retry,
             ...(later ? { later } : {}),
+            ...(window.update ? { update: { runId, lines: brief.lines ?? null, queries: window.update.queries }, report: (text: string) => say(runId, text) } : {}),
             runId,
             // Reads of earlier runs no model judged, out of their run directories.
             carry: async (id) => {
@@ -598,7 +714,14 @@ export function topicSearchTask(
           });
           built = await runtime.memo(
             memo("built"),
-            { resultFile: made.resultFile, itemCount: made.itemCount, empty: made.empty, ...(made.unjudged ? { unjudged: made.unjudged } : {}) },
+            {
+              resultFile: made.resultFile,
+              itemCount: made.itemCount,
+              empty: made.empty,
+              ...(made.unjudged ? { unjudged: made.unjudged } : {}),
+              ...(made.version !== undefined ? { version: made.version } : {}),
+              ...(made.changes ? { changes: made.changes } : {}),
+            },
             context,
           );
         }
@@ -617,7 +740,8 @@ export function topicSearchTask(
         if (!search) return skip(runtime, "the topic search is gone", context, part ?? undefined);
         // A study (`once`) is not stopped by its delivery: it ends only when the reader
         // ends it (docs/info/91 结束, end_study), which calls apply.ts stopFollowing.
-        if (part !== "slow") await deps.ran(search, startedAt);
+        // An update is not a run of the search's sources: it leaves the last run time (and the config's revision) alone.
+        if (part !== "slow" && brief.kind !== "update") await deps.ran(search, startedAt);
         const dir = await deps.runDir(runId);
         const x = part === "fast" ? null : await deps.loadRead(dir);
         const result: TopicSearchRunResult = {
@@ -627,6 +751,8 @@ export function topicSearchTask(
           itemCount: built.itemCount,
           x: x ? { status: x.status, why: x.why, posts: x.posts.length, searchPages: x.pages.search, permalinkPages: x.pages.permalink } : null,
           ...(built.unjudged ? { unjudged: built.unjudged } : {}),
+          ...(built.version !== undefined ? { version: built.version } : {}),
+          ...(built.changes ? { changes: built.changes } : {}),
         };
         if (part === "fast") {
           // The first part goes to the brief now, as the first look's own issue.
@@ -691,9 +817,11 @@ export function topicSearchTask(
             runId,
             searchId: brief.searchId,
             // The slow part is told as what a retry adds: an issue of its own, keyed by this run (first:<id>#<runId>).
-            kind: part === "slow" ? "retry" : brief.kind,
+            // A study's slow part or retry made its next version instead (or none): told as an update (docs/info/91 数据).
+            kind: result.version !== undefined ? "update" : part === "slow" ? "retry" : brief.kind,
             night: brief.night,
             resultFile: briefFile(result),
+            ...(result.version !== undefined ? { version: result.version } : {}),
           });
           await runtime.memo("closed", true, context);
         }

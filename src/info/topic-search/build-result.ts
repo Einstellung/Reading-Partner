@@ -53,6 +53,7 @@ import {
   scorePool,
   streamKey,
   type ArxivFound,
+  type Candidate,
   type RerankAnswer,
   type Scored,
 } from "./rank-pool";
@@ -76,8 +77,13 @@ import {
   type TopicSearchResultItem,
 } from "./result-types";
 import { traceOf, type ReadTrace } from "./read-failure";
-import { selectItems, shortlist, type SelectView } from "./select";
+import { selectItems, selectStudy, shortlist, type SelectView } from "./select";
+import type { StudyFile, StudyLine } from "./study";
 import type { TopicSearch } from "./types";
+import type { SeedPaper } from "./seed-lookup";
+import { currentVersion } from "./study";
+import { addedVersion, firstVersion, pinnedCandidate, studyVersions, withHeld } from "./update";
+import { buildUpdate } from "./build-update";
 import {
   claimsPrompt,
   countsOf,
@@ -149,6 +155,15 @@ export interface BuildTopicSearchResultArgs {
    * them. Null when its directory holds nothing. Absent: none are taken in.
    */
   carry?: (runId: string) => Promise<CarriedRead | null>;
+  /**
+   * A study's update (docs/info/91 更新, build-update.ts): the next version of
+   * its brief, added to the first look's file. `lines`: the confirmed line ids
+   * it was asked with, null for every confirmed line no version used yet;
+   * `queries`: the query ids it searched. Absent or null on the other runs.
+   */
+  update?: { runId: string; lines: readonly string[] | null; queries: readonly string[] } | null;
+  /** Where the build says how far it got (the run's progress line). Absent: nowhere. */
+  report?: (text: string) => void;
 }
 
 /** An earlier run's reads, out of its run directory. */
@@ -189,6 +204,10 @@ export type BuildTopicSearchResultOutput = {
   empty: boolean;
   /** Candidates no model judged (the rerank failed): nothing listed, kept for the next run. Absent otherwise. */
   unjudged?: number;
+  /** A study update's: the version it made, null when it made none (unjudged). Absent on the other runs. */
+  version?: number | null;
+  /** A study update's changes counted ("add 2 · remove 1"); absent otherwise. */
+  changes?: string;
 };
 
 export type BuildTopicSearchResult = (args: BuildTopicSearchResultArgs) => Promise<BuildTopicSearchResultOutput>;
@@ -259,8 +278,18 @@ export interface BuildResultDeps {
    * host). Absent: `language`.
    */
   bookLanguage?(): Promise<string>;
-  /** A search's labels (labels.ts), for a study's label question. Absent: a study asks none. */
+  /** A search's labels (labels.ts), for a study's label question and its update. Absent: a study asks none. */
   labels?(searchId: string): Promise<TopicLabel[]>;
+  /** A study's record (study.ts): its lines and returns. Absent: an update has no lines and no return to an older version. */
+  study?(searchId: string): Promise<StudyFile>;
+  /** Mark the lines an update used with the version it made (study.ts putStudyLines). Absent: nothing is marked. */
+  useLines?(searchId: string, lines: readonly StudyLine[]): Promise<void>;
+  /**
+   * A paper by its arXiv id, through the seed lookup (seed-lookup.ts
+   * SeedSearches.byArxivId): how a study adds a pinned paper no read found.
+   * Absent: such a paper stays out.
+   */
+  seedPaper?(arxivId: string): Promise<SeedPaper | null>;
   now(): number;
   /** Local date, YYYY-MM-DD. */
   today(): string;
@@ -272,13 +301,13 @@ function total(c: PostCounts): number {
   return (c.likes ?? 0) + (c.reposts ?? 0) + (c.replies ?? 0) + (c.quotes ?? 0);
 }
 
-function firstSentence(text: string): string {
+export function firstSentence(text: string): string {
   const line = text.trim().split(/\n/)[0] ?? "";
   const m = /^(.+?[.!?。！？])(\s|$)/.exec(line);
   return (m ? m[1] : line).trim();
 }
 
-function cut120(s: string): string {
+export function cut120(s: string): string {
   const chars = [...s];
   return chars.length <= 120 ? s : `${chars.slice(0, 119).join("")}…`;
 }
@@ -308,7 +337,7 @@ export interface Draft {
   previous: TopicSearchResultItem | null;
 }
 
-function draftOf(cluster: EventCluster<Scored>): Draft {
+export function draftOf(cluster: EventCluster<Scored>): Draft {
   const members = cluster.events.flatMap((e) => e.members);
   const posts = members.filter((m) => m.cand.post).map(resultPost);
   const keys = [...new Set([...cluster.events.map((e) => e.key), ...members.map((m) => m.cand.key)])];
@@ -331,7 +360,7 @@ export function hubOfDraft(draft: Draft): HubFacts | undefined {
 }
 
 /** How the selection sees a draft; a continuing item fills neither reservation. */
-const DRAFT_VIEW: SelectView<Draft> = {
+export const DRAFT_VIEW: SelectView<Draft> = {
   score: (d) => d.score,
   postScore: (d) => {
     if (d.continuing) return null;
@@ -516,7 +545,7 @@ export async function readOriginals(targets: readonly Target[], deps: SourceDeps
   return out;
 }
 
-function kindOfKey(key: string): TopicSearchResultItem["kind"] {
+export function kindOfKey(key: string): TopicSearchResultItem["kind"] {
   if (key.startsWith("arxiv:")) return "paper";
   if (key.startsWith("github:")) return "repo";
   if (key.startsWith("x:")) return "post";
@@ -525,10 +554,10 @@ function kindOfKey(key: string): TopicSearchResultItem["kind"] {
 
 /** The result builder over the given deps; the run pipeline calls what it returns. */
 export function makeResultBuilder(deps: BuildResultDeps): BuildTopicSearchResult {
-  return (args) => buildWith(deps, args);
+  return (args) => (args.update ? buildUpdate(deps, args) : buildWith(deps, args));
 }
 
-async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<TopicSearchResult[]> {
+export async function loadHistory(deps: BuildResultDeps, searchId: string): Promise<TopicSearchResult[]> {
   const names = (await deps.files.list(`${RESULT_FILE_PREFIX}${searchId}-`))
     .map((name) => ({ name, parsed: parseResultFileName(name) }))
     .filter((x) => x.parsed?.searchId === searchId)
@@ -586,7 +615,13 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf);
   // The source health speaks for this run's reads only.
   const own = carried.length ? gatherCandidates(topic, x, arxiv, since, huggingface) : gathered;
-  const numbered = numberPool(fusePool(topic, gathered.kept, RERANK_POOL[kind]));
+  // A study's seeds are judged and listed whatever the reads found (docs/info/91
+  // 起草与种子): one no read found is looked up by its key, and neither the
+  // relevance floor nor the fusion's cut leaves one out. Its first look's own
+  // build only: a retry or the slow part finds them in the file.
+  const seedKeys = new Set(topic.once && kind === "first" && !retry ? (topic.seeds ?? []).map((seed) => seed.key) : []);
+  const looked = await lookUpPinned(seedKeys, new Set(gathered.all.map((c) => c.key)), deps, since, signal);
+  const numbered = numberPool(withHeld(fusePool(topic, gathered.kept, RERANK_POOL[kind]), [...gathered.all, ...looked], seedKeys));
   let answers = new Map<string, RerankAnswer>();
   let reranked = false;
   // The questions already raised, for both prompts that may raise more (88 「攒着问」).
@@ -609,9 +644,26 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const name = target ? `${target.id}.json` : resultFileName(topic.id, today, sameDay + 1);
   const resultId = name.replace(/\.json$/, "");
   // The file (added to the first look's on a retry or the slow part) and this run's source health.
+  // What a study's slow part or retry adds is its next version (docs/info/91 数据); null when it added nothing.
+  let studyMade: number | null | undefined;
   const finish = async (result: TopicSearchResult): Promise<void> => {
     throwIfAborted(signal);
-    const written = target ? mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId, retry!.part === "slow") : result;
+    let written = result;
+    if (target && topic.once) {
+      const versions = studyVersions(target, topic.seeds);
+      const rollbacks = deps.study ? (await deps.study(topic.id)).rollbacks : [];
+      const baseN = currentVersion(versions, rollbacks) ?? versions[versions.length - 1].n;
+      const newest = Math.max(...versions.map((v) => v.n));
+      const made = addedVersion(versions.find((v) => v.n === baseN)!, newest, result.items, retry!.runId, now, topic.seeds);
+      const merged = mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId, {
+        ...(retry!.part === "slow" ? { part: "slow" as const } : {}),
+        ...(made ? { version: made.n } : {}),
+      });
+      written = { ...merged, study: { versions: made ? [...versions, { ...made, overview: merged.overview }] : versions } };
+      studyMade = made ? made.n : null;
+    } else if (target) {
+      written = mergeRetry(target, { ...result, runDir: target.runDir }, retry!.runId, retry!.part === "slow");
+    }
     await deps.files.write(name, `${JSON.stringify(written, null, 2)}\n`);
     const health = sourceHealth(topic, kind, x, arxiv, own.streams, recent, now, huggingface);
     // A retry speaks only for what it read again; the other lines keep what the first look found.
@@ -671,7 +723,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       ...(later ? { awaiting: later } : {}),
       unjudged,
     });
-    return { resultFile: name, itemCount: 0, empty: true, unjudged: numbered.length };
+    return { resultFile: name, itemCount: 0, empty: true, unjudged: numbered.length, ...(studyMade !== undefined ? { version: studyMade } : {}) };
   }
   const judged = unjudgedBefore.map((u) => u.runId);
 
@@ -689,7 +741,10 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   for (const { result, item } of pastItems) for (const p of item.links.posts) lastCounts.set(p.statusId, { result: result.id, counts: p.counts, item });
   const headlines: Headline[] = pastItems.map((p) => ({ id: `${p.result.id}#${p.item.id}`, headline: p.item.title, keys: p.item.keys }));
   const pickedSubtopics = topic.subtopics.filter((s) => s.picked).map((s) => s.id);
-  const drafts = shortlist(clusters.map(draftOf), want * 3, pickedSubtopics, DRAFT_VIEW);
+  const isSeed = (d: Draft) => d.keys.some((k) => seedKeys.has(k));
+  const ranked = clusters.map(draftOf);
+  const listed = shortlist(ranked, want * 3, pickedSubtopics, DRAFT_VIEW);
+  const drafts = [...listed, ...ranked.filter((d) => isSeed(d) && !listed.includes(d))];
   const verdicts = dedupeBatch(
     drafts.map((d, i) => ({ id: `d${i + 1}`, headline: d.headline, keys: d.keys, draft: d })),
     headlines,
@@ -723,8 +778,9 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       if (signal.aborted) throw e;
     }
   }
-  // By score, with slots kept for post items and for each picked subtopic (select.ts).
-  const chosen = selectItems(kept, want, pickedSubtopics, DRAFT_VIEW);
+  // By score, with slots kept for post items and for each picked subtopic (select.ts);
+  // a study's seeds first (docs/info/91 起草与种子).
+  const chosen = seedKeys.size ? selectStudy(kept, want, pickedSubtopics, { ...DRAFT_VIEW, pinned: isSeed }) : selectItems(kept, want, pickedSubtopics, DRAFT_VIEW);
 
   // Verify (88 「看原文」) and the items.
   const registry = new MaterialRegistry(
@@ -732,27 +788,11 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     { write: (path, content) => deps.files.write(path, content) },
     target ? highestNumber(target.materials.map((m) => m.id)) : 0,
   );
-  const lookups = deps.repoLookups();
-  // A page on X opens only while the budget lasts; past it a cut-short post stays cut.
-  const openLink: OpenLink = async (url, s) => {
-    if (isXPage(url) && !(await xPages.take())) return { ok: false, code: "budget_spent", reason: X_PAGES_USED_UP };
-    return deps.openLink(url, s);
-  };
-  const sourceDeps: SourceDeps = {
-    fetchText: deps.fetchText,
-    openLink,
-    lookupRepo: (n: string) => lookups.lookup(n),
-    repoQuotaLeft: () => lookups.quotaLeft(),
-    ...(deps.readPdfText ? { readPdfText: deps.readPdfText } : {}),
-    ...(deps.resolveShortLink ? { resolveShortLink: deps.resolveShortLink } : {}),
-    arxivIdOfDoi: (doi, s) => dois.resolve(doi, s),
-  };
+  const sourceDeps = sourceDepsOf(deps, xPages, dois);
   const items: TopicSearchResultItem[] = [];
   for (const [i, d] of chosen.entries()) {
     throwIfAborted(signal);
     const id = `E${itemsBefore + i + 1}`;
-    const lead = d.cluster.lead;
-    const subtopic = subtopicOf(d);
     if (d.continuing && d.previous) {
       const prev = d.previous;
       items.push({
@@ -771,63 +811,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       });
       continue;
     }
-    const targets = targetsOf(d, dois.keyOfUrl);
-    const { materials, reasons, traces, first, original } = await readOriginals(targets, sourceDeps, registry, signal);
-    let facts = first?.facts ?? null;
-    let title = first?.title ?? null;
-    const leadPost = lead.members.find((m) => m.cand.post)?.cand.post ?? d.members.find((m) => m.cand.post)?.cand.post ?? null;
-    if (facts === null) {
-      const paper = d.members.find((m) => m.cand.paper)?.cand.paper;
-      facts = paper
-        ? { kind: "paper", arxivId: paper.id, authors: paper.authors, publishedAt: paper.publishedAt, depth: "abstract" }
-        : { kind: "post", handle: leadPost!.handle, name: leadPost!.name, postedAt: leadPost!.postedAt, counts: countsOf(leadPost!) };
-      title = paper?.title ?? null;
-    }
-    // A post that is its own content is "self" only when nothing it points at was read; otherwise it is compared with that.
-    const selfPost = targets[0]?.kind === "post" && original === null;
-    let verify: ResultVerify = {
-      status: materials.length === 0 ? "unread" : selfPost ? "self" : d.posts.length ? "compared" : "read",
-      reason: materials.length === 0 ? reasons.join("; ") || "no original to read" : selfPost && reasons.length ? reasons.join("; ") : null,
-      discrepancies: [],
-      checked: { match: 0, mismatch: 0, absent: 0 },
-      ...(traces.length ? { reads: traces } : {}),
-    };
-    const comparable = materials.filter((m) => (registry.get(m)?.sections.length ?? 0) > 0 && registry.get(m)?.reader !== "x");
-    if (verify.status === "compared") {
-      if (!comparable.length) verify = { ...verify, status: "read", reason: "the original is a whole document whose text was not read" };
-      else if (callsLeft() <= 2) verify = { ...verify, status: "read", reason: "the run's model calls ran out before the comparison" };
-      else {
-        const posts = d.posts.slice(0, COMPARE_POSTS).map((post, j) => ({ p: `p${j + 1}`, post }));
-        try {
-          const prompt = claimsPrompt(posts, comparable, registry, language);
-          verify = { ...verify, ...parseClaims(await call({ site: "verify", ...prompt, cache: false, signal }), posts, comparable, registry) };
-        } catch (e) {
-          if (signal.aborted) throw e;
-          verify = { ...verify, status: "read", reason: "the comparison call failed" };
-        }
-      }
-    }
-    const fromPost = leadPost ? cut120(`${leadPost.name || `@${leadPost.handle}`}: ${firstSentence(leadPost.text)}`) : lead.text;
-    const hub = hubOfDraft(d);
-    items.push({
-      id,
-      key: lead.key,
-      keys: d.keys,
-      kind: kindOfKey(lead.key),
-      subtopic,
-      title: title ? cut120(title) : fromPost,
-      titleFrom: title ? "original" : "post",
-      summary: null,
-      body: [],
-      unknown: null,
-      facts,
-      ...(hub ? { hub } : {}),
-      links: { original, posts: d.posts },
-      materials,
-      verify,
-      continuing: null,
-      score: d.score,
-    });
+    items.push(await itemOfDraft(d, id, { sourceDeps, registry, keyOfUrl: dois.keyOfUrl, call, callsLeft, language, signal }));
   }
 
   // Stats, then the questions.
@@ -855,29 +839,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   let repeats = new Set<string>();
   // A paper the write-up asks to read in full (compose.ts): read, registered
   // apart, and put in place of the shorter read of it.
-  const deeper: DeeperReads = {
-    left: DEEP_READS[kind],
-    cap: DEEP_READS[kind],
-    read: async (itemId, s) => {
-      const item = items.find((i) => i.id === itemId);
-      const m = item ? deepenableMaterial(item, registry) : null;
-      if (!item || !m) return { ok: false, reason: "nothing to read deeper" };
-      const arxivId = String(m.facts.arxivId);
-      const paperFacts = item.facts.kind === "paper" && item.facts.arxivId === arxivId ? item.facts : null;
-      const known = {
-        title: m.title,
-        authors: paperFacts?.authors ?? (m.author ? m.author.split(", ") : []),
-        publishedAt: m.publishedAt,
-        abstract: registry.sections(m.id).find((x) => x.heading === "Abstract")?.text ?? null,
-      };
-      const read = await readPaperFull(arxivId, known, sourceDeps, s);
-      if (!read.ok) return { ok: false, reason: read.reason };
-      const full = await registry.register(read.input);
-      item.materials = item.materials.map((id) => (id === m.id ? full.id : id));
-      if (paperFacts) item.facts = { ...paperFacts, depth: "full" };
-      return { ok: true };
-    },
-  };
+  const deeper = deepReader(items, registry, sourceDeps, DEEP_READS[kind]);
   // A study's papers that make the brief are read in full before the write-up
   // (docs/info/91 条目格式), up to the run's cap. That leaves nothing to offer:
   // past the cap none are left, under it every paper was tried.
@@ -976,9 +938,163 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     ...(later ? { awaiting: later } : {}),
     ...(judged.length ? { judged } : {}),
   };
+  // A study's first look is its version 1, the seeds pinned first (docs/info/91 数据).
+  if (topic.once && kind === "first" && !retry) {
+    result.study = { versions: [firstVersion(result, args.runId ?? runDir.replace(/\/+$/, "").split("/").pop()!, topic.seeds)] };
+  }
   await finish(result);
   await saveQueue(deps.files, topic.id, picked.queue);
-  return { resultFile: name, itemCount: items.length, empty };
+  return { resultFile: name, itemCount: items.length, empty, ...(studyMade !== undefined ? { version: studyMade } : {}) };
+}
+
+/**
+ * The pinned papers no read found (docs/info/91 起草与种子), each looked up by
+ * its arXiv id through the seed lookup, as candidates. A key `have` holds is
+ * not looked up. A DOI-only key, a paper the lookup does not know and one it
+ * cannot reach now (a cooldown refuses at once) stay out of this build; the
+ * next build looks again.
+ */
+export async function lookUpPinned(
+  keys: Iterable<string>,
+  have: ReadonlySet<string>,
+  deps: Pick<BuildResultDeps, "seedPaper">,
+  since: number,
+  signal: AbortSignal,
+): Promise<Candidate[]> {
+  const out: Candidate[] = [];
+  for (const key of keys) {
+    if (have.has(key) || !key.startsWith("arxiv:") || !deps.seedPaper) continue;
+    throwIfAborted(signal);
+    const paper = await deps.seedPaper(key.slice("arxiv:".length)).catch(() => null);
+    const cand = paper ? pinnedCandidate(paper, since) : null;
+    if (cand && cand.key === key) out.push(cand);
+  }
+  return out;
+}
+
+/** How a run reads originals: the deps', X pages only while the budget lasts, DOIs as the run maps them. */
+export function sourceDepsOf(deps: BuildResultDeps, xPages: XPageBudget, dois: { resolve: DoiLookup }): SourceDeps {
+  const lookups = deps.repoLookups();
+  // A page on X opens only while the budget lasts; past it a cut-short post stays cut.
+  const openLink: OpenLink = async (url, s) => {
+    if (isXPage(url) && !(await xPages.take())) return { ok: false, code: "budget_spent", reason: X_PAGES_USED_UP };
+    return deps.openLink(url, s);
+  };
+  return {
+    fetchText: deps.fetchText,
+    openLink,
+    lookupRepo: (n: string) => lookups.lookup(n),
+    repoQuotaLeft: () => lookups.quotaLeft(),
+    ...(deps.readPdfText ? { readPdfText: deps.readPdfText } : {}),
+    ...(deps.resolveShortLink ? { resolveShortLink: deps.resolveShortLink } : {}),
+    arxivIdOfDoi: (doi, s) => dois.resolve(doi, s),
+  };
+}
+
+/** What `itemOfDraft` needs of the run. */
+export interface ItemContext {
+  sourceDeps: SourceDeps;
+  registry: MaterialRegistry;
+  keyOfUrl: (url: string) => string | null;
+  call: TopicModel;
+  callsLeft: () => number;
+  language: string;
+  signal: AbortSignal;
+}
+
+/** A ranked event as a result item: its originals read and registered, compared with its posts where it has any. */
+export async function itemOfDraft(d: Draft, id: string, ctx: ItemContext): Promise<TopicSearchResultItem> {
+  const { sourceDeps, registry, call, callsLeft, language, signal } = ctx;
+  const lead = d.cluster.lead;
+  const subtopic = subtopicOf(d);
+  const targets = targetsOf(d, ctx.keyOfUrl);
+  const { materials, reasons, traces, first, original } = await readOriginals(targets, sourceDeps, registry, signal);
+  let facts = first?.facts ?? null;
+  let title = first?.title ?? null;
+  const leadPost = lead.members.find((m) => m.cand.post)?.cand.post ?? d.members.find((m) => m.cand.post)?.cand.post ?? null;
+  if (facts === null) {
+    const paper = d.members.find((m) => m.cand.paper)?.cand.paper;
+    facts = paper
+      ? { kind: "paper", arxivId: paper.id, authors: paper.authors, publishedAt: paper.publishedAt, depth: "abstract" }
+      : { kind: "post", handle: leadPost!.handle, name: leadPost!.name, postedAt: leadPost!.postedAt, counts: countsOf(leadPost!) };
+    title = paper?.title ?? null;
+  }
+  // A post that is its own content is "self" only when nothing it points at was read; otherwise it is compared with that.
+  const selfPost = targets[0]?.kind === "post" && original === null;
+  let verify: ResultVerify = {
+    status: materials.length === 0 ? "unread" : selfPost ? "self" : d.posts.length ? "compared" : "read",
+    reason: materials.length === 0 ? reasons.join("; ") || "no original to read" : selfPost && reasons.length ? reasons.join("; ") : null,
+    discrepancies: [],
+    checked: { match: 0, mismatch: 0, absent: 0 },
+    ...(traces.length ? { reads: traces } : {}),
+  };
+  const comparable = materials.filter((m) => (registry.get(m)?.sections.length ?? 0) > 0 && registry.get(m)?.reader !== "x");
+  if (verify.status === "compared") {
+    if (!comparable.length) verify = { ...verify, status: "read", reason: "the original is a whole document whose text was not read" };
+    else if (callsLeft() <= 2) verify = { ...verify, status: "read", reason: "the run's model calls ran out before the comparison" };
+    else {
+      const posts = d.posts.slice(0, COMPARE_POSTS).map((post, j) => ({ p: `p${j + 1}`, post }));
+      try {
+        const prompt = claimsPrompt(posts, comparable, registry, language);
+        verify = { ...verify, ...parseClaims(await call({ site: "verify", ...prompt, cache: false, signal }), posts, comparable, registry) };
+      } catch (e) {
+        if (signal.aborted) throw e;
+        verify = { ...verify, status: "read", reason: "the comparison call failed" };
+      }
+    }
+  }
+  const fromPost = leadPost ? cut120(`${leadPost.name || `@${leadPost.handle}`}: ${firstSentence(leadPost.text)}`) : lead.text;
+  const hub = hubOfDraft(d);
+  return {
+    id,
+    key: lead.key,
+    keys: d.keys,
+    kind: kindOfKey(lead.key),
+    subtopic,
+    title: title ? cut120(title) : fromPost,
+    titleFrom: title ? "original" : "post",
+    summary: null,
+    body: [],
+    unknown: null,
+    facts,
+    ...(hub ? { hub } : {}),
+    links: { original, posts: d.posts },
+    materials,
+    verify,
+    continuing: null,
+    score: d.score,
+  };
+}
+
+/**
+ * Full reads of papers among `items`, at most `cap`: the deeper read a
+ * write-up asks for, and a study's read before it (docs/info/91 条目格式).
+ * Each read is registered apart and put in place of the shorter read of it.
+ */
+export function deepReader(items: readonly TopicSearchResultItem[], registry: MaterialRegistry, sourceDeps: SourceDeps, cap: number): DeeperReads {
+  return {
+    left: cap,
+    cap,
+    read: async (itemId, s) => {
+      const item = items.find((i) => i.id === itemId);
+      const m = item ? deepenableMaterial(item, registry) : null;
+      if (!item || !m) return { ok: false, reason: "nothing to read deeper" };
+      const arxivId = String(m.facts.arxivId);
+      const paperFacts = item.facts.kind === "paper" && item.facts.arxivId === arxivId ? item.facts : null;
+      const known = {
+        title: m.title,
+        authors: paperFacts?.authors ?? (m.author ? m.author.split(", ") : []),
+        publishedAt: m.publishedAt,
+        abstract: registry.sections(m.id).find((x) => x.heading === "Abstract")?.text ?? null,
+      };
+      const read = await readPaperFull(arxivId, known, sourceDeps, s);
+      if (!read.ok) return { ok: false, reason: read.reason };
+      const full = await registry.register(read.input);
+      item.materials = item.materials.map((id) => (id === m.id ? full.id : id));
+      if (paperFacts) item.facts = { ...paperFacts, depth: "full" };
+      return { ok: true };
+    },
+  };
 }
 
 /** The conclusions earlier results of the topic wrote, newest first (88 「跨天延续」). */

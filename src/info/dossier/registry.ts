@@ -78,6 +78,8 @@ export function materialBodyPath(runDir: string, id: string): string {
 export class MaterialRegistry {
   private readonly entries = new Map<string, { material: RegisteredMaterial; body: MaterialBody }>();
   private readonly byUrl = new Map<string, string>();
+  /** Materials this registry registered itself, numbered after `after`; restored ones keep their own ids. */
+  private made = 0;
 
   /** `after`: numbers already taken in the file this registry adds to, so its first material is M<after + 1>. */
   constructor(
@@ -123,6 +125,17 @@ export class MaterialRegistry {
   }
 
   /**
+   * Take in a material the file already holds, with its cached body, under its
+   * own id and without writing anything: what a study's update rewrites from
+   * (docs/info/91 更新). Its id must be one of the numbers `after` covers.
+   */
+  restore(material: RegisteredMaterial, body: MaterialBody): void {
+    if (this.entries.has(material.id)) return;
+    this.entries.set(material.id, { material, body });
+    if (!this.byUrl.has(material.canonicalUrl)) this.byUrl.set(material.canonicalUrl, material.id);
+  }
+
+  /**
    * Register what was read. A URL already registered (by canonical form) answers
    * the material it has, and nothing is written again.
    */
@@ -130,7 +143,7 @@ export class MaterialRegistry {
     const canonicalUrl = canonicalizeUrl(input.url) ?? input.url;
     const known = this.byUrl.get(canonicalUrl);
     if (known) return this.entries.get(known)!.material;
-    const id = `M${this.after + this.entries.size + 1}`;
+    const id = `M${this.after + ++this.made}`;
     const sections = input.sections
       .map((s) => ({ heading: s.heading?.trim() || null, text: s.text.trim() }))
       .filter((s) => s.text !== "")
