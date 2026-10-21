@@ -711,3 +711,42 @@ describe("a study asks about one item of its brief (docs/info/91 「攒着问」
     expect(daily.result.questions.some((q) => q.template?.code === "label-item")).toBe(false);
   });
 });
+
+test("a study reads its papers in full before the write-up and keeps each entry's seven parts", async () => {
+  const files = memoryFiles();
+  const log: TopicModelCall[] = [];
+  const now = Date.parse("2026-10-14T12:00:00Z");
+  const scripted = scriptedModel(log);
+  const d = deps({ files, log, today: "2026-10-14" });
+  d.model = async (call) => {
+    if (call.site !== "write") return scripted(call);
+    log.push(call);
+    // Each entry tells what was done, citing the first section its block shows (a discrepancy's evidence names the head read the whole one replaced).
+    const blocks = [...call.user.matchAll(/<material id="(E\d+)">\n[\s\S]*?<\/material>/g)];
+    const items = blocks.map((b) => ({
+      e: b[1],
+      conclusion: "Work on the topic.",
+      method: [[{ text: "A model reads the data.", cite: [/^(M\d+\.§\d+) /m.exec(b[0])?.[1] ?? "M0.§1"] }]],
+      results: [],
+    }));
+    return JSON.stringify({ overview: { text: `Agent markets lead; see ${blocks[0][1]}.`, cites: [blocks[0][1]] }, items });
+  };
+  const study = { ...TOPIC, once: true };
+  const out = await makeResultBuilder(d)({ topic: study, kind: "first", x: xRead(POSTS), since: now - 30 * 86_400_000, runDir: RUN_DIR, xPages: ANY_PAGES, signal: new AbortController().signal });
+  const result = parseResultFile(files.files.get(out.resultFile!)!)!;
+  const writes = log.filter((c) => c.site === "write");
+  const agentic = result.items.find((i) => i.key === "arxiv:2609.31562")!;
+  const materials = result.items.find((i) => i.key === "arxiv:2610.00001")!;
+
+  // Read before the first write-up call, and no deeper read offered after.
+  expect(writes[0].user).toContain("Paper read: the whole paper, below.");
+  expect(writes[0].system).not.toContain("you may ask to read");
+  expect(writes[0].system).toContain("background: why this work is worth doing.");
+  expect(result.stats.deepReads).toEqual({ read: [agentic.id], failed: [materials.id], refused: [] });
+  expect(agentic.parts!.confidence.read).toEqual({ depth: "full", cut: false, through: "2 Method" });
+  expect(agentic.parts!.method[0][0].cites[0]).toMatch(/^M\d+\.§1$/);
+  expect(agentic.materials).toContain(agentic.parts!.method[0][0].cites[0].split(".")[0]);
+  expect(agentic.body).toEqual(["A model reads the data."]);
+  expect(result.items.filter((i) => !i.continuing).every((i) => i.parts)).toBe(true);
+  expect(result.writeup).toBe("model");
+});

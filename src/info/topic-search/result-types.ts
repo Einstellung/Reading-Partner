@@ -5,8 +5,9 @@
 //
 // Every fact here — titles, URLs, authors, dates, counts, stars — is the
 // program's. A model wrote only `overview.text`, each item's `summary`, `body`
-// and `unknown`, and the `says` / `difference` of a discrepancy, and all of those passed the number
-// check (numbers.ts) against the materials they cite.
+// and `unknown`, a study entry's sentences (`parts`), and the `says` /
+// `difference` of a discrepancy, and all of those passed the number check
+// (model-io.ts) against the materials they cite.
 
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { RunSource } from "./pace";
@@ -158,6 +159,14 @@ export interface TopicSearchResultItem {
   body?: string[];
   /** One sentence on what is not yet known or could not be checked; null when the model had none. */
   unknown?: string | null;
+  /**
+   * A study's entry in seven parts (docs/info/91 条目格式), each sentence with
+   * the sections of the original it stands on. `body` then holds the same
+   * sentences as plain paragraphs, without anchors, for a page that predates
+   * parts. Absent on every other topic's items, and in files written before
+   * 2026-10-21.
+   */
+  parts?: EntryParts;
   facts: ResultFacts;
   /** The Hub's facts of the item's paper, when Hugging Face found it. Absent otherwise, and in files written before 2026-10-19. */
   hub?: HubFacts;
@@ -169,6 +178,66 @@ export interface TopicSearchResultItem {
   continuing: ResultContinuation | null;
   /** Final score, 0-100. */
   score: number;
+}
+
+/**
+ * One sentence of a study entry. `cites` are anchors into the text the program
+ * read and holds, "M3.§2": the section's text is in the material's cached body
+ * (`<runDir>/materials/M3.json`, dossier/registry.ts), its heading in the
+ * file's `materials`. Every anchor names a section of one of the item's
+ * materials, every number in `text` occurs in the cited sections, and `quote`,
+ * the original's own words, occurs in one of them (entry-parts.ts).
+ */
+export interface EntrySentence {
+  text: string;
+  /** Section anchors, "M3.§2"; empty only in the parts that may be the program's reader's judgement (helps, cannot, ours). */
+  cites: string[];
+  /** Words of the original, verbatim, in its language. Absent when the sentence quotes nothing. */
+  quote?: string;
+}
+
+/** The parts of a study entry that hold sentences, for what the program dropped. */
+export type EntryPartName = "background" | "prior" | "gap" | "method" | "results" | "helps" | "cannot" | "admitted" | "ours";
+
+/** How much of an item's original was read, the program's (88 「看原文」, 91 把握). */
+export interface EntryRead {
+  /** The paper's depth (`facts.depth`); null for an item with no paper. */
+  depth: PaperDepth | null;
+  /** A whole read that stopped at PAPER_FULL_CHARS (verify.ts): what follows `through` was not read. */
+  cut: boolean;
+  /** The heading of the last section a whole read reached; null for any other read. */
+  through: string | null;
+}
+
+/**
+ * A study entry's seven parts (docs/info/91 条目格式): background, earlier
+ * work, what it lacked, what this one did (a story in paragraphs, saying who or
+ * what does each step), results, the relation to the reader's goal (helps,
+ * cannot reach), and how sure (the read, the paper's own limitations, what we
+ * see). An empty part is one the read material does not give: the page says
+ * so ("not in the abstract" when `confidence.read.depth` is "abstract").
+ */
+export interface EntryParts {
+  background: EntrySentence[];
+  prior: EntrySentence[];
+  gap: EntrySentence[];
+  /** Paragraphs of the story. */
+  method: EntrySentence[][];
+  results: EntrySentence[];
+  relevance: { helps: EntrySentence[]; cannot: EntrySentence[] };
+  confidence: {
+    read: EntryRead;
+    /** Limitations the original states, quoted. */
+    admitted: EntrySentence[];
+    /** Problems we see in it (the same model judging, baselines not rerun). */
+    ours: EntrySentence[];
+    /**
+     * Sentences left out on the write-up's last try because a number, a quote
+     * or an anchor did not check out, by part: the page says so (91: a results
+     * sentence dropped for a number prints "the results' numbers did not check").
+     */
+    dropped: { part: EntryPartName; why: "number" | "quote" | "cite" }[];
+  };
 }
 
 export interface ResultQuestion {

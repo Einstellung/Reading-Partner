@@ -16,13 +16,21 @@
 // (`deeper`): the program reads up to the run's cap, refuses the rest saying the
 // reads are used up, and asks for the write-up again with the whole papers in.
 // That round happens once and is not one of the two tries at the write-up.
+//
+// A study (`topic.once`, docs/info/91 条目格式) gets entries of seven parts
+// instead of paragraphs, every sentence anchored to the sections it stands on
+// and checked against them (entry-parts.ts); a sentence still failing on the
+// last try is left out and recorded rather than costing the whole write-up.
+// Its papers that make the brief are read in full before the write-up
+// (`studyReadOrder`, build-result.ts), so it is offered no deeper reads.
 
 import type { MaterialRegistry, RegisteredMaterial } from "../dossier/registry";
+import { entryRead, partsParagraphs, readParts, STUDY_ENTRY_CHARS } from "./entry-parts";
 import { HUB_RULE, hubLine, hubLines } from "./hub-line";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE, type TopicModel } from "./model-io";
 import { SETTLED_RULE, settledBlock, topicBlock } from "./rank-pool";
-import type { PaperDepth, ResultFacts, ResultRunKind, TopicSearchResultItem } from "./result-types";
-import type { TopicSearch } from "./types";
+import type { EntryParts, PaperDepth, ResultFacts, ResultRunKind, TopicSearchResultItem } from "./result-types";
+import type { TopicSearch, TopicSeed } from "./types";
 import { ORIGINALS_PER_ITEM, PAPER_FULL_CHARS } from "./verify";
 
 /** Characters of an item's materials the write-up sees, at least; an item with more materials gets a section's share for each. */
@@ -37,8 +45,11 @@ const ITEM_FULL_CHARS = PAPER_FULL_CHARS + 4000;
 /** One item's entry as the model wrote it. */
 export interface WrittenItem {
   summary: string;
+  /** A study entry's: its parts as plain paragraphs (entry-parts.ts partsParagraphs). */
   body: string[];
   unknown: string | null;
+  /** A study's entry only. */
+  parts?: EntryParts;
 }
 
 /** An earlier issue's conclusion on the same topic, for the model to carry on from. */
@@ -93,6 +104,21 @@ export function paperDepth(item: TopicSearchResultItem, registry: MaterialRegist
   const depths = item.materials.map((id) => registry.get(id)).filter((m) => m?.reader === "arxiv").map((m) => m!.facts.depth);
   for (const d of ["full", "head", "abstract"] as const) if (depths.includes(d)) return d;
   return item.facts.kind === "paper" ? (item.facts.depth ?? "abstract") : null;
+}
+
+/**
+ * The items of a study whose papers are read in full before the write-up, in
+ * the order they are read: those that can be read deeper, a seed's first, then
+ * by score (the order the brief puts them in). The caller takes as many as the
+ * run's cap (build-result.ts DEEP_READS).
+ */
+export function studyReadOrder(items: readonly TopicSearchResultItem[], registry: MaterialRegistry, seeds: readonly TopicSeed[] = []): string[] {
+  const seeded = new Set(seeds.map((s) => s.key));
+  return items
+    .filter((i) => deepenableMaterial(i, registry) !== null)
+    .map((item, at) => ({ item, at, seed: item.keys.some((k) => seeded.has(k)) || seeded.has(item.key) }))
+    .sort((a, b) => Number(b.seed) - Number(a.seed) || b.item.score - a.item.score || a.at - b.at)
+    .map((x) => x.item.id);
 }
 
 const DEPTH_LINE: Record<PaperDepth, string> = {
@@ -174,8 +200,27 @@ function itemSources(item: TopicSearchResultItem, registry: MaterialRegistry, ea
   ];
 }
 
+/** A study entry's parts, for the prompt (docs/info/91 条目格式). */
+const STUDY_ENTRY_LINES = [
+  "- items: for every item that is not marked continuing, an entry a reader new to the field can follow, in these parts:",
+  "  conclusion: one sentence, the finding. It is the item's line in the contents and its lede. Do not repeat the title.",
+  "  background: why this work is worth doing.",
+  "  prior: how it was done before, naming representative earlier work as the original names it.",
+  "  gap: what the earlier ways lacked, in the original's own terms; quote its words.",
+  "  method: what this one did, told as a story in short paragraphs; every step says who or what does it (the large language model, a named algorithmic tool, a human) and what it does.",
+  '  results: exact numbers, each with what it is compared to ("75%, PySR 40%"), one sentence per comparison.',
+  "  helps, cannot: how it bears on the reader's goal (the topic's scope, wants and judgements): what it helps with, and what it cannot reach.",
+  "  admitted: the limitations the original itself states; quote its words.",
+  "  ours: problems you see that it does not state (its accuracy judged by the same model, a baseline's numbers copied rather than rerun); none is fine.",
+  '  Each part is a list of sentences {"text": "…", "cite": ["M3.§2"], "quote": "…"}; method is a list of paragraphs, each a list of sentences. Judgements carry hedges (likely, probably, may); never write a guess as a fact.',
+  "  Every sentence cites the sections (M3.§2) of this item's materials it stands on; only helps, cannot and ours may cite none. quote is optional: the original's exact words, in its language, from a section the sentence cites.",
+  "  A part the material read does not give is an empty list: never fill it from elsewhere or from what you know. Do not write authors, dates, arXiv ids or links: the program prints them.",
+  `  Length: an entry whose paper was read in full or in part stays within about ${STUDY_ENTRY_CHARS.read} characters in Chinese or Japanese (${Math.round(STUDY_ENTRY_CHARS.read / 2.6)} words in other languages); one read from the abstract only, about ${STUDY_ENTRY_CHARS.abstract} (${Math.round(STUDY_ENTRY_CHARS.abstract / 2.6)} words).`,
+];
+
 export function composePrompt(input: ComposeInput): { system: string; user: string } {
   const first = input.kind === "first";
+  const study = input.topic.once === true;
   const offer = input.deeper && input.deeper.left > 0 ? input.items.filter((i) => deepenableMaterial(i, input.registry)).map((i) => i.id) : [];
   const system = [
     first
@@ -184,11 +229,15 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
     first
       ? "- overview: one paragraph, four to seven sentences, naming items by number (E1) where it draws on them."
       : "- overview: two or three sentences, naming items by number (E1) where it draws on them.",
-    "- items: for every item that is not marked continuing (and, if you have something new to say, for a continuing one), a brief entry:",
-    "  conclusion: one sentence, the finding. It is the item's line in the contents and its lede. Do not repeat the title.",
-    "  body: two or three short paragraphs. Say what happened first, then what it likely means, kept apart. Judgements carry hedges (likely, probably, may); never write a guess as a fact. Do not repeat the facts line.",
-    "  unknown: one sentence on what is not yet known or could not be checked.",
-    "  A new story that first shows up today is told short, saying what is not yet known.",
+    ...(study
+      ? STUDY_ENTRY_LINES
+      : [
+          "- items: for every item that is not marked continuing (and, if you have something new to say, for a continuing one), a brief entry:",
+          "  conclusion: one sentence, the finding. It is the item's line in the contents and its lede. Do not repeat the title.",
+          "  body: two or three short paragraphs. Say what happened first, then what it likely means, kept apart. Judgements carry hedges (likely, probably, may); never write a guess as a fact. Do not repeat the facts line.",
+          "  unknown: one sentence on what is not yet known or could not be checked.",
+          "  A new story that first shows up today is told short, saying what is not yet known.",
+        ]),
     "- Earlier issues: when an item continues something listed under \"Said in earlier issues\", write only what is new and carry the rest with words like yesterday, still, again. Never restate what was said there.",
     "- doubts: questions for the reader where you could not tell whether they want this kind of thing; usually none.",
     "- repeats: the numbers of candidate questions (Q1 …) that ask something the reader already answered or that the topic already settles; usually none.",
@@ -200,15 +249,21 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
       : []),
     "Rules: skip promotion, event hype and engagement bait; tell a thread as one piece; tell a quoting post together with what it quotes; where an item lists a discrepancy, say what the original actually shows, not what the post claimed.",
     'A technical term the reader is not known to understand (see "What the reader understands") is explained in a short clause the first time it appears; a term they are known to understand is not. When unsure, explain it. Where two lines there disagree, the earlier one holds.',
-    "Every number and date you write must appear in the materials, posts or facts of the items you cite. Never derive one (no sums, no differences, no rounding).",
+    study
+      ? "Every number and date in an entry's sentence must appear in the sections that sentence cites; in the overview and conclusions, in the materials, posts or facts of the items you cite. Never derive one (no sums, no differences, no rounding)."
+      : "Every number and date you write must appear in the materials, posts or facts of the items you cite. Never derive one (no sums, no differences, no rounding).",
     `${HUB_RULE} You may mention the attention and the repository where they tell the reader something.`,
-    "A paper item says how much of the paper was read. Conclude only from the part read: what its method does or what its results show beyond that is not known to you, so say so in unknown and never guess it.",
+    study
+      ? "A paper item says how much of the paper was read. Write only from the part read: a part it does not give stays an empty list (the program then says the abstract or the part read does not give it), and results hold no number the part read does not."
+      : "A paper item says how much of the paper was read. Conclude only from the part read: what its method does or what its results show beyond that is not known to you, so say so in unknown and never guess it.",
     ...(offer.length
       ? [
           `Before writing, you may ask to read up to ${input.deeper!.left} of these papers in full: ${offer.join(", ")}. Ask only where what was read is too little to say what the paper did or found. To ask, answer only {"deeper": ["E2"]}; the program reads them and asks you to write again. Otherwise write the answer below.`,
         ]
       : []),
-    'Answer with JSON only: {"overview": {"text": "…", "cites": ["E1", "M3"]}, "items": [{"e": "E1", "conclusion": "…", "body": ["…", "…"], "unknown": "…", "cites": ["M3.§2"]}], "doubts": [{"text": "…", "e": "E2"}], "repeats": ["Q1"]}.',
+    study
+      ? 'Answer with JSON only: {"overview": {"text": "…", "cites": ["E1", "M3"]}, "items": [{"e": "E1", "conclusion": "…", "background": [{"text": "…", "cite": ["M3.§1"]}], "prior": [], "gap": [{"text": "…", "cite": ["M3.§2"], "quote": "…"}], "method": [[{"text": "…", "cite": ["M3.§4"]}]], "results": [], "helps": [], "cannot": [], "admitted": [], "ours": []}], "doubts": [{"text": "…", "e": "E2"}], "repeats": ["Q1"]}.'
+      : 'Answer with JSON only: {"overview": {"text": "…", "cites": ["E1", "M3"]}, "items": [{"e": "E1", "conclusion": "…", "body": ["…", "…"], "unknown": "…", "cites": ["M3.§2"]}], "doubts": [{"text": "…", "e": "E2"}], "repeats": ["Q1"]}.',
     UNTRUSTED_RULE,
     input.language,
     // The sentences are in the book's language; what the materials call things stays as they call it.
@@ -281,8 +336,13 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
   return { system, user };
 }
 
-/** The reply read and checked; `problems` lists what failed, empty when it all passed. */
-export function checkWritten(text: string, input: ComposeInput): { written: Written | null; problems: string[] } {
+/**
+ * The reply read and checked; `problems` lists what failed, empty when it all
+ * passed. `final`: the last try. A study entry's sentence that fails is then
+ * left out and recorded in its parts instead of failing the reply; nothing
+ * else changes with it.
+ */
+export function checkWritten(text: string, input: ComposeInput, final = false): { written: Written | null; problems: string[] } {
   let raw: unknown;
   try {
     raw = parseJsonReply(text);
@@ -295,6 +355,7 @@ export function checkWritten(text: string, input: ComposeInput): { written: Writ
   const already = new Map((input.alongside ?? []).map((i) => [i.id, i]));
   const refOk = (r: string) => byId.has(r) || already.has(r) || input.registry.has(r);
   const earlier = input.earlier ?? [];
+  const study = input.topic.once === true;
 
   const ov = (o.overview ?? {}) as Record<string, unknown>;
   const overviewText = typeof ov.text === "string" ? ov.text.trim() : "";
@@ -332,6 +393,32 @@ export function checkWritten(text: string, input: ComposeInput): { written: Writ
       .slice(0, MAX_PARAGRAPHS);
     const unknown = str(x.unknown) || null;
     if (!item || !summary || entries.has(id)) continue;
+    if (study) {
+      const sources = itemSources(item, input.registry, earlier);
+      const checked = readParts(
+        x,
+        {
+          id,
+          materials: item.materials,
+          registry: input.registry,
+          read: entryRead(item.materials, input.registry, paperDepth(item, input.registry)),
+          extra: [item.title, factsText(item.facts)],
+          whole: sources,
+        },
+        final,
+      );
+      if (!checked.parts || !checked.methodGiven) {
+        problems.push(`${id} has a conclusion but no method sentences.`);
+        continue;
+      }
+      const missing = missingNumbers(summary, sources);
+      if (missing.length) problems.push(`${id}'s conclusion has numbers its materials do not hold: ${missing.join(", ")}.`);
+      problems.push(...checked.problems);
+      if (!missing.length && !checked.problems.length) {
+        entries.set(id, { summary, body: partsParagraphs(checked.parts), unknown: null, parts: checked.parts });
+      }
+      continue;
+    }
     // A continuing item may be carried on in a line; a new one needs its paragraphs.
     if (!item.continuing && body.length === 0) {
       problems.push(`${id} has a conclusion but no body paragraphs.`);
@@ -442,7 +529,7 @@ export async function composeResult(
         continue;
       }
     }
-    const { written, problems } = checkWritten(text, input);
+    const { written, problems } = checkWritten(text, input, attempt === 1 || calls >= maxCalls);
     if (written) return { written, calls, deeper };
     tail = [...(note ? [note] : []), `Your previous answer had these problems; write it again:\n${problems.map((p) => `- ${p}`).join("\n")}`];
   }

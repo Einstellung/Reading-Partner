@@ -25,7 +25,7 @@ import { mentionsAnchor } from "../rank/score";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
 import type { ArxivLadder } from "./arxiv-ladder";
 import { doiArxiv, heldDois, poolDois, type DoiLookup } from "./doi-arxiv";
-import { composeResult, deepenableMaterial, EARLIER_LINES, type DeeperReads, type EarlierLine } from "./compose";
+import { composeResult, deepenableMaterial, EARLIER_LINES, studyReadOrder, type DeeperReads, type DeeperReport, type EarlierLine } from "./compose";
 import { abortableSleep, parseJsonReply, retryingModel, type TopicModel } from "./model-io";
 import type { RunSource } from "./pace";
 import { latestLabels, type TopicLabel } from "./labels";
@@ -97,7 +97,11 @@ import type { XReadResult } from "./x-reader";
 
 /** Items a result lists: a first run's, and a day's (88 「打分」 7). */
 export const RESULT_ITEMS = { first: 15, daily: 8 } as const;
-/** Papers the write-up may have read in full, per run: a first run's, and a day's (initial values). */
+/**
+ * Papers the write-up may have read in full, per run: a first run's, and a
+ * day's (initial values). A study reads its first run's in full before the
+ * write-up rather than on the model's ask (docs/info/91 条目格式).
+ */
 export const DEEP_READS = { first: 5, daily: 2 } as const;
 /** How far back the topic's results count as already reported. */
 export const HISTORY_DAYS = 30;
@@ -872,6 +876,17 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       return { ok: true };
     },
   };
+  // A study's papers that make the brief are read in full before the write-up
+  // (docs/info/91 条目格式), up to the run's cap. That leaves nothing to offer:
+  // past the cap none are left, under it every paper was tried.
+  const upfront: DeeperReport = { read: [], failed: [], refused: [] };
+  if (topic.once && !empty) {
+    for (const id of studyReadOrder(items, registry, topic.seeds).slice(0, deeper.cap)) {
+      throwIfAborted(signal);
+      const got = await deeper.read(id, signal);
+      (got.ok ? upfront.read : upfront.failed).push(id);
+    }
+  }
   if (!empty) {
     const offered = waiting(queue).slice(0, 6);
     const label = new Map(offered.map((q, i) => [`Q${i + 1}`, q.id]));
@@ -890,14 +905,15 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         // those are shown beside the new ones rather than again as earlier lines.
         earlier: earlierLines(target ? recent.filter((r) => r.id !== target.id) : recent),
         ...(target ? { alongside: target.items } : {}),
-        deeper,
+        ...(topic.once ? {} : { deeper }),
       },
       model,
       signal,
       Math.max(0, callsLeft()),
     );
     modelCalls += calls;
-    if (deepReads.read.length + deepReads.failed.length + deepReads.refused.length) stats.deepReads = deepReads;
+    const reads = { read: [...upfront.read, ...deepReads.read], failed: [...upfront.failed, ...deepReads.failed], refused: deepReads.refused };
+    if (reads.read.length + reads.failed.length + reads.refused.length) stats.deepReads = reads;
     if (written) {
       writeup = "model";
       overview = written.overview;
@@ -906,6 +922,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         item.summary = entry?.summary ?? null;
         item.body = entry?.body ?? [];
         item.unknown = entry?.unknown ?? null;
+        if (entry?.parts) item.parts = entry.parts;
       }
       repeats = new Set([...written.repeats].map((r) => label.get(r)).filter((r): r is string => !!r));
       const keyOf = new Map(items.map((i) => [i.id, i.key]));
