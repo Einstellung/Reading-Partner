@@ -34,8 +34,10 @@ import { currentDeviceId } from "../app/device";
 import { currentPlatform } from "../app/platform";
 import { currentAppVersion } from "../app/version";
 import { isGoogleConfigured } from "./googleConfig";
+import { reportAfterSignIn, reportOnStartup } from "../account";
 import {
   currentEmail,
+  freshIdToken,
   getAccessToken,
   isSignedIn,
   signIn,
@@ -252,6 +254,9 @@ export async function initSync(mounted: Shell): Promise<void> {
   }
   signedIn = await isSignedIn();
   email = await currentEmail();
+  // The day's account registration (docs/platform/665). Not awaited, and it
+  // swallows its own failures: sync never waits on it.
+  if (signedIn && isGoogleConfigured()) void reportOnStartup(freshIdToken);
   // Covers the paths that start no engine; startEngine sets its own anchor.
   graceSince = Date.now();
   const action = syncStartAction({
@@ -277,7 +282,9 @@ export function subscribeSyncStatus(cb: (s: SyncStatus) => void): () => void {
 }
 
 export async function signInToGoogle(): Promise<void> {
-  await signIn();
+  const idToken = await signIn();
+  // Not awaited; failures are swallowed (docs/platform/665).
+  void reportAfterSignIn(idToken);
   signedIn = true;
   email = await currentEmail();
   signedInState(state, email);

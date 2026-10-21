@@ -1,4 +1,6 @@
 mod atomic_fs;
+// The hardware model for the account registration (docs/platform/665).
+mod device_model;
 // SQLite for pi-durable's storage, behind the frontend's SqliteDatabase facade.
 mod durable_sqlite;
 mod image_proxy;
@@ -95,6 +97,7 @@ pub fn run() {
             durable_sqlite::durable_sqlite_close,
             durable_sqlite::durable_sqlite_remove,
             durable_sqlite::durable_sqlite_size,
+            device_model::device_model,
             oauth_callback::start_oauth_callback_listener,
             voice::start_voice_recording,
             voice::stop_voice_recording,
@@ -136,6 +139,7 @@ pub fn run() {
             durable_sqlite::durable_sqlite_close,
             durable_sqlite::durable_sqlite_remove,
             durable_sqlite::durable_sqlite_size,
+            device_model::device_model,
             oauth_callback::start_oauth_callback_listener
         ]);
 

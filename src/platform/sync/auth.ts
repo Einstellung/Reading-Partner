@@ -67,6 +67,8 @@ export interface GoogleAuth {
   refresh: string;
   expires: number; // epoch ms, already skew-adjusted
   email: string | null;
+  // Absent in files written before the profile scope was asked for.
+  name?: string | null;
 }
 
 // --- storage ---------------------------------------------------------------
@@ -97,19 +99,29 @@ export async function currentEmail(): Promise<string | null> {
   return (await loadAuth())?.email ?? null;
 }
 
-// Pull the email claim out of an OIDC id_token without verifying the signature —
-// it is only used for display, never for authorization. Pure and unit-tested.
-export function parseIdTokenEmail(idToken: string | undefined): string | null {
-  if (!idToken) return null;
+export interface IdTokenProfile {
+  email: string | null;
+  name: string | null;
+}
+
+// Pull the email and name claims out of an OIDC id_token without verifying the
+// signature — they are only used for display and stored locally, never for
+// authorization. Pure and unit-tested.
+export function parseIdTokenClaims(idToken: string | undefined): IdTokenProfile {
+  const none = { email: null, name: null };
+  if (!idToken) return none;
   const parts = idToken.split(".");
-  if (parts.length < 2) return null;
+  if (parts.length < 2) return none;
   try {
     const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const json = atob(payload + "=".repeat((4 - (payload.length % 4)) % 4));
-    const claims = JSON.parse(json) as { email?: string };
-    return typeof claims.email === "string" ? claims.email : null;
+    const claims = JSON.parse(json) as { email?: unknown; name?: unknown };
+    return {
+      email: typeof claims.email === "string" ? claims.email : null,
+      name: typeof claims.name === "string" ? claims.name : null,
+    };
   } catch {
-    return null;
+    return none;
   }
 }
 
@@ -223,7 +235,9 @@ async function captureSchemeCode(flow: AuthFlow, challenge: string, state: strin
 
 // --- login -----------------------------------------------------------------
 
-export async function signIn(): Promise<void> {
+// Returns the id_token of the sign-in, for the account registration
+// (platform/account) to send on.
+export async function signIn(): Promise<string | null> {
   const flow = requireFlow();
   const { verifier, challenge } = await generatePKCE();
   const state = base64Url(crypto.getRandomValues(new Uint8Array(16)));
@@ -239,12 +253,15 @@ export async function signIn(): Promise<void> {
   if (!token.refresh_token) {
     throw new Error(t("shell.auth.noRefreshToken"));
   }
+  const profile = parseIdTokenClaims(token.id_token);
   await saveAuth({
     access: token.access_token,
     refresh: token.refresh_token,
     expires: Date.now() + token.expires_in * 1000 - EXPIRY_SKEW_MS,
-    email: parseIdTokenEmail(token.id_token),
+    email: profile.email,
+    name: profile.name,
   });
+  return token.id_token ?? null;
 }
 
 export async function signOut(): Promise<void> {
@@ -270,13 +287,32 @@ export async function getAccessToken(): Promise<string> {
     }
     throw e;
   }
-  const next: GoogleAuth = {
+  const next = afterRefresh(auth, token);
+  await saveAuth(next);
+  return next.access;
+}
+
+function afterRefresh(auth: GoogleAuth, token: TokenResponse): GoogleAuth {
+  const profile = parseIdTokenClaims(token.id_token);
+  return {
     access: token.access_token,
     // A refresh response usually omits refresh_token; keep the existing one.
     refresh: token.refresh_token ?? auth.refresh,
     expires: Date.now() + token.expires_in * 1000 - EXPIRY_SKEW_MS,
-    email: parseIdTokenEmail(token.id_token) ?? auth.email,
+    email: profile.email ?? auth.email,
+    name: profile.name ?? auth.name ?? null,
   };
-  await saveAuth(next);
-  return next.access;
+}
+
+// A current id_token, for the daily account registration (platform/account).
+// The one from sign-in is an hour old at most and is not kept, so this always
+// refreshes. Null when signed out or when Google returns no id_token; a failed
+// refresh throws and leaves the stored credentials alone (getAccessToken is the
+// path that decides a dead refresh token means signed out).
+export async function freshIdToken(): Promise<string | null> {
+  const auth = await loadAuth();
+  if (!auth || !auth.refresh) return null;
+  const token = await tokenRequest(refreshBody(requireFlow(), auth.refresh));
+  await saveAuth(afterRefresh(auth, token));
+  return token.id_token ?? null;
 }

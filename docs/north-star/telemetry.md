@@ -14,6 +14,6 @@
 - 强制上报可行，前提是保持上面的匿名形态：匿名数据不算个人信息，GDPR 和个人信息保护法不要求开关；App Store 只要求在隐私标签和隐私政策里写明，不涉及 ATT。Release 正文的 Stored data、隐私政策、设置页都要写明收了什么。一旦要加 ID 或任何能识别设备或人的字段，就退回告知加开关。
 - 强制只意味着不给开关。上报失败（离线、国内网络不通、被拦）时 app 照常用，所以统计永远是下限。
 - 不用 IP 代替 ID：IP 本身是个人信息，而且 NAT 共用和移动网络换 IP 让它数不准设备。
-- 不借用户的 Google 登录统计：开发者在 Cloud 后台只看得到 Drive API 请求总量；把账号信息带进统计违反 Google API 用户数据政策，会危及 OAuth 客户端；也数不到没开同步的设备。
+- Google 登录可以作为我们自己的账号用：登录后把账号和设备登记到自己的后端（docs/platform/665），在隐私政策里写明收什么、做什么用，是 Google 登录的正常用法。违反 Google API 用户数据政策的是瞒着用户把账号信息拿去做统计。登记只覆盖登录了的设备，没开同步的数不到。
 - 后端倾向 Vercel Functions 加 Postgres（Neon）。`vercel.app` 和 `workers.dev` 在国内都打不开，要挂自己的域名。Apps Script 加表格已否。
 - 现成可看的：TestFlight 后台有 iOS 安装数、机型、系统版本；GitHub Release 每个安装包的下载次数可以用 `gh api` 查。
