@@ -25,8 +25,12 @@ export const TOPIC_LABELS_VERSION = 1;
 const PREFIX = "topic-search-labels-";
 
 export type TopicLabelKind = "yes" | "no" | "borderline" | "pinned";
-/** Where the label came from: a seed confirmed while drafting, a confirmed study line, an answered question. */
-export type TopicLabelSource = "seed" | "line" | "question";
+/**
+ * Where the label came from: a seed confirmed while drafting, a confirmed study
+ * line, an answered question, or a hand-written list the reader imported with
+ * scripts/topic-labels-replay.ts (its evidence is "import:<file>:<line>").
+ */
+export type TopicLabelSource = "seed" | "line" | "question" | "import";
 
 export interface TopicLabel {
   // "tl-" + 8 hex.
@@ -66,7 +70,7 @@ export function topicLabelsFileName(searchId: string): string {
 }
 
 const KINDS: readonly TopicLabelKind[] = ["yes", "no", "borderline", "pinned"];
-const SOURCES: readonly TopicLabelSource[] = ["seed", "line", "question"];
+const SOURCES: readonly TopicLabelSource[] = ["seed", "line", "question", "import"];
 const PLACES: readonly string[] = ["pinned", "main", "note", "absent"];
 
 const numOrNull = (v: unknown) => v === null || typeof v === "number";
