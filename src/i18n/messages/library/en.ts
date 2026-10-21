@@ -170,6 +170,7 @@ export default {
   "statement.evidenceBoth": "{observations}, {messages}",
   "statement.kindProfile": "profile",
   "statement.kindConcern": "concern",
+  "statement.kindKnown": "known",
 
   // A topic's four sections, as tabs (topic/TopicNav.tsx, base/topic-nav.ts).
   "section.navLabel": "Topic",

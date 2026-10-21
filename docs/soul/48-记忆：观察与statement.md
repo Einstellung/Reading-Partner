@@ -22,9 +22,10 @@
 - 模型调用日志接进发送路径，`model-calls-<device>.jsonl`，一次调用一行（工具循环里一轮算一次），成败都写。它和使用日志是两份文件：使用日志的一行是一条 statement 或观察的 id，dream 拿它算激活度，混进调用记录就没法读了。
 - 模型调用日志不同步，只留在本机，满 1 MB 从头截。没有任何东西收集它，同步就是每台设备一个只涨不收的文件；一台机器花了多少是这台机器的事。
 
-statement 两种 kind：
+statement 三种 kind：
 
-- `profile`：讲法（要完整推导不要图、术语第一次出现要展开）、懂了什么、卡在什么上。
+- `profile`：讲法（要完整推导不要图、术语第一次出现要展开）。
+- `known`：懂或不懂的一个东西，一条一句（「熟悉强化学习」「不熟悉符号回归」）。2026-10-21 从 profile 分出来（[91](../info/91-专题调研.md)「读者懂什么」），写简报时按它决定哪个术语要在句子里解释。
 - `concern`：他现在盯着的一件事，多带新鲜度和 lapse。
 
 字段：`kind`、`text`、`evidence[]`、`contradictedBy[]`、`established`、`lastSupported`、`supersededBy`、`author`；concern 另加预期复现间隔和 `lapsed`。除 `text` 外全部由代码从锚点和日期算，不经模型。
@@ -101,9 +102,9 @@ statement 目录 `src/memory/statements/`，合并策略 `records`。"profile"�
 
 ## 读者自己写
 
-聊天里挂一个写 statement 的工具，是 `update_profile` 的归处。读者说了关于自己的话（"以后别画图"、"我懂了"、"我最近在盯 X"）模型就调它：写一条 statement，`author` 记读者，`kind` 由模型在 profile 和 concern 之间选，evidence 是那条消息的 id。推翻旧的用同一个工具带目标下标，新条 supersede 旧条，旧条不删。
+聊天里挂一个写 statement 的工具，是 `update_profile` 的归处。读者说了关于自己的话（"以后别画图"、"我懂了"、"我最近在盯 X"）模型就调它：写一条 statement，`author` 记读者，`kind` 由模型在 profile、known 和 concern 之间选，evidence 是那条消息的 id。问「X 是什么」算他说了不懂 X，答完写一条 known；说「这个我清楚」写「清楚 X」。推翻旧的用同一个工具带目标下标，新条 supersede 旧条，旧条不删。
 
-挂阅读侧——一个人怎么读只在阅读对话里看得见。info 侧这次不管。
+这个工具随 soul 挂在每张桌上，门口对话也有（`soul/self.ts`）。
 
 `ObservationPanel` 里加一份只读的 statement 列表，读者能看到 AI 认为他是什么样、每条指回哪些证据。改和删走对话，不加按钮。
 
@@ -115,15 +116,15 @@ statement 目录 `src/memory/statements/`，合并策略 `records`。"profile"�
 
 聊天提示词里记忆那一段固定三块，顺序固定：
 
-1. profile 整组，讲法类在最前。
+1. profile 整组，后面接 known；读者自己说的在前，dream 的在后。
 2. 这本书悬着的事。
 3. 检索来的观察，摘要行带 id，正文留在 `observation_read` 后面。
 
-常驻的只有讲法类：它由"正在讲解"这个动作触发，和内容没有词面联系，检索不出来，只能常驻；天然少，长了由 dream 合并。懂了 / 卡着那部分靠检索进来，会话开头以书名、章节、reading-position 做一次线索检索取第一批，之后按轮续，不够模型自己再要。
+讲法类（profile）常驻：它由"正在讲解"这个动作触发，和内容没有词面联系，检索不出来，只能常驻；天然少，长了由 dream 合并。known 将来靠检索进来，会话开头以书名、章节、reading-position 做一次线索检索取第一批，之后按轮续，不够模型自己再要；检索没做之前 known 整组跟在 profile 后面印。info 侧的读者段（`memory/statements/section.ts`）profile、known、concern 各一块。
 
 concern 不进聊天段，消费者是 info 分拣和 dream。
 
-悬项是程序判的，不等 dream：一条 stuck-point 观察，没有被任何更晚的 understood-concept 观察在正文里提及，就算悬着。拷问的出题池就是这个集合。答对了白天写一条 understood-concept 观察提及那条 stuck-point，当天它就从悬项里消失，dream 夜里再把它升成 profile。
+悬项是程序判的，不等 dream：一条 stuck-point 观察，没有被任何更晚的 understood-concept 观察在正文里提及，就算悬着。拷问的出题池就是这个集合。答对了白天写一条 understood-concept 观察提及那条 stuck-point，当天它就从悬项里消失，dream 夜里再把它升成 known。
 
 收口只认后续证据——答对、复述对、亲口说懂了——不认"AI 又讲了一遍"。resolved 的卡点还读作开着，AI 会把他已经懂的再讲一遍，这是最容易被读者看见的失败。
 
@@ -138,7 +139,7 @@ concern 不进聊天段，消费者是 info 分拣和 dream。
 每晚三问：
 
 - 回放哪些。候选 = 上次之后新写或改过的 + 白天被取用过的（使用日志）+ 悬着的。correction 优先，reading-position 不算。优先级是 gain × need：gain 是预测误差幅度，correction 天生是有符号的预测误差；need 是近期被用到的概率，使用日志给。出现次数不是重要性。
-- 写什么。读者亲口说的当场成立；蒸出来的至少两条独立证据；单次不写。
+- 写什么。读者亲口说的当场成立；蒸出来的至少两条独立证据；单次不写。dream 写 profile 和 known，不写 concern；known 的证据只能是 understood-concept 和 stuck-point 观察（`dream/proposals.ts` 校验）。dream 自己写过的 profile 里讲懂不懂的，supersede 时带 `kind: known` 挪进 known；读者写的不动。
 - 谁退出。被引用为证据的观察退出前台。规则漏洞是单次且从未被引用的永远退不出，补一条"考虑过 K 晚都没挂上 → unattached 退出，检索仍然可达"，K 待数据。
 
 pass 只做追加和刷新，不做整组替换。哪条下场由有效期决定，不由这一轮没被重新提起决定。140 条 / 10 万字全量重读在这个量级不贵，不设窗口——照抄先例的窗口常数，结果就是"每主题 12 行导致 74% 的记录不可见"。

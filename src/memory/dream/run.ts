@@ -65,9 +65,13 @@ export const DREAM_SYSTEM_PROMPT = [
   "what is generally true of them.",
   "",
   "An observation is something that happened on a day. A statement is what you conclude",
-  "from several of them: how this reader reads, what they have understood, what they are",
-  "stuck on. A statement carries no date and no hedging — it is a claim, and the",
-  "observations behind it are what it rests on.",
+  "from several of them. A statement carries no date and no hedging — it is a claim, and",
+  "the observations behind it are what it rests on. Two kinds:",
+  "- profile: how this reader reads and wants to be taught (\"Wants the full derivation, no",
+  "  diagrams\").",
+  "- known: one thing they understand or do not, one per statement (\"Familiar with",
+  "  reinforcement learning\", \"Not familiar with symbolic regression\"). It rests only on",
+  "  understood-concept and stuck-point observations.",
   "",
   "Rules:",
   "- A statement needs at least two observations from two different days behind it.",
@@ -77,7 +81,11 @@ export const DREAM_SYSTEM_PROMPT = [
   "  statement with it rather than writing the claim a second time.",
   "- Supersede a statement only when the evidence has turned against it, or when its",
   "  wording is plainly wrong now. A statement written by the reader is never superseded;",
-  "  support it instead.",
+  "  support it instead. What the reader said about themselves beats what you conclude:",
+  "  when your reading of the observations disagrees with a statement by the reader,",
+  "  leave it standing and write nothing against it.",
+  "- A profile statement of yours that says what they understand or are stuck on belongs",
+  "  in known: supersede it with a known statement (give \"kind\":\"known\").",
   "- When two standing statements say the same thing, supersede both with one statement",
   "  that carries the union of their evidence.",
   "- Write the statement in the language the observations are written in.",
@@ -86,9 +94,11 @@ export const DREAM_SYSTEM_PROMPT = [
   "",
   "Answer with one JSON array and nothing else. Each element is one of:",
   '  {"action":"state","kind":"profile","text":"...","evidence":[1,4]}',
+  '  {"action":"state","kind":"known","text":"...","evidence":[2,5]}',
   '  {"action":"support","statement":2,"evidence":[7]}',
   '  {"action":"supersede","statement":2,"text":"...","evidence":[3,9]}',
   '  {"action":"supersede","statement":[2,11],"text":"...","evidence":[3,9]}',
+  '  {"action":"supersede","statement":5,"kind":"known","text":"...","evidence":[6,8]}',
   "",
   "`evidence` holds numbers from the observation list; `statement` is a number from the",
   "statement list, or a list of them when one statement replaces several. An empty array",
@@ -142,7 +152,7 @@ export async function runDream(
     try {
       if (proposal.action === "state") {
         await store.createStatement({
-          kind: "profile",
+          kind: proposal.kind,
           text: proposal.text,
           author: "dream",
           evidence,
@@ -157,11 +167,12 @@ export async function runDream(
         continue;
       }
       const targets = proposal.statements.map((i) => candidates.statements[i - 1]);
-      // The first target mints the replacement; the rest are pointed at it. Its
-      // kind is the replacement's kind — every target passed the author rule, so
-      // they are all statements a night wrote, and a night writes profile.
+      // The first target mints the replacement; the rest are pointed at it. The
+      // replacement keeps the first target's kind unless the model named one —
+      // every target passed the author rule, so they are all statements a night
+      // wrote, and a night writes profile and known.
       const replacement = await store.supersede(targets[0].id, {
-        kind: targets[0].kind,
+        kind: proposal.kind ?? targets[0].kind,
         text: proposal.text,
         author: "dream",
         evidence,

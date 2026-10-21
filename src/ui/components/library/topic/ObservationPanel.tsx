@@ -21,6 +21,7 @@ const TYPE_STYLE: Record<ObservationType, string> = {
 
 const KIND_STYLE: Record<Statement["kind"], string> = {
   profile: "bg-indigo-100 text-indigo-700",
+  known: "bg-sky-100 text-sky-700",
   concern: "bg-fuchsia-100 text-fuchsia-700",
 };
 
@@ -43,10 +44,14 @@ const TYPE_LABEL_KEY: Record<ObservationType, ObservationTypeLabelKey> = {
   correction: "library.observations.typeCorrection",
 };
 
-type StatementKindLabelKey = "library.statement.kindProfile" | "library.statement.kindConcern";
+type StatementKindLabelKey =
+  | "library.statement.kindProfile"
+  | "library.statement.kindKnown"
+  | "library.statement.kindConcern";
 
 const KIND_LABEL_KEY: Record<Statement["kind"], StatementKindLabelKey> = {
   profile: "library.statement.kindProfile",
+  known: "library.statement.kindKnown",
   concern: "library.statement.kindConcern",
 };
 

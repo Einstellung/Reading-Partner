@@ -169,6 +169,7 @@ const ru: Translation<typeof en> = {
   "statement.evidenceBoth": "{observations}, {messages}",
   "statement.kindProfile": "профиль",
   "statement.kindConcern": "пожелание",
+  "statement.kindKnown": "знания",
 
   "section.navLabel": "Тема",
   "section.materials": "Материалы",

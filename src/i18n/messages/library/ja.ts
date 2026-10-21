@@ -141,6 +141,7 @@ const ja: Translation<typeof en> = {
   "statement.evidenceBoth": "{observations}、{messages}",
   "statement.kindProfile": "プロフィール",
   "statement.kindConcern": "気にしていること",
+  "statement.kindKnown": "わかっていること",
 
   "section.navLabel": "トピック",
   "section.materials": "資料",

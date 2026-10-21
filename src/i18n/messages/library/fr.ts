@@ -152,6 +152,7 @@ const fr: Translation<typeof en> = {
   "statement.evidenceBoth": "{observations}, {messages}",
   "statement.kindProfile": "profil",
   "statement.kindConcern": "préoccupation",
+  "statement.kindKnown": "acquis",
 
   "section.navLabel": "Sujet",
   "section.materials": "Documents",

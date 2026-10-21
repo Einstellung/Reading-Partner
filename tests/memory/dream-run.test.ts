@@ -272,3 +272,26 @@ test("a support of a statement that has since gone away is counted as dropped", 
 
   expect(result).toMatchObject({ outcome: "merged", written: 0, dropped: 1 });
 });
+
+test("a known state is written as known, and a supersede may move a profile to known", async () => {
+  const store = fakeStore();
+  const result = await runDream(
+    {
+      observations,
+      statements: [statement({ id: "s-1", kind: "profile", author: "dream" })],
+    },
+    answers(
+      '[{"action":"state","kind":"known","text":"Not familiar with symbolic regression","evidence":[1,2]},' +
+        '{"action":"supersede","statement":1,"kind":"known","text":"Familiar with RL","evidence":[1,2]}]',
+    ),
+    store,
+  );
+
+  expect(result.outcome).toBe("merged");
+  expect(store.written.created).toEqual([
+    { kind: "known", text: "Not familiar with symbolic regression", author: "dream", evidence: [A, B] },
+  ]);
+  expect(store.written.superseded).toEqual([
+    { id: "s-1", input: { kind: "known", text: "Familiar with RL", author: "dream", evidence: [A, B] } },
+  ]);
+});

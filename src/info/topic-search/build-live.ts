@@ -1,6 +1,6 @@
 // The result builder with the real host (docs/info/88): the everyday-tier model,
 // the app's fetch, 86's `open` route for links, the counted GitHub lookup,
-// AppData, the reader's profile statements. Apart from build-result.ts so that
+// AppData, the reader's profile and known statements. Apart from build-result.ts so that
 // file stays testable: everything here reaches the host.
 //
 // The run pipeline (run.ts) injects `buildTopicSearchResult`, and searches
@@ -24,6 +24,7 @@ import { isPdfBytes } from "../../workshop/bindery/pdf";
 import { infoFetch } from "../../workshop/extract/http";
 import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { listStatements } from "../../memory/live/statements";
+import { standingStatements } from "../../memory/statements/section";
 import { arxivPlugin } from "../sources/plugins/arxiv";
 import { huggingfacePlugin } from "../sources/plugins/huggingface";
 import { parseS2ArxivId, s2DoiUrl } from "../sources/plugins/s2-client";
@@ -111,6 +112,8 @@ export const liveResultDeps: BuildResultDeps = {
   },
   profile: async () =>
     (await listStatements()).filter((s) => s.kind === "profile" && !s.supersededBy).map((s) => s.text),
+  // Reader's own words first: they beat what dream concluded (docs/48).
+  known: async () => standingStatements(await listStatements(), "known").map((s) => s.text.trim()),
   language: async () => languageInstruction((await resolveModel("prep")).aiLanguage),
   bookLanguage: async () => bookLanguageInstruction((await resolveModel("prep")).aiLanguage),
   now: () => Date.now(),

@@ -141,6 +141,7 @@ const ko: Translation<typeof en> = {
   "statement.evidenceBoth": "{observations}, {messages}",
   "statement.kindProfile": "프로필",
   "statement.kindConcern": "관심사",
+  "statement.kindKnown": "아는 것",
 
   "section.navLabel": "주제",
   "section.materials": "자료",

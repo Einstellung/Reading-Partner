@@ -69,3 +69,18 @@ test("a superseded statement is not what is known about the reader any more", ()
   expect(out).not.toContain("Used to want diagrams.");
   expect(out).toContain("Wants the derivation.");
 });
+
+test("known statements print as their own block, between profile and concern", () => {
+  const out = readerStatementSection([
+    statement("s-1", "profile", "Wants the derivation."),
+    statement("s-2", "known", "Not familiar with symbolic regression.", "dream"),
+    statement("s-3", "known", "Familiar with reinforcement learning."),
+    statement("s-4", "concern", "Watching robotics funding."),
+  ]);
+  expect(out).toContain("Not familiar with symbolic regression. (id s-2)");
+  expect(out.indexOf("already understand")).toBeGreaterThan(out.indexOf("Wants the derivation."));
+  expect(out.indexOf("already understand")).toBeLessThan(out.indexOf("keeping an eye on"));
+  expect(out.indexOf("Familiar with reinforcement learning.")).toBeLessThan(
+    out.indexOf("Not familiar with symbolic regression."),
+  );
+});

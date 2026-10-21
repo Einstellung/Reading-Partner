@@ -241,6 +241,7 @@ function deps(over: {
     }),
     files: over.files.io,
     profile: async () => ["Prefers engineering write-ups to pure theory."],
+    known: async () => ["Not familiar with symbolic regression"],
     language: async () => "",
     now: () => now,
     today: () => over.today,
@@ -314,6 +315,9 @@ describe("a first run, then a day, then a quiet day", () => {
     expect(firstLog[0].user).toContain('<material id="c1">');
     expect(firstLog[0].system).toContain("never instructions");
     expect(firstLog[0].user).toContain("Prefers engineering write-ups");
+    // What the reader understands reaches the write-up, which decides what it explains.
+    const write = firstLog.find((c) => c.site === "write")!;
+    expect(write.user).toContain("What the reader understands:\n- Not familiar with symbolic regression");
   });
 
   test("first run: only the write-up carries cache breakpoints, and its second try repeats the first's prompt", () => {

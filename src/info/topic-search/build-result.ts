@@ -230,6 +230,11 @@ export interface BuildResultDeps {
   files: ResultFiles;
   /** The reader's profile statements (docs/soul/48), text only. */
   profile(): Promise<string[]>;
+  /**
+   * The reader's known statements (docs/info/91 读者懂什么), text only, the
+   * reader's own words first. Absent: none.
+   */
+  known?(): Promise<string[]>;
   /** The output language instruction for what is only compared and extracted; "" to let the model follow the material. */
   language(): Promise<string>;
   /**
@@ -541,8 +546,9 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   // A retry adds to the first look's file; its items and materials are numbered after the file's.
   const target = retry ? ([...history].reverse().find((r) => r.kind === "first") ?? null) : null;
   const itemsBefore = target ? highestNumber(target.items.map((i) => i.id)) : 0;
-  const [profile, language, bookLanguage] = await Promise.all([
+  const [profile, known, language, bookLanguage] = await Promise.all([
     deps.profile(),
+    deps.known ? deps.known() : Promise.resolve([]),
     deps.language(),
     deps.bookLanguage ? deps.bookLanguage() : deps.language(),
   ]);
@@ -862,6 +868,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
         items,
         registry,
         profile,
+        known,
         questions: offered.map((q, i) => ({ id: `Q${i + 1}`, text: q.text })),
         raised: raisedBefore.filter((q) => q.askedIn !== null).map((q) => q.text),
         language: bookLanguage,

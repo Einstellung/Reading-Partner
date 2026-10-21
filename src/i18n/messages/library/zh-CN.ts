@@ -140,6 +140,7 @@ const zhCN: Translation<typeof en> = {
   "statement.evidenceBoth": "{observations}，{messages}",
   "statement.kindProfile": "画像",
   "statement.kindConcern": "关注点",
+  "statement.kindKnown": "懂与不懂",
 
   "section.navLabel": "主题",
   "section.materials": "材料",

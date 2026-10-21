@@ -185,8 +185,58 @@ test("text naming an observation id is dropped", () => {
   expect(reasons[0]).toContain("observation id");
 });
 
-test("a state of any kind but profile is dropped", () => {
+test("a concern state is dropped: the night writes profile and known only", () => {
   const { accepted } = validateProposals([{ ...STATE, kind: "concern" }], candidates);
+
+  expect(accepted).toEqual([]);
+});
+
+// The fixtures' observations are stuck points, which is what a known rests on.
+test("a known state on stuck-point and understood-concept observations is kept", () => {
+  const mixed: DreamCandidates = {
+    ...candidates,
+    observations: [
+      observation({ id: "m-1111111111111111", created: "2026-08-01", type: "stuck-point" }),
+      observation({ id: "m-2222222222222222", created: "2026-08-02", type: "understood-concept" }),
+    ],
+  };
+  const { accepted } = validateProposals([{ ...STATE, kind: "known", text: "Not familiar with symbolic regression" }], mixed);
+
+  expect(accepted).toEqual([
+    { action: "state", kind: "known", text: "Not familiar with symbolic regression", evidence: [1, 2] },
+  ]);
+});
+
+test("a known state resting on any other kind of observation is dropped", () => {
+  const other: DreamCandidates = {
+    ...candidates,
+    observations: [
+      observation({ id: "m-1111111111111111", created: "2026-08-01", type: "stuck-point" }),
+      observation({ id: "m-2222222222222222", created: "2026-08-02", type: "belief" }),
+    ],
+  };
+  const { accepted, reasons } = validateProposals([{ ...STATE, kind: "known" }], other);
+
+  expect(accepted).toEqual([]);
+  expect(reasons[0]).toContain("understood-concept and stuck-point");
+});
+
+test("a supersede may move a profile the night wrote to known", () => {
+  const { accepted } = validateProposals(
+    [{ action: "supersede", statement: 1, kind: "known", text: "Familiar with RL", evidence: [1, 2] }],
+    candidates,
+  );
+
+  expect(accepted).toEqual([
+    { action: "supersede", statements: [1], text: "Familiar with RL", evidence: [1, 2], kind: "known" },
+  ]);
+});
+
+test("a supersede naming the concern kind is dropped", () => {
+  const { accepted } = validateProposals(
+    [{ action: "supersede", statement: 1, kind: "concern", text: "x", evidence: [1, 2] }],
+    candidates,
+  );
 
   expect(accepted).toEqual([]);
 });

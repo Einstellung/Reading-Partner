@@ -99,14 +99,22 @@ const EMPTY_BLOCK: Block = { text: "", ids: [] };
 //
 // Every line carries its id so the model can name one when it acts on it, and
 // so the reader can be told which line to argue with.
+//
+// Known statements (what they understand or do not, docs/info/91) ride the same
+// block after the profile lines of each author: until retrieval exists (docs/48
+// 消费侧) this is the one place a chat turn sees them.
 function profileBlock(statements: readonly Statement[]): Block {
   const standing = statements.filter(
-    (s) => s.kind === "profile" && !s.supersededBy && s.text.trim() !== "",
+    (s) => (s.kind === "profile" || s.kind === "known") && !s.supersededBy && s.text.trim() !== "",
   );
   if (standing.length === 0) return EMPTY_BLOCK;
+  const byKind = (list: Statement[]) => [
+    ...list.filter((s) => s.kind === "profile"),
+    ...list.filter((s) => s.kind === "known"),
+  ];
   const ordered = [
-    ...standing.filter((s) => s.author === "reader"),
-    ...standing.filter((s) => s.author !== "reader"),
+    ...byKind(standing.filter((s) => s.author === "reader")),
+    ...byKind(standing.filter((s) => s.author !== "reader")),
   ];
   return {
     text: [

@@ -53,9 +53,10 @@ export function latestReaderMessage<T extends { role: "user" | "ai" }>(
 const KIND_LIST = STATEMENT_KINDS.join(" | ");
 
 // A profile holds for the reader whatever they are doing, so its receipt says
-// so in those words (docs/info/88 记忆回写); the other kinds name themselves.
+// so in those words (docs/info/88 记忆回写); so does a known, which is as much
+// about them (docs/info/91 读者懂什么). A concern names itself.
 function wroteLabel(kind: string, rewrote: boolean): string {
-  if (kind === "profile") return t(rewrote ? "chat.statements.rewroteAboutYou" : "chat.statements.wroteAboutYou");
+  if (kind === "profile" || kind === "known") return t(rewrote ? "chat.statements.rewroteAboutYou" : "chat.statements.wroteAboutYou");
   return t(rewrote ? "chat.statements.rewroteKind" : "chat.statements.wroteKind", { kind });
 }
 
@@ -81,7 +82,8 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
         "Write down something the reader has just told you about themselves, in their own " +
         "words. Call it when they say how they want to be taught (\"stop drawing diagrams\", " +
         "\"give me an example first\"), what they have understood or are still stuck on, or " +
-        "what they are keeping an eye on at the moment. " +
+        "what they are keeping an eye on at the moment. A question asking what a term means " +
+        "counts as them saying they do not know it: answer it, then write a known statement. " +
         "Only what they said: your own conclusions about this reader are observations and " +
         "go through observation_update, never through here. " +
         "Keep their wording — this is their claim about themselves, not your summary of it. " +
@@ -93,9 +95,11 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
         kind: Type.String({
           description:
             `One of: ${KIND_LIST}. "profile" is how they read and how to teach them — the ` +
-            `way they want things explained, what they have understood, what they are stuck ` +
-            `on. "concern" is one thing they are watching at the moment; it is about now, ` +
-            `not about who they are.`,
+            `way they want things explained. "known" is one thing they understand or do not, ` +
+            `one per statement ("Familiar with reinforcement learning", "Not familiar with ` +
+            `symbolic regression"): write one when they ask what a term means (they do not ` +
+            `know it) or say they already know it. "concern" is one thing they are watching ` +
+            `at the moment; it is about now, not about who they are.`,
         }),
         text: Type.String({
           description:

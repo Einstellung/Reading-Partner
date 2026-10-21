@@ -141,7 +141,7 @@ test("a kind or a text the tool cannot use is refused before anything is written
   const { store, read } = makeStore();
   const tool = only(buildStatementTools({ store, message: MESSAGE, threadId: THREAD }));
 
-  expect(tool.execute({ kind: "guess", text: "Something" })).rejects.toThrow(/profile \| concern/);
+  expect(tool.execute({ kind: "guess", text: "Something" })).rejects.toThrow(/profile \| known \| concern/);
   expect(tool.execute({ kind: "profile", text: "   " })).rejects.toThrow(/requires text/);
   expect(read()).toEqual([]);
 });
@@ -175,4 +175,21 @@ test("the reader's message for the turn is the last one they sent", () => {
   expect(latestReaderMessage(msgs)?.ts).toBe(3);
   expect(latestReaderMessage([{ role: "ai" as const, ts: 1 }])).toBeNull();
   expect(latestReaderMessage([])).toBeNull();
+});
+
+test("a known statement is written like a profile one and gets the same receipt", async () => {
+  const { store, read } = makeStore();
+  const tool = only(buildStatementTools({ store, message: MESSAGE, threadId: THREAD }));
+
+  const result = await tool.execute({ kind: "known", text: "Not familiar with symbolic regression", expectedIntervalDays: 7 });
+  const profile = await tool.execute({ kind: "profile", text: "Reads the maths" });
+
+  const [known] = read();
+  expect(known.kind).toBe("known");
+  expect(known.author).toBe("reader");
+  expect(known.evidence).toEqual([ANCHOR]);
+  expect(known.expectedIntervalDays).toBeUndefined();
+  expect((result as { receipt: { label: string } }).receipt.label).toBe(
+    (profile as { receipt: { label: string } }).receipt.label,
+  );
 });

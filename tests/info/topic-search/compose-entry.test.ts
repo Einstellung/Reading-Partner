@@ -95,3 +95,18 @@ test("earlier lines are the topic's written conclusions, newest result first", (
   ]);
   expect(lines.map((l) => `${l.date} ${l.summary}`)).toEqual(["2026-10-14 New.", "2026-10-13 Old."]);
 });
+
+test("what the reader understands goes to the model with the rule for explaining terms", () => {
+  const none = composePrompt(input([item("E1")]));
+  expect(none.user).toContain("What the reader understands:\n- (nothing recorded)");
+  expect(none.system).toContain("explained in a short clause the first time it appears");
+  expect(none.system).toContain("When unsure, explain it.");
+
+  const known = composePrompt({
+    ...input([item("E1")]),
+    known: ["Familiar with reinforcement learning", "Not familiar with symbolic regression"],
+  });
+  expect(known.user).toContain(
+    "What the reader understands:\n- Familiar with reinforcement learning\n- Not familiar with symbolic regression",
+  );
+});

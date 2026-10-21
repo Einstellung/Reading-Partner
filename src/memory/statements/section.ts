@@ -3,8 +3,10 @@
 // and the briefing companion read the same knowledge store the soul does, and
 // this is the rendering they get.
 //
-// Two blocks, because the two kinds answer different questions. Profile
-// statements say who this person is and how to pitch something to them; concern
+// One block per kind, because the kinds answer different questions. Profile
+// statements say who this person is and how to pitch something to them; known
+// statements say which terms they already have and which need a word of
+// explanation (docs/info/91 读者懂什么); concern
 // statements say what they are watching for right now, which is exactly what a
 // day's triage sorts by and what a reading turn has no use for. The reading
 // turn prints the profile half alone (live/memory-section.ts), so the two
@@ -19,7 +21,7 @@ import type { Statement } from "./types";
 // (docs/info/88: a concern the reader stopped following is not read) — the
 // reader's own words before what a pass concluded — they are not equally revisable, and the model acts on the first
 // thing it reads (live/memory-section.ts says the same of the reading turn).
-function standing(statements: readonly Statement[], kind: Statement["kind"]): Statement[] {
+export function standingStatements(statements: readonly Statement[], kind: Statement["kind"]): Statement[] {
   const live = statements.filter(
     (s) => s.kind === kind && !s.supersededBy && s.lapsed !== true && s.text.trim() !== "",
   );
@@ -39,8 +41,9 @@ function block(heading: readonly string[], statements: readonly Statement[]): st
  * them, and the caller prints its own placeholder instead.
  */
 export function readerStatementSection(statements: readonly Statement[]): string {
-  const profile = standing(statements, "profile");
-  const concerns = standing(statements, "concern");
+  const profile = standingStatements(statements, "profile");
+  const known = standingStatements(statements, "known");
+  const concerns = standingStatements(statements, "concern");
   const out: string[] = [];
   out.push(
     ...block(
@@ -51,10 +54,13 @@ export function readerStatementSection(statements: readonly Statement[]): string
       profile,
     ),
   );
-  const watching = block(["What they are keeping an eye on at the moment:"], concerns);
-  if (watching.length > 0) {
+  for (const next of [
+    block(["What they already understand, and what they do not (their own words first):"], known),
+    block(["What they are keeping an eye on at the moment:"], concerns),
+  ]) {
+    if (next.length === 0) continue;
     if (out.length > 0) out.push("");
-    out.push(...watching);
+    out.push(...next);
   }
   return out.join("\n");
 }

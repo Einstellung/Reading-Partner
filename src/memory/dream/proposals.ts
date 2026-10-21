@@ -12,17 +12,31 @@
 // Every rule is here rather than in the prompt. A prompt rule is a request; the
 // only ones that hold are the ones a function enforces.
 
+import type { StatementKind } from "../statements/types";
 import type { DreamCandidates } from "./candidates";
+
+// The kinds a night may write. concern is a statement about what the reader is
+// watching now, and it is written by the reader rather than concluded at night
+// (docs/48).
+export const DREAM_KINDS = ["profile", "known"] as const;
+export type DreamKind = (typeof DREAM_KINDS)[number];
+
+function isDreamKind(v: unknown): v is DreamKind {
+  return typeof v === "string" && (DREAM_KINDS as readonly string[]).includes(v);
+}
 
 // A new statement, more evidence on one that stands, or a replacement for one.
 // Numbers are 1-based, matching the lists materialize.ts renders.
 export type Proposal =
-  | { action: "state"; kind: "profile"; text: string; evidence: number[] }
+  | { action: "state"; kind: DreamKind; text: string; evidence: number[] }
   | { action: "support"; statement: number; evidence: number[] }
   // One replacement, one or more statements replaced. The wire form takes a
   // number or a list of them; what comes out of here is always the list, so the
-  // write path has one shape to walk.
-  | { action: "supersede"; statements: number[]; text: string; evidence: number[] };
+  // write path has one shape to walk. `kind` is the replacement's, and present
+  // only when the model named one: a profile line that turns out to be about
+  // what the reader understands is moved to known this way. Absent, the
+  // replacement keeps the first target's kind.
+  | { action: "supersede"; statements: number[]; text: string; evidence: number[]; kind?: DreamKind };
 
 export interface ValidatedProposals {
   accepted: Proposal[];
@@ -45,6 +59,15 @@ const MIN_DAYS = 2;
 // names one is a claim that reads as a citation and cannot be resolved by
 // anything downstream, since nothing renders statement text against a store.
 const ID_IN_TEXT = /\bm-[0-9a-f]{16}\b/;
+
+// What a known statement may rest on (docs/info/91 读者懂什么): the reader
+// getting something or being stuck on it. A known claim resting on anything
+// else is a reading of their manner, which is a profile.
+const KNOWN_EVIDENCE_TYPES = new Set(["understood-concept", "stuck-point"]);
+
+function knownEvidenceOk(indices: readonly number[], candidates: DreamCandidates): boolean {
+  return indices.every((i) => KNOWN_EVIDENCE_TYPES.has(candidates.observations[i - 1].type));
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -128,10 +151,9 @@ export function validateProposals(raw: unknown, candidates: DreamCandidates): Va
     }
 
     if (action === "state") {
-      if (element.kind !== "profile") {
-        // concern is a statement about what the reader is watching now, and it
-        // is written by the reader rather than concluded at night (docs/48).
-        drop(`state takes kind "profile", not ${JSON.stringify(element.kind)}`);
+      const kind = element.kind;
+      if (!isDreamKind(kind)) {
+        drop(`state takes kind ${DREAM_KINDS.map((k) => `"${k}"`).join(" or ")}, not ${JSON.stringify(kind)}`);
         continue;
       }
       const text = textOf(element.text);
@@ -143,12 +165,16 @@ export function validateProposals(raw: unknown, candidates: DreamCandidates): Va
         drop(`state needs ${MIN_EVIDENCE} observations from ${MIN_DAYS} days`);
         continue;
       }
+      if (kind === "known" && !knownEvidenceOk(evidence, candidates)) {
+        drop("a known statement rests only on understood-concept and stuck-point observations");
+        continue;
+      }
       if (evidence.some((i) => claimed.has(i))) {
         drop("state reuses an observation another state in this batch claimed");
         continue;
       }
       for (const i of evidence) claimed.add(i);
-      accepted.push({ action: "state", kind: "profile", text, evidence });
+      accepted.push({ action: "state", kind, text, evidence });
       continue;
     }
 
@@ -181,6 +207,11 @@ export function validateProposals(raw: unknown, candidates: DreamCandidates): Va
         drop("supersede targets a statement the reader wrote");
         continue;
       }
+      if (element.kind !== undefined && !isDreamKind(element.kind)) {
+        drop(`supersede takes kind ${DREAM_KINDS.map((k) => `"${k}"`).join(" or ")}, not ${JSON.stringify(element.kind)}`);
+        continue;
+      }
+      const named: DreamKind | undefined = element.kind;
       const text = textOf(element.text);
       if (text === null) {
         drop("supersede text is empty or names an observation id");
@@ -190,7 +221,12 @@ export function validateProposals(raw: unknown, candidates: DreamCandidates): Va
         drop(`supersede needs ${MIN_EVIDENCE} observations from ${MIN_DAYS} days`);
         continue;
       }
-      accepted.push({ action: "supersede", statements: targets, text, evidence });
+      const kind: StatementKind = named ?? candidates.statements[targets[0] - 1].kind;
+      if (kind === "known" && !knownEvidenceOk(evidence, candidates)) {
+        drop("a known statement rests only on understood-concept and stuck-point observations");
+        continue;
+      }
+      accepted.push({ action: "supersede", statements: targets, text, evidence, ...(named ? { kind: named } : {}) });
       continue;
     }
 

@@ -107,6 +107,11 @@ export interface ComposeInput {
   items: readonly TopicSearchResultItem[];
   registry: MaterialRegistry;
   profile: readonly string[];
+  /**
+   * What the reader understands or does not (known statements, docs/info/91 读者懂什么),
+   * the reader's own words first. Decides which terms the write-up explains.
+   */
+  known?: readonly string[];
   /** Questions that may go out with this result, Q1 …, for the model to mark the ones already answered. */
   questions: readonly { id: string; text: string }[];
   /** The topic's questions raised before this run, oldest first: not to be raised again. */
@@ -194,6 +199,7 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
         ]
       : []),
     "Rules: skip promotion, event hype and engagement bait; tell a thread as one piece; tell a quoting post together with what it quotes; where an item lists a discrepancy, say what the original actually shows, not what the post claimed.",
+    'A technical term the reader is not known to understand (see "What the reader understands") is explained in a short clause the first time it appears; a term they are known to understand is not. When unsure, explain it. Where two lines there disagree, the earlier one holds.',
     "Every number and date you write must appear in the materials, posts or facts of the items you cite. Never derive one (no sums, no differences, no rounding).",
     `${HUB_RULE} You may mention the attention and the repository where they tell the reader something.`,
     "A paper item says how much of the paper was read. Conclude only from the part read: what its method does or what its results show beyond that is not known to you, so say so in unknown and never guess it.",
@@ -261,6 +267,9 @@ export function composePrompt(input: ComposeInput): { system: string; user: stri
   );
   const user = [
     topicBlock(input.topic, input.profile),
+    "",
+    "What the reader understands:",
+    ...(input.known?.length ? input.known.map((k) => `- ${k}`) : ["- (nothing recorded)"]),
     "",
     "Items:",
     ...blocks,

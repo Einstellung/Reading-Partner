@@ -12,7 +12,13 @@
 // by the program, the dates above all — a model asked for a date fills one in,
 // and these two are exactly the span the statement's own evidence covers.
 
-export const STATEMENT_KINDS = ["profile", "concern"] as const;
+// Three kinds (docs/48, docs/info/91 读者懂什么):
+// - profile: how the reader wants to be taught ("full derivations, no diagrams").
+// - known: one thing the reader understands or does not, one per statement
+//   ("Familiar with reinforcement learning", "Not familiar with symbolic
+//   regression"). What a write-up explains in passing and what it does not.
+// - concern: one thing the reader is watching at the moment.
+export const STATEMENT_KINDS = ["profile", "known", "concern"] as const;
 export type StatementKind = (typeof STATEMENT_KINDS)[number];
 
 export function isStatementKind(v: string): v is StatementKind {
