@@ -10,6 +10,7 @@
 // (huggingface.ts paperDay), never by the library's date: OpenAlex can hand back
 // another version's date, or another paper (docs/pitfall/668).
 
+import { arxivIdOfDoi } from "../rank/link-identity";
 import { normalizeArxivId } from "../sources/plugins/arxiv-client";
 import { paperDay } from "../sources/plugins/huggingface";
 import { openAlexArxivHandle, OA_MAX_OR_IDS, type OpenAlexHit } from "../sources/plugins/openalex-client";
@@ -157,14 +158,6 @@ export function openAlexHandle(key: string): string | null {
   return null;
 }
 
-const ARXIV_DOI = /^(?:https?:\/\/(?:dx\.)?doi\.org\/)?10\.48550\/arxiv\.(.+)$/i;
-
-/** The arXiv id in arXiv's own DOI ("10.48550/arXiv.<id>"), else null. */
-export function arxivIdOfDoi(doi: string | null | undefined): string | null {
-  const m = doi ? ARXIV_DOI.exec(doi.trim()) : null;
-  return m ? normalizeArxivId(m[1]) : null;
-}
-
 /** A library's paper as the expansion takes it: an arXiv paper, one with a DOI only (counted, not pooled), or nothing usable. */
 export type Found =
   | { kind: "paper"; paper: GraphPaper }
@@ -186,7 +179,7 @@ function arxivPaper(id: string, hit: { title: string; abstract: string; authors:
 }
 
 export function foundFromS2(hit: S2Hit): Found {
-  const id = (hit.arxivId ? normalizeArxivId(hit.arxivId) : null) ?? arxivIdOfDoi(hit.doi);
+  const id = (hit.arxivId ? normalizeArxivId(hit.arxivId) : null) ?? (hit.doi ? arxivIdOfDoi(hit.doi) : null);
   if (id) return arxivPaper(id, hit, hit.publicationDate ?? null, hit.citationCount);
   if (hit.doi) return { kind: "doi", title: hit.title, day: hit.publicationDate ?? (hit.year ? `${hit.year}-01-01` : null) };
   return null;

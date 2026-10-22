@@ -5,7 +5,6 @@ import { describe, expect, test } from "bun:test";
 import type { OpenAlexHit } from "../../../src/info/sources/plugins/openalex-client";
 import type { S2Hit } from "../../../src/info/sources/plugins/s2-client";
 import {
-  arxivIdOfDoi,
   CACHE_TTL_MS,
   cachedStream,
   chooseWalked,
@@ -145,12 +144,6 @@ describe("ids", () => {
     expect(s2Handle("x:1")).toBeNull();
     expect(openAlexHandle("arxiv:2601.00001")).toBe("doi:10.48550/arXiv.2601.00001");
     expect(openAlexHandle("doi:10.1038/x")).toBe("doi:10.1038/x");
-  });
-
-  test("arXiv's own DOI names the arXiv id", () => {
-    expect(arxivIdOfDoi("10.48550/arXiv.2609.01234")).toBe("2609.01234");
-    expect(arxivIdOfDoi("https://doi.org/10.48550/arxiv.2609.01234")).toBe("2609.01234");
-    expect(arxivIdOfDoi("10.1101/2026.09.10")).toBeNull();
   });
 
   const s2 = (over: Partial<S2Hit>): S2Hit => ({

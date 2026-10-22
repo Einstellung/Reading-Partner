@@ -69,6 +69,7 @@ import {
   streamOf,
   type CachedWork,
   type GraphCache,
+  type GraphExamples,
   type PlannedStream,
   type Sifted,
 } from "./graph-expand";
@@ -402,13 +403,27 @@ async function saveCache(ctx: Ctx): Promise<void> {
  * file; null when there is nothing to expand from (no positive, or an update
  * with no new one), and then nothing is written.
  */
-export async function readGraphExpansion(
+export function readGraphExpansion(
   input: { seeds: readonly TopicSeed[]; labels: readonly TopicLabel[] },
   plan: GraphReadPlan,
   deps: GraphLiveDeps,
   signal: AbortSignal,
 ): Promise<GraphRead | null> {
-  const examples = pickExamples(input.seeds, input.labels);
+  return readGraphFrom(pickExamples(input.seeds, input.labels), plan, deps, signal);
+}
+
+/**
+ * The same from positives and negatives already picked, as the hold-out probe
+ * hands them in (expand-probe.ts); `keepNegatives` leaves the negatives in the
+ * streams, for the probe to count.
+ */
+export async function readGraphFrom(
+  examples: GraphExamples,
+  plan: GraphReadPlan,
+  deps: GraphLiveDeps,
+  signal: AbortSignal,
+  opts: { keepNegatives?: boolean } = {},
+): Promise<GraphRead | null> {
   const onFile = await deps.load();
   let cacheText: string | null = null;
   try {
@@ -440,7 +455,8 @@ export async function readGraphExpansion(
     await save();
     await saveCache(ctx);
   }
-  ctx.exclude = excludedIds(examples, ctx.read.positives.map((p) => idsOf(ctx, p.key)?.arxivId ?? null));
+  const resolved = ctx.read.positives.map((p) => idsOf(ctx, p.key)?.arxivId ?? null);
+  ctx.exclude = excludedIds(opts.keepNegatives ? { ...examples, negatives: [] } : examples, resolved);
   for (const planned of planStreams(ctx.read.positives, plan.only)) {
     if (ctx.read.streams.some((s) => s.id === planned.id)) continue;
     throwIfAborted(signal);

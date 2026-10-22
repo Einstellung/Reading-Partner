@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { HostCoolingDownError } from "../../../src/platform/http/host-gate";
-import { readGraphExpansion, type GraphLiveDeps, type GraphReadPlan } from "../../../src/info/topic-search/graph-live";
+import { readGraphExpansion, readGraphFrom, type GraphLiveDeps, type GraphReadPlan } from "../../../src/info/topic-search/graph-live";
 import { parseGraphCache } from "../../../src/info/topic-search/graph-expand";
 import type { GraphRead } from "../../../src/info/topic-search/graph-read";
 import type { TopicLabel, TopicLabelKind } from "../../../src/info/topic-search/labels";
@@ -175,7 +175,7 @@ function world(opts: { fail?: Fail[] } = {}) {
   const read = (dir: string, plan: GraphReadPlan = PLAN, labels = LABELS, seeds = SEEDS) =>
     readGraphExpansion({ seeds, labels }, plan, deps(dir), new AbortController().signal);
   const count = (host: string) => asked.filter((a) => a.startsWith(host)).length;
-  return { asked, files, writes, read, count, cache: () => parseGraphCache(cacheText), clear: () => (asked.length = 0) };
+  return { asked, files, writes, read, count, fetchFn, cache: () => parseGraphCache(cacheText), clear: () => (asked.length = 0) };
 }
 
 const streamOf = (read: GraphRead, id: string) => read.streams.find((s) => s.id === id)!;
@@ -386,4 +386,16 @@ describe("the budget", () => {
     expect(lists).toBe(13);
     expect(read.streams.every((s) => s.library === "openalex")).toBe(true);
   });
+});
+
+test("the probe's entry keeps the negatives in the streams, for it to count", async () => {
+  const w = world();
+  const examples = {
+    positives: [{ key: `arxiv:${A}`, title: "Seed A", why: "seed" as const }],
+    negatives: [{ key: "arxiv:2607.00021", title: "Cite one" }],
+  };
+  const deps = (keep: boolean) =>
+    readGraphFrom(examples, PLAN, { fetchFn: w.fetchFn, load: async () => null, save: async () => {}, cache: { load: async () => null, save: async () => {} }, now: () => NOW }, new AbortController().signal, { keepNegatives: keep });
+  expect(ids((await deps(true))!, `cites:arxiv:${A}`)).toEqual(["2608.00022", "2607.00021"]);
+  expect(ids((await deps(false))!, `cites:arxiv:${A}`)).toEqual(["2608.00022"]);
 });
