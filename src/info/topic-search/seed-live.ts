@@ -1,6 +1,7 @@
 // The libraries the seed lookup asks (docs/info/91 起草与种子): find_seed_paper
 // at the door, and a study's build adding a seed no read found.
 
+import { loadSettings } from "../../platform/app/settings";
 import { fetchWithRetry, interactiveRetry } from "../../platform/http/throttled-fetch";
 import { infoFetch } from "../../workshop/extract/http";
 import { arxivPlugin } from "../sources/plugins/arxiv";
@@ -31,8 +32,9 @@ export const liveSeedSearches: SeedSearches = {
   },
   arxiv: async (text) => (await arxivPlugin.search!(text, { limit: SEED_LIMIT }, pluginDeps())).map(itemPaper),
   huggingface: async (text) => (await huggingfacePlugin.search!(text, { limit: SEED_LIMIT }, pluginDeps())).map(itemPaper),
+  // With the reader's own Semantic Scholar key where they have one, as every other S2 caller.
   s2: async (text) =>
-    (await searchS2Topic(text, { limit: SEED_LIMIT }, infoFetch)).map((h) => ({
+    (await searchS2Topic(text, { limit: SEED_LIMIT }, infoFetch, (await loadSettings().catch(() => null))?.semanticScholarApiKey ?? undefined)).map((h) => ({
       arxivId: h.arxivId,
       doi: h.doi,
       title: h.title,

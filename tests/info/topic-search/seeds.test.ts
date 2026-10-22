@@ -16,7 +16,7 @@ import { latestLabels, type TopicLabel } from "../../../src/info/topic-search/la
 import { sourcesOf, splitsFirstLook, topicSources } from "../../../src/info/topic-search/pace";
 import { buildProposeTopicSearchTool, draftSources } from "../../../src/info/topic-search/propose-tool";
 import { planRetry } from "../../../src/info/topic-search/retry";
-import { arxivIdIn, findSeedPaper, titleMatch, type SeedPaper, type SeedSearches } from "../../../src/info/topic-search/seed-lookup";
+import { arxivIdIn, findSeedPaper, plausiblePaper, titleMatch, type SeedPaper, type SeedSearches } from "../../../src/info/topic-search/seed-lookup";
 import { buildFindSeedPaperTool } from "../../../src/info/topic-search/seed-tool";
 import { pickSeeds } from "../../../src/info/topic-search/seeds";
 import { topicSearchGuidance } from "../../../src/info/topic-search/guidance";
@@ -62,7 +62,7 @@ test("an arXiv id in the name is looked up directly, once", async () => {
   ]);
 });
 
-test("a title match on arXiv or Hugging Face comes first and Semantic Scholar is not asked", async () => {
+test("a title match on arXiv or Hugging Face is offered, Semantic Scholar is not asked, and the libraries' other hits are not offered", async () => {
   expect(titleMatch("KeplerAgent: Discovering laws with an LLM", "KeplerAgent")).toBe(1);
   expect(titleMatch("Agent systems for labs", "agent")).toBe(0);
   const { searches } = libraries({
@@ -74,7 +74,7 @@ test("a title match on arXiv or Hugging Face comes first and Semantic Scholar is
   });
   const found = await findSeedPaper("KeplerAgent", searches);
   expect(found.misses).toEqual([]);
-  expect(found.candidates.map((c) => c.key)).toEqual(["arxiv:2501.00002", "arxiv:2501.00001", "arxiv:2501.00003"]);
+  expect(found.candidates.map((c) => c.key)).toEqual(["arxiv:2501.00002"]);
   expect(found.candidates.every((c) => c.verdict === null)).toBe(true);
 });
 
@@ -89,10 +89,41 @@ test("without a title match Semantic Scholar is asked once; a journal paper is k
   });
   const found = await findSeedPaper("Highly accurate protein structure prediction with AlphaFold", searches);
   expect(s2Asked).toBe(1);
-  expect(found.candidates.map((c) => [c.key, c.handle])).toEqual([
-    ["doi:10.1038/s41586-021-03819-2", "DOI 10.1038/s41586-021-03819-2"],
-    ["arxiv:2501.00001", "arXiv 2501.00001"],
-  ]);
+  expect(found.candidates.map((c) => [c.key, c.handle])).toEqual([["doi:10.1038/s41586-021-03819-2", "DOI 10.1038/s41586-021-03819-2"]]);
+});
+
+// The run of 2026-10-22: AlphaFold 2 is on neither arXiv nor Hugging Face, Semantic
+// Scholar answered 429, and the card offered these three as the paper.
+const ALPHAFOLD = "Highly accurate protein structure prediction with AlphaFold";
+const NEAR_MISSES = [
+  paper("2310.19624", "Exploring Post-Training Quantization of Protein Language Models", { authors: ["Shuang Peng", "Fei Yang"], date: "2023-10-30" }),
+  paper("2111.06340", "ParaFold: Paralleling AlphaFold for Large-Scale Predictions", { authors: ["Bozitao Zhong", "Xiaoming Su"], date: "2021-11-11" }),
+  paper("2410.16302", "Computational design of target-specific linear peptide binders with TransformerBeta", { authors: ["Haowen Zhao"], date: "2024-10-07" }),
+];
+
+test("a library's nearest hits for a paper it does not have are not offered; the card says it was not found", async () => {
+  for (const p of NEAR_MISSES) expect(plausiblePaper(p, ALPHAFOLD)).toBe(false);
+  expect(plausiblePaper(paper(null, "Highly accurate protein structure prediction with AlphaFold."), ALPHAFOLD)).toBe(true);
+  // One word of five misremembered still matches; authors and a year count as words of the name.
+  expect(plausiblePaper(paper(null, "Highly accurate protein structure predictions with AlphaFold"), ALPHAFOLD)).toBe(true);
+  expect(plausiblePaper(paper(null, "Attention is all you need", { authors: ["Ashish Vaswani"], date: "2017-06-12" }), "Vaswani 2017 attention")).toBe(true);
+  expect(plausiblePaper(paper(null, "Accurate protein structure prediction with AlphaFold and friends"), ALPHAFOLD)).toBe(true);
+
+  const { searches } = libraries({
+    arxiv: async () => NEAR_MISSES.slice(0, 2),
+    huggingface: async () => NEAR_MISSES.slice(2),
+    s2: async () => {
+      throw new Error("HTTP 429 from api.semanticscholar.org");
+    },
+  });
+  const found = await findSeedPaper(ALPHAFOLD, searches);
+  expect(found.candidates).toEqual([]);
+  expect(found.misses.map((m) => m.source)).toEqual(["Semantic Scholar"]);
+  const cards: StudySeedsCardData[] = [];
+  const tool = buildFindSeedPaperTool({ threadId: "t1", readerLines: () => [], searches, now: () => OCT_21, raiseCard: (c) => cards.push(c) });
+  const text = textOf(await tool.execute({ name: ALPHAFOLD, said: "AlphaFold 2 那篇" }));
+  expect(cards).toEqual([]);
+  expect(text).toContain(`No paper found for "${ALPHAFOLD}".`);
 });
 
 test("a library cooling down is reported, not waited out; nothing found says so and draws no card", async () => {

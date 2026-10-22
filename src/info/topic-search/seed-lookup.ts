@@ -1,7 +1,7 @@
 // Finding a paper the reader named while drafting a study (docs/info/91 起草与种子).
 // The reader says a title, a short name or authors and a year; the program asks
-// the libraries and hands back at most three candidates, every field of them
-// the library's. The companion never writes a title or an id itself.
+// the libraries and hands back at most three candidates that plausibly are the
+// paper named (plausiblePaper), every field of them the library's. The companion never writes a title or an id itself.
 //
 // One normal request per library, no loops: an arXiv id in the name is looked
 // up directly; otherwise arXiv's search and Hugging Face's paper search are
@@ -75,6 +75,33 @@ export function titleMatch(title: string, name: string): number {
   return 0;
 }
 
+// Words that carry no identity in a title.
+const STOP_WORDS = new Set(["a", "an", "the", "of", "for", "with", "and", "or", "in", "on", "to", "by", "via", "from", "using", "is", "are", "at", "as", "its"]);
+/** Words a name needs before word coverage alone can match it (fewer goes by titleMatch). */
+export const COVERAGE_MIN_WORDS = 3;
+/**
+ * The share of the name's words a title must hold to be that paper: one word in
+ * five may be misremembered ("prediction" for "predictions" counts as missing).
+ */
+export const COVERAGE_THRESHOLD = 0.8;
+
+const words = (t: string) => normalizeTitle(t).split(" ").filter((w) => w && !STOP_WORDS.has(w));
+
+/**
+ * Whether a library's paper is plausibly the one the name means: the titles
+ * match (titleMatch), or the name has at least COVERAGE_MIN_WORDS words and the
+ * paper's title, authors and year together hold COVERAGE_THRESHOLD of them (so
+ * "Vaswani 2017 attention" finds its paper). Only such a paper is offered on the
+ * card: a library's nearest hit for a name it does not have is a different paper.
+ */
+export function plausiblePaper(p: SeedPaper, name: string): boolean {
+  if (titleMatch(p.title, name) > 0) return true;
+  const want = [...new Set(words(name))];
+  if (want.length < COVERAGE_MIN_WORDS) return false;
+  const got = new Set(words([p.title, ...p.authors, p.date.slice(0, 4)].join(" ")));
+  return want.filter((w) => got.has(w)).length / want.length >= COVERAGE_THRESHOLD;
+}
+
 function keyOf(p: SeedPaper): string | null {
   if (p.arxivId) return `arxiv:${p.arxivId}`;
   const doi = p.doi ? normalizeDoi(p.doi) : null;
@@ -115,9 +142,10 @@ function interleave(lists: readonly SeedPaper[][]): SeedPaper[] {
   return out;
 }
 
-// Matches first (equal before held), then the rest in relevance order.
+// The plausible ones only: matches first (equal before held), then by relevance order.
 function ranked(papers: readonly SeedPaper[], name: string): SeedPaper[] {
   return papers
+    .filter((p) => plausiblePaper(p, name))
     .map((p, i) => ({ p, i, m: titleMatch(p.title, name) }))
     .sort((a, b) => b.m - a.m || a.i - b.i)
     .map((x) => x.p);
@@ -151,7 +179,7 @@ export async function findSeedPaper(name: string, searches: SeedSearches): Promi
   if (arxiv.status === "rejected") misses.push(missOf("arXiv", arxiv.reason));
   if (hf.status === "rejected") misses.push(missOf("Hugging Face", hf.reason));
   const found = interleave([arxiv.status === "fulfilled" ? arxiv.value : [], hf.status === "fulfilled" ? hf.value : []]);
-  if (found.some((p) => titleMatch(p.title, name) > 0)) return finish(ranked(found, name));
+  if (found.some((p) => plausiblePaper(p, name))) return finish(ranked(found, name));
   // Neither has it by title: Semantic Scholar knows journal papers arXiv does not.
   let s2: SeedPaper[] = [];
   try {
@@ -159,5 +187,6 @@ export async function findSeedPaper(name: string, searches: SeedSearches): Promi
   } catch (e) {
     misses.push(missOf("Semantic Scholar", e));
   }
-  return finish(ranked(interleave([s2.filter((p) => titleMatch(p.title, name) > 0), found, s2]), name));
+  // Nothing plausible is nothing found: the card is not drawn and the reader is asked for a link.
+  return finish(ranked(interleave([[...s2, ...found]]), name));
 }
