@@ -64,12 +64,14 @@ test("the origin line names the book and the page", () => {
   expect(originLabel(origin, null)).toBe("A book · p. 37");
 });
 
+// The briefing's cards still sit in boxes after its page went (docs/info/93),
+// and say the document's name: a brief.
 test("the door and the briefing name themselves and the day", () => {
   expect(originLabel({ place: "door", date: "2026-09-15" }, null)).toBe(
     "At the door · 2026-09-15",
   );
   expect(originLabel({ place: "briefing", date: "2026-09-15" }, null)).toBe(
-    "Briefing · 2026-09-15",
+    "Brief · 2026-09-15",
   );
 });
 
