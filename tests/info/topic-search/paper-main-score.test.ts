@@ -55,7 +55,6 @@ function postCand(id: string, links: string[], engagement: number | null): Candi
     links: links.map((url) => ({ url, card: false })),
     relevance: 0.5,
     engagement,
-    mentionsAnchor: true,
     order: 0,
   };
 }
@@ -75,7 +74,6 @@ function paperCand(id: string): Candidate {
     links: [],
     relevance: 0.5,
     engagement: null,
-    mentionsAnchor: true,
     order: 1,
   };
 }
@@ -88,7 +86,25 @@ test("a post whose main is an arXiv paper scores like a paper, engagement ignore
   expect(s.key).toBe("arxiv:2609.20997");
   expect(s.kind).toBe("post");
   expect(s.score).toBeCloseTo(0.8 * 80 + 0.2 * 50, 9);
-  expect(s.score).toBe(finalScore({ kind: "paper", rerank: 80, relevance: 0.5, rrf: 50, engagement: null, mentionsAnchor: true }));
+  expect(s.score).toBe(finalScore({ kind: "paper", rerank: 80, relevance: 0.5, rrf: 50, engagement: null }));
+});
+
+test("a paper the rerank put at 98 keeps its score without naming an anchor, and ranks above lower-rerank ones", () => {
+  const anchored = { ...topic, anchors: ["symbolic regression", "Bayesian optimization"] } as TopicSearch;
+  const paper = (id: string, title: string, abstract: string, order: number): Candidate => {
+    const c = paperCand(id);
+    return { ...c, text: `${title}\n\n${abstract}`, paper: { ...c.paper!, title, abstract }, order };
+  };
+  const off = paper("2610.00001", "Equation discovery with LLM agents", "We search for closed-form laws of dynamical systems.", 0);
+  const named = paper("2610.00002", "Symbolic regression benchmarks revisited", "A Bayesian optimization baseline for program search.", 1);
+  const numbered = numberPool([
+    { cand: off, rrf: 30 },
+    { cand: named, rrf: 60 },
+  ]);
+  const scored = scorePool(anchored, numbered, new Map([["c1", answer(98)], ["c2", answer(70)]]));
+  expect(scored[0].score).toBeGreaterThanOrEqual(0.8 * 98 + 0.2 * 30 - 1e-9);
+  expect(scored[0].score).toBeCloseTo(0.8 * 98 + 0.2 * 30, 9);
+  expect(rankEvents(scored).map((c) => c.lead.key)).toEqual(["arxiv:2610.00001", "arxiv:2610.00002"]);
 });
 
 test("a post that is its own content, or points at something else, keeps the post formula", () => {

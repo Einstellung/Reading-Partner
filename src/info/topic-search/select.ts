@@ -34,9 +34,9 @@ export const POST_QUOTA = 3;
 export const RESERVE_FLOOR = 40;
 /**
  * Final score an event must reach to be listed at all. The rerank's cliff
- * (score under 20, times 0.3) and a missed anchor (less 20) put promotion,
- * one-line replies and off-topic posts under it, mostly at 0; a paper the
- * rerank put at 25 or more with an anchor named stays above it (initial value).
+ * (score under 20, times 0.3) puts promotion, one-line replies and off-topic
+ * posts under it; a paper the rerank put at 25 or more stays above it (initial
+ * value).
  */
 export const ITEM_FLOOR = 20;
 

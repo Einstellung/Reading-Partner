@@ -58,32 +58,32 @@ test("X engagement is a log1p-weighted absolute scale", () => {
 });
 
 test("a post scores 0.65·score + 0.20·RRF + 0.15·engagement, a paper 0.80·score + 0.20·RRF", () => {
-  const post = { kind: "post" as const, rerank: 80, relevance: 0.5, rrf: 50, engagement: 40, mentionsAnchor: true };
+  const post = { kind: "post" as const, rerank: 80, relevance: 0.5, rrf: 50, engagement: 40 };
   expect(finalScore(post)).toBeCloseTo(68, 9);
   expect(finalScore({ ...post, kind: "paper", engagement: null })).toBeCloseTo(74, 9);
   // No engagement counts as 0.
   expect(finalScore({ ...post, engagement: null })).toBeCloseTo(62, 9);
 });
 
-test("a model score under 20 multiplies the sum by 0.3; a missed anchor takes 20 off", () => {
-  const post = { kind: "post" as const, rerank: 10, relevance: 0.5, rrf: 50, engagement: 40, mentionsAnchor: true };
+test("a model score under 20 multiplies the sum by 0.3, and nothing else is taken off", () => {
+  const post = { kind: "post" as const, rerank: 10, relevance: 0.5, rrf: 50, engagement: 40 };
   expect(finalScore(post)).toBeCloseTo(22.5 * 0.3, 9);
-  expect(finalScore({ ...post, rerank: 80, mentionsAnchor: false })).toBeCloseTo(48, 9);
-  expect(finalScore({ ...post, mentionsAnchor: false })).toBe(0);
+  expect(finalScore({ ...post, rerank: 20 })).toBeCloseTo(0.65 * 20 + 10 + 6, 9);
+  // The model's 98 on a paper stands whatever words the paper uses.
+  expect(finalScore({ kind: "paper", rerank: 98, relevance: 0.1, rrf: 30, engagement: null })).toBeCloseTo(0.8 * 98 + 0.2 * 30, 9);
 });
 
-test("without the rerank, 0.7·relevance·100 stands in, less 25 for a missed anchor, with no cliff", () => {
-  expect(fallbackRerankScore(0.5, true)).toBeCloseTo(35, 9);
-  expect(fallbackRerankScore(0.5, false)).toBeCloseTo(10, 9);
-  expect(fallbackRerankScore(0.2, false)).toBe(0);
-  const post = { kind: "post" as const, rerank: null, relevance: 0.2, rrf: 50, engagement: 40, mentionsAnchor: true };
+test("without the rerank, 0.7·relevance·100 stands in, with no cliff", () => {
+  expect(fallbackRerankScore(0.5)).toBeCloseTo(35, 9);
+  expect(fallbackRerankScore(0.2)).toBeCloseTo(14, 9);
+  expect(fallbackRerankScore(2)).toBe(100);
+  const post = { kind: "post" as const, rerank: null, relevance: 0.2, rrf: 50, engagement: 40 };
   // score 14 < 20, but a stand-in is not cliffed.
   expect(finalScore(post)).toBeCloseTo(0.65 * 14 + 10 + 6, 9);
-  // Paper, anchor missed: (0.8·10 + 0.2·100) − 20.
-  expect(finalScore({ kind: "paper", rerank: null, relevance: 0.5, rrf: 100, engagement: null, mentionsAnchor: false })).toBeCloseTo(8, 9);
+  expect(finalScore({ kind: "paper", rerank: null, relevance: 0.5, rrf: 100, engagement: null })).toBeCloseTo(0.8 * 35 + 20, 9);
 });
 
-test("anchors match whole Latin words, or CJK anywhere with spaces ignored", () => {
+test("phrases match whole Latin words, or CJK anywhere with spaces ignored", () => {
   expect(mentionsAnchor(["AI for EDA is moving fast"], ["EDA"])).toBe(true);
   expect(mentionsAnchor(["needa better tools"], ["EDA"])).toBe(false);
   expect(mentionsAnchor(["Title", "an abstract about chip design."], ["EDA", "chip design"])).toBe(true);

@@ -84,10 +84,10 @@ test("enqueue drops the settled model questions and keeps the open ones", () => 
 
 test("the program's own questions are not dropped for sharing the topic's words", () => {
   const metric: NewQuestion = {
-    text: 'More than half of what the searches found never mentions "experiment design", "self-driving lab". Are those the right words to tell this topic apart?',
+    text: '"self-driving lab" has kept out 10 or more finds in each of the last 3 runs. Is that still what you want left out?',
     source: "metric",
-    template: { code: "anchor-miss", params: { anchors: "experiment design, self-driving lab", share: 69 } },
-    about: ["anchors"],
+    template: { code: "avoid-blocks", params: { avoid: "self-driving lab", runs: 3, least: 10 } },
+    about: ["avoid:self-driving lab"],
   };
   expect(enqueue([], [metric], TOPIC, 1)).toHaveLength(1);
 });

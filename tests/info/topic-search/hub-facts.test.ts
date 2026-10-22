@@ -69,7 +69,6 @@ function paperCand(id: string, hub?: HubFacts): Candidate {
     links: [],
     relevance: 0.5,
     engagement: null,
-    mentionsAnchor: true,
     order: 0,
   };
 }

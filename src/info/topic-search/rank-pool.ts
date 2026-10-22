@@ -15,7 +15,7 @@ import { xEngagement } from "../rank/engagement";
 import { arxivEventKey, eventKeyOfUrl, mergeIntoEvents, xEventKey, type EventCluster, type EventMember } from "../rank/events";
 import { weightedRrf, type Stream } from "../rank/fusion";
 import { localRelevance, prepareQuery, RELEVANCE_FLOOR } from "../rank/relevance";
-import { finalScore, mentionsAnchor } from "../rank/score";
+import { finalScore } from "../rank/score";
 const DAY_MS = 86_400_000;
 import type { XSearchPost } from "../x/search-page";
 import { postLinksOut } from "../x/text-links";
@@ -77,7 +77,6 @@ export interface Candidate {
   /** Best local relevance over the queries that found it. */
   relevance: number;
   engagement: number | null;
-  mentionsAnchor: boolean;
   order: number;
 }
 
@@ -206,7 +205,6 @@ export function gatherCandidates(
       links: postLinksOut(post),
       relevance: 0,
       engagement: xEngagement(post.counts),
-      mentionsAnchor: true,
       order: byKey.size,
     });
   }
@@ -243,7 +241,6 @@ export function gatherCandidates(
           links: [],
           relevance: 0,
           engagement: null,
-          mentionsAnchor: true,
           order: byKey.size,
         });
       }
@@ -254,7 +251,6 @@ export function gatherCandidates(
   const kept: Candidate[] = [];
   for (const c of all) {
     c.relevance = Math.max(0, ...c.queries.map((id) => relevanceTo(queries.get(id), c)));
-    c.mentionsAnchor = mentionsAnchor([c.text], topic.anchors);
     // No window filter here: the X lines and the arXiv search already read only
     // their window, and a seen post read again is what continuation looks for.
     if (c.relevance < RELEVANCE_FLOOR) continue;
@@ -529,7 +525,6 @@ export function scorePool(
       relevance: c.relevance,
       rrf: n.rrf,
       engagement: c.engagement,
-      mentionsAnchor: c.mentionsAnchor,
     });
     const subtopic = answer ? answer.subtopic : (queries.get(c.queries[0])?.subtopic ?? null);
     return {

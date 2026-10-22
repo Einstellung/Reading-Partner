@@ -109,15 +109,21 @@ export function paperDepth(item: TopicSearchResultItem, registry: MaterialRegist
 /**
  * The items of a study whose papers are read in full before the write-up, in
  * the order they are read: those that can be read deeper, a seed's first, then
- * by score (the order the brief puts them in). The caller takes as many as the
+ * by the rerank model's score (`rerank`, by item id; an item without one comes
+ * after those with), then by final score. The caller takes as many as the
  * run's cap (build-result.ts DEEP_READS).
  */
-export function studyReadOrder(items: readonly TopicSearchResultItem[], registry: MaterialRegistry, seeds: readonly TopicSeed[] = []): string[] {
+export function studyReadOrder(
+  items: readonly TopicSearchResultItem[],
+  registry: MaterialRegistry,
+  seeds: readonly TopicSeed[] = [],
+  rerank: ReadonlyMap<string, number> = new Map(),
+): string[] {
   const seeded = new Set(seeds.map((s) => s.key));
   return items
     .filter((i) => deepenableMaterial(i, registry) !== null)
-    .map((item, at) => ({ item, at, seed: item.keys.some((k) => seeded.has(k)) || seeded.has(item.key) }))
-    .sort((a, b) => Number(b.seed) - Number(a.seed) || b.item.score - a.item.score || a.at - b.at)
+    .map((item, at) => ({ item, at, seed: item.keys.some((k) => seeded.has(k)) || seeded.has(item.key), rerank: rerank.get(item.id) ?? -1 }))
+    .sort((a, b) => Number(b.seed) - Number(a.seed) || b.rerank - a.rerank || b.item.score - a.item.score || a.at - b.at)
     .map((x) => x.item.id);
 }
 

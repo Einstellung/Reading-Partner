@@ -571,7 +571,7 @@ describe("pieces", () => {
   });
 
   test("rerank answers naming no candidate are dropped, a bad main falls back to self", () => {
-    const cand = { key: "x:1", kind: "post", source: "x", queries: ["q1"], text: "t", author: "a", at: 0, post: null, paper: null, links: [{ url: "https://example.com/a", card: false }], relevance: 0.5, engagement: null, mentionsAnchor: true, order: 0 } as Candidate;
+    const cand = { key: "x:1", kind: "post", source: "x", queries: ["q1"], text: "t", author: "a", at: 0, post: null, paper: null, links: [{ url: "https://example.com/a", card: false }], relevance: 0.5, engagement: null, order: 0 } as Candidate;
     const numbered = numberPool([{ cand, rrf: 50 }]);
     const answers = parseRerank(JSON.stringify({ items: [{ c: "c1", score: 140, main: "c1.z", subtopic: "nope" }, { c: "c7", score: 50, main: "self" }] }), numbered, TOPIC);
     expect([...answers.keys()]).toEqual(["c1"]);
@@ -608,7 +608,7 @@ describe("pieces", () => {
   });
 
   test("a subtopic quiet for 7 days is asked about", () => {
-    const stats: ResultStats = { candidates: { x: 0, arxiv: 0 }, passedFloor: 0, pooled: 0, reranked: true, anchorMiss: 0, avoidBlocked: {}, subtopicItems: { s1: 2 }, modelCalls: 0 };
+    const stats: ResultStats = { candidates: { x: 0, arxiv: 0 }, passedFloor: 0, pooled: 0, reranked: true, avoidBlocked: {}, subtopicItems: { s1: 2 }, modelCalls: 0 };
     const past = ["2026-10-06", "2026-10-10", "2026-10-13"].map((date) => ({ date, stats }) as TopicSearchResult);
     const asked = metricQuestions(TOPIC, "2026-10-14", stats, past);
     expect(asked.map((q) => q.template?.params.subtopic)).toEqual(["Materials"]);

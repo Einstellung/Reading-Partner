@@ -33,6 +33,7 @@ import {
   lookUpDraftRepos,
   lookUpPinned,
   MAX_MODEL_CALLS,
+  rerankOfDraft,
   RESULT_ITEMS,
   SOURCE_HEALTH_FILE,
   sourceDepsOf,
@@ -164,7 +165,6 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
     passedFloor: gathered.kept.length,
     pooled: numbered.length,
     reranked,
-    anchorMiss: gathered.kept.length ? gathered.kept.filter((c) => !c.mentionsAnchor).length / gathered.kept.length : 0,
     avoidBlocked: {},
     subtopicItems,
     modelCalls,
@@ -279,6 +279,7 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
   const written: TopicSearchResultItem[] = [];
   const rewrite: { item: string; line: string }[] = [];
   const entryIds: (string | null)[] = [];
+  const rerankOf = new Map<string, number>();
   for (const e of diff.entries) {
     throwIfAborted(signal);
     if (e.keep) {
@@ -302,13 +303,15 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
       continue;
     }
     written.push(await itemOfDraft(d, id, { sourceDeps, registry, keyOfUrl: dois.keyOfUrl, call, callsLeft, language, signal }));
+    const rerank = rerankOfDraft(d);
+    if (rerank !== null) rerankOf.set(id, rerank);
     entryIds.push(id);
   }
   // Papers new to the brief are read in full first, as the first look's were.
   const fresh = written.filter((i) => !rewrite.some((r) => r.item === i.id));
   const deeper = deepReader(fresh, registry, sourceDeps, UPDATE_DEEP_READS);
   const upfront: DeeperReport = { read: [], failed: [], refused: [] };
-  for (const id of studyReadOrder(fresh, registry, topic.seeds).slice(0, UPDATE_DEEP_READS)) {
+  for (const id of studyReadOrder(fresh, registry, topic.seeds, rerankOf).slice(0, UPDATE_DEEP_READS)) {
     throwIfAborted(signal);
     const got = await deeper.read(id, signal);
     (got.ok ? upfront.read : upfront.failed).push(id);

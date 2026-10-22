@@ -184,11 +184,14 @@ test("the read: a whole read that reached the cap was cut after its last section
   expect(quoteOccurs("brittle  and\nopaque", "…process brittle and opaque.")).toBe(true);
 });
 
-test("a study reads its seeds' papers first, then by score, only those not read in full yet", async () => {
+test("a study reads its seeds' papers first, then by the rerank's score, then by final score, only those not read in full yet", async () => {
   const { registry, items } = await setup();
   const third = { ...items[1], id: "E3", key: "arxiv:2601.00001", keys: ["arxiv:2601.00001"], score: 10 };
   expect(studyReadOrder([...items, third], registry)).toEqual(["E1", "E2", "E3"]);
   expect(studyReadOrder([...items, third], registry, [{ key: "arxiv:2601.00001", title: "Other", said: "the other one", at: 0 }])).toEqual(["E3", "E1", "E2"]);
   const full = { ...items[0], materials: [] };
   expect(studyReadOrder([full, items[1]], registry)).toEqual(["E2"]);
+  // By the rerank's score first, the final score only between equals; an item no model judged comes last.
+  expect(studyReadOrder([...items, third], registry, [], new Map([["E3", 98], ["E1", 70], ["E2", 70]]))).toEqual(["E3", "E1", "E2"]);
+  expect(studyReadOrder([...items, third], registry, [], new Map([["E3", 98], ["E2", 70]]))).toEqual(["E3", "E2", "E1"]);
 });

@@ -2,8 +2,8 @@
 // interrupts; what it could not decide goes into the topic's queue and out at
 // the end of a later result. Two kinds: the model's doubts (from the rerank and
 // the write-up), and the program's, worked out from the results' numbers by
-// template — a subtopic quiet for 7 days, more than half the finds naming no
-// anchor, one `avoid` keeping out many candidates several days running.
+// template — a subtopic quiet for 7 days, one `avoid` keeping out many
+// candidates several days running.
 //
 // A result carries at most 3 questions, and from the fourth result on at most
 // 1. A question asked once is never asked again, answered or not; one that
@@ -36,8 +36,6 @@ export const QUESTIONS_LATER = 1;
 export const EARLY_RESULTS = 3;
 /** Days a picked subtopic may bring nothing before the program asks about it. */
 export const QUIET_DAYS = 7;
-/** Candidates past the floor needed before the anchor miss rate means anything. */
-export const ANCHOR_MIN_CANDIDATES = 10;
 /** One avoid phrase keeping out this many a run, this many results running. */
 export const AVOID_BLOCKS = 10;
 export const AVOID_RUNS = 3;
@@ -109,14 +107,6 @@ export function metricQuestions(topic: TopicSearch, today: string, stats: Result
         about: [`subtopic:${s.id}`],
       });
     }
-  }
-  if (stats.passedFloor >= ANCHOR_MIN_CANDIDATES && stats.anchorMiss > 0.5 && topic.anchors.length) {
-    out.push({
-      text: `More than half of what the searches found never mentions ${topic.anchors.map((a) => `"${a}"`).join(", ")}. Are those the right words to tell this topic apart?`,
-      source: "metric",
-      template: { code: "anchor-miss", params: { anchors: topic.anchors.join(", "), share: Math.round(stats.anchorMiss * 100) } },
-      about: ["anchors"],
-    });
   }
   const lastRuns = past.slice(-(AVOID_RUNS - 1));
   if (lastRuns.length === AVOID_RUNS - 1) {

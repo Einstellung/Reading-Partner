@@ -7,14 +7,14 @@
 // the caller passes kind "paper" for it (topic-search/rank-pool.ts).
 //
 // `score` is the rerank model's 0-100; below 20 the whole sum is multiplied by
-// 0.3. A candidate that names none of the topic's anchors (judged here, by the
-// program) loses 20. When the rerank failed, `score` is 0.7·relevance·100,
-// less 25 for a missed anchor, and the 0.3 cliff does not apply (a weak
-// lexical overlap is not a judge calling it irrelevant).
+// 0.3. Relevance is the model's call: nothing is taken off for wording (a
+// candidate that never names the topic's anchors scores as any other). When
+// the rerank failed, `score` is 0.7·relevance·100 and the 0.3 cliff does not
+// apply (a weak lexical overlap is not a judge calling it irrelevant).
 //
 // Ported from last30days-skill (lib/rerank.py: _final_score and the fallback
-// score, ENTITY_MISS_PENALTY and ENTITY_MISS_FINAL_PENALTY), with docs/88's
-// weights in place of the freshness and source-quality terms. Portions
+// score), with docs/88's weights in place of the freshness and source-quality
+// terms and without its entity-miss penalties. Portions
 // Copyright (c) 2026 Matt Van Horn, under the MIT License; the full notice is
 // in third-party-licenses.txt here.
 
@@ -23,10 +23,6 @@ import { normalizePhrase } from "./relevance";
 
 export const RERANK_CLIFF = 20;
 export const RERANK_CLIFF_FACTOR = 0.3;
-/** Taken off the final score of a candidate that names no anchor. */
-export const ANCHOR_MISS_FINAL_PENALTY = 20;
-/** Taken off the stand-in score when the rerank failed and no anchor is named. */
-export const ANCHOR_MISS_FALLBACK_PENALTY = 25;
 
 export type CandidateKind = "post" | "paper";
 
@@ -40,7 +36,6 @@ export interface ScoreInput {
   rrf: number;
   /** 0-100, posts only; null when the post has none. */
   engagement: number | null;
-  mentionsAnchor: boolean;
 }
 
 function clamp100(x: number): number {
@@ -48,18 +43,17 @@ function clamp100(x: number): number {
 }
 
 /** The stand-in for the model's score when the rerank failed. */
-export function fallbackRerankScore(relevance: number, mentionsAnchor: boolean): number {
-  return clamp100(0.7 * relevance * 100 - (mentionsAnchor ? 0 : ANCHOR_MISS_FALLBACK_PENALTY));
+export function fallbackRerankScore(relevance: number): number {
+  return clamp100(0.7 * relevance * 100);
 }
 
 export function finalScore(c: ScoreInput): number {
-  const score = c.rerank ?? fallbackRerankScore(c.relevance, c.mentionsAnchor);
+  const score = c.rerank ?? fallbackRerankScore(c.relevance);
   let base =
     c.kind === "post"
       ? 0.65 * score + 0.2 * c.rrf + 0.15 * clamp100(c.engagement ?? 0)
       : 0.8 * score + 0.2 * c.rrf;
   if (c.rerank !== null && c.rerank < RERANK_CLIFF) base *= RERANK_CLIFF_FACTOR;
-  if (!c.mentionsAnchor) base -= ANCHOR_MISS_FINAL_PENALTY;
   return clamp100(base);
 }
 

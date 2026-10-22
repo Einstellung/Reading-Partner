@@ -150,7 +150,6 @@ export function pinnedCandidate(paper: SeedPaper, since: number): Candidate | nu
     links: [],
     relevance: 0,
     engagement: null,
-    mentionsAnchor: true,
     order: Number.MAX_SAFE_INTEGER,
   };
 }

@@ -167,7 +167,7 @@ function studyResult(): TopicSearchResult {
       paper("M5", []),
     ],
     questions: [],
-    stats: { candidates: { x: 0, arxiv: 9 }, passedFloor: 0, pooled: 0, reranked: true, anchorMiss: 0, avoidBlocked: {}, subtopicItems: {}, modelCalls: 0 },
+    stats: { candidates: { x: 0, arxiv: 9 }, passedFloor: 0, pooled: 0, reranked: true, avoidBlocked: {}, subtopicItems: {}, modelCalls: 0 },
     runDir: "topic-search-runs/r",
     study: { versions: [v1, v2] },
   } as TopicSearchResult;

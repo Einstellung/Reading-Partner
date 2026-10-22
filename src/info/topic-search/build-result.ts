@@ -353,6 +353,12 @@ export function draftOf(cluster: EventCluster<Scored>): Draft {
   return { cluster, members, posts, keys, headline, score: cluster.score, continuing: null, previous: null };
 }
 
+/** The best rerank score among a draft's members; null when the model judged none of them. */
+export function rerankOfDraft(draft: Draft): number | null {
+  const scores = draft.members.flatMap((m) => (m.rerank ? [m.rerank.score] : []));
+  return scores.length ? Math.max(...scores) : null;
+}
+
 function subtopicOf(draft: Draft): string | null {
   return draft.members.find((m) => m.subtopic)?.subtopic ?? null;
 }
@@ -694,7 +700,6 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     passedFloor: gathered.kept.length,
     pooled: numbered.length,
     reranked,
-    anchorMiss: gathered.kept.length ? gathered.kept.filter((c) => !c.mentionsAnchor).length / gathered.kept.length : 0,
     avoidBlocked,
     subtopicItems,
     modelCalls,
@@ -799,9 +804,12 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const sourceDeps = sourceDepsOf(deps, xPages, dois);
   await lookUpDraftRepos(chosen.filter((d) => !(d.continuing && d.previous)), sourceDeps, dois.keyOfUrl, signal);
   const items: TopicSearchResultItem[] = [];
+  const rerankOf = new Map<string, number>();
   for (const [i, d] of chosen.entries()) {
     throwIfAborted(signal);
     const id = `E${itemsBefore + i + 1}`;
+    const rerank = rerankOfDraft(d);
+    if (rerank !== null) rerankOf.set(id, rerank);
     if (d.continuing && d.previous) {
       const prev = d.previous;
       items.push({
@@ -854,7 +862,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   // past the cap none are left, under it every paper was tried.
   const upfront: DeeperReport = { read: [], failed: [], refused: [] };
   if (topic.once && !empty) {
-    for (const id of studyReadOrder(items, registry, topic.seeds).slice(0, deeper.cap)) {
+    for (const id of studyReadOrder(items, registry, topic.seeds, rerankOf).slice(0, deeper.cap)) {
       throwIfAborted(signal);
       const got = await deeper.read(id, signal);
       (got.ok ? upfront.read : upfront.failed).push(id);

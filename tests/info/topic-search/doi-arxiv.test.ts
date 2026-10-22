@@ -67,7 +67,6 @@ function postCand(id: string, links: string[]): Candidate {
     links: links.map((url) => ({ url, card: false })),
     relevance: 0.5,
     engagement: 2,
-    mentionsAnchor: true,
     order: 0,
   };
 }
@@ -87,7 +86,6 @@ function paperCand(id: string): Candidate {
     links: [],
     relevance: 0.5,
     engagement: null,
-    mentionsAnchor: true,
     order: 1,
   };
 }

@@ -82,12 +82,6 @@ export function questionWords(q: Pick<OpeningQuestion, "text" | "template" | "qu
       quick: [t("info.issue.quick.keep"), t("info.issue.quick.drop")],
     };
   }
-  if (tpl?.code === "anchor-miss") {
-    return {
-      text: t("info.issue.q.anchorMiss", { anchors: String(tpl.params.anchors ?? "") }),
-      quick: [t("info.issue.quick.wordsRight"), t("info.issue.quick.wordsWrong")],
-    };
-  }
   if (tpl?.code === "avoid-blocks") {
     return {
       text: t("info.issue.q.avoidBlocks", {

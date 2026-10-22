@@ -84,7 +84,6 @@ function cand(key: string, kind: "post" | "paper", query: string, relevance: num
     links: [],
     relevance,
     engagement: null,
-    mentionsAnchor: true,
     order,
   };
 }

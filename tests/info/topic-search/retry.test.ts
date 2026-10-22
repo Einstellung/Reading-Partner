@@ -128,8 +128,8 @@ function item(id: string, materials: string[], subtopic: string | null = null): 
   };
 }
 
-const STATS = { candidates: { x: 0, arxiv: 1 }, passedFloor: 1, pooled: 1, reranked: true, anchorMiss: 0, avoidBlocked: {}, subtopicItems: { "": 1 }, modelCalls: 2 };
-const PART_STATS = { candidates: { x: 40, arxiv: 0 }, passedFloor: 12, pooled: 10, reranked: true, anchorMiss: 0.25, avoidBlocked: { hype: 2 }, subtopicItems: { s1: 1 }, modelCalls: 4 };
+const STATS = { candidates: { x: 0, arxiv: 1 }, passedFloor: 1, pooled: 1, reranked: true, avoidBlocked: {}, subtopicItems: { "": 1 }, modelCalls: 2 };
+const PART_STATS = { candidates: { x: 40, arxiv: 0 }, passedFloor: 12, pooled: 10, reranked: true, avoidBlocked: { hype: 2 }, subtopicItems: { s1: 1 }, modelCalls: 4 };
 
 function result(over: Partial<TopicSearchResult>): TopicSearchResult {
   return {
@@ -184,7 +184,6 @@ test("a retry's part is added to the first look's file and read back as its own 
     passedFloor: 13,
     pooled: 11,
     reranked: true,
-    anchorMiss: 3 / 13,
     avoidBlocked: { hype: 2 },
     subtopicItems: { "": 1, s1: 1 },
     modelCalls: 6,

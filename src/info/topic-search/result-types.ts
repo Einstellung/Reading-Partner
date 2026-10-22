@@ -248,7 +248,7 @@ export interface ResultQuestion {
    * For a metric question: which template and its values, so a page can word it in the reader's language.
    * "label-item" is a study's question about one item (questions.ts labelQuestion).
    */
-  template: { code: "subtopic-quiet" | "anchor-miss" | "avoid-blocks" | "label-item"; params: Record<string, string | number> } | null;
+  template: { code: "subtopic-quiet" | "avoid-blocks" | "label-item"; params: Record<string, string | number> } | null;
 }
 
 export interface ResultStats {
@@ -257,8 +257,6 @@ export interface ResultStats {
   passedFloor: number;
   pooled: number;
   reranked: boolean;
-  /** Share of the candidates past the floor that name no anchor, 0-1. */
-  anchorMiss: number;
   /** Per `avoid` phrase: pooled candidates naming it that the rerank scored under its cliff. */
   avoidBlocked: Record<string, number>;
   /** Items per subtopic id ("" for the whole topic). */
@@ -411,8 +409,8 @@ function addCounts(into: Record<string, number>, from: Record<string, number>): 
 
 /**
  * The counts of runs that wrote one file, added up: candidates, the floor, the
- * pool, items per subtopic, avoid blocks and model calls summed; the anchor
- * miss share weighted by what passed the floor; reranked when any part was.
+ * pool, items per subtopic, avoid blocks and model calls summed; reranked
+ * when any part was.
  */
 export function sumStats(parts: readonly ResultStats[]): ResultStats {
   const passed = parts.reduce((n, p) => n + p.passedFloor, 0);
@@ -426,7 +424,6 @@ export function sumStats(parts: readonly ResultStats[]): ResultStats {
     passedFloor: passed,
     pooled: parts.reduce((n, p) => n + p.pooled, 0),
     reranked: parts.some((p) => p.reranked),
-    anchorMiss: passed ? parts.reduce((n, p) => n + p.anchorMiss * p.passedFloor, 0) / passed : 0,
     avoidBlocked: parts.reduce((acc, p) => addCounts(acc, p.avoidBlocked), {} as Record<string, number>),
     subtopicItems: parts.reduce((acc, p) => addCounts(acc, p.subtopicItems), {} as Record<string, number>),
     modelCalls: parts.reduce((n, p) => n + p.modelCalls, 0),

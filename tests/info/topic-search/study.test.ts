@@ -174,7 +174,7 @@ function item(id: string, key: string, materials: string[], subtopic: string | n
   };
 }
 
-const STATS = { candidates: { x: 0, arxiv: 3 }, passedFloor: 3, pooled: 3, reranked: true, anchorMiss: 0, avoidBlocked: {}, subtopicItems: { "": 3 }, modelCalls: 2 };
+const STATS = { candidates: { x: 0, arxiv: 3 }, passedFloor: 3, pooled: 3, reranked: true, avoidBlocked: {}, subtopicItems: { "": 3 }, modelCalls: 2 };
 
 function file(over: Partial<TopicSearchResult>): TopicSearchResult {
   return {
