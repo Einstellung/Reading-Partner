@@ -14,8 +14,8 @@ import { assembleIssue, dueIssues, emptyIssueState, markDone, noteClosed, parseS
 import { expiredIssues } from "../../../src/info/issue/expiry";
 import type { IssueTopic } from "../../../src/info/issue/plan";
 import { openingRecord } from "../../../src/info/issue/opening-record";
-import { studyBookName, studyChangeLine, studyEpubInput } from "../../../src/info/issue/render-study";
-import { anchorOfHref, citeAt, citeHref, citeLabel, citeOfId, itemAnchorId, itemOfAnchorId, splitAnchor } from "../../../src/info/issue/study-cites";
+import { quoteText, studyBookName, studyChangeLine, studyEpubInput } from "../../../src/info/issue/render-study";
+import { anchorOfHref, citeAt, citeHref, citeLabel, citeOfId, enclosingNumber, itemAnchorId, itemOfAnchorId, splitAnchor } from "../../../src/info/issue/study-cites";
 import { citeSheet, excerptFor, itemAtPage, landedAction, materialBodyPaths, sameItemIn, SETTLED_MS, studyBookContext, studyStrip, updatingTo, versionItems, versionRows } from "../../../src/info/issue/study-reader";
 import { planStudyIssue, withStudyVersions } from "../../../src/info/issue/study-plan";
 import { bookExcerpts, citedSections, excerptBody, excerptId, excerptInBook, pickExcerpt } from "../../../src/info/issue/study-excerpts";
@@ -198,9 +198,31 @@ describe("cites the reader can tap (study-cites.ts)", () => {
     expect(citeLabel("IV. Discussion", 4, pdf, "original")).toBe("§IV");
     expect(citeLabel("A.1 Proofs", 9, pdf, "original")).toBe("§A.1");
     expect(citeLabel("PDF part 2", 2, pdf, "original")).toBe("part 2");
-    expect(citeLabel("Method in which the agent picks its next experiment", 3, pdf, "original")).toBe("Method in which the age…");
+    expect(citeLabel("II.1 Sparse Identification of Nonlinear Dynamics", 5, pdf, "original")).toBe("§II.1");
+    expect(citeLabel("III.2.1 Chunked Stochastic Search", 6, pdf, "original")).toBe("§III.2.1");
     expect(citeLabel(null, 4, pdf, "original")).toBe("§4");
     expect(citeLabel("Paper M1", null, pdf, "original")).toBe("original");
+  });
+
+  test("an unnumbered heading is labelled by the section it falls under and a title cut at a word", () => {
+    const pdf = (n: number) => `part ${n}`;
+    // A run-in paragraph heading of the 2026-10-22 run, under §3.1.
+    expect(citeLabel("Python code interpreter.", 10, pdf, "original", "3.1")).toBe("§3.1 Python code interpreter");
+    expect(citeLabel("Python code interpreter.", 10, pdf, "original")).toBe("§10 Python code interpreter");
+    expect(citeLabel("Method in which the agent picks its next experiment", 3, pdf, "original", "3")).toBe("§3 Method in which the…");
+    expect(citeLabel("一个没有空格也没有编号的很长很长很长很长很长的小节标题", 2, pdf, "original")).toBe("§2 一个没有空格也没有编号的很长很长很长很长很长的…");
+    expect(enclosingNumber(["Abstract", "3 Method", "3.1 Tools", "Visual subagent."])).toBe("3.1");
+    expect(enclosingNumber(["Abstract", "PDF part 2"])).toBeNull();
+  });
+});
+
+describe("a quote on the page", () => {
+  test("quotation marks inside become the inner kind, and marks around the whole are dropped", () => {
+    // The 2026-10-22 run drew this as “…“ground truth”” under <q>.
+    expect(quoteText("misinterpretation of symbolic models as “ground truth”")).toBe("misinterpretation of symbolic models as ‘ground truth’");
+    expect(quoteText('a "notoriously nonconvex" problem')).toBe("a ‘notoriously nonconvex’ problem");
+    expect(quoteText("“systematic comparisons remain limited”")).toBe("systematic comparisons remain limited");
+    expect(quoteText("found three of four")).toBe("found three of four");
   });
 });
 
@@ -233,7 +255,8 @@ describe("the book of version 1", () => {
     expect(front).toContain("Study · just this once");
     expect(front).toContain("Version 1 · Tuesday, October 20, 2026");
     expect(front).toContain(`This brief answers one question: ${SCOPE}`);
-    expect(front).toContain("Sources: arXiv, Hugging Face, looking back 2 years. X was not read.");
+    // Each source's own window, not the X window the version's spans (2026-10-22 run: "1 month").
+    expect(front).toContain("Sources: arXiv, Hugging Face (1 year back). X was not read.");
     expect(front).toContain("Entries: 2 · Notes: 1 · Pinned: 1");
     expect(front).toContain("conversation with Lumen");
     const contents = input.sections[1].html;
@@ -255,7 +278,7 @@ describe("the book of version 1", () => {
     expect(e1).toContain('Labs run experiments by hand. <a class="rp-cite" id="rp-cite-E1-1" href="#rp-cite-M1-1">§3.3</a>');
     expect(e1).toContain('<a class="rp-cite" id="rp-cite-E1-2" href="#rp-cite-M1">original</a>');
     expect(e1).toContain('href="#rp-cite-M1-2">part 2</a>');
-    expect(e1).toContain('href="#rp-cite-M1-3">Method in which the age…</a>');
+    expect(e1).toContain('href="#rp-cite-M1-3">§3.3 Method in which the…</a>');
     expect(e1).toContain('href="#rp-cite-M1-4">§4</a>');
     expect(e1).toContain("<q>found three of four</q>");
     // The story keeps its two paragraphs; the empty gap says what was read.
@@ -280,6 +303,14 @@ describe("the book of version 1", () => {
 
 describe("the book of version 2", () => {
   const input = studyEpubInput(planOf(2), { number: 4, date: "2026-10-21", locale: "en", companionName: "Lumen" });
+
+  test("the contents name the panorama as this version's, not the first look's", () => {
+    const contents = input.sections[2].html;
+    expect(contents).toContain("the panorama of version 2.");
+    expect(contents).not.toContain("first look");
+    const first = studyEpubInput(planOf(1), { number: 4, date: "2026-10-20", locale: "en", companionName: "Lumen" });
+    expect(first.sections[1].html).toContain("the panorama of version 1.");
+  });
 
   test("「This update」 first: groups, links, the removed struck, the reader's words, the skipped searches", () => {
     expect(input.sections.map((s) => s.heading)).toEqual(["This update", NAME, "Contents", "Paper titled E1", "Paper titled E5", "Paper titled E6", "Paper titled E7", "Notes", `Annex: ${NAME}`]);

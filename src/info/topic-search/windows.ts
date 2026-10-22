@@ -7,6 +7,8 @@
 // (2026-10-16: five of six first-run queries found nothing). A daily run reads
 // both from the last run on.
 
+import type { RunSource } from "./pace";
+
 export const DAY_MS = 86_400_000;
 
 /** X: how far back the first run's `since:` reaches. */
@@ -16,6 +18,17 @@ export const FIRST_LOOK_BACK_MS = X_FIRST_LOOK_BACK_DAYS * DAY_MS;
 
 /** arXiv: how far back the first run's submittedDate window reaches. */
 export const ARXIV_FIRST_LOOK_BACK_DAYS = 365;
+
+/**
+ * How far back a first look reads each source, days. Hugging Face's paper
+ * search runs on arXiv's window (hf-read.ts). Every run of a study is read as
+ * a first look (run.ts lookOf), so this is also what a study's brief says it read.
+ */
+export const FIRST_LOOK_BACK_DAYS: Readonly<Record<RunSource, number>> = {
+  x: X_FIRST_LOOK_BACK_DAYS,
+  arxiv: ARXIV_FIRST_LOOK_BACK_DAYS,
+  huggingface: ARXIV_FIRST_LOOK_BACK_DAYS,
+};
 
 /** Local date of an instant, YYYY-MM-DD. */
 export function localDay(ms: number): string {

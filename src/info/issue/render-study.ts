@@ -15,11 +15,12 @@ import { translate, type Params } from "../../i18n/translate";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
 import { typographicCover } from "../../workshop/bindery/cover-svg";
 import { factsLine } from "../topic-search/facts-line";
-import { SOURCE_NAME } from "../topic-search/pace";
+import { SOURCE_NAME, type RunSource } from "../topic-search/pace";
+import { FIRST_LOOK_BACK_DAYS } from "../topic-search/windows";
 import type { EntryParts, EntryPartName, EntrySentence, PaperDepth, StudyVersion, TopicSearchResultItem } from "../topic-search/result-types";
 import type { IssuePlan, PlannedItem } from "./plan";
 import { annexHtml, cut, esc, fill, HEADING_CHARS, link, linksLine, longDate, sectionHref, shortDate, verifyLines } from "./render";
-import { CITE_CLASS, ITEM_CLASS, citeHref, citeId, citeLabel, itemAnchorId, splitAnchor } from "./study-cites";
+import { CITE_CLASS, ITEM_CLASS, citeHref, citeId, citeLabel, enclosingNumber, itemAnchorId, splitAnchor } from "./study-cites";
 import { EXCERPT_CLASS, EXCERPT_TEXT_CLASS, SECTION_EXCERPT_CHARS, excerptId, type StudyExcerpts } from "./study-excerpts";
 import type { StudyIssuePlan, StudyTag } from "./study-plan";
 
@@ -34,6 +35,37 @@ export interface StudyMeta {
 }
 
 const DAY_MS = 86_400_000;
+
+/**
+ * "arXiv, Hugging Face (1 year back); X (1 month back)": each source with how
+ * far back it was read, sources read as far back as each other together,
+ * the farthest first. A source with no window of its own goes by the
+ * version's window.
+ */
+function sourcesLine(sources: readonly RunSource[], window: { since: number; until: number }, locale: Locale): string {
+  const byDays = new Map<number, string[]>();
+  for (const source of sources) {
+    const days = FIRST_LOOK_BACK_DAYS[source] ?? (window.until - window.since) / DAY_MS;
+    const span = Math.max(1, Math.round(days));
+    byDays.set(span, [...(byDays.get(span) ?? []), SOURCE_NAME[source] ?? source]);
+  }
+  const groups = [...byDays]
+    .sort((a, b) => b[0] - a[0])
+    .map(([days, names]) => s(locale, "sourcesGroup", { sources: listOf(names, locale), span: spanOf(days, locale) }));
+  return f(locale, "sources", { groups: groups.join(locale === "zh-CN" || locale === "ja" ? "；" : "; ") });
+}
+
+/**
+ * A quote as the page's <q> marks it: the marks are the reader's, so a quote
+ * the model handed over already in quotation marks loses them, and quotation
+ * marks inside it become the inner kind (‘…’), not a second pair of “…”.
+ */
+export function quoteText(quote: string): string {
+  let q = quote.trim();
+  const outer = /^(["“„«「『])([\s\S]*)(["”“»」』])$/u.exec(q);
+  if (outer && !/["“”„«»「」『』]/u.test(outer[2])) q = outer[2].trim();
+  return q.replace(/[“„]([^“”„"]*)[”“]/gu, "‘$1’").replace(/"([^"]*)"/g, "‘$1’");
+}
 
 function s(locale: Locale, name: string, params?: Params): string {
   return translate(locale, `info.issue.book.study.${name}`, params);
@@ -99,8 +131,8 @@ function listOf(names: readonly string[], locale: Locale): string {
   return names.join(locale === "zh-CN" || locale === "ja" ? "、" : ", ");
 }
 
-function spanOf(window: { since: number; until: number }, locale: Locale): string {
-  const days = Math.max(1, Math.round((window.until - window.since) / DAY_MS));
+function spanOf(lookBackDays: number, locale: Locale): string {
+  const days = Math.max(1, Math.round(lookBackDays));
   if (days >= 350) return s(locale, "spanYears", { count: Math.max(1, Math.round(days / 365)) });
   if (days >= 28) return s(locale, "spanMonths", { count: Math.round(days / 30.44) });
   return s(locale, "spanDays", { count: days });
@@ -147,14 +179,14 @@ function citeHtml(anchor: string, study: StudyIssuePlan, counter: CiteCounter, l
   const parts = splitAnchor(anchor);
   if (!href || !parts) return "";
   const heading = parts.section === null ? study.headings[parts.material] : study.headings[anchor];
-  const label = citeLabel(heading, parts.section, (n) => s(locale, "pdfPart", { n }), s(locale, "citeWhole"));
+  const label = citeLabel(heading, parts.section, (n) => s(locale, "pdfPart", { n }), s(locale, "citeWhole"), enclosingOf(parts, study));
   counter.n++;
   return `<a class="${CITE_CLASS}" id="${citeId(counter.itemId, counter.n)}" href="${href}">${esc(label)}</a>`;
 }
 
 function sentenceHtml(sentence: EntrySentence, study: StudyIssuePlan, counter: CiteCounter, locale: Locale): string {
   const cites = sentence.cites.map((c) => citeHtml(c, study, counter, locale)).filter(Boolean);
-  const quote = sentence.quote ? ` <q>${esc(sentence.quote)}</q>` : "";
+  const quote = sentence.quote ? ` <q>${esc(quoteText(sentence.quote))}</q>` : "";
   return `${esc(sentence.text)}${quote}${cites.length ? ` ${cites.join(" ")}` : ""}`;
 }
 
@@ -316,14 +348,13 @@ function updateHtml(plan: IssuePlan, hrefs: Map<string, string>, locale: Locale)
 function frontHtml(plan: IssuePlan, meta: StudyMeta): string {
   const study = studyOf(plan);
   const { locale } = meta;
-  const names = study.sources.map((x) => SOURCE_NAME[x] ?? x);
   const out = [
     `<p><small>${f(locale, "kicker")}</small></p>`,
     `<p><small>${f(locale, "dateLine", { n: study.version.n, date: longDate(meta.date, locale) })}</small></p>`,
   ];
   if (study.scope.trim()) out.push(`<p>${f(locale, "asks", { scope: study.scope.trim() })}</p>`);
-  const sources = names.length ? f(locale, "sources", { sources: listOf(names, locale), span: spanOf(study.window, locale) }) : "";
-  const noX = names.length && !study.sources.includes("x") ? f(locale, "noX") : "";
+  const sources = study.sources.length ? sourcesLine(study.sources, study.window, locale) : "";
+  const noX = study.sources.length && !study.sources.includes("x") ? f(locale, "noX") : "";
   if (sources) out.push(`<p><small>${[sources, noX].filter(Boolean).join(" ")}</small></p>`);
   out.push(
     `<p><small>${f(locale, "counts", { main: plan.entries.length - study.pinned, notes: plan.notes.length, pinned: study.pinned })}</small></p>`,
@@ -344,8 +375,9 @@ function contentsHtml(plan: IssuePlan, hrefs: Map<string, string>, notesHref: st
     const titles = plan.notes.map((p) => cut(p.item.title, 60));
     out.push(`<p>${fill(locale, "info.issue.book.notesLine", { titles: titles.join("; ") }, { link: link(notesHref, translate(locale, "info.issue.book.notes")) })}</p>`);
   }
+  // The panorama is this version's, not the first look's.
   plan.annex.forEach((a, i) => {
-    out.push(`<p>${fill(locale, "info.issue.book.annexLine", {}, { link: link(annexHrefs[i], translate(locale, "info.issue.book.annex", { topic: a.topic })) })}</p>`);
+    out.push(`<p>${f(locale, "annexLine", { n: study.version.n }, { link: link(annexHrefs[i], translate(locale, "info.issue.book.annex", { topic: a.topic })) })}</p>`);
   });
   return out.join("\n");
 }
@@ -356,7 +388,17 @@ function sectionName(anchor: string, study: StudyIssuePlan, locale: Locale): str
   if (!parts) return anchor;
   const heading = parts.section === null ? null : study.headings[anchor];
   const own = heading?.trim();
-  return own && !/^PDF part \d+$/.test(own) ? own : citeLabel(heading, parts.section, (n) => s(locale, "pdfPart", { n }), s(locale, "citeWhole"));
+  return own && !/^PDF part \d+$/.test(own)
+    ? own
+    : citeLabel(heading, parts.section, (n) => s(locale, "pdfPart", { n }), s(locale, "citeWhole"), enclosingOf(parts, study));
+}
+
+/** The number of the nearest numbered heading before a cited section of the same material ("3.1"); null when none. */
+function enclosingOf(parts: { material: string; section: number | null }, study: StudyIssuePlan): string | null {
+  if (parts.section === null) return null;
+  const before: (string | null)[] = [];
+  for (let k = 1; k < parts.section; k++) before.push(study.headings[`${parts.material}.§${k}`] ?? null);
+  return enclosingNumber(before);
 }
 
 /** The cited sections' original text, one block per anchor (study-excerpts.ts). */

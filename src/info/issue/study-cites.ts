@@ -58,28 +58,68 @@ export function itemOfAnchorId(id: string): string | null {
 
 /** A section heading read from a PDF's text layer (topic-search/verify.ts): no number of its own. */
 const PDF_PART = /^PDF part (\d+)$/;
-/** "3.3", "3", "A.1", "IV" at the start of a heading, before a space or the end. */
-const NUMBERED = /^((?:\d+(?:\.\d+)*)|(?:[A-Z]\.\d+(?:\.\d+)*)|(?:[IVX]+))\.?(?=\s|$)/;
-/** Characters of an unnumbered heading kept on a cite. */
+/** "3.3", "3", "A.1", "IV", "II.1" at the start of a heading, before a space or the end. */
+const NUMBERED = /^((?:\d+(?:\.\d+)*)|(?:[A-Z]\.\d+(?:\.\d+)*)|(?:[IVX]+(?:\.\d+)*))\.?(?=\s|$)/;
+/** Characters of an unnumbered heading's title kept on a cite. */
 const LABEL_CHARS = 24;
+
+/** The number a heading starts with ("3.3" of "3.3 Results"); null when it has none. */
+function numberOf(heading: string | null | undefined): string | null {
+  const h = heading?.trim() ?? "";
+  if (PDF_PART.test(h)) return null;
+  return NUMBERED.exec(h)?.[1] ?? null;
+}
+
+/**
+ * The number of the nearest numbered heading among `before`, the headings of
+ * the sections before a cited one, in order; null when none is numbered.
+ */
+export function enclosingNumber(before: readonly (string | null | undefined)[]): string | null {
+  for (let k = before.length - 1; k >= 0; k--) {
+    const n = numberOf(before[k]);
+    if (n) return n;
+  }
+  return null;
+}
+
+/**
+ * An unnumbered heading as a cite's short title: its closing stop dropped, and
+ * past LABEL_CHARS cut at the last word boundary that fits (a run of text with
+ * no space, as Chinese, at the character), with "…".
+ */
+function shortTitle(heading: string): string {
+  const h = heading.replace(/[\s.:;,。：；，]+$/u, "");
+  const chars = [...h];
+  if (chars.length <= LABEL_CHARS) return h;
+  const head = chars.slice(0, LABEL_CHARS - 1).join("");
+  const space = head.lastIndexOf(" ");
+  const kept = space > 0 && !/\s/.test(chars[LABEL_CHARS - 1] ?? " ") ? head.slice(0, space) : head;
+  return `${kept.replace(/[\s,;:–—-]+$/u, "")}…`;
+}
 
 /**
  * What a cite says on the page: "§3.3" from a numbered heading; for a PDF read
- * as plain text, `pdfPart(n)` (the book's "part 2"); the heading itself, cut,
- * when it has no number; "§k" when the heading is unknown.
+ * as plain text, `pdfPart(n)` (the book's "part 2"); for a heading with no
+ * number (a run-in paragraph heading such as "Python code interpreter."), the
+ * number of the numbered section it falls under (`enclosing`), else its own
+ * place "§k", and its title cut short: "§3.1 Python code interpreter";
+ * "§k" when the heading is unknown.
  */
-export function citeLabel(heading: string | null | undefined, section: number | null, pdfPart: (n: number) => string, whole: string): string {
+export function citeLabel(
+  heading: string | null | undefined,
+  section: number | null,
+  pdfPart: (n: number) => string,
+  whole: string,
+  enclosing?: string | null,
+): string {
   if (section === null) return whole;
   const h = heading?.trim() ?? "";
   const pdf = PDF_PART.exec(h);
   if (pdf) return pdfPart(Number(pdf[1]));
-  const numbered = NUMBERED.exec(h);
-  if (numbered) return `§${numbered[1]}`;
-  if (h) {
-    const chars = [...h];
-    return chars.length <= LABEL_CHARS ? h : `${chars.slice(0, LABEL_CHARS - 1).join("")}…`;
-  }
-  return `§${section}`;
+  const numbered = numberOf(h);
+  if (numbered) return `§${numbered}`;
+  const title = h ? shortTitle(h) : "";
+  return title ? `§${enclosing ?? section} ${title}` : `§${section}`;
 }
 
 /** "M3.§2" split: the material and the section (null for a whole material); null when it is not an anchor. */
