@@ -158,6 +158,27 @@ export interface ResultGraph {
   doiOnly: number;
 }
 
+/**
+ * Why a study's second round did not search a line (docs/info/92 「第二轮查询」):
+ * the model proposed no search that passed the checks, the proposal call
+ * failed, the study reads no paper source, no source answered (cooling down,
+ * rate limited, failed), or what it found could not be judged.
+ */
+export type WidenWhy = "no_query" | "proposal_failed" | "no_source" | "cooling_down" | "rate_limited" | "failed" | "unjudged";
+
+/** A study's second round, on its first look's result (docs/info/92 「数据」). */
+export interface ResultWiden {
+  /** The searches that passed the checks (w1 …), each with how it went and the papers it found. */
+  queries: { id: string; subtopic: string | null; text: string; outcome: "ok" | "empty" | "not_searched"; found: number }[];
+  /**
+   * The lines still short after both rounds (null: the whole topic): `empty`,
+   * searched in both rounds with nothing on the mark; `not_searched`, the
+   * second round did not search it, `why` says why. A line with one item on
+   * the mark that both rounds searched is not listed.
+   */
+  lines: { subtopic: string | null; status: "empty" | "not_searched"; why?: WidenWhy }[];
+}
+
 export interface TopicSearchResultItem {
   /** "E1", in the order of the file. */
   id: string;
@@ -357,6 +378,8 @@ export interface TopicSearchResult {
   studyVersion?: StudyVersion;
   /** A study's run with a graph expansion on file: what it read (docs/info/92 「数据」). Absent otherwise. */
   graph?: ResultGraph;
+  /** A study's first look that found a line short: its second round (docs/info/92 「第二轮查询」). Absent otherwise. */
+  widen?: ResultWiden;
 }
 
 /** Where an item sits in a version of a study's brief. */

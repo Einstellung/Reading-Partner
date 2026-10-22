@@ -7,7 +7,7 @@ import { providerFailureName } from "../../ai/provider-failure";
 
 /** One model call. Injected: the live one runs on the everyday tier (同 86). */
 export interface TopicModelCall {
-  site: "rerank" | "verify" | "dedupe" | "write";
+  site: "rerank" | "verify" | "dedupe" | "write" | "widen";
   system: string;
   /** What a later call of the same stage would repeat word for word. */
   user: string;
