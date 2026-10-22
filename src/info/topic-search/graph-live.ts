@@ -175,6 +175,8 @@ const idsOf = (ctx: Ctx, key: string) => {
 
 /** How S2 is asked for a paper: its S2 id once the batch knows it; its key's handle when the batch has not answered; null when S2 does not know it. */
 function s2Ref(ctx: Ctx, key: string): string | null {
+  const filed = ctx.read.positives.find((p) => p.key === key)?.s2;
+  if (filed) return filed;
   const ids = idsOf(ctx, key);
   return ids ? ids.s2 : s2Handle(key);
 }

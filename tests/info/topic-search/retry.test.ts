@@ -9,7 +9,8 @@ import { noteClosed, emptyIssueState } from "../../../src/info/issue/assemble";
 import { clearSignedOut, type XHaltRecord } from "../../../src/info/topic-search/halt";
 import { planIssue } from "../../../src/info/issue/plan";
 import { firstPart, mergeRetry, retryPart, type TopicSearchResult, type TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
-import { nextRetryNumber, planRetry } from "../../../src/info/topic-search/retry";
+import { emptyGraphRead, type GraphRead, type GraphStream } from "../../../src/info/topic-search/graph-read";
+import { isEmptyPlan, nextRetryNumber, planRetry } from "../../../src/info/topic-search/retry";
 import { askedText, buildRetryFirstRunTool, type RetryToolDeps } from "../../../src/info/topic-search/retry-tool";
 import { askRetryRun } from "../../../src/info/topic-search/run-worker";
 import { encodeBrief, topicSearchRunKey, type TopicSearchBrief } from "../../../src/info/topic-search/run";
@@ -75,6 +76,32 @@ test("a retry reads X that failed or was never read, arXiv that failed or was em
     SEARCH.queries.flatMap((q) => [line(q.id, "x", "ok"), line(q.id, "arxiv", "ok"), line(q.id, "huggingface", "empty", EXHAUSTED)]),
   );
   expect(planRetry(SEARCH, all)).toEqual({ x: [], arxiv: [], huggingface: [] });
+});
+
+test("a study's retry also reads the graph streams that did not come back; another topic's never does", () => {
+  const all = Object.fromEntries(
+    ["q1", "q2", "q3", "q4"].flatMap((q) => [line(q, "x", "ok"), line(q, "arxiv", "ok", EXHAUSTED), line(q, "huggingface", "ok")]),
+  );
+  const stream = (id: string, outcome: GraphStream["outcome"], at: string): GraphStream => ({
+    id,
+    kind: id === "rec" ? "rec" : "cites",
+    from: [],
+    library: null,
+    outcome,
+    total: 0,
+    papers: [],
+    at,
+  });
+  const first: GraphRead = { ...emptyGraphRead([], []), streams: [stream("rec", "ok", "2026-10-20T01:00:00Z"), stream("cites:arxiv:1", "cooling_down", "2026-10-20T01:00:01Z")] };
+  const study = { ...SEARCH, once: true };
+  const plan = planRetry(study, all, [], [first]);
+  expect(plan).toEqual({ x: [], arxiv: [], huggingface: [], graph: ["cites:arxiv:1"] });
+  expect(isEmptyPlan(plan)).toBe(false);
+  expect(askedText(study.name, plan, null)).toContain("the citation graph for 1 stream");
+  // Read again since, and back: nothing left.
+  const retried: GraphRead = { ...first, streams: [stream("cites:arxiv:1", "ok", "2026-10-21T01:00:00Z")] };
+  expect(isEmptyPlan(planRetry(study, all, [], [first, retried]))).toBe(true);
+  expect(planRetry(SEARCH, all, [], [first])).toEqual({ x: [], arxiv: [], huggingface: [] });
 });
 
 test("retries are keyed one past the highest still on file, per search", () => {
