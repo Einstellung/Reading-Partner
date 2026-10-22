@@ -185,6 +185,7 @@ export default {
   "shelf.menu": "Más",
   "shelf.open": "Abrir",
   "shelf.moveTo": "Mover a…",
+  "shelf.endStudy": "Pasar a lectura y terminar el estudio…",
   "shelf.delete": "Eliminar",
   "shelf.deleteTitle": "¿Eliminar «{title}»?",
   "shelf.deleteBody": "El volumen se elimina con sus conversaciones y marcas.",

@@ -1,12 +1,17 @@
 // The info shelf (docs/info/88 「info 书架与专题册」): the nightly brief's issues
 // newest first, and the topic volumes in a row of their own. One screen for both
 // shells; the phone gives it a back and a bottom sheet for Move to…. What is on
-// it and what Move to… does are in info-shelf.ts.
+// it and what Move to… does are in info-shelf.ts. A study's cover has its own
+// menu item to move it into reading and end the study (docs/info/91 结束): it
+// raises end_study's move card as the confirmation (companion/study-end.ts).
 
 import { prepareStudyBook } from "../reader/study/study-live";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../../../i18n";
 import { todayLocal } from "../../../info/collect/store";
+import { studySearchIdOf } from "../../../info/issue/study-reader";
+import { STUDY_MOVE_LATER_OP, STUDY_MOVE_OP, type StudyMoveCardData } from "../../../info/topic-search/cards";
+import { parseMoveTarget } from "../../../info/topic-search/study-lines";
 import { appData } from "../../../platform/app/appdata";
 import { listLibraryEntries } from "../../../platform/app/library";
 import { getViewState } from "../../../platform/app/storage";
@@ -14,10 +19,14 @@ import { addFileToTopic, listTopics, type Topic } from "../../../platform/app/to
 import { deleteBook } from "../../../reading/delete/delete-book";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import { useCompanionName } from "../base/use-companion-name";
+import type { CardAction } from "../chat/chatParts";
+import { StudyMoveCard } from "../companion/StudyMoveCard";
+import { endStudyLive, shelfStudyMoveCardLive } from "../companion/study-end";
 import CardMenu from "../shelf/CardMenu";
 import MoveToTopicDialog from "../shelf/MoveToTopicDialog";
 import { moveFailedLine, moveTargets } from "../shelf/move-to";
 import { Button } from "../ui/button";
+import { Dialog, DialogContent, DialogSheetContent, DialogTitle } from "../ui/dialog";
 import { cn } from "../lib/utils";
 import {
   cardBookName,
@@ -57,6 +66,8 @@ export default function InfoShelf(props: {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [moving, setMoving] = useState<VolumeCard | null>(null);
   const [removing, setRemoving] = useState<VolumeCard | null>(null);
+  const [ending, setEnding] = useState<StudyMoveCardData | null>(null);
+  const endingBusy = useRef(false);
 
   const reload = useCallback(async () => {
     try {
@@ -80,6 +91,33 @@ export default function InfoShelf(props: {
     else go();
   };
 
+  const startEnding = (issue: IssueCard) => {
+    if (!issue.study) return;
+    void shelfStudyMoveCardLive(studySearchIdOf(issue), issue.study.name)
+      .then((card) => (card ? setEnding(card) : props.onSay(moveFailedLine())))
+      .catch(() => props.onSay(moveFailedLine()));
+  };
+  // The move card's presses: its go ends the study (the door's moveStudy does the same), its later closes it.
+  const onEndingAction = (action: CardAction) => {
+    if (action.kind !== "mutate" || !ending) return;
+    if (action.op === STUDY_MOVE_LATER_OP) return setEnding(null);
+    const target = parseMoveTarget(action.arg);
+    if (action.op !== STUDY_MOVE_OP || !target || endingBusy.current) return;
+    endingBusy.current = true;
+    const card = ending;
+    void (async () => {
+      try {
+        const moved = await endStudyLive(card, target);
+        setEnding(moved ?? { ...card, failed: true });
+        if (moved?.moved) await props.onTopicsChanged?.();
+      } finally {
+        endingBusy.current = false;
+      }
+      await reload();
+    })();
+  };
+  const EndingContent = props.sheet ? DialogSheetContent : DialogContent;
+
   return (
     <div className="absolute inset-0 overflow-y-auto bg-background">
       <div className="mx-auto flex w-full max-w-4xl flex-col px-4 pt-5 pb-28 sm:px-6 sm:pt-8">
@@ -100,7 +138,7 @@ export default function InfoShelf(props: {
         )}
         <ul className="m-0 mb-8 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3 lg:grid-cols-4">
           {view?.issues.map((issue) => (
-            <li key={issue.key}>
+            <li key={issue.key} className="relative">
               <button
                 className={cn(
                   "relative flex aspect-[4/5] w-full flex-col rounded-xl border bg-card p-4 text-left active:bg-muted",
@@ -135,6 +173,17 @@ export default function InfoShelf(props: {
                   </span>
                 )}
               </button>
+              {issue.study && (
+                <div className="absolute right-1 bottom-1">
+                  <CardMenu
+                    label={t("info.shelf.menu")}
+                    items={[
+                      { label: t("info.shelf.open"), onSelect: () => open(issue) },
+                      { label: t("info.shelf.endStudy"), onSelect: () => startEnding(issue) },
+                    ]}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -196,6 +245,15 @@ export default function InfoShelf(props: {
             })();
           }}
         />
+      )}
+
+      {ending && (
+        <Dialog open onOpenChange={(next) => !next && setEnding(null)}>
+          <EndingContent className={props.sheet ? "px-3 pb-safe-4" : "p-3 sm:max-w-md"}>
+            <DialogTitle className="sr-only">{t("info.shelf.endStudy")}</DialogTitle>
+            <StudyMoveCard payload={ending} dispatch={onEndingAction} surface="bubble" />
+          </EndingContent>
+        </Dialog>
       )}
 
       {removing && (

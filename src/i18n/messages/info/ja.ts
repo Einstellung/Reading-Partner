@@ -185,6 +185,7 @@ export default {
   "shelf.menu": "その他",
   "shelf.open": "開く",
   "shelf.moveTo": "移動…",
+  "shelf.endStudy": "読書に移して調査を終える…",
   "shelf.delete": "削除",
   "shelf.deleteTitle": "「{title}」を削除しますか？",
   "shelf.deleteBody": "合本は会話やマークと一緒に削除されます。",

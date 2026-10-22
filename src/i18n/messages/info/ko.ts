@@ -185,6 +185,7 @@ export default {
   "shelf.menu": "더 보기",
   "shelf.open": "열기",
   "shelf.moveTo": "이동…",
+  "shelf.endStudy": "읽기로 옮기고 조사 끝내기…",
   "shelf.delete": "삭제",
   "shelf.deleteTitle": "“{title}”을(를) 삭제할까요?",
   "shelf.deleteBody": "합본이 대화와 표시와 함께 삭제됩니다.",

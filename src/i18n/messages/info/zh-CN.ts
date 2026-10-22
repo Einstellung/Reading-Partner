@@ -185,6 +185,7 @@ export default {
   "shelf.menu": "更多",
   "shelf.open": "打开",
   "shelf.moveTo": "移到…",
+  "shelf.endStudy": "移进阅读，结束调研…",
   "shelf.delete": "删除",
   "shelf.deleteTitle": "删除「{title}」？",
   "shelf.deleteBody": "专题册连同它的对话和标注一起删除。",

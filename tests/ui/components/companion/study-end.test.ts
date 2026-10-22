@@ -3,7 +3,7 @@
 
 import { expect, test } from "bun:test";
 import { emptyShelf, type IssueEntry, type IssueStudyVersion } from "../../../../src/info/issue/types";
-import { studyRowBooks } from "../../../../src/ui/components/companion/study-end";
+import { shelfStudyMoveCard, studyRowBooks } from "../../../../src/ui/components/companion/study-end";
 
 const v = (n: number, bookId: string) => ({ n, bookId, at: n * 100 }) as IssueStudyVersion;
 const row = (key: string, bookId: string, versions?: IssueStudyVersion[]) =>
@@ -19,4 +19,22 @@ test("a row from before versions is version 1; no row is nothing", () => {
   const shelf = { ...emptyShelf(), issues: [row("first:ts-1", "b0")] };
   expect(studyRowBooks(shelf, "ts-1", [])).toEqual({ current: { version: 1, bookId: "b0" }, others: [] });
   expect(studyRowBooks(shelf, "ts-2", [])).toEqual({ current: null, others: [] });
+});
+
+test("a study cover's menu draws end_study's move card, the topic named like the study suggested", () => {
+  const topics = [{ id: "t1", name: "Papers" }, { id: "t2", name: "AI Discovery", extra: 1 }];
+  const card = shelfStudyMoveCard({ searchId: "ts-1", name: "ai discovery" }, { version: 2, bookId: "b2" }, topics, 9);
+  expect(card).toEqual({
+    kind: "study-move",
+    threadId: "",
+    searchId: "ts-1",
+    name: "ai discovery",
+    version: 2,
+    bookId: "b2",
+    topics: [{ id: "t1", name: "Papers" }, { id: "t2", name: "AI Discovery" }],
+    suggested: "t2",
+    at: 9,
+    phase: "open",
+  });
+  expect(shelfStudyMoveCard({ searchId: "ts-1", name: "Other" }, { version: 1, bookId: "b1" }, topics, 9).suggested).toBeNull();
 });

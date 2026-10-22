@@ -185,6 +185,7 @@ export default {
   "shelf.menu": "Mehr",
   "shelf.open": "Öffnen",
   "shelf.moveTo": "Verschieben nach…",
+  "shelf.endStudy": "In Lesen verschieben, Recherche beenden…",
   "shelf.delete": "Löschen",
   "shelf.deleteTitle": "„{title}“ löschen?",
   "shelf.deleteBody": "Der Band wird mit seinen Gesprächen und Markierungen gelöscht.",

@@ -6,15 +6,19 @@
 // shelf is info/issue's file, which info/topic-search may not read, so where a
 // study's books are is found here. ui/components/info imports this directory,
 // so fileVolume's two lines are repeated rather than imported.
+//
+// The info shelf's study cover starts the same end: its menu item draws the
+// same move card (shelfStudyMoveCard) as the confirmation, and the card's press
+// runs endStudyLive.
 
 import type { StudyMoveCardData } from "../../../info/topic-search/cards";
 import { INFO_SHELF_FILE, parseShelf, type InfoShelf } from "../../../info/issue/types";
 import { stopStudy, studyKept } from "../../../info/topic-search/live";
 import { currentVersion, loadStudy, type StudyRollback } from "../../../info/topic-search/study";
-import { endStudy, type MoveTarget } from "../../../info/topic-search/study-lines";
+import { endStudy, suggestedTopic, type MoveTarget } from "../../../info/topic-search/study-lines";
 import { appData } from "../../../platform/app/appdata";
 import { documentPath, listLibraryEntries } from "../../../platform/app/library";
-import { addFileToTopic, createTopic } from "../../../platform/app/topics";
+import { addFileToTopic, createTopic, listTopics } from "../../../platform/app/topics";
 import { deleteBook } from "../../../reading/delete/delete-book";
 
 /**
@@ -68,4 +72,35 @@ export function endStudyLive(card: StudyMoveCardData, target: MoveTarget): Promi
     deleteBook: (bookId) => deleteBook(bookId),
     kept: studyKept,
   });
+}
+
+/**
+ * The move card a study cover's menu item on the info shelf draws: end_study's
+ * card for the version the reader has, with the reading topic named like the
+ * study suggested when there is one (the shelf has no model to suggest). Pure.
+ */
+export function shelfStudyMoveCard(
+  study: { searchId: string; name: string },
+  book: { version: number; bookId: string },
+  topics: readonly { id: string; name: string }[],
+  now: number,
+): StudyMoveCardData {
+  return {
+    kind: "study-move",
+    threadId: "",
+    searchId: study.searchId,
+    name: study.name,
+    version: book.version,
+    bookId: book.bookId,
+    topics: topics.map((tp) => ({ id: tp.id, name: tp.name })),
+    suggested: suggestedTopic(study.name, topics),
+    at: now,
+    phase: "open",
+  };
+}
+
+/** shelfStudyMoveCard on this device; null when the study has no book here. */
+export async function shelfStudyMoveCardLive(searchId: string, name: string): Promise<StudyMoveCardData | null> {
+  const [book, topics] = await Promise.all([liveStudyBook(searchId), listTopics()]);
+  return book ? shelfStudyMoveCard({ searchId, name }, book, topics, Date.now()) : null;
 }

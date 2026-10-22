@@ -195,6 +195,7 @@ export default {
   "shelf.menu": "More",
   "shelf.open": "Open",
   "shelf.moveTo": "Move to…",
+  "shelf.endStudy": "Move into reading, end the study…",
   "shelf.delete": "Delete",
   "shelf.deleteTitle": "Delete “{title}”?",
   "shelf.deleteBody": "The volume goes, with its conversations and marks.",

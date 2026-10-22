@@ -185,6 +185,7 @@ export default {
   "shelf.menu": "Ещё",
   "shelf.open": "Открыть",
   "shelf.moveTo": "Переместить в…",
+  "shelf.endStudy": "Перенести в чтение и завершить исследование…",
   "shelf.delete": "Удалить",
   "shelf.deleteTitle": "Удалить «{title}»?",
   "shelf.deleteBody": "Том будет удалён вместе с разговорами и пометками.",
