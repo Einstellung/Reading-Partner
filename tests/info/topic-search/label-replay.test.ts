@@ -9,9 +9,12 @@ import {
   parseSeedLines,
   rankedItems,
   replayLabels,
+  routeAttribution,
+  routeLines,
   titleForm,
   type RunReads,
 } from "../../../src/info/topic-search/label-replay";
+import type { GraphRead } from "../../../src/info/topic-search/graph-read";
 import { validateTopicLabel, type TopicLabel, type TopicLabelKind } from "../../../src/info/topic-search/labels";
 import type { ArxivFound } from "../../../src/info/topic-search/rank-pool";
 import type { StudyVersion, TopicSearchResult, TopicSearchResultItem } from "../../../src/info/topic-search/result-types";
@@ -185,4 +188,82 @@ test("imported labels resolve titles against what is known, carry source import,
   ]);
   expect(labels.every((l) => l.source === "import" && l.criteria === 3 && l.brief === null && validateTopicLabel(l) !== null)).toBe(true);
   expect(unresolved.map((u) => u.line)).toEqual([3]);
+});
+
+// --- route attribution ---------------------------------------------------------
+
+function graphRead(streams: { kind: "rec" | "cites" | "refs"; ids: string[] }[]): GraphRead {
+  return {
+    version: 1,
+    positives: [],
+    negatives: [],
+    streams: streams.map((s, i) => ({
+      id: s.kind === "rec" ? "rec" : `${s.kind}:arxiv:2601.0000${i}`,
+      kind: s.kind,
+      from: [],
+      library: "s2",
+      outcome: "ok",
+      total: s.ids.length,
+      papers: s.ids.map((id) => ({ arxivId: id, title: `Graph ${id}`, abstract: "", authors: [], publishedAt: "", citationCount: null })),
+      at: "",
+    })),
+    doiOnly: { count: 0, titles: [] },
+  };
+}
+
+test("each labelled item is attributed to the earliest route that read it, and yes found by one route alone are counted", () => {
+  const runs: RunReads[] = [
+    {
+      x: null,
+      arxiv: [{ query: "q1", items: [paper("2610.00011", "A"), paper("2610.00012", "B")], error: null }],
+      huggingface: [],
+      graph: graphRead([
+        { kind: "rec", ids: ["2610.00012", "2610.00013"] },
+        { kind: "cites", ids: ["2610.00014", "2610.00013"] },
+      ]),
+      round2: {
+        arxiv: [{ query: "w1", items: [paper("2610.00015", "E"), paper("2610.00014", "D")], error: null }],
+        huggingface: [],
+        graph: graphRead([{ kind: "refs", ids: ["2610.00016"] }]),
+      },
+    },
+  ];
+  const labels = [
+    label("arxiv:2610.00011", "yes"), // query-1 alone
+    label("arxiv:2610.00012", "yes"), // query-1 and graph-1 rec
+    label("arxiv:2610.00013", "pinned"), // graph-1 rec and cites
+    label("arxiv:2610.00014", "no"), // graph-1 cites, query-2
+    label("arxiv:2610.00015", "yes"), // query-2 alone
+    label("arxiv:2610.00016", "yes"), // graph-2 refs alone
+    label("arxiv:2610.00017", "yes"), // nowhere
+  ];
+  const r = routeAttribution(labels, runs);
+  const row = (k: string) => r.rows.find((x) => x.item === `arxiv:${k}`)!;
+  expect(row("2610.00012").first).toBe("query-1");
+  expect(row("2610.00012").found).toEqual({ "query-1:arxiv": 2, "graph-1:rec": 1 });
+  expect(row("2610.00013").found).toEqual({ "graph-1:rec": 2, "graph-1:cites": 2 });
+  expect(row("2610.00014").first).toBe("graph-1");
+  expect(row("2610.00017").first).toBeNull();
+  expect(r.first["query-1"]).toEqual({ yes: 2, no: 0, borderline: 0 });
+  expect(r.first["graph-1"]).toEqual({ yes: 1, no: 1, borderline: 0 });
+  expect(r.first["query-2"].yes).toBe(1);
+  expect(r.first["graph-2"].yes).toBe(1);
+  expect(r.first.none.yes).toBe(1);
+  expect(r.aloneByRoute).toEqual({ "query-1": 1, "graph-1": 1, "query-2": 1, "graph-2": 1 });
+  // 00013 is read by two graph-1 streams: alone by route, not by stream.
+  expect(r.aloneByStream).toEqual({ "query-1:arxiv": 1, "query-2:arxiv": 1, "graph-2:refs": 1 });
+  expect(r.streams["graph-1:rec"]).toEqual({ yes: 2, no: 0, borderline: 0 });
+  expect(r.streams["graph-1:cites"]).toEqual({ yes: 1, no: 1, borderline: 0 });
+
+  // Graph papers reach the pool past the floor; the second round's are read, the floor unmeasured.
+  const pool = candidatePool(runs, TOPIC);
+  expect(pool.get("arxiv:2610.00016")?.passedFloor).toBe(true);
+  expect(pool.get("arxiv:2610.00015")?.passedFloor).toBeNull();
+
+  const report = { ...replayLabels(labels, rankedItems(RESULT), pool, true), routes: r };
+  const text = formatReport(report);
+  expect(text).toContain("graph-1  yes 1, no 1; yes found by this route alone: 1");
+  expect(text).toContain("none     yes 1, no 0");
+  expect(text).toContain("graph-2:refs         yes 1, no 0; yes by this stream alone: 1");
+  expect(routeLines(r)[0]).toBe("first route into the pool (yes/pinned, no):");
 });

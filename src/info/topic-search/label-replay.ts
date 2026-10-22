@@ -12,6 +12,7 @@ import { normalizeArxivId } from "../sources/plugins/arxiv-client";
 import { arxivEventKey, currentEventKey, eventKeyOfUrl, xEventKey } from "../rank/events";
 import { arxivIdOfDoi, normalizeDoi } from "../rank/link-identity";
 import { postLinksOut } from "../x/text-links";
+import type { GraphRead, GraphStreamKind } from "./graph-read";
 import { gatherCandidates, type ArxivFound } from "./rank-pool";
 import type { StudyPlace, TopicSearchResult, TopicSearchResultItem } from "./result-types";
 import { versionPart } from "./result-types";
@@ -76,6 +77,10 @@ export interface RunReads {
   x: XReadResult | null;
   arxiv: readonly ArxivFound[];
   huggingface: readonly ArxivFound[];
+  /** A study's graph expansion, first round (graph-read.json). */
+  graph?: GraphRead | null;
+  /** A study's second round: its queries' reads and its graph expansion (the `-2` files). */
+  round2?: { arxiv: readonly ArxivFound[]; huggingface: readonly ArxivFound[]; graph: GraphRead | null } | null;
 }
 
 function addPool(pool: Map<string, PoolEntry>, key: string | null, title: string | null, passed: boolean | null): void {
@@ -120,7 +125,153 @@ export function candidatePool(runs: readonly RunReads[], topic: TopicSearch | nu
       }
     }
   }
+  // The second round's queries are not the topic's, so gatherCandidates drops
+  // them: they are counted as read, the floor unmeasured. Graph candidates skip
+  // the floor (docs/info/92 进候选池), so with the topic at hand they pass it.
+  for (const run of runs) {
+    for (const found of [...(run.round2?.arxiv ?? []), ...(run.round2?.huggingface ?? [])]) {
+      for (const item of found.items) {
+        const id = normalizeArxivId(item.sourceKey ?? item.url);
+        addPool(pool, id ? arxivEventKey(id) : null, item.title, null);
+      }
+    }
+    for (const graph of [run.graph, run.round2?.graph]) {
+      for (const stream of graph?.streams ?? []) {
+        for (const p of stream.papers) addPool(pool, arxivEventKey(p.arxivId), p.title, topic ? true : null);
+      }
+    }
+  }
   return pool;
+}
+
+// --- route attribution (docs/info/92 怎么评) -----------------------------------
+
+/** The four ways into the pool, earliest first. */
+export const ROUTES = ["query-1", "graph-1", "query-2", "graph-2"] as const;
+export type Route = (typeof ROUTES)[number];
+export type RouteStream = "x" | "arxiv" | "huggingface" | GraphStreamKind;
+/** A route and the stream within it: "query-1:arxiv", "graph-1:rec", "graph-2:cites". */
+export type RouteId = `${Route}:${RouteStream}`;
+
+const routeOf = (id: string): Route => id.slice(0, id.indexOf(":")) as Route;
+
+/**
+ * Every item each route and stream read, by key, with the item's best 1-based
+ * place in any of that stream's lists (an X post's links take the post's place).
+ */
+export function routeFinds(runs: readonly RunReads[]): Map<string, Map<RouteId, number>> {
+  const finds = new Map<string, Map<RouteId, number>>();
+  const add = (key: string | null, id: RouteId, place: number) => {
+    if (!key) return;
+    const routes = finds.get(key) ?? new Map<RouteId, number>();
+    const had = routes.get(id);
+    if (had === undefined || place < had) routes.set(id, place);
+    finds.set(key, routes);
+  };
+  const papers = (found: readonly ArxivFound[], id: RouteId) => {
+    for (const f of found) {
+      f.items.forEach((item, i) => {
+        const arxivId = normalizeArxivId(item.sourceKey ?? item.url);
+        add(arxivId ? arxivEventKey(arxivId) : null, id, i + 1);
+      });
+    }
+  };
+  const graph = (read: GraphRead | null | undefined, route: Route) => {
+    for (const stream of read?.streams ?? []) {
+      stream.papers.forEach((p, i) => add(arxivEventKey(p.arxivId), `${route}:${stream.kind}`, i + 1));
+    }
+  };
+  for (const run of runs) {
+    (run.x?.posts ?? []).forEach(({ post }, i) => {
+      add(xEventKey(post.id), "query-1:x", i + 1);
+      for (const link of postLinksOut(post)) add(eventKeyOfUrl(link.url), "query-1:x", i + 1);
+    });
+    papers(run.arxiv, "query-1:arxiv");
+    papers(run.huggingface, "query-1:huggingface");
+    graph(run.graph, "graph-1");
+    papers(run.round2?.arxiv ?? [], "query-2:arxiv");
+    papers(run.round2?.huggingface ?? [], "query-2:huggingface");
+    graph(run.round2?.graph, "graph-2");
+  }
+  return finds;
+}
+
+export interface RouteRow {
+  item: string;
+  label: TopicLabelKind;
+  /** The earliest route that read it; null when none did. */
+  first: Route | null;
+  /** Each route and stream that read it, with its best place there. */
+  found: Partial<Record<RouteId, number>>;
+}
+
+export interface RouteCounts {
+  yes: number;
+  no: number;
+  borderline: number;
+}
+
+export interface RouteReport {
+  rows: RouteRow[];
+  /** Labelled items by the earliest route that read them; "none" for those no route read. */
+  first: Record<Route | "none", RouteCounts>;
+  /** Labelled items each route and stream read at all (an item read by several counts under each). */
+  streams: Partial<Record<RouteId, RouteCounts>>;
+  /** Yes/pinned items read by this route and by no other route. */
+  aloneByRoute: Record<Route, number>;
+  /** Yes/pinned items read by this stream and by no other stream. */
+  aloneByStream: Partial<Record<RouteId, number>>;
+}
+
+const countsOf = (): RouteCounts => ({ yes: 0, no: 0, borderline: 0 });
+const bucketOf = (label: TopicLabelKind): keyof RouteCounts => (label === "pinned" ? "yes" : label);
+
+/**
+ * Which route brought each labelled item into the pool (docs/info/92 怎么评):
+ * the first round's queries, its graph expansion, the second round's queries,
+ * its graph expansion, or none. Yes and pinned count together as yes.
+ */
+export function routeAttribution(labels: readonly TopicLabel[], runs: readonly RunReads[]): RouteReport {
+  const finds = routeFinds(runs);
+  const first = Object.fromEntries([...ROUTES, "none"].map((r) => [r, countsOf()])) as Record<Route | "none", RouteCounts>;
+  const streams: Partial<Record<RouteId, RouteCounts>> = {};
+  const aloneByRoute = Object.fromEntries(ROUTES.map((r) => [r, 0])) as Record<Route, number>;
+  const aloneByStream: Partial<Record<RouteId, number>> = {};
+  const rows: RouteRow[] = [];
+  for (const label of latestLabels(labels).values()) {
+    const key = currentEventKey(label.item);
+    const found = finds.get(key) ?? new Map<RouteId, number>();
+    const routes = new Set([...found.keys()].map(routeOf));
+    const earliest = ROUTES.find((r) => routes.has(r)) ?? null;
+    const bucket = bucketOf(label.label);
+    rows.push({ item: key, label: label.label, first: earliest, found: Object.fromEntries(found) });
+    first[earliest ?? "none"][bucket]++;
+    for (const id of found.keys()) (streams[id] ??= countsOf())[bucket]++;
+    if (bucket !== "yes") continue;
+    if (routes.size === 1) aloneByRoute[earliest!]++;
+    if (found.size === 1) {
+      const [only] = found.keys();
+      aloneByStream[only] = (aloneByStream[only] ?? 0) + 1;
+    }
+  }
+  return { rows, first, streams, aloneByRoute, aloneByStream };
+}
+
+/** The attribution as the script prints it. */
+export function routeLines(r: RouteReport): string[] {
+  const c = (n: RouteCounts) => `yes ${n.yes}, no ${n.no}${n.borderline ? `, borderline ${n.borderline}` : ""}`;
+  const lines = ["first route into the pool (yes/pinned, no):"];
+  for (const route of [...ROUTES, "none"] as const) {
+    const n = r.first[route];
+    if (route !== "none" && !n.yes && !n.no && !n.borderline && !r.aloneByRoute[route]) continue;
+    lines.push(`  ${route.padEnd(8)} ${c(n)}${route === "none" ? "" : `; yes found by this route alone: ${r.aloneByRoute[route]}`}`);
+  }
+  const ids = (Object.keys(r.streams) as RouteId[]).sort((a, b) => ROUTES.indexOf(routeOf(a)) - ROUTES.indexOf(routeOf(b)) || a.localeCompare(b));
+  if (ids.length) {
+    lines.push("by stream (an item read by several counts under each):");
+    for (const id of ids) lines.push(`  ${id.padEnd(20)} ${c(r.streams[id]!)}; yes by this stream alone: ${r.aloneByStream[id] ?? 0}`);
+  }
+  return lines;
 }
 
 /** Why a labelled item is not in the result. */
@@ -149,6 +300,8 @@ export interface ReplayReport {
   negatives: { total: number; found: number; ranks: number[] };
   borderline: { total: number; found: number };
   missing: Record<MissingWhy, number>;
+  /** Which route read each labelled item, when the runs' reads were at hand. */
+  routes?: RouteReport;
 }
 
 const POSITIVE: ReadonlySet<TopicLabelKind> = new Set(["yes", "pinned"]);
@@ -270,7 +423,7 @@ export function formatReport(r: ReplayReport): string {
       row.missing ? `${cutTitle(row.title, 40)} [${MISSING_WORDS[row.missing]}]` : cutTitle(row.title),
     ]),
   ];
-  return [head, "", ...pad(table), "", ...summaryLines(r)].join("\n");
+  return [head, "", ...pad(table), "", ...summaryLines(r), ...(r.routes ? ["", ...routeLines(r.routes)] : [])].join("\n");
 }
 
 /** Two results side by side: each labelled item's rank in both, then the metrics in both. */
