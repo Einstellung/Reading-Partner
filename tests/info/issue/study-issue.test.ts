@@ -246,6 +246,57 @@ describe("one version planned (study-plan.ts)", () => {
   });
 });
 
+describe("the front page's short lines (docs/info/92 slice F)", () => {
+  const meta = { number: 4, date: "2026-10-20", companionName: "Lumen" } as const;
+  const withWiden = (lines: NonNullable<TopicSearchResult["widen"]>["lines"], n = 1) =>
+    planStudyIssue(versionPart({ ...studyResult(), widen: { queries: [], lines } }, n)!, TOPIC, SAID)!;
+  const front = (plan: ReturnType<typeof planOf>, locale: "en" | "zh-CN" | "ru" = "en") => studyEpubInput(plan, { ...meta, locale }).sections[0].html;
+
+  test("no widen on the file: the front page is what it was", () => {
+    expect(front(planOf(1))).not.toContain("second");
+    expect(planOf(1).study!.widen).toBeUndefined();
+  });
+
+  test("an empty line and each why are said plainly, by the line's name", () => {
+    const html = front(
+      withWiden([
+        { subtopic: "s1", status: "empty" },
+        { subtopic: null, status: "not_searched", why: "cooling_down" },
+        { subtopic: "s1", status: "not_searched", why: "no_query" },
+        { subtopic: "s1", status: "not_searched", why: "proposal_failed" },
+        { subtopic: "s1", status: "not_searched", why: "no_source" },
+        { subtopic: "s1", status: "not_searched", why: "rate_limited" },
+        { subtopic: "s1", status: "not_searched", why: "failed" },
+        { subtopic: "s1", status: "not_searched", why: "unjudged" },
+      ]),
+    );
+    expect(html).toContain("<li>Closed-loop science: no paper found after a second round of searches.</li>");
+    expect(html).toContain("<li>The whole topic: not searched a second time; arXiv or Hugging Face was cooling down. Try again later.</li>");
+    expect(html).toContain("no new search was written for it.");
+    expect(html).toContain("the new searches could not be written.");
+    expect(html).toContain("this study reads no paper source.");
+    expect(html).toContain("was limiting requests.");
+    expect(html).toContain("the search failed.");
+    expect(html).toContain("could not be judged");
+    // Before the invitation, after the counts.
+    expect(html.indexOf("Pinned: 1")).toBeLessThan(html.indexOf("Closed-loop science: no paper"));
+    expect(html.indexOf("could not be judged")).toBeLessThan(html.indexOf("conversation with Lumen"));
+  });
+
+  test("a line's name is escaped; the other locales have the sentences", () => {
+    const plan = withWiden([{ subtopic: "s1", status: "empty" }]);
+    plan.study!.widen![0].line = "a <b> & c";
+    expect(front(plan)).toContain("a &lt;b&gt; &amp; c: no paper found");
+    expect(front(withWiden([{ subtopic: null, status: "empty" }]), "zh-CN")).toContain("整个主题：搜了两轮，没有找到对路的论文。");
+    expect(front(withWiden([{ subtopic: "s1", status: "not_searched", why: "failed" }]), "ru")).toContain("второй раз не искали");
+  });
+
+  test("only the first look's book says it; a later version does not", () => {
+    expect(withWiden([{ subtopic: "s1", status: "empty" }], 2).study!.widen).toBeUndefined();
+    expect(withWiden([], 1).study!.widen).toBeUndefined();
+  });
+});
+
 describe("the book of version 1", () => {
   const input = studyEpubInput(planOf(1), { number: 4, date: "2026-10-20", locale: "en", companionName: "Lumen" });
 

@@ -345,6 +345,18 @@ function updateHtml(plan: IssuePlan, hrefs: Map<string, string>, locale: Locale)
   return out.join("\n");
 }
 
+/**
+ * The lines the second round left short, one plain sentence each: nothing found
+ * after both rounds, or not searched again and why. Nothing when none is short.
+ */
+function widenHtml(study: StudyIssuePlan, locale: Locale): string {
+  const rows = (study.widen ?? []).map((l) => {
+    const key = l.status === "empty" ? "widenEmpty" : `widenNot_${l.why ?? "failed"}`;
+    return `<li>${f(locale, key, { line: l.line ?? s(locale, "widenWhole") })}</li>`;
+  });
+  return rows.length ? `<ul>${rows.join("\n")}</ul>` : "";
+}
+
 function frontHtml(plan: IssuePlan, meta: StudyMeta): string {
   const study = studyOf(plan);
   const { locale } = meta;
@@ -358,6 +370,10 @@ function frontHtml(plan: IssuePlan, meta: StudyMeta): string {
   if (sources) out.push(`<p><small>${[sources, noX].filter(Boolean).join(" ")}</small></p>`);
   out.push(
     `<p><small>${f(locale, "counts", { main: plan.entries.length - study.pinned, notes: plan.notes.length, pinned: study.pinned })}</small></p>`,
+  );
+  const widen = widenHtml(study, locale);
+  if (widen) out.push(widen);
+  out.push(
     `<p><small>${f(locale, "invite", { name: meta.companionName })}</small></p>`,
   );
   return out.join("\n");

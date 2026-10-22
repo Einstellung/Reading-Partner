@@ -12,6 +12,7 @@ import {
   type StudyPlace,
   type StudyVersion,
   type TopicSearchResult,
+  type WidenWhy,
   type TopicSearchResultItem,
 } from "../topic-search/result-types";
 import { planIssue, type IssuePlan, type IssueTopic, type PlannedAnnex, type PlannedItem } from "./plan";
@@ -39,6 +40,11 @@ export interface StudyIssuePlan {
   headings: Record<string, string | null>;
   /** By item key: the item's id in this version, for the update block's links. */
   idOfKey: Record<string, string>;
+  /**
+   * Lines the first look's second round left short (docs/info/92), by name
+   * (null: the whole topic). Only on version 1, the first look's own book.
+   */
+  widen?: { line: string | null; status: "empty" | "not_searched"; why?: WidenWhy }[];
 }
 
 function isSeed(item: Pick<TopicSearchResultItem, "key" | "keys">, seeds: readonly string[]): boolean {
@@ -138,6 +144,9 @@ export function planStudyIssue(
       said: { ...said },
       idOfKey: Object.fromEntries(part.items.map((i) => [i.key, i.id])),
       headings,
+      ...(version.n === 1 && part.widen?.lines.length
+        ? { widen: part.widen.lines.map((l) => ({ line: l.subtopic === null ? null : (subName.get(l.subtopic) ?? l.subtopic), status: l.status, why: l.why })) }
+        : {}),
     },
   };
 }

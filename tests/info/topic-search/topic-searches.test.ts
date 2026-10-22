@@ -229,3 +229,10 @@ test("the guidance says when X reading is held on this device", () => {
   expect(text).toContain("This conversation cannot read X");
   expect(text).toContain("retry_topic_search_first_run");
 });
+
+test("the guidance lets Lumen offer to search a short line again, with the study tools", () => {
+  const text = topicSearchGuidance({ searches: [], statements: [] });
+  expect(text).toContain("a line found nothing after a second round, or was not searched again");
+  expect(text).toContain("You may offer to search that line again");
+  expect(text).toContain("propose_study_lines");
+});
