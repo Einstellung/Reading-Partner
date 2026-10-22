@@ -173,7 +173,7 @@ export default {
   "cards.studyMoveFailed": "移せませんでした。調査も終わっていません。もう一度押してください。",
   "cards.studyMovedKicker": "読書に移しました",
   "cards.studyMovedEnded": "この調査は終了し、もう更新されません。",
-  "cards.studyMovedKept": "固定した {pins} 本と書き留めた {marks} 件は残します。近いテーマを調べるとき、それと照らし合わせます。",
+  "cards.studyMovedKept": "固定した {pins} 本と書き留めた {marks} 件は、この調査に残します。",
   "shelf.title": "ブリーフ",
   "shelf.issues": "各号",
   "shelf.volumes": "トピック合本",

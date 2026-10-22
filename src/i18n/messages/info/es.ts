@@ -173,7 +173,7 @@ export default {
   "cards.studyMoveFailed": "No se pudo mover; no se cerró nada. Pulsa de nuevo.",
   "cards.studyMovedKicker": "Pasado a lectura",
   "cards.studyMovedEnded": "Este estudio está cerrado y ya no se actualiza.",
-  "cards.studyMovedKept": "Los {pins} artículos fijados y las {marks} líneas anotadas se quedan. Cuando mires un tema cercano, los usaré para comprobar.",
+  "cards.studyMovedKept": "Los {pins} artículos fijados y las {marks} líneas anotadas se quedan con este estudio.",
   "shelf.title": "Boletines",
   "shelf.issues": "Números",
   "shelf.volumes": "Volúmenes por tema",

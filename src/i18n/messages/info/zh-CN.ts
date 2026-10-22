@@ -173,7 +173,7 @@ export default {
   "cards.studyMoveFailed": "没移成，调研也没结束。再点一次试试。",
   "cards.studyMovedKicker": "已移进阅读",
   "cards.studyMovedEnded": "这次调研已结束，不再更新。",
-  "cards.studyMovedKept": "你钉住的 {pins} 篇和记下的 {marks} 条留着，以后再查相近的题，我拿它们核对。",
+  "cards.studyMovedKept": "你钉住的 {pins} 篇和记下的 {marks} 条留在这次调研里。",
   "shelf.title": "简报书",
   "shelf.issues": "各期",
   "shelf.volumes": "专题册",

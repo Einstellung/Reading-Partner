@@ -173,7 +173,7 @@ export default {
   "cards.studyMoveFailed": "Перенести не удалось; ничего не завершено. Нажми ещё раз.",
   "cards.studyMovedKicker": "Перенесено в чтение",
   "cards.studyMovedEnded": "Это исследование завершено и больше не обновляется.",
-  "cards.studyMovedKept": "Закреплённые статьи ({pins}) и записанные строки ({marks}) остаются. Когда займёшься похожей темой, я сверюсь с ними.",
+  "cards.studyMovedKept": "Закреплённые статьи ({pins}) и записанные строки ({marks}) остаются в этом исследовании.",
   "shelf.title": "Выпуски",
   "shelf.issues": "Выпуски",
   "shelf.volumes": "Тематические тома",

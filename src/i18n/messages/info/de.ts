@@ -173,7 +173,7 @@ export default {
   "cards.studyMoveFailed": "Es ließ sich nicht verschieben; nichts wurde beendet. Drück noch einmal.",
   "cards.studyMovedKicker": "In die Lektüre verschoben",
   "cards.studyMovedEnded": "Diese Recherche ist beendet und wird nicht mehr aktualisiert.",
-  "cards.studyMovedKept": "Die {pins} angehefteten Arbeiten und die {marks} festgehaltenen Zeilen bleiben. Bei einem verwandten Thema prüfe ich daran.",
+  "cards.studyMovedKept": "Die {pins} angehefteten Arbeiten und die {marks} festgehaltenen Zeilen bleiben bei dieser Recherche.",
   "shelf.title": "Briefs",
   "shelf.issues": "Ausgaben",
   "shelf.volumes": "Themenbände",

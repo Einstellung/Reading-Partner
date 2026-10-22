@@ -181,7 +181,7 @@ export default {
   "cards.studyMoveFailed": "It could not be moved; nothing was ended. Press again to retry.",
   "cards.studyMovedKicker": "Moved into reading",
   "cards.studyMovedEnded": "This study has ended and is no longer updated.",
-  "cards.studyMovedKept": "The {pins} papers you pinned and the {marks} lines you noted are kept. When you look into a related topic, I check against them.",
+  "cards.studyMovedKept": "The {pins} papers you pinned and the {marks} lines you noted are kept with this study.",
 
   // --- The info shelf (InfoShelf.tsx, docs/info/88) ------------------------------
   "shelf.title": "Briefs",

@@ -173,7 +173,7 @@ export default {
   "cards.studyMoveFailed": "Le rangement a échoué ; rien n'a été clos. Appuie à nouveau.",
   "cards.studyMovedKicker": "Rangé dans la lecture",
   "cards.studyMovedEnded": "Cette étude est close et n'est plus mise à jour.",
-  "cards.studyMovedKept": "Les {pins} articles épinglés et les {marks} lignes notées sont gardés. Sur un sujet voisin, je m'y référerai.",
+  "cards.studyMovedKept": "Les {pins} articles épinglés et les {marks} lignes notées restent avec cette étude.",
   "shelf.title": "Bulletins",
   "shelf.issues": "Numéros",
   "shelf.volumes": "Volumes thématiques",
