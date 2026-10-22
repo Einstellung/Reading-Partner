@@ -34,6 +34,7 @@ import {
   TODAY_CARD_ITEMS,
 } from "./today";
 import { useT } from "../../../i18n";
+import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 
 // The column the page is set in. 32px top and bottom; 40px sides on a landscape
 // tablet, 32 on a portrait one, where the sidebar has already taken 52px.
@@ -66,6 +67,7 @@ export function Vestibule({
   onOpenBriefing,
   onOpenSettings,
   onStartSubscribing,
+  oldBriefing = OLD_BRIEFING_UI_ENABLED,
 }: Omit<BriefingCardProps, "onOpen"> & {
   // The book to resume, null when there is none, and undefined while the library
   // has not been read — "Nothing open yet" is a claim about a shelf nobody has
@@ -79,6 +81,9 @@ export function Vestibule({
   onCreateTopic: (name: string) => void;
   // The card's own onOpen, named for what it opens: this screen has several.
   onOpenBriefing: () => void;
+  // Whether the day's briefing card is drawn (info/old-briefing.ts). The
+  // switch's value unless a test says otherwise.
+  oldBriefing?: boolean;
 }) {
   const t = useT();
   const [creating, setCreating] = useState(false);
@@ -94,22 +99,24 @@ export function Vestibule({
 
       <ContinueCard book={continueBook} onContinue={onContinue} onOpenLibrary={onOpenLibrary} />
 
-      <div className="mt-3">
-        <BriefingCard
-          snap={snap}
-          ready={ready}
-          configured={configured}
-          hasSources={hasSources}
-          noLabs={noLabs}
-          collecting={collecting}
-          notices={notices}
-          onAsk={onAsk}
-          onStop={onStop}
-          onOpen={onOpenBriefing}
-          onOpenSettings={onOpenSettings}
-          onStartSubscribing={onStartSubscribing}
-        />
-      </div>
+      {oldBriefing && (
+        <div className="mt-3">
+          <BriefingCard
+            snap={snap}
+            ready={ready}
+            configured={configured}
+            hasSources={hasSources}
+            noLabs={noLabs}
+            collecting={collecting}
+            notices={notices}
+            onAsk={onAsk}
+            onStop={onStop}
+            onOpen={onOpenBriefing}
+            onOpenSettings={onOpenSettings}
+            onStartSubscribing={onStartSubscribing}
+          />
+        </div>
+      )}
 
       <div className="mt-6">
         <div className="flex items-baseline justify-between">

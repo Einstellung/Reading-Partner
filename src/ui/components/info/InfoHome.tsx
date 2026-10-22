@@ -6,9 +6,9 @@
 // Rendering and event binding only. The briefing view, the open article and the
 // conversation that is up all live in use-info-home.ts.
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { savedArticleId } from "../../../reading/saved/saved-articles";
-import { showsLaunchCard, type HomeScreen } from "../base/shell-nav";
+import { reachableScreen, showsLaunchCard, type HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
@@ -167,7 +167,11 @@ export default function InfoHome(props: {
   pipCards?: boolean;
 }) {
   const t = useT();
-  const { screen, onNavigate } = props;
+  // The old briefing's page and article are not drawn while its UI is off
+  // (info/old-briefing.ts): a screen or a destination naming them is Today.
+  const screen = props.screen === null ? null : reachableScreen(props.screen);
+  const navigate = props.onNavigate;
+  const onNavigate = useCallback((next: HomeScreen) => navigate(reachableScreen(next)), [navigate]);
   const meals = useMeals(props.mealsEnabled === true);
   // The day the desktop shell has open. It has no navigation stack to hold it,
   // and the phone's entry overrides this the moment it supplies one.

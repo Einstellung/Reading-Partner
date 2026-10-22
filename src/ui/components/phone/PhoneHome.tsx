@@ -11,6 +11,7 @@ import { companionToggleTitle } from "../base/companion-toggle";
 import { useCompanionName } from "../base/use-companion-name";
 import { BriefingCardBody, Card, CardBodyPlaceholder, CardLabel } from "../info/HomeCard";
 import type { LaunchProps } from "../info/InfoHome";
+import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 
 export default function PhoneHome({
   launch,
@@ -25,6 +26,7 @@ export default function PhoneHome({
   onOpenMeals,
   companionShown,
   onToggleCompanion,
+  oldBriefing = OLD_BRIEFING_UI_ENABLED,
 }: {
   launch: LaunchProps;
   // How many articles are kept, or null while saved-articles.json is being read.
@@ -46,9 +48,32 @@ export default function PhoneHome({
   // app's own name on the home screen is what carries it.
   companionShown: boolean;
   onToggleCompanion: () => void;
+  // Whether the day's briefing card is drawn (info/old-briefing.ts). Off, the
+  // briefs take its place at the top, and the kept articles show only once
+  // there are some: keeping one was the briefing's, so an empty card would
+  // point at a way in that is not there.
+  oldBriefing?: boolean;
 }) {
   const t = useT();
   const companionName = useCompanionName();
+  // The info shelf (docs/info/88): under the briefing while that is drawn, and
+  // in its place at the top while it is not.
+  const briefsCard = (
+    <Card>
+      <CardLabel>{t("phone.home.briefsLabel")}</CardLabel>
+      <button
+        className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
+        onClick={onOpenBriefs}
+      >
+        <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
+          {t("phone.home.briefsBlurb")}
+        </p>
+        <div className="mt-4 flex items-center justify-end">
+          <span className="text-[13px] font-medium text-accent-line">{t("phone.home.open")}</span>
+        </div>
+      </button>
+    </Card>
+  );
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col px-4 py-6">
       <div className="flex items-start gap-3">
@@ -73,23 +98,27 @@ export default function PhoneHome({
       <PeerUpdateNotice className="mt-4" />
 
       <div className="mt-5 flex flex-col gap-4">
-        <Card>
-          <CardLabel>{t("phone.home.briefingLabel")}</CardLabel>
-          <BriefingCardBody
-            snap={launch.snap}
-            ready={launch.ready}
-            configured={launch.configured}
-            hasSources={launch.hasSources}
-            noLabs={launch.noLabs}
-            collecting={launch.collecting}
-            notices={launch.notices}
-            onAsk={launch.onAsk}
-            onStop={launch.onStop}
-            onOpen={launch.onOpenBriefing}
-            onOpenSettings={launch.onOpenSettings}
-            onStartSubscribing={launch.onStartSubscribing}
-          />
-        </Card>
+        {!oldBriefing && briefsCard}
+
+        {oldBriefing && (
+          <Card>
+            <CardLabel>{t("phone.home.briefingLabel")}</CardLabel>
+            <BriefingCardBody
+              snap={launch.snap}
+              ready={launch.ready}
+              configured={launch.configured}
+              hasSources={launch.hasSources}
+              noLabs={launch.noLabs}
+              collecting={launch.collecting}
+              notices={launch.notices}
+              onAsk={launch.onAsk}
+              onStop={launch.onStop}
+              onOpen={launch.onOpenBriefing}
+              onOpenSettings={launch.onOpenSettings}
+              onStartSubscribing={launch.onStartSubscribing}
+            />
+          </Card>
+        )}
 
         {/* Under the briefing, above what is kept: it is the other thing the
             day needs deciding, and it is decided in the evening. */}
@@ -110,46 +139,35 @@ export default function PhoneHome({
           </Card>
         )}
 
-        <Card>
-          <CardLabel>{t("phone.home.briefsLabel")}</CardLabel>
-          <button
-            className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
-            onClick={onOpenBriefs}
-          >
-            <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
-              {t("phone.home.briefsBlurb")}
-            </p>
-            <div className="mt-4 flex items-center justify-end">
-              <span className="text-[13px] font-medium text-accent-line">{t("phone.home.open")}</span>
-            </div>
-          </button>
-        </Card>
+        {oldBriefing && briefsCard}
 
-        <Card>
-          <CardLabel>{t("phone.home.savedLabel")}</CardLabel>
-          {savedCount === null ? (
-            <CardBodyPlaceholder />
-          ) : savedCount > 0 ? (
-            <button
-              className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
-              onClick={onOpenSaved}
-            >
-              <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
-                {t("phone.home.savedBlurb")}
+        {(oldBriefing || (savedCount ?? 0) > 0) && (
+          <Card>
+            <CardLabel>{t("phone.home.savedLabel")}</CardLabel>
+            {savedCount === null ? (
+              <CardBodyPlaceholder />
+            ) : savedCount > 0 ? (
+              <button
+                className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
+                onClick={onOpenSaved}
+              >
+                <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
+                  {t("phone.home.savedBlurb")}
+                </p>
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-[13px] text-faint-foreground">
+                    {t("phone.home.savedCount", { count: savedCount })}
+                  </span>
+                  <span className="text-[13px] font-medium text-accent-line">{t("phone.home.open")}</span>
+                </div>
+              </button>
+            ) : (
+              <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
+                {t("phone.home.savedEmpty")}
               </p>
-              <div className="mt-4 flex items-center justify-between">
-                <span className="text-[13px] text-faint-foreground">
-                  {t("phone.home.savedCount", { count: savedCount })}
-                </span>
-                <span className="text-[13px] font-medium text-accent-line">{t("phone.home.open")}</span>
-              </div>
-            </button>
-          ) : (
-            <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
-              {t("phone.home.savedEmpty")}
-            </p>
-          )}
-        </Card>
+            )}
+          </Card>
+        )}
 
         <Card>
           <CardLabel>{t("phone.home.libraryLabel")}</CardLabel>

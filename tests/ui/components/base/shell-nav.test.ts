@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import { translate } from "../../../../src/i18n";
 import {
   activeNavFor,
+  reachableScreen,
   screenForNav,
   shellNavItems,
   showsLaunchCard,
@@ -20,15 +21,29 @@ test("the sidebar's items are in the order a day uses them", () => {
 
 // Meals is opt-in (settings.meals, docs/73), and off it is not in the column
 // at all — the reader having said no is not a reason to show them a row.
+// With the old briefing's UI forced on (src/info/old-briefing.ts), so its row
+// stays covered.
 test("Meals is drawn only when it is switched on, in its own place", () => {
-  expect(shellNavItems({ meals: false }).map((i) => i.id)).toEqual(["today", "briefing", "briefs", "topics"]);
-  expect(shellNavItems({ meals: true }).map((i) => i.id)).toEqual([
+  expect(shellNavItems({ meals: false, oldBriefing: true }).map((i) => i.id)).toEqual(["today", "briefing", "briefs", "topics"]);
+  expect(shellNavItems({ meals: true, oldBriefing: true }).map((i) => i.id)).toEqual([
     "today",
     "briefing",
     "briefs",
     "meals",
     "topics",
   ]);
+});
+
+// Off, as shipped: no Briefing row, and nothing reaches its page or its article.
+test("with the old briefing's UI off its row is gone and its screens land on Today", () => {
+  expect(shellNavItems({ meals: false }).map((i) => i.id)).toEqual(["today", "briefs", "topics"]);
+  expect(shellNavItems({ meals: true }).map((i) => i.id)).toEqual(["today", "briefs", "meals", "topics"]);
+  expect(reachableScreen("briefing")).toBe("vestibule");
+  expect(reachableScreen("article")).toBe("vestibule");
+  expect(reachableScreen("briefs")).toBe("briefs");
+  expect(reachableScreen("meals-day")).toBe("meals-day");
+  expect(reachableScreen("briefing", true)).toBe("briefing");
+  expect(reachableScreen("article", true)).toBe("article");
 });
 
 test("each item opens its screen", () => {

@@ -34,6 +34,7 @@ import {
 import { keptArticleOpening } from "./reading/saved/kept-document";
 import { registerPlaces } from "./desk";
 import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
+import { reachableScreen } from "./ui/components/base/shell-nav";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import InfoShelf from "./ui/components/info/InfoShelf";
@@ -270,8 +271,11 @@ export default function PhoneApp({
   const onNavigate = useCallback((next: HomeScreen) => {
     // A day carries its date, so it is opened by onOpenMealsDay rather than by
     // naming a destination; nothing asks for it through here.
-    if (next === "meals-day" || next === "meals-recipe") return;
-    const kind = next === "vestibule" ? "home" : next;
+    // The old briefing's page and article land on home while its UI is off
+    // (info/old-briefing.ts), a box card's jump included.
+    const reached = reachableScreen(next);
+    if (reached === "meals-day" || reached === "meals-recipe") return;
+    const kind = reached === "vestibule" ? "home" : reached;
     setStack((s) => goTo(s, screen(kind)));
   }, []);
 

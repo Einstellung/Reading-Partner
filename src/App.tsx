@@ -121,7 +121,7 @@ import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
 } from "./ui/components/base/shell-sidebar";
-import { activeNavFor, screenForNav } from "./ui/components/base/shell-nav";
+import { activeNavFor, reachableScreen, screenForNav } from "./ui/components/base/shell-nav";
 import { shellPlaces } from "./ui/components/base/places";
 import { registerPlaces } from "./desk";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
@@ -1286,7 +1286,7 @@ export default function App() {
       // itself told.
       goToBriefing: () => {
         if (inReader) closeReader();
-        setHomeScreen("briefing");
+        setHomeScreen(reachableScreen("briefing"));
       },
       goToMeals: () => {
         if (inReader) closeReader();

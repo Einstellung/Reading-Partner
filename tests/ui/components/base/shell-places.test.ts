@@ -12,12 +12,18 @@ import {
 } from "../../../../src/ui/components/base/places";
 import type { HomeScreen } from "../../../../src/ui/components/base/shell-nav";
 
-function shell(over: { inReader?: boolean } = {}) {
+// The old briefing's UI is switched off (src/info/old-briefing.ts); these run
+// with it forced on, so its place stays covered for the day it comes back.
+function shell(over: { inReader?: boolean; oldBriefing?: boolean } = {}) {
   const log: string[] = [];
-  const places = shellPlaces({
-    goToScreen: (screen: HomeScreen) => void log.push(`screen:${screen}`),
-    reader: { isOpen: () => !!over.inReader, close: () => void log.push("close-reader") },
-  });
+  const places = shellPlaces(
+    {
+      goToScreen: (screen: HomeScreen) => void log.push(`screen:${screen}`),
+      reader: { isOpen: () => !!over.inReader, close: () => void log.push("close-reader") },
+    },
+    PLACE_IDS,
+    over.oldBriefing ?? true,
+  );
   return { places, log };
 }
 
@@ -59,10 +65,18 @@ test("the phone registers the places it has, and needs no reader to leave", asyn
   const places = shellPlaces(
     { goToScreen: (screen: HomeScreen) => void log.push(screen) },
     PHONE_PLACES,
+    true,
   );
   expect(places.map((p) => p.id)).toEqual(["today", "briefing", "settings"]);
   for (const place of places) await place.go();
   expect(log).toEqual(["vestibule", "briefing", "settings"]);
+});
+
+// Off, as shipped: the briefing is nowhere the soul can take anybody, on
+// either shell.
+test("with the old briefing's UI off there is no briefing place", () => {
+  expect(shell({ oldBriefing: false }).places.map((p) => p.id)).toEqual(["today", "topics", "settings"]);
+  expect(shellPlaces({ goToScreen: () => {} }, PHONE_PLACES).map((p) => p.id)).toEqual(["today", "settings"]);
 });
 
 // The sentence is what the soul reads out when it shows somebody around, so

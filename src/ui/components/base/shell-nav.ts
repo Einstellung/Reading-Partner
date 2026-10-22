@@ -8,6 +8,8 @@
 // wants to assert the mapping. InfoHome re-exports it, so its importers are
 // unchanged.
 
+import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
+
 // The launch layer in front of the library. "library" belongs to App, which
 // renders the shelf; it is in the union so the two navigate through one setter.
 // "settings" is one of them too: it is a page of the content area with the
@@ -55,8 +57,25 @@ export const SHELL_NAV_ITEMS: readonly ShellNavItem[] = [
 // The items a sidebar actually draws. Meals is opt-in (settings.meals,
 // docs/73) and is left out entirely when it is off — not greyed, not a teaser:
 // a switch that is off means the reader has said they do not want the line.
-export function shellNavItems(opts: { meals: boolean }): ShellNavItem[] {
-  return SHELL_NAV_ITEMS.filter((item) => item.id !== "meals" || opts.meals);
+// The old daily briefing is left out while its UI is switched off
+// (info/old-briefing.ts).
+export function shellNavItems(opts: { meals: boolean; oldBriefing?: boolean }): ShellNavItem[] {
+  const oldBriefing = opts.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
+  return SHELL_NAV_ITEMS.filter(
+    (item) => (item.id !== "meals" || opts.meals) && (item.id !== "briefing" || oldBriefing),
+  );
+}
+
+// The screen a request actually lands on. While the old briefing's UI is off
+// (info/old-briefing.ts) its page and its article are nowhere: a box card from
+// it, a card's Open, a place the soul names or a back from an article all land
+// on Today instead. Every shell routes its navigation through this.
+export function reachableScreen(
+  screen: HomeScreen,
+  oldBriefing: boolean = OLD_BRIEFING_UI_ENABLED,
+): HomeScreen {
+  if (!oldBriefing && (screen === "briefing" || screen === "article")) return "vestibule";
+  return screen;
 }
 
 // Where an item goes. The shelf is what Topics opens; a topic that is already

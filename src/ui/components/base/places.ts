@@ -9,6 +9,7 @@
 // since it describes what is there and not how that shell draws it.
 
 import type { Place } from "../../../desk";
+import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 import type { HomeScreen } from "./shell-nav";
 
 export const PLACE_IDS = ["today", "briefing", "topics", "settings"] as const;
@@ -53,12 +54,17 @@ export interface ShellPlaceMoves {
   reader?: { isOpen: () => boolean; close: () => void };
 }
 
-/** The shell's places, in the order the soul is shown them. */
+/**
+ * The shell's places, in the order the soul is shown them. The briefing is not
+ * one while the old briefing's UI is off (info/old-briefing.ts): a place the
+ * soul offers has to be somewhere the reader can be taken.
+ */
 export function shellPlaces(
   moves: ShellPlaceMoves,
   ids: readonly PlaceId[] = PLACE_IDS,
+  oldBriefing: boolean = OLD_BRIEFING_UI_ENABLED,
 ): Place[] {
-  return ids.map((id) => ({
+  return ids.filter((id) => id !== "briefing" || oldBriefing).map((id) => ({
     id,
     about: PLACE_ABOUT[id],
     go: () => {
