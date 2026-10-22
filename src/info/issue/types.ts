@@ -83,10 +83,31 @@ export interface VolumeEntry {
   createdAt: number;
 }
 
+/**
+ * A topic search whose last run failed at a stage a model call could not do
+ * (a rejected model, a lost sign-in, a provider error): its result file's
+ * `unjudged.why`, kept on the shelf so the row says why rather than showing
+ * nothing new (topic-search/stage-failure.ts). One per search, the latest;
+ * gone once a later run of that search closes without failing.
+ */
+export interface ShelfStall {
+  searchId: string;
+  /** The topic's name when the run closed. */
+  topic: string;
+  runId: string | null;
+  /** The model call's words (ResultUnjudged.why). */
+  why: string;
+  at: number;
+  /** Whether the search is a study (docs/info/91). */
+  study: boolean;
+}
+
 export interface InfoShelf {
   version: typeof INFO_SHELF_VERSION;
   issues: IssueEntry[];
   volumes: VolumeEntry[];
+  /** Absent when no search has failed. */
+  stalls?: ShelfStall[];
 }
 
 export function emptyShelf(): InfoShelf {
@@ -103,6 +124,7 @@ export function parseShelf(text: string | null): InfoShelf {
       version: INFO_SHELF_VERSION,
       issues: Array.isArray(v.issues) ? v.issues : [],
       volumes: Array.isArray(v.volumes) ? v.volumes : [],
+      ...(Array.isArray(v.stalls) && v.stalls.length ? { stalls: v.stalls } : {}),
     };
   } catch {
     return emptyShelf();

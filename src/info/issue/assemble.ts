@@ -30,11 +30,13 @@
 // reading.
 
 import type { Locale } from "../../i18n/locale";
+import { translate } from "../../i18n/translate";
 import { DEFAULT_COMPANION_NAME, languageInstruction } from "../../platform/app/settings";
 import type { RegisteredMaterial } from "../dossier/registry";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
 import { firstPart, parseResultFile, retryPart, versionPart, type TopicSearchResult } from "../topic-search/result-types";
 import { QUESTIONS_FILE, parseQuestionsFile } from "../topic-search/questions";
+import { runStageFailure, stageFailureLine } from "../topic-search/stage-failure";
 import { parseStudyFile, studyFileName } from "../topic-search/study";
 import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type IssueOpeningRecord } from "./opening-record";
 import { planIssue, type IssuePlan, type IssueTopic, type PlannedItem } from "./plan";
@@ -42,7 +44,7 @@ import { issueBookName, issueCoverLine, issueEpubInput, issueFileName } from "./
 import { studyBookFile, studyBookName, studyBoxLine, studyChangeLine, studyEpubInput } from "./render-study";
 import { loadStudyExcerpts } from "./study-excerpts";
 import { planStudyIssue, withStudyVersions } from "./study-plan";
-import { INFO_SHELF_FILE, ISSUE_BOX_KIND, nextIssueNumber, parseShelf, type IssueEntry, type IssueStudyVersion } from "./types";
+import { INFO_SHELF_FILE, ISSUE_BOX_KIND, nextIssueNumber, parseShelf, type InfoShelf, type IssueEntry, type IssueStudyVersion, type ShelfStall } from "./types";
 
 /** This device's record of which runs closed on which night (local, collector only). */
 export const ISSUE_STATE_FILE = "info-issue-state.json";
@@ -485,8 +487,61 @@ export async function assembleDue(deps: IssueDeps): Promise<AssembleOutcome[]> {
   return out;
 }
 
-/** A run closed: note it, then assemble whatever that made due. */
+/** A box item that says a topic search failed at a model call, and why; its body is empty. */
+export const STALL_BOX_KIND = "topic-search-failed";
+
+function withStalls(shelf: InfoShelf, stalls: ShelfStall[]): InfoShelf {
+  const { stalls: _, ...rest } = shelf;
+  return stalls.length ? { ...rest, stalls } : rest;
+}
+
+/**
+ * Whether the run that closed failed at a model call (its result's `unjudged`
+ * says so, topic-search/stage-failure.ts): if so the search's stall goes on
+ * the shelf and a box item says why; if not, a stall the search had is gone.
+ * A run that left no result file changes nothing.
+ */
+export async function noteStall(deps: IssueDeps, run: ClosedRun): Promise<ShelfStall | null> {
+  if (!run.resultFile) return null;
+  const result = parseResultFile((await deps.files.read(run.resultFile)) ?? "");
+  if (!result) return null;
+  const failure = runStageFailure(result.unjudged, run.runId);
+  const shelf = parseShelf(await deps.files.read(INFO_SHELF_FILE));
+  const before = shelf.stalls ?? [];
+  const others = before.filter((x) => x.searchId !== run.searchId);
+  if (!failure || !result.unjudged) {
+    if (others.length !== before.length) await deps.files.write(INFO_SHELF_FILE, `${JSON.stringify(withStalls(shelf, others), null, 2)}\n`);
+    return null;
+  }
+  const topic = (await deps.topics()).find((x) => x.searchId === run.searchId);
+  const stall: ShelfStall = {
+    searchId: run.searchId,
+    topic: topic?.name ?? result.name,
+    runId: run.runId ?? result.unjudged.runId ?? null,
+    why: result.unjudged.why,
+    at: result.unjudged.at,
+    study: Boolean(topic ? topic.study : result.study),
+  };
+  await deps.files.write(INFO_SHELF_FILE, `${JSON.stringify(withStalls(shelf, [...others, stall]), null, 2)}\n`);
+  const locale = deps.locale ? await deps.locale() : "en";
+  await deps.putBox({
+    id: deps.newBoxItemId(),
+    boxId: `stall:${run.searchId}:${stall.runId ?? stall.at}`,
+    kind: STALL_BOX_KIND,
+    cover: translate(locale, "info.topicSearch.failBox", { topic: stall.topic, reason: stageFailureLine(failure, locale) }),
+    body: "",
+    origin: { place: "door", date: deps.today() },
+  });
+  return stall;
+}
+
+/** A run closed: note it and whether it failed, then assemble whatever that made due. */
 export async function runClosed(deps: IssueDeps, run: ClosedRun): Promise<AssembleOutcome[]> {
   await saveState(deps, noteClosed(await loadState(deps), run));
+  try {
+    await noteStall(deps, run);
+  } catch (e) {
+    console.warn("whether the topic search's run failed could not be put on the shelf", e);
+  }
   return assembleDue(deps);
 }

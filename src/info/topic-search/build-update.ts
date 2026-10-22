@@ -75,6 +75,7 @@ import {
   withHeld,
   type NextEntry,
 } from "./update";
+import { NOTHING_TO_JUDGE, RERANK_NAMED_NONE } from "./stage-failure";
 
 /** Query ids an update's read held back for a rate limit or a cooldown, or never got to: left for the next update. */
 export function skippedQueries(planned: readonly string[], arxiv: readonly ArxivFound[], huggingface: readonly ArxivFound[]): string[] {
@@ -202,7 +203,7 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
 
   say(`re-judging ${numbered.length} candidates against ${lines.length} confirmed line${lines.length === 1 ? "" : "s"}`);
   let answers = new Map<string, RerankAnswer>();
-  let unjudgedWhy: string | null = numbered.length ? null : "no candidate on this device to judge";
+  let unjudgedWhy: string | null = numbered.length ? null : NOTHING_TO_JUDGE;
   if (numbered.length) {
     const prompt = rerankPrompt(topic, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text), {
       lines: lines.map((l) => ({ id: l.id, kind: l.kind, text: l.text })),
@@ -210,7 +211,7 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
     });
     try {
       answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, topic, new Set(lines.map((l) => l.id)));
-      if (answers.size === 0) unjudgedWhy = "the rerank named no candidate";
+      if (answers.size === 0) unjudgedWhy = RERANK_NAMED_NONE;
     } catch (e) {
       if (signal.aborted) throw e;
       unjudgedWhy = e instanceof Error ? e.message : String(e);

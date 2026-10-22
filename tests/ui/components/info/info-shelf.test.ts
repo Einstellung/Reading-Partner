@@ -164,3 +164,32 @@ test("the screen's data reads each study's rollbacks from its record", async () 
   expect(data.ctx.rollbacks).toEqual({ "ts-s": [{ to: 1, at: 99 }] });
   expect([...data.ctx.opened]).toEqual(["study-1"]);
 });
+
+// The ChatGPT Codex backend's words for gpt-5.5 on 2026-10-22, as the result file kept them.
+const CODEX_REJECTS = '{"detail":"The \'gpt-5.5\' model is not supported when using Codex with a ChatGPT account."}';
+const REJECTED_LINE = "The model gpt-5.5 is not supported with your ChatGPT account; choose another in Settings.";
+
+test("a search whose run failed at a model call says why: on its study's card, else on a card that opens nothing", () => {
+  const library = { ...LIBRARY, "study-1": entry("study-1"), "study-2": entry("study-2") };
+  const ctx = { library, filed: new Set<string>(), opened: new Set<string>(), today: "2026-10-22" };
+  const stall = (searchId: string, topic: string, study: boolean, at: number) => ({ searchId, topic, runId: `run-${searchId}`, why: CODEX_REJECTS, at, study });
+  const withStalls: InfoShelf = {
+    ...shelf(),
+    issues: [...shelf().issues, studyRow()],
+    stalls: [stall("ts-s", "AI mechanism discovery", true, 30), stall("ts-new", "AI 自主机制发现", true, 40), stall("ts-1", "AI for science", false, 20)],
+  };
+  const view = infoShelfView(withStalls, ctx);
+  // The failed first look and the nightly topic: cards of their own, newest first, with no book.
+  expect(view.issues.slice(0, 2).map((c) => [c.key, c.bookId, c.title, c.topicsLine, c.failure])).toEqual([
+    ["stall:ts-new", "", "Stopped", "AI 自主机制发现", REJECTED_LINE],
+    ["stall:ts-1", "", "Stopped", "AI for science", REJECTED_LINE],
+  ]);
+  // The study with a version already: its card says it, and it gets no second card.
+  const study = view.issues[2];
+  expect([study.key, study.bookId, study.failure]).toEqual(["first:ts-s", "study-2", REJECTED_LINE]);
+  expect(view.issues.filter((c) => c.key === "stall:ts-s")).toEqual([]);
+  expect(view.issues.slice(3).every((c) => c.failure === null)).toBe(true);
+  // A stall whose words name no failure (a stopped run's) shows nothing.
+  const stopped = infoShelfView({ ...shelf(), stalls: [{ ...stall("ts-1", "AI for science", false, 20), why: "The operation was aborted." }] }, ctx);
+  expect(stopped.issues.every((c) => c.failure === null && c.bookId !== "")).toBe(true);
+});

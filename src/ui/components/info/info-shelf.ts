@@ -12,10 +12,16 @@
 // own cover, opening its current version: the newest, unless the reader went
 // back to an earlier one (the study's record, topic-search/study.ts). Once any
 // of its versions is filed into reading, the card is gone from here.
+//
+// A search whose last run failed at a model call (a rejected model, a lost
+// sign-in, a provider error; the shelf's `stalls`) says why: on its study's
+// card when it has one, else on a card of its own that opens nothing.
 
 import { t } from "../../../i18n";
 import { getLocale } from "../../../i18n/locale";
-import { INFO_SHELF_FILE, parseShelf, type InfoShelf, type IssueEntry, type VolumeEntry } from "../../../info/issue/types";
+import { INFO_SHELF_FILE, parseShelf, type InfoShelf, type IssueEntry, type ShelfStall, type VolumeEntry } from "../../../info/issue/types";
+import { stageFailure, stageFailureLine } from "../../../info/topic-search/stage-failure";
+import { localDay } from "../../../info/topic-search/windows";
 import { currentVersion, parseStudyFile, studyFileName, type StudyRollback } from "../../../info/topic-search/study";
 import { documentPath, type LibraryEntry } from "../../../platform/app/library";
 import type { FiledElsewhere, Topic } from "../../../platform/app/topics";
@@ -36,6 +42,8 @@ export interface IssueCard {
   isNew: boolean;
   /** A study's brief: the topic, which the cover shows in place of the date; null on an issue of the nightly brief. */
   study: { name: string; version: number } | null;
+  /** Why the search's last run failed, one line; null when it did not. A card with no book (`bookId` "") has only this to say. */
+  failure: string | null;
 }
 
 export interface VolumeCard {
@@ -81,12 +89,33 @@ export function issueDateLabel(date: string, locale: string = getLocale()): stri
   }
 }
 
-function studySearchId(issue: IssueEntry): string {
+function studySearchId(issue: Pick<IssueEntry, "key">): string {
   return issue.key.startsWith("first:") ? issue.key.slice("first:".length) : issue.key;
 }
 
+/** The line a stall says; null when its words name no failure (an older build's, or a stopped run's). */
+function stallLine(stall: ShelfStall | undefined): string | null {
+  const failure = stall ? stageFailure(stall.why) : null;
+  return failure ? stageFailureLine(failure, getLocale()) : null;
+}
+
+/** A failed search with no card of its own to say it on: a card with no book. */
+function stallCard(stall: ShelfStall, failure: string): IssueCard {
+  return {
+    key: `stall:${stall.searchId}`,
+    bookId: "",
+    title: t("info.shelf.stalled"),
+    dateLabel: issueDateLabel(localDay(stall.at)),
+    topicsLine: stall.topic,
+    itemsLine: "",
+    isNew: false,
+    study: null,
+    failure,
+  };
+}
+
 /** A study's card: its current version's book; null once a version is in reading or no version's book is here. */
-function studyCard(issue: IssueEntry, ctx: ShelfContext): IssueCard | null {
+function studyCard(issue: IssueEntry, ctx: ShelfContext, stall?: ShelfStall): IssueCard | null {
   const versions = (issue.study?.versions ?? []).filter((v) => ctx.library[v.bookId]);
   if (versions.length === 0 || issue.study!.versions.some((v) => ctx.filed.has(v.bookId))) return null;
   const n = currentVersion(versions, ctx.rollbacks?.[studySearchId(issue)] ?? []);
@@ -101,15 +130,25 @@ function studyCard(issue: IssueEntry, ctx: ShelfContext): IssueCard | null {
     itemsLine: t("info.shelf.studyLine", { n: v.n, count: v.items }),
     isNew: !ctx.opened.has(v.bookId),
     study: { name, version: v.n },
+    failure: stallLine(stall),
   };
 }
 
 export function infoShelfView(shelf: InfoShelf, ctx: ShelfContext): InfoShelfView {
+  const stallOf = new Map((shelf.stalls ?? []).map((x) => [x.searchId, x]));
   const studies = shelf.issues
     .filter((issue) => issue.study)
     .sort((a, b) => b.createdAt - a.createdAt)
-    .map((issue) => studyCard(issue, ctx))
+    .map((issue) => studyCard(issue, ctx, stallOf.get(studySearchId(issue))))
     .filter((card): card is IssueCard => card !== null);
+  const told = new Set(studies.filter((c) => c.failure).map((c) => studySearchId(c)));
+  const stalls = [...stallOf.values()]
+    .filter((x) => !told.has(x.searchId))
+    .sort((a, b) => b.at - a.at)
+    .flatMap((x) => {
+      const line = stallLine(x);
+      return line ? [stallCard(x, line)] : [];
+    });
   const issues = shelf.issues
     .filter((issue) => !issue.study && ctx.library[issue.bookId])
     .sort((a, b) => b.date.localeCompare(a.date) || b.number - a.number)
@@ -123,13 +162,14 @@ export function infoShelfView(shelf: InfoShelf, ctx: ShelfContext): InfoShelfVie
         itemsLine: t("info.shelf.items", { count: issue.items }),
         isNew: issue.date === ctx.today || !ctx.opened.has(issue.bookId),
         study: null,
+        failure: null,
       }),
     );
   const volumes = shelf.volumes
     .filter((v) => ctx.library[v.bookId] && !ctx.filed.has(v.bookId))
     .sort((a, b) => b.createdAt - a.createdAt)
     .map((v): VolumeCard => ({ id: v.id, bookId: v.bookId, title: v.title }));
-  return { issues: [...studies, ...issues], volumes };
+  return { issues: [...stalls, ...studies, ...issues], volumes };
 }
 
 /** The book a card opens, under the name the reader shows. */

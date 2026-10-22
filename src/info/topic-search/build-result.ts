@@ -100,6 +100,7 @@ import {
 import { addDays } from "./windows";
 import { xReadNote } from "./x-progress";
 import type { XReadResult } from "./x-reader";
+import { RERANK_NAMED_NONE } from "./stage-failure";
 
 /** Items a result lists: a first run's, and a day's (88 「打分」 7). */
 export const RESULT_ITEMS = { first: 15, daily: 8 } as const;
@@ -640,7 +641,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     try {
       answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, topic);
       reranked = answers.size > 0;
-      if (!reranked) unjudgedWhy = "the rerank named no candidate";
+      if (!reranked) unjudgedWhy = RERANK_NAMED_NONE;
     } catch (e) {
       if (signal.aborted) throw e;
       unjudgedWhy = e instanceof Error ? e.message : String(e);

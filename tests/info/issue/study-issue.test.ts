@@ -10,7 +10,7 @@ import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { fulltextFrom } from "../../../src/reading/epub/fulltext";
 import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { buildSectionedEpub } from "../../../src/workshop/bindery/build-article";
-import { assembleIssue, dueIssues, emptyIssueState, markDone, noteClosed, parseStudyKey, runClosed, studyKey, type IssueDeps } from "../../../src/info/issue/assemble";
+import { assembleIssue, dueIssues, emptyIssueState, markDone, noteClosed, noteStall, parseStudyKey, runClosed, STALL_BOX_KIND, studyKey, type IssueDeps } from "../../../src/info/issue/assemble";
 import { expiredIssues } from "../../../src/info/issue/expiry";
 import type { IssueTopic } from "../../../src/info/issue/plan";
 import { openingRecord } from "../../../src/info/issue/opening-record";
@@ -374,6 +374,52 @@ function world(topics: IssueTopic[] = [TOPIC]) {
   };
   return { files, library, attached, box, deps };
 }
+
+describe("a run that failed at a model call", () => {
+  // The ChatGPT Codex backend's words for gpt-5.5 on 2026-10-22 (the study run's out/ result file).
+  const why = '{"detail":"The \'gpt-5.5\' model is not supported when using Codex with a ChatGPT account."}';
+  const failed = (runId: string): TopicSearchResult => ({
+    ...studyResult(),
+    study: undefined,
+    empty: true,
+    items: [],
+    materials: [],
+    groups: [],
+    overview: null,
+    unjudged: { runId, at: 77, why, candidates: 60 },
+  });
+
+  test("puts the search's stall on the shelf and a box item saying why; a later run that works takes it away", async () => {
+    const w = world();
+    const file = "topic-search-failed.json";
+    w.files.set(file, JSON.stringify(failed("run-1")));
+    const [made] = await runClosed(w.deps, { searchId: SEARCH, kind: "first", night: null, resultFile: file, runId: "run-1" });
+    expect(made.issue).toBeNull();
+    const shelf = parseShelf(w.files.get(INFO_SHELF_FILE) ?? null);
+    expect(shelf.stalls).toEqual([{ searchId: SEARCH, topic: NAME, runId: "run-1", why, at: 77, study: true }]);
+    expect(w.box).toEqual([
+      expect.objectContaining({
+        boxId: `stall:${SEARCH}:run-1`,
+        kind: STALL_BOX_KIND,
+        cover: `${NAME}: The model gpt-5.5 is not supported with your ChatGPT account; choose another in Settings.`,
+        body: "",
+      }),
+    ]);
+    // The same file closed by another run is not that run's failure: the stall goes.
+    await runClosed(w.deps, { searchId: SEARCH, kind: "update", night: null, resultFile: file, runId: "run-2" });
+    expect(parseShelf(w.files.get(INFO_SHELF_FILE) ?? null).stalls).toBeUndefined();
+    expect(w.box.length).toBe(1);
+  });
+
+  test("the program's own reasons are no failure to tell", async () => {
+    const w = world();
+    const file = "topic-search-quiet.json";
+    w.files.set(file, JSON.stringify({ ...failed("run-1"), unjudged: { runId: "run-1", at: 1, why: "the rerank named no candidate", candidates: 3 } }));
+    expect(await noteStall(w.deps, { searchId: SEARCH, kind: "first", night: null, resultFile: file, runId: "run-1" })).toBeNull();
+    expect(w.files.get(INFO_SHELF_FILE)).toBeUndefined();
+    expect(w.box).toEqual([]);
+  });
+});
 
 describe("a study's versions assembled onto one shelf row", () => {
   const w = world();

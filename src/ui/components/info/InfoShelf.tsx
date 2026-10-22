@@ -139,6 +139,16 @@ export default function InfoShelf(props: {
         <ul className="m-0 mb-8 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3 lg:grid-cols-4">
           {view?.issues.map((issue) => (
             <li key={issue.key} className="relative">
+              {!issue.bookId ? (
+                // A search that failed and made no book: nothing to open, only why.
+                <div className="flex aspect-[4/5] w-full flex-col rounded-xl border border-dashed border-border-soft bg-card p-4 text-left">
+                  <span className="text-[11px] font-medium tracking-[0.08em] text-faint-foreground uppercase">{issue.title}</span>
+                  <span className="flex flex-1 items-center">
+                    <span className="line-clamp-3 font-serif text-[20px] leading-snug text-foreground">{issue.topicsLine}</span>
+                  </span>
+                  <span className="line-clamp-4 text-[12px] leading-snug text-destructive">{issue.failure}</span>
+                </div>
+              ) : (
               <button
                 className={cn(
                   "relative flex aspect-[4/5] w-full flex-col rounded-xl border bg-card p-4 text-left active:bg-muted",
@@ -166,6 +176,7 @@ export default function InfoShelf(props: {
                     <span className="line-clamp-2 text-[13px] leading-snug text-muted-foreground">{issue.topicsLine}</span>
                   )}
                   <span className="text-[12px] text-faint-foreground">{issue.itemsLine}</span>
+                  {issue.failure && <span className="line-clamp-3 text-[12px] leading-snug text-destructive">{issue.failure}</span>}
                 </span>
                 {issue.isNew && (
                   <span className="absolute top-3 right-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold tracking-[0.06em] text-primary-foreground uppercase">
@@ -173,6 +184,7 @@ export default function InfoShelf(props: {
                   </span>
                 )}
               </button>
+              )}
               {issue.study && (
                 <div className="absolute right-1 bottom-1">
                   <CardMenu
