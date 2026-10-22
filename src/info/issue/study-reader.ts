@@ -214,7 +214,8 @@ export interface CiteSheet {
   part: EntryPartName | null;
 }
 
-function paragraphs(text: string): string[] {
+/** A section's text as paragraphs: split at blank lines, whitespace evened. */
+export function paragraphs(text: string): string[] {
   return text
     .split(/\n{2,}/)
     .map((p) => p.replace(/\s+/g, " ").trim())

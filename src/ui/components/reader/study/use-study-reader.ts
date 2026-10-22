@@ -22,7 +22,7 @@ import {
 } from "../../../../info/issue/study-reader";
 import { setBookLinkTaker } from "../../../../reading/epub/reader-logic";
 import { headingPage } from "../../../../reading/issue";
-import { loadStudyReader, prepareStudyBook, readMaterialBody, rollBackStudy, type StudyReaderData } from "./study-live";
+import { loadStudyReader, prepareStudyBook, readBookExcerpt, readMaterialBody, rollBackStudy, type StudyReaderData } from "./study-live";
 
 /** How often the shelf, the record and the runs are read again while a study's book is open. */
 const POLL_MS = 15_000;
@@ -146,9 +146,11 @@ export function useStudyReader(host: StudyReaderHost): StudyReader | null {
       if (!result || !anchor) return false;
       const material = splitAnchor(anchor)?.material ?? "";
       setSheet(citeSheet(result, tap, null));
-      void readMaterialBody(result, material).then((body) => {
+      // The book's own excerpt first; the run directory's cache only on the computer that ran the study.
+      void (async () => {
+        const body = (await readBookExcerpt(hostRef.current.bookId, anchor).catch(() => null)) ?? (await readMaterialBody(result, material));
         if (body) setSheet((was) => (was && was.anchor === anchor ? citeSheet(result, tap, body) : was));
-      });
+      })();
       return true;
     });
   }, [isStudy]);

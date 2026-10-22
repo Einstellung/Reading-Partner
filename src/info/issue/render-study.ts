@@ -20,6 +20,7 @@ import type { EntryParts, EntryPartName, EntrySentence, PaperDepth, StudyVersion
 import type { IssuePlan, PlannedItem } from "./plan";
 import { annexHtml, cut, esc, fill, HEADING_CHARS, link, linksLine, longDate, sectionHref, shortDate, verifyLines } from "./render";
 import { CITE_CLASS, ITEM_CLASS, citeHref, citeId, citeLabel, itemAnchorId, splitAnchor } from "./study-cites";
+import { EXCERPT_CLASS, EXCERPT_TEXT_CLASS, SECTION_EXCERPT_CHARS, excerptId, type StudyExcerpts } from "./study-excerpts";
 import type { StudyIssuePlan, StudyTag } from "./study-plan";
 
 export interface StudyMeta {
@@ -349,8 +350,45 @@ function contentsHtml(plan: IssuePlan, hrefs: Map<string, string>, notesHref: st
   return out.join("\n");
 }
 
-/** The document for buildSectionedEpub: [This update], the front page, the contents, entries, Notes, panorama. */
-export function studyEpubInput(plan: IssuePlan, meta: StudyMeta): SectionedEpubInput {
+/** The label a cited section goes by in the excerpts: its heading, else (and for a PDF's part) what its cite says. */
+function sectionName(anchor: string, study: StudyIssuePlan, locale: Locale): string {
+  const parts = splitAnchor(anchor);
+  if (!parts) return anchor;
+  const heading = parts.section === null ? null : study.headings[anchor];
+  const own = heading?.trim();
+  return own && !/^PDF part \d+$/.test(own) ? own : citeLabel(heading, parts.section, (n) => s(locale, "pdfPart", { n }), s(locale, "citeWhole"));
+}
+
+/** The cited sections' original text, one block per anchor (study-excerpts.ts). */
+function excerptsHtml(ex: StudyExcerpts, study: StudyIssuePlan, locale: Locale): string {
+  const out = [`<p><small>${f(locale, "excerptsIntro", { chars: SECTION_EXCERPT_CHARS })}</small></p>`];
+  for (const e of ex.excerpts) {
+    const id = excerptId(e.anchor);
+    const material = splitAnchor(e.anchor)?.material ?? "";
+    const title = study.headings[material];
+    if (!id) continue;
+    out.push(
+      [
+        `<div class="${EXCERPT_CLASS}" id="${id}">`,
+        `<p>${title ? `<strong>${esc(cut(title, HEADING_CHARS))}</strong> · ` : ""}${esc(sectionName(e.anchor, study, locale))}</p>`,
+        ...e.paras.map((p) => `<p class="${EXCERPT_TEXT_CLASS}">${esc(p)}</p>`),
+        e.cut ? `<p><small>${f(locale, "excerptCut")}</small></p>` : "",
+        "</div>",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+  if (ex.left) out.push(`<p><small>${f(locale, "excerptsLeft", { count: ex.left })}</small></p>`);
+  return out.join("\n");
+}
+
+/**
+ * The document for buildSectionedEpub: [This update], the front page, the
+ * contents, entries, Notes, panorama, and, when given any, the cited sections'
+ * original text last.
+ */
+export function studyEpubInput(plan: IssuePlan, meta: StudyMeta, excerpts?: StudyExcerpts): SectionedEpubInput {
   const study = studyOf(plan);
   const { locale } = meta;
   const topic = topicOf(plan);
@@ -372,6 +410,7 @@ export function studyEpubInput(plan: IssuePlan, meta: StudyMeta): SectionedEpubI
     ...plan.entries.map((p) => ({ heading: cut(p.item.title, HEADING_CHARS), html: entryHtml(p, study, locale) })),
     ...(plan.notes.length ? [{ heading: notesHeading, html: plan.notes.map((p) => noteHtml(p, study, locale)).join("\n<p>* * *</p>\n") }] : []),
     ...plan.annex.map((a) => ({ heading: translate(locale, "info.issue.book.annex", { topic: a.topic }), html: annexHtml(a) })),
+    ...(excerpts && (excerpts.excerpts.length || excerpts.left) ? [{ heading: s(locale, "excerpts"), html: excerptsHtml(excerpts, study, locale) }] : []),
   ];
   return {
     title: s(locale, "title", { topic, n: study.version.n, date: longDate(meta.date, locale) }),

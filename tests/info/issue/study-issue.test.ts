@@ -18,6 +18,7 @@ import { studyBookName, studyChangeLine, studyEpubInput } from "../../../src/inf
 import { anchorOfHref, citeAt, citeHref, citeLabel, citeOfId, itemAnchorId, itemOfAnchorId, splitAnchor } from "../../../src/info/issue/study-cites";
 import { citeSheet, excerptFor, itemAtPage, landedAction, materialBodyPaths, sameItemIn, SETTLED_MS, studyBookContext, studyStrip, updatingTo, versionItems, versionRows } from "../../../src/info/issue/study-reader";
 import { planStudyIssue, withStudyVersions } from "../../../src/info/issue/study-plan";
+import { bookExcerpts, citedSections, excerptBody, excerptId, excerptInBook, pickExcerpt } from "../../../src/info/issue/study-excerpts";
 import { INFO_SHELF_FILE, ISSUE_BOX_KIND, parseShelf, studyOfBook } from "../../../src/info/issue/types";
 import type { RegisteredMaterial } from "../../../src/info/dossier/registry";
 import { studyFileBody, studyFileName } from "../../../src/info/topic-search/study";
@@ -541,5 +542,99 @@ describe("the reader's study chrome (study-reader.ts)", () => {
   test("a material's body is looked for in the first run's directory, then in each later run's", () => {
     const result = { runDir: "topic-search-runs/r1", retries: [{ runId: "r2", at: 1, added: 0 } as never] };
     expect(materialBodyPaths(result, "M3")).toEqual(["topic-search-runs/r1/materials/M3.json", "topic-search-runs/r2/materials/M3.json"]);
+  });
+});
+
+// --- the cited sections' text in the book (study-excerpts.ts) -----------------------
+
+describe("the cited sections' text carried in the book (study-excerpts.ts)", () => {
+  const M1 = {
+    id: "M1",
+    url: "https://arxiv.org/abs/M1",
+    sections: [
+      { id: "M1.§1", heading: "3.3 Results", text: "We ran four systems.\n\nThe agent found three of four rules.\n\nOurs 3 4 75.0" },
+      { id: "M1.§2", heading: "PDF part 2", text: "Part two <of> the paper." },
+      { id: "M1.§3", heading: "Method", text: "The agent picks its next experiment." },
+      { id: "M1.§4", heading: null, text: "It writes a rule." },
+    ],
+  };
+
+  test("the sections a book cites, in the order it first cites them, each with the sentences citing it", () => {
+    const cited = citedSections(planOf(1).entries.map((p) => p.item));
+    expect(cited.map((c) => c.anchor)).toEqual(["M1.§1", "M1", "M1.§2", "M1.§3", "M1.§4", "M2.§1"]);
+    expect(cited[0].sentences.slice(0, 3).map((x) => x.text)).toEqual(["Labs run experiments by hand.", "It found 3 of 4 rules.", "Only toy systems."]);
+    expect(excerptId("M1.§2")).toBe("rp-excerpt-M1-2");
+    expect(excerptId("M1")).toBe("rp-excerpt-M1");
+    expect(excerptId("E1")).toBeNull();
+  });
+
+  test("a section keeps the paragraphs its sentences point at first, then its opening, within the cap", () => {
+    const opening = "Opening words here. ".repeat(6).trim();
+    const text = [opening, "Middle 42 rows.", "The agent found three of four rules.", "Tail."].join("\n\n");
+    const quoted = [{ text: "x", quote: "found three of four" }];
+    expect(pickExcerpt(text, quoted, 400)).toEqual({ paras: [opening, "Middle 42 rows.", "The agent found three of four rules.", "Tail."], cut: false });
+    expect(pickExcerpt(text, quoted, 100)).toEqual({ paras: ["The agent found three of four rules."], cut: true });
+    expect(pickExcerpt(text, [{ text: "It saw 42 of them." }], 60)).toEqual({ paras: ["Middle 42 rows."], cut: true });
+    const long = pickExcerpt("A".repeat(500), [], 300)!;
+    expect(long.cut).toBe(true);
+    expect(long.paras[0].length).toBe(300);
+    expect(long.paras[0].endsWith("…")).toBe(true);
+    expect(pickExcerpt("  \n\n ", [], 300)).toBeNull();
+  });
+
+  test("a book carries sections up to its cap and counts the ones left out; a section with no text here is skipped", () => {
+    const cited = [
+      { anchor: "M1.§1", sentences: [] },
+      { anchor: "M9.§1", sentences: [] },
+      { anchor: "M1.§2", sentences: [] },
+      { anchor: "M1.§3", sentences: [] },
+    ];
+    const text = (a: string) => (a.startsWith("M9") ? null : a === "M1.§3" ? "Short." : "x".repeat(100));
+    const out = bookExcerpts(cited, text, { section: 2_000, book: 150 });
+    expect(out.excerpts.map((e) => e.anchor)).toEqual(["M1.§1", "M1.§3"]);
+    expect(out.left).toBe(1);
+  });
+
+  test("the excerpts close the book; without any the book is as before", () => {
+    const meta = { number: 4, date: "2026-10-21", locale: "en" as const, companionName: "Lumen" };
+    const plain = studyEpubInput(planOf(1), meta);
+    expect(studyEpubInput(planOf(1), meta, { excerpts: [], left: 0 })).toEqual(plain);
+    const input = studyEpubInput(planOf(1), meta, {
+      excerpts: [
+        { anchor: "M1.§1", paras: ["The agent found three of four rules."], cut: false },
+        { anchor: "M1.§2", paras: ["Part two <of> the paper."], cut: true },
+      ],
+      left: 2,
+    });
+    expect(input.sections.length).toBe(plain.sections.length + 1);
+    const last = input.sections[input.sections.length - 1];
+    expect(last.heading).toBe("Cited passages");
+    expect(last.html).toContain('<div class="rp-excerpt" id="rp-excerpt-M1-1">');
+    expect(last.html).toContain("<p><strong>Paper M1</strong> · 3.3 Results</p>");
+    expect(last.html).toContain("· part 2</p>");
+    expect(last.html).toContain('<p class="rp-excerpt-text">Part two &lt;of&gt; the paper.</p>');
+    expect(last.html).toContain("Cut here; the rest of the section is in the original.");
+    expect(last.html).toContain("2 more cited sections did not fit in this book");
+    expect(last.html).toContain("up to about 2000 characters a section");
+  });
+
+  test("assembled where the run's bodies are, the book carries them and the sheet reads them from the book", async () => {
+    const w = world();
+    const r = studyResult();
+    const file = `${r.id}.json`;
+    w.files.set(file, JSON.stringify({ ...r, study: { versions: [r.study!.versions[0]] } }));
+    w.files.set("topic-search-runs/r/materials/M1.json", JSON.stringify(M1));
+    w.files.set("topic-search-runs/r/materials/M2.json", "{torn");
+    await runClosed(w.deps, { searchId: SEARCH, kind: "first", night: null, resultFile: file });
+    const book = parseEpub(w.library.get("h1")!.bytes);
+    expect(excerptInBook(book.docs, "M1.§1")).toEqual(["We ran four systems.", "The agent found three of four rules.", "Ours 3 4 75.0"]);
+    expect(excerptInBook(book.docs, "M1.§2")).toEqual(["Part two <of> the paper."]);
+    expect(excerptInBook(book.docs, "M1")).not.toBeNull();
+    expect(excerptInBook(book.docs, "M2.§1")).toBeNull();
+    const tap = { href: "text/section-003.xhtml#rp-cite-M1-1", id: "rp-cite-E1-6", text: "§3.3" };
+    const sheet = citeSheet(r, tap, excerptBody("M1.§1", excerptInBook(book.docs, "M1.§1")!))!;
+    expect(sheet).toMatchObject({ excerpt: ["The agent found three of four rules."], excerptBy: "quote", heading: "3.3 Results" });
+    const pagination = await paginate(book, characterRuler(700));
+    expect(fulltextFrom(book, pagination).outline.map((o) => o.title)).toContain("Cited passages");
   });
 });

@@ -40,6 +40,7 @@ import { openingPrompt, openingRecord, pickIssueQuestions, returnUnasked, type I
 import { planIssue, type IssuePlan, type IssueTopic, type PlannedItem } from "./plan";
 import { issueBookName, issueCoverLine, issueEpubInput, issueFileName } from "./render";
 import { studyBookFile, studyBookName, studyBoxLine, studyChangeLine, studyEpubInput } from "./render-study";
+import { loadStudyExcerpts } from "./study-excerpts";
 import { planStudyIssue, withStudyVersions } from "./study-plan";
 import { INFO_SHELF_FILE, ISSUE_BOX_KIND, nextIssueNumber, parseShelf, type IssueEntry, type IssueStudyVersion } from "./types";
 
@@ -353,7 +354,9 @@ async function assembleStudy(deps: IssueDeps, key: string, target: { searchId: s
   const number = row?.number ?? nextIssueNumber(shelf);
   const name = plan.topics[0].name;
   const companionName = deps.companionName ? await deps.companionName() : DEFAULT_COMPANION_NAME;
-  const bytes = await deps.buildEpub(studyEpubInput(plan, { number, date, locale, companionName }));
+  // The cited sections' text travels in the book: the run directory does not sync (docs/info/91).
+  const excerpts = await loadStudyExcerpts((path) => deps.files.read(path), raw, plan.entries.map((p) => p.item));
+  const bytes = await deps.buildEpub(studyEpubInput(plan, { number, date, locale, companionName }, excerpts));
   const { hash } = await deps.importBook(bytes, studyBookFile(target.searchId, target.n), {
     kind: "issue",
     publishedAt: date,

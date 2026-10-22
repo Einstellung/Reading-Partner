@@ -5,6 +5,7 @@
 
 import { INFO_SHELF_FILE, parseShelf } from "../../../../info/issue/types";
 import { ITEM_CLASS, itemAnchorId, itemOfAnchorId } from "../../../../info/issue/study-cites";
+import { excerptBody, excerptInBook } from "../../../../info/issue/study-excerpts";
 import {
   materialBodyPaths,
   sameItemIn,
@@ -57,6 +58,24 @@ export async function loadStudyReader(bookId: string): Promise<StudyReaderData |
     .list({ kind: TOPIC_SEARCH_KIND, state: ["pending", "running"] })
     .catch(() => []);
   return { ctx, result, updating: updatingTo(runs, first.searchId, ctx.newest) };
+}
+
+/** The open book's parsed pages, kept for the next tap; one book at a time. */
+let parsedBook: { bookId: string; docs: Promise<{ doc: Document }[]> } | null = null;
+
+/**
+ * The cited section's text the book itself carries (study-excerpts.ts), as a
+ * body citeSheet reads; null when the book has none for it (made before the
+ * excerpts, or the section did not fit).
+ */
+export async function readBookExcerpt(bookId: string, anchor: string): Promise<MaterialBody | null> {
+  if (parsedBook?.bookId !== bookId) parsedBook = { bookId, docs: readLibraryBook(bookId).then((bytes) => parseEpub(bytes).docs) };
+  const docs = await parsedBook.docs.catch(() => {
+    parsedBook = null;
+    return [];
+  });
+  const paras = excerptInBook(docs, anchor);
+  return paras?.length ? excerptBody(anchor, paras) : null;
 }
 
 /** A material's cached body, on the computer that ran the study; null anywhere else. */
