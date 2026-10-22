@@ -525,6 +525,7 @@ export async function composeResult(
   const cache = maxCalls > 1;
   let offered = !!input.deeper && input.deeper.left > 0;
   const deeper: DeeperReport = { read: [], failed: [], refused: [] };
+  let previous: Record<string, unknown> | null = null;
   for (let attempt = 0; attempt < 2 && calls < maxCalls; attempt++) {
     calls++;
     let text: string;
@@ -545,9 +546,66 @@ export async function composeResult(
         continue;
       }
     }
+    // A correction is merged onto the answer it corrects before it is checked.
+    if (previous) text = mergeCorrection(previous, text);
     const { written, problems } = checkWritten(text, input, attempt === 1 || calls >= maxCalls);
     if (written) return { written, calls, deeper };
-    tail = [...(note ? [note] : []), `Your previous answer had these problems; write it again:\n${problems.map((p) => `- ${p}`).join("\n")}`];
+    previous = jsonObject(text);
+    tail = [...(note ? [note] : []), retryNote(problems, previous ? text : null)];
   }
   return { written: null, calls, deeper };
+}
+
+function jsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const raw = parseJsonReply(text);
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a retry is told. With the previous answer in hand the model sends only
+ * corrections (mergeCorrection puts them back); a reply that was not JSON is
+ * written again whole.
+ */
+export function retryNote(problems: readonly string[], previous: string | null): string {
+  const list = problems.map((p) => `- ${p}`).join("\n");
+  if (previous === null) return `Your previous answer had these problems; write it again:\n${list}`;
+  return [
+    "Your previous answer:",
+    previous,
+    "",
+    `It had these problems:\n${list}`,
+    "",
+    'Reply with the corrections only, in the same JSON shape: "overview" only if a problem names the overview; in "items", only the entries a problem names, each with its "e" and only the fields (parts) that need correcting, each such field written whole again; an entry the problems say is missing is written whole. Everything you leave out is kept from your previous answer as it was.',
+  ].join("\n");
+}
+
+/**
+ * A correction laid over the answer it corrects: the overview if it gives one,
+ * and each entry field by field (a part it gives replaces that part, one it
+ * leaves out stays); entries it adds are appended. Doubts and repeats are the
+ * correction's when it gives them. A correction that is not JSON is returned
+ * as it is, to fail the check on its own.
+ */
+export function mergeCorrection(previous: Record<string, unknown>, text: string): string {
+  const fix = jsonObject(text);
+  if (!fix) return text;
+  const out: Record<string, unknown> = { ...previous };
+  const ov = fix.overview as Record<string, unknown> | undefined;
+  if (ov && typeof ov === "object" && typeof ov.text === "string" && ov.text.trim()) out.overview = ov;
+  const idOf = (v: unknown) => (v && typeof v === "object" && typeof (v as { e?: unknown }).e === "string" ? (v as { e: string }).e.trim() : "");
+  const items = (Array.isArray(previous.items) ? previous.items : []).map((v) => ({ ...(v as Record<string, unknown>) }));
+  for (const v of Array.isArray(fix.items) ? fix.items : []) {
+    const id = idOf(v);
+    if (!id) continue;
+    const at = items.findIndex((p) => idOf(p) === id);
+    if (at >= 0) items[at] = { ...items[at], ...(v as Record<string, unknown>) };
+    else items.push({ ...(v as Record<string, unknown>) });
+  }
+  out.items = items;
+  for (const key of ["doubts", "repeats"] as const) if (Array.isArray(fix[key])) out[key] = fix[key];
+  return JSON.stringify(out);
 }

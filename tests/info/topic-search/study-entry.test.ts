@@ -144,6 +144,34 @@ test("a study's write-up that still fails a sentence on its second try keeps the
   expect(fallback.written).toBeNull();
 });
 
+test("a retry carries the previous answer and asks for corrections only; they are merged part by part", async () => {
+  const { input } = await setup();
+  const calls: TopicModelCall[] = [];
+  const bad = reply({ ...GOOD, results: [S("75%, PySR 41%.")] });
+  const fix = JSON.stringify({ items: [{ e: "E1", results: [S("75% on clean data, PySR 40%.")] }] });
+  const answers = [bad, fix];
+  const out = await composeResult(input, async (c) => (calls.push(c), answers.shift()!), signal, 5);
+  expect(out.calls).toBe(2);
+  const tail = calls[1].tail!.join("\n");
+  expect(tail).toContain(`Your previous answer:\n${bad}`);
+  expect(tail).toContain("Reply with the corrections only");
+  const e1 = out.written!.items.get("E1")!.parts!;
+  expect(e1.results.map((s) => s.text)).toEqual(["75% on clean data, PySR 40%."]);
+  expect(e1.gap[0].quote).toBe("brittle and opaque");
+  expect(e1.confidence.dropped).toEqual([]);
+  expect(out.written!.items.get("E2")!.parts!.method[0][0].text).toBe("It studies another thing.");
+  expect(out.written!.overview.text).toBe("Two papers; see E1 and E2.");
+});
+
+test("a reply that was not JSON is written again whole", async () => {
+  const { input } = await setup();
+  const calls: TopicModelCall[] = [];
+  const answers = ["not json", reply(GOOD)];
+  const out = await composeResult(input, async (c) => (calls.push(c), answers.shift()!), signal, 5);
+  expect(out.written).not.toBeNull();
+  expect(calls[1].tail!.join("\n")).toStartWith("Your previous answer had these problems; write it again:");
+});
+
 test("the read: a whole read that reached the cap was cut after its last section; a head read says nothing of sections", async () => {
   const registry = new MaterialRegistry("r", { write: async () => {} });
   const half = PAPER_FULL_CHARS / 2;

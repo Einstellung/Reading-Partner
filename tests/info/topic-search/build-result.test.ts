@@ -329,7 +329,9 @@ describe("a first run, then a day, then a quiet day", () => {
     expect(writes[1].user).toBe(writes[0].user);
     expect(writes[0].tail).toBeUndefined();
     expect(writes[1].tail).toHaveLength(1);
-    expect(writes[1].tail![0]).toStartWith("Your previous answer had these problems; write it again:");
+    // The first reply was JSON: the retry carries it and asks for the corrections only.
+    expect(writes[1].tail![0]).toStartWith("Your previous answer:\n");
+    expect(writes[1].tail![0]).toContain("Reply with the corrections only");
   });
 
   test("first run: questions and source health", () => {
