@@ -95,6 +95,9 @@ export function appToolCatalog(): AgentTool[] {
         startBriefing: () => "started",
         labs: { labs: async () => [], sources: async () => [], onLabCard: () => {}, threadId: "" },
         siteSignIn: { signInSites: async () => [], openSignIn: async () => ({ closed: true, elapsedMs: 0 }) },
+        // Every tool a stored session may name, the old briefing's included
+        // while its UI is off (info/old-briefing.ts).
+        oldBriefing: true,
       }),
     ),
   ];

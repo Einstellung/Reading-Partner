@@ -27,6 +27,7 @@ import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";
 import { briefingErrorText } from "./no-labs";
 import { t, useT } from "../../../i18n";
+import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 
 // Live seconds since a start timestamp, for the analysis activity readout. Ticks
 // on its own so the card keeps moving even while the user scrolls or chats.
@@ -392,14 +393,31 @@ export function MealsAppliedCard({ payload }: CardComponentProps<MealsAppliedCar
   return <div className="text-[12px] leading-snug text-faint-foreground">{appliedLine(payload)}</div>;
 }
 
-export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
-  "probe-confirm": ProbeConfirmCard,
-  "briefing-progress": BriefingProgressCard,
-  "briefing-ready": BriefingReadyCard,
-  "topic-proposal": TopicProposalCard,
-  "lab-proposal": LabProposalCard,
-  "lab-archive": LabArchiveCard,
-  "briefing-failed": BriefingFailedCard,
-  "meals-plan": MealsPlanCard,
-  "meals-applied": MealsAppliedCard,
-};
+// An old briefing card in a stored conversation, while that UI is off.
+function NoCard(): null {
+  return null;
+}
+
+// The registry. While the old briefing's UI is off (info/old-briefing.ts) its
+// cards — a source to add, a run's progress, ready and failed, a lab to open or
+// close — draw nothing: their tools are not mounted, so none is raised, and one
+// already in a conversation would offer a step that is not there. The filing
+// card stays: the door files with it too.
+export function infoCardRegistry(
+  oldBriefing: boolean = OLD_BRIEFING_UI_ENABLED,
+): CardRegistryFor<InfoCard["kind"]> {
+  const old = <T,>(card: T) => (oldBriefing ? card : NoCard);
+  return {
+    "probe-confirm": old(ProbeConfirmCard),
+    "briefing-progress": old(BriefingProgressCard),
+    "briefing-ready": old(BriefingReadyCard),
+    "topic-proposal": TopicProposalCard,
+    "lab-proposal": old(LabProposalCard),
+    "lab-archive": old(LabArchiveCard),
+    "briefing-failed": old(BriefingFailedCard),
+    "meals-plan": MealsPlanCard,
+    "meals-applied": MealsAppliedCard,
+  };
+}
+
+export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = infoCardRegistry();

@@ -34,6 +34,7 @@ import {
 import { addSourceSystemPrompt } from "../sources/source-skill";
 import { holdSecretaryTools } from "./role";
 import { labGuidance } from "./lab-tool";
+import { OLD_BRIEFING_UI_ENABLED } from "../old-briefing";
 import { webSearchPrompt } from "../../websearch/prompt";
 import {
   articleContextSection,
@@ -208,7 +209,11 @@ async function openArticle(ref: InfoArticleDeskRef): Promise<DeskItem | null> {
 }
 
 function briefingPrompt(ref: InfoBriefingDeskRef): string {
-  if (ref.onboarding) return addSourceSystemPrompt({ aiLanguage: ref.aiLanguage, onboarding: true });
+  // The add-source skill describes tools that are not mounted while the old
+  // briefing's UI is off (info/old-briefing.ts, companion-tools.ts).
+  if (ref.onboarding) {
+    return OLD_BRIEFING_UI_ENABLED ? addSourceSystemPrompt({ aiLanguage: ref.aiLanguage, onboarding: true }) : "";
+  }
   if (ref.briefing) return briefingChatSystemPrompt(ref.briefing, ref.ctx);
   return noBriefingChatSystemPrompt(ref.ctx, {
     error: ref.error ?? undefined,
@@ -223,7 +228,7 @@ function briefingPrompt(ref: InfoBriefingDeskRef): string {
 // appended here. There are none yet by construction at that point, which is
 // exactly the state the guidance is written for: ask what to keep watch on.
 function labSection(ref: InfoBriefingDeskRef): string {
-  return ref.onboarding ? labGuidance([], []) : "";
+  return ref.onboarding && OLD_BRIEFING_UI_ENABLED ? labGuidance([], []) : "";
 }
 
 async function topicObservations(

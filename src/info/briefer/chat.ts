@@ -15,6 +15,7 @@ import { allSignInSites, signInSiteLine } from "../sources/site-session";
 import { labGuidance } from "./lab-tool";
 import type { Lab } from "../labs/types";
 import type { Briefing } from "../boxes/types";
+import { OLD_BRIEFING_UI_ENABLED } from "../old-briefing";
 
 // How much article text the chat carries as context (chat models take a big
 // window; a very long piece still gets a sane cap).
@@ -66,8 +67,10 @@ const ADD_SOURCE_BULLETS = [
   "it does. add_source still requires a prior trial of the same descriptor and the user's explicit yes.",
 ];
 
-const REST_BULLETS = [
-  "- statement_write: write down something the user has just told you about themselves.",
+const STATEMENT_BULLET =
+  "- statement_write: write down something the user has just told you about themselves.";
+
+const GENERATE_BRIEFING_BULLETS = [
   "- generate_briefing(scope): regenerate today's briefing — 'retriage' re-runs the labs'",
   "  analysis over today's already-collected cables (no fetch), 'full' re-collects every",
   "  source (including any just added) and re-analyzes, replacing today's briefing.",
@@ -123,11 +126,25 @@ const TOOL_RULES = [
 // tools themselves: a companion told about a window it cannot open would promise
 // one and then fail, and one told about add_source on a device that does not
 // have it would promise a subscription it cannot make.
-function toolGuidance(canSignIn: boolean, collecting: boolean): string {
+//
+// While the old briefing's UI is off (info/old-briefing.ts) its tools are not
+// mounted (companion-tools.ts), so neither the add-source half nor
+// generate_briefing is described.
+function toolGuidance(canSignIn: boolean, collecting: boolean, oldBriefing: boolean): string {
+  if (!oldBriefing) {
+    return [
+      ...TOOL_BULLETS,
+      STATEMENT_BULLET,
+      ...(canSignIn ? [SIGN_IN_BULLET] : []),
+      ...TOOL_RULES,
+      ...(canSignIn ? ["", SIGN_IN_GUIDANCE] : []),
+    ].join("\n");
+  }
   return [
     ...TOOL_BULLETS,
     ...(collecting ? ADD_SOURCE_BULLETS : []),
-    ...REST_BULLETS,
+    STATEMENT_BULLET,
+    ...GENERATE_BRIEFING_BULLETS,
     ...(canSignIn ? [SIGN_IN_BULLET] : []),
     "",
     ...(collecting ? GENERATE_BRIEFING_HERE : [...NO_ADD_SOURCE, "", ...GENERATE_BRIEFING_ELSEWHERE]),
@@ -222,24 +239,28 @@ export interface CompanionContext {
   // promise a subscription it cannot make. Defaults to true — the shape the app
   // had before there were two roles.
   collecting?: boolean;
+  // Whether the old briefing's tools are mounted (info/old-briefing.ts), and
+  // with them described: the add-source half, generate_briefing and the labs.
+  // The switch's value unless a caller says otherwise.
+  oldBriefing?: boolean;
 }
 
 function preamble(ctx: CompanionContext): string[] {
   const lang = languageInstruction(ctx.aiLanguage ?? "auto");
+  const old = ctx.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
   return [
     // Who this is and what it is here to do is the secretary's duty, and it
     // rides ahead of this block (briefer/role.ts). What is left of the old first
     // paragraph here is the language instruction, which is the app's setting
     // rather than the job.
     ...(lang ? [lang, ""] : []),
-    toolGuidance(!!ctx.canSignIn, ctx.collecting !== false),
+    toolGuidance(!!ctx.canSignIn, ctx.collecting !== false, old),
     "",
     formatReader(ctx.reader),
     "",
     formatSources(ctx.sources),
     ...(ctx.canSignIn ? ["", formatSignInSites(ctx.sources, !!ctx.topicSearch)] : []),
-    "",
-    labGuidance(ctx.labs ?? [], ctx.sources, ctx.pictures ?? {}),
+    ...(old ? ["", labGuidance(ctx.labs ?? [], ctx.sources, ctx.pictures ?? {})] : []),
   ];
 }
 
@@ -274,7 +295,11 @@ export function noBriefingChatSystemPrompt(
   // the companion can honestly offer is to pass the request on, and what it
   // knows about that machine comes from its claim file.
   const collecting = opts.collecting !== false;
-  const situation = collecting
+  // Both situations end in generate_briefing, which is not mounted while the
+  // old briefing's UI is off (info/old-briefing.ts).
+  const situation = !(ctx.oldBriefing ?? OLD_BRIEFING_UI_ENABLED)
+    ? []
+    : collecting
     ? [
         "Today's briefing is collected automatically when the app opens; there is no button for it.",
         "If the user asks for one now, call generate_briefing with scope 'full'. Do not offer",

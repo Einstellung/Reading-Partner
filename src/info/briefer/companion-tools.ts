@@ -23,6 +23,7 @@ import { buildReadPageTool } from "../sources/read-page-tool";
 import { buildArchiveLabTool, buildProposeLabTool, type LabToolDeps } from "./lab-tool";
 import { errMsg } from "../../platform/std/errors";
 import { t } from "../../i18n";
+import { OLD_BRIEFING_UI_ENABLED } from "../old-briefing";
 
 export type BriefingScope = "retriage" | "full";
 
@@ -75,6 +76,11 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // proposal is made in and the roster to validate against, so it is passed by
   // whoever knows both; without it propose_lab and archive_lab are not mounted.
   labs?: LabToolDeps;
+  // Whether the old briefing's tools are mounted (info/old-briefing.ts):
+  // generate_briefing, the three add-source tools and the two lab tools. Off,
+  // the set is read_page and, where it can open, the sign-in window. The
+  // switch's value unless a caller says otherwise.
+  oldBriefing?: boolean;
 }
 
 // The generate_briefing tool: regenerate today's briefing on the user's explicit
@@ -295,11 +301,12 @@ export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
 // itself on a schedule — it is one link the user pasted, read once because they
 // asked, which is the same thing a browser does when they tap it.
 export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
+  const old = deps.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
   return [
-    ...(deps.collecting === false ? [] : buildSourceTools(deps)),
+    ...(!old || deps.collecting === false ? [] : buildSourceTools(deps)),
     buildReadPageTool(deps),
-    buildGenerateBriefingTool(deps),
-    ...(deps.labs ? [buildProposeLabTool(deps.labs), buildArchiveLabTool(deps.labs)] : []),
+    ...(old ? [buildGenerateBriefingTool(deps)] : []),
+    ...(old && deps.labs ? [buildProposeLabTool(deps.labs), buildArchiveLabTool(deps.labs)] : []),
     ...(deps.siteSignIn ? [buildSignInTool(deps.siteSignIn)] : []),
   ];
 }
