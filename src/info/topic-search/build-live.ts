@@ -105,7 +105,11 @@ export const liveResultDeps: BuildResultDeps = {
   },
   repoLookups: () => {
     const lookups = new RepoLookups();
-    return { lookup: (name) => lookups.lookup(name, { fetchFn: infoFetch }), quotaLeft: () => lookups.quotaRemaining };
+    return {
+      lookup: (name, signal) => lookups.lookup(name, { fetchFn: infoFetch, ...(signal ? { signal } : {}) }),
+      quotaLeft: () => lookups.quotaRemaining,
+      lookupMany: (names, signal) => lookups.lookupMany(names, { fetchFn: infoFetch, signal }),
+    };
   },
   files: {
     read: async (path) => ((await appData.exists(path)) ? await appData.readText(path) : null),

@@ -5,6 +5,7 @@
 import { expect, test } from "bun:test";
 import {
   GithubRateLimitError,
+  LOOKUP_CONCURRENCY,
   lookupRepoFacts,
   repoHandle,
   RepoLookups,
@@ -170,4 +171,47 @@ test("a missing repo is remembered and a malformed handle costs nothing", async 
   expect(await lookups.lookup("not a repo", gone)).toEqual({ kind: "missing" });
   expect(gone.urls).toHaveLength(1);
   expect(lookups.used).toBe(1);
+});
+
+test("a request that hangs is given up after the timeout, and the run's own abort still wins", async () => {
+  // The run of 2026-10-22: one /repos answer took 288 s and the run waited for it.
+  const hang: FetchFn = (_url, init) =>
+    new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason), { once: true }));
+  await expect(lookupRepoFacts("openai/whisper", { fetchFn: hang, timeoutMs: 20 })).rejects.toThrow(
+    "GitHub did not answer within 0 s for https://api.github.com/repos/openai/whisper",
+  );
+  const run = new AbortController();
+  const asked = lookupRepoFacts("openai/whisper", { fetchFn: hang, signal: run.signal, timeoutMs: 10_000 });
+  run.abort(new Error("run stopped"));
+  await expect(asked).rejects.toThrow("run stopped");
+});
+
+test("lookupMany asks several repos side by side, within the quota counting those in flight, and lookup answers from memory", async () => {
+  let open = 0;
+  let most = 0;
+  const urls: string[] = [];
+  // 12 left: three lookups' worth (three requests each), whatever is in flight.
+  const fetchFn: FetchFn = async (url) => {
+    urls.push(url);
+    open++;
+    most = Math.max(most, open);
+    await new Promise((r) => setTimeout(r, 5));
+    open--;
+    const path = new URL(url).pathname;
+    if (path.endsWith("/releases/latest")) return json(RELEASE, 200, 12);
+    if (path.endsWith("/commits")) return json(COMMITS, 200, 12);
+    const [, , owner, repo] = path.split("/");
+    return json({ ...REPO, full_name: `${owner}/${repo}` }, 200, 12);
+  };
+  const lookups = new RepoLookups();
+  const names = ["a/one", "a/two", "a/three", "a/four", "a/five", "a/six"];
+  await lookups.lookupMany(names, { fetchFn });
+  expect(most).toBeGreaterThan(1);
+  expect(most).toBeLessThanOrEqual(LOOKUP_CONCURRENCY);
+  // The first answers report 12 left: room for three more lookups beyond those in flight, never a fourth.
+  expect(lookups.used).toBeLessThanOrEqual(LOOKUP_CONCURRENCY + 3);
+  const sent = urls.length;
+  const again = await lookups.lookup("a/one", { fetchFn });
+  expect(again.kind).toBe("found");
+  expect(urls.length).toBe(sent);
 });

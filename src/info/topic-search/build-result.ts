@@ -261,7 +261,12 @@ export interface BuildResultDeps {
    */
   arxivIdOfDoi?: DoiLookup;
   /** A fresh counted GitHub lookup for one run (github-lookup.ts RepoLookups). */
-  repoLookups(): { lookup(fullName: string): Promise<RepoLookup>; quotaLeft(): number | null };
+  repoLookups(): {
+    lookup(fullName: string, signal?: AbortSignal): Promise<RepoLookup>;
+    quotaLeft(): number | null;
+    /** Several side by side (github-lookup.ts lookupMany); absent: one at a time as read. */
+    lookupMany?(fullNames: readonly string[], signal: AbortSignal): Promise<void>;
+  };
   files: ResultFiles;
   /** The reader's profile statements (docs/soul/48), text only. */
   profile(): Promise<string[]>;
@@ -789,6 +794,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     target ? highestNumber(target.materials.map((m) => m.id)) : 0,
   );
   const sourceDeps = sourceDepsOf(deps, xPages, dois);
+  await lookUpDraftRepos(chosen.filter((d) => !(d.continuing && d.previous)), sourceDeps, dois.keyOfUrl, signal);
   const items: TopicSearchResultItem[] = [];
   for (const [i, d] of chosen.entries()) {
     throwIfAborted(signal);
@@ -983,12 +989,24 @@ export function sourceDepsOf(deps: BuildResultDeps, xPages: XPageBudget, dois: {
   return {
     fetchText: deps.fetchText,
     openLink,
-    lookupRepo: (n: string) => lookups.lookup(n),
+    lookupRepo: (n: string, s?: AbortSignal) => lookups.lookup(n, s),
     repoQuotaLeft: () => lookups.quotaLeft(),
+    ...(lookups.lookupMany ? { lookupRepos: lookups.lookupMany } : {}),
     ...(deps.readPdfText ? { readPdfText: deps.readPdfText } : {}),
     ...(deps.resolveShortLink ? { resolveShortLink: deps.resolveShortLink } : {}),
     arxivIdOfDoi: (doi, s) => dois.resolve(doi, s),
   };
+}
+
+/**
+ * The repos the drafts about to be read name, looked up side by side first
+ * (within GitHub's quota and the run's cap, RepoLookups), so the serial reads
+ * that follow find them answered.
+ */
+export async function lookUpDraftRepos(drafts: readonly Draft[], sourceDeps: SourceDeps, keyOfUrl: (url: string) => string | null, signal: AbortSignal): Promise<void> {
+  if (!sourceDeps.lookupRepos) return;
+  const names = drafts.flatMap((d) => targetsOf(d, keyOfUrl)).flatMap((t) => (t.kind === "repo" ? [`${t.owner}/${t.repo}`] : []));
+  if (names.length) await sourceDeps.lookupRepos([...new Set(names)], signal);
 }
 
 /** What `itemOfDraft` needs of the run. */

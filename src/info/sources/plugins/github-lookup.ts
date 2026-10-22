@@ -10,6 +10,9 @@
 // already asked about, and stops asking once GitHub reports too little quota
 // left for another lookup. The run reads its counters for the result file.
 //
+// Each request gives up after REQUEST_TIMEOUT_MS. Several lookups may run side
+// by side (lookupMany); the quota check counts those still in flight.
+//
 // Every request goes through the injected fetch, so tests script it.
 
 import { throwIfAborted } from "../../../platform/app/abort";
@@ -26,6 +29,10 @@ const HEADERS = {
 export const REQUESTS_PER_LOOKUP = 3;
 /** Repos a run looks up at most (docs/88, initial value). */
 export const DEFAULT_REPO_LOOKUPS = 30;
+/** How long one request may take before it is given up: one hung answer must not stall a run (seen 288 s, 2026-10-22). */
+export const REQUEST_TIMEOUT_MS = 20_000;
+/** Lookups run side by side when a run asks for several at once. */
+export const LOOKUP_CONCURRENCY = 4;
 
 export interface RepoFacts {
   /** "owner/repo" as GitHub spells it (after a rename, the new name). */
@@ -47,6 +54,8 @@ export interface RepoFacts {
 export interface LookupDeps {
   fetchFn: FetchFn;
   signal?: AbortSignal;
+  /** Per request; REQUEST_TIMEOUT_MS when absent. */
+  timeoutMs?: number;
 }
 
 /** GitHub said the anonymous quota is spent (403/429 with no requests remaining). */
@@ -85,9 +94,15 @@ function headerInt(res: Response, name: string): number | null {
 
 async function getJson(url: string, deps: LookupDeps, seen: (remaining: number | null) => void): Promise<Got> {
   throwIfAborted(deps.signal);
-  const init: RequestInit = { headers: HEADERS };
-  if (deps.signal) init.signal = deps.signal;
-  const res = await deps.fetchFn(url, init);
+  const timeout = AbortSignal.timeout(deps.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  const init: RequestInit = { headers: HEADERS, signal: deps.signal ? AbortSignal.any([deps.signal, timeout]) : timeout };
+  let res: Response;
+  try {
+    res = await deps.fetchFn(url, init);
+  } catch (e) {
+    if (timeout.aborted && !deps.signal?.aborted) throw new Error(`GitHub did not answer within ${Math.round((deps.timeoutMs ?? REQUEST_TIMEOUT_MS) / 1000)} s for ${url}`);
+    throw e;
+  }
   const remaining = headerInt(res, "x-ratelimit-remaining");
   seen(remaining);
   if ((res.status === 403 || res.status === 429) && remaining === 0) {
@@ -191,6 +206,8 @@ export class RepoLookups {
   private sent = 0;
   private quota: number | null = null;
   private spent = false;
+  private inFlight = 0;
+  private readonly pending = new Map<string, Promise<RepoLookup>>();
 
   constructor(readonly cap: number = DEFAULT_REPO_LOOKUPS) {}
 
@@ -215,13 +232,40 @@ export class RepoLookups {
     const ref = repoHandle(handle);
     if (!ref) return { kind: "missing" };
     const key = `${ref.owner}/${ref.repo}`.toLowerCase();
-    const known = this.answers.get(key);
+    const known = this.answers.get(key) ?? this.pending.get(key);
     if (known) return known;
     if (this.asked >= this.cap) return { kind: "skipped", reason: "cap" };
-    if (this.spent || (this.quota !== null && this.quota < REQUESTS_PER_LOOKUP)) {
+    // Lookups in flight will spend theirs from the quota last seen.
+    if (this.spent || (this.quota !== null && this.quota - this.inFlight * REQUESTS_PER_LOOKUP < REQUESTS_PER_LOOKUP)) {
       return { kind: "skipped", reason: "quota" };
     }
     this.asked++;
+    this.inFlight++;
+    const asking = this.ask(handle, key, deps).finally(() => {
+      this.inFlight--;
+      this.pending.delete(key);
+    });
+    this.pending.set(key, asking);
+    return asking;
+  }
+
+  /**
+   * Look several repos up, LOOKUP_CONCURRENCY at a time, under the same cap and
+   * quota as one by one; the answers are remembered for `lookup`. A failed
+   * lookup is left for `lookup` to meet again.
+   */
+  async lookupMany(handles: readonly string[], deps: LookupDeps): Promise<void> {
+    const queue = [...handles];
+    const worker = async () => {
+      for (let h = queue.shift(); h !== undefined; h = queue.shift()) {
+        if (deps.signal?.aborted) return;
+        await this.lookup(h, deps).catch(() => {});
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(LOOKUP_CONCURRENCY, queue.length) }, worker));
+  }
+
+  private async ask(handle: string, key: string, deps: LookupDeps): Promise<RepoLookup> {
     let facts: RepoFacts | null;
     try {
       facts = await lookupRepoFacts(handle, deps, (remaining) => {

@@ -292,10 +292,10 @@ describe("a first run, then a day, then a quiet day", () => {
     const materials = first.items.find((i) => i.key === "arxiv:2610.00001")!;
     expect(first.materials.find((x) => x.id === materials.materials[0])!.facts.body).toBe("abstract only");
 
-    // A repo: README and listing read, stars from the lookup.
+    // A repo: README read, stars from the lookup; the top level is not listed (no API request the book does not use).
     const repo = first.items.find((i) => i.key === "github:yashgurbani/amino-arcade")!;
     expect(repo.facts).toMatchObject({ kind: "repo", fullName: "yashgurbani/amino-arcade", stars: 42, lookedUp: true, license: "MIT" });
-    expect(first.materials.find((x) => x.id === repo.materials[0])!.sections.map((s) => s.heading)).toEqual(["Amino Arcade", "Install", "Top-level files"]);
+    expect(first.materials.find((x) => x.id === repo.materials[0])!.sections.map((s) => s.heading)).toEqual(["Amino Arcade", "Install"]);
 
     // A page through the open route, and an X Article that is its own original.
     expect(first.items.find((i) => i.kind === "page")?.title).toBe("From code to cancer: NUS Computing's expanding role in AI for science");

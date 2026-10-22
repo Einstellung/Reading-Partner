@@ -293,14 +293,25 @@ test("a post whose links could not be read still tells the write-up why in plain
   ]);
 });
 
-test("a repository's README is one call to GitHub's readme endpoint, decoded from base64", async () => {
+test("a repository's README comes off raw.githubusercontent at no API cost, and nothing else is asked of the API", async () => {
+  const urls: string[] = [];
+  const fetchText: FetchText = async (url) => {
+    urls.push(url);
+    return url === "https://raw.githubusercontent.com/acme/tool/HEAD/README.md" ? { status: 200, text: "# Tool\n\nReads cells." } : { status: 404, text: "" };
+  };
+  const got = await readSource({ kind: "repo", owner: "acme", repo: "tool", url: "https://github.com/acme/tool" }, deps({ fetchText }), signal);
+  expect(urls).toEqual(["https://raw.githubusercontent.com/acme/tool/HEAD/README.md"]);
+  expect(got.steps.find((s) => s.step === "readme")).toMatchObject({ ok: true });
+});
+
+test("a README raw does not find by its common filenames is one call to GitHub's readme endpoint, decoded from base64", async () => {
   const urls: string[] = [];
   const fetchText: FetchText = async (url) => {
     urls.push(url);
     return url === "https://api.github.com/repos/acme/tool/readme" ? readmeAnswer("# Tool\n\nCafé-grade ünïcode, 3 commands.") : { status: 404, text: "" };
   };
   const got = await readSource({ kind: "repo", owner: "acme", repo: "tool", url: "https://github.com/acme/tool" }, deps({ fetchText }), signal);
-  expect(urls.filter((u) => u.includes("readme") || u.includes("raw.githubusercontent"))).toEqual(["https://api.github.com/repos/acme/tool/readme"]);
+  expect(urls.filter((u) => u.startsWith("https://api.github.com/"))).toEqual(["https://api.github.com/repos/acme/tool/readme"]);
   expect(got.steps.find((s) => s.step === "readme")).toMatchObject({ ok: true });
   expect(JSON.stringify(got)).toContain("Café-grade ünïcode");
 });

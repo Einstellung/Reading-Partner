@@ -31,7 +31,7 @@ import { inspectFetchedPage } from "../../workshop/bindery/gate";
 import { htmlToText } from "../../workshop/extract/sanitize";
 import { htmlSections, markdownSections, type MaterialInput, type MaterialReader, type MaterialRegistry } from "../dossier/registry";
 import { arxivIdUrl, arxivPdfUrl, parseArxivAtom } from "../sources/plugins/arxiv-client";
-import type { RepoLookup } from "../sources/plugins/github-lookup";
+import { REQUEST_TIMEOUT_MS, type RepoLookup } from "../sources/plugins/github-lookup";
 import { isXHost } from "../x/post";
 import type { XSearchPost } from "../x/search-page";
 import { linkKey, postLinksOut } from "../x/text-links";
@@ -63,8 +63,8 @@ export const ORIGINALS_PER_ITEM = 2;
 const COMPARE_MATERIAL_CHARS = 8000;
 /** pitfall 377: a converted arXiv HTML paper has more text than this. */
 const ARXIV_HTML_MIN_CHARS = 8000;
-/** GitHub requests this run keeps back for lookups before it lists a repo's top level. */
-const LISTING_RESERVE = 6;
+/** GitHub API requests this run keeps back for lookups before it asks the API for a README raw did not find. */
+const README_API_RESERVE = 6;
 
 export interface FetchedText {
   status: number;
@@ -101,10 +101,16 @@ export type OpenLink = (url: string, signal: AbortSignal) => Promise<OpenedLink>
 export interface SourceDeps {
   fetchText: FetchText;
   openLink: OpenLink;
-  /** The run's counted repo lookup (github-lookup.ts RepoLookups). */
-  lookupRepo(fullName: string): Promise<RepoLookup>;
+  /** The run's counted repo lookup (github-lookup.ts RepoLookups); `signal` is the run's. */
+  lookupRepo(fullName: string, signal?: AbortSignal): Promise<RepoLookup>;
   /** GitHub's requests left this hour as last seen; null before any request. */
   repoQuotaLeft(): number | null;
+  /**
+   * Look these repos up side by side before they are read, under the same
+   * counted lookup, so the reads find them answered. Absent: each is looked up
+   * when it is read.
+   */
+  lookupRepos?(fullNames: readonly string[], signal: AbortSignal): Promise<void>;
   /**
    * A PDF's text layer, or null when it is not a PDF or has no text layer;
    * throws, saying the HTTP status, when the fetch failed. With `bytes` (a PDF
@@ -450,12 +456,15 @@ function decodeReadme(body: string): string {
   return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
 }
 
+/** The run's signal, and a GitHub request given up after REQUEST_TIMEOUT_MS (failing that read, not the run). */
+const timed = (signal: AbortSignal) => AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]);
+
 type ReadmeRead = { ok: true; text: string } | { ok: false; why: ReadFailure };
 
-/** One call: GitHub finds the README whatever its filename or branch. */
+/** One API call: GitHub finds the README whatever its filename or branch. */
 async function readmeFromApi(name: string, deps: SourceDeps, signal: AbortSignal): Promise<ReadmeRead> {
   try {
-    const res = await deps.fetchText(`https://api.github.com/repos/${name}/readme`, signal);
+    const res = await deps.fetchText(`https://api.github.com/repos/${name}/readme`, timed(signal));
     if (res.status === 404) return { ok: false, why: failure("readme", "not_found", "the repository has no README") };
     if (res.status !== 200) return { ok: false, why: failure("readme", codeOfStatus(res.status), `the README answered HTTP ${res.status}`) };
     const text = decodeReadme(res.text);
@@ -466,12 +475,12 @@ async function readmeFromApi(name: string, deps: SourceDeps, signal: AbortSignal
   }
 }
 
-/** Without API quota to spare: the common README filenames on the default branch, which cost none. */
+/** The common README filenames on the default branch, off raw.githubusercontent, which costs no API quota. */
 async function readmeFromRaw(name: string, deps: SourceDeps, signal: AbortSignal): Promise<ReadmeRead> {
   let why = failure("readme", "not_found", "the repository has no README");
   for (const file of ["README.md", "readme.md", "README.rst", "README"]) {
     try {
-      const res = await deps.fetchText(`https://raw.githubusercontent.com/${name}/HEAD/${file}`, signal);
+      const res = await deps.fetchText(`https://raw.githubusercontent.com/${name}/HEAD/${file}`, timed(signal));
       if (res.status === 200 && res.text.trim()) return { ok: true, text: res.text };
       if (res.status !== 404 && res.status !== 200) why = failure("readme", codeOfStatus(res.status), `the README answered HTTP ${res.status}`);
     } catch (e) {
@@ -487,7 +496,7 @@ async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, 
   const steps: StepRecord[] = [];
   let lookup: RepoLookup;
   try {
-    lookup = await deps.lookupRepo(full);
+    lookup = await deps.lookupRepo(full, signal);
     if (lookup.kind === "found") steps.push(okStep("lookup"));
     else if (lookup.kind === "skipped") steps.push(failedStep(failure("lookup", "budget_spent", `the GitHub lookup was not made (${lookup.reason})`)));
   } catch (e) {
@@ -499,26 +508,15 @@ async function readRepo(t: Extract<Target, { kind: "repo" }>, deps: SourceDeps, 
   const found = lookup.kind === "found" ? lookup.facts : null;
   const name = found?.fullName ?? full;
   const sections: { heading: string | null; text: string }[] = [];
-  // GitHub's API answers 60 requests an hour without a key; the lookups come first.
+  // GitHub's API answers 60 requests an hour without a key and the lookup spends
+  // three (the facts the book prints). The README comes off raw.githubusercontent,
+  // which costs none; the API is asked only for one raw did not find (an unusual
+  // filename), while the quota keeps a reserve for the lookups.
+  let readme = await readmeFromRaw(name, deps, signal);
   const quota = deps.repoQuotaLeft();
-  const apiLeft = quota === null || quota > LISTING_RESERVE;
-  const readme = apiLeft ? await readmeFromApi(name, deps, signal) : await readmeFromRaw(name, deps, signal);
+  if (!readme.ok && readme.why.code === "not_found" && (quota === null || quota > README_API_RESERVE)) readme = await readmeFromApi(name, deps, signal);
   if (readme.ok) sections.push(...markdownSections(readme.text));
   steps.push(readme.ok ? okStep("readme") : failedStep(readme.why));
-  if (apiLeft) {
-    try {
-      const res = await deps.fetchText(`https://api.github.com/repos/${name}/contents`, signal);
-      const list = res.status === 200 ? (JSON.parse(res.text) as unknown) : null;
-      if (Array.isArray(list)) {
-        const names = list
-          .filter((e): e is { name: string; type: string } => !!e && typeof e.name === "string")
-          .map((e) => (e.type === "dir" ? `${e.name}/` : e.name));
-        if (names.length) sections.push({ heading: "Top-level files", text: names.join("\n") });
-      }
-    } catch (e) {
-      if (signal.aborted) throw e;
-    }
-  }
   if (sections.length === 0 && !found) return unread(steps, `neither the README nor the facts of ${full} could be read`);
   const facts: ResultFacts = {
     kind: "repo",

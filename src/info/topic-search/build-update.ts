@@ -30,6 +30,7 @@ import {
   draftOf,
   itemOfDraft,
   loadHistory,
+  lookUpDraftRepos,
   lookUpPinned,
   MAX_MODEL_CALLS,
   RESULT_ITEMS,
@@ -265,6 +266,10 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
     }
   };
   const sourceDeps = sourceDepsOf(deps, args.xPages, dois);
+  const toRead = diff.entries
+    .filter((e) => !e.keep && !e.from)
+    .flatMap((e) => chosen.filter((c) => c.cluster.lead.key === e.key || c.keys.includes(e.key)).slice(0, 1));
+  await lookUpDraftRepos(toRead, sourceDeps, dois.keyOfUrl, signal);
   const toWrite = diff.entries.filter((e) => !e.keep).length;
   say(`writing ${toWrite} new or rewritten entr${toWrite === 1 ? "y" : "ies"} of version ${version}`);
   let last = highestNumber(target.items.map((i) => i.id));
