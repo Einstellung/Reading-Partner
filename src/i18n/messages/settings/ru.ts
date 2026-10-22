@@ -126,6 +126,10 @@ export default {
   "optional.s2Placeholder": "Необязательно",
   "optional.s2Hint":
     "Бесплатный ключ с semanticscholar.org позволяет обойти общие ограничения частоты запросов, из-за которых загрузка статей зависает.",
+  "optional.openAlexKey": "API-ключ OpenAlex (необязательно)",
+  "optional.openAlexPlaceholder": "Необязательно",
+  "optional.openAlexHint":
+    "Бесплатный ключ с openalex.org лишь повышает лимит запросов; поиск статей работает и без него.",
   "optional.voiceInput": "Голосовой ввод",
   "optional.voiceOutput": "Голосовой вывод",
   "optional.voiceCall": "Голосовой вызов",

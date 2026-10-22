@@ -116,6 +116,10 @@ export default {
   "optional.s2Key": "Semantic Scholar API 密钥",
   "optional.s2Placeholder": "可选",
   "optional.s2Hint": "在 semanticscholar.org 免费申请一个密钥，可以避开导致论文抓取卡住的共享速率限制。",
+  "optional.openAlexKey": "OpenAlex API 密钥（可选）",
+  "optional.openAlexPlaceholder": "可选",
+  "optional.openAlexHint":
+    "在 openalex.org 免费申请的密钥只会提高请求上限；不填也能查论文。",
   "optional.voiceInput": "语音输入",
   "optional.voiceOutput": "语音输出",
   "optional.voiceCall": "语音通话",

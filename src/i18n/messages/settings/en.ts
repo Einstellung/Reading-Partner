@@ -121,6 +121,10 @@ export default {
   "optional.s2Placeholder": "Optional",
   "optional.s2Hint":
     "A free key from semanticscholar.org avoids the shared rate limits that make paper fetching stall.",
+  "optional.openAlexKey": "OpenAlex API key (optional)",
+  "optional.openAlexPlaceholder": "Optional",
+  "optional.openAlexHint":
+    "A free key from openalex.org only raises the request limit; paper lookups work without it.",
   "optional.voiceInput": "Voice input",
   "optional.voiceOutput": "Voice output",
   "optional.voiceCall": "Voice call",

@@ -88,6 +88,7 @@ test("loadSettings round-trips a fully persisted object", async () => {
     voiceFrontModelId: "haiku",
     voiceFrontThinking: "low",
     semanticScholarApiKey: "k",
+    openAlexApiKey: "oa",
     chatThinking: "high",
     prepThinking: "off",
     briefingScreenThinking: "off",

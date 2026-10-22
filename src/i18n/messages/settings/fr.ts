@@ -121,6 +121,10 @@ export default {
   "optional.s2Placeholder": "Facultatif",
   "optional.s2Hint":
     "Une clé gratuite de semanticscholar.org évite les limites de débit partagées qui bloquent la récupération des articles.",
+  "optional.openAlexKey": "Clé API OpenAlex (facultatif)",
+  "optional.openAlexPlaceholder": "Facultatif",
+  "optional.openAlexHint":
+    "Une clé gratuite d'openalex.org ne fait que relever la limite de requêtes ; la recherche d'articles fonctionne sans elle.",
   "optional.voiceInput": "Saisie vocale",
   "optional.voiceOutput": "Sortie vocale",
   "optional.voiceCall": "Appel vocal",

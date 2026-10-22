@@ -134,6 +134,9 @@ export interface Settings {
   // Optional Semantic Scholar API key. When set, prep fetches use it instead of
   // the shared free rate-limit pool.
   semanticScholarApiKey: string | null;
+  // Optional OpenAlex API key (docs/info/92). Without one OpenAlex still answers,
+  // at a lower request limit; with one the limits rise. Synced like the key above.
+  openAlexApiKey: string | null;
   // The reader's own Google Programmable Search key and search engine id
   // (docs/73 图片). Both or neither: with them the meals screen looks a dish
   // up in a general web image search, which has a picture for any name the
@@ -214,6 +217,7 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceFrontModelId: null,
   voiceFrontThinking: "off",
   semanticScholarApiKey: null,
+  openAlexApiKey: null,
   chatThinking: "low",
   prepThinking: "medium",
   briefingScreenThinking: "low",

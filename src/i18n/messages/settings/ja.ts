@@ -121,6 +121,10 @@ export default {
   "optional.s2Placeholder": "任意",
   "optional.s2Hint":
     "semanticscholar.org の無料キーを使うと、論文の取得が止まる原因になる共有レート制限を避けられます。",
+  "optional.openAlexKey": "OpenAlex API キー（任意）",
+  "optional.openAlexPlaceholder": "任意",
+  "optional.openAlexHint":
+    "openalex.org の無料キーはリクエスト上限を引き上げるだけで、なくても論文の検索はできます。",
   "optional.voiceInput": "音声入力",
   "optional.voiceOutput": "音声出力",
   "optional.voiceCall": "音声通話",

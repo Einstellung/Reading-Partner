@@ -121,6 +121,10 @@ export default {
   "optional.s2Placeholder": "Opcional",
   "optional.s2Hint":
     "Una clave gratuita de semanticscholar.org evita los límites de uso compartidos que atascan la descarga de artículos.",
+  "optional.openAlexKey": "Clave de API de OpenAlex (opcional)",
+  "optional.openAlexPlaceholder": "Opcional",
+  "optional.openAlexHint":
+    "Una clave gratuita de openalex.org solo eleva el límite de solicitudes; las consultas de artículos funcionan sin ella.",
   "optional.voiceInput": "Entrada de voz",
   "optional.voiceOutput": "Salida de voz",
   "optional.voiceCall": "Llamada de voz",

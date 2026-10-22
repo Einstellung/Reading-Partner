@@ -118,6 +118,10 @@ export default {
   "optional.s2Key": "Semantic Scholar API 키",
   "optional.s2Placeholder": "선택 사항",
   "optional.s2Hint": "semanticscholar.org의 무료 키를 쓰면 논문 가져오기를 멈추게 하는 공용 요청 한도를 피할 수 있습니다.",
+  "optional.openAlexKey": "OpenAlex API 키(선택 사항)",
+  "optional.openAlexPlaceholder": "선택 사항",
+  "optional.openAlexHint":
+    "openalex.org의 무료 키는 요청 한도를 높여 줄 뿐이며, 없어도 논문 조회는 됩니다.",
   "optional.voiceInput": "음성 입력",
   "optional.voiceOutput": "음성 출력",
   "optional.voiceCall": "음성 통화",

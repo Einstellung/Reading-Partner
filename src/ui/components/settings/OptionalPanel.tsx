@@ -70,6 +70,23 @@ export default function OptionalPanel({
             </Label>
             <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.s2Hint")}</p>
           </div>
+          <div className={CARD}>
+            <Label layout="stack">
+              {t("settings.optional.openAlexKey")}
+              <Input
+                type="password"
+                placeholder={t("settings.optional.openAlexPlaceholder")}
+                value={settings.openAlexApiKey ?? ""}
+                onChange={(e) =>
+                  onSettingsChange({
+                    ...settings,
+                    openAlexApiKey: e.target.value.trim() || null,
+                  })
+                }
+              />
+            </Label>
+            <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.openAlexHint")}</p>
+          </div>
         </SettingsSection>
 
         <SettingsSection title={t("settings.optional.voiceInput")}>

@@ -121,6 +121,10 @@ export default {
   "optional.s2Placeholder": "Optional",
   "optional.s2Hint":
     "Ein kostenloser Schlüssel von semanticscholar.org umgeht die gemeinsamen Ratenlimits, an denen das Laden von Papers hängen bleibt.",
+  "optional.openAlexKey": "OpenAlex-API-Schlüssel (optional)",
+  "optional.openAlexPlaceholder": "Optional",
+  "optional.openAlexHint":
+    "Ein kostenloser Schlüssel von openalex.org erhöht nur das Anfragelimit; Paper-Abfragen funktionieren auch ohne.",
   "optional.voiceInput": "Spracheingabe",
   "optional.voiceOutput": "Sprachausgabe",
   "optional.voiceCall": "Sprachanruf",
