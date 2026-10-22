@@ -55,7 +55,8 @@ for (let i = 0; i < argv.length; i++) {
     if (v === undefined) fail(`${a} needs a value`);
     flags.set(a, v);
   } else if (SWITCHES.has(a)) flags.set(a, true);
-  else if (a === "--round2" || a === "--model") fail(`${a} is not built yet: it needs the second round's gap finder (widen.ts)`);
+  // The second round runs in the build (widen.ts): its gaps, checked searches and their results are in the run directory's widen.json.
+  else if (a === "--round2" || a === "--model") fail(`${a} is not built: read the run directory's widen.json for the second round`);
   else if (a.startsWith("--")) fail(`unknown option ${a}`);
   else positional.push(a);
 }

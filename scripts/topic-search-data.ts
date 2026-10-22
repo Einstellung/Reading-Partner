@@ -15,15 +15,13 @@ import { parseTopicLabelsFile, type ParsedTopicLabels, type TopicLabel } from ".
 import { loadTopicLabels } from "../src/info/topic-search/labels";
 import { parseResultFile, type TopicSearchResult } from "../src/info/topic-search/result-types";
 import { ARXIV_READ_FILE, HF_READ_FILE, runDirOf, X_READ_FILE } from "../src/info/topic-search/run-state";
+import { ARXIV_READ_2_FILE, HF_READ_2_FILE } from "../src/info/topic-search/widen";
 import { parseTopicSearchesFile } from "../src/info/topic-search/topic-searches";
 import type { TopicSearch } from "../src/info/topic-search/types";
 import type { XReadResult } from "../src/info/topic-search/x-reader";
 
 export const APP_DATA = join(homedir(), ".local/share/com.xinyuan.readingpartner");
 export const TOPIC_SEARCHES_FILE = "info-topic-searches.json";
-// The second round's query reads (docs/info/92 第二轮查询).
-export const ARXIV_READ_2_FILE = "arxiv-read-2.json";
-export const HF_READ_2_FILE = "hf-read-2.json";
 
 export function readJson<T>(path: string): T | null {
   if (!existsSync(path)) return null;
