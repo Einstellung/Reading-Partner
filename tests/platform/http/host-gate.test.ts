@@ -12,7 +12,10 @@ import {
   HF_PAPER_SEARCH_LANE,
   isHostCoolingDown,
   memoryStore,
+  OPENALEX_GRAPH_LANE,
   S2_DOI_LANE,
+  S2_GRAPH_LANE,
+  S2_REC_LANE,
   type CooldownStore,
 } from "../../../src/platform/http/host-gate";
 
@@ -276,4 +279,100 @@ test("an aborted caller gives its turn back without sending", async () => {
   expect(err).toBeInstanceOf(Error);
   expect(sent).toBe(0);
   expect((await f("https://export.arxiv.org/b")).status).toBe(200);
+});
+
+// docs/info/92: S2's lanes share the host's clock (a key is one request per
+// second over every endpoint) and each cools down on its own.
+test("S2's graph and recommendation lanes are named by URL", () => {
+  const s2 = "https://api.semanticscholar.org";
+  expect(gateKeyOf(`${s2}/graph/v1/paper/batch?fields=title`)).toBe(S2_GRAPH_LANE);
+  expect(gateKeyOf(`${s2}/graph/v1/paper/ARXIV%3A1706.03762/citations?fields=title&limit=1000`)).toBe(S2_GRAPH_LANE);
+  expect(gateKeyOf(`${s2}/graph/v1/paper/DOI%3A10.1%2Fx/references?limit=500`)).toBe(S2_GRAPH_LANE);
+  expect(gateKeyOf(`${s2}/recommendations/v1/papers/?limit=100`)).toBe(S2_REC_LANE);
+  expect(gateKeyOf(`${s2}/recommendations/v1/papers/forpaper/abc`)).toBe(S2_REC_LANE);
+  expect(gateKeyOf(`${s2}/graph/v1/paper/DOI:10.1103/x?fields=externalIds`)).toBe(S2_DOI_LANE);
+  expect(gateKeyOf(`${s2}/graph/v1/paper/search?query=batch`)).toBe("api.semanticscholar.org");
+  expect(gateKeyOf(`${s2}/graph/v1/paper/ARXIV%3A1706.03762?fields=title`)).toBe("api.semanticscholar.org");
+});
+
+test("S2 and all its lanes are spaced on one clock", async () => {
+  const clock = fakeClock();
+  const gate = createHostGate({ clock, store: memoryStore() });
+  const sent: number[] = [];
+  const f = gatedFetch(
+    async () => {
+      sent.push(clock.t);
+      return ok();
+    },
+    0,
+    gate,
+  );
+  await Promise.all([
+    f("https://api.semanticscholar.org/graph/v1/paper/batch"),
+    f("https://api.semanticscholar.org/recommendations/v1/papers/"),
+    f("https://api.semanticscholar.org/graph/v1/paper/p1/citations"),
+    f("https://api.semanticscholar.org/graph/v1/paper/DOI:10.1/x"),
+    f("https://api.semanticscholar.org/graph/v1/paper/search?query=a"),
+  ]);
+  expect(sent).toEqual([1_000_000, 1_001_500, 1_003_000, 1_004_500, 1_006_000]);
+});
+
+test("a 429 cools down only the S2 lane that drew it", async () => {
+  const clock = fakeClock();
+  const gate = createHostGate({ clock, store: memoryStore() });
+  const sent: string[] = [];
+  const f = gatedFetch(
+    async (url) => {
+      sent.push(String(url));
+      return String(url).includes("/citations") ? new Response("", { status: 429, headers: { "retry-after": "1200" } }) : ok();
+    },
+    0,
+    gate,
+  );
+  expect((await f("https://api.semanticscholar.org/graph/v1/paper/p1/citations")).status).toBe(429);
+  const err = await f("https://api.semanticscholar.org/graph/v1/paper/batch").catch((e) => e);
+  expect(isHostCoolingDown(err)).toBe(true);
+  expect(err.until).toBe(clock.t + 20 * 60_000);
+  expect(gate.coolingDown(S2_GRAPH_LANE)).not.toBeNull();
+  // The other lanes and the host go on.
+  expect((await f("https://api.semanticscholar.org/recommendations/v1/papers/")).status).toBe(200);
+  expect((await f("https://api.semanticscholar.org/graph/v1/paper/DOI:10.1/x")).status).toBe(200);
+  expect((await f("https://api.semanticscholar.org/graph/v1/paper/search?query=a")).status).toBe(200);
+  expect(gate.coolingDown(S2_REC_LANE)).toBeNull();
+  expect(gate.coolingDown(S2_DOI_LANE)).toBeNull();
+  expect(sent.length).toBe(4);
+  // And the recommendations lane cools on its own 429.
+  await gate.observe(S2_REC_LANE, new Response("", { status: 429 }));
+  expect(gate.coolingDown(S2_REC_LANE)).not.toBeNull();
+  expect(gate.coolingDown("api.semanticscholar.org")).toBeNull();
+});
+
+test("OpenAlex's graph lane: works by id and the cites and id filters, spaced with the host, cooled alone", async () => {
+  const oa = "https://api.openalex.org";
+  expect(gateKeyOf(`${oa}/works/doi:10.48550/arXiv.1706.03762?select=id`)).toBe(OPENALEX_GRAPH_LANE);
+  expect(gateKeyOf(`${oa}/works/W2626778328`)).toBe(OPENALEX_GRAPH_LANE);
+  expect(gateKeyOf(`${oa}/works?filter=cites:W1,from_publication_date:2025-10-22&per-page=100`)).toBe(OPENALEX_GRAPH_LANE);
+  expect(gateKeyOf(`${oa}/works?filter=openalex_id:W1|W2&per-page=50`)).toBe(OPENALEX_GRAPH_LANE);
+  expect(gateKeyOf(`${oa}/works?filter=title.search:attention&per-page=5`)).toBe("api.openalex.org");
+  expect(gateKeyOf(`${oa}/works?search=cites:x&per-page=5`)).toBe("api.openalex.org");
+  expect(gateKeyOf(`${oa}/works`)).toBe("api.openalex.org");
+
+  const clock = fakeClock();
+  const gate = createHostGate({ clock, store: memoryStore() });
+  const sent: number[] = [];
+  const f = gatedFetch(
+    async (url) => {
+      sent.push(clock.t);
+      return String(url).includes("cites:") ? new Response("", { status: 429 }) : ok();
+    },
+    0,
+    gate,
+  );
+  await f(`${oa}/works?search=a`);
+  await f(`${oa}/works/W1`);
+  expect((await f(`${oa}/works?filter=cites:W1`)).status).toBe(429);
+  expect(sent).toEqual([1_000_000, 1_000_500, 1_001_000]);
+  expect(isHostCoolingDown(await f(`${oa}/works/W2`).catch((e) => e))).toBe(true);
+  expect((await f(`${oa}/works?search=b`)).status).toBe(200);
+  expect(gate.coolingDown("api.openalex.org")).toBeNull();
 });

@@ -8,9 +8,10 @@
 // - spacing: a minimum gap between requests. A serial group also lets one
 //   request out at a time and measures the gap from the previous answer, which
 //   is what arXiv asks for (one request per three seconds, one connection).
-// - cooldown (arXiv, Hugging Face, S2's DOI lookup): once a host answers with its rate limit,
-//   nothing goes to that host from any caller until a backoff passes; the
-//   group's other hosts keep their turns. The backoff grows
+// - cooldown, per lane rather than per group (arXiv, Hugging Face, S2's DOI
+//   lookup, citation graph and recommendations, OpenAlex's citation graph): once
+//   a lane answers with its rate limit, nothing goes to it from any caller until
+//   a backoff passes; the group's other lanes keep their turns. The backoff grows
 //   on repeats, is never shorter than the Retry-After asked for, and is kept in
 //   localStorage so a restart does not go straight back to the host.
 
@@ -31,7 +32,7 @@ export function isRateLimitError(e: unknown): e is RateLimitError {
   return e instanceof RateLimitError;
 }
 
-// Thrown instead of sending a request while the host's group is cooling down
+// Thrown instead of sending a request while the host or lane is cooling down
 // from an earlier rate limit. A rate limit like any other to callers that only
 // ask isRateLimitError; one that wants to say "nothing was sent" asks for this.
 // `refused` marks the one request that was sent and drew the rate limit.
@@ -75,8 +76,6 @@ export interface GroupPolicy {
   intervalMs: number;
   // One request at a time; the gap runs from the previous answer.
   serial: boolean;
-  // A rate-limit answer stops the whole group for a while.
-  cooldown: boolean;
 }
 
 // Hugging Face's paper search has a rate-limit bucket of its own (50 requests
@@ -91,25 +90,68 @@ export const HF_PAPER_SEARCH_LANE = "huggingface.co/api/papers/search";
 // S2's other callers, which wait out their 429s.
 export const S2_DOI_LANE = "api.semanticscholar.org/graph/v1/paper/DOI";
 
+// A study's graph expansion (docs/info/92): the id batch and the citation and
+// reference walks, and the recommendations, each best effort the same way. The
+// reading side's citation walk goes through the graph lane too, and is skipped
+// while it cools down.
+export const S2_GRAPH_LANE = "api.semanticscholar.org/graph/v1/paper/batch+edges";
+export const S2_REC_LANE = "api.semanticscholar.org/recommendations";
+
+// OpenAlex's side of the same walk, its fallback: works by id (`/works/{id}`)
+// and the `cites:` and `openalex_id:` filters. Searches stay on the host.
+export const OPENALEX_GRAPH_LANE = "api.openalex.org/works+graph";
+
+const S2_EDGES_PATH = /^\/graph\/v1\/paper\/.+\/(citations|references)\/?$/;
+const OPENALEX_GRAPH_FILTER = /(^|,)(cites|openalex_id):/;
+
 /** The gate key of a request: its hostname, or the lane a host splits into. */
 export function gateKeyOf(url: string): string {
   const u = new URL(url);
-  if (u.hostname === "huggingface.co" && u.pathname.startsWith("/api/papers/search")) return HF_PAPER_SEARCH_LANE;
-  if (u.hostname === "api.semanticscholar.org" && u.pathname.startsWith("/graph/v1/paper/DOI:")) return S2_DOI_LANE;
+  const path = u.pathname;
+  if (u.hostname === "huggingface.co" && path.startsWith("/api/papers/search")) return HF_PAPER_SEARCH_LANE;
+  if (u.hostname === "api.semanticscholar.org") {
+    if (path.startsWith("/recommendations/")) return S2_REC_LANE;
+    if (path === "/graph/v1/paper/batch" || S2_EDGES_PATH.test(path)) return S2_GRAPH_LANE;
+    if (path.startsWith("/graph/v1/paper/DOI:")) return S2_DOI_LANE;
+  }
+  if (u.hostname === "api.openalex.org") {
+    if (path.startsWith("/works/") && path.length > "/works/".length) return OPENALEX_GRAPH_LANE;
+    if (path === "/works" && OPENALEX_GRAPH_FILTER.test(u.searchParams.get("filter") ?? "")) return OPENALEX_GRAPH_LANE;
+  }
   return u.hostname;
 }
 
-// Hosts that share one clock. arXiv's one-request-per-three-seconds rule is per
-// IP across its hosts, so the export API, the abstract/HTML pages and the PDFs
-// are one group for spacing.
+// Hosts and lanes that share one clock. arXiv's one-request-per-three-seconds
+// rule is per IP across its hosts, so the export API, the abstract/HTML pages and
+// the PDFs are one group for spacing. An S2 key is one request per second over
+// every endpoint together, so S2 and all its lanes are one group too.
 export const HOST_GROUP: Record<string, string> = {
   "arxiv.org": "arxiv",
   "www.arxiv.org": "arxiv",
   "export.arxiv.org": "arxiv",
   "huggingface.co": "huggingface",
   [HF_PAPER_SEARCH_LANE]: "huggingface-search",
-  [S2_DOI_LANE]: "semanticscholar-doi",
+  "api.semanticscholar.org": "semanticscholar",
+  [S2_DOI_LANE]: "semanticscholar",
+  [S2_GRAPH_LANE]: "semanticscholar",
+  [S2_REC_LANE]: "semanticscholar",
+  "api.openalex.org": "openalex",
+  [OPENALEX_GRAPH_LANE]: "openalex",
 };
+
+// The hosts and lanes a rate limit cools down. The rest of S2 and OpenAlex wait
+// out their 429s in the retry loop instead.
+export const COOLS_DOWN: ReadonlySet<string> = new Set([
+  "arxiv.org",
+  "www.arxiv.org",
+  "export.arxiv.org",
+  "huggingface.co",
+  HF_PAPER_SEARCH_LANE,
+  S2_DOI_LANE,
+  S2_GRAPH_LANE,
+  S2_REC_LANE,
+  OPENALEX_GRAPH_LANE,
+]);
 
 // A cooldown is kept per host, not per group: the export API rate-limits on its
 // own while arxiv.org's pages and PDFs still answer (seen 2026-10-17/18), so its
@@ -122,19 +164,19 @@ const cooldownKeyOf = (host: string): string => COOLDOWN_KEY[host] ?? host;
 
 export const GROUP_POLICY: Record<string, GroupPolicy> = {
   // arXiv's usage policy: one request per three seconds, one connection.
-  arxiv: { intervalMs: 3000, serial: true, cooldown: true },
-  // Semantic Scholar's shared free pool is happier with spacing too.
-  "api.semanticscholar.org": { intervalMs: 1500, serial: false, cooldown: false },
-  // Polite pool allows 10 req/s; stay well under it.
-  "api.openalex.org": { intervalMs: 500, serial: false, cooldown: false },
+  arxiv: { intervalMs: 3000, serial: true },
+  // An S2 key's one request per second, with room; the shared free pool is
+  // happier with spacing too.
+  semanticscholar: { intervalMs: 1500, serial: false },
+  // Keyless OpenAlex allows 10 req/s; stay well under it.
+  openalex: { intervalMs: 500, serial: false },
   // NCBI E-utilities allow 3 requests/second without a key, and a topic search
   // is two calls (esearch then efetch) back to back.
-  "eutils.ncbi.nlm.nih.gov": { intervalMs: 400, serial: false, cooldown: false },
+  "eutils.ncbi.nlm.nih.gov": { intervalMs: 400, serial: false },
   // The Hub API allows 500 requests per 5 minutes per IP anonymous.
-  huggingface: { intervalMs: 1000, serial: false, cooldown: true },
+  huggingface: { intervalMs: 1000, serial: false },
   // Paper search: 50 per 5 minutes, so one per six seconds can never exceed it.
-  "huggingface-search": { intervalMs: 6000, serial: false, cooldown: true },
-  "semanticscholar-doi": { intervalMs: 1500, serial: false, cooldown: true },
+  "huggingface-search": { intervalMs: 6000, serial: false },
 };
 
 /** First cooldown after a rate limit; each repeat doubles it, up to the max. */
@@ -199,7 +241,7 @@ interface Strike {
 export interface HostGate {
   /** Wait for the host's turn; the returned release ends a serial slot. Throws HostCoolingDownError while cooling down. */
   acquire(host: string, defaultIntervalMs: number, signal?: AbortSignal | null): Promise<() => void>;
-  /** Read an answer: a rate limit starts (or extends) the group's cooldown, a success clears it. */
+  /** Read an answer: a rate limit starts (or extends) the lane's cooldown, a success clears it. */
   observe(host: string, res: Response): Promise<void>;
   /** The error a request to the host would get now, or null when it may go. */
   coolingDown(host: string): HostCoolingDownError | null;
@@ -234,8 +276,7 @@ export function createHostGate(opts: { clock?: Clock; store?: CooldownStore } = 
   };
 
   const coolingDown = (host: string): HostCoolingDownError | null => {
-    const group = groupOf(host);
-    if (!GROUP_POLICY[group]?.cooldown) return null;
+    if (!COOLS_DOWN.has(host)) return null;
     const s = readStrikes()[cooldownKeyOf(host)];
     const now = clock.now();
     return s && typeof s.until === "number" && s.until > now ? new HostCoolingDownError(host, s.until, now) : null;
@@ -246,7 +287,7 @@ export function createHostGate(opts: { clock?: Clock; store?: CooldownStore } = 
 
     async acquire(host, defaultIntervalMs, signal) {
       const group = groupOf(host);
-      const policy = GROUP_POLICY[group] ?? (defaultIntervalMs > 0 ? { intervalMs: defaultIntervalMs, serial: false, cooldown: false } : null);
+      const policy = GROUP_POLICY[group] ?? (defaultIntervalMs > 0 ? { intervalMs: defaultIntervalMs, serial: false } : null);
       if (!policy) return () => {};
       const early = coolingDown(host);
       if (early) throw early;
@@ -290,7 +331,7 @@ export function createHostGate(opts: { clock?: Clock; store?: CooldownStore } = 
     },
 
     async observe(host, res) {
-      if (!GROUP_POLICY[groupOf(host)]?.cooldown) return;
+      if (!COOLS_DOWN.has(host)) return;
       const key = cooldownKeyOf(host);
       const strikes = readStrikes();
       if (res.ok) {
@@ -306,7 +347,7 @@ export function createHostGate(opts: { clock?: Clock; store?: CooldownStore } = 
       const count = prior && now - prior.at < STRIKE_MEMORY_MS ? prior.strikes + 1 : 1;
       const backoff = Math.min(COOLDOWN_BASE_MS * 2 ** (count - 1), COOLDOWN_MAX_MS);
       const asked = Math.min(retryAfterMs(res.headers.get("retry-after"), now) ?? 0, RETRY_AFTER_CAP_MS);
-      strikes[key] ={ until: now + Math.max(backoff, asked), strikes: count, at: now };
+      strikes[key] = { until: now + Math.max(backoff, asked), strikes: count, at: now };
       store.save(JSON.stringify(strikes));
     },
   };
