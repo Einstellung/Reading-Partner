@@ -5,7 +5,8 @@
 //   1. The pool is every candidate the study's runs read (the first look, its
 //      retries and earlier updates, out of their run directories) with this
 //      run's extra queries, the base version's items and the pinned ones always
-//      in it. The rerank sees the topic as the reader's lines left it, those
+//      in it, and their graph expansions, each stream's latest answer standing
+//      (docs/info/92 「进候选池」). The rerank sees the topic as the reader's lines left it, those
 //      lines (L1 …) and the labelled items as examples, and names the line
 //      behind each score (`because`).
 //   2. Pinned items come first and stay (select.ts selectStudy); a demoted one
@@ -28,6 +29,7 @@ import {
   deepReader,
   DRAFT_VIEW,
   draftOf,
+  graphReadsOf,
   itemOfDraft,
   loadHistory,
   lookUpDraftRepos,
@@ -50,7 +52,19 @@ import { latestLabels } from "./labels";
 import { abortableSleep, retryingModel, topicCacheKey, type TopicModel } from "./model-io";
 import { readsSource } from "./pace";
 import { enqueue, labelQuestion, loadQueue, pickQuestions, questionCap, saveQueue, waiting, withLabelQuestion, type NewQuestion } from "./questions";
-import { fusePool, gatherCandidates, numberPool, parseRerank, rankEvents, RERANK_POOL, rerankPrompt, scorePool, type ArxivFound, type RerankAnswer } from "./rank-pool";
+import {
+  fusePool,
+  gatherCandidates,
+  graphPool,
+  numberPool,
+  parseRerank,
+  rankEvents,
+  RERANK_POOL,
+  rerankPrompt,
+  scorePool,
+  type ArxivFound,
+  type RerankAnswer,
+} from "./rank-pool";
 import {
   highestNumber,
   mergeRetry,
@@ -61,6 +75,7 @@ import {
   type TopicSearchResult,
   type TopicSearchResultItem,
 } from "./result-types";
+import { runDirOf } from "./run-state";
 import { selectStudy } from "./select";
 import { currentVersion, emptyStudyFile } from "./study";
 import {
@@ -138,7 +153,10 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
   const poolArxiv = [...arxiv, ...carried.flatMap((c) => c.arxiv)];
   const poolHf = [...huggingface, ...carried.flatMap((c) => c.huggingface)];
   const poolX = { ...args.x, posts: [...args.x.posts, ...carried.flatMap((c) => c.x?.posts ?? [])] };
-  const gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf);
+  const runs = studyRuns(target).filter((id) => id !== update.runId);
+  const graph = graphPool(await graphReadsOf(deps.files, [...runs.map((id, i) => (i === 0 ? target.runDir : runDirOf(id))), runDir]));
+  const graphStreams = graph?.streams ?? [];
+  const gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf, graphStreams);
   const own = gatherCandidates(topic, args.x, arxiv, since, huggingface);
   const byId = new Map(target.items.map((i) => [i.id, i]));
   // The base version's items, the pinned and the demoted are judged whatever the
@@ -151,7 +169,7 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
   ]);
   const inFile = target.items.flatMap((i) => [i.key, ...i.keys]);
   const looked = await lookUpPinned(marks.pinned.keys(), new Set([...gathered.all.map((c) => c.key), ...inFile]), deps, since, signal);
-  const numbered = numberPool(withHeld(fusePool(topic, gathered.kept, RERANK_POOL.first), [...gathered.all, ...looked], held));
+  const numbered = numberPool(withHeld(fusePool(topic, gathered.kept, RERANK_POOL.first, graphStreams), [...gathered.all, ...looked], held));
 
   const name = `${target.id}.json`;
   const { queue: stored } = await loadQueue(deps.files, topic.id);
@@ -161,6 +179,7 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
       x: gathered.all.filter((c) => c.source === "x").length,
       arxiv: gathered.all.filter((c) => c.source === "arxiv").length,
       huggingface: gathered.all.filter((c) => c.source === "huggingface").length,
+      ...(graph ? { graph: gathered.all.filter((c) => c.source === "graph").length } : {}),
     },
     passedFloor: gathered.kept.length,
     pooled: numbered.length,
@@ -208,7 +227,7 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
     const prompt = rerankPrompt(topic, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text), {
       lines: lines.map((l) => ({ id: l.id, kind: l.kind, text: l.text })),
       examples: labelExamples(labels),
-    });
+    }, graph?.titles);
     try {
       answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, topic, new Set(lines.map((l) => l.id)));
       if (answers.size === 0) unjudgedWhy = RERANK_NAMED_NONE;

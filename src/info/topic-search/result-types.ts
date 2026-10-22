@@ -137,6 +137,27 @@ export interface HubFacts {
 
 export type ResultItemKind = "paper" | "repo" | "page" | "post";
 
+/**
+ * A way a study's candidate came into the pool besides its first-round queries
+ * (docs/info/92 「进候选池」): recommended from the reader's papers, citing them,
+ * cited by them (`from`: the papers' keys), or a second-round query. Stored,
+ * not shown.
+ */
+export interface ResultVia {
+  kind: "rec" | "cites" | "refs" | "query2";
+  from: string[];
+}
+
+/** A study's graph expansion, counted on its result (docs/info/92 「数据」). */
+export interface ResultGraph {
+  /** The reader's papers it walked from. */
+  positives: number;
+  /** Each stream read, how it ended, and the papers it brought to the pool. */
+  streams: { id: string; outcome: string; kept: number }[];
+  /** Papers found with a DOI and no arXiv id, left out of the pool. */
+  doiOnly: number;
+}
+
 export interface TopicSearchResultItem {
   /** "E1", in the order of the file. */
   id: string;
@@ -170,6 +191,8 @@ export interface TopicSearchResultItem {
   facts: ResultFacts;
   /** The Hub's facts of the item's paper, when Hugging Face found it. Absent otherwise, and in files written before 2026-10-19. */
   hub?: HubFacts;
+  /** A study's: how its members came in besides the queries (docs/info/92). Absent when only queries found them. */
+  via?: ResultVia[];
   /** The original (null when the post is the original) and the posts that led to it. */
   links: { original: string | null; posts: ResultPost[] };
   /** Materials registered for this item, "M3". */
@@ -252,8 +275,11 @@ export interface ResultQuestion {
 }
 
 export interface ResultStats {
-  /** huggingface: papers only Hugging Face found (one arXiv found too counts as arXiv's); absent before it was a source. */
-  candidates: { x: number; arxiv: number; huggingface?: number };
+  /**
+   * huggingface: papers only Hugging Face found (one arXiv found too counts as arXiv's); absent before it was a source.
+   * graph: papers only a study's graph expansion found (docs/info/92); absent when none was on file.
+   */
+  candidates: { x: number; arxiv: number; huggingface?: number; graph?: number };
   passedFloor: number;
   pooled: number;
   reranked: boolean;
@@ -329,6 +355,8 @@ export interface TopicSearchResult {
   study?: { versions: StudyVersion[] };
   /** Not in the file: the study version this is a view of (`versionPart` sets it). */
   studyVersion?: StudyVersion;
+  /** A study's run with a graph expansion on file: what it read (docs/info/92 「数据」). Absent otherwise. */
+  graph?: ResultGraph;
 }
 
 /** Where an item sits in a version of a study's brief. */
@@ -415,11 +443,13 @@ function addCounts(into: Record<string, number>, from: Record<string, number>): 
 export function sumStats(parts: readonly ResultStats[]): ResultStats {
   const passed = parts.reduce((n, p) => n + p.passedFloor, 0);
   const deep = parts.filter((p) => p.deepReads).map((p) => p.deepReads!);
+  const graphed = parts.filter((p) => p.candidates.graph !== undefined);
   return {
     candidates: {
       x: parts.reduce((n, p) => n + p.candidates.x, 0),
       arxiv: parts.reduce((n, p) => n + p.candidates.arxiv, 0),
       huggingface: parts.reduce((n, p) => n + (p.candidates.huggingface ?? 0), 0),
+      ...(graphed.length ? { graph: graphed.reduce((n, p) => n + p.candidates.graph!, 0) } : {}),
     },
     passedFloor: passed,
     pooled: parts.reduce((n, p) => n + p.pooled, 0),

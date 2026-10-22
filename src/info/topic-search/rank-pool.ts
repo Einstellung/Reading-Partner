@@ -2,7 +2,10 @@
 // reader and the arXiv and Hugging Face searches brought, as candidates (one
 // paper found by both is one candidate, by arXiv id, carrying the Hub's facts); the local relevance
 // floor; weighted RRF over the (query, source) streams; the rerank call and its
-// stand-in; the final score; candidates merged into events.
+// stand-in; the final score; candidates merged into events. A study's graph
+// expansion (docs/info/92 「进候选池」, graph-read.ts) adds a stream per read —
+// recommendations, and each walked paper's citations and references — whose
+// papers merge with what the queries found by arXiv id.
 //
 // Every candidate is numbered by the program (c1, c2 …, its links c1.a, c1.b
 // …) and the model answers by number only; an answer naming a number that does
@@ -20,8 +23,9 @@ const DAY_MS = 86_400_000;
 import type { XSearchPost } from "../x/search-page";
 import { postLinksOut } from "../x/text-links";
 import { cut, letter, material, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
+import { RETRIED_OUTCOMES, type GraphRead, type GraphStream } from "./graph-read";
 import { HUB_RULE, hubLines } from "./hub-line";
-import type { HubFacts } from "./result-types";
+import type { HubFacts, ResultVia } from "./result-types";
 import type { TopicQuery, TopicSearch } from "./types";
 import type { XReadResult } from "./x-reader";
 
@@ -32,9 +36,20 @@ export const STREAM_TAKE = { x: 40, arxiv: 12, huggingface: 12 } as const;
 /**
  * Places in the rerank pool kept, by fusion order, for posts and for the
  * candidates each picked subtopic's queries found, so that the result's
- * reservations (select.ts) have something reranked to take.
+ * reservations (select.ts) have something reranked to take; and for papers
+ * only a study's graph expansion found, which the queries' streams outweigh.
  */
-export const POOL_RESERVE = { posts: 10, perSubtopic: 4 } as const;
+export const POOL_RESERVE = { posts: 10, perSubtopic: 4, graph: 12 } as const;
+/**
+ * A graph stream's weight in the fusion, by kind (docs/info/92 「进候选池」):
+ * recommendations, papers citing one of the reader's, papers one of them cites.
+ * Recommendations OpenAlex stood in for (related works, no negatives) weigh
+ * GRAPH_REC_OPENALEX_WEIGHT.
+ */
+export const GRAPH_WEIGHT = { rec: 0.8, cites: 0.6, refs: 0.5 } as const;
+export const GRAPH_REC_OPENALEX_WEIGHT = 0.5;
+/** Candidates each graph stream gives the fusion, by kind. */
+export const GRAPH_TAKE = { rec: 20, cites: 8, refs: 8 } as const;
 /** Characters of a candidate's text the rerank sees. */
 export const RERANK_TEXT_CHARS = 420;
 /** Links of one post the rerank is shown. */
@@ -53,7 +68,8 @@ export interface PaperInfo {
 
 export type { HubFacts };
 
-export type CandidateSource = "x" | "arxiv" | "huggingface";
+/** "graph": only a study's graph expansion found it; one a query found too is the query's source's. */
+export type CandidateSource = "x" | "arxiv" | "huggingface" | "graph";
 
 const PAPER_SOURCES = ["arxiv", "huggingface"] as const;
 
@@ -78,6 +94,8 @@ export interface Candidate {
   relevance: number;
   engagement: number | null;
   order: number;
+  /** A study's: the graph streams that found it, by kind (docs/info/92). Absent when none did. */
+  via?: ResultVia[];
 }
 
 /** One arXiv (or Hugging Face) search's answer: the query it ran and what came back, or why it failed. */
@@ -89,9 +107,45 @@ export interface ArxivFound {
   ladder?: ArxivLadder;
 }
 
-/** "q1|x", "q1|arxiv", "q1|huggingface": a (query, source) stream. */
+/** "q1|x", "q1|arxiv", "q1|huggingface": a (query, source) stream; "rec|graph", "cites:arxiv:…|graph": a graph stream. */
 export function streamKey(query: string, source: CandidateSource): string {
   return `${query}|${source}`;
+}
+
+const isGraphStream = (key: string): boolean => key.endsWith("|graph");
+
+/**
+ * A study's graph expansion as its pool takes it: the streams of every run's
+ * read, oldest first, one per stream id, and the titles of the reader's papers
+ * they walked from, by key. A later read of a stream replaces an earlier one,
+ * unless it came back without an answer (a rate limit, a cooldown, a failure).
+ * Null when no read was on file: the pool is the queries' alone.
+ */
+export interface GraphPool {
+  streams: GraphStream[];
+  titles: Map<string, string>;
+}
+
+export function graphPool(reads: readonly (GraphRead | null)[]): GraphPool | null {
+  const got = reads.filter((r): r is GraphRead => r !== null);
+  if (!got.length) return null;
+  const streams = new Map<string, GraphStream>();
+  for (const s of got.flatMap((r) => r.streams)) {
+    if (streams.has(s.id) && RETRIED_OUTCOMES.includes(s.outcome)) continue;
+    streams.set(s.id, s);
+  }
+  return { streams: [...streams.values()], titles: new Map(got.flatMap((r) => r.positives.map((p) => [p.key, p.title] as const))) };
+}
+
+/** Ways in merged by kind, each kind's papers once, in the order first seen. */
+export function mergeVia(lists: readonly (readonly ResultVia[] | undefined)[]): ResultVia[] {
+  const out: ResultVia[] = [];
+  for (const v of lists.flatMap((l) => l ?? [])) {
+    const same = out.find((o) => o.kind === v.kind);
+    if (!same) out.push({ kind: v.kind, from: [...v.from] });
+    else for (const key of v.from) if (!same.from.includes(key)) same.from.push(key);
+  }
+  return out;
 }
 
 /**
@@ -157,7 +211,11 @@ function paperOf(item: InfoItem, source: CandidateSource): PaperInfo | null {
 /**
  * Normalize, merge by identity, measure relevance and anchors (88 「打分」 1-2).
  * A paper both arXiv and Hugging Face found is one candidate: arXiv's entry
- * (its v1 date) with the Hub's facts added.
+ * (its v1 date) with the Hub's facts added. A study's graph streams (`graph`,
+ * graphPool) add their papers last: one a query found too keeps that entry and
+ * gains the stream. Whatever a graph stream found passes the relevance floor;
+ * a paper only the graph found is measured against every query, for the order
+ * and the record.
  */
 export function gatherCandidates(
   topic: TopicSearch,
@@ -165,6 +223,7 @@ export function gatherCandidates(
   arxiv: readonly ArxivFound[],
   since: number,
   huggingface: readonly ArxivFound[] = [],
+  graph: readonly GraphStream[] = [],
 ): Gathered {
   const byKey = new Map<string, Candidate>();
   const streams = new Map<string, { read: string[]; kept: string[] }>();
@@ -247,15 +306,54 @@ export function gatherCandidates(
     }
   }
 
+  for (const g of graph) {
+    const stream = streamKey(g.id, "graph");
+    if (!streams.has(stream)) streams.set(stream, { read: [], kept: [] });
+    const via: ResultVia[] = [{ kind: g.kind, from: g.from }];
+    for (const p of g.papers) {
+      const id = normalizeArxivId(p.arxivId);
+      const key = id ? arxivEventKey(id) : null;
+      if (!id || !key) continue;
+      touch(stream, key);
+      const got = byKey.get(key);
+      if (got) {
+        if (!got.foundIn.includes(stream)) got.foundIn.push(stream);
+        got.via = mergeVia([got.via, via]);
+        continue;
+      }
+      const at = p.publishedAt ? Date.parse(p.publishedAt) : NaN;
+      byKey.set(key, {
+        key,
+        kind: "paper",
+        source: "graph",
+        queries: [],
+        foundIn: [stream],
+        text: `${p.title}\n\n${p.abstract}`,
+        author: p.authors[0] ?? "",
+        at: Number.isFinite(at) ? at : since,
+        post: null,
+        paper: { id, title: p.title, abstract: p.abstract, authors: p.authors, publishedAt: p.publishedAt || null, url: `https://arxiv.org/abs/${id}` },
+        links: [],
+        relevance: 0,
+        engagement: null,
+        order: byKey.size,
+        via: mergeVia([via]),
+      });
+    }
+  }
+
   const all = [...byKey.values()];
   const kept: Candidate[] = [];
   for (const c of all) {
-    c.relevance = Math.max(0, ...c.queries.map((id) => relevanceTo(queries.get(id), c)));
+    const measured = c.source === "graph" ? topic.queries : c.queries.map((id) => queries.get(id));
+    c.relevance = Math.max(0, ...measured.map((q) => relevanceTo(q, c)));
     // No window filter here: the X lines and the arXiv search already read only
     // their window, and a seen post read again is what continuation looks for.
-    if (c.relevance < RELEVANCE_FLOOR) continue;
+    const lexical = c.relevance >= RELEVANCE_FLOOR;
+    if (!lexical && !c.foundIn.some(isGraphStream)) continue;
     kept.push(c);
-    for (const stream of c.foundIn) streams.get(stream)?.kept.push(c.key);
+    // A query's stream keeps only what passed the floor.
+    for (const stream of c.foundIn) if (lexical || isGraphStream(stream)) streams.get(stream)?.kept.push(c.key);
   }
   return { all, kept, streams };
 }
@@ -276,17 +374,26 @@ function relevanceTo(query: TopicQuery | undefined, c: Candidate): number {
 }
 
 /**
- * Weighted RRF over the (query, source) streams, the per-author cap, the
- * pool's top (88 「打分」 3), with places kept for posts and for each picked
- * subtopic (POOL_RESERVE). The pool stays in fusion order.
+ * Weighted RRF over the (query, source) streams and a study's graph streams
+ * (in their library's order, GRAPH_WEIGHT, GRAPH_TAKE), the per-author cap, the
+ * pool's top (88 「打分」 3), with places kept for posts, for each picked
+ * subtopic and for what only the graph found (POOL_RESERVE). A paper several
+ * streams found adds up across them: several of the reader's papers citing it
+ * is co-citation. The pool stays in fusion order.
  */
-export function fusePool(topic: TopicSearch, kept: readonly Candidate[], size: number): { cand: Candidate; rrf: number }[] {
+export function fusePool(
+  topic: TopicSearch,
+  kept: readonly Candidate[],
+  size: number,
+  graph: readonly GraphStream[] = [],
+): { cand: Candidate; rrf: number }[] {
   const byKey = new Map(kept.map((c) => [c.key, c]));
   const streams: Stream[] = [];
   for (const q of topic.queries) {
     for (const source of ["x", ...PAPER_SOURCES] as const) {
       const members = kept
-        .filter((c) => c.foundIn.includes(streamKey(q.id, source)))
+        // A paper under the floor is in the pool for its graph streams only.
+        .filter((c) => c.foundIn.includes(streamKey(q.id, source)) && c.relevance >= RELEVANCE_FLOOR)
         .map((c) => ({ c, r: relevanceTo(q, c) }))
         // A live line is newest first; its stream is ranked by how well each post answers the query.
         .sort((a, b) => b.r - a.r || a.c.order - b.c.order);
@@ -294,6 +401,15 @@ export function fusePool(topic: TopicSearch, kept: readonly Candidate[], size: n
         streams.push({ weight: q.weight, take: STREAM_TAKE[source], items: members.map(({ c }) => ({ key: c.key, author: c.author })) });
       }
     }
+  }
+  for (const g of graph) {
+    const key = streamKey(g.id, "graph");
+    const items = g.papers
+      .map((p) => byKey.get(arxivEventKey(p.arxivId) ?? ""))
+      .filter((c): c is Candidate => c !== undefined && c.foundIn.includes(key))
+      .map((c) => ({ key: c.key, author: c.author }));
+    const weight = g.kind === "rec" && g.library === "openalex" ? GRAPH_REC_OPENALEX_WEIGHT : GRAPH_WEIGHT[g.kind];
+    if (items.length) streams.push({ weight, take: GRAPH_TAKE[g.kind], items });
   }
   const fused = weightedRrf(streams);
   const subtopicOf = new Map(topic.queries.map((q) => [q.id, q.subtopic]));
@@ -311,6 +427,7 @@ export function fusePool(topic: TopicSearch, kept: readonly Candidate[], size: n
   for (const s of topic.subtopics) {
     if (s.picked) reserve(POOL_RESERVE.perSubtopic, (c) => c.queries.some((id) => subtopicOf.get(id) === s.id));
   }
+  reserve(POOL_RESERVE.graph, (c) => c.source === "graph");
   const inPool = new Set(must.slice(0, size));
   for (const f of fused) {
     if (inPool.size >= size) break;
@@ -389,11 +506,38 @@ export function settledBlock(topic: TopicSearch, raised: readonly string[]): str
   ].join("\n");
 }
 
+/** The rerank's rule when a candidate came in through the reader's papers (docs/info/92 「进候选池」). */
+export const VIA_RULE =
+  'A "Found through" line says how the reader\'s own papers led to a candidate: recommended from them, citing one, cited by one. ' +
+  "That says nothing about whether it is on the topic: judge it by its title and abstract alone, as any other.";
+
+/** The reader's papers a "Found through" line names, at most, per kind. */
+const VIA_NAMED = 3;
+
+/**
+ * How the graph led to a candidate, for the rerank: "Found through:
+ * recommended from the reader's papers; cites "…"; cited by "…"". `titles`:
+ * the reader's papers by key (graphPool). Null when no graph stream found it.
+ */
+export function viaLine(via: readonly ResultVia[] | undefined, titles: ReadonlyMap<string, string>): string | null {
+  const name = (key: string) => `"${cut(titles.get(key) ?? key.replace(/^arxiv:/, "arXiv "), 80)}"`;
+  const names = (keys: readonly string[]) =>
+    keys.slice(0, VIA_NAMED).map(name).join(", ") + (keys.length > VIA_NAMED ? ` and ${keys.length - VIA_NAMED} more` : "");
+  const parts = (via ?? []).flatMap((v) =>
+    v.kind === "rec" ? ["recommended from the reader's papers"] : v.kind === "cites" ? [`cites ${names(v.from)}`] : v.kind === "refs" ? [`cited by ${names(v.from)}`] : [],
+  );
+  return parts.length ? `Found through: ${parts.join("; ")}` : null;
+}
+
 /** The rule both question-raising prompts give the model (docs/info/88 「攒着问」). */
 export const SETTLED_RULE =
   "Never ask what the scope, wants, does-not-wants, accepted judgements, the reader's earlier answers or an already raised question settle: " +
   "a question about a kind of thing a judgement or a does-not-want already places is a repeat. Ask only what none of them decides.";
 
+/**
+ * The rerank's prompt. `titles`: a study's graph expansion's papers by key
+ * (graphPool), to name in a candidate's "Found through" line.
+ */
 export function rerankPrompt(
   topic: TopicSearch,
   numbered: readonly Numbered[],
@@ -401,8 +545,10 @@ export function rerankPrompt(
   language: string,
   raised: readonly string[] = [],
   study: StudyRerank | null = null,
+  titles: ReadonlyMap<string, string> = new Map(),
 ): { system: string; user: string } {
   const lines = study?.lines ?? [];
+  const graphed = numbered.some((n) => n.cand.via?.length);
   const system = [
     "You rank what a topic search found for a reader: posts from X and papers from arXiv and Hugging Face.",
     `For every candidate answer one object {c, score, main, subtopic, doubt${lines.length ? ", because" : ""}}:`,
@@ -419,6 +565,7 @@ export function rerankPrompt(
     SETTLED_RULE,
     "Use only the numbers given. Answer with JSON only: {\"items\": [ … ]}.",
     HUB_RULE,
+    ...(graphed ? [VIA_RULE] : []),
     UNTRUSTED_RULE,
     language,
   ]
@@ -429,13 +576,15 @@ export function rerankPrompt(
     const c = n.cand;
     if (c.paper) {
       const authors = c.paper.authors.slice(0, 3).join(", ") + (c.paper.authors.length > 3 ? " et al." : "");
+      const via = viaLine(c.via, titles);
       return material(
         n.c,
         [
-          `${n.c} · paper · ${authors} · ${day(c.at)} · arXiv ${c.paper.id} · queries ${c.queries.join(", ")}`,
+          `${n.c} · paper · ${authors} · ${day(c.at)} · arXiv ${c.paper.id}${c.source === "graph" ? "" : ` · queries ${c.queries.join(", ")}`}`,
           c.paper.title,
           cut(c.paper.abstract, RERANK_TEXT_CHARS),
           ...hubLines(c.paper.hub),
+          ...(via ? [via] : []),
         ].join("\n"),
       );
     }
@@ -522,7 +671,8 @@ export function scorePool(
       // It shares the paper's event key, so the two stay one event.
       kind: key.startsWith("arxiv:") ? "paper" : c.kind,
       rerank: answer ? answer.score : null,
-      relevance: c.relevance,
+      // Only the graph found it: no query's words stand in for an answer the model left out (docs/info/92).
+      relevance: c.source === "graph" ? 0 : c.relevance,
       rrf: n.rrf,
       engagement: c.engagement,
     });

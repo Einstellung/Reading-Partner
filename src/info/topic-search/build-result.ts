@@ -41,9 +41,12 @@ import {
   withLabelQuestion,
   type NewQuestion,
 } from "./questions";
+import { GRAPH_READ_FILE, parseGraphRead, type GraphRead } from "./graph-read";
 import {
   fusePool,
   gatherCandidates,
+  graphPool,
+  mergeVia,
   numberPool,
   parseRerank,
   queryOfLine,
@@ -67,6 +70,7 @@ import {
   resultFileName,
   TOPIC_SEARCH_RESULT_VERSION,
   type PostCounts,
+  type ResultGraph,
   type ResultPost,
   type ResultRunKind,
   type ResultStats,
@@ -77,6 +81,7 @@ import {
   type TopicSearchResultItem,
 } from "./result-types";
 import { traceOf, type ReadTrace } from "./read-failure";
+import { runDirOf } from "./run-state";
 import { selectItems, selectStudy, shortlist, type SelectView } from "./select";
 import type { StudyFile, StudyLine } from "./study";
 import type { TopicSearch } from "./types";
@@ -624,9 +629,16 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const poolX: XReadResult = carried.length ? { ...x, posts: [...x.posts, ...carried.flatMap((c) => c.x?.posts ?? [])] } : x;
   const poolArxiv = [...arxiv, ...carried.flatMap((c) => c.arxiv)];
   const poolHf = [...huggingface, ...carried.flatMap((c) => c.huggingface)];
+  // A study's graph expansion (docs/info/92 「进候选池」): this run's and the
+  // waiting runs', on file in their directories. The slow part takes none: its
+  // first part did.
+  const graphReads =
+    topic.once && retry?.part !== "slow" ? await graphReadsOf(deps.files, [runDir, ...unjudgedBefore.map((u) => runDirOf(u.runId))]) : [];
+  const graph = graphPool(graphReads);
+  const graphStreams = graph?.streams ?? [];
 
   // Rank (88 「打分」 1-6).
-  const gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf);
+  const gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf, graphStreams);
   // The source health speaks for this run's reads only.
   const own = carried.length ? gatherCandidates(topic, x, arxiv, since, huggingface) : gathered;
   // A study's seeds are judged and listed whatever the reads found (docs/info/91
@@ -635,7 +647,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   // build only: a retry or the slow part finds them in the file.
   const seedKeys = new Set(topic.once && kind === "first" && !retry ? (topic.seeds ?? []).map((seed) => seed.key) : []);
   const looked = await lookUpPinned(seedKeys, new Set(gathered.all.map((c) => c.key)), deps, since, signal);
-  const numbered = numberPool(withHeld(fusePool(topic, gathered.kept, RERANK_POOL[kind]), [...gathered.all, ...looked], seedKeys));
+  const numbered = numberPool(withHeld(fusePool(topic, gathered.kept, RERANK_POOL[kind], graphStreams), [...gathered.all, ...looked], seedKeys));
   let answers = new Map<string, RerankAnswer>();
   let reranked = false;
   // The questions already raised, for both prompts that may raise more (88 「攒着问」).
@@ -643,7 +655,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const raisedBefore = stored.filter((q) => q.source === "model");
   let unjudgedWhy: string | null = null;
   if (numbered.length) {
-    const prompt = rerankPrompt(topic, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text));
+    const prompt = rerankPrompt(topic, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text), null, graph?.titles);
     try {
       answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, topic);
       reranked = answers.size > 0;
@@ -691,11 +703,14 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     health.entries = health.entries.filter((e) => readsSource(topic, e.source));
     await deps.files.write(`${runDir.replace(/\/+$/, "")}/${SOURCE_HEALTH_FILE}`, `${JSON.stringify(health, null, 2)}\n`);
   };
+  // What this run's own graph expansion read, on its result.
+  const graphOf = graphReads[0] ? { graph: resultGraph(graphReads[0]) } : {};
   const statsOf = (subtopicItems: Record<string, number>, avoidBlocked: Record<string, number>): ResultStats => ({
     candidates: {
       x: gathered.all.filter((c) => c.source === "x").length,
       arxiv: gathered.all.filter((c) => c.source === "arxiv").length,
       huggingface: gathered.all.filter((c) => c.source === "huggingface").length,
+      ...(graph ? { graph: gathered.all.filter((c) => c.source === "graph").length } : {}),
     },
     passedFloor: gathered.kept.length,
     pooled: numbered.length,
@@ -735,6 +750,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
       runDir,
       ...(later ? { awaiting: later } : {}),
       unjudged,
+      ...graphOf,
     });
     return { resultFile: name, itemCount: 0, empty: true, unjudged: numbered.length, ...(studyMade !== undefined ? { version: studyMade } : {}) };
   }
@@ -954,6 +970,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     runDir,
     ...(later ? { awaiting: later } : {}),
     ...(judged.length ? { judged } : {}),
+    ...graphOf,
   };
   // A study's first look is its version 1, the seeds pinned first (docs/info/91 数据).
   if (topic.once && kind === "first" && !retry) {
@@ -962,6 +979,29 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   await finish(result);
   await saveQueue(deps.files, topic.id, picked.queue);
   return { resultFile: name, itemCount: items.length, empty, ...(studyMade !== undefined ? { version: studyMade } : {}) };
+}
+
+/**
+ * The graph expansions on file in these run directories (graph-read.ts
+ * graphReadFile, round 1), in their order: null for one with none, or one that
+ * does not read (then the run's pool is the queries' alone).
+ */
+export async function graphReadsOf(files: ResultFiles, dirs: readonly string[]): Promise<(GraphRead | null)[]> {
+  return Promise.all(
+    dirs.map(async (dir) => {
+      const text = await files.read(`${dir.replace(/\/+$/, "")}/${GRAPH_READ_FILE}`).catch(() => null);
+      return text === null ? null : parseGraphRead(text);
+    }),
+  );
+}
+
+/** A graph expansion counted for its run's result: the papers each stream brought, before the pool merged them. */
+export function resultGraph(read: GraphRead): ResultGraph {
+  return {
+    positives: read.positives.length,
+    streams: read.streams.map((s) => ({ id: s.id, outcome: s.outcome, kept: s.papers.length })),
+    doiOnly: read.doiOnly.count,
+  };
 }
 
 /**
@@ -1074,6 +1114,7 @@ export async function itemOfDraft(d: Draft, id: string, ctx: ItemContext): Promi
   }
   const fromPost = leadPost ? cut120(`${leadPost.name || `@${leadPost.handle}`}: ${firstSentence(leadPost.text)}`) : lead.text;
   const hub = hubOfDraft(d);
+  const via = mergeVia(d.members.map((m) => m.cand.via));
   return {
     id,
     key: lead.key,
@@ -1087,6 +1128,7 @@ export async function itemOfDraft(d: Draft, id: string, ctx: ItemContext): Promi
     unknown: null,
     facts,
     ...(hub ? { hub } : {}),
+    ...(via.length ? { via } : {}),
     links: { original, posts: d.posts },
     materials,
     verify,
