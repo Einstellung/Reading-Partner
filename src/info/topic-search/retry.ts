@@ -12,10 +12,14 @@
 // the topic does not read is never planned (docs/info/91 来源开关). An
 // X query that read and found nothing new is left alone, as is everything ok.
 // Reads no model judged (the rerank failed) are not read again: the plan names
-// their runs, and the build takes them in from those runs' directories.
+// their runs, and the build takes them in from those runs' directories. A
+// study's graph expansion streams (docs/info/92) that a cooldown, a rate limit
+// or a failure kept from coming back are read again, by stream id.
 // Pure.
 
 import type { SourceHealth } from "../sources/engine";
+import { streamsToRetry } from "./graph-expand";
+import type { GraphRead } from "./graph-read";
 import { topicSources } from "./pace";
 import { topicSearchHealthKey } from "./source-health";
 import type { TopicSearch } from "./types";
@@ -33,10 +37,18 @@ export interface RetryPlan {
   huggingface?: string[];
   /** Runs whose reads no model judged (result-types.ts pendingJudging): taken in and judged, not read again. Absent: none. */
   judge?: string[];
+  /** A study's graph expansion streams (graph-read.ts ids) read again. Absent: none. */
+  graph?: string[];
 }
 
 export function isEmptyPlan(plan: RetryPlan): boolean {
-  return plan.x.length === 0 && plan.arxiv.length === 0 && (plan.huggingface?.length ?? 0) === 0 && (plan.judge?.length ?? 0) === 0;
+  return (
+    plan.x.length === 0 &&
+    plan.arxiv.length === 0 &&
+    (plan.huggingface?.length ?? 0) === 0 &&
+    (plan.judge?.length ?? 0) === 0 &&
+    (plan.graph?.length ?? 0) === 0
+  );
 }
 
 /** The queries a run reads: those of the whole topic and of a picked subtopic. */
@@ -47,9 +59,16 @@ export function readQueries(search: TopicSearch): TopicSearch["queries"] {
 
 /**
  * What a retry of the search's first look reads, from the health its runs left,
- * and which runs' unjudged reads it judges (`waiting`, by run id).
+ * and which runs' unjudged reads it judges (`waiting`, by run id); a study's,
+ * also the graph streams its runs' expansions (`graph`, each run's file) did
+ * not get back.
  */
-export function planRetry(search: TopicSearch, health: Readonly<Record<string, SourceHealth>>, waiting: readonly string[] = []): RetryPlan {
+export function planRetry(
+  search: TopicSearch,
+  health: Readonly<Record<string, SourceHealth>>,
+  waiting: readonly string[] = [],
+  graph: readonly GraphRead[] = [],
+): RetryPlan {
   const plan: RetryPlan = { x: [], arxiv: [], huggingface: [] };
   // Only the sources the topic reads (docs/info/91 来源开关).
   const reads = topicSources(search);
@@ -62,7 +81,8 @@ export function planRetry(search: TopicSearch, health: Readonly<Record<string, S
     const h = health[topicSearchHealthKey(search.id, q.id, "huggingface")]?.topicSearch;
     if (reads.includes("huggingface") && (!h || h.status === "failed")) plan.huggingface!.push(q.id);
   }
-  return waiting.length ? { ...plan, judge: [...waiting] } : plan;
+  const streams = search.once === true ? streamsToRetry(graph) : [];
+  return { ...plan, ...(waiting.length ? { judge: [...waiting] } : {}), ...(streams.length ? { graph: streams } : {}) };
 }
 
 const RETRY_KEY = /^topic-search:(.+):retry:(\d+)$/;

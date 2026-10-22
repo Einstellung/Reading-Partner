@@ -42,6 +42,13 @@
 // Its build judges every candidate the study ever read again (build-update.ts)
 // and `wrap` tells the brief the version it made.
 //
+// A study that reads papers also expands from its seeds and labelled papers
+// along S2's recommendations and the citation graph (docs/info/92, graph-live.ts)
+// in `read`, beside the paper queries: its first look (the first part when
+// split), a retry with graph streams to read again, and an update, which walks
+// only the positives no earlier run walked. It writes `graph-read.json`, which
+// the build reads; its failure stops nothing.
+//
 // Every run reads only the sources the topic's config names (pace.ts
 // topicSources; a config without `sources` reads all, docs/info/91 来源开关).
 // A topic without X is not split: its first look reads in one go, takes no
@@ -61,6 +68,8 @@ import type { XHalt } from "../x/search-page";
 import type { ArxivSearch } from "./arxiv-ladder";
 import { arxivProgressLine, readArxiv, type ArxivRead } from "./arxiv-read";
 import type { BuildTopicSearchResult, BuildTopicSearchResultOutput, XPageBudget } from "./build-result";
+import { graphProgressLine, planStreams } from "./graph-expand";
+import type { GraphRead } from "./graph-read";
 import type { HfSearch } from "./hf-ladder";
 import { hfProgressLine, readHf } from "./hf-read";
 import { lastNightAnchor, nightEndAt } from "./nightly";
@@ -70,7 +79,7 @@ import type { FirstPartOnFile } from "./run-state";
 import type { TopicSearch } from "./types";
 import { isEmptyPlan, readQueries, type RetryPlan } from "./retry";
 import { UPDATE_COOLDOWN_WAIT_MS, UPDATE_READ_ROUNDS } from "./update";
-import { FIRST_LOOK_BACK_MS } from "./windows";
+import { arxivWindow, FIRST_LOOK_BACK_MS } from "./windows";
 import { localDay, replay, xTally, type XProgressLog, type XReaderStore, type XRunStatus } from "./x-progress";
 import { readXSearch, X_FIRST_RUN_LIMITS, type XReadLimits, type XReadLine, type XReadResult } from "./x-reader";
 
@@ -175,6 +184,36 @@ export function readFromSteps(steps: Parameters<typeof replay>[0], status: XRunS
   };
 }
 
+/** What a study's graph expansion is asked to read (graph-live.ts). */
+export interface GraphRunAbout {
+  search: TopicSearch;
+  runId: string;
+  dir: string;
+  /** A first look; a retry, which reads only `only`'s streams; an update, which walks only positives no earlier run walked. */
+  kind: "first" | "retry" | "update";
+  /** The papers' window's first day, local (windows.ts arxivWindow). */
+  since: string;
+  /** A retry's stream ids; null otherwise. */
+  only: readonly string[] | null;
+}
+
+/**
+ * Whether a run expands a study's graph (docs/info/92), and as what: a study
+ * that reads papers, in its first look (not the split one's slow part), a retry
+ * with graph streams to read again, or an update. Null for every other run.
+ */
+export function graphRunKind(
+  search: TopicSearch,
+  kind: TopicSearchRunKind,
+  window: { retry?: RetryPlan | null; part?: RunPart },
+): GraphRunAbout["kind"] | null {
+  if (search.once !== true || (!readsSource(search, "arxiv") && !readsSource(search, "huggingface"))) return null;
+  if (window.part === "slow") return null;
+  if (kind === "first" || kind === "update") return kind;
+  if (kind === "retry") return window.retry?.graph?.length ? "retry" : null;
+  return null;
+}
+
 export interface TopicSearchTaskInput {
   runId: string;
   brief: TopicSearchBrief;
@@ -267,6 +306,12 @@ export interface TopicSearchRunDeps {
   retryPlan(search: TopicSearch): Promise<RetryPlan>;
   /** The paper queries a study's update searches: those asked and those its newest version left unrun (update.ts planUpdate). */
   updatePlan(search: TopicSearch, asked: readonly string[]): Promise<string[]>;
+  /**
+   * A study's graph expansion (graph-live.ts readGraphExpansion), written to the
+   * run directory's `graph-read.json`; null when there was nothing to expand
+   * from. Absent: no expansion on this device.
+   */
+  readGraph?(about: GraphRunAbout, signal: AbortSignal, onChange?: (read: GraphRead) => void): Promise<GraphRead | null>;
   /** When a paper source's host gate lets requests go again after a rate limit (epoch ms); null when it is not cooling down. Absent: never known. */
   paperCooldown?(source: "arxiv" | "huggingface"): number | null;
   /** X said stop: the state file, the collector's state file and the box. */
@@ -458,6 +503,32 @@ export function topicSearchTask(
       signal,
     );
 
+  // A study's graph expansion, when the run makes one (graphRunKind). A failure
+  // is told on the run's line and the run goes on without it; an abort is not caught.
+  const readGraphOf = async (
+    search: TopicSearch,
+    brief: TopicSearchBrief,
+    window: Window,
+    dir: string,
+    runId: string,
+    signal: AbortSignal,
+    onLine?: (text: string) => void,
+  ): Promise<GraphRead | null> => {
+    const kind = deps.readGraph ? graphRunKind(search, brief.kind, window) : null;
+    if (!kind || !deps.readGraph) return null;
+    const since = arxivWindow(lookOf(brief.kind), window.since, localDay(deps.now())).since;
+    const only = kind === "retry" ? (window.retry?.graph ?? []) : null;
+    try {
+      return await deps.readGraph({ search, runId, dir, kind, since, only }, signal, (read) =>
+        onLine?.(graphProgressLine(read, planStreams(read.positives, only).length)),
+      );
+    } catch (e) {
+      if (signal.aborted) throw e;
+      onLine?.(`citation graph failed: ${message(e)}`);
+      return null;
+    }
+  };
+
   // A study update's paper queries (docs/info/91 更新). A query a rate limit or
   // a cooldown held back is searched again once the host gate lets requests go,
   // waited out here up to UPDATE_COOLDOWN_WAIT_MS; past that, or after
@@ -555,7 +626,9 @@ export function topicSearchTask(
         const blocked = !readsX ? null : retry && retry.x.length === 0 ? "no X query to read again" : await xBlocked(night, search.id, runId);
         // A night's increment is X alone, and so is a retry with no paper query to read again
         // and no unjudged reads to judge; the first look still builds from what else it has.
-        const papersLeft = retry ? retry.arxiv.length + (retry.huggingface?.length ?? 0) + (retry.judge?.length ?? 0) : 0;
+        const papersLeft = retry
+          ? retry.arxiv.length + (retry.huggingface?.length ?? 0) + (retry.judge?.length ?? 0) + (retry.graph?.length ?? 0)
+          : 0;
         if (blocked && (brief.kind === "daily" || (retry && papersLeft === 0))) return skip(runtime, blocked, context);
         if (readsX && !blocked) await hold(runId);
         const since = brief.kind === "daily" ? (search.lastRunAt ?? now - FIRST_LOOK_BACK_MS) : now - FIRST_LOOK_BACK_MS;
@@ -572,18 +645,24 @@ export function topicSearchTask(
         const search = await deps.loadSearch(brief.searchId);
         if (!search) return skip(runtime, "the topic search is gone", context, part ?? undefined);
         if (cp.update) {
-          await readUpdate(search, brief, window, dir, runtime.signal, runId);
+          await Promise.all([
+            readUpdate(search, brief, window, dir, runtime.signal, runId),
+            readGraphOf(search, brief, window, dir, runId, runtime.signal),
+          ]);
           say(runId, "searched; re-judging the study's candidates");
           return next(runtime, { phase: "build", ...window }, context);
         }
         const reads = sourcesOf(part, search);
         // The run's line says where each source is: "reading X: ...; arXiv done: ...; Hugging Face done: ...".
+        const expands = deps.readGraph ? graphRunKind(search, brief.kind, window) !== null : false;
         const line = {
           x: cp.blocked ? `not reading X: ${cp.blocked}` : "waiting to read X",
           arxiv: "arXiv: starting",
           hf: "Hugging Face: starting",
+          graph: expands ? graphProgressLine(null, 0) : "",
         };
-        const papersLine = () => [reads.includes("arxiv") ? line.arxiv : "", reads.includes("huggingface") ? line.hf : ""].filter(Boolean).join("; ");
+        const papersLine = () =>
+          [reads.includes("arxiv") ? line.arxiv : "", reads.includes("huggingface") ? line.hf : "", line.graph].filter(Boolean).join("; ");
         const tell = () =>
           say(
             runId,
@@ -630,14 +709,22 @@ export function topicSearchTask(
           }
           return read;
         })();
+        const graphWork = readGraphOf(search, brief, window, dir, runId, runtime.signal, (text) => {
+          line.graph = text;
+          tell();
+        });
         // Each runs to the end whatever the others do; a failure is raised once all have settled.
-        const [xDone, arxivDone, hfDone] = await Promise.allSettled([xWork, arxivWork, hfWork]);
+        const [xDone, arxivDone, hfDone, graphDone] = await Promise.allSettled([xWork, arxivWork, hfWork, graphWork]);
         if (xDone.status === "rejected") throw xDone.reason;
         if (arxivDone.status === "rejected") throw arxivDone.reason;
         if (hfDone.status === "rejected") throw hfDone.reason;
+        if (graphDone.status === "rejected") throw graphDone.reason;
         const x = xDone.value;
         const count = (read: ArxivRead | null) => (read?.found ?? []).reduce((n, f) => n + f.items.length, 0);
-        const papers = `${count(arxivDone.value)} arXiv and ${count(hfDone.value)} Hugging Face papers`;
+        const graphPapers = graphDone.value ? new Set(graphDone.value.streams.flatMap((st) => st.papers.map((p) => p.arxivId))).size : null;
+        const papers =
+          `${count(arxivDone.value)} arXiv and ${count(hfDone.value)} Hugging Face papers` +
+          (graphPapers === null ? "" : `, ${graphPapers} from the citation graph`);
         if (brief.kind === "daily" && !(await runtime.memo<boolean>("night-spent", context))) {
           await deps.spendNight(window.night, x);
           await runtime.memo("night-spent", true, context);

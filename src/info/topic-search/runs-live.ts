@@ -29,7 +29,11 @@ import { parseResultFile, pendingJudging, RESULT_FILE_PREFIX, type TopicSearchRe
 import { topicSearchDescriber, type ShelfIssue, type TopicSearchStatusDeps } from "./run-status";
 import { buildTopicSearchResult, searchArxivLive, searchHfLive } from "./build-live";
 import { registerFirstRunDispatcher } from "./first-run";
+import { walkedKeys } from "./graph-expand";
+import { liveGraphDeps, readGraphExpansion } from "./graph-live";
+import { loadGraphRead, type GraphRead } from "./graph-read";
 import { clearSignedOut, recordHalt, haltNeedsReader, resumeHalt, xGate } from "./halt";
+import { loadTopicLabels } from "./labels";
 import type { XResume } from "./resume-tool";
 import { planRetry, type RetryPlan } from "./retry";
 import type { TopicSearch } from "./types";
@@ -58,7 +62,7 @@ import {
   spendNight,
 } from "./run-state";
 import { askRetryRun, askUpdateRun, createNightTick, firstRunDispatcher, topicSearchWorker, type UpdateAsk } from "./run-worker";
-import { planUpdate, studyTarget } from "./update";
+import { planUpdate, studyRuns, studyTarget } from "./update";
 import { hostGate, HF_PAPER_SEARCH_LANE } from "../../platform/http/host-gate";
 import { foldTopicSearchHealth, parseSourceHealthFile } from "./source-health";
 import { changeTopicSearch, loadTopicSearches } from "./store";
@@ -182,6 +186,18 @@ function liveDeps(ports: TopicSearchRunPorts): TopicSearchRunDeps {
     checkSession: xSessionState,
     retryPlan: retryPlanOf,
     updatePlan: async (search, asked) => planUpdate(search, studyTarget(sortedResults(await loadResults(search.id))), asked),
+    readGraph: async (about, signal, onChange) => {
+      const [labels, earlier] = await Promise.all([
+        loadTopicLabels(about.search.id),
+        about.kind === "update" ? studyGraphReads(await loadResults(about.search.id), about.runId) : Promise.resolve([]),
+      ]);
+      return readGraphExpansion(
+        { seeds: about.search.seeds ?? [], labels },
+        { since: about.since, only: about.only, walkedBefore: about.kind === "update" ? walkedKeys(earlier) : null },
+        await liveGraphDeps(about.dir, onChange),
+        signal,
+      );
+    },
     paperCooldown: (source) => hostGate.coolingDown(source === "arxiv" ? "export.arxiv.org" : HF_PAPER_SEARCH_LANE)?.until ?? null,
     halted,
     keepAwake: (reason) => keepAwake(reason),
@@ -226,10 +242,21 @@ async function loadResults(searchId: string): Promise<TopicSearchResult[]> {
   return out;
 }
 
-/** What a retry reads again, and the runs whose reads wait to be judged (result files). */
+/** A study's graph expansion files: those of every run its first look's file names (update.ts studyRuns), but `except`. */
+async function studyGraphReads(results: readonly TopicSearchResult[], except?: string): Promise<GraphRead[]> {
+  const target = studyTarget(sortedResults(results));
+  if (!target) return [];
+  const runs = studyRuns(target).filter((id) => id !== except);
+  const reads = await Promise.all(runs.map((id) => loadGraphRead(appData, runDirOf(id))));
+  return reads.filter((r): r is GraphRead => r !== null);
+}
+
+/** What a retry reads again, the runs whose reads wait to be judged (result files), and a study's graph streams that did not come back. */
 async function retryPlanOf(search: TopicSearch): Promise<RetryPlan> {
-  const waiting = pendingJudging(await loadResults(search.id)).map((u) => u.runId);
-  return planRetry(search, await loadSourceHealth(), waiting);
+  const results = await loadResults(search.id);
+  const waiting = pendingJudging(results).map((u) => u.runId);
+  const graph = search.once === true ? await studyGraphReads(results) : [];
+  return planRetry(search, await loadSourceHealth(), waiting, graph);
 }
 
 /** The shelf file info/issue writes (info/issue/types.ts INFO_SHELF_FILE); read here without importing that domain. */

@@ -1526,6 +1526,19 @@ export const PALACE = [
     note: "one directory per topic-search run: the X progress file a cut-off run resumes from and the pace is tuned by, and what the read handed the build (src/info/topic-search/run-state.ts, docs/info/88)",
   },
   {
+    kind: "topic-search-graph-cache",
+    domain: "info",
+    match: fixed("topic-search-graph-cache.json"),
+    samples: ["topic-search-graph-cache.json"],
+    id: "fixed",
+    refs: [],
+    sync: "local",
+    deleteWith: "never",
+    // Every entry lives a month at most and each write drops the expired ones, so a file untouched for a month holds nothing.
+    retention: { rule: "age", days: 30, from: "mtime" },
+    note: "what S2 and OpenAlex answered a study's graph expansion: ids, references and abstracts for a month, citations and recommendations for three days (src/info/topic-search/graph-expand.ts, docs/info/92). Per device: only a cache",
+  },
+  {
     kind: "info-daily-round",
     domain: "info",
     match: fixed("info-daily-round.json"),

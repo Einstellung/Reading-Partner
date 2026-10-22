@@ -34,6 +34,7 @@ export function askedText(name: string, plan: RetryPlan, xSignedIn: boolean | nu
     plan.x.length ? `X for ${queries(plan.x.length)}` : "",
     plan.arxiv.length ? `arXiv for ${queries(plan.arxiv.length)}` : "",
     plan.huggingface?.length ? `Hugging Face for ${queries(plan.huggingface.length)}` : "",
+    plan.graph?.length ? `the citation graph for ${plan.graph.length} ${plan.graph.length === 1 ? "stream" : "streams"}` : "",
   ].filter(Boolean);
   const signedOut =
     plan.x.length && xSignedIn === false
