@@ -23,7 +23,8 @@ import { isShortLink, paperKeyOfUrl, unwrapLink } from "../rank/link-identity";
 import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
 import type { RepoLookup } from "../sources/plugins/github-lookup";
-import type { ArxivLadder } from "./arxiv-ladder";
+import { runArxivLadder, type ArxivLadder, type ArxivSearch } from "./arxiv-ladder";
+import { readPaperQueries, type ArxivRead, type PaperReadFiles } from "./arxiv-read";
 import { doiArxiv, heldDois, poolDois, type DoiLookup } from "./doi-arxiv";
 import { composeResult, deepenableMaterial, EARLIER_LINES, studyReadOrder, type DeeperReads, type DeeperReport, type EarlierLine } from "./compose";
 import { abortableSleep, parseJsonReply, retryingModel, topicCacheKey, type TopicModel } from "./model-io";
@@ -41,7 +42,9 @@ import {
   withLabelQuestion,
   type NewQuestion,
 } from "./questions";
-import { GRAPH_READ_FILE, parseGraphRead, type GraphRead } from "./graph-read";
+import { GRAPH_READ_2_FILE, GRAPH_READ_FILE, parseGraphRead, type GraphRead, type GraphStream } from "./graph-read";
+import { pickExamples } from "./graph-expand";
+import { runHfLadder, type HfSearch } from "./hf-ladder";
 import {
   fusePool,
   gatherCandidates,
@@ -57,6 +60,8 @@ import {
   streamKey,
   type ArxivFound,
   type Candidate,
+  type Gathered,
+  type Numbered,
   type RerankAnswer,
   type Scored,
 } from "./rank-pool";
@@ -76,6 +81,7 @@ import {
   type ResultStats,
   type ResultUnjudged,
   type ResultVerify,
+  type ResultWiden,
   type HubFacts,
   type TopicSearchResult,
   type TopicSearchResultItem,
@@ -84,7 +90,7 @@ import { traceOf, type ReadTrace } from "./read-failure";
 import { runDirOf } from "./run-state";
 import { selectItems, selectStudy, shortlist, type SelectView } from "./select";
 import type { StudyFile, StudyLine } from "./study";
-import type { TopicSearch } from "./types";
+import type { TopicQuery, TopicSearch } from "./types";
 import type { SeedPaper } from "./seed-lookup";
 import { currentVersion } from "./study";
 import { addedVersion, firstVersion, pinnedCandidate, studyVersions, withHeld } from "./update";
@@ -106,6 +112,32 @@ import { addDays } from "./windows";
 import { xReadNote } from "./x-progress";
 import type { XReadResult } from "./x-reader";
 import { RERANK_NAMED_NONE } from "./stage-failure";
+import {
+  ARXIV_READ_2_FILE,
+  calibrationBlock,
+  checkProposals,
+  findGaps,
+  HF_READ_2_FILE,
+  JUDGE_1_FILE,
+  JUDGE_2_FILE,
+  judgeFileBody,
+  judgeOnFile,
+  markQuery2,
+  newCandidates,
+  onTopicPapers,
+  parseProposals,
+  queryResults,
+  sentSearches,
+  WIDEN_FILE,
+  WIDEN_MIN_NEW,
+  widenedTopic,
+  widenLines,
+  widenOnFile,
+  widenPrompt,
+  widenQueries,
+  type WidenFile,
+  type WidenGap,
+} from "./widen";
 
 /** Items a result lists: a first run's, and a day's (88 「打分」 7). */
 export const RESULT_ITEMS = { first: 15, daily: 8 } as const;
@@ -120,7 +152,10 @@ export const HISTORY_DAYS = 30;
 /** 88 延续: a seen post is listed again when its engagement doubled and it gained this many likes. */
 export const CONTINUE_FACTOR = 2;
 export const CONTINUE_LIKES = 100;
-/** Model calls one result may make (rerank, dedupe judge, one comparison per item, two writes). */
+/**
+ * Model calls one result may make (rerank, dedupe judge, one comparison per
+ * item, two writes; a study's second round, its proposal and its judging).
+ */
 export const MAX_MODEL_CALLS = 24;
 /** Posts of one item the comparison sees. */
 const COMPARE_POSTS = 4;
@@ -301,6 +336,13 @@ export interface BuildResultDeps {
    * Absent: such a paper stays out.
    */
   seedPaper?(arxivId: string): Promise<SeedPaper | null>;
+  /**
+   * arXiv's and Hugging Face's search slots, through the host gate
+   * (build-live.ts): a study's second round (docs/info/92 「第二轮查询」)
+   * searches with them. Absent both: no second round.
+   */
+  searchArxiv?: ArxivSearch;
+  searchHf?: HfSearch;
   now(): number;
   /** Local date, YYYY-MM-DD. */
   today(): string;
@@ -638,7 +680,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const graphStreams = graph?.streams ?? [];
 
   // Rank (88 「打分」 1-6).
-  const gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf, graphStreams);
+  let gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf, graphStreams);
   // The source health speaks for this run's reads only.
   const own = carried.length ? gatherCandidates(topic, x, arxiv, since, huggingface) : gathered;
   // A study's seeds are judged and listed whatever the reads found (docs/info/91
@@ -647,14 +689,22 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   // build only: a retry or the slow part finds them in the file.
   const seedKeys = new Set(topic.once && kind === "first" && !retry ? (topic.seeds ?? []).map((seed) => seed.key) : []);
   const looked = await lookUpPinned(seedKeys, new Set(gathered.all.map((c) => c.key)), deps, since, signal);
-  const numbered = numberPool(withHeld(fusePool(topic, gathered.kept, RERANK_POOL[kind], graphStreams), [...gathered.all, ...looked], seedKeys));
+  let numbered = numberPool(withHeld(fusePool(topic, gathered.kept, RERANK_POOL[kind], graphStreams), [...gathered.all, ...looked], seedKeys));
   let answers = new Map<string, RerankAnswer>();
   let reranked = false;
   // The questions already raised, for both prompts that may raise more (88 「攒着问」).
   const { queue: stored } = await loadQueue(deps.files, topic.id);
   const raisedBefore = stored.filter((q) => q.source === "model");
   let unjudgedWhy: string | null = null;
-  if (numbered.length) {
+  // A study's first look may widen (docs/info/92 「第二轮查询」): once a line is
+  // short its first judging is on file, and a resumed build reads it there.
+  const widens = topic.once === true && kind === "first" && !retry && !!(deps.searchArxiv || deps.searchHf);
+  const inRunDir = (file: string) => `${runDir.replace(/\/+$/, "")}/${file}`;
+  const judgedBefore = widens && numbered.length ? judgeOnFile(await deps.files.read(inRunDir(JUDGE_1_FILE)).catch(() => null), numbered) : null;
+  if (judgedBefore?.size) {
+    answers = judgedBefore;
+    reranked = true;
+  } else if (numbered.length) {
     const prompt = rerankPrompt(topic, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text), null, graph?.titles);
     try {
       answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, topic);
@@ -759,7 +809,30 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   // A DOI link in the pool is its arXiv paper when the run holds or a lookup finds it.
   const dois = doiArxiv(heldDois([...poolArxiv, ...poolHf]), deps.arxivIdOfDoi ?? null);
   for (const doi of poolDois(numbered)) await dois.resolve(doi, signal);
-  const scored = scorePool(topic, numbered, answers, dois.keyOfUrl);
+  let scored = scorePool(topic, numbered, answers, dois.keyOfUrl);
+  // A line the first round left short gets a second round (docs/info/92 「第二轮查询」).
+  let widen: ResultWiden | undefined;
+  const gaps = widens ? findGaps(topic, scored) : [];
+  if (gaps.length) {
+    if (!judgedBefore?.size) await deps.files.write(inRunDir(JUDGE_1_FILE), judgeFileBody(numbered, answers));
+    ({ gathered, numbered, answers, scored, widen } = await widenRound({
+      deps,
+      topic,
+      since,
+      runDir,
+      signal,
+      call,
+      callsLeft,
+      gaps,
+      pool: { x: poolX, arxiv: poolArxiv, huggingface: poolHf, graph: graphStreams, titles: graph?.titles },
+      numbered,
+      answers,
+      scored,
+      keyOfUrl: dois.keyOfUrl,
+      prompt: { profile, language: bookLanguage, raised: raisedBefore.map((q) => q.text) },
+      report: args.report,
+    }));
+  }
   const clusters = rankEvents(scored);
 
   // The 30-day history: seen keys out, continuation back in, the near ones to the judge.
@@ -971,6 +1044,7 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
     ...(later ? { awaiting: later } : {}),
     ...(judged.length ? { judged } : {}),
     ...graphOf,
+    ...(widen ? { widen } : {}),
   };
   // A study's first look is its version 1, the seeds pinned first (docs/info/91 数据).
   if (topic.once && kind === "first" && !retry) {
@@ -983,13 +1057,14 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
 
 /**
  * The graph expansions on file in these run directories (graph-read.ts
- * graphReadFile, round 1), in their order: null for one with none, or one that
- * does not read (then the run's pool is the queries' alone).
+ * graphReadFile; round 1 unless `file` says otherwise), in their order: null
+ * for one with none, or one that does not read (then the run's pool is the
+ * queries' alone).
  */
-export async function graphReadsOf(files: ResultFiles, dirs: readonly string[]): Promise<(GraphRead | null)[]> {
+export async function graphReadsOf(files: ResultFiles, dirs: readonly string[], file: string = GRAPH_READ_FILE): Promise<(GraphRead | null)[]> {
   return Promise.all(
     dirs.map(async (dir) => {
-      const text = await files.read(`${dir.replace(/\/+$/, "")}/${GRAPH_READ_FILE}`).catch(() => null);
+      const text = await files.read(`${dir.replace(/\/+$/, "")}/${file}`).catch(() => null);
       return text === null ? null : parseGraphRead(text);
     }),
   );
@@ -1002,6 +1077,182 @@ export function resultGraph(read: GraphRead): ResultGraph {
     streams: read.streams.map((s) => ({ id: s.id, outcome: s.outcome, kept: s.papers.length })),
     doiOnly: read.doiOnly.count,
   };
+}
+
+/**
+ * What a study's first look read in its second round, out of its run
+ * directory (`widen.json` and the `-2` files), for an update's pool: the
+ * searches that passed as queries, what they found, and a second-round graph
+ * expansion. Empty when the first look had no second round.
+ */
+export async function secondRoundOf(
+  files: ResultFiles,
+  dir: string,
+  topic: TopicSearch,
+): Promise<{ queries: TopicQuery[]; arxiv: ArxivFound[]; huggingface: ArxivFound[]; graph: GraphRead | null }> {
+  const path = (file: string) => `${dir.replace(/\/+$/, "")}/${file}`;
+  const read = (file: string) => files.read(path(file)).catch(() => null);
+  const widened = widenOnFile(await read(WIDEN_FILE), null);
+  const queries = widened ? widenQueries(topic, widened.checked ?? []) : [];
+  const [arxiv, huggingface] = queries.length ? await Promise.all([read(ARXIV_READ_2_FILE), read(HF_READ_2_FILE)]) : [null, null];
+  const [graph] = await graphReadsOf(files, [dir], GRAPH_READ_2_FILE);
+  return { queries, arxiv: paperReadOf(arxiv)?.found ?? [], huggingface: paperReadOf(huggingface)?.found ?? [], graph };
+}
+
+/** What a study's second round starts from: the first round as judged. */
+export interface WidenContext {
+  deps: BuildResultDeps;
+  topic: TopicSearch;
+  since: number;
+  runDir: string;
+  signal: AbortSignal;
+  call: TopicModel;
+  callsLeft: () => number;
+  gaps: readonly WidenGap[];
+  /** Every read the first pool was gathered from, and the graph's streams and titles. */
+  pool: { x: XReadResult; arxiv: readonly ArxivFound[]; huggingface: readonly ArxivFound[]; graph: readonly GraphStream[]; titles?: ReadonlyMap<string, string> };
+  numbered: Numbered[];
+  answers: Map<string, RerankAnswer>;
+  scored: Scored[];
+  keyOfUrl: (url: string) => string | null;
+  prompt: { profile: readonly string[]; language: string; raised: readonly string[] };
+  report?: (text: string) => void;
+}
+
+/** Both rounds as one pool, judged, and the round's record. */
+export interface Widened {
+  gathered: Gathered;
+  numbered: Numbered[];
+  answers: Map<string, RerankAnswer>;
+  scored: Scored[];
+  widen: ResultWiden;
+}
+
+/** A paper read on file in the run directory; null for none or one that does not read. */
+function paperReadOf(text: string | null): ArxivRead | null {
+  if (text === null) return null;
+  try {
+    const raw = JSON.parse(text) as ArxivRead;
+    return raw?.version === 1 && Array.isArray(raw.planned) && Array.isArray(raw.found) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A study's second round (docs/info/92 「第二轮查询」 3-9), each step kept in
+ * the run directory and read back on a resume: one call proposes searches for
+ * the gaps and the checks number those that pass (`widen.json`); they are
+ * searched on arXiv and Hugging Face, a source cooling down not waited for
+ * (`arxiv-read-2.json`, `hf-read-2.json`); the candidates the first pool lacked
+ * are judged, at least WIDEN_MIN_NEW of them, beside the first round's highest
+ * and lowest (`judge-2.json`); then every stream of both rounds is fused again
+ * and scored. A failed proposal or judging leaves the first round standing.
+ */
+export async function widenRound(ctx: WidenContext): Promise<Widened> {
+  const { deps, topic, gaps, signal } = ctx;
+  const path = (file: string) => `${ctx.runDir.replace(/\/+$/, "")}/${file}`;
+  const read = (file: string) => deps.files.read(path(file)).catch(() => null);
+  const writeWiden = (file: WidenFile) => deps.files.write(path(WIDEN_FILE), `${JSON.stringify(file, null, 2)}\n`);
+  const searches = {
+    arxiv: readsSource(topic, "arxiv") ? (deps.searchArxiv ?? null) : null,
+    huggingface: readsSource(topic, "huggingface") ? (deps.searchHf ?? null) : null,
+  };
+
+  // 1. The proposal and its checks.
+  let file = widenOnFile(await read(WIDEN_FILE), gaps);
+  if (!file) {
+    if (!searches.arxiv && !searches.huggingface) file = { version: 1, gaps: [...gaps], checked: null, stopped: "no_source" };
+    else if (ctx.callsLeft() <= 0) file = { version: 1, gaps: [...gaps], checked: null, stopped: "proposal_failed", error: "the run's model calls ran out" };
+    else {
+      const labels = deps.labels ? await deps.labels(topic.id).catch(() => []) : [];
+      const papers = onTopicPapers(pickExamples(topic.seeds ?? [], labels).positives, ctx.scored);
+      const sent = sentSearches(topic);
+      try {
+        const reply = await ctx.call({ site: "widen", ...widenPrompt(topic, gaps, papers, sent), cache: false, signal });
+        file = { version: 1, gaps: [...gaps], checked: checkProposals(parseProposals(reply), gaps, sent, papers) };
+      } catch (e) {
+        if (signal.aborted) throw e;
+        file = { version: 1, gaps: [...gaps], checked: null, stopped: "proposal_failed", error: e instanceof Error ? e.message : String(e) };
+      }
+    }
+    await writeWiden(file);
+  }
+
+  // 2. The searches, those not yet on file.
+  const queries = widenQueries(topic, file.checked ?? []);
+  const plan = { kind: "first" as const, since: ctx.since, today: deps.today(), only: null };
+  const only = { ...topic, queries };
+  const onFile = (name: string): PaperReadFiles => ({
+    load: async () => paperReadOf(await read(name)),
+    save: (r) => deps.files.write(path(name), JSON.stringify(r)),
+  });
+  if (queries.length) ctx.report?.(`second round: searching ${queries.length} quer${queries.length === 1 ? "y" : "ies"} for ${gaps.length} short line${gaps.length === 1 ? "" : "s"}`);
+  const [arxiv2, hf2] = await Promise.all([
+    queries.length && searches.arxiv
+      ? readPaperQueries(only, plan, (q, w, k, s) => runArxivLadder(q, w, k, searches.arxiv!, s), onFile(ARXIV_READ_2_FILE), signal)
+      : null,
+    queries.length && searches.huggingface
+      ? readPaperQueries(only, plan, (q, w, k, s) => runHfLadder(q, w, k, searches.huggingface!, s), onFile(HF_READ_2_FILE), signal)
+      : null,
+  ]);
+  const found = [...(arxiv2?.found ?? []), ...(hf2?.found ?? [])];
+  const results = queryResults(queries, found);
+
+  // 3. Both rounds' streams fused again; the first pool keeps its numbers.
+  const both = widenedTopic(topic, queries);
+  const gathered = gatherCandidates(
+    both,
+    ctx.pool.x,
+    [...ctx.pool.arxiv, ...(arxiv2?.found ?? [])],
+    ctx.since,
+    [...ctx.pool.huggingface, ...(hf2?.found ?? [])],
+    ctx.pool.graph,
+  );
+  markQuery2(gathered.all);
+  const fused = fusePool(both, gathered.kept, gathered.kept.length, ctx.pool.graph);
+  const rrf = new Map(fused.map((f) => [f.cand.key, f.rrf]));
+  const byKey = new Map(gathered.all.map((c) => [c.key, c]));
+  const first = ctx.numbered.map((n) => ({ cand: byKey.get(n.cand.key) ?? n.cand, rrf: rrf.get(n.cand.key) ?? n.rrf }));
+  const fresh = newCandidates(fused, new Set(ctx.numbered.map((n) => n.cand.key)));
+
+  // 4. Only the new candidates are judged, numbered after the first pool's.
+  let numbered = numberPool(first);
+  let answers = ctx.answers;
+  let unjudged = false;
+  if (fresh.length >= WIDEN_MIN_NEW) {
+    const all = numberPool([...first, ...fresh]);
+    const added = all.slice(first.length);
+    let got = judgeOnFile(await read(JUDGE_2_FILE), added);
+    if (!got?.size && ctx.callsLeft() > 0) {
+      const prompt = rerankPrompt(both, added, ctx.prompt.profile, ctx.prompt.language, ctx.prompt.raised, null, ctx.pool.titles);
+      const scale = calibrationBlock(
+        ctx.numbered.flatMap((n) => {
+          const a = ctx.answers.get(n.c);
+          return a ? [{ score: a.score, title: n.cand.paper?.title ?? n.cand.text }] : [];
+        }),
+      );
+      try {
+        const reply = await ctx.call({ site: "rerank", system: prompt.system, user: scale ? `${prompt.user}\n\n${scale}` : prompt.user, cache: false, signal });
+        got = parseRerank(reply, added, both);
+        if (got.size) await deps.files.write(path(JUDGE_2_FILE), judgeFileBody(added, got));
+      } catch (e) {
+        if (signal.aborted) throw e;
+        got = null;
+      }
+    }
+    if (got?.size) {
+      numbered = all;
+      answers = new Map([...ctx.answers, ...got]);
+    } else unjudged = true;
+  }
+  const scored = scorePool(both, numbered, answers, ctx.keyOfUrl);
+  const widen: ResultWiden = {
+    queries: results,
+    lines: widenLines(gaps, scored, { checked: file.checked, ...(file.stopped ? { stopped: file.stopped } : {}), results, found, unjudged }),
+  };
+  await writeWiden({ ...file, result: widen });
+  return { gathered, numbered, answers, scored, widen };
 }
 
 /**

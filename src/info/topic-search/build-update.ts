@@ -32,6 +32,7 @@ import {
   graphReadsOf,
   itemOfDraft,
   loadHistory,
+  secondRoundOf,
   lookUpDraftRepos,
   lookUpPinned,
   MAX_MODEL_CALLS,
@@ -77,6 +78,7 @@ import {
 } from "./result-types";
 import { runDirOf } from "./run-state";
 import { selectStudy } from "./select";
+import { markQuery2, widenedTopic } from "./widen";
 import { currentVersion, emptyStudyFile } from "./study";
 import {
   changeCounts,
@@ -150,13 +152,23 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
   }
   const arxiv = args.arxiv;
   const huggingface = args.huggingface ?? [];
-  const poolArxiv = [...arxiv, ...carried.flatMap((c) => c.arxiv)];
-  const poolHf = [...huggingface, ...carried.flatMap((c) => c.huggingface)];
+  // The first look's second round (docs/info/92 「第二轮查询」): its searches join
+  // the pool as this run's queries, never the topic's, and are not run again.
+  const second = await secondRoundOf(deps.files, target.runDir, topic);
+  const pooled = widenedTopic(topic, second.queries);
+  const poolArxiv = [...arxiv, ...carried.flatMap((c) => c.arxiv), ...second.arxiv];
+  const poolHf = [...huggingface, ...carried.flatMap((c) => c.huggingface), ...second.huggingface];
   const poolX = { ...args.x, posts: [...args.x.posts, ...carried.flatMap((c) => c.x?.posts ?? [])] };
   const runs = studyRuns(target).filter((id) => id !== update.runId);
-  const graph = graphPool(await graphReadsOf(deps.files, [...runs.map((id, i) => (i === 0 ? target.runDir : runDirOf(id))), runDir]));
+  const runDirs = runs.map((id, i) => (i === 0 ? target.runDir : runDirOf(id)));
+  const graph = graphPool([
+    ...(await graphReadsOf(deps.files, runDirs.slice(0, 1))),
+    second.graph,
+    ...(await graphReadsOf(deps.files, [...runDirs.slice(1), runDir])),
+  ]);
   const graphStreams = graph?.streams ?? [];
-  const gathered = gatherCandidates(topic, poolX, poolArxiv, since, poolHf, graphStreams);
+  const gathered = gatherCandidates(pooled, poolX, poolArxiv, since, poolHf, graphStreams);
+  markQuery2(gathered.all);
   const own = gatherCandidates(topic, args.x, arxiv, since, huggingface);
   const byId = new Map(target.items.map((i) => [i.id, i]));
   // The base version's items, the pinned and the demoted are judged whatever the
@@ -169,7 +181,7 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
   ]);
   const inFile = target.items.flatMap((i) => [i.key, ...i.keys]);
   const looked = await lookUpPinned(marks.pinned.keys(), new Set([...gathered.all.map((c) => c.key), ...inFile]), deps, since, signal);
-  const numbered = numberPool(withHeld(fusePool(topic, gathered.kept, RERANK_POOL.first, graphStreams), [...gathered.all, ...looked], held));
+  const numbered = numberPool(withHeld(fusePool(pooled, gathered.kept, RERANK_POOL.first, graphStreams), [...gathered.all, ...looked], held));
 
   const name = `${target.id}.json`;
   const { queue: stored } = await loadQueue(deps.files, topic.id);
@@ -224,12 +236,12 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
   let answers = new Map<string, RerankAnswer>();
   let unjudgedWhy: string | null = numbered.length ? null : NOTHING_TO_JUDGE;
   if (numbered.length) {
-    const prompt = rerankPrompt(topic, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text), {
+    const prompt = rerankPrompt(pooled, numbered, profile, bookLanguage, raisedBefore.map((q) => q.text), {
       lines: lines.map((l) => ({ id: l.id, kind: l.kind, text: l.text })),
       examples: labelExamples(labels),
     }, graph?.titles);
     try {
-      answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, topic, new Set(lines.map((l) => l.id)));
+      answers = parseRerank(await call({ site: "rerank", ...prompt, cache: false, signal }), numbered, pooled, new Set(lines.map((l) => l.id)));
       if (answers.size === 0) unjudgedWhy = RERANK_NAMED_NONE;
     } catch (e) {
       if (signal.aborted) throw e;
@@ -244,7 +256,7 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
   // 2. What the version lists, and where.
   const dois = doiArxiv(heldDois([...poolArxiv, ...poolHf]), deps.arxivIdOfDoi ?? null);
   for (const doi of poolDois(numbered)) await dois.resolve(doi, signal);
-  const scored = scorePool(topic, numbered, answers, dois.keyOfUrl);
+  const scored = scorePool(pooled, numbered, answers, dois.keyOfUrl);
   const drafts = rankEvents(scored).map(draftOf);
   const has = (map: ReadonlyMap<string, unknown>) => (d: Draft) => d.keys.some((k) => map.has(k));
   const isPinned = has(marks.pinned);

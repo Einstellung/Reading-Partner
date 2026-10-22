@@ -3,8 +3,10 @@
 // write byte for byte what they wrote before the graph joined the pool. The
 // hashes in fixtures/graph-pool-golden.json were taken on the commit before it
 // (927bbc62); `GRAPH_GOLDEN_WRITE=1 scripts/t.sh <this file>` writes them again.
-// A non-study topic ignores a graph-read.json in its run directory. No network,
-// no model: every answer is scripted.
+// A non-study topic ignores a graph-read.json in its run directory. The second
+// round's searches are wired (docs/info/92 「第二轮查询」): the study leaves no
+// line short, so it writes the same bytes with them. No network, no model:
+// every answer is scripted.
 
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -124,6 +126,8 @@ function world(topic: TopicSearch, seed: Record<string, string> = {}) {
     labels: async () => [],
     study: async (): Promise<StudyFile> => ({ version: 1, searchId: SEARCH_ID, lines: [], rollbacks: [] }),
     seedPaper: async () => null,
+    searchArxiv: async () => [],
+    searchHf: async () => [],
     now: () => now,
     today: () => "2026-10-21",
   };

@@ -127,6 +127,9 @@ export const liveResultDeps: BuildResultDeps = {
   useLines: async (searchId, lines) => void (await putStudyLines(searchId, lines)),
   // A study's seed no read found, looked up as find_seed_paper looks it up (docs/info/91 起草与种子).
   seedPaper: (arxivId) => liveSeedSearches.byArxivId(arxivId),
+  // A study's second round searches as the read phase does (docs/info/92 「第二轮查询」).
+  searchArxiv: searchArxivLive,
+  searchHf: searchHfLive,
   known: async () => standingStatements(await listStatements(), "known").map((s) => s.text.trim()),
   language: async () => languageInstruction((await resolveModel("prep")).aiLanguage),
   bookLanguage: async () => bookLanguageInstruction((await resolveModel("prep")).aiLanguage),
