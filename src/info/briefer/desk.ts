@@ -89,6 +89,9 @@ export type InfoBriefingDeskRef =
       // add-source skill (docs/17).
       onboarding: true;
       aiLanguage?: AiLanguage;
+      // Whether the add-source skill is the prompt (info/old-briefing.ts). The
+      // switch's value unless a test says otherwise.
+      oldBriefing?: boolean;
       tools?: CompanionTools;
       listObservations?: ListObservations;
     }
@@ -212,7 +215,7 @@ function briefingPrompt(ref: InfoBriefingDeskRef): string {
   // The add-source skill describes tools that are not mounted while the old
   // briefing's UI is off (info/old-briefing.ts, companion-tools.ts).
   if (ref.onboarding) {
-    return OLD_BRIEFING_UI_ENABLED ? addSourceSystemPrompt({ aiLanguage: ref.aiLanguage, onboarding: true }) : "";
+    return (ref.oldBriefing ?? OLD_BRIEFING_UI_ENABLED) ? addSourceSystemPrompt({ aiLanguage: ref.aiLanguage, onboarding: true }) : "";
   }
   if (ref.briefing) return briefingChatSystemPrompt(ref.briefing, ref.ctx);
   return noBriefingChatSystemPrompt(ref.ctx, {
@@ -228,7 +231,7 @@ function briefingPrompt(ref: InfoBriefingDeskRef): string {
 // appended here. There are none yet by construction at that point, which is
 // exactly the state the guidance is written for: ask what to keep watch on.
 function labSection(ref: InfoBriefingDeskRef): string {
-  return ref.onboarding && OLD_BRIEFING_UI_ENABLED ? labGuidance([], []) : "";
+  return ref.onboarding && (ref.oldBriefing ?? OLD_BRIEFING_UI_ENABLED) ? labGuidance([], []) : "";
 }
 
 async function topicObservations(

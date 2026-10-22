@@ -44,7 +44,10 @@ const SOURCES: SourceDescriptor[] = [
   },
 ];
 
-const CTX: CompanionContext = { reader: "I like hard technical substance.", sources: SOURCES };
+// With the old briefing's tools forced on (src/info/old-briefing.ts), so their
+// guidance stays covered while its UI is off; the shape that ships is tested
+// at the end.
+const CTX: CompanionContext = { reader: "I like hard technical substance.", sources: SOURCES, oldBriefing: true };
 
 const LAB: Lab = {
   id: "lab-1234abcd",
@@ -369,4 +372,18 @@ test("formatSignInSites lists X search's site once there is a topic search", () 
   expect(formatSignInSites(SOURCES, false)).toContain("nothing to sign in to");
   expect(formatSignInSites([BLOOMBERG], false)).not.toContain("x.com");
   expect(formatSignInSites([BLOOMBERG], true)).toContain("bloomberg.com — ");
+});
+
+// Off, as shipped: the tools are not mounted (companion-tools.ts), so the
+// prompts do not describe them — no add-source half, no generate_briefing, no
+// lab roster — while read_page and statement_write stay.
+test("with the old briefing's UI off neither thread describes its tools", async () => {
+  const off = { ...CTX, oldBriefing: undefined };
+  for (const prompt of [await briefingPrompt(BRIEFING, off), await noBriefingPrompt(off)]) {
+    expect(prompt).toContain("read_page");
+    expect(prompt).toContain("statement_write");
+    for (const gone of ["generate_briefing", "add_source", "probe_source", "trial_source", "propose_lab"]) {
+      expect(prompt).not.toContain(gone);
+    }
+  }
 });

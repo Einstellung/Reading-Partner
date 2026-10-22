@@ -269,6 +269,9 @@ const companion = buildCompanionTools(
     startBriefing: () => "started",
     labs: { labs: async () => [], sources: async () => [], onLabCard: () => {}, threadId: "t" },
     siteSignIn: { signInSites: async () => [], openSignIn: async () => ({ closed: true, elapsedMs: 1 }) },
+    // The old briefing's tools too, though its UI is off (src/info/old-briefing.ts):
+    // the catalog still registers them for stored sessions.
+    oldBriefing: true,
   }),
 );
 

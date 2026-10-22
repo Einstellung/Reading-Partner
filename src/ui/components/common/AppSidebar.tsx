@@ -104,6 +104,9 @@ export default function AppSidebar(props: {
   // Whether the meals line is switched on (settings.meals, docs/73). Off, and
   // its row is not in the column at all.
   meals?: boolean;
+  // Whether the old daily briefing has its row (info/old-briefing.ts). The
+  // switch's value unless a test says otherwise.
+  oldBriefing?: boolean;
 }) {
   const t = useT();
   const companionName = useCompanionName();
@@ -150,7 +153,7 @@ export default function AppSidebar(props: {
       </div>
       {collapsed && toggle}
 
-      {shellNavItems({ meals: props.meals === true }).map((item) => (
+      {shellNavItems({ meals: props.meals === true, oldBriefing: props.oldBriefing }).map((item) => (
         <Row
           key={item.id}
           label={t(item.labelKey)}

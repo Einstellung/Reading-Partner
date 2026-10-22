@@ -17,10 +17,14 @@ function render(
     active?: "today" | "briefing" | "topics" | "settings" | null;
     alert?: boolean;
     collapsed?: boolean;
+    oldBriefing?: boolean;
   } = {},
 ) {
+  // The old briefing's row is forced on (src/info/old-briefing.ts) so it stays
+  // covered while its UI is off; the sidebar that ships is tested below.
   return renderToStaticMarkup(
     <AppSidebar
+      oldBriefing={over.oldBriefing ?? true}
       active={"active" in over ? (over.active ?? null) : "today"}
       onSelect={() => {}}
       onOpenSettings={() => {}}
@@ -39,6 +43,14 @@ test("the three items and Settings read as text, in order", () => {
   expect(html.indexOf(">Briefing<")).toBeGreaterThan(html.indexOf(">Today<"));
   expect(html.indexOf(">Topics<")).toBeGreaterThan(html.indexOf(">Briefing<"));
   expect(html.indexOf(">Settings<")).toBeGreaterThan(html.indexOf(">Topics<"));
+});
+
+test("with the old briefing's UI off there is no Briefing row", () => {
+  const html = render({ oldBriefing: false });
+  expect(html).not.toContain(">Briefing<");
+  expect(html.indexOf(">Briefs<")).toBeGreaterThan(html.indexOf(">Today<"));
+  expect(html.indexOf(">Topics<")).toBeGreaterThan(html.indexOf(">Briefs<"));
+  expect(html.match(/h-11 w-11/g)?.length).toBe(5);
 });
 
 // The labels leave the flow on the rail, so every row keeps its name for a

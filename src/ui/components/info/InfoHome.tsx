@@ -36,6 +36,7 @@ import { useInfoHome } from "./use-info-home";
 import { useRegisterVoiceContext } from "../companion/voice-context";
 import { noLabsOpen } from "./no-labs";
 import { useT } from "../../../i18n";
+import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 
 // The screen union lives in base/shell-nav.ts, which is what maps it to the
 // shell's sidebar; re-exported here so its importers are unchanged.
@@ -165,13 +166,20 @@ export default function InfoHome(props: {
   // swaps it away would be a second way to leave, eating a corner of a 393pt
   // screen to offer it.
   pipCards?: boolean;
+  // Whether the old daily briefing's page, article and Today card are drawn
+  // (info/old-briefing.ts). The switch's value unless a test says otherwise.
+  oldBriefing?: boolean;
 }) {
   const t = useT();
   // The old briefing's page and article are not drawn while its UI is off
   // (info/old-briefing.ts): a screen or a destination naming them is Today.
-  const screen = props.screen === null ? null : reachableScreen(props.screen);
+  const oldBriefing = props.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
+  const screen = props.screen === null ? null : reachableScreen(props.screen, oldBriefing);
   const navigate = props.onNavigate;
-  const onNavigate = useCallback((next: HomeScreen) => navigate(reachableScreen(next)), [navigate]);
+  const onNavigate = useCallback(
+    (next: HomeScreen) => navigate(reachableScreen(next, oldBriefing)),
+    [navigate, oldBriefing],
+  );
   const meals = useMeals(props.mealsEnabled === true);
   // The day the desktop shell has open. It has no navigation stack to hold it,
   // and the phone's entry overrides this the moment it supplies one.
@@ -239,6 +247,7 @@ export default function InfoHome(props: {
               onOpenBriefing={() => onNavigate("briefing")}
               onOpenSettings={props.onOpenSettings}
               onStartSubscribing={info.openOnboarding}
+              oldBriefing={oldBriefing}
             />
           )}
         </div>

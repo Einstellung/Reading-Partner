@@ -34,13 +34,18 @@ const BOOK = {
   topicName: "Evolution",
 };
 
+// The old briefing's card is forced on (src/info/old-briefing.ts) so its
+// placeholder stays covered while that UI is off; the last test of this group
+// is the Today that ships.
 function launch(over: {
   launchReady: boolean;
   continueBook?: { file: { path: string; name: string; addedAt: number }; topicName: string } | null;
+  oldBriefing?: boolean;
 }) {
   return (
     <InfoHome
       screen="vestibule"
+      oldBriefing
       onNavigate={() => {}}
       // Null keeps the briefing view unbuilt, which is also what a real first
       // frame has: device.json has not been read either.
@@ -112,6 +117,25 @@ test("an empty shelf is an answer, not a reason to keep waiting", async () => {
 
   expect(container.textContent ?? "").toContain("Nothing open yet");
   expect(container.querySelectorAll("[data-placeholder='card-body']").length).toBe(1);
+});
+
+// Off, as shipped: no briefing card, so only the shelf's card holds a
+// placeholder, and nothing on the page says "briefing".
+test("with the old briefing's UI off Today is Continue reading and the topics", async () => {
+  const { container, rerender } = await paint(launch({ launchReady: false, oldBriefing: false }));
+  expect(container.querySelectorAll("[data-placeholder='card-body']").length).toBe(1);
+  const text = container.textContent ?? "";
+  expect(text).toContain("Today");
+  expect(text).toContain("Continue reading");
+  expect(text).toContain("Your topics");
+  expect(text.toLowerCase()).not.toContain("briefing");
+
+  await act(async () => {
+    rerender(launch({ launchReady: true, continueBook: null, oldBriefing: false }));
+  });
+  expect(container.querySelectorAll("[data-placeholder='card-body']").length).toBe(0);
+  expect(container.textContent ?? "").toContain("Nothing open yet");
+  expect(container.textContent ?? "").not.toContain("Configure a provider to begin");
 });
 
 // The flag itself. A read that failed still has to report, or the placeholder it

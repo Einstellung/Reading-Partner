@@ -32,7 +32,9 @@ import type { CompanionContext } from "../../../src/info/briefer/chat";
 import type { Briefing } from "../../../src/info/boxes/types";
 import { WEB_SEARCH_PROMPT, WEB_SEARCH_UNAVAILABLE_PROMPT } from "../../../src/websearch/prompt";
 
-const CTX: CompanionContext = { reader: "Reads robotics.", sources: [], collecting: true };
+// The old briefing's tools forced on (src/info/old-briefing.ts), so their
+// guidance stays covered while its UI is off.
+const CTX: CompanionContext = { reader: "Reads robotics.", sources: [], collecting: true, oldBriefing: true };
 
 const BRIEFING: Briefing = {
   date: "2026-07-21",
@@ -248,10 +250,14 @@ test("an article on its own desk brings no tools but the soul's", async () => {
 // Onboarding is the briefing item in a variant, not a kind of its own.
 test("the onboarding variant opens on the add-source skill", async () => {
   const turn = await assemble([
-    { kind: INFO_BRIEFING_KIND, ref: { onboarding: true, aiLanguage: "zh-CN" } },
+    { kind: INFO_BRIEFING_KIND, ref: { onboarding: true, aiLanguage: "zh-CN", oldBriefing: true } },
   ]);
   expect(turn.systemPrompt).toContain("first run");
   expect(turn.systemPrompt).not.toContain("Overview:");
+  // Off, as shipped: the add-source tools are not mounted, so nothing names them.
+  const off = await assemble([{ kind: INFO_BRIEFING_KIND, ref: { onboarding: true, aiLanguage: "zh-CN" } }]);
+  expect(off.systemPrompt).not.toContain("add_source");
+  expect(off.systemPrompt).not.toContain("propose_lab");
 });
 
 // docs/48: info's first read of memory. The statements are about the reader and

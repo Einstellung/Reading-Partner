@@ -23,6 +23,8 @@ import { toolText } from "../../support/tool-text";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 
+// With the old briefing's tools forced on (src/info/old-briefing.ts), so they
+// stay covered while its UI is off; the last test here is the shape that ships.
 function deps() {
   return {
     fetchFn: async () => new Response(""),
@@ -30,6 +32,7 @@ function deps() {
     addSource: async () => {},
     onProbeCard: () => {},
     startBriefing: () => "started" as const,
+    oldBriefing: true,
   };
 }
 
@@ -373,4 +376,23 @@ test("a window that could not open, and a check that failed, are both reported h
   const out2 = String(await buildSignInTool(noCheck.d).execute({ site: "bloomberg.com" }));
   expect(out2).toMatch(/closed the bloomberg\.com sign-in window/);
   expect(out2).toMatch(/session check that follows failed: load timed out/);
+});
+
+// Off, as shipped (src/info/old-briefing.ts): read_page, and the sign-in window
+// where one can open. No generate_briefing, no add-source tools, no lab tools,
+// whatever the host hands in.
+test("with the old briefing's UI off the companion mounts none of its tools", () => {
+  const off = { ...deps(), oldBriefing: undefined };
+  expect(buildCompanionTools(off).map((t) => t.name)).toEqual(["read_page"]);
+  const names = buildCompanionTools({
+    ...off,
+    labs: {
+      threadId: "briefing-2026-09-09",
+      labs: async () => [],
+      sources: async () => [],
+      onLabCard: () => {},
+    },
+    siteSignIn: signInDeps().d,
+  }).map((t) => t.name);
+  expect(names).toEqual(["read_page", "open_site_sign_in"]);
 });
