@@ -174,16 +174,16 @@ export function s2PaperUrl(id: string, fields = SEARCH_FIELDS): string {
 export const S2_REFERENCES_PAGE = 500;
 export const S2_CITATIONS_PAGE = 100;
 
-export function s2ReferencesUrl(id: string, limit = S2_REFERENCES_PAGE): string {
-  return `${S2_BASE}/paper/${encodeURIComponent(id)}/references?fields=${SEARCH_FIELDS}&limit=${limit}`;
+export function s2ReferencesUrl(id: string, limit = S2_REFERENCES_PAGE, fields = SEARCH_FIELDS): string {
+  return `${S2_BASE}/paper/${encodeURIComponent(id)}/references?fields=${fields}&limit=${limit}`;
 }
 
 // No `year=` here on purpose: the parameter is accepted, returns 200, and is
 // silently ignored. Measured 2026-07-30 on ARXIV:1706.03762, `year=1990-1995`
 // returned the same 2026 papers as no filter at all — a window that must have been
 // empty. Passing it would buy nothing and make the caller believe it had filtered.
-export function s2CitationsUrl(id: string, limit = S2_CITATIONS_PAGE): string {
-  return `${S2_BASE}/paper/${encodeURIComponent(id)}/citations?fields=${SEARCH_FIELDS}&limit=${limit}`;
+export function s2CitationsUrl(id: string, limit = S2_CITATIONS_PAGE, fields = SEARCH_FIELDS): string {
+  return `${S2_BASE}/paper/${encodeURIComponent(id)}/citations?fields=${fields}&limit=${limit}`;
 }
 
 // Edges come wrapped one level deep, under `citedPaper` on /references and
@@ -204,12 +204,16 @@ export function parseS2Edges(body: unknown, key: S2EdgeKey): S2Hit[] {
     .map(s2Hit);
 }
 
-function s2Init(apiKey?: string): RequestInit | undefined {
-  return apiKey ? { headers: { "x-api-key": apiKey } } : undefined;
+function s2Init(apiKey?: string, body?: unknown): RequestInit | undefined {
+  const headers: Record<string, string> = {};
+  if (apiKey) headers["x-api-key"] = apiKey;
+  if (body === undefined) return apiKey ? { headers } : undefined;
+  headers["Content-Type"] = "application/json";
+  return { method: "POST", headers, body: JSON.stringify(body) };
 }
 
-async function s2Get(url: string, fetchFn?: FetchFn, apiKey?: string): Promise<Response> {
-  const res = await fetchWithRetry(url, s2Init(apiKey), interactiveRetry(fetchFn));
+async function s2Get(url: string, fetchFn?: FetchFn, apiKey?: string, body?: unknown): Promise<Response> {
+  const res = await fetchWithRetry(url, s2Init(apiKey, body), interactiveRetry(fetchFn));
   // 404 is a seed S2 does not know — a miss for the caller to fall back on, not a
   // failure of the library.
   if (!res.ok && res.status !== 404) throw new HttpStatusError(res.status, "api.semanticscholar.org");
@@ -238,6 +242,94 @@ export async function fetchS2Edges(
   const res = await s2Get(url, fetchFn, apiKey);
   if (res.status === 404) return [];
   return parseS2Edges(await res.json(), direction === "references" ? "citedPaper" : "citingPaper");
+}
+
+// --- graph expansion (docs/info/92: a study's recommendations and citation walk) ---
+
+// What the expansion reads off every paper it is handed: the arXiv id to pool it
+// under, the abstract to judge it on, the day for the window.
+export const S2_GRAPH_FIELDS = "title,abstract,authors,year,publicationDate,externalIds,citationCount";
+// The walk's page sizes (both endpoints' maximum is 1000): every citation of any
+// positive under the hub cut, every reference of any real paper.
+export const S2_GRAPH_CITATIONS_PAGE = 1000;
+export const S2_GRAPH_REFERENCES_PAGE = 500;
+export const S2_BATCH_MAX = 500;
+export const S2_RECOMMENDATIONS_MAX = 500;
+
+const S2_RECOMMENDATIONS_BASE = "https://api.semanticscholar.org/recommendations/v1";
+
+export function s2BatchUrl(fields = S2_GRAPH_FIELDS): string {
+  return `${S2_BASE}/paper/batch?fields=${fields}`;
+}
+
+export function s2RecommendationsUrl(limit = 100, fields = S2_GRAPH_FIELDS): string {
+  return `${S2_RECOMMENDATIONS_BASE}/papers/?limit=${Math.min(limit, S2_RECOMMENDATIONS_MAX)}&fields=${fields}`;
+}
+
+/** The batch answer, one entry per id asked, null where S2 does not know the id. */
+export function parseS2Batch(body: unknown): (S2Hit | null)[] {
+  if (!Array.isArray(body)) return [];
+  return body.map((p: S2Paper | null) => (p && (p.title ?? "").trim() ? s2Hit(p) : null));
+}
+
+export function parseS2Recommendations(body: unknown): S2Hit[] {
+  const papers = (body as { recommendedPapers?: S2Paper[] | null } | null)?.recommendedPapers;
+  if (!Array.isArray(papers)) return [];
+  return papers.filter((p) => !!p && (p.title ?? "").trim().length > 0).map(s2Hit);
+}
+
+// Many papers by identifier in one request ("ARXIV:2401.00001", "DOI:10.1/x", a
+// paperId), in the order asked. Ids past S2_BATCH_MAX are not sent.
+export async function fetchS2Batch(
+  ids: string[],
+  fetchFn?: FetchFn,
+  apiKey?: string,
+  fields = S2_GRAPH_FIELDS,
+): Promise<(S2Hit | null)[]> {
+  const asked = ids.slice(0, S2_BATCH_MAX);
+  if (asked.length === 0) return [];
+  const res = await s2Get(s2BatchUrl(fields), fetchFn, apiKey, { ids: asked });
+  if (res.status === 404) return asked.map(() => null);
+  const hits = parseS2Batch(await res.json());
+  return asked.map((_, i) => hits[i] ?? null);
+}
+
+// Papers like the positives and unlike the negatives. Null when S2 knows none of
+// the positives (404 "Input papers not found"), a miss for the caller to fall
+// back on.
+export async function fetchS2Recommendations(
+  examples: { positive: string[]; negative: string[] },
+  opts: { limit?: number; fields?: string } = {},
+  fetchFn?: FetchFn,
+  apiKey?: string,
+): Promise<S2Hit[] | null> {
+  const body = { positivePaperIds: examples.positive, negativePaperIds: examples.negative };
+  const res = await s2Get(s2RecommendationsUrl(opts.limit, opts.fields), fetchFn, apiKey, body);
+  if (res.status === 404) return null;
+  return parseS2Recommendations(await res.json());
+}
+
+// One walk from a positive, told apart the three ways the expansion records it:
+// edges (perhaps none), a paper S2 does not know, and a paper S2 knows but whose
+// edges a publisher withheld (`data: null`, docs/pitfall/73). The last two fall
+// back to OpenAlex.
+export type S2EdgeAnswer = { kind: "ok"; hits: S2Hit[] } | { kind: "not_found" } | { kind: "elided" };
+
+export async function fetchS2EdgePage(
+  id: string,
+  direction: "references" | "citations",
+  fetchFn?: FetchFn,
+  apiKey?: string,
+): Promise<S2EdgeAnswer> {
+  const url =
+    direction === "references"
+      ? s2ReferencesUrl(id, S2_GRAPH_REFERENCES_PAGE, S2_GRAPH_FIELDS)
+      : s2CitationsUrl(id, S2_GRAPH_CITATIONS_PAGE, S2_GRAPH_FIELDS);
+  const res = await s2Get(url, fetchFn, apiKey);
+  if (res.status === 404) return { kind: "not_found" };
+  const body = (await res.json()) as { data?: unknown } | null;
+  if (!Array.isArray(body?.data)) return { kind: "elided" };
+  return { kind: "ok", hits: parseS2Edges(body, direction === "references" ? "citedPaper" : "citingPaper") };
 }
 
 export async function fetchFromS2(

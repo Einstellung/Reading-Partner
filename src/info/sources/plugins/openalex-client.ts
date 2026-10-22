@@ -12,6 +12,10 @@
 // returns candidates for the reading conversation (docs/24). Note the pricing
 // change of 2026-02-13: keyless callers get 100 free credits and then 409, so a
 // spent quota is reported as a named failure rather than an empty result.
+//
+// The graph calls take an optional API key, sent as a bearer header and never
+// in the URL; without one OpenAlex still answers, out of a daily budget shared by
+// every keyless caller on the IP (docs/info/92).
 
 import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
 import { normalizeArxivId } from "./arxiv-client";
@@ -48,8 +52,11 @@ interface OaWork {
   primary_location?: OaLocation | null;
   authorships?: { author?: { display_name?: string | null } | null }[] | null;
   cited_by_count?: number | null;
-  // Only selected by the seed lookup: the works this one cites, as OpenAlex ids.
+  // Only selected by the seed lookup: the works this one cites, and the works
+  // OpenAlex counts as related, as OpenAlex ids.
   referenced_works?: string[] | null;
+  related_works?: string[] | null;
+  publication_date?: string | null;
 }
 
 export interface OpenAlexResult {
@@ -70,12 +77,21 @@ export function reconstructAbstract(index: Record<string, number[]> | null | und
   return slots.filter((w) => w !== undefined).join(" ");
 }
 
+// arXiv's DataCite DOI, "10.48550/arXiv.<id>"; OpenAlex spells it lower case.
+const ARXIV_DOI = /10\.48550\/arxiv\.(.+)$/i;
+
 // An arXiv id from the work, if any. OpenAlex has no arxiv field in `ids`, but
-// arXiv-hosted copies appear as arxiv.org landing/pdf URLs in the locations.
+// arXiv-hosted copies appear as arxiv.org landing/pdf URLs in the locations, and
+// a work known only as the preprint carries arXiv's DOI.
 export function extractArxivId(work: OaWork): string | null {
   const fromIds = work.ids?.arxiv;
   if (fromIds) {
     const id = normalizeArxivId(fromIds);
+    if (id) return id;
+  }
+  for (const doi of [work.doi, work.ids?.doi]) {
+    const m = doi ? ARXIV_DOI.exec(doi) : null;
+    const id = m ? normalizeArxivId(m[1]) : null;
     if (id) return id;
   }
   const locs: OaLocation[] = [];
@@ -103,7 +119,7 @@ export function extractPdfUrl(work: OaWork): string | null {
 // Authors, venue and the citation count join the selection for the candidate
 // list; the title lookup keeps its own leaner SELECT, since it only ever wants an
 // abstract and a PDF.
-const SEARCH_SELECT = `${SELECT},doi,primary_location,authorships,cited_by_count`;
+const SEARCH_SELECT = `${SELECT},doi,primary_location,authorships,cited_by_count,publication_date`;
 
 export interface OpenAlexTopicOptions {
   limit?: number;
@@ -123,6 +139,7 @@ export interface OpenAlexHit {
   url: string | null;
   abstract: string;
   citedByCount: number | null;
+  publicationDate: string | null;
 }
 
 // A works search over the whole corpus. `search` is OpenAlex's full-text query;
@@ -181,6 +198,7 @@ function oaHit(w: OaWork): OpenAlexHit {
     url: oaUrl(w),
     abstract: reconstructAbstract(w.abstract_inverted_index),
     citedByCount: w.cited_by_count ?? null,
+    publicationDate: w.publication_date ?? null,
   };
 }
 
@@ -197,22 +215,29 @@ export async function searchOpenAlexTopic(
   query: string,
   opts: OpenAlexTopicOptions = {},
   fetchFn?: FetchFn,
+  apiKey?: string,
 ): Promise<OpenAlexHit[]> {
-  const res = await fetchWithRetry(openAlexTopicSearchUrl(query, opts), undefined, interactiveRetry(fetchFn));
+  const res = await fetchWithRetry(openAlexTopicSearchUrl(query, opts), oaInit(apiKey), interactiveRetry(fetchFn));
   if (!res.ok) throw new HttpStatusError(res.status, "api.openalex.org");
   return parseOpenAlexSearch(await res.json());
 }
 
 // --- citation graph (docs/24: snowballing out from a seed paper) ---
 
-// The seed lookup also wants the citation count and the outgoing edges.
-const SEED_SELECT = `${SEARCH_SELECT},referenced_works`;
+// The seed lookup also wants the citation count and the edges: outgoing, and the
+// related works a study's expansion falls back on for recommendations.
+const SEED_SELECT = `${SEARCH_SELECT},referenced_works,related_works`;
 
 // One work by an identifier OpenAlex resolves directly: a DOI ("doi:10.1073/…"),
 // a PMID ("pmid:17553422") or its own id ("W2033231119"). Unlike /works?filter=,
 // this returns the work object itself rather than a results page.
 export function openAlexWorkUrl(id: string): string {
   return `${OPENALEX_BASE}/works/${encodeURIComponent(id)}?select=${SEED_SELECT}&mailto=${MAILTO}`;
+}
+
+/** The handle openAlexWorkUrl takes for an arXiv paper: its arXiv DOI. */
+export function openAlexArxivHandle(arxivId: string): string {
+  return `doi:10.48550/arXiv.${arxivId}`;
 }
 
 export interface OpenAlexPage {
@@ -236,14 +261,27 @@ export function parseOpenAlexWork(body: unknown): OpenAlexHit | null {
   return oaHit(w);
 }
 
+const bareIds = (ids: string[] | null | undefined): string[] =>
+  (ids ?? []).map((id) => bareOpenAlexId(id)).filter((id): id is string => id !== null);
+
 export function openAlexReferencedWorks(body: unknown): string[] {
-  const ids = (body as OaWork | null)?.referenced_works ?? [];
-  return ids.map((id) => bareOpenAlexId(id)).filter((id): id is string => id !== null);
+  return bareIds((body as OaWork | null)?.referenced_works);
+}
+
+export function openAlexRelatedWorks(body: unknown): string[] {
+  return bareIds((body as OaWork | null)?.related_works);
 }
 
 export interface OpenAlexGraphOptions {
   limit?: number;
   sinceYear?: number | null;
+  // Published on or after this day (YYYY-MM-DD); wins over sinceYear.
+  since?: string | null;
+}
+
+function sinceFilter(opts: OpenAlexGraphOptions): string[] {
+  if (opts.since) return [`from_publication_date:${opts.since}`];
+  return opts.sinceYear ? [`from_publication_date:${opts.sinceYear}-01-01`] : [];
 }
 
 // Works citing the seed: the forward direction of a snowball. Both knobs matter
@@ -261,8 +299,7 @@ export interface OpenAlexGraphOptions {
 // sort parameter. That echo is lossy; the sort does apply (same request, the two
 // sorts return different orders).
 export function openAlexCitedByUrl(workId: string, opts: OpenAlexGraphOptions = {}): string {
-  const filters = [`cites:${workId}`];
-  if (opts.sinceYear) filters.push(`from_publication_date:${opts.sinceYear}-01-01`);
+  const filters = [`cites:${workId}`, ...sinceFilter(opts)];
   return (
     `${OPENALEX_BASE}/works?filter=${filters.join(",")}` +
     `&sort=cited_by_count:desc&per-page=${opts.limit ?? 10}` +
@@ -277,8 +314,7 @@ export function openAlexCitedByUrl(workId: string, opts: OpenAlexGraphOptions = 
 export const OA_MAX_OR_IDS = 50;
 
 export function openAlexWorksByIdUrl(ids: string[], opts: OpenAlexGraphOptions = {}): string {
-  const filters = [`openalex_id:${ids.slice(0, OA_MAX_OR_IDS).join("|")}`];
-  if (opts.sinceYear) filters.push(`from_publication_date:${opts.sinceYear}-01-01`);
+  const filters = [`openalex_id:${ids.slice(0, OA_MAX_OR_IDS).join("|")}`, ...sinceFilter(opts)];
   return (
     `${OPENALEX_BASE}/works?filter=${filters.join(",")}` +
     `&sort=cited_by_count:desc&per-page=${Math.min(opts.limit ?? 10, OA_MAX_OR_IDS)}` +
@@ -286,8 +322,24 @@ export function openAlexWorksByIdUrl(ids: string[], opts: OpenAlexGraphOptions =
   );
 }
 
-async function oaGet(url: string, fetchFn?: FetchFn): Promise<Response> {
-  const res = await fetchWithRetry(url, undefined, interactiveRetry(fetchFn));
+// The works whose DOI is one of these arXiv papers' DOIs, in one request: the
+// abstract fallback for a page of graph hits S2 gave without one. A work found
+// this way can come back under another DOI (docs/pitfall/668), so a caller maps
+// it back by extractArxivId, never by the DOI it asked with.
+export function openAlexWorksByArxivUrl(arxivIds: string[]): string {
+  const dois = arxivIds.slice(0, OA_MAX_OR_IDS).map((id) => `10.48550/arxiv.${id.toLowerCase()}`);
+  return (
+    `${OPENALEX_BASE}/works?filter=doi:${dois.join("|")}` +
+    `&per-page=${OA_MAX_OR_IDS}&select=${SEARCH_SELECT}&mailto=${MAILTO}`
+  );
+}
+
+function oaInit(apiKey?: string): RequestInit | undefined {
+  return apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined;
+}
+
+async function oaGet(url: string, fetchFn?: FetchFn, apiKey?: string): Promise<Response> {
+  const res = await fetchWithRetry(url, oaInit(apiKey), interactiveRetry(fetchFn));
   // 409 is the spent-free-credits refusal (see the file header); 404 is a seed
   // OpenAlex does not know, which is a miss rather than a failure.
   if (!res.ok && res.status !== 404) throw new HttpStatusError(res.status, "api.openalex.org");
@@ -299,20 +351,22 @@ async function oaGet(url: string, fetchFn?: FetchFn): Promise<Response> {
 export async function fetchOpenAlexWork(
   id: string,
   fetchFn?: FetchFn,
-): Promise<{ hit: OpenAlexHit; referenced: string[] } | null> {
-  const res = await oaGet(openAlexWorkUrl(id), fetchFn);
+  apiKey?: string,
+): Promise<{ hit: OpenAlexHit; referenced: string[]; related: string[] } | null> {
+  const res = await oaGet(openAlexWorkUrl(id), fetchFn, apiKey);
   if (res.status === 404) return null;
   const body = await res.json();
   const hit = parseOpenAlexWork(body);
-  return hit ? { hit, referenced: openAlexReferencedWorks(body) } : null;
+  return hit ? { hit, referenced: openAlexReferencedWorks(body), related: openAlexRelatedWorks(body) } : null;
 }
 
 export async function fetchOpenAlexCitedBy(
   workId: string,
   opts: OpenAlexGraphOptions = {},
   fetchFn?: FetchFn,
+  apiKey?: string,
 ): Promise<OpenAlexPage> {
-  const res = await oaGet(openAlexCitedByUrl(workId, opts), fetchFn);
+  const res = await oaGet(openAlexCitedByUrl(workId, opts), fetchFn, apiKey);
   if (res.status === 404) return { hits: [], total: 0 };
   return parseOpenAlexPage(await res.json());
 }
@@ -321,9 +375,21 @@ export async function fetchOpenAlexWorksByIds(
   ids: string[],
   opts: OpenAlexGraphOptions = {},
   fetchFn?: FetchFn,
+  apiKey?: string,
 ): Promise<OpenAlexHit[]> {
   if (ids.length === 0) return [];
-  const res = await oaGet(openAlexWorksByIdUrl(ids, opts), fetchFn);
+  const res = await oaGet(openAlexWorksByIdUrl(ids, opts), fetchFn, apiKey);
+  if (res.status === 404) return [];
+  return parseOpenAlexPage(await res.json()).hits;
+}
+
+export async function fetchOpenAlexWorksByArxiv(
+  arxivIds: string[],
+  fetchFn?: FetchFn,
+  apiKey?: string,
+): Promise<OpenAlexHit[]> {
+  if (arxivIds.length === 0) return [];
+  const res = await oaGet(openAlexWorksByArxivUrl(arxivIds), fetchFn, apiKey);
   if (res.status === 404) return [];
   return parseOpenAlexPage(await res.json()).hits;
 }
