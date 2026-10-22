@@ -27,7 +27,7 @@ export const UPDATE_DEEP_READS = 3;
 export const UPDATE_COOLDOWN_WAIT_MS = 60 * 60_000;
 /** Times an update's read waits out a cooldown and searches again what it held back. */
 export const UPDATE_READ_ROUNDS = 3;
-/** Labelled items of each kind (on, off the mark) the rerank is shown as examples. */
+/** Labelled items of each kind (on, borderline, off the mark) the rerank is shown as examples. */
 export const LABEL_EXAMPLES = 6;
 
 /**
@@ -216,15 +216,27 @@ export function studyMarks(labels: readonly TopicLabel[], lines: readonly StudyL
   return marks;
 }
 
-/** The label examples the update's rerank is shown: the latest yes and no labels, newest first, so many of each. */
-export function labelExamples(labels: readonly TopicLabel[]): { label: "yes" | "no"; title: string; reason: string }[] {
+/**
+ * The label examples the update's rerank is shown: each item's label in force,
+ * newest first, so many of each kind. A pinned item is on the mark (a seed is
+ * labelled yes and pinned at the same moment, and the pin is the label in force);
+ * borderline and off the mark are shown as the reader said them.
+ */
+export function labelExamples(labels: readonly TopicLabel[]): LabelExample[] {
   const latest = [...latestLabels(labels).values()].sort((a, b) => b.at - a.at);
-  const pick = (kind: "yes" | "no") =>
+  const kindOf = (l: TopicLabel): LabelExample["label"] => (l.label === "pinned" ? "yes" : l.label);
+  const pick = (kind: LabelExample["label"]) =>
     latest
-      .filter((l) => l.label === kind)
+      .filter((l) => kindOf(l) === kind)
       .slice(0, LABEL_EXAMPLES)
       .map((l) => ({ label: kind, title: l.title, reason: l.reason }));
-  return [...pick("yes"), ...pick("no")];
+  return [...pick("yes"), ...pick("borderline"), ...pick("no")];
+}
+
+export interface LabelExample {
+  label: "yes" | "borderline" | "no";
+  title: string;
+  reason: string;
 }
 
 /** One item of the next version as the selection chose it. */

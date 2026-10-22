@@ -24,6 +24,7 @@ import {
   changeCounts,
   diffVersion,
   firstVersion,
+  labelExamples,
   pinnedCandidate,
   planUpdate,
   studyMarks,
@@ -92,6 +93,27 @@ test("an update searches the queries the last version left first, then those ask
   const result = { study: { versions: [{ n: 1, skipped: ["q1"] }, { n: 2, skipped: ["q2"] }] } } as unknown as TopicSearchResult;
   expect(planUpdate(TOPIC, result, ["q1", "q2", "q9"])).toEqual(["q2", "q1"]);
   expect(planUpdate(TOPIC, null, ["q1"])).toEqual(["q1"]);
+});
+
+test("a seed's yes and its pin written at the same moment make one on-the-mark example", () => {
+  // The run of 2026-10-22: the seed's yes and pin share `at`, the pin is in force,
+  // and the rerank was shown no examples at all.
+  const labels = [
+    label("arxiv:s", "yes", 1, "seed"),
+    label("arxiv:s", "pinned", 1, "seed"),
+    label("arxiv:p", "pinned", 4),
+    label("arxiv:b", "borderline", 3),
+    label("arxiv:n", "no", 2, "question"),
+    label("arxiv:r", "yes", 5),
+    label("arxiv:r", "no", 6),
+  ];
+  expect(labelExamples(labels).map((e) => [e.label, e.title])).toEqual([
+    ["yes", "arxiv:p"],
+    ["yes", "arxiv:s"],
+    ["borderline", "arxiv:b"],
+    ["no", "arxiv:r"],
+    ["no", "arxiv:n"],
+  ]);
 });
 
 test("pinned and demoted go by the reader's last word, across versions; rewrites are this update's only", () => {

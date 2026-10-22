@@ -357,7 +357,7 @@ export interface RerankAnswer {
  */
 export interface StudyRerank {
   lines: readonly { id: string; kind: string; text: string }[];
-  examples: readonly { label: "yes" | "no"; title: string; reason: string }[];
+  examples: readonly { label: "yes" | "borderline" | "no"; title: string; reason: string }[];
 }
 
 function day(ms: number): string {
@@ -452,7 +452,7 @@ export function rerankPrompt(
   });
   const settled = settledBlock(topic, raised);
   const confirmed = lines.map((l) => `- ${l.id} (${l.kind}): ${l.text}`);
-  const examples = (study?.examples ?? []).map((e) => `- ${e.label === "yes" ? "On the mark" : "Off the mark"}: ${e.title}${e.reason ? ` (the reader: ${e.reason})` : ""}`);
+  const examples = (study?.examples ?? []).map((e) => `- ${e.label === "yes" ? "On the mark" : e.label === "borderline" ? "Borderline" : "Off the mark"}: ${e.title}${e.reason ? ` (the reader: ${e.reason})` : ""}`);
   const user = [
     topicBlock(topic, profile),
     ...(settled ? [settled] : []),
