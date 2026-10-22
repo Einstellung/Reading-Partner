@@ -472,6 +472,7 @@
 - [647-an-auto-language-prompt-with-no-reader-words-picks-any-language](./ai/647-an-auto-language-prompt-with-no-reader-words-picks-any-language.md) — 语言设成 auto 时 `languageInstruction` 返回空串，主题搜索的结果和卢明开场话没有语言指令：同样的英文材料一次写成英文书、一次写成中文书（夹着英文的程序标签），开场话另挑一次。10-16 定：书、开场话、程序标签统一用界面语言（设置具体语言优先，auto 取系统语言），始终带明确的语言指令
 - [663-a-single-call-writes-its-whole-prompt-to-the-cache](./ai/663-a-single-call-writes-its-whole-prompt-to-the-cache.md) — pi 默认在最后一个用户块上打缓存断点，只调一次的调用（主题搜索的重排、开口）把整份提示按 1.25 倍写进缓存却没人读；整份用户文字拼成一个字符串时，重写那次也只读回 system。只调一次的传 `cacheRetention: "none"`；会被复用的前缀单独成块（`ChatMessage.parts`），变的部分另起块接在后面
 - [665-codex-reads-no-cache-without-a-prompt-cache-key](./ai/665-codex-reads-no-cache-without-a-prompt-cache-key.md) — `streamChat` 的单次调用在 Codex 上不带 `prompt_cache_key`（`call-setup.ts` 不给 openai 传 `sessionId`），同一份提示两分钟内重发也读不到缓存；会重发提示的调用传稳定的 `cacheKey`（主题搜索按主题一个）
+- [666-codex-catalog-lists-a-model-chatgpt-accounts-cannot-use](./ai/666-codex-catalog-lists-a-model-chatgpt-accounts-cannot-use.md) — pi-ai 的 openai-codex 目录列着 `gpt-5.5`，ChatGPT 账号调它被后端拒（"not supported when using Codex with a ChatGPT account"），`enforceKnownModel` 只查目录拦不住；失败记进书架 `stalls` 和盒子，选单里拿不拿掉等用户定
 
 ## 开发环境
 
