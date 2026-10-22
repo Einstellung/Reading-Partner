@@ -20,10 +20,19 @@ export interface TopicModelCall {
    * price and never reads it (pitfall 663), so it sends none.
    */
   cache: boolean;
+  /**
+   * The provider's cache key: one per topic, so a prompt sent again while the
+   * cache holds it is read from it where the provider caches by key (Codex).
+   * Set by the build, not by each stage.
+   */
+  cacheKey?: string;
   signal: AbortSignal;
 }
 
 export type TopicModel = (call: TopicModelCall) => Promise<string>;
+
+/** The cache key every model call of one topic's runs carries (TopicModelCall.cacheKey). */
+export const topicCacheKey = (searchId: string): string => `topic-search:${searchId}`;
 
 /** Tries again after a call failed for the network, and the wait before each (88 「判不了」). */
 export const MODEL_RETRY_WAITS_MS = [3_000, 6_000] as const;

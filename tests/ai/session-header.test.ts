@@ -21,7 +21,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { callModel } from "../../src/ai/model-call";
 import { getModels, providers, streamChat, PROVIDER_IDS, type ProviderId } from "../../src/ai/providers";
-import { providerCallSetup } from "../../src/ai/call-setup";
+import { cacheKeySetup, providerCallSetup } from "../../src/ai/call-setup";
 import * as credentials from "../../src/ai/auth/credentials";
 import { chatCleanupRunner } from "../../src/ai/voice";
 import * as cacheTelemetry from "../../src/platform/app/cache-telemetry";
@@ -196,4 +196,11 @@ test("a voice cleanup pass is its own session, a new one each utterance", async 
 	const [first, second] = h.seen().map((o) => o.headers?.[SESSION]);
 	expect(first).toBeTruthy();
 	expect(first).not.toBe(second);
+});
+
+test("a cache key reaches Codex as pi's sessionId (its prompt_cache_key) and nothing else", () => {
+	expect(cacheKeySetup("openai", "topic-search:ts-1")).toEqual({ sessionId: "topic-search:ts-1" });
+	expect(cacheKeySetup("openai", undefined)).toEqual({});
+	// Anthropic caches by the prompt itself; the others are unmeasured.
+	for (const id of ["anthropic", "deepseek", "opencode"] as ProviderId[]) expect(cacheKeySetup(id, "k")).toEqual({});
 });

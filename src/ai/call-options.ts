@@ -11,4 +11,6 @@
 export interface AiCallOptions {
   signal: AbortSignal;
   onProgress(chars: number): void;
+  /** A key the same across calls that resend one prompt, for providers that cache by key (call-setup.ts cacheKeySetup). */
+  cacheKey?: string;
 }

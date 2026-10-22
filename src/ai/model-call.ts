@@ -234,6 +234,7 @@ export function callModel(
 					systemPrompt: prompt,
 					messages: [{ role: "user", text, ...(parts.length ? { parts } : {}) }],
 					...(cache ? { cacheRetention: cache } : {}),
+					...(opts.cacheKey ? { cacheKey: opts.cacheKey } : {}),
 					signal: opts.signal,
 					// A pipeline call is one exchange with nothing before or after it: it
 					// takes its material entire and has no conversation to name. A fresh

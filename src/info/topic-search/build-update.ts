@@ -46,7 +46,7 @@ import {
 import { composeResult, studyReadOrder, type DeeperReport } from "./compose";
 import { doiArxiv, heldDois, poolDois } from "./doi-arxiv";
 import { latestLabels } from "./labels";
-import { abortableSleep, retryingModel, type TopicModel } from "./model-io";
+import { abortableSleep, retryingModel, topicCacheKey, type TopicModel } from "./model-io";
 import { readsSource } from "./pace";
 import { enqueue, labelQuestion, loadQueue, pickQuestions, questionCap, saveQueue, waiting, withLabelQuestion, type NewQuestion } from "./questions";
 import { fusePool, gatherCandidates, numberPool, parseRerank, rankEvents, RERANK_POOL, rerankPrompt, scorePool, type ArxivFound, type RerankAnswer } from "./rank-pool";
@@ -96,7 +96,9 @@ export async function buildUpdate(deps: BuildResultDeps, args: BuildTopicSearchR
   throwIfAborted(signal);
   const now = deps.now();
   let modelCalls = 0;
-  const model = retryingModel(deps.model, deps.sleep ?? abortableSleep);
+  // Every call of the topic carries its cache key (the write-up's retry resends its prompt).
+  const retrying = retryingModel(deps.model, deps.sleep ?? abortableSleep);
+  const model: TopicModel = (c) => retrying({ ...c, cacheKey: topicCacheKey(topic.id) });
   const call: TopicModel = async (c) => {
     modelCalls++;
     return model(c);

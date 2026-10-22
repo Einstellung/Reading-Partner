@@ -87,3 +87,21 @@ const NOTHING: CallSetup = {};
 export function providerCallSetup(providerId: ProviderId, sessionId: string): CallSetup {
 	return RULES[providerId]?.(sessionId) ?? NOTHING;
 }
+
+// A stable cache key, for single calls that send the same prompt again within
+// the cache's life (a topic search's write-up and its retry). Codex keys its
+// prompt cache by pi's sessionId (pi sends it as `prompt_cache_key`, and as the
+// session headers durable turns already send on every Codex request); without
+// one, nothing streamChat sent on Codex was ever read from the cache (seen
+// 2026-10-22: a 56k-token prompt resent within two minutes, zero cache reads).
+// Anthropic caches by the prompt itself at its cache_control breakpoints, so it
+// takes no key. Only Codex is here: the other openai-responses providers would
+// take the key too, unmeasured.
+const CACHE_KEY_RULES: Partial<Record<ProviderId, SetupRule>> = {
+	openai: piSessionAffinity,
+};
+
+/** The setup a caller-chosen cache key adds for one call; empty where the provider caches without one. */
+export function cacheKeySetup(providerId: ProviderId, cacheKey: string | undefined): CallSetup {
+	return cacheKey ? (CACHE_KEY_RULES[providerId]?.(cacheKey) ?? NOTHING) : NOTHING;
+}

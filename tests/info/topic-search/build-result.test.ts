@@ -324,6 +324,8 @@ describe("a first run, then a day, then a quiet day", () => {
   test("first run: only the write-up carries cache breakpoints, and its second try repeats the first's prompt", () => {
     const writes = firstLog.filter((c) => c.site === "write");
     for (const c of firstLog.filter((c) => c.site !== "write")) expect(c.cache).toBe(false);
+    // One cache key for every call of the topic, so the retry's resent prompt can be read from Codex's cache.
+    expect(new Set(firstLog.map((c) => c.cacheKey))).toEqual(new Set([`topic-search:${TOPIC.id}`]));
     expect(writes.map((c) => c.cache)).toEqual([true, true]);
     expect(writes[1].system).toBe(writes[0].system);
     expect(writes[1].user).toBe(writes[0].user);

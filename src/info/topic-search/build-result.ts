@@ -26,7 +26,7 @@ import type { RepoLookup } from "../sources/plugins/github-lookup";
 import type { ArxivLadder } from "./arxiv-ladder";
 import { doiArxiv, heldDois, poolDois, type DoiLookup } from "./doi-arxiv";
 import { composeResult, deepenableMaterial, EARLIER_LINES, studyReadOrder, type DeeperReads, type DeeperReport, type EarlierLine } from "./compose";
-import { abortableSleep, parseJsonReply, retryingModel, type TopicModel } from "./model-io";
+import { abortableSleep, parseJsonReply, retryingModel, topicCacheKey, type TopicModel } from "./model-io";
 import { readsSource, type RunSource } from "./pace";
 import { latestLabels, type TopicLabel } from "./labels";
 import {
@@ -586,7 +586,9 @@ async function buildWith(deps: BuildResultDeps, args: BuildTopicSearchResultArgs
   const today = deps.today();
   let modelCalls = 0;
   // A call the network broke is tried again twice, a few seconds apart.
-  const model = retryingModel(deps.model, deps.sleep ?? abortableSleep);
+  // Every call of the topic carries its cache key (the write-up's retry resends its prompt).
+  const retrying = retryingModel(deps.model, deps.sleep ?? abortableSleep);
+  const model: TopicModel = (c) => retrying({ ...c, cacheKey: topicCacheKey(topic.id) });
   const call: TopicModel = async (c) => {
     modelCalls++;
     return model(c);

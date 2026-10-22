@@ -61,7 +61,7 @@ import { normalizeContext } from "@earendil-works/pi-ai";
 import { getValidAnthropicAuth } from "./auth/anthropic-oauth";
 import { getValidOpenAIAuth } from "./auth/openai-oauth";
 import { activeProviderId, loadCredentials, setActiveCredential } from "./auth/credentials";
-import { providerCallSetup } from "./call-setup";
+import { cacheKeySetup, providerCallSetup } from "./call-setup";
 import {
 	API_KEY_PROVIDER_IDS,
 	AUTH_KIND,
@@ -169,6 +169,9 @@ export interface StreamChatOptions {
 	// the whole prompt to the cache at 1.25x the input price. "none" sends no
 	// breakpoint, for a call whose prompt no later call starts with.
 	cacheRetention?: CacheRetention;
+	// A key that stays the same across calls that resend one prompt, where the
+	// provider caches by key (call-setup.ts cacheKeySetup); unset: none.
+	cacheKey?: string;
 	onDelta(text: string): void;
 	// Reasoning/thinking deltas, when the model streams them. Kept separate from
 	// onDelta so callers never render thinking into the visible reply; prep wires
@@ -587,7 +590,7 @@ export async function streamChatCore(params: StreamChatCoreParams): Promise<void
 }
 
 export async function streamChat(options: StreamChatOptions): Promise<void> {
-	const { providerId, modelId, systemPrompt, messages, signal, reasoning, sessionId, spend, cacheRetention } = options;
+	const { providerId, modelId, systemPrompt, messages, signal, reasoning, sessionId, spend, cacheRetention, cacheKey } = options;
 	const { onDelta, onThinking, onResponse, onDone, onError } = options;
 	try {
 		const call = await resolveCall(providerId, modelId, messages, reasoning);
@@ -605,6 +608,7 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 			// Decided here, where the provider id is known, and passed down as data.
 			// Both halves come from the one session value.
 			...providerCallSetup(providerId, sessionId),
+			...(cacheRetention === "none" ? {} : cacheKeySetup(providerId, cacheKey)),
 			onDelta,
 			onThinking,
 			onResponse,
