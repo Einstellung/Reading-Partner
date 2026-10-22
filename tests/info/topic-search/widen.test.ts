@@ -159,7 +159,15 @@ describe("the proposal", () => {
   });
 });
 
-const item = (id: string): InfoItem => ({ id: `arxiv-${id}`, source: "arxiv", sourceName: "arXiv", sourceKey: id, title: id, url: `https://arxiv.org/abs/${id}` });
+const item = (id: string): InfoItem => ({
+  id: `arxiv-${id}`,
+  source: "arxiv",
+  sourceName: "arXiv",
+  sourceKey: id,
+  title: id,
+  url: `https://arxiv.org/abs/${id}`,
+  publishedAt: "2026-01-10T00:00:00Z",
+});
 const queries = widenQueries(STUDY, [
   { line: "s2", subtopic: "s2", text: "physics informed discovery", id: "w1", rejected: null },
   { line: "s2", subtopic: "s2", text: "conservation knowledge search", id: "w2", rejected: null },
