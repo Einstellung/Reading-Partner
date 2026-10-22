@@ -30,7 +30,7 @@ export const EXCERPT_TEXT_CLASS = "rp-excerpt-text";
 /** Characters of one cited section a book carries at most. */
 export const SECTION_EXCERPT_CHARS = 2_000;
 /** Characters of cited sections one book carries at most. */
-export const BOOK_EXCERPT_CHARS = 60_000;
+export const BOOK_EXCERPT_CHARS = 120_000;
 /** A paragraph cut to fit is cut no shorter than this; below it, it is left out. */
 const MIN_CUT_CHARS = 160;
 
