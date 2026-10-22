@@ -6,9 +6,9 @@
 //
 // What it reads: the info shelf's study row (versions and their books), the
 // study's record (the returns to older versions), the study's result file
-// (items, their parts and keys, the materials), the runs in flight, and — on
-// the computer that ran the study only, because run directories do not sync —
-// the cached section text of a material.
+// (items, their parts and keys, the materials), the runs in flight, and the
+// section text of a material: the excerpt the book carries (study-excerpts.ts),
+// else, on the computer that ran the study only, the run directory's cache.
 
 import { materialBodyPath, type MaterialBody } from "../dossier/registry";
 import { quoteOccurs } from "../topic-search/entry-parts";
@@ -280,8 +280,8 @@ export interface CiteTap {
 /**
  * What a tapped section reference shows (docs/info/91 「条目格式」: the section a
  * sentence stands on). The sentence is found by the link's id (the item and the
- * cite's place on its page); the section's text comes from `body` when this
- * device has the material's cached body. Null when the link is not a cite.
+ * cite's place on its page); the section's text comes from `body`: the book's
+ * excerpt (study-excerpts.ts excerptBody) or the material's cached body. Null when the link is not a cite.
  */
 export function citeSheet(result: Pick<TopicSearchResult, "items" | "materials">, tap: CiteTap, body: MaterialBody | null): CiteSheet | null {
   const anchor = anchorOfHref(tap.href);
