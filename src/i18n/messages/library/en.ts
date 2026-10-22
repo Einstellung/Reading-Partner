@@ -73,7 +73,7 @@ export default {
   "materials.savedArticlesHeading": "Saved articles",
   "materials.removeArticleTitle": "Remove “{title}”?",
   "materials.removeArticleDescription":
-    "The article leaves your saved articles. Saving it again from a briefing brings it back.",
+    "The article leaves your saved articles. Saving it again from a brief brings it back.",
   "materials.removeArticleAction": "Remove",
   "materials.deleteBookTitle": "Delete “{title}”?",
   "materials.deleteBookDescription":

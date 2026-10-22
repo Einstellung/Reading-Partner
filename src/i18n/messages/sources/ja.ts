@@ -12,7 +12,7 @@ export default {
   signIn: "サインイン",
   "account.benefitX": "トピック検索があなたのアカウントで X の検索を読みます。",
   "account.cautionX": "自動での読み取りは、サインインしたアカウントで行われます。X のリスク管理が反応する可能性はわずかにあるため、メインではなくサブアカウントでのサインインをおすすめします。",
-  "account.benefitBloomberg": "ブリーフィングで約 500 文字のプレビューではなく Bloomberg の全文を読めます。",
+  "account.benefitBloomberg": "ブリーフで約 500 文字のプレビューではなく Bloomberg の全文を読めます。",
   "account.usedBy": "{names} が使用",
   "account.signInOnCollector": "情報源を収集するコンピュータでサインインしてください",
 

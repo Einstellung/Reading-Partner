@@ -23,7 +23,7 @@ export default {
   "holdMenu.confirmRemoveTitle": "Remove “{title}”?",
   "holdMenu.remove": "Remove",
   "holdMenu.confirmConversationTitle": "Delete this conversation?",
-  "holdMenu.confirmRemoveSavedDescription": "It leaves Saved on every device. The briefing it came from is not changed.",
+  "holdMenu.confirmRemoveSavedDescription": "It leaves Saved on every device. The brief it came from is not changed.",
   "holdMenu.confirmDeleteAsideDescription": "The aside goes, and its row in the lesson with it. The lesson itself stays.",
 
   "holdMenu.doneDeleted": "Deleted “{title}”",

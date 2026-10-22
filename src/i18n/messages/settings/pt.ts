@@ -31,7 +31,7 @@ export default {
   "account.everydayModel": "Modelo do dia a dia",
   "account.sameAsChat": "Igual ao chat",
   "account.everydayHint":
-    "O trabalho de rotina roda aqui em vez de no modelo acima: as refeições e o resumo noturno. Ninguém está esperando por ele, então um modelo mais barato não custa nada a você; quais tarefas pertencem a ele é o app que decide, não este ajuste. Ele usa o provedor acima.",
+    "O trabalho de rotina roda aqui em vez de no modelo acima: as refeições e o boletim noturno. Ninguém está esperando por ele, então um modelo mais barato não custa nada a você; quais tarefas pertencem a ele é o app que decide, não este ajuste. Ele usa o provedor acima.",
   "account.voiceFront": "Chamada de voz",
   "account.voiceFrontHint":
     "A primeira resposta rápida de uma chamada de voz roda aqui, antes de qualquer trabalho em segundo plano. Um modelo rápido responde antes; deixe o raciocínio desligado, a menos que as respostas fiquem superficiais demais. Um provedor que não consegue desligar o raciocínio usa o nível mais baixo. Ele usa o provedor acima.",
@@ -89,7 +89,7 @@ export default {
   "features.language": "Idioma",
   "features.languageAuto": "Automático (app: sistema; IA: seu idioma)",
   "features.languageHint":
-    "O idioma do app e de tudo o que a IA escreve: respostas do chat, notas e o resumo de notícias. No automático, o app usa o idioma do sistema e a IA responde no idioma em que você escreve. A transcrição de voz sempre segue o que você fala.",
+    "O idioma do app e de tudo o que a IA escreve: respostas do chat, notas e os boletins. No automático, o app usa o idioma do sistema e a IA responde no idioma em que você escreve. A transcrição de voz sempre segue o que você fala.",
   "features.paper": "Fundo de papel",
   "features.paperHint":
     "Troca o branco por trás de todo o app (chats, estantes, barras laterais, esta janela e as páginas dos livros) por uma cor de papel off-white. Há um só tom e nenhum mais escuro; não é um modo escuro. A escolha fica neste dispositivo.",
@@ -98,19 +98,19 @@ export default {
   "features.companionShowHint":
     "{name} fica no canto de todas as telas, inclusive no leitor. Desativado, o canto fica vazio; o botão na barra lateral, na tela inicial do celular e no menu Mais do leitor traz {name} de volta. A escolha fica neste dispositivo.",
   "features.companionName": "Nome do companheiro",
-  "features.briefing": "Resumo de notícias",
+  "features.briefing": "Intel",
   "features.collect": "Coletar das suas fontes neste computador",
   "features.collectHint":
-    "Cada fonte é verificada no seu próprio horário. A coleta automática para o resumo está em pausa enquanto ele é redesenhado; as buscas por tema continuam rodando durante a noite. Desativado, esta máquina para de coletar por completo e outro coletor, se você tiver, assume.",
+    "Cada fonte é verificada no seu próprio horário, e as buscas por tema rodam aqui durante a noite. Desativado, esta máquina para de coletar por completo e outro coletor, se você tiver, assume.",
   "features.thisComputer": "Este computador",
   "features.role": "Esta máquina é um",
   "features.roleCollector": "Coletor — lê as fontes aqui",
   "features.roleReader": "Leitor — lê o que outra máquina coletou",
   "features.roleHint":
-    "Um coletor lê os sites que você assina o dia todo e publica o resumo para os seus outros dispositivos; um leitor mostra o que um coletor publicou e nunca busca nada de um site por conta própria. Celulares e tablets são sempre leitores. Se duas máquinas coletam, trabalha a que está ligada há mais tempo.",
+    "Um coletor lê os sites que você assina o dia todo e publica os seus boletins para os seus outros dispositivos; um leitor mostra o que um coletor publicou e nunca busca nada de um site por conta própria. Celulares e tablets são sempre leitores. Se duas máquinas coletam, trabalha a que está ligada há mais tempo.",
   "features.autostart": "Abrir o Reading Partner quando este computador iniciar",
   "features.autostartHint":
-    "Desativado por padrão. Ative na máquina que você quer que colete suas fontes o dia todo: junto com o ícone da bandeja, o resumo é montado quer você abra o app ou não. Este ajuste pertence a este computador e não vai para os seus outros dispositivos.",
+    "Desativado por padrão. Ative na máquina que você quer que colete suas fontes o dia todo: junto com o ícone da bandeja, os seus boletins são montados quer você abra o app ou não. Este ajuste pertence a este computador e não vai para os seus outros dispositivos.",
 
   "optional.intro":
     "Chaves para serviços externos, todas opcionais. As duas chaves de voz ficam com as credenciais deste dispositivo e nunca são sincronizadas, então cada dispositivo precisa das suas.",

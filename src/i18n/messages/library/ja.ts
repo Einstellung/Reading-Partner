@@ -59,7 +59,7 @@ const ja: Translation<typeof en> = {
   "materials.addBook": "本を追加",
   "materials.savedArticlesHeading": "保存した記事",
   "materials.removeArticleTitle": "「{title}」を削除しますか？",
-  "materials.removeArticleDescription": "記事は保存した記事から削除されます。ブリーフィングから再度保存すれば戻ります。",
+  "materials.removeArticleDescription": "記事は保存した記事から削除されます。ブリーフから再度保存すれば戻ります。",
   "materials.removeArticleAction": "削除",
   "materials.deleteBookTitle": "「{title}」を削除しますか？",
   "materials.deleteBookDescription": "この本と、それに関するすべてを削除しますか？あなた自身についてのメモは残ります。",

@@ -60,7 +60,7 @@ const pt: Translation<typeof en> = {
   "materials.addBook": "Adicionar livro",
   "materials.savedArticlesHeading": "Artigos salvos",
   "materials.removeArticleTitle": "Remover “{title}”?",
-  "materials.removeArticleDescription": "O artigo sai dos seus artigos salvos. Salvá-lo de novo a partir de um resumo o traz de volta.",
+  "materials.removeArticleDescription": "O artigo sai dos seus artigos salvos. Salvá-lo de novo a partir de um boletim o traz de volta.",
   "materials.removeArticleAction": "Remover",
   "materials.deleteBookTitle": "Excluir “{title}”?",
   "materials.deleteBookDescription": "Excluir este livro e tudo relacionado a ele? Suas anotações sobre você mesmo permanecem.",

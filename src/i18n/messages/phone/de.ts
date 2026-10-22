@@ -18,7 +18,7 @@ export default {
   "holdMenu.remove": "Entfernen",
   "holdMenu.confirmConversationTitle": "Diese Unterhaltung löschen?",
   "holdMenu.confirmRemoveSavedDescription":
-    "Er verschwindet auf allen Geräten aus Gespeichert. Das Briefing, aus dem er stammt, bleibt unverändert.",
+    "Er verschwindet auf allen Geräten aus Gespeichert. Der Brief, aus dem er stammt, bleibt unverändert.",
   "holdMenu.confirmDeleteAsideDescription":
     "Die Nebenfrage und ihre Zeile in der Lektion werden gelöscht. Die Lektion selbst bleibt erhalten.",
 

@@ -94,6 +94,7 @@ export default function FeaturesPanel({
 
       {/* A reader collects nothing, so there is no schedule to switch off. */}
       {device?.role === "collector" && (
+        // Titled with the info side's name, Intel (docs/info/93).
         <SettingsSection title={t("settings.features.briefing")}>
           <div className={CARD}>
             <Label>

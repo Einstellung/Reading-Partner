@@ -18,7 +18,7 @@ export default {
   "holdMenu.remove": "Retirer",
   "holdMenu.confirmConversationTitle": "Supprimer cette conversation ?",
   "holdMenu.confirmRemoveSavedDescription":
-    "Il disparaît des éléments enregistrés sur tous les appareils. Le résumé dont il vient n'est pas modifié.",
+    "Il disparaît des éléments enregistrés sur tous les appareils. Le bulletin dont il vient n'est pas modifié.",
   "holdMenu.confirmDeleteAsideDescription":
     "L'aparté disparaît, avec sa ligne dans la leçon. La leçon elle-même reste.",
 

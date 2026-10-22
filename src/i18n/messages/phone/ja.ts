@@ -15,7 +15,7 @@ export default {
   "holdMenu.confirmRemoveTitle": "「{title}」を削除しますか？",
   "holdMenu.remove": "削除",
   "holdMenu.confirmConversationTitle": "この会話を削除しますか？",
-  "holdMenu.confirmRemoveSavedDescription": "すべてのデバイスの保存済みから消えます。元になったブリーフィングは変わりません。",
+  "holdMenu.confirmRemoveSavedDescription": "すべてのデバイスの保存済みから消えます。元になったブリーフは変わりません。",
   "holdMenu.confirmDeleteAsideDescription": "アサイドと、レッスン内のその行が削除されます。レッスン自体は残ります。",
 
   "holdMenu.doneDeleted": "「{title}」を削除しました",

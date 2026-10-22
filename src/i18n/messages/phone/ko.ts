@@ -15,7 +15,7 @@ export default {
   "holdMenu.confirmRemoveTitle": "“{title}”을(를) 제거할까요?",
   "holdMenu.remove": "제거",
   "holdMenu.confirmConversationTitle": "이 대화를 삭제할까요?",
-  "holdMenu.confirmRemoveSavedDescription": "모든 기기의 저장한 항목에서 사라집니다. 이 기사가 나온 브리핑은 그대로입니다.",
+  "holdMenu.confirmRemoveSavedDescription": "모든 기기의 저장한 항목에서 사라집니다. 이 기사가 나온 브리프는 그대로입니다.",
   "holdMenu.confirmDeleteAsideDescription": "곁가지 대화와 레슨 안의 해당 줄이 삭제됩니다. 레슨 자체는 남습니다.",
 
   "holdMenu.doneDeleted": "“{title}”을(를) 삭제했습니다",

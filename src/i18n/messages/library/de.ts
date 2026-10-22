@@ -60,7 +60,7 @@ const de: Translation<typeof en> = {
   "materials.addBook": "Buch hinzufügen",
   "materials.savedArticlesHeading": "Gespeicherte Artikel",
   "materials.removeArticleTitle": "„{title}“ entfernen?",
-  "materials.removeArticleDescription": "Der Artikel verschwindet aus deinen gespeicherten Artikeln. Erneutes Speichern aus einem Briefing bringt ihn zurück.",
+  "materials.removeArticleDescription": "Der Artikel verschwindet aus deinen gespeicherten Artikeln. Erneutes Speichern aus einem Brief bringt ihn zurück.",
   "materials.removeArticleAction": "Entfernen",
   "materials.deleteBookTitle": "„{title}“ löschen?",
   "materials.deleteBookDescription": "Dieses Buch und alles dazu löschen? Deine Notizen über dich selbst bleiben erhalten.",

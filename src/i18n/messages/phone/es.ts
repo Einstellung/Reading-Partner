@@ -18,7 +18,7 @@ export default {
   "holdMenu.remove": "Quitar",
   "holdMenu.confirmConversationTitle": "¿Eliminar esta conversación?",
   "holdMenu.confirmRemoveSavedDescription":
-    "Desaparece de Guardados en todos los dispositivos. El resumen del que vino no cambia.",
+    "Desaparece de Guardados en todos los dispositivos. El boletín del que vino no cambia.",
   "holdMenu.confirmDeleteAsideDescription":
     "El aparte se elimina, junto con su fila en la lección. La lección en sí se conserva.",
 

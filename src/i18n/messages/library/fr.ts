@@ -62,7 +62,7 @@ const fr: Translation<typeof en> = {
   "materials.savedArticlesHeading": "Articles enregistrés",
   "materials.removeArticleTitle": "Retirer « {title} » ?",
   "materials.removeArticleDescription":
-    "L’article quitte vos articles enregistrés. L’enregistrer à nouveau depuis un résumé le fait revenir.",
+    "L’article quitte vos articles enregistrés. L’enregistrer à nouveau depuis un bulletin le fait revenir.",
   "materials.removeArticleAction": "Retirer",
   "materials.deleteBookTitle": "Supprimer « {title} » ?",
   "materials.deleteBookDescription": "Supprimer ce livre et tout ce qui s’y rapporte ? Vos notes sur vous-même sont conservées.",

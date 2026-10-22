@@ -30,7 +30,7 @@ export default {
   "account.everydayModel": "Modelo para tareas rutinarias",
   "account.sameAsChat": "Igual que el chat",
   "account.everydayHint":
-    "El trabajo rutinario se ejecuta aquí en lugar de en el modelo de arriba: las comidas y el resumen nocturno. Nadie lo está esperando, así que un modelo más barato no te cuesta nada; qué tareas le corresponden lo decide la app, no este ajuste. Usa el proveedor de arriba.",
+    "El trabajo rutinario se ejecuta aquí en lugar de en el modelo de arriba: las comidas y el boletín nocturno. Nadie lo está esperando, así que un modelo más barato no te cuesta nada; qué tareas le corresponden lo decide la app, no este ajuste. Usa el proveedor de arriba.",
   "account.voiceFront": "Llamada de voz",
   "account.voiceFrontHint":
     "La primera respuesta rápida de una llamada de voz se ejecuta aquí, antes de cualquier trabajo en segundo plano. Un modelo rápido responde antes; deja el razonamiento desactivado salvo que las respuestas queden demasiado superficiales. Un proveedor que no puede desactivar el razonamiento usa su nivel más bajo. Usa el proveedor de arriba.",
@@ -88,7 +88,7 @@ export default {
   "features.language": "Idioma",
   "features.languageAuto": "Automático (app: sistema; IA: tu idioma)",
   "features.languageHint":
-    "El idioma de la app y de todo lo que escribe la IA: respuestas del chat, notas y el resumen de noticias. En automático, la app usa el idioma del sistema y la IA responde en el idioma en que escribes. La transcripción de voz siempre sigue lo que dices.",
+    "El idioma de la app y de todo lo que escribe la IA: respuestas del chat, notas y los boletines. En automático, la app usa el idioma del sistema y la IA responde en el idioma en que escribes. La transcripción de voz siempre sigue lo que dices.",
   "features.paper": "Fondo de papel",
   "features.paperHint":
     "Convierte el blanco de toda la app (chats, estanterías, barras laterales, este cuadro de diálogo y las páginas de los libros) en un color de papel hueso. Hay un solo tono y ninguno más oscuro; no es un modo oscuro. La elección se guarda solo en este dispositivo.",
@@ -97,19 +97,19 @@ export default {
   "features.companionShowHint":
     "{name} está en la esquina de cada pantalla, también en el lector. Desactivado, la esquina queda vacía; el botón de {name} en la barra lateral, en la pantalla de inicio del móvil y en el menú Más del lector hace que reaparezca. La elección se queda en este dispositivo.",
   "features.companionName": "Nombre del acompañante",
-  "features.briefing": "Resumen de noticias",
+  "features.briefing": "Intel",
   "features.collect": "Recopilar de tus fuentes en este ordenador",
   "features.collectHint":
-    "Cada fuente se consulta según su propio horario. La recopilación automática para el resumen está en pausa mientras se rediseña; las búsquedas por tema siguen ejecutándose por la noche. Desactivado, este equipo deja de recopilar por completo y otro recopilador, si lo tienes, toma el relevo.",
+    "Cada fuente se consulta según su propio horario, y las búsquedas por tema se ejecutan aquí por la noche. Desactivado, este equipo deja de recopilar por completo y otro recopilador, si lo tienes, toma el relevo.",
   "features.thisComputer": "Este ordenador",
   "features.role": "Este equipo es un",
   "features.roleCollector": "Recopilador: lee las fuentes aquí",
   "features.roleReader": "Lector: lee lo que recopiló otro equipo",
   "features.roleHint":
-    "Un recopilador lee tus sitios suscritos todo el día y publica el resumen para tus otros dispositivos; un lector muestra lo que publicó un recopilador y nunca descarga nada de un sitio por su cuenta. Los teléfonos y las tabletas son siempre lectores. Si dos equipos recopilan, trabaja el que lleva más tiempo en marcha.",
+    "Un recopilador lee tus sitios suscritos todo el día y publica tus boletines para tus otros dispositivos; un lector muestra lo que publicó un recopilador y nunca descarga nada de un sitio por su cuenta. Los teléfonos y las tabletas son siempre lectores. Si dos equipos recopilan, trabaja el que lleva más tiempo en marcha.",
   "features.autostart": "Abrir Reading Partner al iniciar este ordenador",
   "features.autostartHint":
-    "Desactivado de forma predeterminada. Actívalo en el equipo que quieras que recopile tus fuentes todo el día: junto con el icono de la bandeja, el resumen se prepara tanto si abres la app como si no. Este ajuste es de este ordenador y no pasa a tus otros dispositivos.",
+    "Desactivado de forma predeterminada. Actívalo en el equipo que quieras que recopile tus fuentes todo el día: junto con el icono de la bandeja, tus boletines se preparan tanto si abres la app como si no. Este ajuste es de este ordenador y no pasa a tus otros dispositivos.",
 
   "optional.intro":
     "Claves para servicios externos, todas opcionales. Las dos claves de voz se guardan con las credenciales de este dispositivo y nunca se sincronizan, así que cada dispositivo necesita las suyas.",

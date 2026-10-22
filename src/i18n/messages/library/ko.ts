@@ -59,7 +59,7 @@ const ko: Translation<typeof en> = {
   "materials.addBook": "책 추가",
   "materials.savedArticlesHeading": "저장한 기사",
   "materials.removeArticleTitle": "“{title}”을(를) 삭제할까요?",
-  "materials.removeArticleDescription": "기사가 저장한 기사 목록에서 사라집니다. 브리핑에서 다시 저장하면 돌아옵니다.",
+  "materials.removeArticleDescription": "기사가 저장한 기사 목록에서 사라집니다. 브리프에서 다시 저장하면 돌아옵니다.",
   "materials.removeArticleAction": "삭제",
   "materials.deleteBookTitle": "“{title}”을(를) 삭제할까요?",
   "materials.deleteBookDescription": "이 책과 이 책에 관한 모든 것을 삭제할까요? 당신에 대한 메모는 남습니다.",

@@ -30,7 +30,7 @@ export default {
   "account.everydayModel": "Modèle du quotidien",
   "account.sameAsChat": "Comme pour le chat",
   "account.everydayHint":
-    "Les tâches de routine tournent ici plutôt que sur le modèle ci-dessus : les repas et le briefing de la nuit. Personne ne les attend, donc un modèle moins cher ne vous coûte rien ; c'est l'app qui décide quelles tâches en relèvent, pas ce réglage. Il utilise le fournisseur ci-dessus.",
+    "Les tâches de routine tournent ici plutôt que sur le modèle ci-dessus : les repas et le bulletin de la nuit. Personne ne les attend, donc un modèle moins cher ne vous coûte rien ; c'est l'app qui décide quelles tâches en relèvent, pas ce réglage. Il utilise le fournisseur ci-dessus.",
   "account.voiceFront": "Appel vocal",
   "account.voiceFrontHint":
     "La première réponse rapide d'un appel vocal tourne ici, avant tout travail en arrière-plan. Un modèle rapide répond le plus vite ; laissez la réflexion désactivée sauf si les réponses sont trop superficielles. Un fournisseur qui ne peut pas désactiver la réflexion utilise son niveau le plus bas. Il utilise le fournisseur ci-dessus.",
@@ -88,7 +88,7 @@ export default {
   "features.language": "Langue",
   "features.languageAuto": "Auto (app : système, IA : votre langue)",
   "features.languageHint":
-    "La langue de l'app et de tout ce qu'écrit l'IA : réponses du chat, notes et briefing d'actualités. En mode auto, l'app s'affiche dans la langue du système et l'IA répond dans la langue dans laquelle vous écrivez. La transcription vocale suit toujours la langue parlée.",
+    "La langue de l'app et de tout ce qu'écrit l'IA : réponses du chat, notes et bulletins. En mode auto, l'app s'affiche dans la langue du système et l'IA répond dans la langue dans laquelle vous écrivez. La transcription vocale suit toujours la langue parlée.",
   "features.paper": "Fond papier",
   "features.paperHint":
     "Remplace le blanc derrière toute l'app (chats, étagères, barres latérales, cette fenêtre et les pages d'un livre) par une couleur de papier crème. Il n'y a qu'une teinte, sans niveau plus sombre ; ce n'est pas un mode sombre. Le choix reste sur cet appareil.",
@@ -97,19 +97,19 @@ export default {
   "features.companionShowHint":
     "{name} se tient dans le coin de chaque écran, lecteur compris. Désactivé, le coin reste vide ; le bouton de la barre latérale, de l'écran d'accueil du téléphone et du menu Plus du lecteur ramène {name}. Ce choix reste sur cet appareil.",
   "features.companionName": "Nom du compagnon",
-  "features.briefing": "Briefing",
+  "features.briefing": "Intel",
   "features.collect": "Collecter vos sources sur cet ordinateur",
   "features.collectHint":
-    "Chaque source est consultée selon son propre calendrier. La collecte automatique pour le briefing est en pause pendant sa refonte ; les recherches par sujet continuent de tourner la nuit. Désactivé, cette machine arrête toute collecte et un autre collecteur, si vous en avez un, prend le relais.",
+    "Chaque source est consultée selon son propre calendrier, et les recherches par sujet tournent ici la nuit. Désactivé, cette machine arrête toute collecte et un autre collecteur, si vous en avez un, prend le relais.",
   "features.thisComputer": "Cet ordinateur",
   "features.role": "Cette machine est un",
   "features.roleCollector": "Collecteur — lit les sources ici",
   "features.roleReader": "Lecteur — lit ce qu'une autre machine a collecté",
   "features.roleHint":
-    "Un collecteur lit vos sites suivis toute la journée et publie le briefing pour vos autres appareils ; un lecteur affiche ce qu'un collecteur a publié et ne récupère jamais rien d'un site lui-même. Les téléphones et tablettes sont toujours lecteurs. Si deux machines collectent, celle qui tourne depuis le plus longtemps fait le travail.",
+    "Un collecteur lit vos sites suivis toute la journée et publie vos bulletins pour vos autres appareils ; un lecteur affiche ce qu'un collecteur a publié et ne récupère jamais rien d'un site lui-même. Les téléphones et tablettes sont toujours lecteurs. Si deux machines collectent, celle qui tourne depuis le plus longtemps fait le travail.",
   "features.autostart": "Ouvrir Reading Partner au démarrage de cet ordinateur",
   "features.autostartHint":
-    "Désactivé par défaut. Activez-le sur la machine qui doit collecter vos sources toute la journée : avec l'icône de la barre système, le briefing se prépare que vous ayez ouvert l'app ou non. Ce réglage appartient à cet ordinateur et n'est pas transmis à vos autres appareils.",
+    "Désactivé par défaut. Activez-le sur la machine qui doit collecter vos sources toute la journée : avec l'icône de la barre système, vos bulletins se préparent que vous ayez ouvert l'app ou non. Ce réglage appartient à cet ordinateur et n'est pas transmis à vos autres appareils.",
 
   "optional.intro":
     "Des clés pour des services externes, toutes facultatives. Les deux clés vocales sont conservées avec les identifiants de cet appareil et ne sont jamais synchronisées : chaque appareil a besoin des siennes.",

@@ -59,7 +59,7 @@ export default {
   "box.bookFallback": "Ein Buch",
   "box.originBookPage": "{book} · S. {page}",
   "box.originDoor": "An der Tür · {date}",
-  "box.originBriefing": "Briefing · {date}",
+  "box.originBriefing": "Brief · {date}",
   "box.originMeals": "Mahlzeiten",
   "box.originTalk": "Vortragscoach",
   "box.originRetell": "Nacherzählung",

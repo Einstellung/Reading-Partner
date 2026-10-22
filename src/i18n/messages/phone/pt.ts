@@ -18,7 +18,7 @@ export default {
   "holdMenu.remove": "Remover",
   "holdMenu.confirmConversationTitle": "Excluir esta conversa?",
   "holdMenu.confirmRemoveSavedDescription":
-    "Ele sai dos salvos em todos os dispositivos. O resumo de onde veio não é alterado.",
+    "Ele sai dos salvos em todos os dispositivos. O boletim de onde veio não é alterado.",
   "holdMenu.confirmDeleteAsideDescription": "O aparte é excluído, com sua linha na aula. A aula em si continua.",
 
   "holdMenu.doneDeleted": "“{title}” excluído",

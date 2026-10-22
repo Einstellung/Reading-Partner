@@ -12,7 +12,7 @@ export default {
   signIn: "Iniciar sesión",
   "account.benefitX": "Las búsquedas por tema leen la búsqueda de X con tu cuenta.",
   "account.cautionX": "La lectura automática se hace con la cuenta con la que inicias sesión. Hay una pequeña probabilidad de que los controles de riesgo de X reaccionen, así que te sugerimos iniciar sesión con una cuenta secundaria en lugar de la principal.",
-  "account.benefitBloomberg": "Artículos completos de Bloomberg en el resumen en lugar de la vista previa de ~500 caracteres.",
+  "account.benefitBloomberg": "Artículos completos de Bloomberg en tus boletines en lugar de la vista previa de ~500 caracteres.",
   "account.usedBy": "Lo usa: {names}",
   "account.signInOnCollector": "Inicia sesión en el ordenador que recopila tus fuentes",
 

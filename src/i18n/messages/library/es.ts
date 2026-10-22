@@ -61,7 +61,7 @@ const es: Translation<typeof en> = {
   "materials.savedArticlesHeading": "Artículos guardados",
   "materials.removeArticleTitle": "¿Quitar “{title}”?",
   "materials.removeArticleDescription":
-    "El artículo se quita de tus artículos guardados. Volver a guardarlo desde un resumen lo trae de vuelta.",
+    "El artículo se quita de tus artículos guardados. Volver a guardarlo desde un boletín lo trae de vuelta.",
   "materials.removeArticleAction": "Quitar",
   "materials.deleteBookTitle": "¿Eliminar “{title}”?",
   "materials.deleteBookDescription": "¿Eliminar este libro y todo lo relacionado con él? Tus notas sobre ti mismo se conservan.",

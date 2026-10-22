@@ -79,7 +79,7 @@ const ru: Translation<typeof en> = {
   "materials.addBook": "Добавить книгу",
   "materials.savedArticlesHeading": "Сохранённые статьи",
   "materials.removeArticleTitle": "Убрать «{title}»?",
-  "materials.removeArticleDescription": "Статья исчезнет из сохранённых. Сохранив её снова из подборки, вы вернёте её обратно.",
+  "materials.removeArticleDescription": "Статья исчезнет из сохранённых. Сохранив её снова из сводки, вы вернёте её обратно.",
   "materials.removeArticleAction": "Убрать",
   "materials.deleteBookTitle": "Удалить «{title}»?",
   "materials.deleteBookDescription": "Удалить эту книгу и всё, что с ней связано? Ваши заметки о себе сохранятся.",

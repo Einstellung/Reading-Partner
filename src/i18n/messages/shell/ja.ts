@@ -59,7 +59,7 @@ export default {
   "box.bookFallback": "ある本",
   "box.originBookPage": "{book} · {page}ページ",
   "box.originDoor": "扉にて · {date}",
-  "box.originBriefing": "ブリーフィング · {date}",
+  "box.originBriefing": "ブリーフ · {date}",
   "box.originMeals": "食事",
   "box.originTalk": "発表コーチ",
   "box.originRetell": "リテル",

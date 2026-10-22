@@ -30,7 +30,7 @@ export default {
   "account.everydayModel": "Everyday model",
   "account.sameAsChat": "Same as chat",
   "account.everydayHint":
-    "The routine work runs here instead of on the model above: meals, and the nightly briefing. It is work nobody is waiting for, so a cheaper model costs you nothing; which tasks belong to it is decided by the app, not here. It uses the provider above.",
+    "The routine work runs here instead of on the model above: meals, and the nightly brief. It is work nobody is waiting for, so a cheaper model costs you nothing; which tasks belong to it is decided by the app, not here. It uses the provider above.",
   "account.voiceFront": "Voice call",
   "account.voiceFrontHint":
     "A voice call's quick first answer runs here, before any background work. A fast model answers soonest; leave thinking off unless the answers are too shallow. A provider that cannot turn thinking off uses its lowest level. It uses the provider above.",
@@ -88,7 +88,7 @@ export default {
   "features.language": "Language",
   "features.languageAuto": "Auto (system UI, AI matches you)",
   "features.languageHint":
-    "The language of the app and of everything the AI writes: chat replies, notes, and the news briefing. Auto shows the app in your system language and lets the AI answer in the language you write in. Voice transcription always follows what you speak.",
+    "The language of the app and of everything the AI writes: chat replies, notes, and briefs. Auto shows the app in your system language and lets the AI answer in the language you write in. Voice transcription always follows what you speak.",
   "features.paper": "Paper background",
   "features.paperHint":
     "Turns the white behind the whole app — chats, shelves, sidebars, this dialog, and the pages of a book — into an off-white paper colour. There is one shade and no darker step; this is not a dark mode. The choice stays on this device.",
@@ -97,19 +97,19 @@ export default {
   "features.companionShowHint":
     "{name} stands in the corner of every screen, the reader included. Off, the corner is empty; the {name} button in the sidebar, on the phone's home screen and in the reader's More menu brings it back. The choice stays on this device.",
   "features.companionName": "Companion name",
-  "features.briefing": "Briefing",
+  "features.briefing": "Intel",
   "features.collect": "Collect from your sources on this computer",
   "features.collectHint":
-    "Each source is checked on its own schedule. Automatic collection for the briefing is paused while the briefing is redesigned; topic searches still run overnight. Off, this machine stops collecting entirely and another collector, if you have one, takes over.",
+    "Each source is checked on its own schedule, and topic searches run here overnight. Off, this machine stops collecting entirely and another collector, if you have one, takes over.",
   "features.thisComputer": "This computer",
   "features.role": "This machine is a",
   "features.roleCollector": "Collector — read the sources here",
   "features.roleReader": "Reader — read what another machine collected",
   "features.roleHint":
-    "A collector reads your subscribed sites all day and publishes the briefing for your other devices; a reader shows what a collector published and never fetches from a site itself. Phones and tablets are always readers. If two machines collect, the one that has been running longest does the work.",
+    "A collector reads your subscribed sites all day and publishes your briefs for your other devices; a reader shows what a collector published and never fetches from a site itself. Phones and tablets are always readers. If two machines collect, the one that has been running longest does the work.",
   "features.autostart": "Start Reading Partner when this computer starts",
   "features.autostartHint":
-    "Off by default. Turn it on for the machine you want collecting your sources all day — together with the tray, it means the briefing is being built whether or not you opened the app. This setting belongs to this computer and is not carried to your other devices.",
+    "Off by default. Turn it on for the machine you want collecting your sources all day — together with the tray, it means your briefs are being built whether or not you opened the app. This setting belongs to this computer and is not carried to your other devices.",
 
   "optional.intro":
     "Keys for outside services, each of them optional. The two voice keys are kept with this device's credentials and never sync, so every device needs its own.",

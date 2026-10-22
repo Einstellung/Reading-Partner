@@ -30,7 +30,7 @@ export default {
   "account.everydayModel": "Modell für Routinearbeit",
   "account.sameAsChat": "Wie beim Chat",
   "account.everydayHint":
-    "Die Routinearbeit läuft hier statt auf dem Modell oben: Mahlzeiten und das nächtliche Briefing. Niemand wartet darauf, ein günstigeres Modell kostet dich also nichts; welche Aufgaben dazugehören, entscheidet die App, nicht diese Einstellung. Es nutzt den Anbieter oben.",
+    "Die Routinearbeit läuft hier statt auf dem Modell oben: Mahlzeiten und der nächtliche Brief. Niemand wartet darauf, ein günstigeres Modell kostet dich also nichts; welche Aufgaben dazugehören, entscheidet die App, nicht diese Einstellung. Es nutzt den Anbieter oben.",
   "account.voiceFront": "Sprachanruf",
   "account.voiceFrontHint":
     "Die schnelle erste Antwort eines Sprachanrufs läuft hier, vor jeder Hintergrundarbeit. Ein schnelles Modell antwortet am zügigsten; lass das Denken aus, solange die Antworten nicht zu flach sind. Anbieter, die das Denken nicht abschalten können, nutzen ihre niedrigste Stufe. Es nutzt den Anbieter oben.",
@@ -88,7 +88,7 @@ export default {
   "features.language": "Sprache",
   "features.languageAuto": "Automatisch (App: System, KI: deine Sprache)",
   "features.languageHint":
-    "Die Sprache der App und von allem, was die KI schreibt: Chat-Antworten, Notizen und das Nachrichten-Briefing. Bei „Automatisch“ erscheint die App in der Systemsprache und die KI antwortet in der Sprache, in der du schreibst. Die Spracherkennung folgt immer dem, was du sprichst.",
+    "Die Sprache der App und von allem, was die KI schreibt: Chat-Antworten, Notizen und Briefs. Bei „Automatisch“ erscheint die App in der Systemsprache und die KI antwortet in der Sprache, in der du schreibst. Die Spracherkennung folgt immer dem, was du sprichst.",
   "features.paper": "Papierhintergrund",
   "features.paperHint":
     "Macht das Weiß hinter der ganzen App – Chats, Regale, Seitenleisten, dieses Fenster und die Seiten eines Buchs – zu einem gebrochenen Papierweiß. Es gibt nur diesen einen Ton und keine dunklere Stufe; das ist kein Dunkelmodus. Die Wahl bleibt auf diesem Gerät.",
@@ -97,19 +97,19 @@ export default {
   "features.companionShowHint":
     "{name} steht in der Ecke jedes Bildschirms, auch im Reader. Aus bleibt die Ecke leer; der Knopf in der Seitenleiste, auf dem Startbildschirm des Handys und im Mehr-Menü des Readers holt {name} zurück. Die Wahl bleibt auf diesem Gerät.",
   "features.companionName": "Name des Begleiters",
-  "features.briefing": "Briefing",
+  "features.briefing": "Intel",
   "features.collect": "Quellen auf diesem Computer sammeln",
   "features.collectHint":
-    "Jede Quelle wird nach ihrem eigenen Zeitplan abgefragt. Das automatische Sammeln für das Briefing ist pausiert, solange es neu gestaltet wird; Themensuchen laufen weiterhin über Nacht. Aus: Dieser Rechner sammelt überhaupt nicht mehr, und ein anderer Sammler übernimmt, falls vorhanden.",
+    "Jede Quelle wird nach ihrem eigenen Zeitplan abgefragt, und Themensuchen laufen hier über Nacht. Aus: Dieser Rechner sammelt überhaupt nicht mehr, und ein anderer Sammler übernimmt, falls vorhanden.",
   "features.thisComputer": "Dieser Computer",
   "features.role": "Dieser Rechner ist ein",
   "features.roleCollector": "Sammler – liest die Quellen hier",
   "features.roleReader": "Leser – liest, was ein anderer Rechner gesammelt hat",
   "features.roleHint":
-    "Ein Sammler liest deine abonnierten Seiten den ganzen Tag und veröffentlicht das Briefing für deine anderen Geräte; ein Leser zeigt, was ein Sammler veröffentlicht hat, und lädt selbst nie etwas von einer Seite. Smartphones und Tablets sind immer Leser. Wenn zwei Rechner sammeln, arbeitet der, der am längsten läuft.",
+    "Ein Sammler liest deine abonnierten Seiten den ganzen Tag und veröffentlicht deine Briefs für deine anderen Geräte; ein Leser zeigt, was ein Sammler veröffentlicht hat, und lädt selbst nie etwas von einer Seite. Smartphones und Tablets sind immer Leser. Wenn zwei Rechner sammeln, arbeitet der, der am längsten läuft.",
   "features.autostart": "Reading Partner beim Start dieses Computers öffnen",
   "features.autostartHint":
-    "Standardmäßig aus. Schalte es auf dem Rechner ein, der deine Quellen den ganzen Tag sammeln soll – zusammen mit dem Symbol in der Menüleiste bzw. im Infobereich entsteht das Briefing, ob du die App geöffnet hast oder nicht. Diese Einstellung gehört zu diesem Computer und wird nicht auf deine anderen Geräte übertragen.",
+    "Standardmäßig aus. Schalte es auf dem Rechner ein, der deine Quellen den ganzen Tag sammeln soll – zusammen mit dem Symbol in der Menüleiste bzw. im Infobereich entstehen deine Briefs, ob du die App geöffnet hast oder nicht. Diese Einstellung gehört zu diesem Computer und wird nicht auf deine anderen Geräte übertragen.",
 
   "optional.intro":
     "Schlüssel für externe Dienste, alle optional. Die beiden Sprachschlüssel werden mit den Zugangsdaten dieses Geräts gespeichert und nie synchronisiert, daher braucht jedes Gerät seine eigenen.",

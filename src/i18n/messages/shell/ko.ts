@@ -59,7 +59,7 @@ export default {
   "box.bookFallback": "어떤 책",
   "box.originBookPage": "{book} · {page}쪽",
   "box.originDoor": "문 앞에서 · {date}",
-  "box.originBriefing": "브리핑 · {date}",
+  "box.originBriefing": "브리프 · {date}",
   "box.originMeals": "식단",
   "box.originTalk": "발표 코치",
   "box.originRetell": "다시 말하기",
