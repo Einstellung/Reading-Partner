@@ -1,0 +1,25 @@
+{
+  "followed": {
+    "info-topic-search-questions.json": "494e1a4ccbc6701fa58ab9f9be85317d6918d8022665a6f7d078fc6c77e92f6c",
+    "runs/r-first/materials/M1.json": "f472ed27a75c87794c644e23d41106a7de47fec82a3ab3da5ce3f0163728966e",
+    "runs/r-first/materials/M2.json": "5935a74faa4be4131ed2c95f83ba1caa9f61d6c0310f1808b998608c267f0217",
+    "runs/r-first/topic-search-source-health.json": "a33c041cdfdf43674ce9e35196d90a7dbdeabcbde7be3ec3ce2cf0bbce688c4c",
+    "topic-search-ts-6b6b6b6b-2026-10-21.json": "f19abc451f0b5bf0fa27c75eae9fec0fb548d89a766c113375d257c243794ff6"
+  },
+  "studyFirst": {
+    "info-topic-search-questions.json": "494e1a4ccbc6701fa58ab9f9be85317d6918d8022665a6f7d078fc6c77e92f6c",
+    "runs/r-first/materials/M1.json": "32eef54ef35366926173aa070996bf41859b238174f31d73b08db36104c0d3f2",
+    "runs/r-first/materials/M2.json": "9e1099215d0d618d809864a79fd8a6131640b2209559cb2bd1129bbb0aeed079",
+    "runs/r-first/topic-search-source-health.json": "a33c041cdfdf43674ce9e35196d90a7dbdeabcbde7be3ec3ce2cf0bbce688c4c",
+    "topic-search-ts-6b6b6b6b-2026-10-21.json": "bf4c6e276fb849245392ff5cdfe88d71fa02f3cb83dd061c2eb00c89fbdee157"
+  },
+  "studyUpdated": {
+    "info-topic-search-questions.json": "494e1a4ccbc6701fa58ab9f9be85317d6918d8022665a6f7d078fc6c77e92f6c",
+    "runs/r-first/materials/M1.json": "32eef54ef35366926173aa070996bf41859b238174f31d73b08db36104c0d3f2",
+    "runs/r-first/materials/M2.json": "9e1099215d0d618d809864a79fd8a6131640b2209559cb2bd1129bbb0aeed079",
+    "runs/r-first/materials/M3.json": "3fbcfd4e0cc3c789a2d5008a7af4cec1eb166909013e12ff5eddfaaac248c9da",
+    "runs/r-first/topic-search-source-health.json": "a33c041cdfdf43674ce9e35196d90a7dbdeabcbde7be3ec3ce2cf0bbce688c4c",
+    "runs/r-up/topic-search-source-health.json": "58346d79d85b254a5164d5e640cd5c16aec0cf9e5bbc75a042fee2f533c14da6",
+    "topic-search-ts-6b6b6b6b-2026-10-21.json": "c7f2bd76a4d7ca4f2f02ad7c12f9f17e76d1c955fa3cf10db75fe5ae9f955f8a"
+  }
+}
