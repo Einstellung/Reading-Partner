@@ -92,6 +92,19 @@ test("the prompt names the language and forbids grams in the steps and the packi
   expect(prompt).not.toContain("batch");
 });
 
+test("the prompt keeps the steps to the listed seasoning, salt, pepper, oil and water, in a few steps", () => {
+  const prompt = recipeSystemPrompt({ effort: "homestyle", language: "en" });
+  expect(prompt.split("\n")[0]).toBe("Write the steps in English.");
+  expect(prompt).toContain("3 to 6 steps");
+  expect(prompt).not.toContain("3 to 8 steps");
+  expect(prompt).toContain("The listed seasoning (a dry blend, a jar of sauce) is the dish's flavour");
+  expect(prompt).toContain("Never mix a sauce from several bottles");
+  expect(prompt).toContain("Use only the listed ingredients, plus salt, pepper, cooking oil and water");
+  expect(prompt).toContain("No fresh ginger, garlic, scallion, chilli or herbs");
+  expect(prompt).toContain("it is done the evening before and that the meat waits covered in the fridge overnight");
+  expect(recipeSystemPrompt({ effort: "simple", language: "en" })).toContain("3 or 4 steps");
+});
+
 test("the recipe language is the answer-language setting, and auto is the system language by name", () => {
   expect(recipeLanguage("en", ["zh-CN"])).toBe("en");
   expect(recipeLanguage("ja", ["en-US"])).toBe("ja");

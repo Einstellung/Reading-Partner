@@ -182,6 +182,12 @@ export default {
   "flavour.pesto": "青酱",
   "flavour.sweet": "甜口",
   "flavour.plain": "原味",
+  "flavour.herb": "香草",
+  "flavour.cajun": "卡津",
+  "flavour.tex-mex": "墨西哥风味",
+  "flavour.smoked-paprika": "烟熏红椒",
+  "flavour.cumin": "孜然",
+  "flavour.bbq": "烧烤",
 
   "unit.kcal": "千卡",
   "unit.g": "克",

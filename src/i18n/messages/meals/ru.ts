@@ -195,6 +195,12 @@ export default {
   "flavour.pesto": "Песто",
   "flavour.sweet": "Сладкий",
   "flavour.plain": "Нейтральный",
+  "flavour.herb": "Травы",
+  "flavour.cajun": "Каджун",
+  "flavour.tex-mex": "Текс-мекс",
+  "flavour.smoked-paprika": "Копчёная паприка",
+  "flavour.cumin": "Зира",
+  "flavour.bbq": "Барбекю",
 
   "unit.kcal": "ккал",
   "unit.g": "г",

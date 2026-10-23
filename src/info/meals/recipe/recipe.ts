@@ -71,13 +71,18 @@ function languageName(language: Locale): string {
   return aiLanguageName(language) ?? "English";
 }
 
+// Raised when the prompt changes what the steps may use. 2: the listed
+// seasoning is the flavour, nothing fresh or bottled beyond the list.
+export const RECIPE_PROMPT_VERSION = 2;
+
 /**
  * The stored recipe's key: the dish, every food at its solved grams, the
  * kitchen and the language, and for a pot meal what the steps depend on —
  * whether it cooks the pot or eats a box, the pot's name, method, weight and
  * meals, and where the box waits. Any of them changing asks for a new recipe,
- * and the old one is left for retention to drop. A meal without a pot keys as
- * it always has.
+ * and the old one is left for retention to drop. RECIPE_PROMPT_VERSION goes
+ * in too, so a prompt that changes what the steps may use rewrites every
+ * stored recipe once, on its next open.
  */
 export function recipeKey(
   name: string,
@@ -87,7 +92,7 @@ export function recipeKey(
   pot: RecipePot | null = null,
 ): string {
   const foods = rows.map((r) => `${r.foodId}:${r.grams}`).sort();
-  const base: unknown[] = [name, foods, [...kitchen], language];
+  const base: unknown[] = [name, foods, [...kitchen], language, RECIPE_PROMPT_VERSION];
   if (pot) base.push([pot.cooks ? "cook" : "eat", pot.name, pot.method, pot.rawG, pot.count, pot.storage]);
   return hashText(JSON.stringify(base));
 }
@@ -133,7 +138,7 @@ export function recipeRequest(view: MealView, profile: Profile, language: Locale
 
 const EFFORT_LINE: Record<Effort, string> = {
   simple:
-    "The reader chose the simple level: keep to the method line, no extra techniques, as few pans and steps as the dish allows.",
+    "The reader chose the simple level: keep to the method line, no extra techniques, one pan or tray where the dish allows, 3 or 4 steps.",
   homestyle: "The reader chose the home-style level: a little more care is welcome, but nothing a home cook would not do.",
 };
 
@@ -146,8 +151,10 @@ export function recipeSystemPrompt(request: Pick<RecipeRequest, "effort" | "lang
     "You write the cooking steps for one meal of a meal plan. The reader follows them in their own kitchen, one step at a time, so every step has to be doable exactly as written with the equipment they have.",
     "",
     "Steps:",
-    "- 3 to 8 steps, in the order the reader does them, each one or two short sentences. Say the heat and the minutes. Use waiting time (while the water heats, cut the tofu).",
-    "- Use the listed ingredients, plus water, salt and cooking oil.",
+    "- 3 to 6 steps, in the order the reader does them, each one or two short sentences. Say the heat and the minutes. Use waiting time (while the oven heats, cut the vegetables).",
+    "- The listed seasoning (a dry blend, a jar of sauce) is the dish's flavour. It goes on or in as it comes from the jar or packet: rubbed on, sprinkled over or stirred in. Never mix a sauce from several bottles.",
+    "- Use only the listed ingredients, plus salt, pepper, cooking oil and water. No fresh ginger, garlic, scallion, chilli or herbs and no sauce or condiment that is not on the list. Most blends are already salted: add salt only to taste at the end.",
+    "- When the plan's method line has the meat rubbed or marinated the night before, make that the first step: say plainly that it is done the evening before and that the meat waits covered in the fridge overnight. The steps after it are the day itself. Otherwise the seasoning goes on just before cooking.",
     "- Do not repeat the grams from the ingredient list: the list is printed right above the steps. A small measure that is not on the list (2 spoons of water) is fine.",
     "- Write to the reader's kitchen as they described it and keep to its limits. If the steamer rack holds one bun, steam one and heat the rest another way. Frozen steamed buns go straight onto the rack, no thawing. If the dish wants a tool they do not have, use one they do.",
     "- Say when something has to be cooked through to be safe to eat (green beans, chicken, pork, eggs).",

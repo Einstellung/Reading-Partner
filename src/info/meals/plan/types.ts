@@ -45,44 +45,58 @@ export interface MealRef {
 }
 
 // A meal's taste, from a fixed list so the program can check that two meals in
-// a row do not taste the same (docs/73 每顿怎么搭).
+// a row do not taste the same (docs/73 每顿怎么搭). Most are what one ready-made
+// jar or packet gives; the `local` ones belong to a cuisine and are planned
+// only when the reader's own words ask for it.
 export type Flavour =
-  | "soy-ginger"
+  | "herb"
   | "garlic"
-  | "scallion-oil"
-  | "tomato"
+  | "lemon-pepper"
+  | "black-pepper"
+  | "cajun"
+  | "tex-mex"
+  | "smoked-paprika"
+  | "cumin"
+  | "bbq"
   | "curry"
+  | "tomato"
+  | "pesto"
+  | "vinaigrette"
+  | "sweet"
+  | "plain"
+  | "soy-ginger"
+  | "scallion-oil"
   | "sesame"
   | "teriyaki"
   | "sweet-sour"
   | "spicy-sichuan"
   | "hot-sour"
-  | "black-pepper"
-  | "lemon-pepper"
-  | "vinaigrette"
-  | "miso"
-  | "pesto"
-  | "sweet"
-  | "plain";
+  | "miso";
 
-export const FLAVOURS: readonly { id: Flavour; zh: string; en: string }[] = [
-  { id: "soy-ginger", zh: "姜葱酱油", en: "Soy & ginger" },
+export const FLAVOURS: readonly { id: Flavour; zh: string; en: string; local?: true }[] = [
+  { id: "herb", zh: "香草", en: "Herbs" },
   { id: "garlic", zh: "蒜香", en: "Garlic" },
-  { id: "scallion-oil", zh: "葱油", en: "Scallion oil" },
-  { id: "tomato", zh: "番茄", en: "Tomato" },
-  { id: "curry", zh: "咖喱", en: "Curry" },
-  { id: "sesame", zh: "麻酱", en: "Sesame" },
-  { id: "teriyaki", zh: "照烧", en: "Teriyaki" },
-  { id: "sweet-sour", zh: "糖醋", en: "Sweet & sour" },
-  { id: "spicy-sichuan", zh: "麻辣", en: "Sichuan spicy" },
-  { id: "hot-sour", zh: "酸辣", en: "Hot & sour" },
-  { id: "black-pepper", zh: "黑椒", en: "Black pepper" },
   { id: "lemon-pepper", zh: "柠檬胡椒", en: "Lemon pepper" },
-  { id: "vinaigrette", zh: "油醋", en: "Vinaigrette" },
-  { id: "miso", zh: "味噌", en: "Miso" },
+  { id: "black-pepper", zh: "黑椒", en: "Black pepper" },
+  { id: "cajun", zh: "卡津", en: "Cajun" },
+  { id: "tex-mex", zh: "墨西哥风味", en: "Tex-Mex" },
+  { id: "smoked-paprika", zh: "烟熏红椒", en: "Smoked paprika" },
+  { id: "cumin", zh: "孜然", en: "Cumin" },
+  { id: "bbq", zh: "烧烤", en: "BBQ" },
+  { id: "curry", zh: "咖喱", en: "Curry" },
+  { id: "tomato", zh: "番茄", en: "Tomato" },
   { id: "pesto", zh: "青酱", en: "Pesto" },
+  { id: "vinaigrette", zh: "油醋", en: "Vinaigrette" },
   { id: "sweet", zh: "甜口", en: "Sweet" },
   { id: "plain", zh: "原味", en: "Plain" },
+  { id: "soy-ginger", zh: "姜葱酱油", en: "Soy & ginger", local: true },
+  { id: "scallion-oil", zh: "葱油", en: "Scallion oil", local: true },
+  { id: "sesame", zh: "麻酱", en: "Sesame", local: true },
+  { id: "teriyaki", zh: "照烧", en: "Teriyaki", local: true },
+  { id: "sweet-sour", zh: "糖醋", en: "Sweet & sour", local: true },
+  { id: "spicy-sichuan", zh: "麻辣", en: "Sichuan spicy", local: true },
+  { id: "hot-sour", zh: "酸辣", en: "Hot & sour", local: true },
+  { id: "miso", zh: "味噌", en: "Miso", local: true },
 ];
 
 /** The flavour an id names, or null for anything off the list. */

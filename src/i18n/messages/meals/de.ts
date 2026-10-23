@@ -191,6 +191,12 @@ export default {
   "flavour.pesto": "Pesto",
   "flavour.sweet": "Süß",
   "flavour.plain": "Naturell",
+  "flavour.herb": "Kräuter",
+  "flavour.cajun": "Cajun",
+  "flavour.tex-mex": "Tex-Mex",
+  "flavour.smoked-paprika": "Rauchpaprika",
+  "flavour.cumin": "Kreuzkümmel",
+  "flavour.bbq": "BBQ",
 
   "unit.kcal": "kcal",
   "unit.g": "g",

@@ -174,7 +174,9 @@ const EFFORT_ADVICE: Record<Effort, string> = {
     "Simple food: one pot, a microwave or plain assembly, mostly from ready foods — ready-to-eat " +
     "chicken breast, frozen shrimp, eggs, tofu, Greek yogurt, frozen vegetables, microwave grain " +
     "rice, oats.",
-  homestyle: "Ordinary home cooking: a stir-fry, steamed fish, a pot of stew, from the foods below.",
+  homestyle:
+    "Ordinary home cooking: a pan-seared or oven-roasted protein, a tray bake, a pot of stew, " +
+    "from the foods below.",
 };
 
 const GOAL_ADVICE: Record<Goal, string> = {
@@ -190,11 +192,15 @@ const GOAL_ADVICE: Record<Goal, string> = {
     "meal, vegetables at lunch and dinner.",
 };
 
-/** The food table as the model chooses from it: id, name, roles, tags, and the pack a pot cooks. */
+/**
+ * The food table as the model chooses from it: id, name, roles, tags, a
+ * seasoning's gram range (the model gives its grams) and the pack a pot cooks.
+ */
 export function foodListing(dislikes: readonly string[]): string[] {
   return FOODS.filter((f) => foodAllowed(f, dislikes)).map(
     (f) =>
       `${f.id} ${f.zh} ${f.roles.join("/")}${f.tags.length ? ` [${f.tags.join(",")}]` : ""}` +
+      (f.roles.includes("sauce") ? ` ${f.minG}–${f.maxG} g` : "") +
       (f.potG ? ` pot ${f.potG} g` : ""),
   );
 }
@@ -324,20 +330,34 @@ export function mealsGuidance(
     "program fills the meal's calories with it, within its usual range and at most 400 kcal of it.",
     "At most one `fat` (an oil, nuts, a fatty spread), which the program raises when the staple is",
     "full. Any number of `fixed` items with grams you give: vegetables (150–250 g at lunch and",
-    "dinner, 80 g or more at breakfast), fruit (150–200 g; a fruit is never the staple), a sauce",
-    "(10–30 g), milk, a second protein. Give no grams for the solved roles and never a calorie or",
-    "protein number: the program computes every one.",
+    "dinner, 80 g or more at breakfast), fruit (150–200 g; a fruit is never the staple), the",
+    "seasoning (inside its range in FOODS: a few grams for a dry blend), milk, a second protein.",
+    "Give no grams for the solved roles and never a calorie or protein number: the program",
+    "computes every one.",
     profile ? GOAL_ADVICE[profile.goal] : "",
-    "Each made meal has a `flavour` from FLAVOURS. Two main meals in a row — dinner and the next",
-    "breakfast included — never share one; rotate through the list over the week.",
+    "SEASONING: a made meal tastes of one ready-made seasoning bought as a single jar or packet,",
+    "listed as a `fixed` item: a dry blend (herb rub, lemon pepper, cajun, taco or fajita, BBQ,",
+    "garlic and herb, Italian herbs, smoked paprika, cumin, curry powder, black pepper) or one",
+    "ready sauce (pesto, tomato pasta sauce). Pick what their shops sell and their kitchen can",
+    "use. Do not build a taste out of several single condiments (soy sauce with vinegar and",
+    "oyster sauce), and no fresh ginger, garlic, scallion or chilli as items, unless their words",
+    "ask for that dish or that food. Salt, cooking oil and water need no item; black pepper is an",
+    "item only when it is the meal's flavour. Flavours marked `local` in FLAVOURS belong to one",
+    "cuisine: plan them only when their words ask for that cuisine.",
+    "A dry rub can go on the evening before: rub the meat, keep it covered in the fridge overnight,",
+    "cook it the next day. Say so in the method when it saves hands-on time ('rub with cajun the",
+    "night before; roast 20 min').",
+    "Each made meal has a `flavour` from FLAVOURS that matches its seasoning. Two main meals in a",
+    "row — dinner and the next breakfast included — never share one; rotate through the list over",
+    "the week.",
     "Fish or seafood in at least two meals a week. Nothing they do not eat. Only what their kitchen",
     "can do and their shops sell.",
     "POTS: cook a meat once and eat it over several meals. Only foods marked `pot` in FOODS can be",
     "one (raw meat bought by the pack); fish fillets, shrimp, eggs, ready-to-eat chicken and tofu",
     `are portioned per meal. A pot feeds ${MIN_POT_MEALS} to ${MAX_POT_MEALS} main meals, the first of them the meal it is cooked`,
-    "at, the rest within the next few days; make the dish different across them (the same braised",
-    "beef over noodles, then in a curry) and keep the flavour rule. Send it in `pots`: an id, the",
-    "food, the day and meal it is cooked at, a short `name` in their language ('卤牛腱') and a",
+    "at, the rest within the next few days; make the dish different across them (the same roast",
+    "chicken sliced over rice, then in a wrap) and keep the flavour rule. Send it in `pots`: an id, the",
+    "food, the day and meal it is cooked at, a short `name` in their language ('roast chicken') and a",
     "one-line `method` their kitchen can do. Its weight is the food's pack; give `grams` only for",
     "another size. Each meal that eats from it sets `pot` to that id and has no protein item. The",
     "program splits the weight evenly, solves the rest of each meal around its share, decides",
@@ -349,7 +369,8 @@ export function mealsGuidance(
     "Out, delivery, bought and skip are ordinary plans, from the places they actually go. They have",
     "no foods and no grams. Do not apologise for them.",
     "Give each made meal a `name` in their language, a `searchName` (the dish's common English",
-    "name, what an image search would find), a one-line `method` in their language and `minutes`.",
+    "name, what an image search would find), a short one-line `method` in their language and",
+    "`minutes`.",
     "The program solves the grams and checks the week: foods in the table, roles, minutes,",
     "dislikes, flavours in a row, fish twice, whether the protein reaches the meal's target, and",
     "whether each day reaches 90% of its calories. A day that falls short needs a fixed item on one",
@@ -359,9 +380,9 @@ export function mealsGuidance(
     "again. An adjustment that fails is sent again with all of its meals.",
     "",
     "FLAVOURS",
-    FLAVOURS.map((f) => `${f.id} (${f.zh})`).join(", "),
+    FLAVOURS.map((f) => `${f.id} (${f.en}${f.local ? ", local" : ""})`).join(", "),
     "",
-    "FOODS (id, name, roles, [tags])",
+    "FOODS (id, name, roles, [tags], a seasoning's grams, a pot's pack)",
     ...foodListing(profile?.dislikes ?? []),
     "",
     "WHEN A MEAL GOES DIFFERENTLY",

@@ -184,6 +184,12 @@ export default {
   "flavour.pesto": "ジェノベーゼ",
   "flavour.sweet": "甘口",
   "flavour.plain": "プレーン",
+  "flavour.herb": "ハーブ",
+  "flavour.cajun": "ケイジャン",
+  "flavour.tex-mex": "テクス・メクス",
+  "flavour.smoked-paprika": "スモークパプリカ",
+  "flavour.cumin": "クミン",
+  "flavour.bbq": "バーベキュー",
 
   "unit.kcal": "kcal",
   "unit.g": "g",

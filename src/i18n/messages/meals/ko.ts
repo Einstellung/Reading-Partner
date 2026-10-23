@@ -184,6 +184,12 @@ export default {
   "flavour.pesto": "페스토",
   "flavour.sweet": "달콤한 맛",
   "flavour.plain": "담백한 맛",
+  "flavour.herb": "허브",
+  "flavour.cajun": "케이준",
+  "flavour.tex-mex": "텍스멕스",
+  "flavour.smoked-paprika": "훈제 파프리카",
+  "flavour.cumin": "커민",
+  "flavour.bbq": "바비큐",
 
   "unit.kcal": "kcal",
   "unit.g": "g",

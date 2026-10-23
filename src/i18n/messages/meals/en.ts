@@ -191,8 +191,8 @@ export default {
   "tool.rewritingMethod": "Rewriting how it's made",
   "tool.refreshingPhotos": "Looking for better photographs",
 
-  // plan/types.ts FLAVOURS, as displayed (the ids and their Chinese names, used
-  // to steer the model, are unchanged; this is only what the reader sees)
+  // plan/types.ts FLAVOURS, as displayed (the ids and their English names in
+  // FLAVOURS steer the model; this is only what the reader sees)
   "flavour.soy-ginger": "Soy & ginger",
   "flavour.garlic": "Garlic",
   "flavour.scallion-oil": "Scallion oil",
@@ -210,6 +210,12 @@ export default {
   "flavour.pesto": "Pesto",
   "flavour.sweet": "Sweet",
   "flavour.plain": "Plain",
+  "flavour.herb": "Herbs",
+  "flavour.cajun": "Cajun",
+  "flavour.tex-mex": "Tex-Mex",
+  "flavour.smoked-paprika": "Smoked paprika",
+  "flavour.cumin": "Cumin",
+  "flavour.bbq": "BBQ",
 
   // Units and macro initials in the number lines and tables, so a table says
   // what the sentence under it says.

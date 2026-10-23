@@ -122,6 +122,29 @@ test("the instruction gives the program's targets and every meal of every day", 
   expect(text).toContain("soy-ginger (");
 });
 
+test("the instruction flavours each made meal with one ready-made seasoning", () => {
+  const text = mealsGuidance(state(), MON);
+  const flat = text.replace(/\n/g, " ");
+  expect(flat).toContain("a made meal tastes of one ready-made seasoning bought as a single jar or packet");
+  expect(flat).toContain("Do not build a taste out of several single condiments");
+  expect(flat).toContain("no fresh ginger, garlic, scallion or chilli as items, unless their words ask");
+  expect(flat).toContain("plan them only when their words ask for that cuisine");
+  expect(flat).toContain("A dry rub can go on the evening before");
+  expect(flat).not.toContain("(10–30 g)");
+  // The rules around it stay.
+  expect(flat).toContain("never share one; rotate through the list over the week");
+  expect(flat).toContain("Exactly one `protein`");
+  // Flavours are listed by their English names, the cuisine-bound ones marked.
+  expect(text).toContain("herb (Herbs), garlic (Garlic)");
+  expect(text).toContain("soy-ginger (Soy & ginger, local)");
+  expect(text).not.toContain("soy-ginger (姜葱酱油)");
+  // A seasoning shows the grams the model may give it; other foods do not.
+  const foods = foodListing([]);
+  expect(foods).toContain("cajun_seasoning 卡津调味粉 sauce [spicy] 2–5 g");
+  expect(foods.find((l) => l.startsWith("chicken_breast "))).toBe("chicken_breast 鸡胸肉（生） protein [poultry] pot 400 g");
+  expect(foodListing(["spicy"]).some((l) => l.startsWith("cajun_seasoning "))).toBe(false);
+});
+
 test("the instruction gives the portion rules: normal protein, a capped staple, fruit fixed and never the staple", () => {
   const text = mealsGuidance(state(), MON).replace(/\n/g, " ");
   expect(text).toContain("about 25 g of protein at lunch and dinner, 12 g at breakfast (two eggs), 9 g at the snack");
