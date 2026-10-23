@@ -13,6 +13,7 @@ import {
   type MealsPhotoAsk,
 } from "../../../../src/info/meals/photos/photo-run";
 import { mealsPhotosWorker } from "../../../../src/info/meals/photos/photo-worker";
+import { FOODS } from "../../../../src/info/meals/nutrition/foods";
 import type { WebviewPage } from "../../../../src/workshop/extract/webview-page";
 import type { DishPhotoEntry, Meal, WeekPlan } from "../../../../src/info/meals/plan/types";
 import type { Run } from "../../../../src/legion/run/types";
@@ -55,14 +56,11 @@ function week(meals: Meal[]): WeekPlan {
 const NOW = 1_000_000;
 const noBank = () => null;
 
-test("a week asks for its meals by searchName first, then the foods no bank has", () => {
+test("a week asks only for the foods no bank has: its dishes are drawn, not searched", () => {
   const queries = photoQueriesForPlan(week([meal()]), {}, NOW, {
     bankImage: (en) => (en === "firm tofu" ? "https://themealdb/tofu.png" : null),
   });
-  expect(queries).toEqual([
-    { key: "dish:mapo tofu", q: "mapo tofu" },
-    { key: "ingredient:bok choy", q: "bok choy vegetable" },
-  ]);
+  expect(queries).toEqual([{ key: "ingredient:bok choy", q: "bok choy vegetable" }]);
 });
 
 test("only made meals ask: a delivery with a searchName asks nothing", () => {
@@ -93,23 +91,26 @@ test("what the cache already answered is not asked again, and the reader can ask
   // is asked again, wherever the searching happens.
   expect(
     photoQueriesForPlan(week([meal()]), cache, NOW, { bankImage: noBank, askedAt: NOW }).length,
-  ).toBe(3);
-  // An answer written since they asked stands: the dish was found before it and
-  // is asked again, the bok choy was looked for after it and is not.
+  ).toBe(2);
+  // An answer written since they asked stands: the bok choy was looked for
+  // after it and is not asked again.
   expect(
     photoQueriesForPlan(week([meal()]), cache, NOW, { bankImage: noBank, askedAt: 2 }).map(
       (q) => q.key,
     ),
-  ).toEqual(["dish:mapo tofu", "ingredient:firm tofu"]);
+  ).toEqual(["ingredient:firm tofu"]);
 });
 
 test("a name is asked for once however many days eat it, and a run is capped", () => {
-  const many = Array.from({ length: 30 }, (_, i) =>
+  const same = Array.from({ length: 30 }, (_, i) =>
     meal({ searchName: `dish ${i}`, items: [{ foodId: "bok_choy", role: "fixed", grams: 150 }] }),
   );
-  const queries = photoQueriesForPlan(week(many), {}, NOW, { bankImage: noBank });
-  expect(queries.length).toBe(MAX_PHOTO_QUERIES);
-  expect(queries.filter((q) => q.key === "ingredient:bok choy").length).toBeLessThan(2);
+  expect(photoQueriesForPlan(week(same), {}, NOW, { bankImage: noBank })).toEqual([
+    { key: "ingredient:bok choy", q: "bok choy vegetable" },
+  ]);
+  const foods = FOODS.filter((f) => f.en).slice(0, MAX_PHOTO_QUERIES * 2);
+  const wide = meal({ items: foods.map((f) => ({ foodId: f.id, role: "fixed" as const, grams: 10 })) });
+  expect(photoQueriesForPlan(week([wide]), {}, NOW, { bankImage: noBank }).length).toBe(MAX_PHOTO_QUERIES);
 });
 
 test("a meal with no searchName and a food with no English name ask nothing", () => {

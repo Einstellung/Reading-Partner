@@ -68,20 +68,10 @@ function harness(
   return h;
 }
 
-// Every photograph the fixture week wants when nothing has been found yet: its
-// seven made meals by searchName, then the two foods the bank below has no
-// cut-out of. The bank covers the rest so the week stays under the run's cap.
-const WHOLE_WEEK = [
-  "dish:greek yogurt bowl",
-  "dish:shrimp rice bowl",
-  "dish:teriyaki salmon bowl",
-  "dish:yogurt banana",
-  "dish:egg toast",
-  "dish:tuna pita",
-  "dish:chicken sweet potato salad",
-  "ingredient:salmon",
-  "ingredient:bok choy",
-];
+// Every photograph the fixture week wants when nothing has been found yet: the
+// two foods the bank below has no cut-out of. Its dishes are drawn, not
+// searched (dish-draw-sweep.ts).
+const WHOLE_WEEK = ["ingredient:salmon", "ingredient:bok choy"];
 
 const UNBANKED = new Set(["salmon", "bok choy"]);
 

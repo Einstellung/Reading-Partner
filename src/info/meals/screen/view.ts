@@ -8,7 +8,7 @@
 
 import { formatDateTime, getLocale, t, translate } from "../../../i18n";
 import { fishMeals } from "../plan/checks";
-import { photoForDish, photoForIngredient, type PhotoCache } from "../photos/dish-photos";
+import { drawingForDish, photoForIngredient, type PhotoCache } from "../photos/dish-photos";
 import { ingredientImageUrl } from "../photos/images";
 import { foodById, isProduce } from "../nutrition/foods";
 import type { MealCells, Nutrition, TemplateItem, TemplateRole } from "../nutrition/solve";
@@ -389,22 +389,19 @@ export function dayViewOn(state: MealsState, date: string, today: string, region
 
 // --- pictures ----------------------------------------------------------------
 
-// The line under a dish photograph, and where it goes when it is tapped.
-export interface DishPhotoCredit {
-  text: string;
-  url: string;
-}
-
 /** A picture on the screen, and the page it was found on for the proxy's Referer (pitfall 30). */
 export interface Picture {
   url: string;
   pageUrl: string | null;
 }
 
-/** The photograph the search found for a meal, by its searchName. */
+/**
+ * The picture drawn for a meal, by its searchName, once the screen has read
+ * its file (photo-store.ts withDrawingSources). Null shows the ingredient strip.
+ */
 export function dishPicture(meal: { searchName?: string } | null | undefined, photos: PhotoCache | undefined): Picture | null {
-  const photo = photoForDish(meal, photos);
-  return photo ? { url: photo.url, pageUrl: photo.pageUrl || null } : null;
+  const src = drawingForDish(meal, photos)?.src;
+  return src ? { url: src, pageUrl: null } : null;
 }
 
 /**
@@ -422,17 +419,12 @@ export function ingredientPicture(
   return photo ? { url: photo.url, pageUrl: photo.pageUrl || null } : null;
 }
 
-/** "Photo: example.com" and the page it opens, or null for a meal drawn from its foods. */
-export function dishPhotoCredit(
+/** The small line under a drawn dish picture, or null when the card shows none. */
+export function dishPictureLabel(
   meal: { searchName?: string } | null | undefined,
   photos: PhotoCache | undefined,
-): DishPhotoCredit | null {
-  const photo = photoForDish(meal, photos);
-  if (!photo) return null;
-  const site = photo.site.trim();
-  const url = photo.pageUrl.trim();
-  if (!site || !url) return null;
-  return { text: t("meals.photoCredit", { site }), url };
+): string | null {
+  return dishPicture(meal, photos) ? t("meals.pictureDrawn") : null;
 }
 
 const THUMBNAIL_LIMIT = 4;

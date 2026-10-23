@@ -329,23 +329,42 @@ test("applying a week on the machine that searches asks for what it is missing",
   const h = harness({ plan: null });
   const asked = searching(h);
   await (await applyPlan(planCard(), h.ports)).pending;
-  expect(asked[0]).toContain("dish:shrimp rice bowl");
+  expect(asked[0]).toContain("ingredient:salmon");
+  // Dishes are drawn, not searched.
+  expect(asked[0]?.some((k) => k.startsWith("dish:"))).toBe(false);
+});
+
+test("applying a week starts drawing its dishes without waiting for them", async () => {
+  const h = harness({ plan: null });
+  let draws = 0;
+  let finish: () => void = () => {};
+  h.ports.drawDishes = () => {
+    draws += 1;
+    return new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+  };
+  const applied = await applyPlan(planCard(), h.ports);
+  await applied.pending;
+  expect(applied.ok).toBe(true);
+  expect(draws).toBe(1);
+  finish();
 });
 
 // The reader said a picture is wrong before this week was applied: a picture
 // found before they said so is looked for again.
 test("a week applied after the reader asked is searched from before their ask", async () => {
   const h = harness({ plan: null, photosAskedAt: 500 });
-  h.ports.photos = async () => ({ "dish:shrimp rice bowl": found(400) });
+  h.ports.photos = async () => ({ "ingredient:salmon": found(400) });
   const asked = searching(h);
   await (await applyPlan(planCard(), h.ports)).pending;
-  expect(asked[0]).toContain("dish:shrimp rice bowl");
+  expect(asked[0]).toContain("ingredient:salmon");
 
   const after = harness({ plan: null, photosAskedAt: 300 });
-  after.ports.photos = async () => ({ "dish:shrimp rice bowl": found(400) });
+  after.ports.photos = async () => ({ "ingredient:salmon": found(400) });
   const later = searching(after);
   await (await applyPlan(planCard(), after.ports)).pending;
-  expect(later[0]).not.toContain("dish:shrimp rice bowl");
+  expect(later[0]).not.toContain("ingredient:salmon");
 });
 
 test("asking for better pictures writes down when they asked, wherever they are", async () => {
@@ -377,7 +396,8 @@ test("an ask that could not be written down is not reported as asked", async () 
     throw new Error("no");
   };
   const asked = searching(h);
-  expect(await refreshPhotos(h.ports)).toEqual({ queries: 0, searching: false });
+  const nothing = { queries: 0, searching: false, dishes: 0, drawing: false };
+  expect(await refreshPhotos(h.ports)).toEqual(nothing);
   expect(asked).toEqual([]);
 
   // No week is nothing to search for either, and nothing is written down.
@@ -386,6 +406,33 @@ test("an ask that could not be written down is not reported as asked", async () 
   none.ports.markPhotosAsked = async () => {
     wrote = true;
   };
-  expect(await refreshPhotos(none.ports)).toEqual({ queries: 0, searching: false });
+  expect(await refreshPhotos(none.ports)).toEqual(nothing);
   expect(wrote).toBe(false);
+});
+
+test("asking for better pictures draws the week's dishes again where the provider can draw", async () => {
+  const h = harness();
+  h.ports.markPhotosAsked = async () => {};
+  let draws = 0;
+  h.ports.drawDishes = async () => {
+    draws += 1;
+  };
+  h.ports.canDraw = async () => true;
+  const result = await refreshPhotos(h.ports);
+  expect(result.dishes).toBeGreaterThan(0);
+  expect(result.drawing).toBe(true);
+  expect(draws).toBe(1);
+
+  // A provider that cannot draw: the ask is written down for a device that can.
+  const phone = harness();
+  phone.ports.markPhotosAsked = async () => {};
+  let phoneDraws = 0;
+  phone.ports.drawDishes = async () => {
+    phoneDraws += 1;
+  };
+  phone.ports.canDraw = async () => false;
+  const asked = await refreshPhotos(phone.ports);
+  expect(asked.dishes).toBeGreaterThan(0);
+  expect(asked.drawing).toBe(false);
+  expect(phoneDraws).toBe(0);
 });

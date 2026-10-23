@@ -1,18 +1,80 @@
-// The photograph cache on disk: info-meals-photos.json (docs/73 图片).
+// The picture cache on disk: info-meals-photos.json (docs/73 图片), and the
+// drawn dish pictures it points at, one file each under meals-pictures/.
 //
 // Its own file rather than a field of info-meals.json. The plan is written in
-// the reader's turn and the photographs are written by a run on the PC minutes
-// later, one entry at a time; sharing a file would mean the run's load-modify-
+// the reader's turn and the pictures are written by a pass minutes later, one
+// entry at a time; sharing a file would mean the pass's load-modify-
 // save sitting on top of a week the reader has meanwhile adjusted. The two have
 // nothing to say to each other — the cache is keyed by name and outlives every
 // week — so they are two files. Palace merges the week whole and this one per
 // key against the last synced copy (kinds.ts), which is what lets a dropped
 // entry stay dropped on the other device.
 
+import { appData } from "../../../platform/app/appdata";
+import { contentHash } from "../../../platform/app/content-hash";
 import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../../platform/app/guarded-file";
+import { bytesToBase64 } from "../../../platform/std/base64";
 import { isObject } from "../../../platform/std/json";
-import { dishPhotoKey, withoutPhoto, type PhotoCache } from "./dish-photos";
-import { MEALS_VERSION, type DishPhotoEntry } from "../plan/types";
+import { dishDrawingKey, withoutPhoto, type PhotoCache } from "./dish-photos";
+import { DRAWINGS_DIR, drawingPath } from "./dish-drawing";
+import { isDishDrawing, MEALS_VERSION, type DishPhotoEntry } from "../plan/types";
+
+/** The byte half of the store: where a drawn picture's file is put and read back. */
+export interface DrawingIo {
+  readBytes(path: string): Promise<Uint8Array>;
+  writeBytes(path: string, bytes: Uint8Array): Promise<void>;
+  mkdirp(path: string): Promise<void>;
+}
+
+export const drawingIo: DrawingIo = appData;
+
+/**
+ * Keep a drawn picture, answering its path. Named for the hash of its bytes, so
+ * the file is written once and never revised, and two devices never write the
+ * same path with different bytes: it travels on the data channel like an
+ * article body (palace kinds.ts `meals-picture`).
+ */
+export async function saveDrawingFile(
+  bytes: Uint8Array,
+  mediaType: string,
+  io: DrawingIo = drawingIo,
+): Promise<string> {
+  const path = drawingPath(await contentHash(bytes), mediaType);
+  await io.mkdirp(DRAWINGS_DIR);
+  await io.writeBytes(path, bytes);
+  return path;
+}
+
+function mediaTypeOf(path: string): string {
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  return "image/jpeg";
+}
+
+/**
+ * The cache with the drawings under `keys` read into memory as data: URIs, for
+ * the screen. A file that has not arrived yet (the cache entry synced ahead of
+ * it) or will not read leaves its entry without a source, which the screen
+ * draws as a dish with no picture.
+ */
+export async function withDrawingSources(
+  cache: PhotoCache,
+  keys: readonly string[],
+  io: Pick<DrawingIo, "readBytes"> = drawingIo,
+): Promise<PhotoCache> {
+  const next: Record<string, DishPhotoEntry> = { ...cache };
+  for (const key of new Set(keys)) {
+    const entry = cache[key];
+    if (!entry || !isDishDrawing(entry)) continue;
+    try {
+      const bytes = await io.readBytes(entry.drawing);
+      next[key] = { ...entry, src: `data:${mediaTypeOf(entry.drawing)};base64,${bytesToBase64(bytes)}` };
+    } catch {
+      // Not here yet; the pull that brings it reloads the screen.
+    }
+  }
+  return next;
+}
 
 export const MEALS_PHOTOS_FILE = "info-meals-photos.json";
 
@@ -81,9 +143,9 @@ export async function savePhotoEntries(
 }
 
 /**
- * Forget the photograph of one dish, because the picture the search found will
- * not load in this app (see withoutPhoto). Called from the screen, not from a
- * run: the `<img>` is the only place that finds out.
+ * Forget the picture of one dish, because it will not load in this app (see
+ * withoutPhoto); the next pass draws it again. Called from the screen, not from
+ * a run: the `<img>` is the only place that finds out.
  *
  * Nothing is written when the name is not in the cache, so a strip of ingredient
  * pictures failing costs no writes at all.
@@ -92,5 +154,5 @@ export async function markDishPhotoBroken(
   searchName: string,
   io: PhotoIo = photoIo,
 ): Promise<PhotoCache> {
-  return mutate(io, (photos) => withoutPhoto(photos, dishPhotoKey(searchName)));
+  return mutate(io, (photos) => withoutPhoto(photos, dishDrawingKey(searchName)));
 }

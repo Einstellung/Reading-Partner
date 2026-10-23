@@ -1,4 +1,5 @@
-// Who starts the photograph search, and when (docs/73 图片).
+// Who starts the ingredient photograph search, and when (docs/73 图片). Dish
+// pictures are drawn instead, by dish-draw-sweep.ts, on the same moments.
 //
 // The search runs in a hidden webview, which one machine in the house has. The
 // week is written on whichever machine the reader is holding, which is usually
@@ -22,6 +23,7 @@
 import { hasWebviewFetch } from "../../../platform/app/platform";
 import { registerPullRoute, type PullMatcher } from "../../../platform/sync/pull-routes";
 import type { PhotoCache } from "./dish-photos";
+import { mealsDishDrawer, watchMealsForDrawings } from "./dish-draw-sweep";
 import { ingredientImageUrl } from "./images";
 import {
   photoQueriesForPlan,
@@ -186,7 +188,9 @@ export function watchMealsForPhotos(searcher: PhotoSearcher): () => void {
 let housekeeping = false;
 
 /**
- * Start looking after the week's photographs on this machine.
+ * Start looking after the week's pictures on this machine: the ingredient
+ * search where there is a webview, the dish drawings wherever the provider
+ * can draw.
  *
  * Called when the meals screen is switched on, from the shell's bootstrap.
  * Idempotent, and never stopped: it costs a route and a read of two files, and
@@ -196,4 +200,5 @@ export function startMealsPhotoHousekeeping(): void {
   if (housekeeping) return;
   housekeeping = true;
   watchMealsForPhotos(mealsPhotoSearcher());
+  watchMealsForDrawings(mealsDishDrawer());
 }

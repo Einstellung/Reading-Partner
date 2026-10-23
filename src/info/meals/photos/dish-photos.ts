@@ -1,13 +1,23 @@
-// The photograph cache, read (docs/73 图片).
+// The picture cache, read (docs/73 图片).
 //
-// One record for the whole line, keyed by what was searched for rather than by
-// what is planned: `dish:mapo tofu` and `ingredient:kale` outlive every week, so
-// a dish cooked again in October costs no search and a vegetable bought every
-// week costs one ever. Where it is kept and how it is written is photo-store.ts;
-// this file is the pure half — the keys, what still has to be searched for, and
-// what a plan looks like once the pictures have landed.
+// One record for the whole line, keyed by name rather than by what is planned:
+// `dish:mapo tofu` and `ingredient:kale` outlive every week, so a dish cooked
+// again in October costs no new picture and a vegetable bought every week costs
+// one search ever. A dish key holds a picture an image model drew
+// (dish-drawing.ts); an ingredient key holds what the image search found. Where
+// the cache is kept and how it is written is photo-store.ts; this file is the
+// pure half — the keys, what still has to be searched for, and which picture a
+// dish or an ingredient shows.
 
-import { isDishPhotoMiss, type DishPhoto, type DishPhotoEntry } from "../plan/types";
+import {
+  isDishDrawing,
+  isDishDrawingClaim,
+  isDishPhoto,
+  isDishPhotoMiss,
+  type DishDrawing,
+  type DishPhoto,
+  type DishPhotoEntry,
+} from "../plan/types";
 
 // How long an empty answer stands before the name is searched again. A search
 // that found nothing today may find something next season, and asking every
@@ -19,10 +29,22 @@ export function normalizeSearchName(raw: string): string {
   return (raw ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Where a dish's photograph is kept. Empty when the dish has no search name. */
+/**
+ * Where an earlier build kept the photograph it searched for a dish. Read by
+ * nothing now; the entries stay in the file for builds that still show them.
+ */
 export function dishPhotoKey(searchName: string): string {
   const name = normalizeSearchName(searchName);
   return name ? `dish:${name}` : "";
+}
+
+/**
+ * Where a dish's drawn picture is kept. A key of its own rather than `dish:`,
+ * so a build from before the drawings never reads one as a searched photograph.
+ */
+export function dishDrawingKey(searchName: string): string {
+  const name = normalizeSearchName(searchName);
+  return name ? `drawing:${name}` : "";
 }
 
 /** Where an ingredient's photograph is kept, by its English name. */
@@ -34,14 +56,17 @@ export function ingredientPhotoKey(en: string): string {
 /** The whole cache, as everything that reads it takes it. */
 export type PhotoCache = Readonly<Record<string, DishPhotoEntry>>;
 
-/** When one entry was written: found or looked for and not found. */
+/** When one entry was written: found, drawn, claimed, or looked for and not found. */
 export function photoEntryAt(entry: DishPhotoEntry): number {
-  return isDishPhotoMiss(entry) ? entry.checkedAt : entry.foundAt;
+  if (isDishPhotoMiss(entry)) return entry.checkedAt;
+  if (isDishDrawing(entry)) return entry.drawnAt;
+  if (isDishDrawingClaim(entry)) return entry.drawingSince;
+  return entry.foundAt;
 }
 
 /**
- * Whether a key still has to be searched for: never asked, asked again since
- * this answer was written, or a miss old enough to be worth another look.
+ * Whether an ingredient still has to be searched for: never asked, asked again
+ * since this answer was written, or a miss old enough to be worth another look.
  *
  * `askedAt` is the reader saying the pictures are wrong (MealsState.
  * photosAskedAt). It is a time rather than a flag because the reader and the
@@ -59,20 +84,24 @@ export function needsPhotoLookup(
   return now - entry.checkedAt >= PHOTO_MISS_RETRY_MS;
 }
 
-/** The photograph under one key, or null when there is none or it was a miss. */
+/** The searched photograph under one key, or null when there is none or it was a miss. */
 export function photoAt(cache: PhotoCache | undefined, key: string): DishPhoto | null {
   const entry = key ? cache?.[key] : undefined;
-  if (!entry || isDishPhotoMiss(entry)) return null;
-  return entry;
+  return entry && isDishPhoto(entry) ? entry : null;
 }
 
-/** The photograph a dish shows, from the cache, or null. */
-export function photoForDish(
+/**
+ * The drawn picture a dish shows, or null. A photograph an earlier build found
+ * for the dish by searching is not one: the dish path only draws now.
+ */
+export function drawingForDish(
   dish: { searchName?: string } | null | undefined,
   cache: PhotoCache | undefined,
-): DishPhoto | null {
+): DishDrawing | null {
   if (!dish) return null;
-  return photoAt(cache, dishPhotoKey(dish.searchName ?? ""));
+  const key = dishDrawingKey(dish.searchName ?? "");
+  const entry = key ? cache?.[key] : undefined;
+  return entry && isDishDrawing(entry) ? entry : null;
 }
 
 /** The photograph an ingredient line shows when no picture bank has one. */
@@ -83,13 +112,12 @@ export function photoForIngredient(en: string, cache: PhotoCache | undefined): D
 /**
  * The cache with one key forgotten, or null when there was nothing to forget.
  *
- * A web image search hands back arbitrary CDNs, and some of them refuse the
- * app's request even with a Referer. The screen falls back to the ingredient
- * strip, which is right for the night but wrong for the month: the entry would
- * sit in the cache being loaded and failing every time. Forgotten rather than
- * written down as a miss, because a miss is the search having nothing and this
- * is the app failing to load what it found — the next run asks again, and may
- * well get a different picture.
+ * A picture that will not load in this app — a searched photograph on a CDN
+ * that refuses the app, or a drawing whose file is unreadable — falls back on
+ * screen to the ingredient strip, which is right for the night but wrong for
+ * the month. Forgotten rather than written down as a miss, because a miss is
+ * the search having nothing and this is the app failing to load what it had:
+ * the next pass asks again.
  */
 export function withoutPhoto(
   cache: PhotoCache,

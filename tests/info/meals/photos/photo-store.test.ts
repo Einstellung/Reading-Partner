@@ -10,16 +10,20 @@ import {
   markDishPhotoBroken,
   parsePhotoFile,
   photoFileBody,
+  saveDrawingFile,
   savePhotoEntries,
+  withDrawingSources,
 } from "../../../../src/info/meals/photos/photo-store";
 import {
   PHOTO_MISS_RETRY_MS,
+  dishDrawingKey,
   dishPhotoKey,
+  drawingForDish,
   ingredientPhotoKey,
   needsPhotoLookup,
-  photoForDish,
   photoForIngredient,
 } from "../../../../src/info/meals/photos/dish-photos";
+import { dishPicture } from "../../../../src/info/meals/screen/view";
 import type { DishPhoto } from "../../../../src/info/meals/plan/types";
 import { mergeFile } from "../../../../src/platform/sync/merge";
 
@@ -43,13 +47,15 @@ function meal(searchName = "mapo tofu") {
 
 test("the keys say what was searched for", () => {
   expect(dishPhotoKey("  Mapo  Tofu ")).toBe("dish:mapo tofu");
+  expect(dishDrawingKey("  Mapo  Tofu ")).toBe("drawing:mapo tofu");
+  expect(dishDrawingKey("")).toBe("");
   expect(ingredientPhotoKey("Bok Choy")).toBe("ingredient:bok choy");
   expect(dishPhotoKey("")).toBe("");
   expect(ingredientPhotoKey("   ")).toBe("");
 });
 
 test("a file body round-trips through the parser", () => {
-  const state = { photos: { "dish:mapo tofu": PHOTO } };
+  const state = { photos: { "drawing:mapo tofu": PHOTO } };
   expect(parsePhotoFile(JSON.parse(photoFileBody(state)))).toEqual(state);
   expect(parsePhotoFile(7)).toBeNull();
   expect(parsePhotoFile({})).toEqual({ photos: {} });
@@ -60,10 +66,10 @@ test("no file is no photographs", async () => {
 });
 
 test("what one search found is merged into what is already there", async () => {
-  await savePhotoEntries({ "dish:mapo tofu": PHOTO }, io);
+  await savePhotoEntries({ "drawing:mapo tofu": PHOTO }, io);
   await savePhotoEntries({ "ingredient:kale": { none: true, checkedAt: 5 } }, io);
   const cache = await loadMealsPhotos(io);
-  expect(Object.keys(cache).sort()).toEqual(["dish:mapo tofu", "ingredient:kale"]);
+  expect(Object.keys(cache).sort()).toEqual(["drawing:mapo tofu", "ingredient:kale"]);
   // Nothing to write is no write at all.
   const before = io.files.get(MEALS_PHOTOS_FILE);
   await savePhotoEntries({}, io);
@@ -73,14 +79,14 @@ test("what one search found is merged into what is already there", async () => {
 // A picture the search found and the webview cannot load: dropped, so the next
 // run asks again instead of loading the same dead URL every week.
 test("a broken dish photograph is dropped from the cache", async () => {
-  await savePhotoEntries({ "dish:mapo tofu": PHOTO, "dish:shakshuka": PHOTO }, io);
+  await savePhotoEntries({ "drawing:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO }, io);
   const after = await markDishPhotoBroken("Mapo Tofu", io);
-  expect(Object.keys(after)).toEqual(["dish:shakshuka"]);
-  expect((await loadMealsPhotos(io))["dish:mapo tofu"]).toBeUndefined();
+  expect(Object.keys(after)).toEqual(["drawing:shakshuka"]);
+  expect((await loadMealsPhotos(io))["drawing:mapo tofu"]).toBeUndefined();
 });
 
 test("a name the cache never had is written nowhere", async () => {
-  await savePhotoEntries({ "dish:mapo tofu": PHOTO }, io);
+  await savePhotoEntries({ "drawing:mapo tofu": PHOTO }, io);
   const before = io.files.get(MEALS_PHOTOS_FILE);
   await markDishPhotoBroken("lentil soup", io);
   expect(io.files.get(MEALS_PHOTOS_FILE)).toBe(before);
@@ -106,13 +112,62 @@ test("an answer older than the reader's ask is asked again, and a newer one is n
 });
 
 test("a meal and an ingredient read their own keys, and a miss is nothing", () => {
-  const cache = { "dish:mapo tofu": PHOTO, "ingredient:kale": { none: true as const, checkedAt: 1 } };
-  expect(photoForDish(meal(), cache)).toEqual(PHOTO);
-  expect(photoForDish(meal("shakshuka"), cache)).toBeNull();
-  expect(photoForDish({}, cache)).toBeNull();
-  expect(photoForDish(null, cache)).toBeNull();
+  const drawn = { drawing: "meals-pictures/ab.jpg", drawnAt: 5 };
+  const cache = {
+    "drawing:mapo tofu": drawn,
+    "dish:shakshuka": PHOTO,
+    "ingredient:kale": { none: true as const, checkedAt: 1 },
+    "ingredient:bok choy": PHOTO,
+  };
+  expect(drawingForDish(meal(), cache)).toEqual(drawn);
+  // A photograph an earlier build searched for a dish is not shown any more.
+  expect(drawingForDish(meal("shakshuka"), cache)).toBeNull();
+  expect(drawingForDish({}, cache)).toBeNull();
+  expect(drawingForDish(null, cache)).toBeNull();
   expect(photoForIngredient("Kale", cache)).toBeNull();
-  expect(photoForIngredient("bok choy", cache)).toBeNull();
+  expect(photoForIngredient("bok choy", cache)).toEqual(PHOTO);
+  expect(photoForIngredient("leek", { "ingredient:leek": { drawingSince: 3 } })).toBeNull();
+});
+
+function memoryDrawings() {
+  const files = new Map<string, Uint8Array>();
+  return {
+    files,
+    io: {
+      readBytes: async (path: string) => {
+        const bytes = files.get(path);
+        if (!bytes) throw new Error(`no ${path}`);
+        return bytes;
+      },
+      writeBytes: async (path: string, bytes: Uint8Array) => {
+        files.set(path, bytes);
+      },
+      mkdirp: async () => {},
+    },
+  };
+}
+
+test("a drawn picture is kept under the hash of its bytes, and read back for the screen", async () => {
+  const disk = memoryDrawings();
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+  const path = await saveDrawingFile(bytes, "image/jpeg", disk.io);
+  expect(path).toMatch(/^meals-pictures\/[0-9a-f]{32}\.jpg$/);
+  expect(await saveDrawingFile(bytes, "image/jpeg", disk.io)).toBe(path);
+  expect(disk.files.size).toBe(1);
+
+  const cache = {
+    "drawing:mapo tofu": { drawing: path, drawnAt: 1 },
+    // The entry synced ahead of its file: no source, and no throw.
+    "drawing:shakshuka": { drawing: "meals-pictures/missing.jpg", drawnAt: 1 },
+    "drawing:dal": { drawing: path, drawnAt: 1 },
+  };
+  const shown = await withDrawingSources(cache, ["drawing:mapo tofu", "drawing:shakshuka"], disk.io);
+  expect(dishPicture(meal(), shown)?.url).toBe("data:image/jpeg;base64,/9j/AQID");
+  expect(dishPicture(meal("shakshuka"), shown)).toBeNull();
+  // Only the keys asked for are read: the cache outlives every week.
+  expect(dishPicture(meal("dal"), shown)).toBeNull();
+  // The file on disk is unchanged by reading.
+  expect((cache["drawing:mapo tofu"] as { src?: string }).src).toBeUndefined();
 });
 
 // --- across devices ----------------------------------------------------------
@@ -152,25 +207,25 @@ function synced(base: string, a: FakeAppData, b: FakeAppData): string[][] {
 }
 
 test("two devices that each found a photograph both keep both", async () => {
-  const { a, b, base } = await twoDevices({ "dish:mapo tofu": PHOTO });
-  await savePhotoEntries({ "dish:shakshuka": PHOTO }, a);
+  const { a, b, base } = await twoDevices({ "drawing:mapo tofu": PHOTO });
+  await savePhotoEntries({ "drawing:shakshuka": PHOTO }, a);
   await savePhotoEntries({ "ingredient:kale": { none: true, checkedAt: 5 } }, b);
-  const all = ["dish:mapo tofu", "dish:shakshuka", "ingredient:kale"];
+  const all = ["drawing:mapo tofu", "drawing:shakshuka", "ingredient:kale"];
   expect(synced(base, a, b)).toEqual([all, all]);
 });
 
 // The other device writes the file too, just not that entry: a device that left
 // the file alone would hand the merge nothing to decide.
 test("a photograph one device dropped stays dropped while the other adds its own", async () => {
-  const { a, b, base } = await twoDevices({ "dish:mapo tofu": PHOTO, "dish:shakshuka": PHOTO });
+  const { a, b, base } = await twoDevices({ "drawing:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO });
   await markDishPhotoBroken("mapo tofu", a);
   await savePhotoEntries({ "ingredient:kale": { none: true, checkedAt: 5 } }, b);
-  const all = ["dish:shakshuka", "ingredient:kale"];
+  const all = ["drawing:shakshuka", "ingredient:kale"];
   expect(synced(base, a, b)).toEqual([all, all]);
 });
 
 test("a photograph one device dropped stays dropped when the other did nothing", async () => {
-  const { a, b, base } = await twoDevices({ "dish:mapo tofu": PHOTO, "dish:shakshuka": PHOTO });
+  const { a, b, base } = await twoDevices({ "drawing:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO });
   await markDishPhotoBroken("mapo tofu", a);
-  expect(synced(base, a, b)).toEqual([["dish:shakshuka"], ["dish:shakshuka"]]);
+  expect(synced(base, a, b)).toEqual([["drawing:shakshuka"], ["drawing:shakshuka"]]);
 });

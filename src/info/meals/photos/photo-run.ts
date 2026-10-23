@@ -17,7 +17,7 @@
 import { appData } from "../../../platform/app/appdata";
 import { appRunner } from "../../../legion/runner/runner";
 import type { Delegated, DelegateInput } from "../../../legion/runner/worker";
-import { dishPhotoKey, ingredientPhotoKey, needsPhotoLookup, type PhotoCache } from "./dish-photos";
+import { ingredientPhotoKey, needsPhotoLookup, type PhotoCache } from "./dish-photos";
 import { ingredientQuery } from "./photo-search";
 import { foodById } from "../nutrition/foods";
 import { MEAL_KEYS, type WeekPlan } from "../plan/types";
@@ -35,7 +35,7 @@ export const MAX_PHOTO_QUERIES = 20;
 
 /** One thing to search for: where the answer goes, and what is typed in. */
 export interface PhotoQuery {
-  /** The cache key, `dish:<searchName>` or `ingredient:<en>`. */
+  /** The cache key, `ingredient:<en>`. */
   key: string;
   /** The words the search is given. */
   q: string;
@@ -49,13 +49,13 @@ export interface MealsPhotoAsk {
 }
 
 /**
- * Everything a week wants a picture of and has none of: its dishes by name,
- * then the ingredients no picture bank has artwork for.
+ * The ingredients a week wants a photograph of and has none of: those no
+ * picture bank has artwork for. Dishes are not searched; they are drawn
+ * (dish-draw-sweep.ts).
  *
- * Dishes first because they are the two large pictures on the screen, and the
- * cap falls on the ingredients. TheMealDB stays ahead of the search for an
- * ingredient: a white-background cut-out of a bok choy identifies the vegetable
- * in the shop better than a photograph of a dish it is in.
+ * TheMealDB stays ahead of the search for an ingredient: a white-background
+ * cut-out of a bok choy identifies the vegetable in the shop better than a
+ * photograph of a dish it is in.
  *
  * `askedAt` is the reader saying the pictures are wrong (MealsState.
  * photosAskedAt): everything answered before that moment is asked again.
@@ -75,7 +75,6 @@ export function photoQueriesForPlan(
     out.push({ key, q });
   };
   const made = plan.days.flatMap((d) => MEAL_KEYS.map((k) => d[k])).filter((m) => m.mode === "make");
-  for (const meal of made) want(dishPhotoKey(meal.searchName ?? ""), normalize(meal.searchName));
   for (const meal of made) {
     for (const item of meal.items ?? []) {
       const food = foodById(item.foodId);

@@ -145,7 +145,7 @@ export default {
   "category.other": "Otros",
   today: "Hoy",
   tomorrow: "Mañana",
-  photoCredit: "Foto: {site}",
+  pictureDrawn: "Imagen generada por IA",
   shoppingNoteFreeze: "{keeps} · congelar al llegar a casa",
   "targetsLine.cut":
     "Media semanal de {avg} kcal al día, unas {gap} por debajo del mantenimiento: aproximadamente {kg} kg a la semana.",

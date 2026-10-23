@@ -161,7 +161,7 @@ export default {
   "category.other": "Other",
   today: "Today",
   tomorrow: "Tomorrow",
-  photoCredit: "Photo: {site}",
+  pictureDrawn: "AI-generated image",
   shoppingNoteFreeze: "{keeps} · freeze on arrival",
   "targetsLine.cut":
     "Weekly average {avg} kcal a day, about {gap} under maintenance: roughly {kg} kg a week.",

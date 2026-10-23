@@ -150,7 +150,7 @@ export default {
   "category.other": "Прочее",
   today: "Сегодня",
   tomorrow: "Завтра",
-  photoCredit: "Фото: {site}",
+  pictureDrawn: "Изображение создано ИИ",
   shoppingNoteFreeze: "{keeps} · заморозить сразу по приходе домой",
   "targetsLine.cut":
     "В среднем за неделю {avg} ккал в день, примерно на {gap} меньше нормы поддержания: около {kg} кг в неделю.",

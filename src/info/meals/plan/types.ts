@@ -241,11 +241,49 @@ export interface DishPhotoMiss {
   checkedAt: number;
 }
 
-export type DishPhotoEntry = DishPhoto | DishPhotoMiss;
+// A picture an image model drew for a dish (docs/73 图片). The bytes are their
+// own file, named for their hash (photo-store.ts saveDrawingFile); the cache
+// holds where.
+export interface DishDrawing {
+  // The app-data path of the image, `meals-pictures/<hash>.<ext>`.
+  drawing: string;
+  drawnAt: number;
+  // Being drawn again (DishDrawingClaim), the old picture shown meanwhile.
+  drawingSince?: number;
+  // The image as a data: URI, set in memory by the screen once the file has
+  // been read. Never written.
+  src?: string;
+}
+
+// A device drawing this dish now. Written before the paid call so the other
+// devices, reading the synced cache, leave the dish alone. It lapses rather
+// than being cleared: a claim older than DRAWING_CLAIM_MS is nobody's. A dish
+// drawn before and being drawn again keeps its DishDrawing with the claim's
+// time on it instead.
+export interface DishDrawingClaim {
+  drawingSince: number;
+}
+
+export type DishPhotoEntry = DishPhoto | DishPhotoMiss | DishDrawing | DishDrawingClaim;
 
 /** Whether a cache entry is a search that came back empty. */
 export function isDishPhotoMiss(entry: DishPhotoEntry): entry is DishPhotoMiss {
   return (entry as DishPhotoMiss).none === true;
+}
+
+/** Whether a cache entry is a photograph the search found. */
+export function isDishPhoto(entry: DishPhotoEntry): entry is DishPhoto {
+  return typeof (entry as DishPhoto).url === "string";
+}
+
+/** Whether a cache entry is a picture an image model drew. */
+export function isDishDrawing(entry: DishPhotoEntry): entry is DishDrawing {
+  return typeof (entry as DishDrawing).drawing === "string";
+}
+
+/** Whether a cache entry is a device saying it is drawing the dish. */
+export function isDishDrawingClaim(entry: DishPhotoEntry): entry is DishDrawingClaim {
+  return typeof (entry as DishDrawingClaim).drawingSince === "number";
 }
 
 export interface ShoppingItem {

@@ -1073,12 +1073,13 @@ export function buildWriteMethodTool(deps: MealsToolDeps & { ports: MealsPorts }
 }
 
 /**
- * Search this week's photographs again (docs/73 图片).
+ * Picture this week again (docs/73 图片): draw its dishes anew and search its
+ * ingredients again.
  *
- * The one thing the reader can ask about the pictures. The searching happens on
- * the machine with a hidden webview, which is usually not the one they are
- * holding, so what this writes is the moment they asked: every picture older
- * than it is looked up again wherever the search runs. The pictures appear on
+ * The one thing the reader can ask about the pictures. What this writes is the
+ * moment they asked: every picture older than it is drawn or looked up again
+ * wherever that can be done — the dishes on any device whose provider draws,
+ * the ingredients on the machine with a hidden webview. The pictures appear on
  * the screen as they land, without another turn.
  */
 export function buildRefreshMealsPhotosTool(
@@ -1090,33 +1091,44 @@ export function buildRefreshMealsPhotosTool(
     effect: "write",
     description:
       "Call this when they say a picture on the meals screen is wrong or is not the dish they " +
-      "meant. It searches this week's dishes and ingredients again from scratch. There is " +
-      "nothing to choose and nothing to confirm; say it is looking and move on.",
+      "meant. It draws this week's dishes again and searches its ingredients again from " +
+      "scratch. There is nothing to choose and nothing to confirm; say it is on it and move on.",
     parameters: Type.Object({}),
     execute: async () => {
       const state = await deps.state();
       if (!state.plan) {
         return {
           receipt: null,
-          text: "There is no week planned, so there are no photographs to look for.",
+          text: "There is no week planned, so there are no pictures to redo.",
         };
       }
-      const { queries, searching } = await refreshPhotos(deps.ports);
-      if (!queries) {
+      const { queries, searching, dishes, drawing } = await refreshPhotos(deps.ports);
+      if (!queries && !dishes) {
         return {
           receipt: null,
           text: "Nothing could be asked for: the request could not be written down.",
         };
       }
-      const many = `${queries} ${queries === 1 ? "photograph" : "photographs"}`;
-      return {
-        receipt: null,
-        text: searching
-          ? `Searching again for ${many}. They appear on their screen as they are found; ` +
-            "nothing else has to be done."
-          : `Asked for ${many} to be looked for again. The search runs on the computer, which ` +
-            "may be asleep; they appear on their screen as they arrive.",
-      };
+      const lines: string[] = [];
+      if (dishes) {
+        const many = `${dishes} ${dishes === 1 ? "dish" : "dishes"}`;
+        lines.push(
+          drawing
+            ? `Drawing ${many} again.`
+            : `Asked for ${many} to be drawn again by a device whose AI provider can make pictures; ` +
+                "this one's cannot.",
+        );
+      }
+      if (queries) {
+        const many = `${queries} ingredient ${queries === 1 ? "photograph" : "photographs"}`;
+        lines.push(
+          searching
+            ? `Searching again for ${many}.`
+            : `Asked for ${many} to be looked for again. The search runs on the computer, which may be asleep.`,
+        );
+      }
+      lines.push("They appear on their screen as they arrive; nothing else has to be done.");
+      return { receipt: null, text: lines.join(" ") };
     },
   };
 }

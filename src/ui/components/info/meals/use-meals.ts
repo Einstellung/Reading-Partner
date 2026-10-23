@@ -12,7 +12,10 @@ import { liveMealsPorts } from "../../../../info/meals/live";
 import { setShoppingChecked } from "../../../../info/meals/plan/shopping";
 import { markShoppingTripDone } from "../../../../info/meals/tools";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
-import { loadMealsPhotos } from "../../../../info/meals/photos/photo-store";
+import { MEALS_PICTURES_PULL_ROUTE, onDishDrawn } from "../../../../info/meals/photos/dish-draw-sweep";
+import { weekDishKeys } from "../../../../info/meals/photos/dish-drawing";
+import { loadMealsPhotos, withDrawingSources } from "../../../../info/meals/photos/photo-store";
+import { registerPullRoute } from "../../../../platform/sync/pull-routes";
 import { loadMeals, saveShopping } from "../../../../info/meals/plan/store";
 import type { MealsState } from "../../../../info/meals/plan/types";
 
@@ -51,15 +54,8 @@ export function useMeals(enabled: boolean): MealsController {
       return;
     }
     setToday(todayLocal());
-    // A cache that will not read is no photographs, not a screen that holds:
-    // the week is worth showing without them.
-    void loadMealsPhotos().then(
-      (next) => {
-        if (live.current) setPhotos(next);
-      },
-      () => {},
-    );
-    void loadMeals().then(
+    const week = loadMeals();
+    void week.then(
       (next) => {
         if (live.current) setState(next);
       },
@@ -69,9 +65,33 @@ export function useMeals(enabled: boolean): MealsController {
         // by waiting.
       },
     );
+    // A cache that will not read is no pictures, not a screen that holds: the
+    // week is worth showing without them. The week's drawn dishes are read into
+    // memory before the one set, so a reload never takes a picture down and
+    // puts it back.
+    void loadMealsPhotos().then(
+      async (cache) => {
+        const plan = await week.then((s) => s.plan, () => null);
+        const drawn = await withDrawingSources(cache, weekDishKeys(plan));
+        if (live.current) setPhotos(drawn);
+      },
+      () => {},
+    );
   }, [enabled]);
 
   useEffect(reload, [reload]);
+
+  // A picture landing — drawn here, or pulled from another device with the
+  // cache entry or the file it points at — redraws the cards that wanted it.
+  useEffect(() => {
+    if (!enabled) return;
+    const offDrawn = onDishDrawn(reload);
+    const offPull = registerPullRoute({ ...MEALS_PICTURES_PULL_ROUTE, onPulled: reload });
+    return () => {
+      offDrawn();
+      offPull();
+    };
+  }, [enabled, reload]);
 
   const toggleItem = useCallback((key: string, checked: boolean) => {
     setState((prev) => {

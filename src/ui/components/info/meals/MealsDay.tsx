@@ -6,7 +6,6 @@
 
 import { useState } from "react";
 
-import { openExternal } from "../../../../platform/app/external-link";
 import { useT } from "../../../../i18n";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import { markDishPhotoBroken } from "../../../../info/meals/photos/photo-store";
@@ -14,8 +13,8 @@ import { hostRegion } from "../../../../info/meals/region";
 import type { MealKey, MealsState } from "../../../../info/meals/plan/types";
 import {
   dayViewOn,
-  dishPhotoCredit,
   dishPicture,
+  dishPictureLabel,
   dishThumbnails,
   ingredientPicture,
   mealName,
@@ -55,8 +54,8 @@ function MealCard({ view, photos, onOpen }: { view: MealView; photos: PhotoCache
   const opens = made && view.rows.length > 0;
   const dish = { searchName: view.searchName };
   const picture = made ? dishPicture(dish, photos) : null;
-  const credit = made ? dishPhotoCredit(dish, photos) : null;
-  // The photo credit inside the card is a link of its own.
+  const label = made ? dishPictureLabel(dish, photos) : null;
+  // A link or button inside the card is not the card's own tap.
   const fromInner = (target: EventTarget) => target instanceof Element && target.closest("button, a") !== null;
   const openRecipe = (
     <span className="mt-2 flex items-center gap-1 text-[13px] text-accent-line">
@@ -105,21 +104,15 @@ function MealCard({ view, photos, onOpen }: { view: MealView; photos: PhotoCache
             imagePageUrl={picture?.pageUrl}
             thumbnails={dishThumbnails(view.meal.items, (en) => ingredientPicture(en, photos)?.url ?? null)}
             alt={view.name}
-            photoClassName="mt-3 aspect-[16/9] max-h-40 w-full"
+            photoClassName="mt-3 aspect-[16/9] max-h-40 w-full animate-in fade-in duration-300 motion-reduce:animate-none"
             stripClassName="mt-3"
             onPhotoFailed={() => {
               setPhotoFailed(true);
               if (view.searchName) void markDishPhotoBroken(view.searchName);
             }}
           />
-          {credit && !photoFailed && (
-            <button
-              type="button"
-              className="mt-1 block max-w-full truncate text-left text-[11px] leading-snug text-faint-foreground underline underline-offset-2 can-hover:hover:text-muted-foreground"
-              onClick={() => openExternal(credit.url)}
-            >
-              {credit.text}
-            </button>
+          {label && !photoFailed && (
+            <p className="m-0 mt-1 truncate text-[11px] leading-snug text-faint-foreground">{label}</p>
           )}
           <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
             {mealName(view)}

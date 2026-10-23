@@ -10,6 +10,7 @@
 import type { MealsAppliedCardData, MealsPlanCardData } from "./cards";
 import type { PhotoCache } from "./photos/dish-photos";
 import type { Profile, Region, Targets } from "./nutrition/targets";
+import { dishesToDraw } from "./photos/dish-drawing";
 import { photoQueriesForPlan, type PhotoQuery } from "./photos/photo-run";
 import { currentList, deriveShoppingList, isChecked, reconcileShoppingList } from "./plan/shopping";
 import { solvePlan, targetsOf } from "./plan/solve-week";
@@ -42,6 +43,11 @@ export interface MealsPorts {
   startPhotoRun?(planId: string, queries: readonly PhotoQuery[]): Promise<unknown>;
   // Write down that the reader asked for the pictures again.
   markPhotosAsked?(at: number): Promise<unknown>;
+  // Draw the dishes the week has no picture of, in the background
+  // (dish-draw-sweep.ts). Answers once the round is over; nobody waits on it.
+  drawDishes?(): Promise<unknown>;
+  // Whether this device's provider can draw at all.
+  canDraw?(): Promise<boolean>;
   // Whether a name already has a picture from a bank.
   bankImage?(en: string): string | null;
   // Which BMI cut points and fat range apply (region.ts).
@@ -140,6 +146,9 @@ export async function applyPlan(card: MealsPlanCardData, ports: MealsPorts): Pro
     return NOTHING;
   }
   ports.changed();
+  // Not part of `pending`: a round of drawings is a minute of paid calls, and
+  // the screen shows the ingredient strip until each one lands.
+  void ports.drawDishes?.().catch(() => {});
   const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
   // The photographs are asked for after the week is on disk and after the note
   // is handed back: the search takes minutes and the screen is usable without
@@ -173,37 +182,47 @@ export async function startPhotoSearch(
 
 /** What the reader asking for better pictures came to. */
 export interface PhotoRefresh {
-  // How many names the week will be searched for.
+  // How many ingredient names the week will be searched for.
   queries: number;
   // Whether the search started here.
   searching: boolean;
+  // How many dishes will be drawn again (the first round's worth).
+  dishes: number;
+  // Whether this device is drawing them.
+  drawing: boolean;
 }
 
+const NO_REFRESH: PhotoRefresh = { queries: 0, searching: false, dishes: 0, drawing: false };
+
 /**
- * Search the whole week again. The ask is a timestamp on the week
- * (photosAskedAt), not a run, because the machine that can search is usually
- * not the one being held.
+ * Picture the whole week again: search its ingredients and draw its dishes. The
+ * ask is a timestamp on the week (photosAskedAt), not a run, because the
+ * machine that can search is usually not the one being held, and every device
+ * that draws reads the same timestamp.
  */
 export async function refreshPhotos(ports: MealsPorts): Promise<PhotoRefresh> {
   const state = await ports.current();
-  if (!state.plan) return { queries: 0, searching: false };
+  if (!state.plan) return NO_REFRESH;
   const at = ports.now();
   try {
-    if (!ports.markPhotosAsked) return { queries: 0, searching: false };
+    if (!ports.markPhotosAsked) return NO_REFRESH;
     await ports.markPhotosAsked(at);
   } catch {
-    return { queries: 0, searching: false };
+    return NO_REFRESH;
   }
   const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
+  const dishes = dishesToDraw(state.plan, cache, at, { askedAt: at }).length;
+  const drawing = dishes > 0 && !!ports.drawDishes && (await ports.canDraw?.().catch(() => false)) === true;
+  if (drawing) void ports.drawDishes?.().catch(() => {});
   const queries = photoQueriesForPlan(state.plan, cache, at, {
     bankImage: ports.bankImage ?? (() => null),
     askedAt: at,
   });
-  if (!queries.length) return { queries: 0, searching: false };
+  if (!queries.length) return { queries: 0, searching: false, dishes, drawing };
   const start = ports.startPhotoRun;
-  if (!start) return { queries: queries.length, searching: false };
+  if (!start) return { queries: queries.length, searching: false, dishes, drawing };
   await start(state.plan.id, queries);
-  return { queries: queries.length, searching: true };
+  return { queries: queries.length, searching: true, dishes, drawing };
 }
 
 /**
