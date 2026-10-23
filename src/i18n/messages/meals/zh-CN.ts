@@ -139,6 +139,7 @@ export default {
   "category.other": "其他",
   today: "今天",
   tomorrow: "明天",
+  photoCredit: "图片来自：{site}",
   pictureDrawn: "AI 生成的图片",
   shoppingNoteFreeze: "{keeps} · 到家就冷冻",
   "targetsLine.cut": "本周日均 {avg} 千卡，比维持热量低约 {gap}：大约每周减 {kg} 千克。",

@@ -141,6 +141,7 @@ export default {
   "category.other": "기타",
   today: "오늘",
   tomorrow: "내일",
+  photoCredit: "사진 제공: {site}",
   pictureDrawn: "AI 생성 이미지",
   shoppingNoteFreeze: "{keeps} · 집에 오면 바로 냉동",
   "targetsLine.cut": "주간 평균 하루 {avg}kcal, 유지 칼로리보다 약 {gap} 적음: 대략 주당 {kg}kg 감량 속도예요.",

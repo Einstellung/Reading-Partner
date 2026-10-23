@@ -8,7 +8,7 @@
 
 import { formatDateTime, getLocale, t, translate } from "../../../i18n";
 import { fishMeals } from "../plan/checks";
-import { drawingForDish, photoForIngredient, type PhotoCache } from "../photos/dish-photos";
+import { drawingForDish, photoForDish, photoForIngredient, type PhotoCache } from "../photos/dish-photos";
 import { ingredientImageUrl } from "../photos/images";
 import { foodById, isProduce } from "../nutrition/foods";
 import type { MealCells, Nutrition, TemplateItem, TemplateRole } from "../nutrition/solve";
@@ -393,15 +393,20 @@ export function dayViewOn(state: MealsState, date: string, today: string, region
 export interface Picture {
   url: string;
   pageUrl: string | null;
+  // An image model drew it, rather than a search finding it.
+  drawn?: boolean;
 }
 
 /**
- * The picture drawn for a meal, by its searchName, once the screen has read
- * its file (photo-store.ts withDrawingSources). Null shows the ingredient strip.
+ * The picture a meal shows, by its searchName: the drawing once the screen has
+ * read its file (photo-store.ts withDrawingSources), else the photograph the
+ * search found. Null shows the ingredient strip.
  */
 export function dishPicture(meal: { searchName?: string } | null | undefined, photos: PhotoCache | undefined): Picture | null {
   const src = drawingForDish(meal, photos)?.src;
-  return src ? { url: src, pageUrl: null } : null;
+  if (src) return { url: src, pageUrl: null, drawn: true };
+  const photo = photoForDish(meal, photos);
+  return photo ? { url: photo.url, pageUrl: photo.pageUrl || null } : null;
 }
 
 /**
@@ -419,12 +424,27 @@ export function ingredientPicture(
   return photo ? { url: photo.url, pageUrl: photo.pageUrl || null } : null;
 }
 
-/** The small line under a drawn dish picture, or null when the card shows none. */
-export function dishPictureLabel(
+/** The small line under a dish picture, and the page it opens when there is one. */
+export interface DishPictureCaption {
+  text: string;
+  url: string | null;
+}
+
+/**
+ * "AI-generated image" under a drawing, "Photo: example.com" linking to its
+ * page under a searched photograph, or null when the card shows neither.
+ */
+export function dishPictureCaption(
   meal: { searchName?: string } | null | undefined,
   photos: PhotoCache | undefined,
-): string | null {
-  return dishPicture(meal, photos) ? t("meals.pictureDrawn") : null;
+): DishPictureCaption | null {
+  const picture = dishPicture(meal, photos);
+  if (!picture) return null;
+  if (picture.drawn) return { text: t("meals.pictureDrawn"), url: null };
+  const photo = photoForDish(meal, photos);
+  const site = photo?.site.trim() ?? "";
+  const url = photo?.pageUrl.trim() ?? "";
+  return site && url ? { text: t("meals.photoCredit", { site }), url } : null;
 }
 
 const THUMBNAIL_LIMIT = 4;

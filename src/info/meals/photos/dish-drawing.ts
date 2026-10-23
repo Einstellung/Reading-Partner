@@ -94,6 +94,29 @@ export function claimEntry(entry: DishPhotoEntry | undefined, since: number): Di
   return { drawingSince: since };
 }
 
+/**
+ * The cache with this device's claims under `keys`, written at `since`, taken
+ * back: a dish drawn before keeps its old picture, one never drawn loses the
+ * entry. A claim of another time is another round's and stays. Null when
+ * nothing changed.
+ */
+export function withClaimsReleased(
+  cache: PhotoCache,
+  keys: readonly string[],
+  since: number,
+): Record<string, DishPhotoEntry> | null {
+  const next: Record<string, DishPhotoEntry> = { ...cache };
+  let changed = false;
+  for (const key of keys) {
+    const entry = next[key];
+    if (!entry || !isDishDrawingClaim(entry) || entry.drawingSince !== since) continue;
+    if (isDishDrawing(entry)) next[key] = { drawing: entry.drawing, drawnAt: entry.drawnAt };
+    else delete next[key];
+    changed = true;
+  }
+  return changed ? next : null;
+}
+
 /** The cache keys of the week's made dishes, each once. */
 export function weekDishKeys(plan: WeekPlan | null | undefined): string[] {
   const keys = new Set<string>();

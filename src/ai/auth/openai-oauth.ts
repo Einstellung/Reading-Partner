@@ -68,6 +68,22 @@ const flow = createOAuthFlow({
 	stateFor: generateState,
 });
 
+/** The ChatGPT account id the Codex backend wants beside the token, read off the token's JWT. */
+export function codexAccountId(token: string): string {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) throw new Error("not a JWT");
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+    const id = JSON.parse(new TextDecoder().decode(bytes))?.["https://api.openai.com/auth"]?.chatgpt_account_id;
+    if (typeof id !== "string" || !id) throw new Error("no account id");
+    return id;
+  } catch {
+    throw new Error("Could not read the ChatGPT account id from the OpenAI sign-in. Sign in again in Settings.");
+  }
+}
+
 export const buildAuthUrl = flow.buildAuthUrl;
 
 /**

@@ -42,7 +42,7 @@ test("a provider with no images endpoint is unavailable, and nothing is sent", a
   expect(h.sent).toEqual([]);
   expect(h.recorded).toEqual([]);
   expect(await imageGenerationReady({ providerId: async () => null })).toBe(false);
-  expect(await imageGenerationReady({ providerId: async () => "openai" })).toBe(false);
+  expect(await imageGenerationReady({ providerId: async () => "anthropic" })).toBe(false);
 });
 
 test("a missing credential is unavailable too", async () => {
@@ -109,4 +109,47 @@ test("the bytes are read out of the response and their type from their first byt
   expect(sniffImageType(JPEG)).toBe("image/jpeg");
   expect(sniffImageType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]))).toBe("image/png");
   expect(sniffImageType(new Uint8Array([1, 2, 3, 4]))).toBeNull();
+});
+
+// A ChatGPT sign-in token: a JWT whose payload names the account.
+function chatgptToken(accountId: string): string {
+  const payload = btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: accountId } }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `e30.${payload}.sig`;
+}
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]);
+
+// Unverified against the live backend: this pins the request to the shape
+// OpenAI's Codex client sends (codex-rs/codex-api/src/endpoint/images.rs).
+test("the ChatGPT sign-in draws on the Codex backend with gpt-image-2 and its account header", async () => {
+  const token = chatgptToken("acct-123");
+  const h = deps("openai", () =>
+    Response.json({ created: 1, data: [{ b64_json: btoa(String.fromCharCode(...PNG)) }], output_format: "png" }),
+  );
+  h.deps.apiKey = async () => token;
+  const result = await generateImage("a bowl", { caller: "info" }, h.deps);
+  expect(result).toEqual({ ok: true, bytes: PNG, mediaType: "image/png", provider: "openai", model: "gpt-image-2" });
+  expect(h.sent[0]?.url).toBe("https://chatgpt.com/backend-api/codex/images/generations");
+  expect(JSON.parse(String(h.sent[0]?.init.body))).toEqual({
+    prompt: "a bowl",
+    model: "gpt-image-2",
+    background: "opaque",
+    quality: "medium",
+    size: "1536x1024",
+  });
+  const headers = h.sent[0]?.init.headers as Record<string, string>;
+  expect(headers.authorization).toBe(`Bearer ${token}`);
+  expect(headers["ChatGPT-Account-ID"]).toBe("acct-123");
+  expect(h.recorded).toEqual([{ caller: "info", provider: "openai", model: "gpt-image-2", ok: true }]);
+  expect(await imageGenerationReady({ providerId: async () => "openai", apiKey: async () => token })).toBe(true);
+});
+
+test("a ChatGPT token without an account id is unavailable, and nothing is sent", async () => {
+  const h = deps("openai", () => Response.json({}));
+  h.deps.apiKey = async () => "not-a-jwt";
+  expect(await generateImage("a bowl", { caller: "info" }, h.deps)).toMatchObject({ ok: false, unavailable: true });
+  expect(h.sent).toEqual([]);
 });

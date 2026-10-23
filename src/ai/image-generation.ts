@@ -1,7 +1,8 @@
 // Drawing a picture with the reader's own provider (docs/73 图片).
 //
 // One request, one image, on the provider this device is set to talk to. Only
-// providers with an OpenAI-style `POST /images/generations` are in the table;
+// providers with an OpenAI-style `POST /images/generations` are in the table
+// (the ChatGPT sign-in's Codex backend among them, unverified);
 // on any other provider, or with no provider at all, the answer is
 // "unavailable" and the caller keeps whatever it shows without a picture. No
 // key of its own: the provider's credential is the one the chat already uses
@@ -14,6 +15,7 @@
 
 import { loadSettings } from "../platform/app/settings";
 import { errMsg } from "../platform/std/errors";
+import { codexAccountId } from "./auth/openai-oauth";
 import { recordModelCall, type ModelCallContext } from "./model-usage";
 import { resolveApiKey, type ProviderId } from "./providers";
 
@@ -22,6 +24,8 @@ export interface ImageEndpoint {
   baseUrl: string;
   model: string;
   body(prompt: string): Record<string, unknown>;
+  /** Headers beyond the bearer token, made from the credential. May throw. */
+  headers?(key: string): Record<string, string>;
 }
 
 // A wide picture, because the card is 16:9; base64 back, because a link would
@@ -51,6 +55,25 @@ export const IMAGE_ENDPOINTS: Partial<Record<ProviderId, ImageEndpoint>> = {
       response_format: "base64",
       output_format: "jpeg",
     }),
+  },
+  // UNVERIFIED: never called with a live credential. The ChatGPT sign-in's
+  // Codex backend, the way OpenAI's own Codex client draws (openai/codex
+  // codex-rs/codex-api/src/endpoint/images.rs: POST {CHATGPT_CODEX_BASE_URL}/
+  // images/generations, `ChatGPT-Account-ID` beside the token, gpt-image-2).
+  // OpenAI's Codex docs say it counts toward the plan's Codex limits and is
+  // not on the Free plan. The body carries only the fields that client sends;
+  // the answer is PNG. Notes in docs/research/食材与菜品图片源调研.md.
+  openai: {
+    baseUrl: "https://chatgpt.com/backend-api/codex",
+    model: "gpt-image-2",
+    body: (prompt) => ({
+      prompt,
+      model: "gpt-image-2",
+      background: "opaque",
+      quality: "medium",
+      size: "1536x1024",
+    }),
+    headers: (key) => ({ "ChatGPT-Account-ID": codexAccountId(key), originator: "codex_cli_rs" }),
   },
 };
 
@@ -141,8 +164,10 @@ export async function generateImage(
   if (!found) return { ok: false, unavailable: true, reason: "the configured provider does not draw pictures" };
   const { id, endpoint } = found;
   let key: string;
+  let extra: Record<string, string>;
   try {
     key = await (deps.apiKey ?? resolveApiKey)(id);
+    extra = endpoint.headers?.(key) ?? {};
   } catch (e) {
     return { ok: false, unavailable: true, reason: errMsg(e) };
   }
@@ -152,7 +177,7 @@ export async function generateImage(
   try {
     const response = await send(`${endpoint.baseUrl}/images/generations`, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      headers: { ...extra, "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify(endpoint.body(prompt)),
       signal: AbortSignal.timeout(deps.timeoutMs ?? TIMEOUT_MS),
     });

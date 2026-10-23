@@ -4,6 +4,7 @@
 // Portions adapted from pi-web-search by ttttmr (https://www.npmjs.com/package/pi-web-search),
 // MIT License; see LICENSE.pi-web-search in this directory.
 
+import { codexAccountId } from "../ai/auth/openai-oauth";
 import { isMessagesChannel, type SearchChannel } from "./channel";
 import { applyIndexCitations, cleanSources, pushUniqueSource, titleFromUrl, type SearchOutcome, type Source } from "./results";
 import { readSseEvents } from "./sse";
@@ -69,22 +70,6 @@ function codexResponsesUrl(base: string): string {
   if (b.endsWith("/codex/responses")) return b;
   if (b.endsWith("/codex")) return `${b}/responses`;
   return `${b}/codex/responses`;
-}
-
-/** The ChatGPT account id the Codex backend wants beside the token, read off the token's JWT. */
-export function codexAccountId(token: string): string {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) throw new Error("not a JWT");
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
-    const id = JSON.parse(new TextDecoder().decode(bytes))?.["https://api.openai.com/auth"]?.chatgpt_account_id;
-    if (typeof id !== "string" || !id) throw new Error("no account id");
-    return id;
-  } catch {
-    throw new Error("Could not read the ChatGPT account id from the OpenAI sign-in. Sign in again in Settings.");
-  }
 }
 
 export function buildSearchRequest(call: SearchCall, query: string): SearchRequest {

@@ -329,9 +329,17 @@ test("applying a week on the machine that searches asks for what it is missing",
   const h = harness({ plan: null });
   const asked = searching(h);
   await (await applyPlan(planCard(), h.ports)).pending;
+  expect(asked[0]).toContain("dish:shrimp rice bowl");
   expect(asked[0]).toContain("ingredient:salmon");
-  // Dishes are drawn, not searched.
-  expect(asked[0]?.some((k) => k.startsWith("dish:"))).toBe(false);
+
+  // Where the provider draws, the dishes are drawn and only the foods searched.
+  const drawing = harness({ plan: null });
+  drawing.ports.drawDishes = async () => {};
+  drawing.ports.canDraw = async () => true;
+  const foods = searching(drawing);
+  await (await applyPlan(planCard(), drawing.ports)).pending;
+  expect(foods[0]).toContain("ingredient:salmon");
+  expect(foods[0]?.some((k) => k.startsWith("dish:"))).toBe(false);
 });
 
 test("applying a week starts drawing its dishes without waiting for them", async () => {
@@ -423,16 +431,18 @@ test("asking for better pictures draws the week's dishes again where the provide
   expect(result.drawing).toBe(true);
   expect(draws).toBe(1);
 
-  // A provider that cannot draw: the ask is written down for a device that can.
-  const phone = harness();
-  phone.ports.markPhotosAsked = async () => {};
-  let phoneDraws = 0;
-  phone.ports.drawDishes = async () => {
-    phoneDraws += 1;
+  // A provider that cannot draw: the dishes are searched again with the foods,
+  // and a device that can draw reads the same ask.
+  const pc = harness();
+  pc.ports.markPhotosAsked = async () => {};
+  let pcDraws = 0;
+  pc.ports.drawDishes = async () => {
+    pcDraws += 1;
   };
-  phone.ports.canDraw = async () => false;
-  const asked = await refreshPhotos(phone.ports);
-  expect(asked.dishes).toBeGreaterThan(0);
-  expect(asked.drawing).toBe(false);
-  expect(phoneDraws).toBe(0);
+  pc.ports.canDraw = async () => false;
+  const searched = searching(pc);
+  const asked = await refreshPhotos(pc.ports);
+  expect(asked).toMatchObject({ dishes: 0, drawing: false, searching: true });
+  expect(searched[0]?.some((k) => k.startsWith("dish:"))).toBe(true);
+  expect(pcDraws).toBe(0);
 });

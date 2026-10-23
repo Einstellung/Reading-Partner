@@ -3,11 +3,12 @@
 // One record for the whole line, keyed by name rather than by what is planned:
 // `dish:mapo tofu` and `ingredient:kale` outlive every week, so a dish cooked
 // again in October costs no new picture and a vegetable bought every week costs
-// one search ever. A dish key holds a picture an image model drew
-// (dish-drawing.ts); an ingredient key holds what the image search found. Where
-// the cache is kept and how it is written is photo-store.ts; this file is the
-// pure half — the keys, what still has to be searched for, and which picture a
-// dish or an ingredient shows.
+// one search ever. A dish has two keys: `drawing:` for a picture an image
+// model drew (dish-drawing.ts) and `dish:` for what the image search found on a
+// device that cannot draw; the drawing wins. An ingredient key holds what the
+// image search found. Where the cache is kept and how it is written is
+// photo-store.ts; this file is the pure half — the keys, what still has to be
+// searched for, and which picture a dish or an ingredient shows.
 
 import {
   isDishDrawing,
@@ -29,10 +30,7 @@ export function normalizeSearchName(raw: string): string {
   return (raw ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/**
- * Where an earlier build kept the photograph it searched for a dish. Read by
- * nothing now; the entries stay in the file for builds that still show them.
- */
+/** Where the photograph the image search found for a dish is kept. */
 export function dishPhotoKey(searchName: string): string {
   const name = normalizeSearchName(searchName);
   return name ? `dish:${name}` : "";
@@ -91,9 +89,19 @@ export function photoAt(cache: PhotoCache | undefined, key: string): DishPhoto |
 }
 
 /**
- * The drawn picture a dish shows, or null. A photograph an earlier build found
- * for the dish by searching is not one: the dish path only draws now.
+ * The photograph the image search found for a dish, or null. Shown when the
+ * dish has no drawn picture (see drawingForDish), which is the case on every
+ * device in a house where no provider draws.
  */
+export function photoForDish(
+  dish: { searchName?: string } | null | undefined,
+  cache: PhotoCache | undefined,
+): DishPhoto | null {
+  if (!dish) return null;
+  return photoAt(cache, dishPhotoKey(dish.searchName ?? ""));
+}
+
+/** The drawn picture a dish has, or null. It wins over a searched photograph once its file is read. */
 export function drawingForDish(
   dish: { searchName?: string } | null | undefined,
   cache: PhotoCache | undefined,

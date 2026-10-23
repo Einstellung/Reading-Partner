@@ -8,8 +8,7 @@
 import type { MealsPorts } from "./apply";
 import type { MealsCard } from "./cards";
 import { ingredientImageUrl } from "./photos/images";
-import { imageGenerationReady } from "../../ai/image-generation";
-import { mealsDishDrawer } from "./photos/dish-draw-sweep";
+import { mealsCanDraw, mealsDishDrawer } from "./photos/dish-draw-sweep";
 import { mealsPhotoSearcher } from "./photos/photo-sweep";
 import { loadMealsPhotos } from "./photos/photo-store";
 import {
@@ -64,7 +63,7 @@ export function liveMealsPorts(opts: Pick<LiveMealsOptions, "today" | "changed">
       : {}),
     markPhotosAsked: (at) => savePhotosAsked(at),
     drawDishes: () => mealsDishDrawer().sweep(),
-    canDraw: () => imageGenerationReady(),
+    canDraw: () => mealsCanDraw(),
     bankImage: (en) => ingredientImageUrl(en),
     now: () => Date.now(),
     today: opts.today,

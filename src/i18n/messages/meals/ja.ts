@@ -141,6 +141,7 @@ export default {
   "category.other": "その他",
   today: "今日",
   tomorrow: "明日",
+  photoCredit: "写真提供：{site}",
   pictureDrawn: "AI生成の画像",
   shoppingNoteFreeze: "{keeps} · 帰宅したらすぐ冷凍",
   "targetsLine.cut": "週平均{avg}kcal/日、維持カロリーより約{gap}少なめ：週あたり約{kg}kgのペース。",

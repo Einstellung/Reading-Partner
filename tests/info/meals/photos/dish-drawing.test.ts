@@ -12,6 +12,7 @@ import {
   dishesToDraw,
   wantsDrawing,
   weekDishKeys,
+  withClaimsReleased,
 } from "../../../../src/info/meals/photos/dish-drawing";
 import {
   backoffAfter,
@@ -94,6 +95,7 @@ function harness(opts: Partial<Omit<DishDrawPorts, "state">> & { week?: MealsSta
   const writes: Record<string, DishPhotoEntry>[] = [];
   let clock = NOW;
   let landed = 0;
+  let failed = 0;
   const images = queued ?? [];
   const ports: DishDrawPorts = {
     canDraw: async () => true,
@@ -112,9 +114,18 @@ function harness(opts: Partial<Omit<DishDrawPorts, "state">> & { week?: MealsSta
       writes.push(entries);
       Object.assign(cache, entries);
     },
+    release: async (keys, since) => {
+      const next = withClaimsReleased(cache, keys, since);
+      if (!next) return;
+      for (const key of Object.keys(cache)) delete cache[key];
+      Object.assign(cache, next);
+    },
     now: () => clock,
     landed: () => {
       landed += 1;
+    },
+    failed: () => {
+      failed += 1;
     },
     ...over,
   };
@@ -125,6 +136,7 @@ function harness(opts: Partial<Omit<DishDrawPorts, "state">> & { week?: MealsSta
     files,
     writes,
     landed: () => landed,
+    failed: () => failed,
     tick: (ms: number) => {
       clock += ms;
     },
@@ -164,18 +176,37 @@ test("a failed call is not a missing picture: the round stops and waits longer e
   expect(first).toMatchObject({ drawn: 1, why: "failed" });
   const drawings = Object.values(h.cache).filter((e) => "drawing" in e);
   expect(drawings.length).toBe(1);
-  // Nothing was written as "this dish has no picture".
+  // Nothing was written as "this dish has no picture", and the claims on the
+  // dishes not drawn were taken back, so the search can have them now.
   expect(Object.values(h.cache).some((e) => "none" in e)).toBe(false);
+  expect(Object.values(h.cache).some((e) => !("drawing" in e))).toBe(false);
+  expect(h.drawer.failing()).toBe(true);
+  expect(h.failed()).toBe(1);
 
   expect((await h.drawer.sweep()).why).toBe("backing-off");
   h.tick(DRAW_BACKOFF_MS);
-  // The claims have lapsed with the wait, so the rest are drawn now.
   const again = await h.drawer.sweep();
   expect(again.why).toBeUndefined();
   expect(again.drawn).toBeGreaterThan(0);
+  expect(h.drawer.failing()).toBe(false);
   expect(backoffAfter(1)).toBe(DRAW_BACKOFF_MS);
   expect(backoffAfter(2)).toBe(2 * DRAW_BACKOFF_MS);
   expect(backoffAfter(30)).toBe(6 * 60 * 60 * 1000);
+});
+
+test("taking back claims touches only this round's, and keeps an old picture", () => {
+  const cache: PhotoCache = {
+    "drawing:a": { drawingSince: 5 },
+    "drawing:b": { drawing: "p.jpg", drawnAt: 1, drawingSince: 5 },
+    "drawing:c": { drawingSince: 9 },
+    "drawing:d": { drawing: "q.jpg", drawnAt: 2 },
+  };
+  expect(withClaimsReleased(cache, ["drawing:a", "drawing:b", "drawing:c", "drawing:d"], 5)).toEqual({
+    "drawing:b": { drawing: "p.jpg", drawnAt: 1 },
+    "drawing:c": { drawingSince: 9 },
+    "drawing:d": { drawing: "q.jpg", drawnAt: 2 },
+  });
+  expect(withClaimsReleased(cache, ["drawing:d"], 5)).toBeNull();
 });
 
 test("another device's fresh claim keeps this one off the dish", async () => {

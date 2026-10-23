@@ -17,7 +17,8 @@
 import { appData } from "../../../platform/app/appdata";
 import { appRunner } from "../../../legion/runner/runner";
 import type { Delegated, DelegateInput } from "../../../legion/runner/worker";
-import { ingredientPhotoKey, needsPhotoLookup, type PhotoCache } from "./dish-photos";
+import { dishDrawingKey, dishPhotoKey, ingredientPhotoKey, needsPhotoLookup, type PhotoCache } from "./dish-photos";
+import { wantsDrawing } from "./dish-drawing";
 import { ingredientQuery } from "./photo-search";
 import { foodById } from "../nutrition/foods";
 import { MEAL_KEYS, type WeekPlan } from "../plan/types";
@@ -35,7 +36,7 @@ export const MAX_PHOTO_QUERIES = 20;
 
 /** One thing to search for: where the answer goes, and what is typed in. */
 export interface PhotoQuery {
-  /** The cache key, `ingredient:<en>`. */
+  /** The cache key, `dish:<searchName>` or `ingredient:<en>`. */
   key: string;
   /** The words the search is given. */
   q: string;
@@ -49,9 +50,15 @@ export interface MealsPhotoAsk {
 }
 
 /**
- * The ingredients a week wants a photograph of and has none of: those no
- * picture bank has artwork for. Dishes are not searched; they are drawn
- * (dish-draw-sweep.ts).
+ * Everything a week wants a photograph of and has none of: its dishes by name
+ * when this device cannot draw them (`searchDishes`), then the ingredients no
+ * picture bank has artwork for.
+ *
+ * A device whose provider draws leaves the dishes to the drawing
+ * (dish-draw-sweep.ts). One that cannot still skips a dish that has a current
+ * drawing or that another device has claimed to draw: the drawing wins on
+ * screen, so searching for it would be wasted. Dishes come first because they
+ * are the large pictures on the screen, and the cap falls on the ingredients.
  *
  * TheMealDB stays ahead of the search for an ingredient: a white-background
  * cut-out of a bok choy identifies the vegetable in the shop better than a
@@ -64,7 +71,7 @@ export function photoQueriesForPlan(
   plan: WeekPlan,
   cache: PhotoCache,
   now: number,
-  opts: { bankImage: (en: string) => string | null; askedAt?: number },
+  opts: { bankImage: (en: string) => string | null; askedAt?: number; searchDishes?: boolean },
 ): PhotoQuery[] {
   const out: PhotoQuery[] = [];
   const seen = new Set<string>();
@@ -75,6 +82,13 @@ export function photoQueriesForPlan(
     out.push({ key, q });
   };
   const made = plan.days.flatMap((d) => MEAL_KEYS.map((k) => d[k])).filter((m) => m.mode === "make");
+  if (opts.searchDishes) {
+    for (const meal of made) {
+      const drawn = cache[dishDrawingKey(meal.searchName ?? "")];
+      if (drawn && !wantsDrawing(drawn, now, opts.askedAt ?? 0)) continue;
+      want(dishPhotoKey(meal.searchName ?? ""), normalize(meal.searchName));
+    }
+  }
   for (const meal of made) {
     for (const item of meal.items ?? []) {
       const food = foodById(item.foodId);

@@ -1073,13 +1073,14 @@ export function buildWriteMethodTool(deps: MealsToolDeps & { ports: MealsPorts }
 }
 
 /**
- * Picture this week again (docs/73 图片): draw its dishes anew and search its
- * ingredients again.
+ * Picture this week again (docs/73 图片): draw its dishes anew where the
+ * provider can, search the rest again.
  *
  * The one thing the reader can ask about the pictures. What this writes is the
  * moment they asked: every picture older than it is drawn or looked up again
  * wherever that can be done — the dishes on any device whose provider draws,
- * the ingredients on the machine with a hidden webview. The pictures appear on
+ * the ingredients (and the dishes, when this device cannot draw) on the machine
+ * with a hidden webview. The pictures appear on
  * the screen as they land, without another turn.
  */
 export function buildRefreshMealsPhotosTool(
@@ -1091,8 +1092,8 @@ export function buildRefreshMealsPhotosTool(
     effect: "write",
     description:
       "Call this when they say a picture on the meals screen is wrong or is not the dish they " +
-      "meant. It draws this week's dishes again and searches its ingredients again from " +
-      "scratch. There is nothing to choose and nothing to confirm; say it is on it and move on.",
+      "meant. It redoes this week's dish and ingredient pictures from scratch: dishes are " +
+      "drawn where the AI provider can make pictures and searched for otherwise. There is nothing to choose and nothing to confirm; say it is on it and move on.",
     parameters: Type.Object({}),
     execute: async () => {
       const state = await deps.state();
@@ -1102,7 +1103,7 @@ export function buildRefreshMealsPhotosTool(
           text: "There is no week planned, so there are no pictures to redo.",
         };
       }
-      const { queries, searching, dishes, drawing } = await refreshPhotos(deps.ports);
+      const { queries, searching, dishes } = await refreshPhotos(deps.ports);
       if (!queries && !dishes) {
         return {
           receipt: null,
@@ -1112,15 +1113,10 @@ export function buildRefreshMealsPhotosTool(
       const lines: string[] = [];
       if (dishes) {
         const many = `${dishes} ${dishes === 1 ? "dish" : "dishes"}`;
-        lines.push(
-          drawing
-            ? `Drawing ${many} again.`
-            : `Asked for ${many} to be drawn again by a device whose AI provider can make pictures; ` +
-                "this one's cannot.",
-        );
+        lines.push(`Drawing ${many} again.`);
       }
       if (queries) {
-        const many = `${queries} ingredient ${queries === 1 ? "photograph" : "photographs"}`;
+        const many = `${queries} ${queries === 1 ? "photograph" : "photographs"}`;
         lines.push(
           searching
             ? `Searching again for ${many}.`

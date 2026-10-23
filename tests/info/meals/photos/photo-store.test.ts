@@ -21,9 +21,10 @@ import {
   drawingForDish,
   ingredientPhotoKey,
   needsPhotoLookup,
+  photoForDish,
   photoForIngredient,
 } from "../../../../src/info/meals/photos/dish-photos";
-import { dishPicture } from "../../../../src/info/meals/screen/view";
+import { dishPicture, dishPictureCaption } from "../../../../src/info/meals/screen/view";
 import type { DishPhoto } from "../../../../src/info/meals/plan/types";
 import { mergeFile } from "../../../../src/platform/sync/merge";
 
@@ -76,19 +77,21 @@ test("what one search found is merged into what is already there", async () => {
   expect(io.files.get(MEALS_PHOTOS_FILE)).toBe(before);
 });
 
-// A picture the search found and the webview cannot load: dropped, so the next
-// run asks again instead of loading the same dead URL every week.
-test("a broken dish photograph is dropped from the cache", async () => {
-  await savePhotoEntries({ "drawing:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO }, io);
-  const after = await markDishPhotoBroken("Mapo Tofu", io);
-  expect(Object.keys(after)).toEqual(["drawing:shakshuka"]);
+// A picture the webview cannot load: dropped, so the next pass asks again
+// instead of loading the same dead URL every week. Only the one that showed.
+test("a broken dish picture is dropped from the cache: the drawing or the photograph", async () => {
+  await savePhotoEntries({ "drawing:mapo tofu": PHOTO, "dish:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO }, io);
+  const after = await markDishPhotoBroken("Mapo Tofu", true, io);
+  expect(Object.keys(after).sort()).toEqual(["dish:mapo tofu", "drawing:shakshuka"]);
   expect((await loadMealsPhotos(io))["drawing:mapo tofu"]).toBeUndefined();
+  const searched = await markDishPhotoBroken("mapo tofu", false, io);
+  expect(Object.keys(searched)).toEqual(["drawing:shakshuka"]);
 });
 
 test("a name the cache never had is written nowhere", async () => {
   await savePhotoEntries({ "drawing:mapo tofu": PHOTO }, io);
   const before = io.files.get(MEALS_PHOTOS_FILE);
-  await markDishPhotoBroken("lentil soup", io);
+  await markDishPhotoBroken("lentil soup", true, io);
   expect(io.files.get(MEALS_PHOTOS_FILE)).toBe(before);
 });
 
@@ -120,8 +123,10 @@ test("a meal and an ingredient read their own keys, and a miss is nothing", () =
     "ingredient:bok choy": PHOTO,
   };
   expect(drawingForDish(meal(), cache)).toEqual(drawn);
-  // A photograph an earlier build searched for a dish is not shown any more.
+  // A searched photograph is not a drawing, and a drawing is not a photograph.
   expect(drawingForDish(meal("shakshuka"), cache)).toBeNull();
+  expect(photoForDish(meal("shakshuka"), cache)).toEqual(PHOTO);
+  expect(photoForDish(meal(), cache)).toBeNull();
   expect(drawingForDish({}, cache)).toBeNull();
   expect(drawingForDish(null, cache)).toBeNull();
   expect(photoForIngredient("Kale", cache)).toBeNull();
@@ -218,7 +223,7 @@ test("two devices that each found a photograph both keep both", async () => {
 // the file alone would hand the merge nothing to decide.
 test("a photograph one device dropped stays dropped while the other adds its own", async () => {
   const { a, b, base } = await twoDevices({ "drawing:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO });
-  await markDishPhotoBroken("mapo tofu", a);
+  await markDishPhotoBroken("mapo tofu", true, a);
   await savePhotoEntries({ "ingredient:kale": { none: true, checkedAt: 5 } }, b);
   const all = ["drawing:shakshuka", "ingredient:kale"];
   expect(synced(base, a, b)).toEqual([all, all]);
@@ -226,6 +231,25 @@ test("a photograph one device dropped stays dropped while the other adds its own
 
 test("a photograph one device dropped stays dropped when the other did nothing", async () => {
   const { a, b, base } = await twoDevices({ "drawing:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO });
-  await markDishPhotoBroken("mapo tofu", a);
+  await markDishPhotoBroken("mapo tofu", true, a);
   expect(synced(base, a, b)).toEqual([["drawing:shakshuka"], ["drawing:shakshuka"]]);
+});
+
+test("a drawn picture wins over a searched one once its file is read, and each says where it came from", async () => {
+  const disk = memoryDrawings();
+  const path = await saveDrawingFile(new Uint8Array([0xff, 0xd8, 0xff, 1]), "image/jpeg", disk.io);
+  const cache = {
+    "drawing:mapo tofu": { drawing: path, drawnAt: 2000 },
+    "dish:mapo tofu": PHOTO,
+    "dish:shakshuka": PHOTO,
+  };
+  // The entry is here, the file not read yet: the searched photograph shows.
+  expect(dishPicture(meal(), cache)).toEqual({ url: PHOTO.url, pageUrl: PHOTO.pageUrl });
+  expect(dishPictureCaption(meal(), cache)).toEqual({ text: "Photo: example.com", url: PHOTO.pageUrl });
+
+  const shown = await withDrawingSources(cache, ["drawing:mapo tofu"], disk.io);
+  expect(dishPicture(meal(), shown)).toMatchObject({ drawn: true, pageUrl: null });
+  expect(dishPictureCaption(meal(), shown)).toEqual({ text: "AI-generated image", url: null });
+  expect(dishPicture(meal("shakshuka"), shown)?.url).toBe(PHOTO.url);
+  expect(dishPictureCaption(meal("lentil soup"), shown)).toBeNull();
 });

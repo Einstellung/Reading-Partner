@@ -161,6 +161,7 @@ export default {
   "category.other": "Other",
   today: "Today",
   tomorrow: "Tomorrow",
+  photoCredit: "Photo: {site}",
   pictureDrawn: "AI-generated image",
   shoppingNoteFreeze: "{keeps} · freeze on arrival",
   "targetsLine.cut":

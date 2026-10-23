@@ -35,6 +35,7 @@ interface Harness {
 function harness(
   over: {
     canSearch?: boolean;
+    canDraw?: boolean;
     state?: MealsState;
     photos?: Record<string, DishPhotoEntry>;
     run?: PhotoSweepPorts["run"];
@@ -48,6 +49,7 @@ function harness(
   };
   h.ports = {
     canSearch: () => over.canSearch ?? true,
+    canDraw: async () => over.canDraw ?? false,
     state: async () => over.state ?? state(),
     photos: async () => over.photos ?? {},
     run:
@@ -68,10 +70,21 @@ function harness(
   return h;
 }
 
-// Every photograph the fixture week wants when nothing has been found yet: the
-// two foods the bank below has no cut-out of. Its dishes are drawn, not
-// searched (dish-draw-sweep.ts).
-const WHOLE_WEEK = ["ingredient:salmon", "ingredient:bok choy"];
+// Every photograph the fixture week wants when nothing has been found yet on a
+// machine whose provider cannot draw: its seven made meals by searchName, then
+// the two foods the bank below has no cut-out of. The bank covers the rest so
+// the week stays under the run's cap.
+const INGREDIENTS = ["ingredient:salmon", "ingredient:bok choy"];
+const WHOLE_WEEK = [
+  "dish:greek yogurt bowl",
+  "dish:shrimp rice bowl",
+  "dish:teriyaki salmon bowl",
+  "dish:yogurt banana",
+  "dish:egg toast",
+  "dish:tuna pita",
+  "dish:chicken sweet potato salad",
+  ...INGREDIENTS,
+];
 
 const UNBANKED = new Set(["salmon", "bok choy"]);
 
@@ -121,7 +134,7 @@ test("no week and a week with every picture already found ask for nothing", asyn
 
 // Twenty page loads in a real browser is a couple of minutes, and both a pull
 // and an Apply can land inside it.
-test("one run at a time, and the lane opens again when it is over", async () => {
+test("one run at a time, and the pass asked for meanwhile runs when it is over", async () => {
   const h = harness();
   expect((await h.searcher.sweep()).runId).toBe("run-1");
   expect(h.searcher.searching()).toBe(true);
@@ -131,11 +144,10 @@ test("one run at a time, and the lane opens again when it is over", async () => 
   expect(h.asked.length).toBe(1);
 
   h.finish();
-  await Promise.resolve();
-  await Promise.resolve();
-  expect(h.searcher.searching()).toBe(false);
-  expect((await h.searcher.sweep()).runId).toBe("run-2");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  // The pass that found the lane busy has run now, once.
   expect(h.asked.length).toBe(2);
+  expect(h.searcher.searching()).toBe(true);
 });
 
 // Two callers in the same tick: the guard is taken before the first await, so
@@ -213,4 +225,25 @@ test("a pull of the week or the cache starts a pass, and stops when the route go
   off();
   dispatchPull(["info-meals.json"]);
   expect(sweeps).toBe(3);
+});
+
+test("a machine whose provider draws searches only the ingredients", async () => {
+  const h = harness({ canDraw: true });
+  expect(await h.searcher.sweep()).toMatchObject({ queries: INGREDIENTS.length });
+  expect(h.asked).toEqual([INGREDIENTS]);
+});
+
+test("a dish with a current drawing or another device's claim is not searched", async () => {
+  const h = harness({
+    photos: {
+      "drawing:greek yogurt bowl": { drawing: "meals-pictures/a.jpg", drawnAt: NOW - 1000 },
+      "drawing:shrimp rice bowl": { drawingSince: NOW - 1000 },
+      // A claim that lapsed long ago is nobody's: the dish is searched.
+      "drawing:egg toast": { drawingSince: NOW - 24 * 60 * 60 * 1000 },
+    },
+  });
+  await h.searcher.sweep();
+  expect(h.asked[0]).not.toContain("dish:greek yogurt bowl");
+  expect(h.asked[0]).not.toContain("dish:shrimp rice bowl");
+  expect(h.asked[0]).toContain("dish:egg toast");
 });

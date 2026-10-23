@@ -10,14 +10,23 @@
 // Cost: one picture per dish key, ever, until the reader says the pictures are
 // wrong; at most MAX_DRAWINGS_PER_ROUND a round; a claim written into the synced
 // cache before the paid call, so the phone and the PC do not both draw the same
-// dish. A failed call is not written down as "no picture": the round stops and
-// this device waits before the next one, longer each time it fails again.
+// dish. A failed call is not written down as "no picture": the round stops,
+// takes back its claims on the dishes it did not draw, and this device waits
+// before the next one, longer each time it fails again. Meanwhile the search
+// treats this device as one that cannot draw (mealsCanDraw), so a provider that
+// refuses pictures leaves the dishes to the image search as before.
 
 import { generateImage, imageGenerationReady, type GeneratedImage } from "../../../ai/image-generation";
 import { registerPullRoute, type PullMatcher } from "../../../platform/sync/pull-routes";
 import type { PhotoCache } from "./dish-photos";
 import { claimEntry, DRAWINGS_DIR, dishesToDraw } from "./dish-drawing";
-import { loadMealsPhotos, MEALS_PHOTOS_FILE, saveDrawingFile, savePhotoEntries } from "./photo-store";
+import {
+  loadMealsPhotos,
+  MEALS_PHOTOS_FILE,
+  releaseDrawingClaims,
+  saveDrawingFile,
+  savePhotoEntries,
+} from "./photo-store";
 import { loadMeals, MEALS_FILE } from "../plan/store";
 import type { DishPhotoEntry, MealsState } from "../plan/types";
 
@@ -37,9 +46,13 @@ export interface DishDrawPorts {
   /** Keep a picture's bytes, answering the path. */
   saveFile(bytes: Uint8Array, mediaType: string): Promise<string>;
   save(entries: Record<string, DishPhotoEntry>): Promise<unknown>;
+  /** Take back the claims written at `since` on these keys. */
+  release(keys: readonly string[], since: number): Promise<unknown>;
   now(): number;
   /** A picture landed: the screen re-reads the cache. */
   landed?(): void;
+  /** A call failed: the search may take the dishes over. */
+  failed?(): void;
 }
 
 export type DishDrawSkip = "unavailable" | "busy" | "backing-off" | "no-week" | "nothing-wanted" | "failed";
@@ -58,6 +71,8 @@ export interface DishDrawer {
   sweep(): Promise<DishDrawResult>;
   /** Whether a round is going. */
   drawing(): boolean;
+  /** Whether the last call this device made failed and none has worked since. */
+  failing(): boolean;
 }
 
 export function backoffAfter(failures: number): number {
@@ -81,14 +96,16 @@ export function createDishDrawer(ports: DishDrawPorts): DishDrawer {
     const since = ports.now();
     await ports.save(Object.fromEntries(wanted.map((d) => [d.key, claimEntry(cache[d.key], since)])));
     let drawn = 0;
-    for (const dish of wanted) {
+    for (const [i, dish] of wanted.entries()) {
       const image = await ports.draw(dish.prompt);
       if (!image.ok) {
         // A provider that refused one dish refuses the next: the rest wait,
-        // their claims lapsing, and nothing says the dishes have no picture.
+        // their claims taken back, and nothing says the dishes have no picture.
+        await ports.release(wanted.slice(i).map((d) => d.key), since).catch(() => {});
         if (image.unavailable) return { drawn, wanted: wanted.length, why: "unavailable" };
         failures += 1;
         pausedUntil = ports.now() + backoffAfter(failures);
+        ports.failed?.();
         return { drawn, wanted: wanted.length, why: "failed" };
       }
       failures = 0;
@@ -114,18 +131,27 @@ export function createDishDrawer(ports: DishDrawPorts): DishDrawer {
     }
   }
 
-  return { sweep, drawing: () => busy };
+  return { sweep, drawing: () => busy, failing: () => failures > 0 };
 }
 
 // --- the live one -------------------------------------------------------------
 
 const listeners = new Set<() => void>();
+const failureListeners = new Set<() => void>();
 
 /** Be told when a picture drawn on this device lands. Returns the undo. */
 export function onDishDrawn(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+  };
+}
+
+/** Be told when a drawing on this device fails. Returns the undo. */
+export function onDishDrawFailed(listener: () => void): () => void {
+  failureListeners.add(listener);
+  return () => {
+    failureListeners.delete(listener);
   };
 }
 
@@ -140,12 +166,26 @@ export function mealsDishDrawer(): DishDrawer {
     draw: (prompt) => generateImage(prompt, { caller: "info" }),
     saveFile: (bytes, mediaType) => saveDrawingFile(bytes, mediaType),
     save: (entries) => savePhotoEntries(entries),
+    release: (keys, since) => releaseDrawingClaims(keys, since),
     now: () => Date.now(),
     landed: () => {
       for (const listener of listeners) listener();
     },
+    failed: () => {
+      for (const listener of failureListeners) listener();
+    },
   });
   return live;
+}
+
+/**
+ * Whether the week's dishes are this device's to draw rather than to search:
+ * its provider draws, and its last call did not fail. What the search and the
+ * reader's "the pictures are wrong" ask; the drawer itself asks only whether
+ * the provider draws, so that it tries again after its wait.
+ */
+export async function mealsCanDraw(): Promise<boolean> {
+  return !mealsDishDrawer().failing() && (await imageGenerationReady());
 }
 
 /**

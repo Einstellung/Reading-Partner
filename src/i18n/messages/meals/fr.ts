@@ -145,6 +145,7 @@ export default {
   "category.other": "Autres",
   today: "Aujourd'hui",
   tomorrow: "Demain",
+  photoCredit: "Photo : {site}",
   pictureDrawn: "Image générée par IA",
   shoppingNoteFreeze: "{keeps} · à congeler dès le retour",
   "targetsLine.cut":

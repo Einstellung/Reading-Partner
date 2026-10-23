@@ -160,6 +160,10 @@ export async function applyPlan(card: MealsPlanCardData, ports: MealsPorts): Pro
   return { ok: true, note: planNote(card, shopping), shown: appliedCard(card, shopping), pending };
 }
 
+async function canDrawHere(ports: MealsPorts): Promise<boolean> {
+  return !!ports.drawDishes && (await ports.canDraw?.().catch(() => false)) === true;
+}
+
 /**
  * Ask for the photographs a week has none of, on the machine that can search.
  * Never throws: every failure is a week drawn from its ingredients.
@@ -175,6 +179,7 @@ export async function startPhotoSearch(
   const queries = photoQueriesForPlan(plan, cache, ports.now(), {
     bankImage: ports.bankImage ?? (() => null),
     askedAt,
+    searchDishes: !(await canDrawHere(ports)),
   });
   if (!queries.length) return null;
   return start(plan.id, queries);
@@ -182,23 +187,25 @@ export async function startPhotoSearch(
 
 /** What the reader asking for better pictures came to. */
 export interface PhotoRefresh {
-  // How many ingredient names the week will be searched for.
+  // How many names the week will be searched for: its ingredients, and its
+  // dishes too when this device cannot draw them.
   queries: number;
   // Whether the search started here.
   searching: boolean;
-  // How many dishes will be drawn again (the first round's worth).
+  // How many dishes this device will draw again (the first round's worth).
+  // Zero on a device whose provider cannot draw.
   dishes: number;
-  // Whether this device is drawing them.
+  // Whether it is drawing them.
   drawing: boolean;
 }
 
 const NO_REFRESH: PhotoRefresh = { queries: 0, searching: false, dishes: 0, drawing: false };
 
 /**
- * Picture the whole week again: search its ingredients and draw its dishes. The
- * ask is a timestamp on the week (photosAskedAt), not a run, because the
- * machine that can search is usually not the one being held, and every device
- * that draws reads the same timestamp.
+ * Picture the whole week again: draw its dishes where the provider can, search
+ * the rest. The ask is a timestamp on the week (photosAskedAt), not a run,
+ * because the machine that can search is usually not the one being held, and
+ * every device that draws or searches reads the same timestamp.
  */
 export async function refreshPhotos(ports: MealsPorts): Promise<PhotoRefresh> {
   const state = await ports.current();
@@ -211,12 +218,14 @@ export async function refreshPhotos(ports: MealsPorts): Promise<PhotoRefresh> {
     return NO_REFRESH;
   }
   const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
-  const dishes = dishesToDraw(state.plan, cache, at, { askedAt: at }).length;
-  const drawing = dishes > 0 && !!ports.drawDishes && (await ports.canDraw?.().catch(() => false)) === true;
+  const draws = await canDrawHere(ports);
+  const dishes = draws ? dishesToDraw(state.plan, cache, at, { askedAt: at }).length : 0;
+  const drawing = dishes > 0;
   if (drawing) void ports.drawDishes?.().catch(() => {});
   const queries = photoQueriesForPlan(state.plan, cache, at, {
     bankImage: ports.bankImage ?? (() => null),
     askedAt: at,
+    searchDishes: !draws,
   });
   if (!queries.length) return { queries: 0, searching: false, dishes, drawing };
   const start = ports.startPhotoRun;
