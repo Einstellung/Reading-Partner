@@ -6,8 +6,17 @@
 // made behind its back.
 
 import { callModel, resolveModel } from "../../../ai/model-call";
+import type { Locale } from "../../../i18n/locale";
+import { loadSettings } from "../../../platform/app/settings";
 import { newTally, reportParse } from "../../../platform/app/structured-output";
-import { parseRecipe, recipeSystemPrompt, recipeUserText, type RecipeEntry, type RecipeRequest } from "./recipe";
+import {
+  parseRecipe,
+  recipeLanguage,
+  recipeSystemPrompt,
+  recipeUserText,
+  type RecipeEntry,
+  type RecipeRequest,
+} from "./recipe";
 import { loadRecipe, saveRecipe } from "./recipe-store";
 
 // One call per key at a time. Leaving the page does not cancel it — the recipe
@@ -30,6 +39,11 @@ async function writeRecipe(request: RecipeRequest): Promise<RecipeEntry> {
   if (!parsed.ok) throw new Error(parsed.error);
   const entry: RecipeEntry = { at: Date.now(), name: request.name, ...parsed.value };
   return saveRecipe(request.key, entry);
+}
+
+/** The language a recipe asked for now is written in, read from the answer-language setting. */
+export async function recipeLanguageNow(): Promise<Locale> {
+  return recipeLanguage((await loadSettings()).aiLanguage);
 }
 
 /** The stored recipe for a request, or null when none has been written. */

@@ -5,10 +5,10 @@
 // Rendering and event binding only. The request, the parse and the packing
 // step are in info/meals/recipe; the call and the stored copy in use-recipe.
 
-import { useLocale, useT } from "../../../../i18n";
+import { useT } from "../../../../i18n";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import type { MealKey, MealsState } from "../../../../info/meals/plan/types";
-import { packStep, recipeRequest, type RecipeEntry } from "../../../../info/meals/recipe/recipe";
+import { hasRecipe, packStep, recipeRequest, type RecipeEntry } from "../../../../info/meals/recipe/recipe";
 import { hostRegion } from "../../../../info/meals/region";
 import { dayViewOn, ingredientPicture, weekdayName, type MealView } from "../../../../info/meals/screen/view";
 import { IconSparkle } from "../../base/icons";
@@ -16,7 +16,7 @@ import { Button } from "../../ui/button";
 import { cn } from "../../lib/utils";
 import { CardLabel, MealsColumn, MealsHeader } from "./MealsChrome";
 import { IngredientThumb } from "./MealsImages";
-import { useRecipe } from "./use-recipe";
+import { useRecipe, useRecipeLanguage } from "./use-recipe";
 
 export interface MealsRecipeProps {
   state: MealsState | null;
@@ -153,17 +153,17 @@ function RecipeBody({ view, request }: { view: MealView; request: ReturnType<typ
 }
 
 export function MealsRecipe(props: MealsRecipeProps) {
-  const locale = useLocale();
+  const language = useRecipeLanguage();
   const { state, photos, today, date, meal } = props;
   const day = state ? dayViewOn(state, date, today, hostRegion()) : null;
   const view = day?.meals.find((m) => m.key === meal) ?? null;
   const profile = state?.charter?.profile ?? null;
-  const request = view && profile ? recipeRequest(view, profile, locale) : null;
+  const request = view && profile && language ? recipeRequest(view, profile, language) : null;
 
   return (
     <MealsColumn>
       <MealsHeader title={view?.label ?? ""} weekday={weekdayName(date)} onBack={props.onBack} />
-      {view && request ? (
+      {view && profile && hasRecipe(view) ? (
         <div className="flex flex-col gap-4">
           <RecipeHead view={view} photos={photos} />
           <div className="flex flex-col gap-4">

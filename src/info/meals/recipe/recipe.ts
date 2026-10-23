@@ -7,6 +7,7 @@
 // plan (docs/73 一锅, 事实不经模型).
 
 import { t } from "../../../i18n";
+import { localeForSetting, type Locale } from "../../../i18n/locale";
 import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings";
 import { readObject } from "../../../platform/std/json";
 import type { ParseTally } from "../../../platform/app/structured-output";
@@ -52,8 +53,22 @@ export interface RecipeRequest {
   rows: ReadonlyArray<Pick<IngredientRow, "foodId" | "name" | "grams" | "units">>;
   kitchen: readonly string[];
   effort: Effort;
-  language: AiLanguage;
+  language: Locale;
   pot: RecipePot | null;
+}
+
+/**
+ * The language a recipe is written in: the answer-language setting, "auto"
+ * taken as the system language the UI is drawn in. Always a named language,
+ * so the prompt never leaves the model to pick one (pitfall 647). `system` is
+ * the device's language list, injected in tests.
+ */
+export function recipeLanguage(aiLanguage: AiLanguage, system?: readonly string[]): Locale {
+  return localeForSetting(aiLanguage, system);
+}
+
+function languageName(language: Locale): string {
+  return aiLanguageName(language) ?? "English";
 }
 
 /**
@@ -92,9 +107,14 @@ export function recipePot(portion: PotPortion | null): RecipePot | null {
   };
 }
 
+/** Whether the page has steps to write for a meal: one that is made, with ingredients. */
+export function hasRecipe(view: Pick<MealView, "mode" | "rows">): boolean {
+  return view.mode === "make" && view.rows.length > 0;
+}
+
 /** The request for one made meal, or null for a meal the page has nothing to write for. */
-export function recipeRequest(view: MealView, profile: Profile, language: AiLanguage): RecipeRequest | null {
-  if (view.mode !== "make" || view.rows.length === 0) return null;
+export function recipeRequest(view: MealView, profile: Profile, language: Locale): RecipeRequest | null {
+  if (!hasRecipe(view)) return null;
   const rows = view.rows.map((r) => ({ foodId: r.foodId, name: r.name, grams: r.grams, units: r.units }));
   const pot = recipePot(view.pot);
   return {
@@ -119,8 +139,10 @@ const EFFORT_LINE: Record<Effort, string> = {
 
 /** The system prompt. */
 export function recipeSystemPrompt(request: Pick<RecipeRequest, "effort" | "language">): string {
-  const language = aiLanguageName(request.language) ?? "the language the dish is named in";
+  const language = languageName(request.language);
   return [
+    `Write the steps in ${language}.`,
+    "",
     "You write the cooking steps for one meal of a meal plan. The reader follows them in their own kitchen, one step at a time, so every step has to be doable exactly as written with the equipment they have.",
     "",
     "Steps:",
@@ -132,7 +154,7 @@ export function recipeSystemPrompt(request: Pick<RecipeRequest, "effort" | "lang
     `- ${EFFORT_LINE[request.effort]}`,
     "- Some meals cook a pot of meat that several meals eat from, or eat one box of such a pot. The message says which and what to write. The app adds the step that packs the pot into boxes and says where each box is kept: never write packing, storage times or which day a box is for.",
     "",
-    `Write every sentence in ${language}.`,
+    `Write every sentence in ${language}. The dish name, the method line, the ingredient names, the pot and the kitchen notes may be in another language, often Chinese: that is how the plan stores them, not the language to answer in. Translate what you use and still write every step in ${language}.`,
     "",
     "Reply with one JSON object and nothing else:",
     '{"steps": ["…", "…"]}',
@@ -161,6 +183,8 @@ function potLines(pot: RecipePot): string[] {
 /** The user message: the meal, numbered, then the pot it cooks or eats from. */
 export function recipeUserText(request: RecipeRequest): string {
   const lines = [
+    `Write the steps in ${languageName(request.language)}, whatever language the lines below are in.`,
+    "",
     `Dish: ${request.name}`,
     ...(request.flavour ? [`Flavour: ${request.flavour}`] : []),
     ...(request.minutes !== null ? [`Hands-on minutes: ${request.minutes}`] : []),

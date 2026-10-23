@@ -4,8 +4,32 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useLocale, type Locale } from "../../../../i18n";
 import type { RecipeEntry, RecipeRequest } from "../../../../info/meals/recipe/recipe";
-import { storedRecipe, writeRecipeOnce } from "../../../../info/meals/recipe/recipe-live";
+import { recipeLanguageNow, storedRecipe, writeRecipeOnce } from "../../../../info/meals/recipe/recipe-live";
+
+/**
+ * The language the recipe is asked in, read from the answer-language setting
+ * rather than taken from the UI locale, which is the default until the shell
+ * has read the setting. Null until read. Read again whenever the UI locale
+ * moves, since that is when the setting changed; a failed read falls back to
+ * the UI locale.
+ */
+export function useRecipeLanguage(): Locale | null {
+  const ui = useLocale();
+  const [language, setLanguage] = useState<Locale | null>(null);
+  useEffect(() => {
+    let live = true;
+    recipeLanguageNow().then(
+      (l) => live && setLanguage(l),
+      () => live && setLanguage(ui),
+    );
+    return () => {
+      live = false;
+    };
+  }, [ui]);
+  return language;
+}
 
 export type RecipeStatus =
   | { kind: "reading" }

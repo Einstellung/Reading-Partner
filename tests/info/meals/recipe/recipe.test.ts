@@ -10,6 +10,7 @@ import {
   packStep,
   parseRecipe,
   recipeKey,
+  recipeLanguage,
   recipePot,
   recipeRequest,
   recipeSystemPrompt,
@@ -89,6 +90,36 @@ test("the prompt names the language and forbids grams in the steps and the packi
   expect(prompt).toContain("Do not repeat the grams");
   expect(prompt).toContain("never write packing");
   expect(prompt).not.toContain("batch");
+});
+
+test("the recipe language is the answer-language setting, and auto is the system language by name", () => {
+  expect(recipeLanguage("en", ["zh-CN"])).toBe("en");
+  expect(recipeLanguage("ja", ["en-US"])).toBe("ja");
+  expect(recipeLanguage("auto", ["zh-TW", "en-US"])).toBe("zh-CN");
+  expect(recipeLanguage("auto", ["fr-FR"])).toBe("fr");
+  expect(recipeLanguage("auto", [])).toBe("en");
+});
+
+test("an English recipe over a Chinese plan says English first in both messages and asks to translate", () => {
+  const view = madeMeal();
+  const p = profile({ kitchen: ["小锅（带蒸架，一次蒸一个馒头）"] });
+  const req = recipeRequest(view, p, "en")!;
+  const system = recipeSystemPrompt(req);
+  expect(system.split("\n")[0]).toBe("Write the steps in English.");
+  expect(system).toContain("may be in another language, often Chinese");
+  expect(system).toContain("still write every step in English");
+  expect(system).not.toContain("the language the dish is named in");
+  const user = recipeUserText(req);
+  expect(user.split("\n")[0]).toBe("Write the steps in English, whatever language the lines below are in.");
+  expect(user).toContain(`Dish: ${view.name}`);
+  expect(recipeUserText(recipeRequest(view, p, "zh-CN")!).split("\n")[0]).toContain("简体中文");
+});
+
+test("switching the language asks for a new recipe", () => {
+  const view = madeMeal();
+  const p = profile();
+  expect(recipeRequest(view, p, "en")!.key).not.toBe(recipeRequest(view, p, "zh-CN")!.key);
+  expect(recipeRequest(view, p, "en")!.key).toBe(recipeRequest(view, p, "en")!.key);
 });
 
 test("steps lose a leading number; a batch the model still sends is ignored", () => {
