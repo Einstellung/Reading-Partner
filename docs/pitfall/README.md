@@ -376,6 +376,7 @@
 - [366-a-shortened-scroller-keeps-the-old-offset](./webview/366-a-shortened-scroller-keeps-the-old-offset.md) — 内容变矮之后 WKWebView 不夹回过期的 `scrollTop`，也不发 scroll 事件：它照旧报旧偏移并把这段量算进 `scrollHeight`，直到有人往这条轴上写一次。EPUB 从纵向栏切 paged flip 时 `placePage` 只写 `scrollLeft`，一行卡片的页带被顶到视口上方 2068px，整片全白而页码照走。改内容尺寸之后，该布局拥有的那条轴无条件写一遍，答案是 0 也写
 - [444-range-client-rects-count-an-element-and-its-text-twice](./webview/444-range-client-rects-count-an-element-and-its-text-twice.md) — `Range.getClientRects()` 对完整包住的元素（引文里的 `<em>`）既给元素盒又给文字盒，半透明的引文底和高亮在那个词上叠两层（实测取色 (174,163,194) 对 (205,196,205)）；`drawQuote` / `drawStroke` 先过 `lineBands`，同一行上重叠或相接的并成一条
 - [644-a-quote-landing-leaves-the-page-count-on-the-top-edge-page](./webview/644-a-quote-landing-leaves-the-page-count-on-the-top-edge-page.md) — 手机滚动视图点页码引文跳转后底部计数不变：当前页读顶边下的位置，引文落点在顶边下方一截，顶边上还是前一页。`highlightQuote` 落定后像 `settle` 那样设 `pinned`（引文起点 CFI + 引文所在页）
+- [670-a-table-row-splits-across-columns-whatever-break-inside-says](./webview/670-a-table-row-splits-across-columns-whatever-break-inside-says.md) — EPUB 长表格翻页时最后一行被切成两半（行首编号格掉到下一页），`tr/td/th` 上写 `break-inside` 三种写法在 WebKit 列碎片化里都无效；只能分页时自己把整行推到下一列，未做
 
 ## 浮层与 shadcn 原语
 
