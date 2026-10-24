@@ -17,6 +17,7 @@ import { bytesToBase64 } from "../../../platform/std/base64";
 import { isObject } from "../../../platform/std/json";
 import { dishDrawingKey, dishPhotoKey, withoutPhoto, type PhotoCache } from "./dish-photos";
 import { DRAWINGS_DIR, drawingPath, withClaimsReleased } from "./dish-drawing";
+import { shrinkDrawnPicture, webviewPictureResizer, type PictureResizer } from "./picture-shrink";
 import { isDishDrawing, MEALS_VERSION, type DishPhotoEntry } from "../plan/types";
 
 /** The byte half of the store: where a drawn picture's file is put and read back. */
@@ -29,19 +30,22 @@ export interface DrawingIo {
 export const drawingIo: DrawingIo = appData;
 
 /**
- * Keep a drawn picture, answering its path. Named for the hash of its bytes, so
- * the file is written once and never revised, and two devices never write the
- * same path with different bytes: it travels on the data channel like an
- * article body (palace kinds.ts `meals-picture`).
+ * Keep a drawn picture, answering its path. Shrunk first (picture-shrink.ts),
+ * then named for the hash of the bytes kept, with their extension, so the file
+ * is written once and never revised, and two devices never write the same path
+ * with different bytes: it travels on the data channel like an article body
+ * (palace kinds.ts `meals-picture`).
  */
 export async function saveDrawingFile(
   bytes: Uint8Array,
   mediaType: string,
   io: DrawingIo = drawingIo,
+  resizer: PictureResizer = webviewPictureResizer,
 ): Promise<string> {
-  const path = drawingPath(await contentHash(bytes), mediaType);
+  const kept = await shrinkDrawnPicture(bytes, mediaType, resizer);
+  const path = drawingPath(await contentHash(kept.bytes), kept.mediaType);
   await io.mkdirp(DRAWINGS_DIR);
-  await io.writeBytes(path, bytes);
+  await io.writeBytes(path, kept.bytes);
   return path;
 }
 
