@@ -139,6 +139,58 @@ describe("seed dishes", () => {
     }
   });
 
+  test("fish and seafood mains are always fresh, never batch", () => {
+    const fish = mains.filter((d) => d.ingredients.some((i) => i.role === "protein" && foodById(i.food)?.proteinCategory === "seafood"));
+    expect(fish.length).toBeGreaterThanOrEqual(15);
+    expect(fish.filter((d) => d.prep === "batch").map((d) => d.id)).toEqual([]);
+    for (const d of fish) expect(d.staples.length, d.id).toBeGreaterThan(0);
+  });
+
+  test("fish dishes use fish that is easy to buy and mild: no scallop, clam, hairtail or squid", () => {
+    const banned = new Set(["scallop", "clam", "hairtail", "squid"]);
+    for (const d of SEED_DISHES) {
+      for (const i of [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)]) expect(banned.has(i.food), `${d.id}: ${i.food}`).toBe(false);
+    }
+  });
+
+  test("fish and shrimp dishes vary their vegetables: no two share a main pair, tomato with zucchini at most once", () => {
+    const fish = mains.filter((d) => d.ingredients.some((i) => i.role === "protein" && foodById(i.food)?.proteinCategory === "seafood"));
+    const tomato = new Set(["tomato", "cherry_tomato", "crushed_tomatoes"]);
+    const pair = (d: Dish) =>
+      d.ingredients
+        .filter((i) => i.role === "veg")
+        .sort((a, b) => b.grams - a.grams)
+        .slice(0, 2)
+        .map((i) => (tomato.has(i.food) ? "tomato" : i.food))
+        .sort()
+        .join("+");
+    const seen = new Map<string, string>();
+    for (const d of fish) {
+      const p = pair(d);
+      expect(seen.get(p), `${d.id} repeats the vegetables ${p} of ${seen.get(p)}`).toBeUndefined();
+      seen.set(p, d.id);
+    }
+    const both = fish.filter((d) => {
+      const veg = d.ingredients.filter((i) => i.role === "veg").map((i) => i.food);
+      return veg.some((f) => tomato.has(f)) && veg.includes("zucchini");
+    });
+    expect(both.length).toBeLessThanOrEqual(1);
+  });
+
+  test("canned mackerel and sardine dishes (no cooking) in two cuisines, and a basa dish", () => {
+    const using = (food: string) => mains.filter((d) => d.ingredients.some((i) => i.food === food));
+    const mackerel = using("canned_mackerel_tomato");
+    const sardine = using("canned_sardine");
+    expect(mackerel.length).toBeGreaterThanOrEqual(1);
+    expect(sardine.length).toBeGreaterThanOrEqual(1);
+    for (const d of [...mackerel, ...sardine]) {
+      expect(d.prep, d.id).toBe("fresh");
+      expect(d.method, d.id).toBe("assemble");
+    }
+    expect(new Set([...mackerel, ...sardine].map((d) => d.cuisine)).size).toBeGreaterThanOrEqual(2);
+    expect(using("basa_fillet").length).toBeGreaterThanOrEqual(1);
+  });
+
   test("a solid set of beef dishes, spread over the cuisines", () => {
     const beef = mains.filter((d) => d.ingredients.some((i) => foodById(i.food)?.tags.includes("beef")));
     expect(beef.length).toBeGreaterThanOrEqual(18);

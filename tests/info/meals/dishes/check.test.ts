@@ -419,6 +419,34 @@ describe("batch methods", () => {
   });
 });
 
+describe("fish is always fresh", () => {
+  const withProtein = (food: string, grams: number): DishIngredient[] => [
+    { food, grams, role: "protein" },
+    { food: "tomato", grams: 130, role: "veg" },
+    { food: "olive_oil", grams: 5, role: "oil" },
+  ];
+
+  test("a batch main with a fish or seafood protein line is rejected", () => {
+    for (const [food, grams] of [["cod", 140], ["salmon", 120], ["white_shrimp", 115], ["canned_tuna_water", 125], ["frozen_tilapia_fillet", 140]] as const) {
+      const f = only(batchMain({ ingredients: withProtein(food, grams) }), "fresh_fish");
+      expect(f.food, food).toBe(food);
+    }
+  });
+
+  test("the same fish is fine as a fresh main", () => {
+    for (const [food, grams] of [["cod", 140], ["white_shrimp", 115]] as const) {
+      const r = checkDish(dish({ ingredients: withProtein(food, grams) }));
+      expect(r.ok ? [] : r.failures.map((x) => x.rule), food).toEqual([]);
+    }
+  });
+
+  test("a batch main with chicken is unaffected, and a seafood seasoning is not a protein line", () => {
+    expect(failures(batchMain()).filter((x) => x.rule === "fresh_fish")).toEqual([]);
+    const fishSauce = batchMain({ ingredients: [...BASE, { food: "fish_sauce", grams: 2, role: "seasoning" }] });
+    expect(failures(fishSauce).filter((x) => x.rule === "fresh_fish")).toEqual([]);
+  });
+});
+
 describe("ways to eat a batch main", () => {
   test("each way is checked as the reference serving plus its add-ons", () => {
     // Over rice: the base, 176.8 kcal. In a tortilla: + tomato 50 (8.5 kcal,

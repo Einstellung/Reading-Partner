@@ -375,22 +375,14 @@ const MEDITERRANEAN: Dish[] = [
     ],
   }),
   dish({
-    id: "lemon_dill_steamed_salmon", zh: "柠檬莳萝蒸三文鱼", en: "Lemon-dill steamed salmon", sum: "三文鱼和小番茄、西葫芦淋柠檬汁、撒莳萝，上锅蒸 10 分钟", sumEn: "Salmon with cherry tomato and zucchini, lemon and dill, steamed 10 minutes.", c: "mediterranean", m: "steam", eq: ["steamer"], t: [10, 20],
-    i: [pr("salmon", 120), ve("cherry_tomato", 70), ve("zucchini", 60), se("lemon", 10), tp("dill", 3), oi("olive_oil", 2), se("salt", 0.3)],
-    ways: [
-      way("蒸三文鱼配蒸小土豆和四季豆", "Salmon with steamed baby potatoes and green beans", BABY_POTATOES, [ve("frozen_green_beans", 90)]),
-      way("蒸三文鱼藜麦沙拉", "Salmon over a quinoa salad", QUINOA, [ve("cucumber", 60), ve("romaine", 40)]),
-      way("蒸三文鱼拌冷全麦意面", "Salmon with cold whole-wheat pasta", WW_PASTA, [ve("cucumber", 60), ve("spinach", 50)]),
-    ],
+    id: "lemon_dill_steamed_salmon", zh: "柠檬莳萝蒸三文鱼", en: "Lemon-dill steamed salmon", sum: "三文鱼和四季豆、黄彩椒淋柠檬汁、撒莳萝，上锅蒸 10 分钟", sumEn: "Salmon with green beans and yellow pepper, lemon and dill, steamed 10 minutes.", c: "mediterranean", m: "steam", eq: ["steamer"], t: [10, 20],
+    staples: [BABY_POTATOES, QUINOA, WW_PASTA],
+    i: [pr("salmon", 120), ve("green_beans", 90), ve("yellow_bell_pepper", 50), se("lemon", 10), tp("dill", 3), oi("olive_oil", 2), se("salt", 0.3)],
   }),
   dish({
     id: "tomato_braised_cod", zh: "番茄炖鳕鱼", en: "Tomato-braised cod", sum: "番茄、洋葱和西葫芦煮成酱，铺上鳕鱼加盖煮 10 分钟", sumEn: "Tomato, onion and zucchini cooked into a sauce, cod laid on top and cooked under a lid 10 minutes.", c: "mediterranean", m: "stew", eq: ["stove"], t: [10, 25],
+    staples: [PASTA, BROWN, "whole_wheat_pita"],
     i: [pr("cod", 140), ve("crushed_tomatoes", 100), ve("onion", 40), ve("zucchini", 50), se("dried_oregano", 1), oi("olive_oil", 4), se("salt", 0.3)],
-    ways: [
-      way("番茄炖鳕鱼拌意面配沙拉", "Cod over pasta with a green salad", PASTA, [ve("romaine", 60)]),
-      way("番茄炖鳕鱼盖糙米饭配西兰花", "Cod over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 90)]),
-      way("番茄炖鳕鱼夹口袋饼配黄瓜酸奶", "Cod in pita with cucumber and yogurt", "whole_wheat_pita", [ve("cucumber", 60), tp("greek_yogurt", 20)]),
-    ],
   }),
   dish({
     id: "lentil_tomato_stew", zh: "番茄扁豆炖菜", en: "Lentil and tomato stew with feta", sum: "扁豆、番茄、胡萝卜、芹菜加高汤和孜然煮 30 分钟，撒菲达奶酪", sumEn: "Lentils, tomato, carrot and celery simmered 30 minutes in stock with cumin, topped with feta.", c: "mediterranean", m: "stew", t: [12, 45],
@@ -439,19 +431,24 @@ const MEDITERRANEAN: Dish[] = [
     i: [pr("ready_chicken_breast", 105), ve("cucumber", 70), ve("tomato", 70), ve("red_onion", 20), tp("feta", 15), oi("olive_oil", 3), se("dried_oregano", 1), se("lemon", 8)],
   }),
   dish({
-    id: "tuna_chickpea_salad", zh: "金枪鱼鹰嘴豆沙拉", en: "Tuna and chickpea salad", sum: "水浸金枪鱼和鹰嘴豆拌黄瓜、小番茄，淋橄榄油和柠檬汁", sumEn: "Canned tuna and chickpeas tossed with cucumber and cherry tomato, dressed with oil and lemon.", c: "mediterranean", m: "assemble", eq: [], t: [8, 8],
+    id: "tuna_chickpea_salad", zh: "金枪鱼鹰嘴豆沙拉", en: "Tuna and chickpea salad", sum: "水浸金枪鱼和鹰嘴豆拌黄瓜、彩椒，淋橄榄油和柠檬汁", sumEn: "Canned tuna and chickpeas tossed with cucumber and red pepper, dressed with oil and lemon.", c: "mediterranean", m: "assemble", eq: [], t: [8, 8],
     staples: ["whole_wheat_pita", "whole_wheat_toast"],
-    i: [pr("canned_tuna_water", 110), st("canned_chickpeas", 60), ve("cucumber", 60), ve("cherry_tomato", 60), ve("red_onion", 20), oi("olive_oil", 3), se("lemon", 10), tp("parsley", 3)],
+    i: [pr("canned_tuna_water", 110), st("canned_chickpeas", 60), ve("cucumber", 60), ve("red_bell_pepper", 50), ve("red_onion", 20), oi("olive_oil", 3), se("lemon", 10), tp("parsley", 3)],
   }),
   dish({
-    id: "tomato_shrimp_feta_skillet", zh: "番茄菲达奶酪烩虾", en: "Tomato and feta shrimp skillet", sum: "番茄和西葫芦煮成酱，下虾煮熟，撒碎菲达奶酪", sumEn: "Tomato and zucchini cooked into a sauce, shrimp poached in it, crumbled feta on top.", c: "mediterranean", m: "stir_fry", t: [12, 18],
+    id: "sardine_chickpea_salad", zh: "沙丁鱼鹰嘴豆沙拉", en: "Sardine and chickpea salad", sum: "油浸沙丁鱼和鹰嘴豆铺在菠菜、胡萝卜丝上，淋橄榄油和柠檬汁，不用开火", sumEn: "Canned sardines and chickpeas over spinach and grated carrot, dressed with olive oil and lemon; no cooking.", c: "mediterranean", m: "assemble", eq: [], t: [8, 8],
+    staples: ["whole_wheat_pita", "whole_wheat_toast"],
+    i: [pr("canned_sardine", 100), st("canned_chickpeas", 60), ve("spinach", 80), ve("carrot", 40), ve("red_onion", 15), oi("olive_oil", 3), se("lemon", 10), tp("parsley", 3)],
+  }),
+  dish({
+    id: "tomato_shrimp_feta_skillet", zh: "番茄菲达奶酪烩虾", en: "Tomato and feta shrimp skillet", sum: "番茄煮成酱，下虾煮熟，拌入菠菜，撒碎菲达奶酪", sumEn: "Tomato cooked into a sauce, shrimp poached in it, spinach wilted in, crumbled feta on top.", c: "mediterranean", m: "stir_fry", t: [12, 18],
     staples: [PASTA, QUINOA, BROWN],
-    i: [pr("white_shrimp", 110), tp("feta", 10), ve("crushed_tomatoes", 100), ve("zucchini", 60), se("dried_oregano", 1), oi("olive_oil", 3)],
+    i: [pr("white_shrimp", 110), tp("feta", 10), ve("crushed_tomatoes", 100), ve("spinach", 80), se("dried_oregano", 1), oi("olive_oil", 3)],
   }),
   dish({
-    id: "lemon_seared_cod", zh: "柠檬香煎鳕鱼", en: "Lemon pan-seared cod with tomatoes", sum: "鳕鱼煎至两面金黄，小番茄和西葫芦同锅煎软，挤柠檬汁", sumEn: "Cod pan-seared golden on both sides, cherry tomato and zucchini softened in the same pan, finished with lemon.", c: "mediterranean", m: "pan_fry", t: [12, 15],
+    id: "lemon_seared_cod", zh: "柠檬香煎鳕鱼", en: "Lemon pan-seared cod with broccoli", sum: "鳕鱼煎至两面金黄，西兰花和荷兰豆同锅煎软，挤柠檬汁", sumEn: "Cod pan-seared golden on both sides, broccoli and snow peas softened in the same pan, finished with lemon.", c: "mediterranean", m: "pan_fry", t: [12, 15],
     staples: [BABY_POTATOES, QUINOA, WW_PASTA],
-    i: [pr("cod", 140), ve("cherry_tomato", 100), ve("zucchini", 60), oi("olive_oil", 4), se("lemon", 10), tp("parsley", 3), se("salt", 0.4)],
+    i: [pr("cod", 140), ve("broccoli", 100), ve("snow_peas", 50), oi("olive_oil", 4), se("lemon", 10), tp("parsley", 3), se("salt", 0.4)],
   }),
 ];
 
@@ -538,9 +535,9 @@ const ITALIAN: Dish[] = [
     ],
   }),
   dish({
-    id: "shrimp_tomato_basil_pasta", zh: "番茄罗勒炒虾仁", en: "Shrimp with cherry tomatoes and basil", sum: "虾仁和小番茄、西葫芦快炒到番茄出汁，起锅撒罗勒", sumEn: "Shrimp, cherry tomato and zucchini stir-fried until the tomato breaks down, finished with basil.", c: "italian", m: "stir_fry", t: [12, 18],
+    id: "shrimp_tomato_basil_pasta", zh: "番茄罗勒炒虾仁", en: "Shrimp with cherry tomatoes and basil", sum: "虾仁和小番茄、蘑菇快炒到番茄出汁，起锅撒罗勒", sumEn: "Shrimp, cherry tomato and mushroom stir-fried until the tomato breaks down, finished with basil.", c: "italian", m: "stir_fry", t: [12, 18],
     staples: [PASTA, WW_PASTA],
-    i: [pr("white_shrimp", 115), ve("cherry_tomato", 110), ve("zucchini", 60), tp("basil", 4), oi("olive_oil", 4), se("garlic_paste", 2), se("salt", 0.2)],
+    i: [pr("white_shrimp", 115), ve("cherry_tomato", 110), ve("button_mushroom", 60), tp("basil", 4), oi("olive_oil", 4), se("garlic_paste", 2), se("salt", 0.2)],
   }),
   dish({
     id: "lemon_mushroom_chicken", zh: "柠檬蘑菇煎鸡胸", en: "Lemon chicken with mushrooms and spinach", sum: "鸡胸肉煎熟，蘑菇和菠菜同锅炒软，加柠檬汁和少许高汤收汁", sumEn: "Chicken breast pan-fried, mushroom and spinach wilted in the pan, finished with lemon and a splash of stock.", c: "italian", m: "pan_fry", t: [12, 18],
@@ -553,9 +550,9 @@ const ITALIAN: Dish[] = [
     i: [pr("ready_chicken_breast", 100), tp("mozzarella", 25), ve("tomato", 130), tp("basil", 4), oi("olive_oil", 3), se("lemon", 5)],
   }),
   dish({
-    id: "tuna_tomato_spaghetti_sauce", zh: "金枪鱼番茄意面酱", en: "Tuna and tomato sauce", sum: "西葫芦和番茄碎煮成酱，拌入水浸金枪鱼，浇在意面上", sumEn: "Zucchini and crushed tomato cooked into a sauce, canned tuna stirred in, served over pasta.", c: "italian", m: "stir_fry", t: [10, 15],
+    id: "tuna_tomato_spaghetti_sauce", zh: "金枪鱼番茄意面酱", en: "Tuna and tomato sauce", sum: "茄子和番茄碎煮成酱，拌入水浸金枪鱼，浇在意面上", sumEn: "Eggplant and crushed tomato cooked into a sauce, canned tuna stirred in, served over pasta.", c: "italian", m: "stir_fry", t: [10, 15],
     staples: [PASTA, WW_PASTA],
-    i: [pr("canned_tuna_water", 100), ve("crushed_tomatoes", 100), ve("zucchini", 50), tp("basil", 3), oi("olive_oil", 3), se("dried_oregano", 0.5), se("garlic_paste", 2)],
+    i: [pr("canned_tuna_water", 100), ve("crushed_tomatoes", 100), ve("eggplant", 80), tp("basil", 3), oi("olive_oil", 3), se("dried_oregano", 0.5), se("garlic_paste", 2)],
   }),
   dish({
     id: "pork_pepper_medallions", zh: "彩椒煎猪里脊", en: "Pork medallions with peppers and zucchini", sum: "猪里脊切厚片煎熟，彩椒和西葫芦同锅煎软，挤柠檬汁", sumEn: "Thick pork tenderloin slices pan-fried, pepper and zucchini softened in the same pan, finished with lemon.", c: "italian", m: "pan_fry", t: [12, 18],
@@ -826,9 +823,14 @@ const JAPANESE: Dish[] = [
     ],
   }),
   dish({
-    id: "miso_salmon_bok_choy", zh: "味噌煎三文鱼配上海青", en: "Miso salmon with bok choy", sum: "三文鱼抹味噌和味醂腌 10 分钟后煎熟，上海青同锅炒软", sumEn: "Salmon marinated 10 minutes in miso and mirin, pan-fried, with bok choy wilted in the same pan.", c: "japanese", m: "pan_fry", t: [12, 18],
+    id: "miso_salmon_spinach", zh: "味噌煎三文鱼配菠菜金针菇", en: "Miso salmon with spinach and enoki", sum: "三文鱼抹味噌和味醂腌 10 分钟后煎熟，菠菜、金针菇同锅炒软", sumEn: "Salmon marinated 10 minutes in miso and mirin, pan-fried, with spinach and enoki wilted in the same pan.", c: "japanese", m: "pan_fry", t: [12, 18],
     staples: [RICE, BROWN, SOBA],
-    i: [pr("salmon", 120), se("miso", 8), se("mirin", 3), ve("bok_choy", 120), oi("canola_oil", 2)],
+    i: [pr("salmon", 120), se("miso", 8), se("mirin", 3), ve("spinach", 90), ve("enoki", 50), oi("canola_oil", 2)],
+  }),
+  dish({
+    id: "mackerel_cucumber_rice_bowl", zh: "茄汁鲭鱼黄瓜饭碗", en: "Tomato mackerel and cucumber rice bowl", sum: "罐头茄汁鲭鱼和黄瓜片、紫甘蓝丝摆在饭上，淋醋撒芝麻，不用开火", sumEn: "Canned mackerel in tomato sauce over rice with cucumber and red cabbage, rice vinegar and sesame; no cooking.", c: "japanese", m: "assemble", eq: [], t: [6, 6],
+    staples: [RICE, BROWN, MILLET],
+    i: [pr("canned_mackerel_tomato", 130), ve("cucumber", 90), ve("red_cabbage", 40), se("rice_vinegar", 4), tp("sesame_seeds", 3)],
   }),
   dish({
     id: "cold_soba_chicken", zh: "凉荞麦面鸡丝", en: "Cold soba with chicken and cucumber", sum: "荞麦面煮熟过凉水，拌鸡丝、黄瓜丝、海苔，淋酱油醋汁", sumEn: "Soba boiled and rinsed cold, tossed with shredded chicken, cucumber and nori in a soy-vinegar dressing.", c: "japanese", m: "assemble", eq: [], t: [10, 10],
@@ -901,6 +903,11 @@ const SOUTHEAST_ASIAN: Dish[] = [
     id: "shrimp_rice_noodle_stirfry", zh: "虾仁炒米粉", en: "Shrimp and bean sprout rice noodle stir-fry", sum: "虾仁和豆芽、韭菜、胡萝卜快炒，拌入泡软的米粉和甜辣酱，撒花生", sumEn: "Shrimp, bean sprouts, chives and carrot stir-fried quickly, tossed with soaked rice noodles and sweet chili sauce, topped with peanuts.", c: "southeast_asian", m: "stir_fry", t: [14, 18],
     staples: [VERMICELLI],
     i: [pr("white_shrimp", 115), ve("mung_bean_sprouts", 80), ve("chinese_chives", 40), ve("carrot", 30), se("sweet_chili_sauce", 8), se("fish_sauce", 1.5), se("lime", 10), tp("peanuts", 5), oi("canola_oil", 4)],
+  }),
+  dish({
+    id: "lime_steamed_basa", zh: "青柠蒸龙利鱼", en: "Lime-steamed basa with napa cabbage", sum: "龙利鱼和大白菜、杏鲍菇铺盘，淋青柠汁、鱼露和甜辣酱，蒸 10 分钟", sumEn: "Basa fillet on napa cabbage and king oyster mushroom with lime, fish sauce and sweet chili sauce, steamed 10 minutes.", c: "southeast_asian", m: "steam", eq: ["steamer"], t: [10, 20],
+    staples: [RICE, BROWN, VERMICELLI],
+    i: [pr("basa_fillet", 140), ve("napa_cabbage", 100), ve("king_oyster_mushroom", 50), se("lime", 15), se("fish_sauce", 3), se("sweet_chili_sauce", 6), tp("coriander", 3)],
   }),
   dish({
     id: "chicken_larb_lettuce", zh: "泰式香草鸡丁拌菜（larb）", en: "Diced chicken larb with lettuce", sum: "鸡胸肉切小丁炒熟，拌薄荷、香菜、青柠汁和鱼露，用生菜包着吃", sumEn: "Small diced chicken breast cooked through, tossed with mint, coriander, lime and fish sauce, eaten wrapped in lettuce.", c: "southeast_asian", m: "stir_fry", t: [12, 15],

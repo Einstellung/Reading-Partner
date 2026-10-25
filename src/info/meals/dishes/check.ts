@@ -25,6 +25,7 @@ export type CheckRule =
   | "line"
   | "method"
   | "batch_method"
+  | "fresh_fish"
   | "prep"
   | "breakfast_method"
   | "breakfast_items"
@@ -118,6 +119,15 @@ export function isMincedMeat(food: Food): boolean {
 /** Protein categories of whole cuts that may be ground fresh. */
 const GROUNDABLE: readonly string[] = ["meat", "poultry"];
 
+/**
+ * Fish and shellfish: reheated, they turn dry and fishy, and fish cooks in
+ * about 10 minutes anyway, so a main with one as a protein line is always made
+ * at the meal (docs/671 能备).
+ */
+export function isFishOrSeafood(food: Food): boolean {
+  return food.proteinCategory === "seafood" || food.tags.includes("fish") || food.tags.includes("seafood");
+}
+
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 export interface CheckOptions {
@@ -193,6 +203,19 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
       rule: "batch_method",
       message: `${method.id} (${method.zh}) is made at the meal; only hands-off methods (stew, braise, pressure cook, slow cook, roast, bake, steam, simmer, grain) can be batched`,
     });
+  }
+
+  if (isBatchMain) {
+    for (const line of dish.ingredients) {
+      const food = foodById(line.food);
+      if (line.role === "protein" && food && isFishOrSeafood(food)) {
+        add({
+          rule: "fresh_fish",
+          food: line.food,
+          message: `${line.food} is fish or seafood; reheated it turns dry and fishy, so the main is made fresh at the meal, never batch`,
+        });
+      }
+    }
   }
 
   if (dish.role === "breakfast") {
