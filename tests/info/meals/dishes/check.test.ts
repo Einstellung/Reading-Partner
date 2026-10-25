@@ -19,9 +19,23 @@
 //   salt Na 38758; honey 308 kcal, Na 4, added sugar 79.6
 
 import { describe, expect, test } from "bun:test";
-import { ACTIVE_MIN, LIMITS, SUMMARY_MAX_CHARS, checkDish, isMincedMeat, type CheckFailure, type CheckRule } from "../../../../src/info/meals/dishes/check";
+import { ACTIVE_MIN, LIMITS, SUMMARY_MAX_CHARS, checkDish as checkDishRaw, isMincedMeat, type CheckFailure, type CheckRule, type CheckOptions, type DishCheck } from "../../../../src/info/meals/dishes/check";
 import { FOODS } from "../../../../src/info/meals/nutrition/foods";
 import { CUISINES, type Dish, type DishIngredient, type DishWay } from "../../../../src/info/meals/dishes/types";
+
+/**
+ * The hand-worked fixtures below are small plates (130 g of tomato) built to
+ * show one rule at a time, so checkDish here leaves the real_veg and deep_veg
+ * rules out; the "real and deep-coloured vegetables" block at the end uses
+ * checkDishRaw and tests those two on their own.
+ */
+const VEG_RULES: readonly CheckRule[] = ["real_veg", "deep_veg"];
+function checkDish(d: Dish, opts?: CheckOptions): DishCheck {
+  const r = checkDishRaw(d, opts);
+  if (r.ok) return r;
+  const failures = r.failures.filter((f) => !VEG_RULES.includes(f.rule));
+  return failures.length ? { ...r, failures } : { ok: true, serving: r.serving!, ways: r.ways };
+}
 
 // 25.0 g protein as written, so the reference serving is the template itself:
 // 176.8 kcal, 5 g added fat, 296.55 mg sodium, 0.735 g added sugar, 130 g veg.
@@ -249,14 +263,6 @@ describe("checkDish fails, with the numbers", () => {
     expect(f.limit).toBe(10);
   });
 
-  test("vegetables", () => {
-    // tomato 50: protein 24.44, factor 25 / 24.44, veg 51.15 g
-    const f = only(dish({ ingredients: [BASE[0], { food: "tomato", grams: 50, role: "veg" }, BASE[2], BASE[3]] }), "vegetables");
-    expect(f.actual!).toBeCloseTo((50 * 25) / 24.44, 6);
-    expect(f.limit).toBe(100);
-    expect(f.message).toBe("vegetables 51 g are under 100 g");
-  });
-
   test("a food not in the table", () => {
     const f = failures(dish({ ingredients: [...BASE, { food: "dragon_meat", grams: 10, role: "seasoning" }] }));
     expect(f).toEqual([{ rule: "unknown_food", food: "dragon_meat", message: "dragon_meat is not in the food table" }]);
@@ -466,20 +472,6 @@ describe("ways to eat a batch main", () => {
     expect(t.vegG).toBeCloseTo(180, 6);
   });
 
-  test("a pot short of vegetables passes when every way adds them, and fails on the way that does not", () => {
-    // tomato 60: protein 24.51, factor 25 / 24.51, veg 61.2 g. + 50 g salad
-    // tomato on the way: 111.2 g.
-    const thin = [BASE[0], { food: "tomato", grams: 60, role: "veg" as const }, BASE[2], BASE[3]];
-    const salad: DishWay = { ...OVER_RICE, name: "配沙拉", nameEn: "With salad", addOns: [{ food: "tomato", grams: 50, role: "veg" }] };
-    const r = checkDish(batchMain({ ingredients: thin, ways: [salad, IN_TORTILLA] }));
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.ways[0].vegG).toBeCloseTo((60 * 25) / 24.51 + 50, 6);
-    const f = only(batchMain({ ingredients: thin, ways: [salad, OVER_RICE] }), "vegetables");
-    expect(f.way).toBe(1);
-    expect(f.actual!).toBeCloseTo((60 * 25) / 24.51, 6);
-    expect(f.message).toBe("way 2: vegetables 61 g are under 100 g");
-  });
-
   test("a topping that tips one way over the fat limit fails that way", () => {
     // feta 25 g: added fat 5 + 5.375 = 10.375 g; sodium 296.55 + 284.75 = 581.3 passes
     const cheesy: DishWay = { ...IN_TORTILLA, addOns: [{ food: "feta", grams: 25, role: "topping" }] };
@@ -550,7 +542,7 @@ describe("sides", () => {
     expect(r.serving.vegG).toBeCloseTo(150, 6);
     expect(r.serving.addedFat).toBeCloseTo(3, 6);
     expect(r.serving.sodium).toBeCloseTo(116.455, 6);
-    expect(LIMITS.side).toEqual({ proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150 });
+    expect(LIMITS.side).toEqual({ proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150, realVegG: null, deepVegShare: null });
   });
 
   test("sodium over 200 mg", () => {
@@ -743,5 +735,81 @@ describe("time rules", () => {
 
   test("total minutes below hands-on minutes", () => {
     only(dish({ activeMin: 15, totalMin: 10 }), "times");
+  });
+});
+
+describe("real and deep-coloured vegetables", () => {
+  const SPINACH = { food: "frozen_spinach", role: "veg" as const };
+  const only2 = (d: Dish) => {
+    const r = checkDishRaw(d);
+    return r.ok ? [] : r.failures.filter((f) => VEG_RULES.includes(f.rule));
+  };
+
+  test("limits: a main needs 150 g of real vegetables, half of them deep-coloured; other roles are not checked", () => {
+    expect(LIMITS.main.realVegG).toBe(150);
+    expect(LIMITS.main.deepVegShare).toBe(0.5);
+    for (const role of ["breakfast", "staple", "side"] as const) {
+      expect(LIMITS[role].realVegG, role).toBeNull();
+      expect(LIMITS[role].deepVegShare, role).toBeNull();
+    }
+  });
+
+  test("a fresh main with 160 g of tomato passes both", () => {
+    const d = dish({ ingredients: [BASE[0], { food: "tomato", grams: 160, role: "veg" }, BASE[2], BASE[3]] });
+    expect(only2(d)).toEqual([]);
+    const r = checkDishRaw(d);
+    if (r.ok) {
+      expect(r.serving.realVegG).toBeGreaterThanOrEqual(150);
+      expect(r.serving.deepVegG).toBeCloseTo(r.serving.realVegG, 6);
+    }
+  });
+
+  test("real_veg: onion and tinned tomatoes do not count, and the message says so", () => {
+    // 100 g tomato + 100 g onion + 100 g tinned tomatoes: 300 g veg lines, 100 g real.
+    const d = dish({
+      ingredients: [BASE[0], { food: "tomato", grams: 100, role: "veg" }, { food: "onion", grams: 100, role: "veg" }, { food: "crushed_tomatoes", grams: 100, role: "veg" }, BASE[2], BASE[3]],
+    });
+    const f = only2(d);
+    expect(f.map((x) => x.rule)).toEqual(["real_veg"]);
+    expect(f[0].limit).toBe(150);
+    expect(f[0].actual!).toBeLessThan(110);
+    expect(f[0].message).toContain("real vegetables");
+    expect(f[0].message).toContain("tinned tomatoes do not count");
+    const r = checkDishRaw(d);
+    expect(r.serving!.vegG).toBeGreaterThan(f[0].actual! * 2.5);
+  });
+
+  test("deep_veg: 200 g of cabbage is real but not deep-coloured", () => {
+    const d = dish({ ingredients: [BASE[0], { food: "cabbage", grams: 200, role: "veg" }, BASE[2], BASE[3]] });
+    const f = only2(d);
+    expect(f.map((x) => x.rule)).toEqual(["deep_veg"]);
+    expect(f[0].limit).toBe(0.5);
+    expect(f[0].actual).toBe(0);
+    expect(f[0].message).toContain("deep-coloured");
+  });
+
+  test("deep_veg: exactly half passes, a little under fails", () => {
+    const mk = (spinach: number, cabbage: number) =>
+      dish({ ingredients: [BASE[0], { ...SPINACH, grams: spinach }, { food: "cabbage", grams: cabbage, role: "veg" }, BASE[2], BASE[3]] });
+    expect(only2(mk(100, 100))).toEqual([]);
+    expect(only2(mk(90, 110)).map((x) => x.rule)).toEqual(["deep_veg"]);
+  });
+
+  test("a batch main is checked per way: the pot's vegetables plus the way's add-ons", () => {
+    const pot = [BASE[0], { food: "onion", grams: 60, role: "veg" as const }, BASE[2], BASE[3]];
+    const withSpinach: DishWay = { ...OVER_RICE, name: "配菠菜", nameEn: "With spinach", addOns: [{ ...SPINACH, grams: 160 }] };
+    const withCabbage: DishWay = { ...OVER_RICE, name: "配卷心菜", nameEn: "With cabbage", addOns: [{ food: "cabbage", grams: 160, role: "veg" }] };
+    expect(only2(batchMain({ ingredients: pot, ways: [withSpinach, withSpinach] }))).toEqual([]);
+    const f = only2(batchMain({ ingredients: pot, ways: [withSpinach, withCabbage] }));
+    expect(f.map((x) => [x.rule, x.way])).toEqual([["deep_veg", 1]]);
+    const none = only2(batchMain({ ingredients: pot, ways: [withSpinach, OVER_RICE] }));
+    expect(none.map((x) => [x.rule, x.way])).toEqual([["real_veg", 1]]);
+    expect(none[0].message.startsWith("way 2: ")).toBe(true);
+  });
+
+  test("sides keep the all-veg-lines limit, not the real-veg rules", () => {
+    expect(LIMITS.side.vegG).toBe(150);
+    expect(LIMITS.main.vegG).toBeNull();
+    expect(only2(side())).toEqual([]);
   });
 });

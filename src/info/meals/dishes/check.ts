@@ -43,6 +43,8 @@ export type CheckRule =
   | "sodium"
   | "added_sugar"
   | "vegetables"
+  | "real_veg"
+  | "deep_veg"
   | "protein_grams";
 
 export interface CheckFailure {
@@ -70,14 +72,19 @@ interface Limits {
   /** null: not checked (breakfast; its sodium still counts in the day total). */
   sodiumMg: number | null;
   addedSugarG: number;
+  /** Grams of all veg lines (aromatics included); null: not checked. */
   vegG: number | null;
+  /** Grams of real vegetables, aromatics and sauce bases left out; null: not checked. */
+  realVegG: number | null;
+  /** Least share of the real vegetables that are deep-coloured; null: not checked. */
+  deepVegShare: number | null;
 }
 
 export const LIMITS: Readonly<Record<DishRole, Limits>> = {
-  main: { proteinShare: 0.3, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: 600, addedSugarG: 10, vegG: 100 },
-  breakfast: { proteinShare: 0.2, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: null, addedSugarG: 10, vegG: null },
-  staple: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: null },
-  side: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150 },
+  main: { proteinShare: 0.3, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: 600, addedSugarG: 10, vegG: null, realVegG: 150, deepVegShare: 0.5 },
+  breakfast: { proteinShare: 0.2, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: null, addedSugarG: 10, vegG: null, realVegG: null, deepVegShare: null },
+  staple: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: null, realVegG: null, deepVegShare: null },
+  side: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150, realVegG: null, deepVegShare: null },
 };
 
 /** Hands-on minutes: a batch pot (waiting unlimited), a fresh meal, a breakfast, putting one way together. */
@@ -367,6 +374,24 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
         message: `${at}vegetables ${Math.round(s.vegG)} g are under ${lim.vegG} g`,
         actual: s.vegG,
         limit: lim.vegG,
+      });
+    }
+    if (lim.realVegG != null && s.realVegG < lim.realVegG) {
+      add({
+        rule: "real_veg",
+        ...tag,
+        message: `${at}real vegetables ${Math.round(s.realVegG)} g are under ${lim.realVegG} g (onion, garlic, ginger, scallion and tinned tomatoes do not count)`,
+        actual: s.realVegG,
+        limit: lim.realVegG,
+      });
+    }
+    if (lim.deepVegShare != null && s.realVegG > 0 && s.deepVegG < s.realVegG * lim.deepVegShare) {
+      add({
+        rule: "deep_veg",
+        ...tag,
+        message: `${at}deep-coloured vegetables are ${Math.round(s.deepVegG)} g of ${Math.round(s.realVegG)} g real vegetables, under ${Math.round(lim.deepVegShare * 100)}%`,
+        actual: s.deepVegG / s.realVegG,
+        limit: lim.deepVegShare,
       });
     }
   }
