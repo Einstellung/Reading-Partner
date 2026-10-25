@@ -81,6 +81,13 @@ describe("a list line", () => {
     expect(packLineText(line({ food: "cod", grams: 3, buy: { by: "weight" } }))).toBe("鳕鱼 (about 10 g)");
   });
 
+  test("a food planned cooked but bought dry goes by its dry name", () => {
+    setLocale("zh-CN");
+    expect(packLineText(line({ food: "brown_rice_cooked", buy: { by: "onHand" } }))).toBe("糙米 家里常备");
+    expect(packLineText(line({ food: "quinoa_cooked", buy: { by: "onHand" } }))).toBe("藜麦 家里常备");
+    expect(packLineText(line({ food: "multigrain_rice_raw", buy: { by: "weight" }, grams: 115 }))).toBe("五谷杂粮米（约 120 g）");
+  });
+
   test("an id the table lacks is shown as the id", () => {
     setLocale("en");
     expect(packLineText(line({ food: "no_such_food", buy: { by: "onHand" } }))).toBe("no_such_food on hand");

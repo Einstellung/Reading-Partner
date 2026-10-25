@@ -9,7 +9,9 @@
 //   halved over lunch and dinner; never under the reference serving, never a
 //   protein line over its food's maximum. A pot's meals share one scale, and
 //   a pot's packed protein rounds to whole packs when that moves it 30 % or
-//   less ("一盒整盒下锅").
+//   less ("一盒整盒下锅"). Seasoning grows with the square root of the scale
+//   (scaledMain). A day still over DAY_SODIUM_MG steps its mains' scales down
+//   while it keeps its protein target and kcal floor.
 // - The staple fills the meal's kcal within its range, the range growing with
 //   a day above 2000 kcal (mealStapleCapG); the day's carbs are held to the
 //   carb floor.
@@ -25,6 +27,7 @@ import type { Dish, DishIngredient, IngredientRole } from "../dishes/types";
 import { foodById, type Food } from "../nutrition/foods";
 import { STAPLE_KCAL_CAP } from "../nutrition/solve";
 import type { DayTargets, Profile, Targets } from "../nutrition/targets";
+import { DAY_KCAL_FLOOR } from "../plan/checks";
 import { dayTargetsOn } from "../plan/solve-week";
 import { addDays } from "../plan/week";
 import { isBatchMain, MAIN_SLOTS, type DraftDay, type MainSlot, type MealAt, type PlanDraft, type PlanSlot } from "./draft";
@@ -103,6 +106,21 @@ function need(lib: PlanLibrary, id: string): Dish {
   const d = lib.dish(id);
   if (!d) throw new Error(`Dish not in the library: ${id}`);
   return d;
+}
+
+/** A main's scale steps down by this much a round while its day is over DAY_SODIUM_MG, for at most MAX_SODIUM_ROUNDS rounds. */
+const SODIUM_SCALE_STEP = 0.1;
+const MAX_SODIUM_ROUNDS = 20;
+
+/**
+ * A main's reference serving at `k` times its protein. Seasoning lines grow
+ * with the square root of `k`: a bigger pot is seasoned to taste, not by the
+ * meat's weight, and the reference serving's seasoning is what the entry
+ * check holds to its sodium limit. Every other line grows with `k`.
+ */
+export function scaledMain(lines: readonly DishIngredient[], k: number): DishIngredient[] {
+  const season = Math.sqrt(Math.max(1, k));
+  return lines.map((l) => ({ ...l, grams: l.grams * (l.role === "seasoning" ? season : k) }));
 }
 
 const tag = (lines: readonly DishIngredient[], source: LineSource, dish?: string, k = 1): PlanLine[] =>
@@ -285,78 +303,118 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
     return Math.max(REFERENCE_TARGET.main.value, (targets[i].protein - around) / 2);
   });
 
-  // One scale per meal; a pot's meals share theirs.
+  // One scale per meal, kept by its unit: a pot's meals share their pot's.
+  const meal = (day: number, slot: MainSlot) => `${day}:${slot}`;
+  const unitOf = new Map<string, string>();
   const scale = new Map<string, number>();
-  const key = (day: number, slot: MainSlot) => `${day}:${slot}`;
   for (const b of draft.batches) {
     const dish = need(lib, b.dish);
     const want = b.meals.reduce((s, m) => s + mainProtein[m.day - 1], 0) / Math.max(1, b.meals.length);
-    const k = clamp(want / REFERENCE_TARGET.main.value, 1, maxMainScale(dish));
-    for (const m of b.meals) scale.set(key(m.day, m.slot), k);
+    scale.set(b.id, clamp(want / REFERENCE_TARGET.main.value, 1, maxMainScale(dish)));
+    for (const m of b.meals) unitOf.set(meal(m.day, m.slot), b.id);
   }
-
-  const mains = draft.days.map((d, i) =>
-    Object.fromEntries(
-      MAIN_SLOTS.map((slot) => {
-        const m = mainOf(draft, lib, d, slot);
-        const serving = referenceServing(m.dish);
-        const k = scale.get(key(i + 1, slot)) ?? clamp(mainProtein[i] / REFERENCE_TARGET.main.value, 1, maxMainScale(m.dish));
-        const lines = serving ? tag(serving.ingredients, "main", m.dish.id, k) : [];
-        return [slot, { ...m, lines }];
-      }),
-    ) as Record<MainSlot, ReturnType<typeof mainOf> & { lines: PlanLine[] }>,
-  );
-
-  // Whole packs into the pot.
-  for (const b of draft.batches) {
-    const meals = b.meals.map((m) => mains[m.day - 1][m.slot].lines);
-    const foods = new Set(meals.flat().filter((l) => l.role === "protein" && foodById(l.food)?.pack).map((l) => l.food));
-    for (const food of foods) {
-      const total = meals.flat().filter((l) => l.food === food).reduce((s, l) => s + l.grams, 0);
-      const pack = foodById(food)?.pack?.grams ?? 0;
-      const packs = Math.round(total / pack);
-      if (packs < 1 || Math.abs(packs * pack - total) > POT_PACK_SNAP * total) continue;
-      const ratio = (packs * pack) / total;
-      for (const lines of meals) for (const l of lines) if (l.food === food) l.grams = r1(l.grams * ratio);
+  draft.days.forEach((d, i) => {
+    for (const slot of MAIN_SLOTS) {
+      const at = meal(i + 1, slot);
+      if (unitOf.has(at)) continue;
+      unitOf.set(at, at);
+      scale.set(at, clamp(mainProtein[i] / REFERENCE_TARGET.main.value, 1, maxMainScale(mainOf(draft, lib, d, slot).dish)));
     }
-  }
-
-  const days: SolvedDay[] = draft.days.map((_, i) => {
-    const target = targets[i];
-    const f = fixed[i];
-    const solveDay = (bump: number, boost: number) => {
-      const left = target.kcal - totals([...f.breakfast, ...f.fruit]).kcal;
-      const share = target.meals.lunch.kcal / Math.max(1, target.meals.lunch.kcal + target.meals.dinner.kcal);
-      const meals = Object.fromEntries(
-        MAIN_SLOTS.map((slot) => {
-          const m = mains[i][slot];
-          const oil: PlanLine[] = bump > 0 ? [{ food: FAT_BUMP_FOOD, grams: bump, role: "oil", source: "oil" }] : [];
-          const base = [...m.lines, ...tag(m.addOns, "addOn", m.dish.id), ...f.sides[slot], ...oil];
-          const kcal = (slot === "lunch" ? share : 1 - share) * left - totals(base).kcal;
-          const lines = [...base, ...stapleLines(lib, m.staple, kcal, target.kcal, boost)];
-          return [slot, { day: i + 1, slot, lines, totals: totals(lines) }];
-        }),
-      ) as Record<MainSlot, SolvedMeal>;
-      const breakfast: SolvedMeal = { day: i + 1, slot: "breakfast", lines: f.breakfast, totals: totals(f.breakfast) };
-      const eaten = [...f.breakfast, ...meals.lunch.lines, ...meals.dinner.lines, ...f.fruit];
-      const sum = totals(eaten);
-      const snack = snackLines(lib, target.kcal - sum.kcal, sum.sodium);
-      return { meals: { breakfast, ...meals }, snack, totals: totals([...eaten, ...snack]) };
-    };
-    let bump = 0;
-    let boost = 1;
-    let out = solveDay(bump, boost);
-    for (let round = 1; round < MAX_FAT_ROUNDS && out.totals.fat < target.fatFloor; round++) {
-      bump += FAT_BUMP_STEP;
-      out = solveDay(bump, boost);
-    }
-    // The carb floor: staples step up 10 % at a time toward their caps.
-    for (let step = 0; step < 10 && out.totals.carbs < target.carbFloor; step++) {
-      boost += 0.1;
-      out = solveDay(bump, boost);
-    }
-    return { day: i + 1, target, meals: out.meals, fruit: f.fruit, snack: out.snack, totals: out.totals, fatBumpG: bump };
   });
+
+  const solveAll = () => {
+    const mains = draft.days.map((d, i) =>
+      Object.fromEntries(
+        MAIN_SLOTS.map((slot) => {
+          const m = mainOf(draft, lib, d, slot);
+          const serving = referenceServing(m.dish);
+          const k = scale.get(unitOf.get(meal(i + 1, slot)) ?? "") ?? 1;
+          const lines = serving ? tag(scaledMain(serving.ingredients, k), "main", m.dish.id) : [];
+          return [slot, { ...m, lines }];
+        }),
+      ) as Record<MainSlot, ReturnType<typeof mainOf> & { lines: PlanLine[] }>,
+    );
+
+    // Whole packs into the pot.
+    for (const b of draft.batches) {
+      const meals = b.meals.map((m) => mains[m.day - 1][m.slot].lines);
+      const foods = new Set(meals.flat().filter((l) => l.role === "protein" && foodById(l.food)?.pack).map((l) => l.food));
+      for (const food of foods) {
+        const total = meals.flat().filter((l) => l.food === food).reduce((s, l) => s + l.grams, 0);
+        const pack = foodById(food)?.pack?.grams ?? 0;
+        const packs = Math.round(total / pack);
+        if (packs < 1 || Math.abs(packs * pack - total) > POT_PACK_SNAP * total) continue;
+        const ratio = (packs * pack) / total;
+        for (const lines of meals) for (const l of lines) if (l.food === food) l.grams = r1(l.grams * ratio);
+      }
+    }
+    return { mains, days: solveDays(mains) };
+  };
+
+  const solveDays = (mains: Record<MainSlot, ReturnType<typeof mainOf> & { lines: PlanLine[] }>[]): SolvedDay[] =>
+    draft.days.map((_, i) => {
+      const target = targets[i];
+      const f = fixed[i];
+      const solveDay = (bump: number, boost: number) => {
+        const left = target.kcal - totals([...f.breakfast, ...f.fruit]).kcal;
+        const share = target.meals.lunch.kcal / Math.max(1, target.meals.lunch.kcal + target.meals.dinner.kcal);
+        const meals = Object.fromEntries(
+          MAIN_SLOTS.map((slot) => {
+            const m = mains[i][slot];
+            const oil: PlanLine[] = bump > 0 ? [{ food: FAT_BUMP_FOOD, grams: bump, role: "oil", source: "oil" }] : [];
+            const base = [...m.lines, ...tag(m.addOns, "addOn", m.dish.id), ...f.sides[slot], ...oil];
+            const kcal = (slot === "lunch" ? share : 1 - share) * left - totals(base).kcal;
+            const lines = [...base, ...stapleLines(lib, m.staple, kcal, target.kcal, boost)];
+            return [slot, { day: i + 1, slot, lines, totals: totals(lines) }];
+          }),
+        ) as Record<MainSlot, SolvedMeal>;
+        const breakfast: SolvedMeal = { day: i + 1, slot: "breakfast", lines: f.breakfast, totals: totals(f.breakfast) };
+        const eaten = [...f.breakfast, ...meals.lunch.lines, ...meals.dinner.lines, ...f.fruit];
+        const sum = totals(eaten);
+        const snack = snackLines(lib, target.kcal - sum.kcal, sum.sodium);
+        return { meals: { breakfast, ...meals }, snack, totals: totals([...eaten, ...snack]) };
+      };
+      let bump = 0;
+      let boost = 1;
+      let out = solveDay(bump, boost);
+      for (let round = 1; round < MAX_FAT_ROUNDS && out.totals.fat < target.fatFloor; round++) {
+        bump += FAT_BUMP_STEP;
+        out = solveDay(bump, boost);
+      }
+      // The carb floor: staples step up 10 % at a time toward their caps.
+      for (let step = 0; step < 10 && out.totals.carbs < target.carbFloor; step++) {
+        boost += 0.1;
+        out = solveDay(bump, boost);
+      }
+      return { day: i + 1, target, meals: out.meals, fruit: f.fruit, snack: out.snack, totals: out.totals, fatBumpG: bump };
+    });
+
+  // Sodium: a day over DAY_SODIUM_MG steps its mains' scales down, a pot's
+  // with every day it feeds, while each of those days keeps its protein
+  // target and its kcal floor.
+  let solved = solveAll();
+  const frozen = new Set<string>();
+  for (let round = 0; round < MAX_SODIUM_ROUNDS; round++) {
+    const units = [...new Set(solved.days.filter((d) => d.totals.sodium > DAY_SODIUM_MG).flatMap((d) => MAIN_SLOTS.map((slot) => unitOf.get(meal(d.day, slot)) ?? "")))]
+      .filter((u) => !frozen.has(u) && (scale.get(u) ?? 1) > 1);
+    if (!units.length) break;
+    for (const u of units) {
+      const fed = new Set(draft.days.map((_, i) => i + 1).filter((day) => MAIN_SLOTS.some((slot) => unitOf.get(meal(day, slot)) === u)));
+      if (!solved.days.some((d) => fed.has(d.day) && d.totals.sodium > DAY_SODIUM_MG)) continue;
+      const was = scale.get(u) ?? 1;
+      scale.set(u, Math.max(1, was - SODIUM_SCALE_STEP));
+      const trial = solveAll();
+      const keeps = trial.days.every((d, i) =>
+        !fed.has(d.day) || (d.totals.protein >= d.target.protein && d.totals.kcal >= Math.min(DAY_KCAL_FLOOR * d.target.kcal, solved.days[i].totals.kcal)),
+      );
+      if (keeps) solved = trial;
+      else {
+        scale.set(u, was);
+        frozen.add(u);
+      }
+    }
+  }
+  const { mains, days } = solved;
 
   const batches: SolvedBatch[] = draft.batches.map((b) => {
     const sum = new Map<string, DishIngredient>();

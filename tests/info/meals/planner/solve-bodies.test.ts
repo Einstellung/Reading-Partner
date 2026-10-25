@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { referenceServing } from "../../../../src/info/meals/dishes/serving";
+import type { Dish } from "../../../../src/info/meals/dishes/types";
 import { foodById, type Food } from "../../../../src/info/meals/nutrition/foods";
 import { stapleCapG } from "../../../../src/info/meals/nutrition/solve";
 import type { Profile } from "../../../../src/info/meals/nutrition/targets";
@@ -10,6 +12,7 @@ import {
   DAY_SODIUM_MG,
   growBreakfast,
   mealStapleCapG,
+  scaledMain,
   solveDraft,
   STAPLE_REFERENCE_DAY_KCAL,
 } from "../../../../src/info/meals/planner/solve";
@@ -29,9 +32,6 @@ const BODIES: Record<string, Partial<Profile>> = {
   "85 kg man, 5 days": { sex: "m", weightKg: 85, heightCm: 182, age: 30, trainingDays: [1, 2, 3, 4, 5] },
   "85 kg man gaining, 5 days": { sex: "m", weightKg: 85, heightCm: 182, age: 30, trainingDays: [1, 2, 3, 4, 5], goal: "gain" },
 };
-
-/** The bodies whose day sodium stays within the limit on this draft; the others' saucy mains scale past it with their protein. */
-const SODIUM_OK = ["55 kg woman, 2 days", "60 kg woman, 3 days", "60 kg woman cutting", "72 kg man, 3 days", "85 kg man, 5 days"];
 
 function run(over: Partial<Profile>) {
   const profile: Profile = { ...PROFILE, ...over };
@@ -53,9 +53,11 @@ describe("the 3-day fixture draft across bodies", () => {
     });
   }
 
-  for (const name of SODIUM_OK) {
-    test(`${name}: passes every check`, () => {
-      expect(run(BODIES[name]).result.problems.map((p) => p.message)).toEqual([]);
+  for (const [name, over] of Object.entries(BODIES)) {
+    test(`${name}: passes every check, sodium included`, () => {
+      const { result } = run(over);
+      expect(result.problems.map((p) => p.message)).toEqual([]);
+      for (const d of result.plan?.days ?? []) expect(d.totals.sodium).toBeLessThanOrEqual(DAY_SODIUM_MG);
     });
   }
 
@@ -70,6 +72,24 @@ describe("the 3-day fixture draft across bodies", () => {
         }
       }
     }
+  });
+});
+
+describe("a main's seasoning and sodium", () => {
+  test("seasoning grows with the square root of the scale, every other line with the scale", () => {
+    const lib = planLibrary(PROFILE);
+    const ref = referenceServing(lib.dish("kung_pao_chicken") as Dish)?.ingredients ?? [];
+    const big = scaledMain(ref, 2.25);
+    big.forEach((l, i) => expect(l.grams).toBeCloseTo(ref[i].grams * (l.role === "seasoning" ? 1.5 : 2.25), 6));
+    expect(scaledMain(ref, 1)).toEqual(ref);
+  });
+
+  test("a salty day steps its mains down only as far as its protein target", () => {
+    // Kung pao and the chili pot on day 1 pass the limit at their protein scale.
+    const { result } = run(BODIES["85 kg man gaining, 5 days"]);
+    const d1 = result.plan?.days[0];
+    expect(d1?.totals.sodium).toBeLessThanOrEqual(DAY_SODIUM_MG);
+    expect(d1?.totals.protein).toBeGreaterThanOrEqual(d1?.target.protein ?? Infinity);
   });
 });
 
