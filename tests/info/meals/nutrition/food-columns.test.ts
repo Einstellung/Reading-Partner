@@ -135,6 +135,7 @@ describe("foods added for the dish library", () => {
       expect(Number.isFinite(f.addedSugar), f.id).toBe(true);
       const s = f.source;
       if (s.kind === "usda") expect(s.dataset, f.id).toBe("SR Legacy");
+      else if (s.kind === "tw") expect(s.code, f.id).toMatch(/^[A-Z]\d{7}$/);
       else expect(s.kind === "label" && /Open Food Facts \d+/.test(s.note), f.id).toBe(true);
       if (f.roles.includes("protein")) expect(f.proteinCategory, f.id).toBeDefined();
     }
@@ -159,6 +160,10 @@ describe("foods added for the dish library", () => {
       basil: 4,
       dill: 61,
       mint: 30,
+      cornstarch: 9,
+      black_soybean_dry: 4,
+      adzuki_beans_dry: 1,
+      red_dates_dried: 5,
     };
     expect(ADDED_FOODS.map((f) => f.id).sort()).toEqual(Object.keys(want).sort());
     for (const [id, mg] of Object.entries(want)) expect(foodById(id)?.sodium, id).toBe(mg);
@@ -199,5 +204,18 @@ describe("foods added for the dish library", () => {
     expect(foodById("feta")?.roles).toEqual(["dairy", "fat"]);
     expect(foodById("sesame_seeds")?.roles).toEqual(["fat"]);
     expect(foodById("lentils_dry")?.roles).toEqual(["protein", "staple"]);
+    expect(foodById("cornstarch")?.roles).toEqual(["sauce"]);
+    expect(foodById("red_dates_dried")?.roles).toEqual(["fruit"]);
+  });
+
+  test("the soy milk beans, cornstarch and dried red dates cite their records", () => {
+    expect(foodById("black_soybean_dry")?.source).toEqual({ kind: "tw", code: "H0605101", name: "青仁黑豆" });
+    expect(foodById("adzuki_beans_dry")?.source).toEqual({ kind: "tw", code: "H0405101", name: "紅豆" });
+    expect(foodById("cornstarch")?.source).toMatchObject({ kind: "usda", fdcId: 169698 });
+    expect(foodById("red_dates_dried")?.source).toMatchObject({ kind: "usda", fdcId: 168152 });
+    // Black soybeans count with the soy products, adzuki beans with the pulses.
+    expect(foodById("black_soybean_dry")?.proteinCategory).toBe("soy");
+    expect(foodById("adzuki_beans_dry")?.proteinCategory).toBe("legume");
+    expect(foodById("sesame_seeds")?.aliases).toContain("黑芝麻");
   });
 });

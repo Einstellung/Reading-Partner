@@ -1,14 +1,18 @@
 // Foods the dish library needs that the generated table lacks (docs/671 菜库):
 // salt, citrus, lentils, canned tomatoes, stock, coconut milk, feta,
-// corn tortillas, breadcrumbs, sesame and fresh herbs. Hand-maintained like
+// corn tortillas, breadcrumbs, sesame, fresh herbs, cornstarch, and the dry
+// black soybeans, adzuki beans and dried red dates of the soy milk maker
+// breakfasts. Hand-maintained like
 // seasonings.ts and appended to the generated rows by foods.ts, with the
 // docs/671 columns inline. Every number is read from the record the row
-// cites: USDA FDC SR Legacy, or the label for the coconut milk. Added sugar
+// cites: USDA FDC SR Legacy, Taiwan FDA for the two dry beans (USDA has no
+// black soybean), or the label for the coconut milk. Added sugar
 // follows food-columns.ts: the record's total sugars for the prepared
 // seasonings (stock, coconut milk, breadcrumbs), 0 for single foods.
 
 import type { Food } from "./foods";
 
+const tw = (code: string, name: string) => ({ kind: "tw", code, name }) as const;
 const usda = (fdcId: number, name: string) => ({ kind: "usda", fdcId, dataset: "SR Legacy", name }) as const;
 type Shared = Pick<Food, "category" | "keeps" | "roles" | "minG" | "maxG" | "addedSugar"> & Partial<Food>;
 const herb = (): Shared & Pick<Food, "tags"> => ({ category: "produce", keeps: "d3-5", roles: ["sauce"], minG: 1, maxG: 15, tags: [], addedSugar: 0 });
@@ -25,7 +29,11 @@ export const ADDED_FOODS: readonly Food[] = [
   { id: "feta", zh: "菲达奶酪", aliases: ["菲达", "希腊白奶酪"], en: "feta", roles: ["dairy", "fat"], category: "dairy", keeps: "w1", kcal: 265, protein: 14.2, fat: 21.5, carbs: 3.9, minG: 10, maxG: 40, tags: ["dairy"], sodium: 1139, addedSugar: 0, proteinCategory: "dairy", source: usda(173420, "Cheese, feta") },
   { id: "corn_tortilla", zh: "玉米饼皮", aliases: ["玉米薄饼", "墨西哥玉米饼"], en: "corn tortillas", roles: ["staple"], category: "grains", keeps: "w1", kcal: 218, protein: 5.7, fat: 2.9, carbs: 44.6, minG: 24, maxG: 150, tags: [], sodium: 45, addedSugar: 0, piece: { grams: 24, label: "张" }, source: usda(175036, "Tortillas, ready-to-bake or -fry, corn") },
   { id: "breadcrumbs", zh: "面包糠", aliases: ["面包屑", "日式面包糠"], en: "breadcrumbs", roles: ["sauce"], category: "pantry", keeps: "pantry", kcal: 395, protein: 13.4, fat: 5.3, carbs: 72.0, minG: 5, maxG: 30, tags: ["gluten"], sodium: 732, addedSugar: 6.2, source: usda(174928, "Bread, crumbs, dry, grated, plain") },
-  { id: "sesame_seeds", zh: "芝麻", aliases: ["白芝麻", "熟芝麻"], en: "sesame seed", roles: ["fat"], category: "pantry", keeps: "pantry", kcal: 573, protein: 17.7, fat: 49.7, carbs: 23.5, minG: 2, maxG: 15, defaultG: 5, tags: [], sodium: 11, addedSugar: 0, source: usda(170150, "Seeds, sesame seeds, whole, dried") },
+  { id: "sesame_seeds", zh: "芝麻", aliases: ["白芝麻", "黑芝麻", "熟芝麻"], en: "sesame seed", roles: ["fat"], category: "pantry", keeps: "pantry", kcal: 573, protein: 17.7, fat: 49.7, carbs: 23.5, minG: 2, maxG: 15, defaultG: 5, tags: [], sodium: 11, addedSugar: 0, source: usda(170150, "Seeds, sesame seeds, whole, dried") },
+  { id: "cornstarch", zh: "玉米淀粉", aliases: ["淀粉", "太白粉", "生粉", "芡粉"], en: "", roles: ["sauce"], category: "pantry", keeps: "pantry", kcal: 381, protein: 0.3, fat: 0.1, carbs: 91.3, minG: 1, maxG: 10, tags: [], sodium: 9, addedSugar: 0, source: usda(169698, "Cornstarch") },
+  { id: "black_soybean_dry", zh: "黑豆（干）", aliases: ["黑大豆", "青仁黑豆"], en: "", roles: ["protein"], category: "pantry", keeps: "pantry", kcal: 340, protein: 37.0, fat: 14.2, carbs: 33.7, minG: 5, maxG: 60, tags: ["soy"], sodium: 4, addedSugar: 0, proteinCategory: "soy", source: tw("H0605101", "青仁黑豆") },
+  { id: "adzuki_beans_dry", zh: "红豆（干）", aliases: ["赤小豆", "红小豆", "赤豆"], en: "", roles: ["protein", "staple"], category: "pantry", keeps: "pantry", kcal: 290, protein: 20.9, fat: 0.6, carbs: 61.5, minG: 5, maxG: 100, tags: [], sodium: 1, addedSugar: 0, proteinCategory: "legume", source: tw("H0405101", "紅豆") },
+  { id: "red_dates_dried", zh: "红枣（干）", aliases: ["干红枣", "大枣", "枣干"], en: "", roles: ["fruit"], category: "pantry", keeps: "pantry", kcal: 281, protein: 4.7, fat: 0.5, carbs: 72.5, minG: 5, maxG: 40, tags: [], sodium: 5, addedSugar: 0, source: usda(168152, "Jujube, Chinese, fresh, dried") },
   { id: "coriander", zh: "香菜", aliases: ["芫荽", "鲜香菜"], en: "coriander", ...herb(), kcal: 23, protein: 2.1, fat: 0.5, carbs: 3.7, sodium: 46, source: usda(169997, "Coriander (cilantro) leaves, raw") },
   { id: "parsley", zh: "欧芹", aliases: ["洋香菜", "巴西里", "鲜欧芹"], en: "parsley", ...herb(), kcal: 36, protein: 3.0, fat: 0.8, carbs: 6.3, sodium: 56, source: usda(170416, "Parsley, fresh") },
   { id: "basil", zh: "罗勒", aliases: ["鲜罗勒", "甜罗勒"], en: "basil", ...herb(), kcal: 23, protein: 3.2, fat: 0.6, carbs: 2.7, sodium: 4, source: usda(172232, "Basil, fresh") },
