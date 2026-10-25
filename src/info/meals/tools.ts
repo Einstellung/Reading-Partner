@@ -20,9 +20,10 @@ import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts
 import type { MealsCard, MealsPlanCardData } from "./cards";
 import { checkPlan } from "./plan/checks";
 import { boxName, mealsList, modeWord, profileFieldsLine, weekdayName } from "./screen/view";
-import { FOOD_TAGS, FOODS, foodAllowed } from "./nutrition/foods";
+import { FOOD_TAGS, FOODS, foodAllowed, foodById } from "./nutrition/foods";
 import type { TemplateItem, TemplateRole } from "./nutrition/solve";
 import {
+  COOK_PARTS,
   DEFAULT_EFFORT,
   EFFORTS,
   minuteCap,
@@ -706,6 +707,19 @@ export function patchProfile(profile: Profile, args: Record<string, unknown>): P
   if (Array.isArray(args.dislikes)) set("dislikes", asStrings(args.dislikes));
   if (Array.isArray(args.shops)) set("shops", asStrings(args.shops));
   if (Array.isArray(args.kitchen)) set("kitchen", asStrings(args.kitchen));
+  if (Array.isArray(args.unavailable)) set("unavailable", asStrings(args.unavailable).filter((id) => foodById(id)));
+  if (typeof args.boxes === "boolean") set("boxes", args.boxes);
+  const burners = positive(args.burners, 10);
+  set("burners", burners === null ? null : Math.round(burners));
+  if (Array.isArray(args.cookSlots)) {
+    const slots = args.cookSlots.flatMap((raw) => {
+      const s = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+      const weekday = Math.round(Number(s.weekday));
+      const part = oneOf(s.part, COOK_PARTS);
+      return weekday >= 1 && weekday <= 7 && part ? [{ weekday, part }] : [];
+    });
+    set("cookSlots", slots);
+  }
   return touched ? next : null;
 }
 
@@ -755,6 +769,24 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       ),
       shops: Type.Optional(Type.Array(Type.String())),
       kitchen: Type.Optional(Type.Array(Type.String())),
+      unavailable: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Food ids from the listing they cannot buy where they live or do not want (canned kidney beans, " +
+            "pita), kept beside dislikes. The planner swaps them for another food of the same group.",
+        }),
+      ),
+      cookSlots: Type.Optional(
+        Type.Array(
+          Type.Object({
+            weekday: Type.Number({ description: "ISO weekday, Monday 1 to Sunday 7." }),
+            part: Type.String({ description: `One of: ${COOK_PARTS.join(", ")}.` }),
+          }),
+          { description: "When they can cook a prep session, as a standing habit." },
+        ),
+      ),
+      boxes: Type.Optional(Type.Boolean({ description: "They pack meals into boxes." })),
+      burners: Type.Optional(Type.Number({ description: "Burners on their stove." })),
       notes: Type.Optional(Type.String({ description: "Their meals in their own words, one paragraph." })),
     }),
     execute: async (args) => {

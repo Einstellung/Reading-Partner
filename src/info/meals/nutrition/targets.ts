@@ -54,6 +54,25 @@ export interface Profile {
   kitchen: string[];
   /** FoodTag values ("beef", "seafood", "spicy"…) are checked by the program; anything else is passed to the model as text. */
   dislikes: string[];
+  // Docs/671 数据模型. Absent on profiles written before; absent means not said.
+  /** The weekdays and parts of the day they can cook a prep session. */
+  cookSlots?: CookSlot[];
+  /** They pack meals into boxes. */
+  boxes?: boolean;
+  /** Burners on the stove. */
+  burners?: number;
+  /** Food ids they cannot buy or do not want, beside dislikes (docs/671 替换组). */
+  unavailable?: string[];
+}
+
+/** A part of the day a prep session can sit in: morning is before lunch, afternoon before dinner, evening after it. */
+export type CookPart = "morning" | "afternoon" | "evening";
+export const COOK_PARTS: readonly CookPart[] = ["morning", "afternoon", "evening"];
+
+export interface CookSlot {
+  /** ISO weekday, Monday 1 … Sunday 7. */
+  weekday: number;
+  part: CookPart;
 }
 
 export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";

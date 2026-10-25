@@ -13,7 +13,16 @@
 
 import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../../platform/app/guarded-file";
 import { isObject } from "../../../platform/std/json";
-import { DEFAULT_EFFORT, EFFORTS, minuteCap, type Effort, type Profile } from "../nutrition/targets";
+import {
+  COOK_PARTS,
+  DEFAULT_EFFORT,
+  EFFORTS,
+  minuteCap,
+  type CookPart,
+  type CookSlot,
+  type Effort,
+  type Profile,
+} from "../nutrition/targets";
 import {
   EMPTY_MEALS,
   EMPTY_SHOPPING,
@@ -92,9 +101,18 @@ export function validateProfile(raw: unknown): Profile | null {
     isStrings(raw.kitchen) &&
     isStrings(raw.dislikes);
   if (!ok) return null;
-  const { minutesPerMeal: _replaced, ...rest } = raw;
+  const { minutesPerMeal: _replaced, cookSlots, boxes, burners, unavailable, ...rest } = raw;
   const effort = EFFORTS.includes(raw.effort as Effort) ? (raw.effort as Effort) : DEFAULT_EFFORT;
-  return { ...(rest as unknown as Profile), effort };
+  const profile: Profile = { ...(rest as unknown as Profile), effort };
+  if (Array.isArray(cookSlots)) profile.cookSlots = cookSlots.filter(isCookSlot);
+  if (typeof boxes === "boolean") profile.boxes = boxes;
+  if (isNum(burners)) profile.burners = burners;
+  if (isStrings(unavailable)) profile.unavailable = unavailable;
+  return profile;
+}
+
+function isCookSlot(raw: unknown): raw is CookSlot {
+  return isObject(raw) && isNum(raw.weekday) && COOK_PARTS.includes(raw.part as CookPart);
 }
 
 function validateCharter(raw: unknown): MealsCharter | null {
