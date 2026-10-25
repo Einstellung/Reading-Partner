@@ -625,7 +625,7 @@ const CHINESE: Dish[] = [
   }),
   dish({
     id: "napa_tofu_meatball_stew", zh: "白菜豆腐炖肉丸", en: "Napa cabbage, tofu and pork meatball stew", sum: "猪后腿瘦肉现绞拌姜捏丸，和白菜、豆腐、米粉炖 25 分钟", sumEn: "Lean pork leg ground fresh and mixed with ginger into balls, simmered 25 minutes with napa cabbage, tofu and a little rice noodle.", c: "chinese", m: "stew", t: [18, 45],
-    i: [gr("lean_pork_leg", 85), pr("soft_tofu", 110), ve("napa_cabbage", 100), st("rice_noodles_dry", 12), se("reduced_salt_soy_sauce", 4), se("ginger_paste", 3), oi("sesame_oil", 2), se("salt", 0.3)],
+    i: [pr("firm_tofu", 145), gr("lean_pork_leg", 50), ve("napa_cabbage", 100), st("rice_noodles_dry", 12), se("reduced_salt_soy_sauce", 4), se("ginger_paste", 3), oi("sesame_oil", 2), se("salt", 0.3)],
     ways: [
       way("白菜豆腐肉丸盖米饭配上海青", "Tofu meatball stew over rice with bok choy", RICE, [ve("bok_choy", 140)]),
       way("白菜豆腐肉丸配馒头和菠菜", "Tofu meatball stew with a steamed bun and spinach", "steamed_bun", [ve("frozen_spinach", 135)]),
@@ -670,7 +670,7 @@ const CHINESE: Dish[] = [
   }),
   dish({
     id: "beef_mapo_tofu", zh: "牛肉丁麻婆豆腐", en: "Mapo tofu with diced beef and peppers", sum: "牛后腿肉切小丁炒散，加麻婆酱和豆瓣酱，下豆腐、青椒煮 8 分钟", sumEn: "Small diced beef round browned, simmered 8 minutes with mapo and chili bean sauce, tofu and green pepper.", c: "chinese", m: "stew", t: [12, 20],
-    i: [pr("lean_beef", 85), pr("soft_tofu", 120), ve("green_pepper", 100), se("mapo_sauce", 12), se("doubanjiang", 3), se("sichuan_pepper_powder", 1)],
+    i: [pr("firm_tofu", 150), pr("lean_beef", 55), ve("green_pepper", 100), se("mapo_sauce", 12), se("doubanjiang", 3), se("sichuan_pepper_powder", 1)],
     ways: [
       way("麻婆豆腐盖米饭配上海青", "Mapo tofu over rice with bok choy", RICE, [ve("bok_choy", 100)]),
       way("麻婆豆腐盖糙米饭配西兰花", "Mapo tofu over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 140)]),
@@ -718,7 +718,7 @@ const CHINESE: Dish[] = [
   }),
   dish({
     id: "tomato_tofu_chicken_stew", zh: "番茄豆腐炖鸡腿", en: "Tomato tofu and chicken thigh stew", sum: "鸡腿肉块与番茄、北豆腐加酱油炖 20 分钟，豆腐吸饱汤汁", sumEn: "Chicken thigh cubes stewed 20 minutes with tomato, firm tofu and soy sauce until the tofu takes up the broth.", c: "chinese", m: "stew", t: [10, 35],
-    i: [pr("chicken_thigh", 90), pr("firm_tofu", 90), ve("tomato", 170), ve("onion", 25), se("reduced_salt_soy_sauce", 4), se("ketchup", 8), se("ginger_paste", 2), oi("sesame_oil", 2), se("salt", 0.3)],
+    i: [pr("firm_tofu", 145), pr("chicken_thigh", 55), ve("tomato", 170), ve("onion", 25), se("reduced_salt_soy_sauce", 4), se("ketchup", 8), se("ginger_paste", 2), oi("sesame_oil", 2), se("salt", 0.3)],
     ways: [
       way("豆腐炖鸡腿盖米饭配上海青", "Tofu chicken stew over rice with bok choy", RICE, [ve("bok_choy", 100)]),
       way("豆腐炖鸡腿盖小米饭配西兰花", "Tofu chicken stew over millet rice with broccoli", MILLET, [ve("frozen_broccoli", 100)]),
@@ -728,7 +728,7 @@ const CHINESE: Dish[] = [
   dish({
     id: "homestyle_tofu_pork_slices", zh: "家常豆腐炒肉片", en: "Home-style tofu with pork slices", sum: "猪大排切片滑炒，下煎黄的北豆腐块，加青椒、胡萝卜、木耳和豆瓣酱炒熟", sumEn: "Pork loin slices stir-fried until pale, then pan-browned firm tofu, green pepper, carrot and wood ear with chili bean sauce.", c: "chinese", m: "stir_fry", t: [14, 15],
     staples: [RICE, BROWN, GRAINS],
-    i: [pr("pork_loin", 90), pr("firm_tofu", 90), ve("green_pepper", 100), ve("carrot", 45), ve("wood_ear", 25), se("doubanjiang", 3), se("reduced_salt_soy_sauce", 4), se("garlic_paste", 2), oi("canola_oil", 4)],
+    i: [pr("firm_tofu", 170), pr("pork_loin", 45), ve("green_pepper", 100), ve("carrot", 45), ve("wood_ear", 25), se("doubanjiang", 3), se("reduced_salt_soy_sauce", 4), se("garlic_paste", 2), oi("canola_oil", 4)],
   }),
 ];
 
@@ -885,11 +885,11 @@ const JAPANESE: Dish[] = [
   dish({
     id: "teriyaki_tofu_chicken_dice", zh: "照烧豆腐鸡丁", en: "Teriyaki tofu and chicken dice", sum: "鸡腿丁与北豆腐块煎上色，加彩椒、胡萝卜和照烧汁收汁，撒芝麻", sumEn: "Chicken thigh dice and firm tofu browned, then red pepper, carrot and teriyaki sauce reduced to a glaze, sprinkled with sesame.", c: "japanese", m: "pan_fry", t: [12, 15],
     staples: [RICE, BROWN, SOBA],
-    i: [pr("chicken_thigh", 90), pr("firm_tofu", 90), ve("red_bell_pepper", 125), ve("carrot", 50), se("teriyaki_sauce", 12), tp("sesame_seeds", 2), oi("canola_oil", 3)],
+    i: [pr("firm_tofu", 170), pr("chicken_thigh", 45), ve("red_bell_pepper", 125), ve("carrot", 50), se("teriyaki_sauce", 12), tp("sesame_seeds", 2), oi("canola_oil", 3)],
   }),
   dish({
     id: "miso_tofu_chicken_pot", zh: "日式豆腐味噌鸡肉锅", en: "Japanese miso tofu and chicken pot", sum: "鸡腿肉块与白萝卜、胡萝卜、香菇煮 15 分钟，下北豆腐，化入味噌", sumEn: "Chicken thigh cubes simmered 15 minutes with daikon, carrot and shiitake, then firm tofu, with miso stirred in.", c: "japanese", m: "simmer", t: [10, 30],
-    i: [pr("chicken_thigh", 105), pr("firm_tofu", 105), ve("white_radish", 70), ve("carrot", 40), ve("shiitake", 30), se("miso", 9), se("ginger_paste", 2), oi("sesame_oil", 2)],
+    i: [pr("firm_tofu", 150), pr("chicken_thigh", 50), ve("white_radish", 70), ve("carrot", 40), ve("shiitake", 30), se("miso", 9), se("ginger_paste", 2), oi("sesame_oil", 2)],
     ways: [
       way("味噌豆腐鸡肉锅盖米饭配上海青", "Miso tofu pot over rice with bok choy", RICE, [ve("bok_choy", 110)]),
       way("味噌豆腐鸡肉锅盖糙米饭配菠菜", "Miso tofu pot over brown rice with spinach", BROWN, [ve("frozen_spinach", 110)]),
@@ -976,7 +976,7 @@ const SOUTHEAST_ASIAN: Dish[] = [
   dish({
     id: "thai_sweet_chili_tofu_chicken", zh: "泰式甜辣豆腐鸡丁", en: "Thai sweet chili tofu and chicken", sum: "鸡腿丁与北豆腐块煎上色，加四季豆、彩椒，拌甜辣酱和鱼露", sumEn: "Chicken thigh dice and firm tofu browned, tossed with green beans and pepper in sweet chili and fish sauce.", c: "southeast_asian", m: "stir_fry", t: [13, 15],
     staples: [RICE, BROWN, VERMICELLI],
-    i: [pr("chicken_thigh", 90), pr("firm_tofu", 90), ve("green_beans", 110), ve("red_bell_pepper", 60), se("sweet_chili_sauce", 12), se("fish_sauce", 1.5), oi("canola_oil", 3)],
+    i: [pr("firm_tofu", 170), pr("chicken_thigh", 46), ve("green_beans", 110), ve("red_bell_pepper", 60), se("sweet_chili_sauce", 12), se("fish_sauce", 1.5), oi("canola_oil", 3)],
   }),
 ];
 

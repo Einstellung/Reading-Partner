@@ -311,7 +311,72 @@ describe("checkDish fails, with the numbers", () => {
     );
     expect(f.food).toBe("chicken_tender");
     expect(f.actual!).toBeCloseTo((30 * 25) / 28.02, 6);
-    expect(f.limit).toBe(80);
+    expect(f.limit).toBe(40);
+  });
+
+  describe("a main with two or more protein lines: each lower bound is half the food's minimum", () => {
+    const proteinFails = (d: Dish) => {
+      const r = checkDishRaw(d);
+      return r.ok ? [] : r.failures.filter((f) => f.rule === "protein_grams");
+    };
+    const chickenEgg = (chicken: number, egg: number) =>
+      dish({
+        ingredients: [
+          { food: "chicken_tender", grams: chicken, role: "protein" },
+          { food: "egg", grams: egg, role: "protein" },
+          { food: "tomato", grams: 130, role: "veg" },
+          { food: "light_soy_sauce", grams: 5, role: "seasoning" },
+          { food: "olive_oil", grams: 5, role: "oil" },
+        ],
+      });
+
+    test("two proteins pass between half the minimum and the minimum", () => {
+      // chicken 45 + egg 115: protein 10.665 + 14.375 + 0.91 + 0.39 = 26.34,
+      // factor 0.949, chicken 42.7 g (under its 80 g minimum, over the half, 40 g)
+      const d = chickenEgg(45, 115);
+      expect(proteinFails(d)).toEqual([]);
+      const r = checkDishRaw(d);
+      const chicken = r.serving!.ingredients.find((i) => i.food === "chicken_tender")!;
+      expect(chicken.grams).toBeGreaterThan(40);
+      expect(chicken.grams).toBeLessThan(80);
+    });
+
+    test("below the half it still fails, naming the lowered bound", () => {
+      // chicken 36 + egg 125: protein 8.532 + 15.625 + 1.3 = 25.46, chicken 35.4 g
+      const f = proteinFails(chickenEgg(36, 125));
+      expect(f).toHaveLength(1);
+      expect(f[0]).toMatchObject({ food: "chicken_tender", limit: 40 });
+      expect(f[0].actual!).toBeCloseTo((36 * 25) / 25.4575, 2);
+      expect(f[0].message).toContain("outside 40-250 g");
+    });
+
+    test("the upper bounds are unchanged", () => {
+      // egg 220 + chicken 30: factor about 0.70, egg 153 g over 150
+      const f = proteinFails(chickenEgg(30, 220));
+      expect(f.find((x) => x.food === "egg")).toMatchObject({ limit: 150 });
+    });
+
+    test("a single protein line still needs the full minimum", () => {
+      // chicken 50 + toast 110 g (a staple line carrying 13.6 g protein): factor
+      // about 0.98, chicken about 49 g, under 80 g
+      const f = proteinFails(
+        dish({
+          ingredients: [
+            { food: "chicken_tender", grams: 50, role: "protein" },
+            { food: "whole_wheat_toast", grams: 110, role: "staple" },
+            { food: "tomato", grams: 130, role: "veg" },
+          ],
+        }),
+      );
+      expect(f).toHaveLength(1);
+      expect(f[0]).toMatchObject({ food: "chicken_tender", limit: 80 });
+    });
+
+    test("a breakfast keeps the full minimum on every line", () => {
+      const f = proteinFails(breakfast({ ingredients: [{ food: "egg", grams: 40, role: "protein" }, { food: "low_fat_milk", grams: 250, role: "protein" }, BREAKFAST[1]] }));
+      expect(f).toHaveLength(1);
+      expect(f[0]).toMatchObject({ food: "egg", limit: 50 });
+    });
   });
 
   test("nothing to scale by", () => {

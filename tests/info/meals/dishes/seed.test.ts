@@ -205,6 +205,24 @@ describe("seed dishes", () => {
     expect(lines.filter((i) => ["dried_tofu", "spiced_dried_tofu"].includes(i.food))).toEqual([]);
   });
 
+  test("a tofu-with-meat batch pot uses about one block of tofu: tofu is the larger protein, 3 servings take 330-450 g", () => {
+    const pots = batchMains.filter((d) => {
+      const protein = d.ingredients.filter((i) => i.role === "protein");
+      return protein.some((i) => i.food.endsWith("_tofu")) && protein.some((i) => ["meat", "poultry"].includes(foodById(i.food)?.proteinCategory ?? ""));
+    });
+    expect(pots.map((d) => d.id).sort()).toEqual(["beef_mapo_tofu", "miso_tofu_chicken_pot", "napa_tofu_meatball_stew", "tomato_tofu_chicken_stew"]);
+    for (const d of pots) {
+      const serving = checkDish(d, { stapleDishIds: STAPLE_IDS }).serving!;
+      const grams = (pick: (food: string) => boolean) => serving.ingredients.filter((i) => i.role === "protein" && pick(i.food)).reduce((n, i) => n + i.grams, 0);
+      const tofu = grams((f) => f.endsWith("_tofu"));
+      const meat = grams((f) => !f.endsWith("_tofu"));
+      expect(tofu * 3, d.id).toBeGreaterThanOrEqual(330);
+      expect(tofu * 3, d.id).toBeLessThanOrEqual(450);
+      expect(tofu, d.id).toBeGreaterThan(meat * 2);
+      expect(meat, d.id).toBeGreaterThanOrEqual(40);
+    }
+  });
+
   test("frozen edamame is used in several dishes: it keeps indefinitely", () => {
     const using = SEED_DISHES.filter((d) => [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)].some((i) => i.food === "frozen_edamame"));
     expect(using.length).toBeGreaterThanOrEqual(10);

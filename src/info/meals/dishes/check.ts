@@ -93,6 +93,13 @@ export const ACTIVE_MIN = { batch: 20, fresh: 15, breakfast: 5, way: 5 } as cons
 /** A breakfast, as written, has at least this much protein (grams). */
 export const BREAKFAST_PROTEIN_MIN_G = 15;
 
+/**
+ * In a main with two or more protein lines, each line's lower gram bound is
+ * this share of the food's `minG` (meat 80 g becomes 40 g, an egg 50 g becomes
+ * 25 g). The upper bounds stay. A single protein line keeps the full `minG`.
+ */
+export const MULTI_PROTEIN_MIN_SHARE = 0.5;
+
 /** The Chinese summary of how a dish is cooked is one short sentence. */
 export const SUMMARY_MAX_CHARS = 40;
 
@@ -396,18 +403,23 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     }
   }
 
-  // Only protein lines carry a gram range; toppings are small by nature.
+  // Only protein lines carry a gram range; toppings are small by nature. A
+  // main with two or more protein lines shares its 25 g between them, so each
+  // line's lower bound drops to a share of the food's minimum.
+  const proteinLines = serving.ingredients.filter((i) => i.role === "protein").length;
+  const minShare = dish.role === "main" && proteinLines >= 2 ? MULTI_PROTEIN_MIN_SHARE : 1;
   for (const line of serving.ingredients) {
     if (line.role !== "protein") continue;
     const f = foodById(line.food);
     if (!f) continue;
-    if (line.grams < f.minG || line.grams > f.maxG) {
+    const min = f.minG * minShare;
+    if (line.grams < min || line.grams > f.maxG) {
       add({
         rule: "protein_grams",
         food: line.food,
-        message: `${line.food} ${Math.round(line.grams)} g is outside ${f.minG}-${f.maxG} g`,
+        message: `${line.food} ${Math.round(line.grams)} g is outside ${min}-${f.maxG} g`,
         actual: line.grams,
-        limit: line.grams < f.minG ? f.minG : f.maxG,
+        limit: line.grams < min ? min : f.maxG,
       });
     }
   }
