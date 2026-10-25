@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { checkDish, isMincedMeat } from "../../../../src/info/meals/dishes/check";
 import { SEED_DISHES } from "../../../../src/info/meals/dishes/seed";
-import type { Dish, DishRole } from "../../../../src/info/meals/dishes/types";
+import { DEFAULT_KITCHEN, type Dish, type DishRole } from "../../../../src/info/meals/dishes/types";
 import { foodById } from "../../../../src/info/meals/nutrition/foods";
 
 const byRole = (role: DishRole): Dish[] => SEED_DISHES.filter((d) => d.role === role);
@@ -123,11 +123,10 @@ describe("seed dishes", () => {
     expect(lines.filter(({ i }) => isMincedMeat(foodById(i.food)!)).map(({ d }) => d.id)).toEqual([]);
     const ground = SEED_DISHES.filter((d) => d.ingredients.some((i) => i.ground));
     expect(ground.map((d) => d.id).sort()).toEqual([
-      "baked_beef_kofta",
       "beef_meatballs_marinara",
-      "beef_meatloaf",
       "chicken_meatball_spinach_soup",
       "napa_tofu_meatball_stew",
+      "tomato_beef_kofta",
       "winter_melon_chicken_meatball_soup",
     ]);
     for (const d of ground) {
@@ -162,6 +161,24 @@ describe("seed dishes", () => {
     const d = byRole("breakfast").find((x) => x.id === "milk_toast_boiled_egg")!;
     expect(d.ingredients.find((i) => i.food === "whole_wheat_toast")?.grams).toBe(70);
     expect(checkDish(d).ok).toBe(true);
+  });
+
+  test("every dish fits the default kitchen: its equipment and every way's staple preparation", () => {
+    const outside = SEED_DISHES.flatMap((d) => d.equipment.filter((e) => !DEFAULT_KITCHEN.includes(e)).map((e) => `${d.id}: ${e}`));
+    expect(outside).toEqual([]);
+    const staples = new Map(byRole("staple").map((d) => [d.id, d]));
+    for (const d of SEED_DISHES) {
+      for (const id of [...d.staples, ...(d.ways ?? []).map((w) => w.staple ?? "")]) {
+        for (const e of staples.get(id)?.equipment ?? []) expect(DEFAULT_KITCHEN.includes(e), `${d.id} -> ${id}: ${e}`).toBe(true);
+      }
+    }
+  });
+
+  test("no oven, slow-cooker, baked or roasted wording in names and summaries", () => {
+    for (const d of SEED_DISHES) {
+      const text = [d.name, d.nameEn, d.summary, d.summaryEn, ...(d.ways ?? []).flatMap((w) => [w.name, w.nameEn])].join(" ");
+      expect(/烤箱|慢炖锅|慢炖|烤盘|\boven\b|slow[- ]cook|\bbaked?\b|(?<!pot )\broast(ed)?\b|traybake|sheet[- ]pan/i.test(text), d.id).toBe(false);
+    }
   });
 
   test("seasoning is ready-made: no fresh garlic, ginger, scallion or leek, and no braised beef shank row", () => {
