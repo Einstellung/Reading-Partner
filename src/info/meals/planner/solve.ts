@@ -1,15 +1,20 @@
 // Grams for a drafted plan (docs/671 克数). The model never supplies an
 // amount; the program solves them per person:
 //
-// - A breakfast is its template as written. Fruit is whole pieces.
+// - A breakfast is its template grown by whole everyday units (an egg, a cup
+//   of milk, a slice of bread) toward the breakfast's kcal share
+//   (growBreakfast). Fruit is whole pieces.
 // - A main dish scales from its reference serving (25 g protein) to the
 //   meal's protein: the day's protein target less breakfast, fruit and sides,
 //   halved over lunch and dinner; never under the reference serving, never a
 //   protein line over its food's maximum. A pot's meals share one scale, and
 //   a pot's packed protein rounds to whole packs when that moves it 30 % or
 //   less ("一盒整盒下锅").
-// - The staple fills the meal's kcal within its range (nutrition/solve.ts
-//   stapleCapG); the day's carbs are held to the carb floor.
+// - The staple fills the meal's kcal within its range, the range growing with
+//   a day above 2000 kcal (mealStapleCapG); the day's carbs are held to the
+//   carb floor.
+// - What lunch and dinner cannot fill goes to a snack of whole units, a cup
+//   of milk or yogurt and a pack of nuts (snackLines).
 // - Oil never fills kcal: a day under its fat floor gets 5 g of oil at each
 //   lunch and dinner, up to four solves (docs/73).
 //
@@ -18,14 +23,14 @@
 import { referenceServing, REFERENCE_TARGET, totals, type Totals } from "../dishes/serving";
 import type { Dish, DishIngredient, IngredientRole } from "../dishes/types";
 import { foodById, type Food } from "../nutrition/foods";
-import { stapleCapG } from "../nutrition/solve";
+import { STAPLE_KCAL_CAP } from "../nutrition/solve";
 import type { DayTargets, Profile, Targets } from "../nutrition/targets";
 import { dayTargetsOn } from "../plan/solve-week";
 import { addDays } from "../plan/week";
 import { isBatchMain, MAIN_SLOTS, type DraftDay, type MainSlot, type MealAt, type PlanDraft, type PlanSlot } from "./draft";
 import type { PlanLibrary } from "./library";
 
-export type LineSource = "breakfast" | "main" | "addOn" | "staple" | "side" | "fruit" | "oil";
+export type LineSource = "breakfast" | "main" | "addOn" | "staple" | "side" | "fruit" | "snack" | "oil";
 
 export interface PlanLine extends DishIngredient {
   source: LineSource;
@@ -45,6 +50,8 @@ export interface SolvedDay {
   target: DayTargets;
   meals: Record<PlanSlot, SolvedMeal>;
   fruit: PlanLine[];
+  /** What the program adds when lunch and dinner cannot fill the day's kcal; empty on most days. */
+  snack: PlanLine[];
   totals: Totals;
   /** Oil added at each lunch and dinner to reach the fat floor. */
   fatBumpG: number;
@@ -71,6 +78,10 @@ const FAT_BUMP_FOOD = "olive_oil";
 export const POT_PACK_SNAP = 0.3;
 /** A fruit portion is whole pieces making at least this many grams; fruit not counted in pieces is this many grams. */
 export const FRUIT_PORTION_G = 125;
+/** Sodium a plan day holds to (checks.ts re-exports it). */
+export const DAY_SODIUM_MG = 2000;
+/** The day the staple caps are written for; a bigger day scales them (mealStapleCapG). */
+export const STAPLE_REFERENCE_DAY_KCAL = 2000;
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const round5 = (n: number) => Math.round(n / 5) * 5;
@@ -120,12 +131,22 @@ function mainOf(draft: PlanDraft, lib: PlanLibrary, day: DraftDay, slot: MainSlo
   return { dish, addOns: [] as DishIngredient[], staple: main.staple ?? null, batch: undefined };
 }
 
+/**
+ * The most of a staple one meal takes. The food's maximum and STAPLE_KCAL_CAP
+ * are an ordinary eater's, written for a STAPLE_REFERENCE_DAY_KCAL day; a day
+ * above it scales both, so a big eater's lunch gets proportionally more rice.
+ */
+export function mealStapleCapG(food: Food, dayKcal: number): number {
+  const k = Math.max(1, dayKcal / STAPLE_REFERENCE_DAY_KCAL);
+  return Math.max(food.minG, k * Math.min(food.maxG, (STAPLE_KCAL_CAP / food.kcal) * 100));
+}
+
 /** Staple lines filling `kcal`: a staple food in its range, or a staple dish scaled by its staple line's range. */
-function stapleLines(lib: PlanLibrary, ref: string | null, kcal: number, boost = 1): PlanLine[] {
+function stapleLines(lib: PlanLibrary, ref: string | null, kcal: number, dayKcal: number, boost = 1): PlanLine[] {
   if (!ref) return [];
   const food = foodById(ref);
   if (food) {
-    const g = clamp(((kcal / food.kcal) * 100) * boost, food.minG, stapleCapG(food));
+    const g = clamp(((kcal / food.kcal) * 100) * boost, food.minG, mealStapleCapG(food, dayKcal));
     return [{ food: ref, grams: round5(g), role: "staple", source: "staple" }];
   }
   const dish = lib.dish(ref);
@@ -134,20 +155,122 @@ function stapleLines(lib: PlanLibrary, ref: string | null, kcal: number, boost =
   const main = serving.ingredients.find((l) => l.role === "staple");
   const mainFood = main && foodById(main.food);
   let k = (kcal / REFERENCE_TARGET.staple.value) * boost;
-  if (main && mainFood && main.grams > 0) k = clamp(k, mainFood.minG / main.grams, stapleCapG(mainFood) / main.grams);
+  if (main && mainFood && main.grams > 0) k = clamp(k, mainFood.minG / main.grams, mealStapleCapG(mainFood, dayKcal) / main.grams);
   return tag(serving.ingredients, "staple", dish.id, Math.max(0, k));
 }
 
+/**
+ * The everyday unit a breakfast line grows by, beside the food table's own
+ * units (eggs): a 250 ml cup, a slice of bread, half a steamed bun.
+ */
+export const BREAKFAST_UNITS: Readonly<Record<string, { grams: number; label: string }>> = {
+  low_fat_milk: { grams: 250, label: "杯" },
+  whole_milk: { grams: 250, label: "杯" },
+  soy_milk_unsweetened: { grams: 250, label: "杯" },
+  whole_wheat_toast: { grams: 35, label: "片" },
+  wholegrain_toast: { grams: 35, label: "片" },
+  steamed_bun: { grams: 50, label: "半个" },
+  whole_wheat_pita: { grams: 40, label: "个" },
+  corn_tortilla: { grams: 30, label: "张" },
+  oats: { grams: 30, label: "袋" },
+};
+
+export function breakfastUnit(food: Food): { grams: number; label: string } | null {
+  return food.unit ?? BREAKFAST_UNITS[food.id] ?? null;
+}
+
+/**
+ * A breakfast template grown by whole units toward the meal's kcal target
+ * (`target.meals.breakfast`): one unit at a time, staples first and then
+ * protein, each line to at most twice its template grams and its food's
+ * maximum, while a unit brings the breakfast nearer the target. Fruit and
+ * lines without a unit stay as written. Sodium: a unit no saltier per kcal
+ * than the day's limit allows (DAY_SODIUM_MG over the day's kcal) is always
+ * fine; a saltier one (an egg, a slice of bread) only while the breakfast
+ * stays within its kcal share of that limit.
+ */
+export function growBreakfast(lines: readonly DishIngredient[], target: Pick<DayTargets, "kcal" | "meals">): DishIngredient[] {
+  const out = lines.map((l) => ({ ...l }));
+  const kcalTarget = target.meals.breakfast.kcal;
+  const perKcal = DAY_SODIUM_MG / Math.max(1, target.kcal);
+  const sodiumShare = kcalTarget * perKcal;
+  const growable = out
+    .map((l, i) => ({ l, i, food: foodById(l.food) as Food }))
+    .filter((x) => (x.l.role === "staple" || x.l.role === "protein") && x.food && breakfastUnit(x.food))
+    .sort((a, b) => (a.l.role === b.l.role ? a.i - b.i : a.l.role === "staple" ? -1 : 1));
+  const now = totals(out);
+  let kcal = now.kcal;
+  let sodium = now.sodium;
+  for (let added = true; added; ) {
+    added = false;
+    for (const { l, i, food } of growable) {
+      const unit = breakfastUnit(food)?.grams ?? 0;
+      const step = (food.kcal * unit) / 100;
+      const salt = ((food.sodium ?? 0) * unit) / 100;
+      const cap = Math.min(2 * lines[i].grams, food.maxG);
+      if (l.grams + unit > cap + 1e-6 || Math.abs(kcal + step - kcalTarget) >= Math.abs(kcal - kcalTarget)) continue;
+      if (salt > step * perKcal && sodium + salt > sodiumShare) continue;
+      l.grams += unit;
+      kcal += step;
+      sodium += salt;
+      added = true;
+    }
+  }
+  return out;
+}
+
+/**
+ * The snack a day gets when lunch and dinner cannot fill its kcal (docs/73
+ * 加餐): a cup of milk or yogurt, then a small pack of nuts, the first of
+ * each the user can have that keeps the day within DAY_SODIUM_MG, each only
+ * when it brings the day nearer its target.
+ * The day's fruit stays its own line. Soy milk is left out: its opened carton
+ * keeps 3 to 5 days.
+ */
+export const SNACK_UNITS: readonly (readonly { food: string; grams: number; label: string }[])[] = [
+  [
+    { food: "low_fat_milk", grams: 250, label: "杯" },
+    { food: "greek_yogurt", grams: 150, label: "杯" },
+    { food: "plain_yogurt", grams: 150, label: "杯" },
+    { food: "whole_milk", grams: 250, label: "杯" },
+  ],
+  [
+    { food: "mixed_nuts", grams: 25, label: "小包" },
+    { food: "almonds", grams: 25, label: "小包" },
+    { food: "walnuts", grams: 25, label: "小包" },
+    { food: "peanuts", grams: 25, label: "小包" },
+  ],
+];
+
+function snackLines(lib: PlanLibrary, short: number, sodium: number): PlanLine[] {
+  const out: PlanLine[] = [];
+  let left = short;
+  let salt = sodium;
+  for (const choices of SNACK_UNITS) {
+    const pick = choices
+      .map((c) => ({ ...c, f: foodById(c.food) as Food }))
+      .find((c) => c.f && !lib.foodBlocked(c.food) && salt + ((c.f.sodium ?? 0) * c.grams) / 100 <= DAY_SODIUM_MG);
+    if (!pick) continue;
+    const kcal = (pick.f.kcal * pick.grams) / 100;
+    if (Math.abs(left - kcal) >= Math.abs(left)) continue;
+    out.push({ food: pick.food, grams: pick.grams, role: pick.f.roles.includes("protein") ? "protein" : "topping", source: "snack" });
+    left -= kcal;
+    salt += ((pick.f.sodium ?? 0) * pick.grams) / 100;
+  }
+  return out;
+}
+
 export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly DayTargets[]): SolvedPlan {
-  const fixed = draft.days.map((d) => {
+  const fixed = draft.days.map((d, i) => {
     const breakfast = need(lib, d.breakfast);
+    const breakfastLines = growBreakfast(breakfast.ingredients, targets[i]);
     const sides = (ids: readonly string[]) =>
       ids.flatMap((id) => {
         const s = referenceServing(need(lib, id));
         return s ? tag(s.ingredients, "side", id) : [];
       });
     return {
-      breakfast: tag(breakfast.ingredients, "breakfast", breakfast.id),
+      breakfast: tag(breakfastLines, "breakfast", breakfast.id),
       fruit: d.fruit.flatMap((id): PlanLine[] => {
         const f = foodById(id);
         return f ? [{ food: id, grams: fruitPortionG(f), role: "fruit" as IngredientRole, source: "fruit" }] : [];
@@ -210,13 +333,15 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
           const oil: PlanLine[] = bump > 0 ? [{ food: FAT_BUMP_FOOD, grams: bump, role: "oil", source: "oil" }] : [];
           const base = [...m.lines, ...tag(m.addOns, "addOn", m.dish.id), ...f.sides[slot], ...oil];
           const kcal = (slot === "lunch" ? share : 1 - share) * left - totals(base).kcal;
-          const lines = [...base, ...stapleLines(lib, m.staple, kcal, boost)];
+          const lines = [...base, ...stapleLines(lib, m.staple, kcal, target.kcal, boost)];
           return [slot, { day: i + 1, slot, lines, totals: totals(lines) }];
         }),
       ) as Record<MainSlot, SolvedMeal>;
       const breakfast: SolvedMeal = { day: i + 1, slot: "breakfast", lines: f.breakfast, totals: totals(f.breakfast) };
-      const all = [...f.breakfast, ...meals.lunch.lines, ...meals.dinner.lines, ...f.fruit];
-      return { meals: { breakfast, ...meals }, totals: totals(all) };
+      const eaten = [...f.breakfast, ...meals.lunch.lines, ...meals.dinner.lines, ...f.fruit];
+      const sum = totals(eaten);
+      const snack = snackLines(lib, target.kcal - sum.kcal, sum.sodium);
+      return { meals: { breakfast, ...meals }, snack, totals: totals([...eaten, ...snack]) };
     };
     let bump = 0;
     let boost = 1;
@@ -230,7 +355,7 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
       boost += 0.1;
       out = solveDay(bump, boost);
     }
-    return { day: i + 1, target, meals: out.meals, fruit: f.fruit, totals: out.totals, fatBumpG: bump };
+    return { day: i + 1, target, meals: out.meals, fruit: f.fruit, snack: out.snack, totals: out.totals, fatBumpG: bump };
   });
 
   const batches: SolvedBatch[] = draft.batches.map((b) => {
