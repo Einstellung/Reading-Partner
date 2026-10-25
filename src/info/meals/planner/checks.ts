@@ -34,6 +34,7 @@ import {
 import { planLibrary, type PlanLibrary } from "./library";
 import { leftoverMatters, packList, shownName, type PackLine } from "./packs";
 import { solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
+import { planStorage, type StoragePlan } from "./storage";
 
 export type DraftRule =
   | "days"
@@ -79,7 +80,7 @@ export interface DraftProblem {
 }
 
 export interface DraftContext {
-  profile: Pick<Profile, "dislikes" | "kitchen" | "unavailable" | "cookSlots">;
+  profile: Pick<Profile, "dislikes" | "kitchen" | "unavailable" | "cookSlots" | "boxes">;
   /** Each plan day's targets (solve.ts planDayTargets). */
   targets: readonly DayTargets[];
   /** ISO weekday of day 1, for the profile's cooking times. */
@@ -98,6 +99,8 @@ export interface DraftResult {
   /** Solved when the structure held; meaningful only when `problems` is empty. */
   plan: SolvedPlan | null;
   shopping: PackLine[];
+  /** Containers, boxes, where each food is kept and the night-before reminders (storage.ts); null when the plan was not solved. */
+  storage: StoragePlan | null;
 }
 
 /** Whole grains are at least this share of the plan's staple servings. */
@@ -501,7 +504,7 @@ export function checkDraft(input: PlanDraft, ctx: DraftContext): DraftResult {
   const draft = cloneDraft(input);
   const structure = structureProblems(draft, lib, ctx);
   if (structure.length || ctx.targets.length < draft.days.length) {
-    return { problems: structure, notes: [], draft, plan: null, shopping: [] };
+    return { problems: structure, notes: [], draft, plan: null, shopping: [], storage: null };
   }
   const first = solveDraft(draft, lib, ctx.targets);
   const notes = topUpVegetables(draft, first, lib);
@@ -519,5 +522,6 @@ export function checkDraft(input: PlanDraft, ctx: DraftContext): DraftResult {
       notes.push(`${lib.dish(id)?.name} uses ${foodById(s.to)?.zh} (${s.to}) in place of ${foodById(s.from)?.zh} (${s.from}), which they cannot get.`);
     }
   }
-  return { problems: solvedProblems(plan, lib, shopping), notes, draft, plan, shopping };
+  const storage = planStorage({ draft, plan, shopping, profile: ctx.profile, library: lib, people: ctx.people ?? 1 });
+  return { problems: solvedProblems(plan, lib, shopping), notes, draft, plan, shopping, storage };
 }

@@ -3,10 +3,12 @@
 // bought the way a shop sells it: whole packs of perishables, whole pieces of
 // loose produce, whole eggs. What a perishable pack leaves over is computed
 // with the day it spoils once opened; a leftover no meal uses goes back to the
-// model as a draft problem (checks.ts). Pantry and long-keeping foods, and raw
-// meat and fish (frozen in portions the day they are bought), are not checked.
-// Grams stay inside the program: what the user reads is packs, pieces and
-// "about" weights.
+// model as a draft problem (checks.ts). Pantry and long-keeping foods, food
+// bought frozen, and raw meat and fish (what no meal uses is frozen raw,
+// storage.ts) are not checked. Raw meat and fish wait in the fridge until
+// their cooking day when they keep that long and are frozen the day they are
+// bought when they do not. Grams stay inside the program: what the user reads
+// is packs, pieces and "about" weights.
 
 import { t } from "../../../i18n";
 import { foodById, type Food } from "../nutrition/foods";
@@ -28,8 +30,12 @@ export interface PackLine {
   buy: PackBuy;
   /** The first plan day a meal or a prep session uses it. */
   firstDay: number;
-  /** Raw meat or fish: portioned and frozen the day it is bought. */
+  /** The last plan day a meal or a prep session uses it. */
+  lastDay: number;
+  /** Raw meat or fish some meal cooks after it stops keeping raw: portioned and frozen the day it is bought. */
   freeze: boolean;
+  /** Bought frozen (fish fillets, shrimp, frozen vegetables): kept frozen. */
+  frozen: boolean;
   /** For perishables only: what is bought but no meal uses, and the day an opened pack of it spoils. */
   leftover: { grams: number; spoilsDay: number } | null;
 }
@@ -47,8 +53,25 @@ const LEFTOVER_CHECKED: ReadonlySet<string> = new Set(["d1-2", "d3-5"]);
 /** Whole packs or pieces for a weight, a few grams over a whole one not counting as another. */
 const wholeCount = (grams: number, unit: number) => Math.max(1, Math.ceil(grams / unit - 0.02));
 
-function freezesOnPurchase(food: Food): boolean {
-  return food.keeps === "d1-2" && ["meat", "poultry", "seafood"].includes(food.proteinCategory ?? "");
+/** The list is bought by day 1: a food's keeping days count from it. */
+export const SHOP_DAY = 1;
+
+/** Days raw meat and fish keep in the fridge after the day they are bought, by shelf-life class (the low end). */
+const RAW_KEEP_DAYS: Readonly<Record<string, number>> = { "d1-2": 1, "d3-5": 3 };
+
+/** Raw meat, poultry or fish bought fresh. */
+export function isRawFlesh(food: Food): boolean {
+  return food.category === "protein" && food.keeps in RAW_KEEP_DAYS && ["meat", "poultry", "seafood"].includes(food.proteinCategory ?? "");
+}
+
+/** The last plan day raw meat or fish bought on SHOP_DAY can be cooked without freezing it first. */
+export function rawKeepsUntil(food: Food): number {
+  return SHOP_DAY + (RAW_KEEP_DAYS[food.keeps] ?? 0);
+}
+
+/** Sold frozen and kept frozen. */
+export function isBoughtFrozen(food: Food): boolean {
+  return food.category === "frozen";
 }
 
 /** A seasoning, oil or spread: kept on hand, never bought for one plan. */
@@ -77,10 +100,14 @@ function dayNeeded(draft: PlanDraft, day: number, slot: PlanSlot): number {
 }
 
 export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLine[] {
-  const need = new Map<string, { grams: number; firstDay: number }>();
+  const need = new Map<string, { grams: number; firstDay: number; lastDay: number }>();
   const add = (food: string, grams: number, day: number) => {
     const had = need.get(food);
-    need.set(food, { grams: (had?.grams ?? 0) + grams * people, firstDay: Math.min(had?.firstDay ?? day, day) });
+    need.set(food, {
+      grams: (had?.grams ?? 0) + grams * people,
+      firstDay: Math.min(had?.firstDay ?? day, day),
+      lastDay: Math.max(had?.lastDay ?? day, day),
+    });
   };
   for (const d of plan.days) {
     for (const slot of ["breakfast", "lunch", "dinner"] as const) {
@@ -93,15 +120,17 @@ export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLi
     const food = foodById(id);
     if (!food) continue;
     const buy = buyFor(food, n.grams);
-    const freeze = freezesOnPurchase(food);
+    const raw = isRawFlesh(food);
+    const freeze = raw && n.lastDay > rawKeepsUntil(food);
+    const frozen = isBoughtFrozen(food);
     // Loose produce is bought by the piece, so what is left is less than one
     // piece; only packs are held to finishing (docs/671 整包与开封).
-    const checked = LEFTOVER_CHECKED.has(food.keeps) && !freeze && !food.boughtDry && buy.by === "pack";
+    const checked = LEFTOVER_CHECKED.has(food.keeps) && !raw && !frozen && !food.boughtDry && buy.by === "pack";
     const leftover: PackLine["leftover"] =
       checked && buy.by === "pack"
         ? { grams: Math.max(0, buy.count * buy.packG - n.grams), spoilsDay: n.firstDay + (food.pack?.openDays ?? 0) }
         : null;
-    out.push({ food: id, grams: n.grams, buy, firstDay: n.firstDay, freeze, leftover });
+    out.push({ food: id, grams: n.grams, buy, firstDay: n.firstDay, lastDay: n.lastDay, freeze, frozen, leftover });
   }
   return out.sort((a, b) => a.firstDay - b.firstDay || a.food.localeCompare(b.food));
 }
@@ -135,6 +164,13 @@ export function packLineText(line: PackLine): string {
   const name = food ? shownName(food) : line.food;
   if (line.buy.by === "weight") return t("meals.pack.about", { qty: name, grams: about(line.grams) });
   return `${name} ${buyText(line)}`;
+}
+
+/** What to do with it once bought: "买回当天分装冷冻", "买回直接冷冻", or nothing. */
+export function keepText(line: PackLine): string {
+  if (line.frozen) return t("meals.pack.keepFrozen");
+  if (line.freeze) return t("meals.pack.freeze");
+  return "";
 }
 
 /** "一锅分 3 顿". */

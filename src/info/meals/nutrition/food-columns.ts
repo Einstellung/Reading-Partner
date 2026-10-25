@@ -206,8 +206,9 @@ export type PackKind = "box" | "bag" | "block" | "carton" | "head" | "bunch" | "
  * (a 1 lb bag of green beans, an 8 oz box of mushrooms, a 400 g block of firm
  * tofu, a 1 L carton), not a database figure; opened days follow the
  * refrigerated after-opening figures of USDA FoodKeeper, the low end where it
- * gives a range. Raw meat and fish are frozen in portions the day they are
- * bought, so their opened days never count; they carry the pack for the list.
+ * gives a range. Raw meat and fish wait in the fridge only until their cooking
+ * day and what no meal uses is frozen raw, so their opened days never count;
+ * they carry the pack for the list.
  * Countable produce bought loose (tomatoes, peppers, cucumbers) has no pack:
  * one piece (PIECE_G) is the unit and PIECE_OPEN_DAYS says how long a cut one
  * keeps.
@@ -253,6 +254,31 @@ export const RETAIL_PACK: Readonly<Record<string, { grams: number; kind: PackKin
   strawberries: { grams: 450, kind: "box", openDays: 3 },
   grapes: { grams: 500, kind: "bag", openDays: 5 },
 };
+
+/**
+ * Seasonings kept in the fridge once opened (USDA FoodKeeper, condiments):
+ * oyster and hoisin sauce, the bean and chili pastes, tube garlic and ginger,
+ * ketchup, mayonnaise and dressings, pesto and jarred pasta sauce, miso and
+ * the curry pastes. Soy sauce, vinegar, oils, sugar, dry spices and fish
+ * sauce go back in the cupboard.
+ */
+export const CHILL_AFTER_OPENING: ReadonlySet<string> = new Set([
+  "oyster_sauce", "hoisin_sauce", "doubanjiang", "chili_sauce", "sweet_chili_sauce", "garlic_chili_sauce",
+  "gochujang", "sriracha", "garlic_paste", "ginger_paste", "ketchup", "mayonnaise", "japanese_dressing",
+  "pesto", "tomato_pasta_sauce", "miso", "satay_sauce", "bbq_sauce", "teriyaki_sauce", "mapo_sauce",
+  "red_curry_paste", "tikka_masala_paste", "harissa", "sesame_paste",
+]);
+
+/**
+ * Produce kept out of the fridge (USDA FoodKeeper, fresh produce): onions,
+ * garlic, potatoes, sweet potatoes, taro and whole pumpkin in a cool dark
+ * place; bananas, mangoes, avocados, citrus, lemons and apples for a few days
+ * on the counter.
+ */
+export const ROOM_TEMPERATURE: ReadonlySet<string> = new Set([
+  "onion", "red_onion", "garlic", "potato", "baby_potato", "sweet_potato", "purple_sweet_potato", "taro",
+  "pumpkin", "banana", "mango", "avocado", "orange", "mandarin", "pomelo", "grapefruit", "lemon", "apple",
+]);
 
 /** Days a cut piece of loose produce keeps in the fridge (FoodKeeper, cut vegetables). */
 export const PIECE_OPEN_DAYS = 3;
