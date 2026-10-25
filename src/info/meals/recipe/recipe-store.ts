@@ -65,6 +65,11 @@ export async function loadRecipe(key: string, io: RecipeIo = recipeIo): Promise<
   return (await readRecipes(io)).recipes[key] ?? null;
 }
 
+/** The keys that have a stored recipe. */
+export async function storedRecipeKeys(io: RecipeIo = recipeIo): Promise<Set<string>> {
+  return new Set(Object.keys((await readRecipes(io)).recipes));
+}
+
 /** What survives a save at `now`: the newest RECIPE_KEEP_COUNT written within RECIPE_KEEP_DAYS. */
 export function keptRecipes(recipes: Readonly<Record<string, RecipeEntry>>, now: number): Record<string, RecipeEntry> {
   const floor = now - RECIPE_KEEP_DAYS * 86_400_000;

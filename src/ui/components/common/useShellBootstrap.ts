@@ -57,6 +57,7 @@ import { registerSourceSiteAdapters } from "../../../info/sources/plugins/all";
 import { registerXLinkReader } from "../../../info/x/live";
 import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-worker";
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photos/photo-sweep";
+import { startMealsRecipeHousekeeping } from "../../../info/meals/live";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerProseAdjudicateWorker } from "../../../memory/adjudicate/live";
 import { amICollecting, noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
@@ -436,8 +437,11 @@ export function useShellBootstrap({
   // switched on rather than at boot: a household not using it should not have a
   // pass reading two files on every pull. Idempotent, so turning the setting on
   // mid-session starts it and nothing starts it twice.
+  // The week's recipes are written on the same switch, on every device (docs/73 做法页).
   useEffect(() => {
-    if (settings.meals) startMealsPhotoHousekeeping();
+    if (!settings.meals) return;
+    startMealsPhotoHousekeeping();
+    startMealsRecipeHousekeeping();
   }, [settings.meals]);
 
   const syncReport = useSyncHealth();

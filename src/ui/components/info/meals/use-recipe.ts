@@ -1,6 +1,7 @@
-// The recipe page's steps (docs/73 做法页): the stored recipe when there is
-// one, else the call that writes it. Only this state changes while the page is
-// open, so only the steps area redraws when the call lands.
+// The recipe page's steps (docs/73 做法页): the stored recipe, which the
+// background sweep has usually written already, else the call that writes it
+// (the sweep's own when it is on this meal). Only this state changes while the
+// page is open, so only the steps area redraws when the call lands.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 

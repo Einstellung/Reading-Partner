@@ -82,7 +82,7 @@ export const RECIPE_PROMPT_VERSION = 2;
  * meals, and where the box waits. Any of them changing asks for a new recipe,
  * and the old one is left for retention to drop. RECIPE_PROMPT_VERSION goes
  * in too, so a prompt that changes what the steps may use rewrites every
- * stored recipe once, on its next open.
+ * stored recipe of the week once.
  */
 export function recipeKey(
   name: string,

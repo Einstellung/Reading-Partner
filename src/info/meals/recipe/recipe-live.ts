@@ -1,11 +1,14 @@
 // Writing a recipe with the real model and keeping it (docs/73 做法页).
 //
-// The reader has the page open and is watching the steps area, so the call is
-// on the talk tier ("chat", ai/model-tier.ts). One call per recipe: a reply
-// that does not read is a failure the page offers to retry, not a second call
-// made behind its back.
+// Most recipes are written in the background before anyone opens the page
+// (recipe-sweep.ts), on the everyday tier ("meals", ai/model-tier.ts). A page
+// opened before the sweep reached its meal writes it on the talk tier
+// ("chat"): the reader is watching the steps area. One call per recipe: a
+// reply that does not read is a failure, not a second call made behind the
+// reader's back.
 
 import { callModel, resolveModel } from "../../../ai/model-call";
+import type { ThinkingKind } from "../../../ai/model-tier";
 import type { Locale } from "../../../i18n/locale";
 import { loadSettings } from "../../../platform/app/settings";
 import { newTally, reportParse } from "../../../platform/app/structured-output";
@@ -19,14 +22,18 @@ import {
 } from "./recipe";
 import { loadRecipe, saveRecipe } from "./recipe-store";
 
-// One call per key at a time. Leaving the page does not cancel it — the recipe
-// is saved when it lands — and coming back while it runs waits on the same one.
+/** Who is asking: the page the reader is watching, or the background sweep. */
+export type RecipeTier = Extract<ThinkingKind, "chat" | "meals">;
+
+// One call per key at a time, whoever started it. Leaving the page does not
+// cancel it — the recipe is saved when it lands — and the page opened while
+// the sweep writes its meal, or opened again, waits on the same call.
 const inFlight = new Map<string, Promise<RecipeEntry>>();
 
-async function writeRecipe(request: RecipeRequest): Promise<RecipeEntry> {
-  const model = await resolveModel("chat");
+async function writeRecipe(request: RecipeRequest, tier: RecipeTier): Promise<RecipeEntry> {
+  const model = await resolveModel(tier);
   const text = await callModel(
-    "chat",
+    tier,
     "plan",
     recipeSystemPrompt(request),
     recipeUserText(request),
@@ -51,11 +58,14 @@ export function storedRecipe(request: RecipeRequest): Promise<RecipeEntry | null
   return loadRecipe(request.key);
 }
 
-/** The recipe for a request: the one being written, or a new call. */
-export function writeRecipeOnce(request: RecipeRequest): Promise<RecipeEntry> {
+/**
+ * The recipe for a request: the one being written, or a new call on `tier`.
+ * A call already running keeps the tier it started on.
+ */
+export function writeRecipeOnce(request: RecipeRequest, tier: RecipeTier = "chat"): Promise<RecipeEntry> {
   const running = inFlight.get(request.key);
   if (running) return running;
-  const call = writeRecipe(request).finally(() => inFlight.delete(request.key));
+  const call = writeRecipe(request, tier).finally(() => inFlight.delete(request.key));
   inFlight.set(request.key, call);
   return call;
 }

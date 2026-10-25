@@ -11,6 +11,9 @@ import { ingredientImageUrl } from "./photos/images";
 import { mealsCanDraw, mealsDishDrawer } from "./photos/dish-draw-sweep";
 import { mealsPhotoSearcher } from "./photos/photo-sweep";
 import { loadMealsPhotos } from "./photos/photo-store";
+import { recipeLanguageNow, writeRecipeOnce } from "./recipe/recipe-live";
+import { storedRecipeKeys } from "./recipe/recipe-store";
+import { createRecipeWriter, watchMealsForRecipes, type RecipeWriter } from "./recipe/recipe-sweep";
 import {
   loadMeals,
   saveCharter,
@@ -21,6 +24,7 @@ import {
   saveShopping,
 } from "./plan/store";
 import { hasWebviewFetch } from "../../platform/app/platform";
+import { localDate } from "../../platform/std/day";
 import { buildMealsCatalogTools } from "./tools";
 import { hostRegion } from "./region";
 import type { AgentTool } from "../../legion/durable/contract";
@@ -38,6 +42,40 @@ export interface LiveMealsOptions {
   changed(): void;
 }
 
+let recipeWriter: RecipeWriter | null = null;
+
+/** This device's recipe writer (recipe/recipe-sweep.ts). One, so that "one round at a time" means anything. */
+export function mealsRecipeWriter(): RecipeWriter {
+  recipeWriter ??= createRecipeWriter({
+    state: () => loadMeals(),
+    language: () => recipeLanguageNow(),
+    region: () => hostRegion(),
+    stored: () => storedRecipeKeys(),
+    write: (request) => writeRecipeOnce(request, "meals"),
+    today: () => localDate(Date.now()),
+    now: () => Date.now(),
+  });
+  return recipeWriter;
+}
+
+let recipesWatched = false;
+
+/** Write the week's recipes now and on every pull of the week. Idempotent. */
+export function startMealsRecipeHousekeeping(): void {
+  if (recipesWatched) return;
+  recipesWatched = true;
+  watchMealsForRecipes(mealsRecipeWriter());
+}
+
+// A write that changes the week's meals or grams changes their recipe keys:
+// the recipes are written for the new week once it is on disk.
+function thenWriteRecipes<T>(write: Promise<T>): Promise<T> {
+  return write.then((result) => {
+    void mealsRecipeWriter().sweep();
+    return result;
+  });
+}
+
 /**
  * The ports every meals write goes through, on the live store.
  *
@@ -51,11 +89,11 @@ export function liveMealsPorts(opts: Pick<LiveMealsOptions, "today" | "changed">
   const searcher = mealsPhotoSearcher();
   return {
     current: () => loadMeals(),
-    saveCharter: (charter, week) => saveCharter(charter, week),
-    savePlan: (plan, shopping) => savePlan(plan, shopping),
-    saveDeviation: (deviation, plan, shopping) => saveDeviation(deviation, plan, shopping),
+    saveCharter: (charter, week) => thenWriteRecipes(saveCharter(charter, week)),
+    savePlan: (plan, shopping) => thenWriteRecipes(savePlan(plan, shopping)),
+    saveDeviation: (deviation, plan, shopping) => thenWriteRecipes(saveDeviation(deviation, plan, shopping)),
     saveShopping: (shopping) => saveShopping(shopping),
-    saveMealMethod: (date, meal, method) => saveMealMethod(date, meal, method),
+    saveMealMethod: (date, meal, method) => thenWriteRecipes(saveMealMethod(date, meal, method)),
     region: () => hostRegion(),
     photos: () => loadMealsPhotos(),
     ...(hasWebviewFetch()
