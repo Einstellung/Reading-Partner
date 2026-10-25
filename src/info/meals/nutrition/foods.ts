@@ -4,6 +4,7 @@
 // gram, kcal and protein figure from the numbers here. A food the table does
 // not have cannot be planned.
 
+import { ADDED_FOODS } from "./added-foods";
 import { ADDED_SUGAR_G, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "./food-columns";
 import { FOOD_TABLE } from "./food-table";
 import { COMPOUND_SEASONINGS } from "./seasonings";
@@ -155,7 +156,7 @@ function withColumns(f: Food): Food {
   return out;
 }
 
-export const FOODS: readonly Food[] = [...FOOD_TABLE, ...COMPOUND_SEASONINGS].map(withColumns);
+export const FOODS: readonly Food[] = [...FOOD_TABLE, ...COMPOUND_SEASONINGS, ...ADDED_FOODS].map(withColumns);
 
 const BY_ID: ReadonlyMap<string, Food> = new Map(FOODS.map((f) => [f.id, f]));
 

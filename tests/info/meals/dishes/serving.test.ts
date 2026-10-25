@@ -6,8 +6,8 @@
 // brown_rice_cooked 123 kcal 2.7 P 1.0 F, Na 4.
 
 import { describe, expect, test } from "bun:test";
-import { METHODS, dishStorage } from "../../../../src/info/meals/dishes/methods";
-import { referenceServing, totals } from "../../../../src/info/meals/dishes/serving";
+import { BREAKFAST_METHODS, METHODS, canBatch, dishStorage } from "../../../../src/info/meals/dishes/methods";
+import { referenceServing, totals, wayServing } from "../../../../src/info/meals/dishes/serving";
 import type { DishIngredient } from "../../../../src/info/meals/dishes/types";
 
 const MAIN: DishIngredient[] = [
@@ -31,6 +31,14 @@ describe("totals", () => {
     // 14.7 * 0.05
     expect(t.addedSugar).toBeCloseTo(0.735, 6);
     expect(t.vegG).toBe(130);
+  });
+
+  test("a topping's fat is added fat whatever the food", () => {
+    // greek yogurt 0.4 g fat per 100 g: not added as a protein line, added as a topping
+    expect(totals([{ food: "greek_yogurt", grams: 100, role: "protein" }]).addedFat).toBe(0);
+    expect(totals([{ food: "greek_yogurt", grams: 100, role: "topping" }]).addedFat).toBeCloseTo(0.4, 6);
+    // feta is a fat food: added either way, 21.5 * 0.2
+    expect(totals([{ food: "feta", grams: 20, role: "topping" }]).addedFat).toBeCloseTo(4.3, 6);
   });
 
   test("skips foods the table does not have", () => {
@@ -79,6 +87,42 @@ describe("reference serving", () => {
     expect(s.addedFat).toBeCloseTo(4.3725, 3);
   });
 
+  test("a side scales to 150 g of vegetables", () => {
+    // broccoli 200 + carrot 100 + oil 6: factor 0.5, oil 3 g
+    const s = referenceServing({
+      role: "side",
+      ingredients: [
+        { food: "broccoli", grams: 200, role: "veg" },
+        { food: "carrot", grams: 100, role: "veg" },
+        { food: "olive_oil", grams: 6, role: "oil" },
+      ],
+    })!;
+    expect(s.factor).toBeCloseTo(0.5, 6);
+    expect(s.vegG).toBeCloseTo(150, 6);
+    expect(s.addedFat).toBeCloseTo(3, 6);
+    expect(referenceServing({ role: "side", ingredients: [{ food: "olive_oil", grams: 6, role: "oil" }] })).toBeNull();
+  });
+
+  test("a way adds its add-ons to the reference serving without rescaling it", () => {
+    // MAIN doubled scales by 0.5 back to the base; + tomato 50 and feta 10:
+    // kcal 176.8 + 8.5 + 26.5, protein 25 + 0.35 + 1.42, fat added 5 + 2.15
+    const base = referenceServing({ role: "main", ingredients: MAIN.map((i) => ({ ...i, grams: i.grams * 2 })) })!;
+    const w = wayServing(base, {
+      addOns: [
+        { food: "tomato", grams: 50, role: "veg" },
+        { food: "feta", grams: 10, role: "topping" },
+      ],
+    });
+    expect(w.factor).toBeCloseTo(0.5, 6);
+    expect(w.ingredients).toHaveLength(6);
+    expect(w.ingredients[4].grams).toBe(50);
+    expect(w.kcal).toBeCloseTo(211.8, 6);
+    expect(w.protein).toBeCloseTo(26.77, 6);
+    expect(w.addedFat).toBeCloseTo(7.15, 6);
+    expect(w.vegG).toBeCloseTo(180, 6);
+    expect(wayServing(base, { addOns: [] }).kcal).toBeCloseTo(176.8, 6);
+  });
+
   test("nothing to scale by gives null", () => {
     expect(referenceServing({ role: "main", ingredients: [{ food: "olive_oil", grams: 10, role: "oil" }] })).toBeNull();
     expect(referenceServing({ role: "staple", ingredients: [] })).toBeNull();
@@ -88,22 +132,13 @@ describe("reference serving", () => {
 describe("storage from the method", () => {
   const chicken: DishIngredient[] = [{ food: "chicken_breast", grams: 100, role: "protein" }];
 
-  test("cooked methods keep two days after cooking and freeze for three weeks", () => {
-    for (const method of ["stew", "braise", "pressure_cook", "slow_cook", "roast", "steam", "pan_fry", "stir_fry"]) {
+  test("the hands-off methods keep two days after cooking and freeze for three weeks", () => {
+    for (const method of ["stew", "braise", "pressure_cook", "slow_cook", "roast", "bake", "steam", "simmer"]) {
+      expect(canBatch(method), method).toBe(true);
       expect(dishStorage({ method: method as never, ingredients: chicken }), method).toEqual({
         fridgeDays: 2,
         freezable: true,
         freezeWeeks: 3,
-      });
-    }
-  });
-
-  test("dressed, pickled and marinated keep three days and do not freeze", () => {
-    for (const method of ["cold_dress", "pickle", "marinate"]) {
-      expect(dishStorage({ method: method as never, ingredients: chicken }), method).toEqual({
-        fridgeDays: 3,
-        freezable: false,
-        freezeWeeks: 0,
       });
     }
   });
@@ -123,10 +158,28 @@ describe("storage from the method", () => {
     }
   });
 
-  test("made-at-the-meal and unknown methods cannot be batched", () => {
-    for (const method of ["greens", "salad", "sear_fresh", "assemble", "deep_fry"]) {
+  test("stir-fry, pan-fry, cold, assembled, breakfast-only and unknown methods cannot be batched", () => {
+    for (const method of [
+      "pan_fry",
+      "stir_fry",
+      "cold_dress",
+      "pickle",
+      "marinate",
+      "greens",
+      "salad",
+      "microwave",
+      "toast",
+      "assemble",
+      "deep_fry",
+    ]) {
       expect(dishStorage({ method: method as never, ingredients: chicken }), method).toBeNull();
+      expect(canBatch(method), method).toBe(false);
     }
+  });
+
+  test("breakfast methods", () => {
+    expect([...BREAKFAST_METHODS]).toEqual(["assemble", "simmer", "microwave", "steam", "toast"]);
+    for (const m of BREAKFAST_METHODS) expect(METHODS.map((x) => x.id)).toContain(m);
   });
 
   test("the method table has no deep frying", () => {

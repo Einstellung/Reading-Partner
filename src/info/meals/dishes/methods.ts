@@ -1,6 +1,8 @@
 // Method categories and the storage the program derives from them (docs/671
-// 一锅). There is no deep frying. Storage is never stored on a dish: it is
-// read off the method and the foods each time.
+// 一锅). There is no deep frying. Only hands-off methods whose hands-on time
+// does not grow with the amount and whose food reheats well can be batched;
+// everything else is made at the meal. Storage is never stored on a dish: it
+// is read off the method and the foods each time.
 
 import { foodById } from "../nutrition/foods";
 import type { Dish } from "./types";
@@ -11,16 +13,19 @@ export type MethodId =
   | "pressure_cook"
   | "slow_cook"
   | "roast"
+  | "bake"
   | "steam"
+  | "simmer"
+  | "grain"
   | "pan_fry"
   | "stir_fry"
   | "cold_dress"
   | "pickle"
   | "marinate"
-  | "grain"
   | "greens"
   | "salad"
-  | "sear_fresh"
+  | "microwave"
+  | "toast"
   | "assemble";
 
 export interface Storage {
@@ -38,7 +43,6 @@ export interface Method {
 }
 
 const COOKED: Storage = { fridgeDays: 2, freezeWeeks: 3 };
-const DRESSED: Storage = { fridgeDays: 3, freezeWeeks: 0 };
 const GRAIN: Storage = { fridgeDays: 1, freezeWeeks: 3 };
 
 export const METHODS: readonly Method[] = [
@@ -46,24 +50,35 @@ export const METHODS: readonly Method[] = [
   { id: "braise", zh: "卤", storage: COOKED },
   { id: "pressure_cook", zh: "压力锅", storage: COOKED },
   { id: "slow_cook", zh: "慢炖", storage: COOKED },
-  { id: "roast", zh: "烤", storage: COOKED },
+  { id: "roast", zh: "烤盘、烤箱烤", storage: COOKED },
+  { id: "bake", zh: "焗烤", storage: COOKED },
   { id: "steam", zh: "蒸", storage: COOKED },
-  { id: "pan_fry", zh: "煎", storage: COOKED },
-  { id: "stir_fry", zh: "少油炒", storage: COOKED },
-  { id: "cold_dress", zh: "凉拌", storage: DRESSED },
-  { id: "pickle", zh: "醋渍", storage: DRESSED },
-  { id: "marinate", zh: "腌泡", storage: DRESSED },
+  { id: "simmer", zh: "煮（汤、白煮肉、手撕肉、煮蛋）", storage: COOKED },
   { id: "grain", zh: "煮米饭和谷物", storage: GRAIN },
+  { id: "pan_fry", zh: "煎（含鱼、牛排）", storage: null },
+  { id: "stir_fry", zh: "少油炒", storage: null },
+  { id: "cold_dress", zh: "凉拌", storage: null },
+  { id: "pickle", zh: "醋渍", storage: null },
+  { id: "marinate", zh: "腌泡", storage: null },
   { id: "greens", zh: "绿叶菜", storage: null },
   { id: "salad", zh: "沙拉", storage: null },
-  { id: "sear_fresh", zh: "现煎（鱼、牛排）", storage: null },
+  { id: "microwave", zh: "微波加热", storage: null },
+  { id: "toast", zh: "烤面包", storage: null },
   { id: "assemble", zh: "组装，不开火", storage: null },
 ];
+
+/** What a breakfast may be made with (docs/671 早餐): assembly, boiled eggs, the microwave, reheating by steam, toast. */
+export const BREAKFAST_METHODS: readonly MethodId[] = ["assemble", "simmer", "microwave", "steam", "toast"];
 
 const BY_ID: ReadonlyMap<string, Method> = new Map(METHODS.map((m) => [m.id, m]));
 
 export function methodById(id: string): Method | undefined {
   return BY_ID.get(id);
+}
+
+/** True for the hands-off methods a pot can be cooked with. */
+export function canBatch(id: string): boolean {
+  return methodById(id)?.storage != null;
 }
 
 export interface DishStorage {

@@ -39,7 +39,9 @@ describe("food table integrity", () => {
         expect(Number.isFinite(v)).toBe(true);
         expect(v).toBeGreaterThanOrEqual(0);
       }
-      expect(f.kcal).toBeGreaterThan(0);
+      // Salt is the one row with no energy at all.
+      if (f.protein + f.fat + f.carbs > 0) expect(f.kcal, f.id).toBeGreaterThan(0);
+      else expect(f.id).toBe("salt");
       expect(f.protein + f.fat + f.carbs).toBeLessThanOrEqual(101);
     }
   });

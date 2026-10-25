@@ -1,15 +1,18 @@
 // The reference serving (docs/671 菜库): the template scaled so a main has
-// 25 g protein, a breakfast 12 g (docs/73's normal amounts) and a staple
-// 200 kcal, with every figure the entry check reads, computed from the food
-// table.
+// 25 g protein, a breakfast 12 g (docs/73's normal amounts), a staple 200 kcal
+// and a side 150 g of vegetables, with every figure the entry check reads,
+// computed from the food table. A batch main is also read with each of its
+// ways: the reference serving plus that way's add-ons, which are written for
+// one reference serving and not scaled.
 
 import { foodById, type Food } from "../nutrition/foods";
-import type { Dish, DishIngredient, DishRole } from "./types";
+import type { Dish, DishIngredient, DishRole, DishWay } from "./types";
 
-export const REFERENCE_TARGET: Readonly<Record<DishRole, { by: "protein" | "kcal"; value: number }>> = {
+export const REFERENCE_TARGET: Readonly<Record<DishRole, { by: "protein" | "kcal" | "veg"; value: number }>> = {
   main: { by: "protein", value: 25 },
   breakfast: { by: "protein", value: 12 },
   staple: { by: "kcal", value: 200 },
+  side: { by: "veg", value: 150 },
 };
 
 /** Cheese counts toward added fat with oils, sauces and nuts (docs/671 入库检查). */
@@ -25,6 +28,7 @@ export interface Totals {
   protein: number;
   fat: number;
   carbs: number;
+  /** Fat of added-fat foods, and all the fat of topping lines. */
   addedFat: number;
   sodium: number;
   addedSugar: number;
@@ -43,7 +47,7 @@ export function totals(lines: readonly DishIngredient[]): Totals {
     t.protein += f.protein * k;
     t.fat += f.fat * k;
     t.carbs += f.carbs * k;
-    if (isAddedFat(f)) t.addedFat += f.fat * k;
+    if (isAddedFat(f) || line.role === "topping") t.addedFat += f.fat * k;
     t.sodium += (f.sodium ?? 0) * k;
     t.addedSugar += (f.addedSugar ?? 0) * k;
     if (line.role === "veg") t.vegG += line.grams;
@@ -61,9 +65,15 @@ export interface Serving extends Totals {
 export function referenceServing(dish: Pick<Dish, "role" | "ingredients">): Serving | null {
   const target = REFERENCE_TARGET[dish.role];
   const base = totals(dish.ingredients);
-  const have = target.by === "protein" ? base.protein : base.kcal;
+  const have = target.by === "protein" ? base.protein : target.by === "kcal" ? base.kcal : base.vegG;
   if (!(have > 0)) return null;
   const factor = target.value / have;
   const ingredients = dish.ingredients.map((i) => ({ ...i, grams: i.grams * factor }));
   return { ...totals(ingredients), factor, ingredients };
+}
+
+/** A reference serving with one way's add-ons on the plate; the pot's grams and factor stay as they are. */
+export function wayServing(serving: Serving, way: Pick<DishWay, "addOns">): Serving {
+  const ingredients = [...serving.ingredients, ...way.addOns.map((i) => ({ ...i }))];
+  return { ...totals(ingredients), factor: serving.factor, ingredients };
 }
