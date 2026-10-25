@@ -196,6 +196,36 @@ const BREAKFASTS: Dish[] = [
     role: "breakfast", c: "chinese", m: "steam", eq: ["steamer"], t: [3, 18],
     i: [pr("soy_milk_unsweetened", 250), pr("egg", 50), st("sweet_potato", 150)],
   }),
+  // Soy milk maker breakfasts: the dry beans and the water go in the night
+  // before with the timer set, so the milk is ready when the user wakes. The
+  // line grams are the dry beans, oats and nuts that go into the maker, the
+  // water is not a line (it has no nutrition), and the whole-bean milk is
+  // drunk unstrained, so the nutrition is the dry ingredients' own. These
+  // count as legumes in the plan (docs/671 多样性).
+  dish({
+    id: "soy_milk_maker_plain", zh: "自磨黄豆浆茶叶蛋馒头", en: "Home-made soy milk, tea egg and steamed bun",
+    sum: "前一晚黄豆加水入豆浆机，设好定时；早上馒头微波热 1 分钟，配茶叶蛋", sumEn: "Load the soybeans and water into the soy milk maker the night before and set the timer; in the morning microwave the bun 1 minute and serve with a tea egg.",
+    role: "breakfast", c: "chinese", m: "assemble", eq: ["soy_milk_maker", "microwave"], t: [4, 35],
+    i: [pr("soybean_dry", 25), pr("tea_egg", 50), st("steamed_bun", 100), fr("mandarin", 100)],
+  }),
+  dish({
+    id: "soy_milk_maker_five_grain", zh: "五谷豆浆水煮蛋半个馒头", en: "Five-grain soy milk, two boiled eggs and half a steamed bun",
+    sum: "前一晚黄豆燕麦小米红豆加水入豆浆机定时；早上煮 2 个蛋，配半个馒头", sumEn: "Load the soybeans, oats, millet and adzuki beans with water into the soy milk maker the night before and set the timer; in the morning boil two eggs 8 minutes and serve with half a bun.",
+    role: "breakfast", c: "chinese", m: "simmer", eq: ["soy_milk_maker", "stove"], t: [5, 40],
+    i: [pr("soybean_dry", 20), st("adzuki_beans_dry", 8), st("oats", 15), st("millet_raw", 10), pr("egg", 100), st("steamed_bun", 50), fr("apple", 100)],
+  }),
+  dish({
+    id: "soy_milk_maker_black_bean_walnut", zh: "黑豆核桃豆浆水煮蛋吐司", en: "Black bean and walnut soy milk, boiled egg and toast",
+    sum: "前一晚黄豆、黑豆、核桃加水入豆浆机，设好定时；早上煮蛋，配吐司", sumEn: "Load the soybeans, black soybeans and walnuts with water into the soy milk maker the night before and set the timer; in the morning boil the egg 8 minutes and serve with toast.",
+    role: "breakfast", c: "chinese", m: "simmer", eq: ["soy_milk_maker", "stove"], t: [5, 40],
+    i: [pr("soybean_dry", 20), pr("black_soybean_dry", 10), tp("walnuts", 8), pr("egg", 50), st("whole_wheat_toast", 70)],
+  }),
+  dish({
+    id: "soy_milk_maker_red_date", zh: "红枣豆浆茶叶蛋全麦吐司", en: "Red date soy milk, tea egg and whole-wheat toast",
+    sum: "前一晚黄豆、红枣加水入豆浆机，设好定时；早上倒出，配茶叶蛋和全麦吐司", sumEn: "Load the soybeans, dried red dates and water into the soy milk maker the night before and set the timer; in the morning pour it out and serve with a tea egg and whole-wheat toast.",
+    role: "breakfast", c: "chinese", m: "assemble", eq: ["soy_milk_maker"], t: [3, 35],
+    i: [pr("soybean_dry", 25), fr("red_dates_dried", 10), pr("tea_egg", 50), st("whole_wheat_toast", 70)],
+  }),
 ];
 
 const AMERICAN: Dish[] = [

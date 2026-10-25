@@ -189,6 +189,32 @@ describe("seed dishes", () => {
     }
   });
 
+  test("soy milk maker breakfasts: dry beans on the line, load the night before, count as legumes", () => {
+    expect(DEFAULT_KITCHEN).toContain("soy_milk_maker");
+    const soy = byRole("breakfast").filter((d) => d.equipment.includes("soy_milk_maker"));
+    expect(soy.length).toBeGreaterThanOrEqual(4);
+    const sources = new Set<string>();
+    for (const d of soy) {
+      const beans = d.ingredients.filter((i) => ["soy", "legume"].includes(foodById(i.food)?.proteinCategory ?? ""));
+      expect(beans.length, d.id).toBeGreaterThan(0);
+      // Soybeans are the base of every milk, in a natural 20 to 25 g handful.
+      const soybeans = d.ingredients.find((i) => i.food === "soybean_dry");
+      expect(soybeans?.grams, d.id).toBeGreaterThanOrEqual(20);
+      expect(soybeans?.grams, d.id).toBeLessThanOrEqual(25);
+      expect(d.summary, d.id).toContain("前一晚");
+      expect(d.summary, d.id).toContain("定时");
+      expect(d.summaryEn.toLowerCase(), d.id).toContain("night before");
+      expect(d.summaryEn.toLowerCase(), d.id).toContain("timer");
+      expect(d.activeMin, d.id).toBeLessThanOrEqual(5);
+      expect(checkDish(d).ok, d.id).toBe(true);
+      expect(checkDish(d).serving!.protein, d.id).toBeGreaterThanOrEqual(15);
+      for (const i of d.ingredients) sources.add(i.food);
+    }
+    for (const f of ["black_soybean_dry", "adzuki_beans_dry", "red_dates_dried", "oats", "millet_raw", "walnuts"]) {
+      expect(sources.has(f), f).toBe(true);
+    }
+  });
+
   test("steamed chicken is sliced thin and coated with starch, never a plain whole breast", () => {
     const steamed = SEED_DISHES.filter((d) => d.method === "steam" && d.ingredients.some((i) => i.food.startsWith("chicken_")));
     expect(steamed.length).toBeGreaterThan(0);
