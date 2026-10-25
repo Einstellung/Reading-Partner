@@ -285,3 +285,64 @@ describe("seed dishes", () => {
     for (const d of SEED_DISHES) expect(/整[块片]鸡胸|整块鸡腿|whole (chicken )?breast/i.test(d.summary + d.summaryEn), d.id).toBe(false);
   });
 });
+
+// Docs/671 菜库: seed dishes avoid partial-pack perishables. A dish that opens a
+// pack it cannot finish leaves the rest to spoil, so the seed library stays
+// clear of the packs nobody can use up in one plan.
+describe("seed dishes and partial-pack perishables", () => {
+  const lines = (d: Dish) => [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)];
+  const usedBy = (food: string) => SEED_DISHES.filter((d) => lines(d).some((i) => i.food === food)).map((d) => d.id);
+
+  test("no seed dish uses coconut milk: the rest of the can would spoil", () => {
+    expect(usedBy("light_coconut_milk")).toEqual([]);
+    expect(foodById("light_coconut_milk")).toBeDefined();
+    for (const d of SEED_DISHES) expect(/椰/.test(`${d.name} ${(d.ways ?? []).map((w) => w.name).join(" ")} ${d.summary}`), d.id).toBe(false);
+  });
+
+  test("no fresh herb line: a bunch rots long before three grams of it are used up", () => {
+    for (const id of ["basil", "mint", "coriander", "dill", "parsley"]) expect(usedBy(id), id).toEqual([]);
+    // Generic form: no perishable fresh produce line under 20 g (lemon, lime and onion keep for weeks).
+    const tiny = SEED_DISHES.flatMap((d) =>
+      lines(d)
+        .filter((i) => {
+          const f = foodById(i.food)!;
+          return f.category === "produce" && f.keeps !== "w2plus" && i.grams < 20;
+        })
+        .map((i) => `${d.id}: ${i.food} ${i.grams} g`),
+    );
+    expect(tiny).toEqual([]);
+  });
+
+  test("no soft cheese or fresh dairy garnish: feta and mozzarella are not in any dish", () => {
+    expect(usedBy("feta")).toEqual([]);
+    expect(usedBy("mozzarella")).toEqual([]);
+    expect(usedBy("egg_white")).toEqual([]);
+    // Yogurt is a breakfast item at 100 g or more, not a spoonful on a pot.
+    for (const d of SEED_DISHES) {
+      for (const i of lines(d).filter((x) => x.food === "greek_yogurt" || x.food === "plain_yogurt")) {
+        expect(d.role === "breakfast" && i.grams >= 100, `${d.id}: ${i.food} ${i.grams} g`).toBe(true);
+      }
+    }
+  });
+
+  test("no unusual perishable that only one or two dishes would use", () => {
+    const banned = ["avocado", "pineapple", "asparagus", "eggplant", "snow_peas", "enoki", "chinese_chives", "mung_bean_sprouts", "king_oyster_mushroom", "blueberries", "firm_tofu"];
+    for (const f of banned) expect(usedBy(f), f).toEqual([]);
+  });
+
+  test("a pot of three takes about one whole can of tomatoes, and a whole drained can of beans where it has beans", () => {
+    const canned = (d: Dish, foods: string[]) => lines(d).filter((i) => foods.includes(i.food));
+    for (const d of SEED_DISHES) {
+      for (const i of canned(d, ["crushed_tomatoes"])) {
+        expect(d.prep, `${d.id} opens a can for one serving`).toBe("batch");
+        expect(i.grams * 3, d.id).toBeGreaterThanOrEqual(375);
+        expect(i.grams * 3, d.id).toBeLessThanOrEqual(420);
+      }
+      for (const i of canned(d, ["canned_kidney_beans", "canned_black_beans", "canned_chickpeas"])) {
+        expect(d.prep, `${d.id} opens a can for one serving`).toBe("batch");
+        expect(i.grams * 3, d.id).toBeGreaterThanOrEqual(225);
+        expect(i.grams * 3, d.id).toBeLessThanOrEqual(260);
+      }
+    }
+  });
+});
