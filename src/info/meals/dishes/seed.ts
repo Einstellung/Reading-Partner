@@ -481,6 +481,288 @@ const ITALIAN: Dish[] = [
   }),
 ];
 
-const MAINS: Dish[] = [...AMERICAN, ...MEDITERRANEAN, ...ITALIAN];
+const CHINESE: Dish[] = [
+  dish({
+    id: "tomato_braised_beef_shank", zh: "番茄炖牛腱", en: "Tomato braised beef shank", c: "chinese", m: "pressure_cook", eq: ["pressure_cooker"], t: [15, 60],
+    i: [pr("beef_shank_raw", 105), ve("tomato", 220), ve("carrot", 50), ve("onion", 40), se("garlic_paste", 3), se("ginger_paste", 3), se("reduced_salt_soy_sauce", 5), oi("canola_oil", 3)],
+    ways: [
+      way("牛腱配米饭和焯上海青", "Beef over rice with blanched bok choy", RICE, [ve("bok_choy", 100)]),
+      way("牛腱拌面配焯菜心", "Beef with noodles and blanched choy sum", "fresh_noodles", [ve("choy_sum", 100)]),
+      way("牛腱配馒头和拍黄瓜", "Beef with a steamed bun and cucumber", "steamed_bun", [ve("cucumber", 80)]),
+    ],
+  }),
+  dish({
+    id: "shiitake_braised_chicken", zh: "香菇黄焖鸡", en: "Shiitake braised chicken thighs", c: "chinese", m: "stew", t: [15, 40],
+    i: [pr("chicken_thigh", 120), ve("shiitake", 80), ve("green_pepper", 70), se("oyster_sauce", 5), se("reduced_salt_soy_sauce", 3), se("ginger_paste", 3), oi("canola_oil", 3)],
+    ways: [
+      way("黄焖鸡配糙米饭和上海青", "Chicken over brown rice with bok choy", BROWN, [ve("bok_choy", 100)]),
+      way("黄焖鸡配糯玉米和黄瓜", "Chicken with waxy corn and cucumber", CORN, [ve("cucumber", 80)]),
+      way("黄焖鸡配杂粮饭和西兰花", "Chicken over multigrain rice with broccoli", GRAINS, [ve("frozen_broccoli", 90)]),
+    ],
+  }),
+  dish({
+    id: "yam_wood_ear_chicken", zh: "山药木耳炖鸡", en: "Chicken stew with yam and wood ear", c: "chinese", m: "stew", t: [15, 45],
+    i: [pr("chicken_thigh", 115), ve("chinese_yam", 120), ve("wood_ear", 60), ve("shiitake", 40), se("reduced_salt_soy_sauce", 4), se("ginger_paste", 3)],
+    ways: [
+      way("炖鸡配米饭和芥蓝", "Stew over rice with blanched gai lan", RICE, [ve("gai_lan", 100)]),
+      way("炖鸡配小米饭和菜心", "Stew over millet rice with choy sum", MILLET, [ve("choy_sum", 100)]),
+      way("炖鸡配馒头和黄瓜", "Stew with a steamed bun and cucumber", "steamed_bun", [ve("cucumber", 80)]),
+    ],
+  }),
+  dish({
+    id: "potato_soy_braised_chicken", zh: "土豆烧鸡", en: "Soy-braised chicken with potato", c: "chinese", m: "braise", t: [15, 40],
+    i: [pr("chicken_thigh", 115), st("potato", 100), ve("onion", 40), ve("carrot", 50), se("reduced_salt_soy_sauce", 5), se("oyster_sauce", 3), se("five_spice_powder", 0.5), se("ginger_paste", 2)],
+    ways: [
+      way("土豆烧鸡配焯上海青", "Chicken and potato with blanched bok choy", null, [ve("bok_choy", 100)]),
+      way("土豆烧鸡配米饭和拍黄瓜", "Chicken and potato over rice with cucumber", RICE, [ve("cucumber", 80)]),
+    ],
+  }),
+  dish({
+    id: "radish_beef_stew", zh: "白萝卜炖牛腱", en: "Beef shank and white radish stew", c: "chinese", m: "pressure_cook", eq: ["pressure_cooker"], t: [15, 60],
+    i: [pr("beef_shank_raw", 105), ve("white_radish", 200), ve("carrot", 40), ve("onion", 30), se("reduced_salt_soy_sauce", 5), se("five_spice_powder", 0.5), se("ginger_paste", 3)],
+    ways: [
+      way("炖牛腱配米饭和菜心", "Stew over rice with choy sum", RICE, [ve("choy_sum", 100)]),
+      way("炖牛腱拌面配上海青", "Stew with noodles and bok choy", "fresh_noodles", [ve("bok_choy", 100)]),
+      way("炖牛腱配糯玉米和黄瓜", "Stew with waxy corn and cucumber", CORN, [ve("cucumber", 80)]),
+    ],
+  }),
+  dish({
+    id: "winter_melon_chicken_meatball_soup", zh: "冬瓜鸡肉丸汤", en: "Winter melon and chicken meatball soup", c: "chinese", m: "simmer", t: [18, 40],
+    i: [pr("chicken_mince", 125), ve("winter_melon", 200), ve("shiitake", 30), se("reduced_salt_soy_sauce", 3), se("ginger_paste", 3), oi("sesame_oil", 2), se("low_sodium_stock", 150)],
+    ways: [
+      way("肉丸汤配米饭和上海青", "Soup with rice and bok choy", RICE, [ve("bok_choy", 100)]),
+      way("肉丸汤配杂粮饭和芥蓝", "Soup with multigrain rice and gai lan", GRAINS, [ve("gai_lan", 100)]),
+      way("肉丸汤下面条", "Soup with noodles and choy sum", "fresh_noodles", [ve("choy_sum", 100)]),
+    ],
+  }),
+  dish({
+    id: "steamed_chicken_shiitake", zh: "香菇蒸鸡", en: "Steamed chicken with shiitake and wood ear", c: "chinese", m: "steam", eq: ["steamer"], t: [12, 30],
+    i: [pr("chicken_thigh", 120), ve("shiitake", 80), ve("wood_ear", 40), se("oyster_sauce", 4), se("reduced_salt_soy_sauce", 3), se("ginger_paste", 3), oi("sesame_oil", 2)],
+    ways: [
+      way("蒸鸡配糙米饭和菜心", "Chicken over brown rice with choy sum", BROWN, [ve("choy_sum", 100)]),
+      way("蒸鸡配蒸红薯和上海青", "Chicken with steamed sweet potato and bok choy", SWEET_POTATO, [ve("bok_choy", 100)]),
+      way("蒸鸡配馒头和拍黄瓜", "Chicken with a steamed bun and cucumber", "steamed_bun", [ve("cucumber", 80)]),
+    ],
+  }),
+  dish({
+    id: "beef_mapo_tofu", zh: "牛肉麻婆豆腐", en: "Mapo tofu with beef and peppers", c: "chinese", m: "stew", t: [12, 20],
+    i: [pr("lean_beef_mince", 85), pr("soft_tofu", 120), ve("green_pepper", 100), se("mapo_sauce", 12), se("doubanjiang", 3), se("sichuan_pepper_powder", 1)],
+    ways: [
+      way("麻婆豆腐配米饭和上海青", "Mapo tofu over rice with bok choy", RICE, [ve("bok_choy", 100)]),
+      way("麻婆豆腐配糙米饭和西兰花", "Mapo tofu over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 90)]),
+      way("麻婆豆腐配杂粮饭和芥蓝", "Mapo tofu over multigrain rice with gai lan", GRAINS, [ve("gai_lan", 100)]),
+    ],
+  }),
+  dish({
+    id: "five_spice_braised_chicken", zh: "五香卤鸡胸", en: "Five-spice braised chicken breast", c: "chinese", m: "braise", t: [10, 40],
+    i: [pr("chicken_breast", 108), ve("carrot", 60), ve("onion", 30), se("reduced_salt_soy_sauce", 5), se("five_spice_powder", 1), se("ginger_paste", 3)],
+    ways: [
+      way("卤鸡配米饭和菜心", "Chicken over rice with choy sum", RICE, [ve("choy_sum", 100)]),
+      way("卤鸡拌面配上海青", "Chicken with noodles and bok choy", "fresh_noodles", [ve("bok_choy", 100)]),
+      way("手撕卤鸡凉拌黄瓜", "Shredded chicken with sesame cucumber salad", null, [ve("cucumber", 110), tp("sesame_seeds", 3)], 5),
+    ],
+  }),
+  dish({
+    id: "tomato_shrimp_egg_stirfry", zh: "番茄虾仁炒蛋", en: "Tomato, shrimp and scrambled eggs", c: "chinese", m: "stir_fry", t: [12, 15],
+    staples: [RICE, BROWN, GRAINS],
+    i: [pr("egg", 55), pr("white_shrimp", 85), ve("tomato", 150), se("reduced_salt_soy_sauce", 3), oi("canola_oil", 5)],
+  }),
+  dish({
+    id: "kung_pao_chicken", zh: "宫保鸡丁", en: "Kung pao chicken", c: "chinese", m: "stir_fry", t: [15, 20],
+    staples: [RICE, BROWN, MILLET],
+    i: [pr("chicken_breast", 105), tp("peanuts", 8), ve("green_pepper", 60), ve("carrot", 50), ve("celery", 50), se("reduced_salt_soy_sauce", 4), se("black_vinegar", 4), se("white_sugar", 3), se("chili_sauce", 3), oi("canola_oil", 4)],
+  }),
+  dish({
+    id: "green_pepper_pork_strips", zh: "青椒肉丝", en: "Pork strips with peppers", c: "chinese", m: "stir_fry", t: [12, 15],
+    staples: [RICE, GRAINS, SWEET_POTATO],
+    i: [pr("lean_pork_leg", 115), ve("green_pepper", 100), ve("red_bell_pepper", 50), se("reduced_salt_soy_sauce", 3), se("oyster_sauce", 3), se("garlic_paste", 3), oi("canola_oil", 5)],
+  }),
+  dish({
+    id: "steamed_cod_shiitake", zh: "清蒸鳕鱼香菇", en: "Steamed cod with shiitake and bok choy", c: "chinese", m: "steam", eq: ["steamer"], t: [10, 20],
+    staples: [RICE, MILLET, CORN],
+    i: [pr("cod", 135), ve("shiitake", 60), ve("bok_choy", 90), se("reduced_salt_soy_sauce", 5), se("ginger_paste", 3), oi("sesame_oil", 3)],
+  }),
+  dish({
+    id: "sesame_chicken_cucumber_salad", zh: "麻酱鸡丝拌黄瓜", en: "Sesame chicken and cucumber salad", c: "chinese", m: "assemble", eq: [], t: [10, 10],
+    staples: [RICE, "steamed_bun", SWEET_POTATO],
+    i: [pr("ready_chicken_breast", 105), ve("cucumber", 130), ve("red_cabbage", 40), oi("sesame_paste", 8), se("reduced_salt_soy_sauce", 3), se("black_vinegar", 4)],
+  }),
+];
+
+const MEXICAN: Dish[] = [
+  dish({
+    id: "salsa_shredded_chicken", zh: "莎莎手撕鸡", en: "Slow-cooker salsa chicken", c: "mexican", m: "slow_cook", eq: ["slow_cooker"], t: [10, 300],
+    i: [pr("chicken_breast", 110), ve("crushed_tomatoes", 80), ve("onion", 40), ve("green_pepper", 40), se("taco_seasoning", 2.5), se("lime", 8)],
+    ways: [
+      way("鸡肉玉米饼塔可", "Chicken tacos in corn tortillas", "corn_tortilla", [ve("cabbage", 60), tp("coriander", 3), tp("lime", 8)]),
+      way("鸡肉墨西哥饭碗", "Chicken burrito bowl over brown rice", BROWN, [ve("frozen_corn", 60), ve("tomato", 50), fr("avocado", 30)]),
+      way("鸡肉烤土豆配酸奶", "Chicken on a baked potato with yogurt", BAKED_POTATO, [tp("greek_yogurt", 25), ve("romaine", 60), tp("coriander", 3)]),
+    ],
+  }),
+  dish({
+    id: "orange_carnitas_pork", zh: "橙香手撕猪肉", en: "Orange carnitas-style pork", c: "mexican", m: "slow_cook", eq: ["slow_cooker"], t: [10, 420],
+    i: [pr("lean_pork_leg", 120), ve("onion", 50), fr("orange", 40), se("ground_cumin", 1.5), se("dried_oregano", 1), se("lime", 8), se("salt", 0.4)],
+    ways: [
+      way("猪肉玉米饼塔可", "Carnitas tacos with cabbage and lime", "corn_tortilla", [ve("cabbage", 60), tp("coriander", 3), tp("lime", 8)]),
+      way("猪肉饭碗配菠萝", "Carnitas rice bowl with pineapple", BROWN, [ve("tomato", 65), fr("pineapple", 60)]),
+      way("猪肉生菜卷", "Carnitas lettuce wraps", null, [ve("romaine", 100), ve("cherry_tomato", 50)], 5),
+    ],
+  }),
+  dish({
+    id: "beef_barbacoa", zh: "墨西哥炖牛腱", en: "Beef barbacoa", c: "mexican", m: "pressure_cook", eq: ["pressure_cooker"], t: [12, 75],
+    i: [pr("beef_shank_raw", 105), ve("onion", 50), ve("crushed_tomatoes", 60), se("chili_powder_blend", 2), se("ground_cumin", 1), se("dried_oregano", 1), se("lime", 8), se("salt", 0.3)],
+    ways: [
+      way("牛肉玉米饼塔可", "Barbacoa tacos with red cabbage", "corn_tortilla", [ve("red_cabbage", 60), tp("coriander", 3)]),
+      way("牛肉烤红薯配酸奶", "Barbacoa on sweet potato with yogurt", SWEET_POTATO, [ve("cabbage", 60), tp("greek_yogurt", 20)]),
+      way("牛肉糙米饭配玉米", "Barbacoa over brown rice with corn", BROWN, [ve("frozen_corn", 60), ve("romaine", 50)]),
+    ],
+  }),
+  dish({
+    id: "turkey_taco_meat", zh: "火鸡塔可肉酱", en: "Turkey taco meat", c: "mexican", m: "stew", t: [12, 30],
+    i: [pr("ground_turkey", 125), ve("crushed_tomatoes", 80), ve("onion", 40), ve("red_bell_pepper", 40), se("taco_seasoning", 3)],
+    ways: [
+      way("肉酱玉米饼塔可", "Tacos in corn tortillas with lettuce", "corn_tortilla", [ve("romaine", 60), ve("tomato", 50)]),
+      way("肉酱糙米饭碗", "Taco rice bowl with corn", BROWN, [ve("frozen_corn", 50), ve("cucumber", 60)]),
+      way("肉酱烤土豆配奶酪", "Taco baked potato with cheese", BAKED_POTATO, [tp("mozzarella", 15), ve("romaine", 60)]),
+    ],
+  }),
+  dish({
+    id: "chicken_tortilla_soup", zh: "墨西哥鸡肉玉米汤", en: "Chicken tortilla soup", c: "mexican", m: "simmer", t: [12, 40],
+    i: [pr("chicken_breast", 95), st("frozen_corn", 40), ve("crushed_tomatoes", 80), ve("onion", 30), ve("green_pepper", 30), se("low_sodium_stock", 150), se("taco_seasoning", 2), se("lime", 8), tp("coriander", 3)],
+    ways: [
+      way("汤配玉米饼脆片和牛油果", "Soup with tortilla strips and avocado", "corn_tortilla", [fr("avocado", 30), ve("romaine", 50)]),
+      way("汤泡饭配紫甘蓝", "Soup over rice with red cabbage", RICE, [ve("cherry_tomato", 50), ve("cabbage", 50)]),
+    ],
+  }),
+  dish({
+    id: "shrimp_fajita_skillet", zh: "虾仁法吉塔", en: "Shrimp fajita skillet", c: "mexican", m: "stir_fry", t: [12, 18],
+    staples: ["corn_tortilla", "whole_wheat_tortilla", BROWN],
+    i: [pr("white_shrimp", 115), ve("red_bell_pepper", 70), ve("green_pepper", 50), ve("onion", 40), se("fajita_seasoning", 2.5), se("lime", 8), oi("canola_oil", 4)],
+  }),
+  dish({
+    id: "fish_tacos_cabbage", zh: "鱼肉卷心菜塔可", en: "Fish tacos with cabbage", c: "mexican", m: "pan_fry", t: [12, 15],
+    staples: ["corn_tortilla", BROWN],
+    i: [pr("frozen_tilapia_fillet", 135), ve("cabbage", 80), ve("red_cabbage", 30), ve("tomato", 40), se("lime", 10), tp("coriander", 3), se("taco_seasoning", 1.5), oi("canola_oil", 3)],
+  }),
+  dish({
+    id: "chicken_burrito_bowl", zh: "鸡肉黑豆饭碗", en: "Chicken and black bean burrito bowl", c: "mexican", m: "assemble", eq: [], t: [8, 8],
+    staples: [BROWN, RICE, "whole_wheat_tortilla"],
+    i: [pr("ready_chicken_breast", 100), st("canned_black_beans", 50), ve("tomato", 60), ve("romaine", 60), ve("red_onion", 15), fr("avocado", 30), se("lime", 8), tp("coriander", 3)],
+  }),
+];
+
+const JAPANESE: Dish[] = [
+  dish({
+    id: "baked_teriyaki_chicken", zh: "烤照烧鸡胸", en: "Baked teriyaki chicken", c: "japanese", m: "bake", eq: ["oven"], t: [10, 35],
+    i: [pr("chicken_breast", 108), ve("onion", 40), se("teriyaki_sauce", 12), tp("sesame_seeds", 2)],
+    ways: [
+      way("照烧鸡配米饭和西兰花", "Teriyaki chicken over rice with broccoli", RICE, [ve("frozen_broccoli", 90)]),
+      way("照烧鸡拌荞麦面配黄瓜", "Teriyaki chicken with soba and cucumber", SOBA, [ve("cucumber", 80)]),
+      way("照烧鸡配糙米饭和菠菜", "Teriyaki chicken over brown rice with spinach", BROWN, [ve("frozen_spinach", 70)]),
+    ],
+  }),
+  dish({
+    id: "nikujaga", zh: "土豆炖牛肉", en: "Nikujaga beef and potato simmer", c: "japanese", m: "simmer", t: [15, 40],
+    i: [pr("lean_beef", 110), st("potato", 100), ve("onion", 50), ve("carrot", 40), se("reduced_salt_soy_sauce", 4), se("mirin", 5), se("low_sodium_stock", 100)],
+    ways: [
+      way("炖肉配米饭和菠菜", "Simmer over rice with spinach", RICE, [ve("frozen_spinach", 70)]),
+      way("炖肉配焯上海青", "Simmer with blanched bok choy", null, [ve("bok_choy", 100)]),
+      way("炖肉配糙米饭和黄瓜", "Simmer over brown rice with cucumber", BROWN, [ve("cucumber", 80)]),
+    ],
+  }),
+  dish({
+    id: "miso_pork_cabbage_stew", zh: "味噌猪肉卷心菜煲", en: "Miso pork and cabbage stew", c: "japanese", m: "braise", t: [12, 35],
+    i: [pr("lean_pork_leg", 120), ve("cabbage", 120), ve("onion", 30), se("miso", 8), se("mirin", 3), se("ginger_paste", 2), se("low_sodium_stock", 80)],
+    ways: [
+      way("味噌煲配米饭和黄瓜", "Stew over rice with cucumber", RICE, [ve("cucumber", 80)]),
+      way("味噌煲配糙米饭和西兰花", "Stew over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 90)]),
+      way("味噌煲配荞麦面和上海青", "Stew with soba and bok choy", SOBA, [ve("bok_choy", 100)]),
+    ],
+  }),
+  dish({
+    id: "japanese_chicken_curry", zh: "日式咖喱鸡", en: "Japanese chicken curry", c: "japanese", m: "stew", t: [15, 40],
+    i: [pr("chicken_breast", 100), st("potato", 60), ve("carrot", 50), ve("onion", 50), se("curry_roux", 8), se("low_sodium_stock", 150)],
+    ways: [
+      way("咖喱配米饭和黄瓜", "Curry over rice with cucumber", RICE, [ve("cucumber", 70)]),
+      way("咖喱配糙米饭和西兰花", "Curry over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 90)]),
+      way("咖喱拌荞麦面配菠菜", "Curry over soba with spinach", SOBA, [ve("frozen_spinach", 70)]),
+    ],
+  }),
+  dish({
+    id: "chicken_soboro", zh: "鸡肉松", en: "Chicken soboro (simmered mince)", c: "japanese", m: "simmer", t: [12, 20],
+    i: [pr("chicken_mince", 140), ve("onion", 30), se("reduced_salt_soy_sauce", 5), se("mirin", 5), se("ginger_paste", 3)],
+    ways: [
+      way("鸡肉松盖饭配上海青", "Soboro rice bowl with bok choy", RICE, [ve("bok_choy", 100)]),
+      way("鸡肉松糙米饭配菠菜黄瓜", "Soboro over brown rice with spinach and cucumber", BROWN, [ve("frozen_spinach", 70), ve("cucumber", 40)]),
+      way("鸡肉松拌荞麦面", "Soboro over soba with cucumber and sesame", SOBA, [ve("cucumber", 100), tp("sesame_seeds", 3)]),
+    ],
+  }),
+  dish({
+    id: "miso_salmon_bok_choy", zh: "味噌煎三文鱼配上海青", en: "Miso salmon with bok choy", c: "japanese", m: "pan_fry", t: [12, 18],
+    staples: [RICE, BROWN, SOBA],
+    i: [pr("salmon", 120), se("miso", 8), se("mirin", 3), ve("bok_choy", 120), oi("canola_oil", 2)],
+  }),
+  dish({
+    id: "cold_soba_chicken", zh: "凉荞麦面鸡丝", en: "Cold soba with chicken and cucumber", c: "japanese", m: "assemble", eq: [], t: [10, 10],
+    staples: [SOBA],
+    i: [pr("ready_chicken_breast", 105), ve("cucumber", 120), ve("nori", 1), tp("sesame_seeds", 3), se("reduced_salt_soy_sauce", 4), se("rice_vinegar", 4), oi("sesame_oil", 2)],
+  }),
+];
+
+const SOUTHEAST_ASIAN: Dish[] = [
+  dish({
+    id: "thai_red_curry_chicken", zh: "泰式红咖喱鸡", en: "Thai red curry chicken", c: "southeast_asian", m: "stew", t: [12, 30],
+    i: [pr("chicken_breast", 105), ve("zucchini", 60), ve("red_bell_pepper", 40), ve("green_beans", 40), se("light_coconut_milk", 50), se("red_curry_paste", 6), se("fish_sauce", 1), tp("basil", 3)],
+    ways: [
+      way("咖喱配米饭和上海青", "Curry over rice with bok choy", RICE, [ve("bok_choy", 100)]),
+      way("咖喱配糙米饭和西兰花", "Curry over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 90)]),
+      way("咖喱拌米粉配豆芽", "Curry over rice vermicelli with bean sprouts", VERMICELLI, [ve("mung_bean_sprouts", 60), ve("cucumber", 50)]),
+    ],
+  }),
+  dish({
+    id: "chicken_adobo", zh: "菲式醋焖鸡", en: "Chicken adobo", c: "southeast_asian", m: "braise", t: [10, 40],
+    i: [pr("chicken_thigh", 120), ve("onion", 40), se("reduced_salt_soy_sauce", 6), se("rice_vinegar", 10), se("garlic_paste", 3), se("ground_black_pepper", 0.5)],
+    ways: [
+      way("醋焖鸡配米饭和上海青", "Adobo over rice with bok choy", RICE, [ve("bok_choy", 100)]),
+      way("醋焖鸡配糙米饭和番茄黄瓜", "Adobo over brown rice with tomato and cucumber", BROWN, [ve("tomato", 60), ve("cucumber", 60)]),
+      way("醋焖鸡拌米粉配菜心", "Adobo over rice vermicelli with choy sum", VERMICELLI, [ve("choy_sum", 100)]),
+    ],
+  }),
+  dish({
+    id: "thai_beef_pumpkin_curry", zh: "泰式牛肉南瓜咖喱", en: "Thai beef and pumpkin curry", c: "southeast_asian", m: "pressure_cook", eq: ["pressure_cooker"], t: [12, 60],
+    i: [pr("beef_shank_raw", 105), ve("pumpkin", 150), ve("onion", 30), se("light_coconut_milk", 50), se("red_curry_paste", 5), se("fish_sauce", 1)],
+    ways: [
+      way("咖喱配米饭和芥蓝", "Curry over rice with gai lan", RICE, [ve("gai_lan", 100)]),
+      way("咖喱配糙米饭和四季豆", "Curry over brown rice with green beans", BROWN, [ve("frozen_green_beans", 90)]),
+      way("咖喱拌米粉配豆芽", "Curry over rice vermicelli with bean sprouts", VERMICELLI, [ve("mung_bean_sprouts", 60), ve("cucumber", 50)]),
+    ],
+  }),
+  dish({
+    id: "tom_kha_chicken_soup", zh: "椰奶鸡肉汤", en: "Tom kha chicken soup", c: "southeast_asian", m: "simmer", t: [12, 30],
+    i: [pr("chicken_breast", 100), ve("button_mushroom", 80), ve("tomato", 60), se("light_coconut_milk", 60), se("low_sodium_stock", 100), se("red_curry_paste", 4), se("fish_sauce", 1.5), se("lime", 10), tp("coriander", 3)],
+    ways: [
+      way("椰奶汤配米粉和豆芽", "Soup with rice vermicelli and bean sprouts", VERMICELLI, [ve("mung_bean_sprouts", 60), ve("bok_choy", 60)]),
+      way("椰奶汤配米饭和菜心", "Soup over rice with choy sum", RICE, [ve("choy_sum", 100)]),
+      way("椰奶汤配糙米饭和西兰花", "Soup over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 90)]),
+    ],
+  }),
+  dish({
+    id: "thai_basil_chicken", zh: "罗勒鸡肉末", en: "Thai basil minced chicken", c: "southeast_asian", m: "stir_fry", t: [12, 15],
+    staples: [RICE, BROWN, GRAINS],
+    i: [pr("chicken_mince", 140), ve("green_beans", 100), ve("red_bell_pepper", 50), tp("basil", 8), se("oyster_sauce", 4), se("fish_sauce", 1.5), oi("canola_oil", 3)],
+  }),
+  dish({
+    id: "shrimp_rice_noodle_stirfry", zh: "虾仁炒米粉", en: "Shrimp and bean sprout rice noodle stir-fry", c: "southeast_asian", m: "stir_fry", t: [14, 18],
+    staples: [VERMICELLI],
+    i: [pr("white_shrimp", 115), ve("mung_bean_sprouts", 80), ve("chinese_chives", 40), ve("carrot", 30), se("sweet_chili_sauce", 8), se("fish_sauce", 1.5), se("lime", 10), tp("peanuts", 5), oi("canola_oil", 4)],
+  }),
+  dish({
+    id: "chicken_larb_lettuce", zh: "香草鸡肉末沙拉", en: "Chicken larb with lettuce", c: "southeast_asian", m: "stir_fry", t: [12, 15],
+    staples: [RICE, BROWN, GRAINS],
+    i: [pr("chicken_mince", 140), ve("romaine", 100), ve("cucumber", 60), tp("mint", 3), tp("coriander", 3), se("lime", 15), se("fish_sauce", 2.5), se("sriracha", 3)],
+  }),
+];
+
+const MAINS: Dish[] = [...AMERICAN, ...MEDITERRANEAN, ...ITALIAN, ...CHINESE, ...MEXICAN, ...JAPANESE, ...SOUTHEAST_ASIAN];
 
 export const SEED_DISHES: readonly Dish[] = [...MAINS, ...SIDES, ...STAPLES, ...BREAKFASTS];
