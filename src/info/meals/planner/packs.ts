@@ -141,9 +141,14 @@ export function leftoverMatters(line: PackLine): boolean {
   return line.leftover.grams >= Math.max(LEFTOVER_IGNORE.share * line.buy.packG, LEFTOVER_IGNORE.grams);
 }
 
-/** The name a food is shown by on the list: its Chinese name without the trailing note. */
+/** The name a food is shown by: its Chinese name without the trailing note. */
 export function shownName(food: Food): string {
   return food.zh.replace(/（[^）]*）$/, "");
+}
+
+/** The name a food is bought and kept by: a food planned cooked but bought dry goes by its dry name (糙米, not 糙米饭). */
+export function boughtName(food: Food): string {
+  return food.boughtDry?.zh ?? shownName(food);
 }
 
 const about = (g: number) => Math.max(10, Math.round(g / 10) * 10);
@@ -161,7 +166,7 @@ export function buyText(line: PackLine): string {
 /** One line of the list as the reader sees it: "去皮鸡腿肉 1 盒（约 500 g）". */
 export function packLineText(line: PackLine): string {
   const food = foodById(line.food);
-  const name = food ? shownName(food) : line.food;
+  const name = food ? boughtName(food) : line.food;
   if (line.buy.by === "weight") return t("meals.pack.about", { qty: name, grams: about(line.grams) });
   return `${name} ${buyText(line)}`;
 }

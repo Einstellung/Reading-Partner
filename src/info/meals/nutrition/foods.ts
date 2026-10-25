@@ -132,8 +132,8 @@ export interface Food {
   wholeGrain?: true;
   /** The usual retail pack of a perishable food and the days it keeps once opened. */
   pack?: { grams: number; kind: PackKind; openDays: number };
-  /** Planned cooked or soaked but bought dry and kept on hand (rice, quinoa). */
-  boughtDry?: true;
+  /** Planned cooked or soaked but bought dry and kept on hand (rice, quinoa); `zh` is the dry food's name (糙米 for 糙米饭). */
+  boughtDry?: { zh: string };
   /** The swap group it belongs to (swap-groups.ts). */
   swapGroup?: string;
 }
@@ -169,7 +169,8 @@ function withColumns(f: Food): Food {
   if (WHOLE_GRAIN.has(f.id)) out.wholeGrain = true;
   const pack = RETAIL_PACK[f.id];
   if (pack) out.pack = { ...pack };
-  if (BOUGHT_DRY.has(f.id)) out.boughtDry = true;
+  const dry = BOUGHT_DRY[f.id];
+  if (dry) out.boughtDry = { zh: dry };
   const group = SWAP_GROUP_OF.get(f.id);
   if (group) out.swapGroup = group;
   const pot = POT_PACK_G[f.id];

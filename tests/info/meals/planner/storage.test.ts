@@ -184,6 +184,11 @@ describe("text", () => {
     expect(fridge?.rows).toContainEqual({ name: "去皮鸡腿肉（生）", detail: "原包装放冷藏最下层。", until: "第 1 天备餐时用" });
     const freezer = tx.places.find((p) => p.place === "freezer");
     expect(freezer?.rows).toContainEqual({ name: "去皮鸡腿肉（生）· 剩约 290 g", detail: "平铺装进冷冻袋，压出空气，袋上写日期。", until: "4 周内用" });
+    // Rice and quinoa are kept dry, by their dry names.
+    const cupboard = tx.places.find((p) => p.place === "cupboard")?.rows.map((r) => r.name).join("、") ?? "";
+    expect(cupboard).toContain("糙米");
+    expect(cupboard).not.toContain("糙米饭");
+    expect(cupboard).toContain("五谷杂粮米");
     expect(tx.nights).toEqual([
       { title: "第 1 天晚上", lines: ["糙米饭：淘洗好放进电饭锅，定好时（第 2 天晚餐）"] },
       {

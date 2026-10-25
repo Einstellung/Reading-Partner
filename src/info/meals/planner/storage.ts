@@ -28,7 +28,7 @@ import { foodById, type Food } from "../nutrition/foods";
 import type { Profile } from "../nutrition/targets";
 import { isBatchMain, MAIN_SLOTS, type MainSlot, type MealAt, type PlanDraft, type PlanSlot } from "./draft";
 import type { PlanLibrary } from "./library";
-import { isRawFlesh, LEFTOVER_IGNORE, rawKeepsUntil, shownName, type PackLine } from "./packs";
+import { boughtName, isRawFlesh, LEFTOVER_IGNORE, rawKeepsUntil, shownName, type PackLine } from "./packs";
 import type { SolvedPlan } from "./solve";
 
 /** The box to get: about this many millilitres, lidded, microwave-safe, glass preferred. */
@@ -363,6 +363,12 @@ function foodName(id: string): string {
   return f ? shownName(f) : id;
 }
 
+/** A food in the cupboard by the name it is bought by: rice kept dry is 糙米, not 糙米饭. */
+function keptName(id: string): string {
+  const f = foodById(id);
+  return f ? boughtName(f) : id;
+}
+
 function dishName(d: Dish | undefined, id: string): string {
   if (!d) return id;
   return zh() ? d.name : d.nameEn;
@@ -427,7 +433,7 @@ function rowText(row: StoreRow, lib: PlanLibrary): StorageTextRow {
     case "room":
       return { name: list(row.foods.map(foodName)), detail: t("meals.store.room.do"), until: "" };
     case "pantry":
-      return { name: list(row.foods.map(foodName)), detail: t("meals.store.pantry.do"), until: "" };
+      return { name: list(row.foods.map(keptName)), detail: t("meals.store.pantry.do"), until: "" };
   }
 }
 

@@ -285,10 +285,11 @@ export const PIECE_OPEN_DAYS = 3;
 
 /**
  * Foods planned at their cooked or soaked weight but bought dry and kept in
- * the pantry (rice, quinoa, dried wood ear). The list says they are on hand
- * rather than packing the cooked weight.
+ * the pantry (rice, quinoa, dried wood ear), each with the dry food's name.
+ * The list says they are on hand, by that name, rather than packing the
+ * cooked weight.
  */
-export const BOUGHT_DRY: ReadonlySet<string> = new Set(["rice_cooked", "brown_rice_cooked", "quinoa_cooked", "wood_ear"]);
+export const BOUGHT_DRY: Readonly<Record<string, string>> = { rice_cooked: "大米", brown_rice_cooked: "糙米", quinoa_cooked: "藜麦", wood_ear: "干木耳" };
 
 /**
  * Rows whose generated numbers are replaced. The table's avocado is a Taiwan
