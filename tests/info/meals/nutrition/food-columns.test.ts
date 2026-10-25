@@ -136,7 +136,7 @@ describe("foods added for the dish library", () => {
       const s = f.source;
       if (s.kind === "usda") expect(s.dataset, f.id).toBe("SR Legacy");
       else if (s.kind === "tw") expect(s.code, f.id).toMatch(/^[A-Z]\d{7}$/);
-      else expect(s.kind === "label" && /Open Food Facts \d+/.test(s.note), f.id).toBe(true);
+      else expect(s.kind === "label" && /Open Food Facts \d+|USDA FDC Branded \d+/.test(s.note), f.id).toBe(true);
       if (f.roles.includes("protein")) expect(f.proteinCategory, f.id).toBeDefined();
     }
   });
@@ -164,6 +164,7 @@ describe("foods added for the dish library", () => {
       black_soybean_dry: 4,
       adzuki_beans_dry: 1,
       red_dates_dried: 5,
+      basa_fillet: 27,
     };
     expect(ADDED_FOODS.map((f) => f.id).sort()).toEqual(Object.keys(want).sort());
     for (const [id, mg] of Object.entries(want)) expect(foodById(id)?.sodium, id).toBe(mg);
@@ -178,6 +179,7 @@ describe("foods added for the dish library", () => {
     for (const id of ["salt", "lemon", "lime", "crushed_tomatoes", "coriander", "basil"]) {
       expect(foodById(id)?.addedSugar, id).toBe(0);
     }
+    expect(foodById("basa_fillet")?.proteinCategory).toBe("seafood");
     expect(foodById("lemon")?.piece).toEqual({ grams: 84, label: "个" });
     expect(foodById("lime")?.piece).toEqual({ grams: 67, label: "个" });
     expect(foodById("corn_tortilla")?.piece).toEqual({ grams: 24, label: "张" });

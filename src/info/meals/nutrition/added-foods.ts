@@ -2,11 +2,13 @@
 // salt, citrus, lentils, canned tomatoes, stock, coconut milk, feta,
 // corn tortillas, breadcrumbs, sesame, fresh herbs, cornstarch, and the dry
 // black soybeans, adzuki beans and dried red dates of the soy milk maker
-// breakfasts. Hand-maintained like
+// breakfasts, and frozen basa (pangasius) fillets. Hand-maintained like
 // seasonings.ts and appended to the generated rows by foods.ts, with the
 // docs/671 columns inline. Every number is read from the record the row
 // cites: USDA FDC SR Legacy, Taiwan FDA for the two dry beans (USDA has no
-// black soybean), or the label for the coconut milk. Added sugar
+// black soybean), or the label for the coconut milk. Basa is a USDA FDC
+// Branded record (SR Legacy and Foundation have no pangasius), a plain
+// fillet with pangasius as the only ingredient. Added sugar
 // follows food-columns.ts: the record's total sugars for the prepared
 // seasonings (stock, coconut milk, breadcrumbs), 0 for single foods.
 
@@ -34,6 +36,7 @@ export const ADDED_FOODS: readonly Food[] = [
   { id: "black_soybean_dry", zh: "黑豆（干）", aliases: ["黑大豆", "青仁黑豆"], en: "", roles: ["protein"], category: "pantry", keeps: "pantry", kcal: 340, protein: 37.0, fat: 14.2, carbs: 33.7, minG: 5, maxG: 60, tags: ["soy"], sodium: 4, addedSugar: 0, proteinCategory: "soy", source: tw("H0605101", "青仁黑豆") },
   { id: "adzuki_beans_dry", zh: "红豆（干）", aliases: ["赤小豆", "红小豆", "赤豆"], en: "", roles: ["protein", "staple"], category: "pantry", keeps: "pantry", kcal: 290, protein: 20.9, fat: 0.6, carbs: 61.5, minG: 5, maxG: 100, tags: [], sodium: 1, addedSugar: 0, proteinCategory: "legume", source: tw("H0405101", "紅豆") },
   { id: "red_dates_dried", zh: "红枣（干）", aliases: ["干红枣", "大枣", "枣干"], en: "", roles: ["fruit"], category: "pantry", keeps: "pantry", kcal: 281, protein: 4.7, fat: 0.5, carbs: 72.5, minG: 5, maxG: 40, tags: [], sodium: 5, addedSugar: 0, source: usda(168152, "Jujube, Chinese, fresh, dried") },
+  { id: "basa_fillet", zh: "龙利鱼", aliases: ["巴沙鱼", "巴沙鱼片", "冷冻龙利鱼", "龙利鱼片", "鲶鱼片"], en: "white fish fillets", roles: ["protein"], category: "frozen", keeps: "w2plus", kcal: 88, protein: 18.6, fat: 1.8, carbs: 0, minG: 80, maxG: 300, tags: ["seafood", "fish"], sodium: 27, addedSugar: 0, proteinCategory: "seafood", source: { kind: "label", note: "USDA FDC Branded 2099832, swai (Pangasius hypophthalmus) fillets, per 100 g; ingredient list is the fish only" } },
   { id: "coriander", zh: "香菜", aliases: ["芫荽", "鲜香菜"], en: "coriander", ...herb(), kcal: 23, protein: 2.1, fat: 0.5, carbs: 3.7, sodium: 46, source: usda(169997, "Coriander (cilantro) leaves, raw") },
   { id: "parsley", zh: "欧芹", aliases: ["洋香菜", "巴西里", "鲜欧芹"], en: "parsley", ...herb(), kcal: 36, protein: 3.0, fat: 0.8, carbs: 6.3, sodium: 56, source: usda(170416, "Parsley, fresh") },
   { id: "basil", zh: "罗勒", aliases: ["鲜罗勒", "甜罗勒"], en: "basil", ...herb(), kcal: 23, protein: 3.2, fat: 0.6, carbs: 2.7, sodium: 4, source: usda(172232, "Basil, fresh") },
