@@ -2,7 +2,7 @@
 // and the library as a whole is balanced across roles, cuisines and prep.
 
 import { describe, expect, test } from "bun:test";
-import { checkDish } from "../../../../src/info/meals/dishes/check";
+import { checkDish, isMincedMeat } from "../../../../src/info/meals/dishes/check";
 import { SEED_DISHES } from "../../../../src/info/meals/dishes/seed";
 import type { Dish, DishRole } from "../../../../src/info/meals/dishes/types";
 import { foodById } from "../../../../src/info/meals/nutrition/foods";
@@ -116,6 +116,52 @@ describe("seed dishes", () => {
   test("sides and breakfasts are fresh; breakfasts take under 5 minutes", () => {
     for (const d of [...byRole("side"), ...byRole("breakfast")]) expect(d.prep, d.id).toBe("fresh");
     for (const d of byRole("breakfast")) expect(d.activeMin, d.id).toBeLessThanOrEqual(5);
+  });
+
+  test("no pre-packaged mince: ground meat comes only from a named whole cut ground fresh", () => {
+    const lines = SEED_DISHES.flatMap((d) => d.ingredients.map((i) => ({ d, i })));
+    expect(lines.filter(({ i }) => isMincedMeat(foodById(i.food)!)).map(({ d }) => d.id)).toEqual([]);
+    const ground = SEED_DISHES.filter((d) => d.ingredients.some((i) => i.ground));
+    expect(ground.map((d) => d.id).sort()).toEqual([
+      "baked_beef_kofta",
+      "beef_meatballs_marinara",
+      "beef_meatloaf",
+      "chicken_meatball_spinach_soup",
+      "napa_tofu_meatball_stew",
+      "winter_melon_chicken_meatball_soup",
+    ]);
+    for (const d of ground) {
+      expect(d.summary, d.id).toContain("现绞");
+      expect(d.summaryEn, d.id).toMatch(/ground fresh/);
+    }
+    // Nothing still talks about mince in a name or summary.
+    for (const d of SEED_DISHES) {
+      expect(/肉末|肉馅|肉糜|绞肉|mince/i.test(`${d.name} ${d.nameEn} ${d.summary} ${d.summaryEn}`), d.id).toBe(false);
+    }
+  });
+
+  test("a solid set of beef dishes, spread over the cuisines", () => {
+    const beef = mains.filter((d) => d.ingredients.some((i) => foodById(i.food)?.tags.includes("beef")));
+    expect(beef.length).toBeGreaterThanOrEqual(18);
+    const cuisines = new Set(beef.map((d) => d.cuisine));
+    for (const c of ["chinese", "japanese", "southeast_asian", "american", "mexican", "italian", "mediterranean"]) {
+      expect(cuisines.has(c as never), c).toBe(true);
+    }
+  });
+
+  test("the Northeastern iron-pot stew and the napa tofu meatball stew are in the library", () => {
+    for (const id of ["napa_tofu_meatball_stew", "northeast_iron_pot_chicken"]) {
+      const d = SEED_DISHES.find((x) => x.id === id);
+      expect(d?.cuisine, id).toBe("chinese");
+      expect(d?.prep, id).toBe("batch");
+      expect(d?.ways?.length ?? 0, id).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  test("breakfast sodium is not capped, and the toast breakfast has two slices", () => {
+    const d = byRole("breakfast").find((x) => x.id === "milk_toast_boiled_egg")!;
+    expect(d.ingredients.find((i) => i.food === "whole_wheat_toast")?.grams).toBe(70);
+    expect(checkDish(d).ok).toBe(true);
   });
 
   test("seasoning is ready-made: no fresh garlic, ginger, scallion or leek, and no braised beef shank row", () => {
