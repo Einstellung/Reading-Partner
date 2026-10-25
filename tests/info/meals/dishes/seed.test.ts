@@ -53,6 +53,13 @@ describe("seed dishes", () => {
     }
   });
 
+  test("breakfasts are natural servings: eggs by the whole egg, not scaled", () => {
+    for (const d of byRole("breakfast")) {
+      for (const i of d.ingredients.filter((x) => x.food === "egg" || x.food === "tea_egg")) expect(i.grams % 50, d.id).toBe(0);
+      expect(checkDish(d).serving?.factor, d.id).toBe(1);
+    }
+  });
+
   test("breakfasts are mostly two-protein combinations", () => {
     const twoOrMore = byRole("breakfast").filter((d) => d.ingredients.filter((i) => i.role === "protein").length >= 2);
     expect(twoOrMore.length).toBeGreaterThanOrEqual(6);

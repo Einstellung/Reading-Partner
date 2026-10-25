@@ -26,6 +26,7 @@ export type CheckRule =
   | "prep"
   | "breakfast_method"
   | "breakfast_items"
+  | "breakfast_protein"
   | "summary"
   | "cuisine"
   | "equipment"
@@ -77,6 +78,9 @@ export const LIMITS: Readonly<Record<DishRole, Limits>> = {
 
 /** Hands-on minutes: a batch pot (waiting unlimited), a fresh meal, a breakfast, putting one way together. */
 export const ACTIVE_MIN = { batch: 20, fresh: 15, breakfast: 5, way: 5 } as const;
+
+/** A breakfast, as written, has at least this much protein (grams). */
+export const BREAKFAST_PROTEIN_MIN_G = 15;
 
 /** The Chinese summary of how a dish is cooked is one short sentence. */
 export const SUMMARY_MAX_CHARS = 40;
@@ -235,6 +239,15 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     return { ok: false, failures: fail, serving: null, ways: [] };
   }
 
+  if (dish.role === "breakfast" && serving.protein < BREAKFAST_PROTEIN_MIN_G) {
+    add({
+      rule: "breakfast_protein",
+      message: `a breakfast has ${r1(serving.protein)} g protein, under ${BREAKFAST_PROTEIN_MIN_G} g`,
+      actual: serving.protein,
+      limit: BREAKFAST_PROTEIN_MIN_G,
+    });
+  }
+
   const lim = LIMITS[dish.role];
   const hasStaple = dish.ingredients.some((i) => i.role === "staple");
   const wayServings = isBatchMain ? ways.map((w) => wayServing(serving, w)) : [];
@@ -294,16 +307,12 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     }
   }
 
-  // Only protein lines carry a gram range; toppings are small by nature. A
-  // breakfast with several protein lines is scaled as a whole to its 12 g, so
-  // its lines are shares of a combination and only the upper bound applies.
-  const proteinLines = serving.ingredients.filter((i) => i.role === "protein").length;
-  const shares = dish.role === "breakfast" && proteinLines > 1;
+  // Only protein lines carry a gram range; toppings are small by nature.
   for (const line of serving.ingredients) {
     if (line.role !== "protein") continue;
     const f = foodById(line.food);
     if (!f) continue;
-    if ((!shares && line.grams < f.minG) || line.grams > f.maxG) {
+    if (line.grams < f.minG || line.grams > f.maxG) {
       add({
         rule: "protein_grams",
         food: line.food,

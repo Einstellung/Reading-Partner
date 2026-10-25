@@ -1,6 +1,8 @@
 // The reference serving (docs/671 菜库): the template scaled so a main has
-// 25 g protein, a breakfast 12 g (docs/73's normal amounts), a staple 200 kcal
-// and a side 150 g of vegetables, with every figure the entry check reads,
+// 25 g protein (docs/73's normal amount), a staple 200 kcal and a side 150 g of
+// vegetables; a breakfast is not scaled, its template grams are the natural
+// serving (one egg, a glass of milk, a slice of toast). Every figure the entry
+// check reads,
 // computed from the food table. A batch main is also read with each of its
 // ways: the reference serving plus that way's add-ons, which are written for
 // one reference serving and not scaled.
@@ -8,9 +10,9 @@
 import { foodById, type Food } from "../nutrition/foods";
 import type { Dish, DishIngredient, DishRole, DishWay } from "./types";
 
-export const REFERENCE_TARGET: Readonly<Record<DishRole, { by: "protein" | "kcal" | "veg"; value: number }>> = {
+export const REFERENCE_TARGET: Readonly<Record<DishRole, { by: "protein" | "kcal" | "veg" | "as_written"; value: number }>> = {
   main: { by: "protein", value: 25 },
-  breakfast: { by: "protein", value: 12 },
+  breakfast: { by: "as_written", value: 0 },
   staple: { by: "kcal", value: 200 },
   side: { by: "veg", value: 150 },
 };
@@ -65,6 +67,7 @@ export interface Serving extends Totals {
 export function referenceServing(dish: Pick<Dish, "role" | "ingredients">): Serving | null {
   const target = REFERENCE_TARGET[dish.role];
   const base = totals(dish.ingredients);
+  if (target.by === "as_written") return { ...base, factor: 1, ingredients: dish.ingredients.map((i) => ({ ...i })) };
   const have = target.by === "protein" ? base.protein : target.by === "kcal" ? base.kcal : base.vegG;
   if (!(have > 0)) return null;
   const factor = target.value / have;

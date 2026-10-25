@@ -514,17 +514,21 @@ describe("sides", () => {
 
 describe("breakfast templates", () => {
   test("a boiled egg and toast", () => {
-    // factor 12 / 16.84; share 67.36 / 220.2 = 30.6%; sodium 306.25 * 0.7126 = 218.2 mg
+    // as written: 16.84 g protein, share 67.36 / 220.2 = 30.6%, sodium 147 + 159.25 = 306.25 mg
     const r = checkDish(breakfast());
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.serving.sodium).toBeCloseTo(218.23, 1);
+    if (r.ok) {
+      expect(r.serving.factor).toBe(1);
+      expect(r.serving.protein).toBeCloseTo(16.84, 2);
+      expect(r.serving.sodium).toBeCloseTo(306.25, 2);
+    }
   });
 
   test("with a fruit", () => {
     // + apple 100: protein 17.04, kcal 267.2, share 68.16 / 267.2 = 25.5%
     const r = checkDish(breakfast({ ingredients: [...BREAKFAST, { food: "apple", grams: 100, role: "fruit" }] }));
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.serving.factor).toBeCloseTo(12 / 17.04, 6);
+    if (r.ok) expect(r.serving.protein).toBeCloseTo(17.04, 2);
   });
 
   test("each allowed method", () => {
@@ -552,28 +556,46 @@ describe("breakfast templates", () => {
   });
 
   test("at least one protein and one staple, any number of either", () => {
-    // egg alone: 12.5 P, 132 kcal, share 37.9%; only the items rule fails
-    expect(only(breakfast({ ingredients: [BREAKFAST[0]] }), "breakfast_items").message).toBe(
-      "a breakfast needs at least one protein item and one staple item; this has 1 protein, 0 staple",
-    );
+    // egg alone: 12.5 P, 132 kcal, share 37.9%
+    const noStaple = failures(breakfast({ ingredients: [BREAKFAST[0]] })).find((x) => x.rule === "breakfast_items");
+    expect(noStaple?.message).toBe("a breakfast needs at least one protein item and one staple item; this has 1 protein, 0 staple");
     const noProtein = failures(breakfast({ ingredients: [BREAKFAST[1]] })).find((x) => x.rule === "breakfast_items");
     expect(noProtein?.message).toBe("a breakfast needs at least one protein item and one staple item; this has 0 protein, 1 staple");
   });
 
-  test("two or three protein items, two staples and two fruits are fine", () => {
-    // egg 50 + milk 150 + yogurt 60 + toast 40 + oats 15 + apple 80 + banana 60
+  test("two protein items, two staples and two fruits are fine", () => {
+    // egg 50 + milk 250 + toast 35 + oats 20 + apple 80 + banana 60: 6.25 + 8.25 + 4.34 + 2.46 = 21.3 g protein
     const many: DishIngredient[] = [
       { food: "egg", grams: 50, role: "protein" },
-      { food: "low_fat_milk", grams: 150, role: "protein" },
-      { food: "greek_yogurt", grams: 60, role: "protein" },
-      { food: "whole_wheat_toast", grams: 40, role: "staple" },
-      { food: "oats", grams: 15, role: "staple" },
+      { food: "low_fat_milk", grams: 250, role: "protein" },
+      { food: "whole_wheat_toast", grams: 35, role: "staple" },
+      { food: "oats", grams: 20, role: "staple" },
       { food: "apple", grams: 80, role: "fruit" },
       { food: "banana", grams: 60, role: "fruit" },
     ];
     expect(checkDish(breakfast({ ingredients: many })).ok).toBe(true);
-    const milkAndEgg = [BREAKFAST[0], { food: "low_fat_milk", grams: 200, role: "protein" as const }, BREAKFAST[1]];
-    expect(checkDish(breakfast({ ingredients: milkAndEgg })).ok).toBe(true);
+  });
+
+  test("a breakfast is not scaled: its grams are the serving", () => {
+    const r = checkDish(breakfast());
+    expect(r.ok && r.serving.ingredients.map((i) => i.grams)).toEqual([100, 35]);
+  });
+
+  test("total protein at least 15 g", () => {
+    // egg 50 + toast 35: 6.25 + 4.34 = 10.6 g, share 42 / 154 = 27%
+    const f = only(breakfast({ ingredients: [{ ...BREAKFAST[0], grams: 50 }, BREAKFAST[1]] }), "breakfast_protein");
+    expect(f.actual!).toBeCloseTo(10.59, 2);
+    expect(f.limit).toBe(15);
+    expect(f.message).toBe("a breakfast has 10.6 g protein, under 15 g");
+  });
+
+  test("each protein line stays inside its own gram range, with several lines too", () => {
+    // egg 40 g is under 50; with milk 250 and toast 35 the total protein is 17.6 g
+    const f = only(
+      breakfast({ ingredients: [{ food: "egg", grams: 40, role: "protein" }, { food: "low_fat_milk", grams: 250, role: "protein" }, BREAKFAST[1]] }),
+      "protein_grams",
+    );
+    expect(f).toMatchObject({ food: "egg", actual: 40, limit: 50 });
   });
 
   test("protein share under 20%", () => {
@@ -594,9 +616,9 @@ describe("breakfast templates", () => {
   });
 
   test("sodium capped at 400 mg", () => {
-    // egg 100 + toast 35 + soy 6: protein 17.308, sodium (306.25 + 299.82) * 12 / 17.308 = 420.2
+    // egg 100 + toast 35 + soy 6: sodium 306.25 + 299.82 = 606.07 mg
     const f = only(breakfast({ ingredients: [...BREAKFAST, { food: "light_soy_sauce", grams: 6, role: "seasoning" }] }), "sodium");
-    expect(f.actual!).toBeCloseTo((606.07 * 12) / 17.308, 4);
+    expect(f.actual!).toBeCloseTo(606.07, 2);
     expect(f.limit).toBe(400);
   });
 
