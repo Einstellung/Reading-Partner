@@ -17,11 +17,9 @@ import {
 import {
   PHOTO_MISS_RETRY_MS,
   dishDrawingKey,
-  dishPhotoKey,
   drawingForDish,
   ingredientPhotoKey,
   needsPhotoLookup,
-  photoForDish,
   photoForIngredient,
 } from "../../../../src/info/meals/photos/dish-photos";
 import { dishPicture, dishPictureCaption } from "../../../../src/info/meals/screen/view";
@@ -47,11 +45,9 @@ function meal(searchName = "mapo tofu") {
 }
 
 test("the keys say what was searched for", () => {
-  expect(dishPhotoKey("  Mapo  Tofu ")).toBe("dish:mapo tofu");
   expect(dishDrawingKey("  Mapo  Tofu ")).toBe("drawing:mapo tofu");
   expect(dishDrawingKey("")).toBe("");
   expect(ingredientPhotoKey("Bok Choy")).toBe("ingredient:bok choy");
-  expect(dishPhotoKey("")).toBe("");
   expect(ingredientPhotoKey("   ")).toBe("");
 });
 
@@ -77,21 +73,20 @@ test("what one search found is merged into what is already there", async () => {
   expect(io.files.get(MEALS_PHOTOS_FILE)).toBe(before);
 });
 
-// A picture the webview cannot load: dropped, so the next pass asks again
-// instead of loading the same dead URL every week. Only the one that showed.
-test("a broken dish picture is dropped from the cache: the drawing or the photograph", async () => {
+// A drawing the webview cannot load: dropped, so the next round draws it again
+// instead of loading the same dead file every week. An old `dish:` entry is
+// left for the builds that still read it.
+test("a broken dish picture drops its drawing from the cache and nothing else", async () => {
   await savePhotoEntries({ "drawing:mapo tofu": PHOTO, "dish:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO }, io);
-  const after = await markDishPhotoBroken("Mapo Tofu", true, io);
+  const after = await markDishPhotoBroken("Mapo Tofu", io);
   expect(Object.keys(after).sort()).toEqual(["dish:mapo tofu", "drawing:shakshuka"]);
   expect((await loadMealsPhotos(io))["drawing:mapo tofu"]).toBeUndefined();
-  const searched = await markDishPhotoBroken("mapo tofu", false, io);
-  expect(Object.keys(searched)).toEqual(["drawing:shakshuka"]);
 });
 
-test("a name the cache never had is written nowhere", async () => {
-  await savePhotoEntries({ "drawing:mapo tofu": PHOTO }, io);
+test("a name the cache has no drawing of is written nowhere", async () => {
+  await savePhotoEntries({ "drawing:mapo tofu": PHOTO, "dish:lentil soup": PHOTO }, io);
   const before = io.files.get(MEALS_PHOTOS_FILE);
-  await markDishPhotoBroken("lentil soup", true, io);
+  await markDishPhotoBroken("lentil soup", io);
   expect(io.files.get(MEALS_PHOTOS_FILE)).toBe(before);
 });
 
@@ -123,10 +118,8 @@ test("a meal and an ingredient read their own keys, and a miss is nothing", () =
     "ingredient:bok choy": PHOTO,
   };
   expect(drawingForDish(meal(), cache)).toEqual(drawn);
-  // A searched photograph is not a drawing, and a drawing is not a photograph.
+  // A photograph an older build searched for is not a drawing.
   expect(drawingForDish(meal("shakshuka"), cache)).toBeNull();
-  expect(photoForDish(meal("shakshuka"), cache)).toEqual(PHOTO);
-  expect(photoForDish(meal(), cache)).toBeNull();
   expect(drawingForDish({}, cache)).toBeNull();
   expect(drawingForDish(null, cache)).toBeNull();
   expect(photoForIngredient("Kale", cache)).toBeNull();
@@ -223,7 +216,7 @@ test("two devices that each found a photograph both keep both", async () => {
 // the file alone would hand the merge nothing to decide.
 test("a photograph one device dropped stays dropped while the other adds its own", async () => {
   const { a, b, base } = await twoDevices({ "drawing:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO });
-  await markDishPhotoBroken("mapo tofu", true, a);
+  await markDishPhotoBroken("mapo tofu", a);
   await savePhotoEntries({ "ingredient:kale": { none: true, checkedAt: 5 } }, b);
   const all = ["drawing:shakshuka", "ingredient:kale"];
   expect(synced(base, a, b)).toEqual([all, all]);
@@ -231,11 +224,13 @@ test("a photograph one device dropped stays dropped while the other adds its own
 
 test("a photograph one device dropped stays dropped when the other did nothing", async () => {
   const { a, b, base } = await twoDevices({ "drawing:mapo tofu": PHOTO, "drawing:shakshuka": PHOTO });
-  await markDishPhotoBroken("mapo tofu", true, a);
+  await markDishPhotoBroken("mapo tofu", a);
   expect(synced(base, a, b)).toEqual([["drawing:shakshuka"], ["drawing:shakshuka"]]);
 });
 
-test("a drawn picture wins over a searched one once its file is read, and each says where it came from", async () => {
+// The photographs older builds searched for under `dish:` are still in the
+// synced file, and were junk: a dish shows its drawing or its ingredient strip.
+test("a dish shows its drawing once the file is read, and never a searched photograph", async () => {
   const disk = memoryDrawings();
   const path = await saveDrawingFile(new Uint8Array([0xff, 0xd8, 0xff, 1]), "image/jpeg", disk.io);
   const cache = {
@@ -243,13 +238,16 @@ test("a drawn picture wins over a searched one once its file is read, and each s
     "dish:mapo tofu": PHOTO,
     "dish:shakshuka": PHOTO,
   };
-  // The entry is here, the file not read yet: the searched photograph shows.
-  expect(dishPicture(meal(), cache)).toEqual({ url: PHOTO.url, pageUrl: PHOTO.pageUrl });
-  expect(dishPictureCaption(meal(), cache)).toEqual({ text: "Photo: example.com", url: PHOTO.pageUrl });
+  // The entry is here, the file not read yet: the ingredient strip, not the
+  // searched photograph.
+  expect(dishPicture(meal(), cache)).toBeNull();
+  expect(dishPictureCaption(meal(), cache)).toBeNull();
 
   const shown = await withDrawingSources(cache, ["drawing:mapo tofu"], disk.io);
-  expect(dishPicture(meal(), shown)).toMatchObject({ drawn: true, pageUrl: null });
-  expect(dishPictureCaption(meal(), shown)).toEqual({ text: "AI-generated image", url: null });
-  expect(dishPicture(meal("shakshuka"), shown)?.url).toBe(PHOTO.url);
+  expect(dishPicture(meal(), shown)).toEqual({ url: expect.stringMatching(/^data:image\/jpeg;base64,/), pageUrl: null });
+  expect(dishPictureCaption(meal(), shown)).toBe("AI-generated image");
+  // A dish with only a `dish:` photograph shows its ingredient strip.
+  expect(dishPicture(meal("shakshuka"), shown)).toBeNull();
+  expect(dishPictureCaption(meal("shakshuka"), shown)).toBeNull();
   expect(dishPictureCaption(meal("lentil soup"), shown)).toBeNull();
 });

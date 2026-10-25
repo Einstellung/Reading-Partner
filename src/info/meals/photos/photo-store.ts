@@ -15,7 +15,7 @@ import { contentHash } from "../../../platform/app/content-hash";
 import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../../platform/app/guarded-file";
 import { bytesToBase64 } from "../../../platform/std/base64";
 import { isObject } from "../../../platform/std/json";
-import { dishDrawingKey, dishPhotoKey, withoutPhoto, type PhotoCache } from "./dish-photos";
+import { dishDrawingKey, withoutPhoto, type PhotoCache } from "./dish-photos";
 import { DRAWINGS_DIR, drawingPath, withClaimsReleased } from "./dish-drawing";
 import { shrinkDrawnPicture, webviewPictureResizer, type PictureResizer } from "./picture-shrink";
 import { isDishDrawing, MEALS_VERSION, type DishPhotoEntry } from "../plan/types";
@@ -147,27 +147,21 @@ export async function savePhotoEntries(
 }
 
 /**
- * Forget the picture of one dish, because it will not load in this app (see
- * withoutPhoto): the drawing when that was what showed, else the searched
- * photograph. The next pass draws or searches it again. Called from the
- * screen, not from a run: the `<img>` is the only place that finds out.
+ * Forget the drawing of one dish, because it will not load in this app (see
+ * withoutPhoto). The next round draws it again. Called from the screen, not
+ * from a run: the `<img>` is the only place that finds out.
  *
- * Nothing is written when the name is not in the cache, so a strip of ingredient
+ * Nothing is written when the name has no drawing, so a strip of ingredient
  * pictures failing costs no writes at all.
  */
-export async function markDishPhotoBroken(
-  searchName: string,
-  drawn: boolean,
-  io: PhotoIo = photoIo,
-): Promise<PhotoCache> {
-  const key = drawn ? dishDrawingKey(searchName) : dishPhotoKey(searchName);
-  return mutate(io, (photos) => withoutPhoto(photos, key));
+export async function markDishPhotoBroken(searchName: string, io: PhotoIo = photoIo): Promise<PhotoCache> {
+  return mutate(io, (photos) => withoutPhoto(photos, dishDrawingKey(searchName)));
 }
 
 /**
  * Take back the claims a round wrote at `since` on the dishes it did not draw,
- * so that a failed drawing hands the dish to the search at once rather than
- * after the claim lapses.
+ * so that another device may draw the dish at once rather than after the claim
+ * lapses.
  */
 export async function releaseDrawingClaims(
   keys: readonly string[],

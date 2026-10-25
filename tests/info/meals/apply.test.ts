@@ -329,10 +329,11 @@ test("applying a week on the machine that searches asks for what it is missing",
   const h = harness({ plan: null });
   const asked = searching(h);
   await (await applyPlan(planCard(), h.ports)).pending;
-  expect(asked[0]).toContain("dish:shrimp rice bowl");
   expect(asked[0]).toContain("ingredient:salmon");
+  // The dishes are drawn or show their ingredients; they are never searched.
+  expect(asked[0]?.every((k) => k.startsWith("ingredient:"))).toBe(true);
 
-  // Where the provider draws, the dishes are drawn and only the foods searched.
+  // Where the provider draws, the same: only the foods are searched.
   const drawing = harness({ plan: null });
   drawing.ports.drawDishes = async () => {};
   drawing.ports.canDraw = async () => true;
@@ -431,8 +432,8 @@ test("asking for better pictures draws the week's dishes again where the provide
   expect(result.drawing).toBe(true);
   expect(draws).toBe(1);
 
-  // A provider that cannot draw: the dishes are searched again with the foods,
-  // and a device that can draw reads the same ask.
+  // A provider that cannot draw: only the foods are searched again, and a
+  // device that can draw reads the same ask.
   const pc = harness();
   pc.ports.markPhotosAsked = async () => {};
   let pcDraws = 0;
@@ -443,6 +444,6 @@ test("asking for better pictures draws the week's dishes again where the provide
   const searched = searching(pc);
   const asked = await refreshPhotos(pc.ports);
   expect(asked).toMatchObject({ dishes: 0, drawing: false, searching: true });
-  expect(searched[0]?.some((k) => k.startsWith("dish:"))).toBe(true);
+  expect(searched[0]?.every((k) => k.startsWith("ingredient:"))).toBe(true);
   expect(pcDraws).toBe(0);
 });

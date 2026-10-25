@@ -146,7 +146,6 @@ export default {
   "category.other": "Sonstiges",
   today: "Heute",
   tomorrow: "Morgen",
-  photoCredit: "Foto: {site}",
   pictureDrawn: "KI-generiertes Bild",
   shoppingNoteFreeze: "{keeps} · gleich nach dem Einkauf einfrieren",
   "targetsLine.cut":

@@ -150,7 +150,6 @@ export default {
   "category.other": "Прочее",
   today: "Сегодня",
   tomorrow: "Завтра",
-  photoCredit: "Фото: {site}",
   pictureDrawn: "Изображение создано ИИ",
   shoppingNoteFreeze: "{keeps} · заморозить сразу по приходе домой",
   "targetsLine.cut":

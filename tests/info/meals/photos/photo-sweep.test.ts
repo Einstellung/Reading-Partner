@@ -35,7 +35,6 @@ interface Harness {
 function harness(
   over: {
     canSearch?: boolean;
-    canDraw?: boolean;
     state?: MealsState;
     photos?: Record<string, DishPhotoEntry>;
     run?: PhotoSweepPorts["run"];
@@ -49,7 +48,6 @@ function harness(
   };
   h.ports = {
     canSearch: () => over.canSearch ?? true,
-    canDraw: async () => over.canDraw ?? false,
     state: async () => over.state ?? state(),
     photos: async () => over.photos ?? {},
     run:
@@ -70,20 +68,18 @@ function harness(
   return h;
 }
 
-// Every photograph the fixture week wants when nothing has been found yet on a
-// machine whose provider cannot draw: its seven made meals by searchName, then
-// the two foods the bank below has no cut-out of. The bank covers the rest so
-// the week stays under the run's cap.
-const INGREDIENTS = ["ingredient:salmon", "ingredient:bok choy"];
-const WHOLE_WEEK = [
-  "dish:greek yogurt bowl",
-  "dish:shrimp rice bowl",
-  "dish:teriyaki salmon bowl",
-  "dish:yogurt banana",
-  "dish:egg toast",
-  "dish:tuna pita",
-  "dish:chicken sweet potato salad",
-  ...INGREDIENTS,
+// Every photograph the fixture week wants when nothing has been found yet: the
+// two foods the bank below has no cut-out of. The bank covers the rest. The
+// dishes are never searched for.
+const WHOLE_WEEK = ["ingredient:salmon", "ingredient:bok choy"];
+const DISHES = [
+  "greek yogurt bowl",
+  "shrimp rice bowl",
+  "teriyaki salmon bowl",
+  "yogurt banana",
+  "egg toast",
+  "tuna pita",
+  "chicken sweet potato salad",
 ];
 
 const UNBANKED = new Set(["salmon", "bok choy"]);
@@ -119,7 +115,7 @@ test("a machine with no webview starts nothing, whatever the week wants", async 
     queries: 0,
     why: "cannot-search",
   } satisfies PhotoSweepResult);
-  expect(await h.searcher.start("week-1", [{ key: "dish:x", q: "x" }])).toBeNull();
+  expect(await h.searcher.start("week-1", [{ key: "ingredient:x", q: "x" }])).toBeNull();
   expect(h.asked).toEqual([]);
 });
 
@@ -140,7 +136,7 @@ test("one run at a time, and the pass asked for meanwhile runs when it is over",
   expect(h.searcher.searching()).toBe(true);
   expect((await h.searcher.sweep()).why).toBe("busy");
   // An Apply on this machine takes the same lane as the pass.
-  expect(await h.searcher.start(week().id, [{ key: "dish:x", q: "x" }])).toBeNull();
+  expect(await h.searcher.start(week().id, [{ key: "ingredient:x", q: "x" }])).toBeNull();
   expect(h.asked.length).toBe(1);
 
   h.finish();
@@ -227,23 +223,21 @@ test("a pull of the week or the cache starts a pass, and stops when the route go
   expect(sweeps).toBe(3);
 });
 
-test("a machine whose provider draws searches only the ingredients", async () => {
-  const h = harness({ canDraw: true });
-  expect(await h.searcher.sweep()).toMatchObject({ queries: INGREDIENTS.length });
-  expect(h.asked).toEqual([INGREDIENTS]);
-});
-
-test("a dish with a current drawing or another device's claim is not searched", async () => {
-  const h = harness({
-    photos: {
-      "drawing:greek yogurt bowl": { drawing: "meals-pictures/a.jpg", drawnAt: NOW - 1000 },
-      "drawing:shrimp rice bowl": { drawingSince: NOW - 1000 },
-      // A claim that lapsed long ago is nobody's: the dish is searched.
-      "drawing:egg toast": { drawingSince: NOW - 24 * 60 * 60 * 1000 },
-    },
-  });
-  await h.searcher.sweep();
-  expect(h.asked[0]).not.toContain("dish:greek yogurt bowl");
-  expect(h.asked[0]).not.toContain("dish:shrimp rice bowl");
-  expect(h.asked[0]).toContain("dish:egg toast");
+// A dish shows a drawing or its ingredient strip; a searched photograph of it
+// was junk. Not with no drawing, not with an old `dish:` photograph or miss in
+// the cache, not after the reader asked for the pictures again.
+test("the pass never searches for a dish", async () => {
+  const legacy: Record<string, DishPhotoEntry> = {
+    [`dish:${DISHES[0]}`]: found(NOW - 10_000),
+    [`dish:${DISHES[1]}`]: { none: true, checkedAt: NOW - 400 * 24 * 60 * 60 * 1000 },
+  };
+  for (const h of [
+    harness(),
+    harness({ photos: legacy }),
+    harness({ photos: legacy, state: state({ photosAskedAt: NOW - 5_000 }) }),
+  ]) {
+    await h.searcher.sweep();
+    expect(h.asked).toEqual([WHOLE_WEEK]);
+    expect(h.asked.flat().some((key) => !key.startsWith("ingredient:"))).toBe(false);
+  }
 });

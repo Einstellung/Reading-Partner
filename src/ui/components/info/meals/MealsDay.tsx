@@ -7,7 +7,6 @@
 import { useState } from "react";
 
 import { useT } from "../../../../i18n";
-import { openExternal } from "../../../../platform/app/external-link";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import { markDishPhotoBroken } from "../../../../info/meals/photos/photo-store";
 import { hostRegion } from "../../../../info/meals/region";
@@ -109,21 +108,12 @@ function MealCard({ view, photos, onOpen }: { view: MealView; photos: PhotoCache
             stripClassName="mt-3"
             onPhotoFailed={() => {
               setPhotoFailed(true);
-              if (view.searchName) void markDishPhotoBroken(view.searchName, picture?.drawn === true);
+              if (view.searchName) void markDishPhotoBroken(view.searchName);
             }}
           />
-          {caption && !photoFailed &&
-            (caption.url ? (
-              <button
-                type="button"
-                className="mt-1 block max-w-full truncate text-left text-[11px] leading-snug text-faint-foreground underline underline-offset-2 can-hover:hover:text-muted-foreground"
-                onClick={() => caption.url && openExternal(caption.url)}
-              >
-                {caption.text}
-              </button>
-            ) : (
-              <p className="m-0 mt-1 truncate text-[11px] leading-snug text-faint-foreground">{caption.text}</p>
-            ))}
+          {caption && !photoFailed && (
+            <p className="m-0 mt-1 truncate text-[11px] leading-snug text-faint-foreground">{caption}</p>
+          )}
           <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
             {mealName(view)}
           </div>

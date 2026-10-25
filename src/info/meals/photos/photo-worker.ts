@@ -12,7 +12,7 @@
 // pictures.
 //
 // A page that does not come back stops the run. Bing refusing the app, or the
-// machine being offline, is not a fact about the dish: the queries after it
+// machine being offline, is not a fact about the ingredient: the queries after it
 // would all get the same nothing, and remembering "no photograph" for twenty
 // names would take them off the screen for a month. They wait for the next run.
 

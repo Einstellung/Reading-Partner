@@ -1,14 +1,16 @@
 // The picture cache, read (docs/73 图片).
 //
 // One record for the whole line, keyed by name rather than by what is planned:
-// `dish:mapo tofu` and `ingredient:kale` outlive every week, so a dish cooked
+// `drawing:mapo tofu` and `ingredient:kale` outlive every week, so a dish cooked
 // again in October costs no new picture and a vegetable bought every week costs
-// one search ever. A dish has two keys: `drawing:` for a picture an image
-// model drew (dish-drawing.ts) and `dish:` for what the image search found on a
-// device that cannot draw; the drawing wins. An ingredient key holds what the
-// image search found. Where the cache is kept and how it is written is
-// photo-store.ts; this file is the pure half — the keys, what still has to be
-// searched for, and which picture a dish or an ingredient shows.
+// one search ever. A dish's key holds the picture an image model drew
+// (dish-drawing.ts); a dish nobody drew shows its ingredient strip. An
+// ingredient key holds what the image search found. Files synced from older
+// builds also carry `dish:` keys, photographs searched for a dish; they stay in
+// the file for the builds that still read them, and nothing here reads them.
+// Where the cache is kept and how it is written is photo-store.ts; this file is
+// the pure half — the keys, what still has to be searched for, and which
+// picture a dish or an ingredient shows.
 
 import {
   isDishDrawing,
@@ -30,15 +32,10 @@ export function normalizeSearchName(raw: string): string {
   return (raw ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Where the photograph the image search found for a dish is kept. */
-export function dishPhotoKey(searchName: string): string {
-  const name = normalizeSearchName(searchName);
-  return name ? `dish:${name}` : "";
-}
-
 /**
- * Where a dish's drawn picture is kept. A key of its own rather than `dish:`,
- * so a build from before the drawings never reads one as a searched photograph.
+ * Where a dish's drawn picture is kept. A key of its own rather than the old
+ * `dish:`, so a build from before the drawings never reads one as a searched
+ * photograph.
  */
 export function dishDrawingKey(searchName: string): string {
   const name = normalizeSearchName(searchName);
@@ -83,25 +80,12 @@ export function needsPhotoLookup(
 }
 
 /** The searched photograph under one key, or null when there is none or it was a miss. */
-export function photoAt(cache: PhotoCache | undefined, key: string): DishPhoto | null {
+function photoAt(cache: PhotoCache | undefined, key: string): DishPhoto | null {
   const entry = key ? cache?.[key] : undefined;
   return entry && isDishPhoto(entry) ? entry : null;
 }
 
-/**
- * The photograph the image search found for a dish, or null. Shown when the
- * dish has no drawn picture (see drawingForDish), which is the case on every
- * device in a house where no provider draws.
- */
-export function photoForDish(
-  dish: { searchName?: string } | null | undefined,
-  cache: PhotoCache | undefined,
-): DishPhoto | null {
-  if (!dish) return null;
-  return photoAt(cache, dishPhotoKey(dish.searchName ?? ""));
-}
-
-/** The drawn picture a dish has, or null. It wins over a searched photograph once its file is read. */
+/** The drawn picture a dish has, or null. The only picture a dish shows; without one it shows its ingredient strip. */
 export function drawingForDish(
   dish: { searchName?: string } | null | undefined,
   cache: PhotoCache | undefined,
@@ -120,12 +104,10 @@ export function photoForIngredient(en: string, cache: PhotoCache | undefined): D
 /**
  * The cache with one key forgotten, or null when there was nothing to forget.
  *
- * A picture that will not load in this app — a searched photograph on a CDN
- * that refuses the app, or a drawing whose file is unreadable — falls back on
- * screen to the ingredient strip, which is right for the night but wrong for
- * the month. Forgotten rather than written down as a miss, because a miss is
- * the search having nothing and this is the app failing to load what it had:
- * the next pass asks again.
+ * A drawing whose file will not load in this app falls back on screen to the
+ * ingredient strip, which is right for the night but wrong for the month.
+ * Forgotten rather than written down as anything, because this is the app
+ * failing to load what it had: the next round draws it again.
  */
 export function withoutPhoto(
   cache: PhotoCache,

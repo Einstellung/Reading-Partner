@@ -95,7 +95,6 @@ function harness(opts: Partial<Omit<DishDrawPorts, "state">> & { week?: MealsSta
   const writes: Record<string, DishPhotoEntry>[] = [];
   let clock = NOW;
   let landed = 0;
-  let failed = 0;
   const images = queued ?? [];
   const ports: DishDrawPorts = {
     canDraw: async () => true,
@@ -124,9 +123,6 @@ function harness(opts: Partial<Omit<DishDrawPorts, "state">> & { week?: MealsSta
     landed: () => {
       landed += 1;
     },
-    failed: () => {
-      failed += 1;
-    },
     ...over,
   };
   return {
@@ -136,7 +132,6 @@ function harness(opts: Partial<Omit<DishDrawPorts, "state">> & { week?: MealsSta
     files,
     writes,
     landed: () => landed,
-    failed: () => failed,
     tick: (ms: number) => {
       clock += ms;
     },
@@ -177,11 +172,10 @@ test("a failed call is not a missing picture: the round stops and waits longer e
   const drawings = Object.values(h.cache).filter((e) => "drawing" in e);
   expect(drawings.length).toBe(1);
   // Nothing was written as "this dish has no picture", and the claims on the
-  // dishes not drawn were taken back, so the search can have them now.
+  // dishes not drawn were taken back, so another device can draw them now.
   expect(Object.values(h.cache).some((e) => "none" in e)).toBe(false);
   expect(Object.values(h.cache).some((e) => !("drawing" in e))).toBe(false);
   expect(h.drawer.failing()).toBe(true);
-  expect(h.failed()).toBe(1);
 
   expect((await h.drawer.sweep()).why).toBe("backing-off");
   h.tick(DRAW_BACKOFF_MS);

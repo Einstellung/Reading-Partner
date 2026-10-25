@@ -1100,8 +1100,7 @@ export function buildWriteMethodTool(deps: MealsToolDeps & { ports: MealsPorts }
  * The one thing the reader can ask about the pictures. What this writes is the
  * moment they asked: every picture older than it is drawn or looked up again
  * wherever that can be done — the dishes on any device whose provider draws,
- * the ingredients (and the dishes, when this device cannot draw) on the machine
- * with a hidden webview. The pictures appear on
+ * the ingredients on the machine with a hidden webview. The pictures appear on
  * the screen as they land, without another turn.
  */
 export function buildRefreshMealsPhotosTool(
@@ -1114,7 +1113,7 @@ export function buildRefreshMealsPhotosTool(
     description:
       "Call this when they say a picture on the meals screen is wrong or is not the dish they " +
       "meant. It redoes this week's dish and ingredient pictures from scratch: dishes are " +
-      "drawn where the AI provider can make pictures and searched for otherwise. There is nothing to choose and nothing to confirm; say it is on it and move on.",
+      "drawn where the AI provider can make pictures and otherwise show their ingredients. There is nothing to choose and nothing to confirm; say it is on it and move on.",
     parameters: Type.Object({}),
     execute: async () => {
       const state = await deps.state();

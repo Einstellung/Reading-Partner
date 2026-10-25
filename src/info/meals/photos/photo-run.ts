@@ -4,9 +4,10 @@
 // The search needs a hidden webview with a real browser session in it
 // (photo-search.ts), which is one capability tag and one kind of machine. The
 // run is `local`, so whoever delegates it runs it themselves — which is why
-// nobody delegates it but the machine that can search (photo-sweep.ts). The
-// phone applies a plan and shows it at once from the ingredient pictures, and
-// the pictures of the dishes arrive later over the synced cache file.
+// nobody delegates it but the machine that can search (photo-sweep.ts). It
+// searches for ingredients only: a dish shows a drawing or its ingredient
+// strip, never a searched photograph. The phone applies a plan and shows it at
+// once, and the ingredient photographs arrive later over the synced cache file.
 //
 // The ask is a file, like the ingest run's: a run record carries references and
 // never content (docs/55), and this ask is a plan and a list of queries.
@@ -17,8 +18,7 @@
 import { appData } from "../../../platform/app/appdata";
 import { appRunner } from "../../../legion/runner/runner";
 import type { Delegated, DelegateInput } from "../../../legion/runner/worker";
-import { dishDrawingKey, dishPhotoKey, ingredientPhotoKey, needsPhotoLookup, type PhotoCache } from "./dish-photos";
-import { wantsDrawing } from "./dish-drawing";
+import { ingredientPhotoKey, needsPhotoLookup, type PhotoCache } from "./dish-photos";
 import { ingredientQuery } from "./photo-search";
 import { foodById } from "../nutrition/foods";
 import { MEAL_KEYS, type WeekPlan } from "../plan/types";
@@ -36,7 +36,7 @@ export const MAX_PHOTO_QUERIES = 20;
 
 /** One thing to search for: where the answer goes, and what is typed in. */
 export interface PhotoQuery {
-  /** The cache key, `dish:<searchName>` or `ingredient:<en>`. */
+  /** The cache key, `ingredient:<en>`. */
   key: string;
   /** The words the search is given. */
   q: string;
@@ -50,15 +50,9 @@ export interface MealsPhotoAsk {
 }
 
 /**
- * Everything a week wants a photograph of and has none of: its dishes by name
- * when this device cannot draw them (`searchDishes`), then the ingredients no
- * picture bank has artwork for.
- *
- * A device whose provider draws leaves the dishes to the drawing
- * (dish-draw-sweep.ts). One that cannot still skips a dish that has a current
- * drawing or that another device has claimed to draw: the drawing wins on
- * screen, so searching for it would be wasted. Dishes come first because they
- * are the large pictures on the screen, and the cap falls on the ingredients.
+ * Everything a week wants a photograph of and has none of: the ingredients no
+ * picture bank has artwork for. The dishes are never searched for; they are
+ * drawn where the provider can (dish-draw-sweep.ts).
  *
  * TheMealDB stays ahead of the search for an ingredient: a white-background
  * cut-out of a bok choy identifies the vegetable in the shop better than a
@@ -71,7 +65,7 @@ export function photoQueriesForPlan(
   plan: WeekPlan,
   cache: PhotoCache,
   now: number,
-  opts: { bankImage: (en: string) => string | null; askedAt?: number; searchDishes?: boolean },
+  opts: { bankImage: (en: string) => string | null; askedAt?: number },
 ): PhotoQuery[] {
   const out: PhotoQuery[] = [];
   const seen = new Set<string>();
@@ -82,13 +76,6 @@ export function photoQueriesForPlan(
     out.push({ key, q });
   };
   const made = plan.days.flatMap((d) => MEAL_KEYS.map((k) => d[k])).filter((m) => m.mode === "make");
-  if (opts.searchDishes) {
-    for (const meal of made) {
-      const drawn = cache[dishDrawingKey(meal.searchName ?? "")];
-      if (drawn && !wantsDrawing(drawn, now, opts.askedAt ?? 0)) continue;
-      want(dishPhotoKey(meal.searchName ?? ""), normalize(meal.searchName));
-    }
-  }
   for (const meal of made) {
     for (const item of meal.items ?? []) {
       const food = foodById(item.foodId);

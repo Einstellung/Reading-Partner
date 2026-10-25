@@ -1268,7 +1268,7 @@ export const PALACE = [
     shape: { kind: "map", container: "photos", idField: null },
     deleteWith: "never",
     retention: NEVER,
-    note: "the meals line's pictures (docs/73 图片): drawn dishes (a path into meals-pictures/, or a device's claim while it draws), dish photographs searched where no provider draws, and searched ingredient photographs, keyed by name and outliving every week; its own file because the pass that writes it runs minutes after the week was written; records-merged per key, so new entries and another device dropping a picture that will not load both survive a crossing sync",
+    note: "the meals line's pictures (docs/73 图片): drawn dishes (a path into meals-pictures/, or a device's claim while it draws), searched ingredient photographs, and dish photographs older builds searched (`dish:`, kept but no longer shown), keyed by name and outliving every week; its own file because the pass that writes it runs minutes after the week was written; records-merged per key, so new entries and another device dropping a picture that will not load both survive a crossing sync",
   },
   {
     kind: "meals-picture",
