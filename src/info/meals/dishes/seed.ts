@@ -476,7 +476,7 @@ const ITALIAN: Dish[] = [
     ways: [
       way("番茄牛肉丸拌意面配西兰花", "Meatballs with pasta and broccoli", PASTA, [ve("frozen_broccoli", 150)]),
       way("番茄牛肉丸配炒菠菜", "Meatballs over sauteed spinach", null, [ve("frozen_spinach", 150)], 5),
-      way("番茄牛肉丸配吐司和番茄生菜", "Meatballs on toast with tomato and lettuce", "white_toast", [ve("tomato", 90), ve("romaine", 80)]),
+      way("牛肉丸配吐司和番茄生菜", "Meatballs on toast with tomato and lettuce", "white_toast", [ve("tomato", 90), ve("romaine", 80)]),
     ],
   }),
   dish({
