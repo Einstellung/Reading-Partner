@@ -241,4 +241,17 @@ export default {
   "applied.week": "Неделя сохранена · купить: {count}",
   "applied.change": "Изменено: {meals} · купить: {count}",
   "applied.freeze": "Заморозить по приезде: {count}",
+  // The shopping list in whole packs (planner/packs.ts)
+  "pack.box": { one: "{count} упаковка", few: "{count} упаковки", many: "{count} упаковок", other: "{count} упаковки" },
+  "pack.bag": { one: "{count} пакет", few: "{count} пакета", many: "{count} пакетов", other: "{count} пакета" },
+  "pack.block": { one: "{count} брусок", few: "{count} бруска", many: "{count} брусков", other: "{count} бруска" },
+  "pack.carton": { one: "{count} коробка", few: "{count} коробки", many: "{count} коробок", other: "{count} коробки" },
+  "pack.head": { one: "{count} кочан", few: "{count} кочана", many: "{count} кочанов", other: "{count} кочана" },
+  "pack.bunch": { one: "{count} пучок", few: "{count} пучка", many: "{count} пучков", other: "{count} пучка" },
+  "pack.loaf": { one: "{count} буханка", few: "{count} буханки", many: "{count} буханок", other: "{count} буханки" },
+  "pack.piece": { one: "{count} штука", few: "{count} штуки", many: "{count} штук", other: "{count} штуки" },
+  "pack.about": "{qty} (около {grams} г)",
+  "pack.onHand": "есть дома",
+  "pack.freeze": "в день покупки разложить по порциям и заморозить",
+  "pack.pot": { one: "1 кастрюля, {count} приём пищи", few: "1 кастрюля, {count} приёма пищи", many: "1 кастрюля, {count} приёмов пищи", other: "1 кастрюля, {count} приёма пищи" },
 } satisfies Translation<typeof en>;

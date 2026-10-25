@@ -5,7 +5,21 @@
 // not have cannot be planned.
 
 import { ADDED_FOODS } from "./added-foods";
-import { ADDED_SUGAR_G, AROMATIC, DEEP_COLOR, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "./food-columns";
+import {
+  ADDED_SUGAR_G,
+  AROMATIC,
+  BOUGHT_DRY,
+  DEEP_COLOR,
+  NOT_FREEZABLE,
+  NUTRIENT_OVERRIDES,
+  PIECE_G,
+  PROTEIN_CATEGORY,
+  RETAIL_PACK,
+  SODIUM_MG,
+  WHOLE_GRAIN,
+  type PackKind,
+} from "./food-columns";
+import { SWAP_GROUP_OF } from "./swap-groups";
 import { FOOD_TABLE } from "./food-table";
 import { COMPOUND_SEASONINGS } from "./seasonings";
 
@@ -113,6 +127,15 @@ export interface Food {
   aromatic?: true;
   /** Edible grams of one piece of countable produce, for lists only. */
   piece?: { grams: number; label: string };
+  // The planner's columns (docs/671 多样性, 整包与开封, 替换组).
+  /** A whole-grain staple. */
+  wholeGrain?: true;
+  /** The usual retail pack of a perishable food and the days it keeps once opened. */
+  pack?: { grams: number; kind: PackKind; openDays: number };
+  /** Planned cooked or soaked but bought dry and kept on hand (rice, quinoa). */
+  boughtDry?: true;
+  /** The swap group it belongs to (swap-groups.ts). */
+  swapGroup?: string;
 }
 
 export const TAIWAN_FDA_CREDIT =
@@ -142,7 +165,13 @@ export const POT_PACK_G: Readonly<Record<string, number>> = {
 };
 
 function withColumns(f: Food): Food {
-  const out: Food = { ...f };
+  const out: Food = { ...f, ...NUTRIENT_OVERRIDES[f.id] };
+  if (WHOLE_GRAIN.has(f.id)) out.wholeGrain = true;
+  const pack = RETAIL_PACK[f.id];
+  if (pack) out.pack = { ...pack };
+  if (BOUGHT_DRY.has(f.id)) out.boughtDry = true;
+  const group = SWAP_GROUP_OF.get(f.id);
+  if (group) out.swapGroup = group;
   const pot = POT_PACK_G[f.id];
   if (pot) out.potG = pot;
   const na = SODIUM_MG[f.id];

@@ -15,6 +15,7 @@ import type { FoodSource, ProteinCategory } from "./foods";
  * the Taiwan plain steamed bun's.
  */
 export const SODIUM_MG: Readonly<Record<string, number | { mg: number; source: FoodSource }>> = {
+  avocado: 8, // USDA FDC 171706, Avocados, raw, California (the NUTRIENT_OVERRIDES row)
   braised_beef_shank: 64, frozen_shrimp: 225, white_shrimp: 178, egg: 147, egg_white: 183, tea_egg: 458,
   century_egg: 590, quail_egg: 89, firm_tofu: 2, soft_tofu: 32, frozen_tofu: 8, dried_tofu: 116,
   spiced_dried_tofu: 445, tofu_skin: 23, soy_milk_unsweetened: 2, frozen_edamame: 359, greek_yogurt: 36,
@@ -42,7 +43,7 @@ export const SODIUM_MG: Readonly<Record<string, number | { mg: number; source: F
   pumpkin: 1, pea_shoots: 4, frozen_mixed_veg: 47, banana: 0, apple: 3, blueberries: 0,
   frozen_blueberries: 1, kiwi: 3, orange: 5, mandarin: 2, grapes: 1, strawberries: 7, pear: 0, peach: 2,
   mango: 1, dragon_fruit: 0, watermelon: 1, cantaloupe: 12, papaya: 3, pineapple: 1, pomelo: 7,
-  grapefruit: 4, guava: 0, cherries: 2, avocado: 0, butter: 6, peanut_butter: 306, sesame_paste: 4,
+  grapefruit: 4, guava: 0, cherries: 2, butter: 6, peanut_butter: 306, sesame_paste: 4,
   walnuts: 5, almonds: 20, cashews: 10, peanuts: 6, pistachios: 462, mixed_nuts: 4, chia_seeds: 16,
   flaxseed: 46, pumpkin_seeds: 395, light_soy_sauce: 4997, rice_vinegar: 8, black_vinegar: 1571,
   oyster_sauce: 5847, doubanjiang: 5042, chili_sauce: 4948, sweet_chili_sauce: 1968,
@@ -181,3 +182,99 @@ export const DEEP_COLOR: ReadonlySet<string> = new Set([
 export const AROMATIC: ReadonlySet<string> = new Set([
   "onion", "red_onion", "garlic", "ginger", "scallion", "leek", "crushed_tomatoes",
 ]);
+
+/**
+ * Whole-grain staples (docs/671 多样性, 全谷物): brown rice, mixed grains,
+ * millet, quinoa, oats, buckwheat, whole-wheat bread, pasta, wraps and buns,
+ * and corn. White rice, white flour, potato and sweet potato are staples but
+ * not whole grain. "含全谷吐司" is sold as wholegrain bread and counts.
+ */
+export const WHOLE_GRAIN: ReadonlySet<string> = new Set([
+  "brown_rice_cooked", "microwave_grain_rice", "multigrain_rice_raw", "black_rice_raw", "millet_raw",
+  "quinoa_cooked", "oats", "whole_wheat_toast", "wholegrain_toast", "whole_wheat_tortilla", "whole_wheat_pita",
+  "whole_wheat_bun", "whole_wheat_pasta_dry", "soba_dry", "soba_fresh", "sweet_corn_cob", "waxy_corn_cob",
+  "frozen_corn", "corn_tortilla",
+]);
+
+/** How a pack is sold, for the shopping list's words (盒、袋、块、盒装奶、颗、把、条). */
+export type PackKind = "box" | "bag" | "block" | "carton" | "head" | "bunch" | "loaf";
+
+/**
+ * The usual retail pack and how many days it keeps once opened or cut
+ * (docs/671 整包与开封), for perishable foods only: shelf-life class d1-2,
+ * d3-5 or w1. Pack grams are common supermarket sizes in China and the US
+ * (a 1 lb bag of green beans, an 8 oz box of mushrooms, a 400 g block of firm
+ * tofu, a 1 L carton), not a database figure; opened days follow the
+ * refrigerated after-opening figures of USDA FoodKeeper, the low end where it
+ * gives a range. Raw meat and fish are frozen in portions the day they are
+ * bought, so their opened days never count; they carry the pack for the list.
+ * Countable produce bought loose (tomatoes, peppers, cucumbers) has no pack:
+ * one piece (PIECE_G) is the unit and PIECE_OPEN_DAYS says how long a cut one
+ * keeps.
+ */
+export const RETAIL_PACK: Readonly<Record<string, { grams: number; kind: PackKind; openDays: number }>> = {
+  chicken_thigh: { grams: 500, kind: "box", openDays: 1 },
+  chicken_breast: { grams: 500, kind: "box", openDays: 1 },
+  beef_shank_raw: { grams: 600, kind: "box", openDays: 1 },
+  lean_beef: { grams: 500, kind: "box", openDays: 1 },
+  lean_pork_leg: { grams: 500, kind: "box", openDays: 1 },
+  pork_loin: { grams: 500, kind: "box", openDays: 1 },
+  pork_tenderloin: { grams: 500, kind: "box", openDays: 1 },
+  salmon: { grams: 300, kind: "box", openDays: 1 },
+  white_shrimp: { grams: 400, kind: "box", openDays: 1 },
+  ready_chicken_breast: { grams: 200, kind: "box", openDays: 3 },
+  firm_tofu: { grams: 400, kind: "block", openDays: 3 },
+  soy_milk_unsweetened: { grams: 1000, kind: "carton", openDays: 7 },
+  low_fat_milk: { grams: 1000, kind: "carton", openDays: 7 },
+  whole_milk: { grams: 1000, kind: "carton", openDays: 7 },
+  greek_yogurt: { grams: 500, kind: "box", openDays: 7 },
+  plain_yogurt: { grams: 500, kind: "box", openDays: 7 },
+  fresh_noodles: { grams: 500, kind: "bag", openDays: 3 },
+  soba_fresh: { grams: 400, kind: "bag", openDays: 3 },
+  corn_tortilla: { grams: 300, kind: "bag", openDays: 10 },
+  whole_wheat_pita: { grams: 300, kind: "bag", openDays: 7 },
+  whole_wheat_toast: { grams: 450, kind: "loaf", openDays: 7 },
+  wholegrain_toast: { grams: 450, kind: "loaf", openDays: 7 },
+  white_toast: { grams: 450, kind: "loaf", openDays: 7 },
+  spinach: { grams: 300, kind: "bag", openDays: 3 },
+  bok_choy: { grams: 500, kind: "bag", openDays: 4 },
+  romaine: { grams: 300, kind: "head", openDays: 5 },
+  cherry_tomato: { grams: 300, kind: "box", openDays: 5 },
+  green_beans: { grams: 450, kind: "bag", openDays: 5 },
+  button_mushroom: { grams: 250, kind: "box", openDays: 5 },
+  shiitake: { grams: 150, kind: "box", openDays: 5 },
+  celery: { grams: 450, kind: "bunch", openDays: 7 },
+  napa_cabbage: { grams: 1000, kind: "head", openDays: 7 },
+  red_cabbage: { grams: 700, kind: "head", openDays: 7 },
+  white_radish: { grams: 500, kind: "head", openDays: 7 },
+  winter_melon: { grams: 500, kind: "block", openDays: 3 },
+  chinese_yam: { grams: 400, kind: "bag", openDays: 7 },
+  blueberries: { grams: 170, kind: "box", openDays: 5 },
+  strawberries: { grams: 450, kind: "box", openDays: 3 },
+  grapes: { grams: 500, kind: "bag", openDays: 5 },
+};
+
+/** Days a cut piece of loose produce keeps in the fridge (FoodKeeper, cut vegetables). */
+export const PIECE_OPEN_DAYS = 3;
+
+/**
+ * Foods planned at their cooked or soaked weight but bought dry and kept in
+ * the pantry (rice, quinoa, dried wood ear). The list says they are on hand
+ * rather than packing the cooked weight.
+ */
+export const BOUGHT_DRY: ReadonlySet<string> = new Set(["rice_cooked", "brown_rice_cooked", "quinoa_cooked", "wood_ear"]);
+
+/**
+ * Rows whose generated numbers are replaced. The table's avocado is a Taiwan
+ * variety (D0900301, 80 kcal and 6.8 g fat per 100 g); the avocado sold in
+ * China and the US is Hass, so the row reads USDA FDC 171706 (SR Legacy,
+ * "Avocados, raw, California") instead.
+ */
+export const NUTRIENT_OVERRIDES: Readonly<
+  Record<string, { kcal: number; protein: number; fat: number; carbs: number; source: FoodSource }>
+> = {
+  avocado: {
+    kcal: 167, protein: 2.0, fat: 15.4, carbs: 8.6,
+    source: { kind: "usda", fdcId: 171706, dataset: "SR Legacy", name: "Avocados, raw, California" },
+  },
+};

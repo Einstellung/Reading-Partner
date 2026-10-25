@@ -230,4 +230,17 @@ export default {
   "applied.week": "이번 주 식단 저장 · 살 것 {count}개",
   "applied.change": "{meals} 변경 · 살 것 {count}개",
   "applied.freeze": "{count}개는 도착하면 냉동",
+  // The shopping list in whole packs (planner/packs.ts)
+  "pack.box": { other: "{count}팩" },
+  "pack.bag": { other: "{count}봉지" },
+  "pack.block": { other: "{count}모" },
+  "pack.carton": { other: "{count}팩" },
+  "pack.head": { other: "{count}통" },
+  "pack.bunch": { other: "{count}단" },
+  "pack.loaf": { other: "{count}봉지" },
+  "pack.piece": { other: "{count}개" },
+  "pack.about": "{qty} (약 {grams} g)",
+  "pack.onHand": "집에 있는 것",
+  "pack.freeze": "산 날 소분해서 냉동",
+  "pack.pot": { other: "한 냄비로 {count}끼" },
 } satisfies Translation<typeof en>;
