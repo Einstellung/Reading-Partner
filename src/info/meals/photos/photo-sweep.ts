@@ -1,6 +1,6 @@
-// Who starts the photograph search, and when (docs/73 图片). Ingredients are
-// always searched here; dishes only when this machine's provider cannot draw
-// them (dish-draw-sweep.ts draws on the same moments where it can).
+// Who starts the photograph search, and when (docs/73 图片). Only ingredients
+// are searched; the dishes are drawn (dish-draw-sweep.ts, on the same moments)
+// or show their ingredient strip.
 //
 // The search runs in a hidden webview, which one machine in the house has. The
 // week is written on whichever machine the reader is holding, which is usually
@@ -24,7 +24,7 @@
 import { hasWebviewFetch } from "../../../platform/app/platform";
 import { registerPullRoute, type PullMatcher } from "../../../platform/sync/pull-routes";
 import type { PhotoCache } from "./dish-photos";
-import { mealsCanDraw, mealsDishDrawer, onDishDrawFailed, watchMealsForDrawings } from "./dish-draw-sweep";
+import { mealsDishDrawer, watchMealsForDrawings } from "./dish-draw-sweep";
 import { ingredientImageUrl } from "./images";
 import {
   photoQueriesForPlan,
@@ -49,8 +49,6 @@ export const MEALS_PHOTOS_PULL_ROUTE: PullMatcher = {
 export interface PhotoSweepPorts {
   /** Whether this machine has the hidden webview the search needs. */
   canSearch(): boolean;
-  /** Whether this machine's provider draws the dishes, which are then not searched. */
-  canDraw(): Promise<boolean>;
   /** The week, the way it is on disk right now. */
   state(): Promise<MealsState>;
   /** The photographs found so far, by cache key. */
@@ -99,7 +97,7 @@ export interface PhotoSearcher {
 export function createPhotoSearcher(ports: PhotoSweepPorts): PhotoSearcher {
   let busy = false;
   // A pass asked for while a run was going: run once more when it is over, so
-  // that what changed meanwhile (a drawing that failed, a pull) is not lost.
+  // that what changed meanwhile (a pull) is not lost.
   let again = false;
   const over = () => {
     busy = false;
@@ -143,11 +141,9 @@ export function createPhotoSearcher(ports: PhotoSweepPorts): PhotoSearcher {
       const state = await ports.state();
       if (!state.plan) return { runId: null, queries: 0, why: "no-week" };
       planId = state.plan.id;
-      const draws = await ports.canDraw().catch(() => false);
       queries = photoQueriesForPlan(state.plan, await ports.photos(), ports.now(), {
         bankImage: ports.bankImage,
         askedAt: state.photosAskedAt ?? 0,
-        searchDishes: !draws,
       });
     } catch {
       return { runId: null, queries: 0, why: "failed" };
@@ -171,7 +167,6 @@ let live: PhotoSearcher | null = null;
 export function mealsPhotoSearcher(): PhotoSearcher {
   live ??= createPhotoSearcher({
     canSearch: hasWebviewFetch,
-    canDraw: () => mealsCanDraw(),
     state: () => loadMeals(),
     photos: () => loadMealsPhotos(),
     run: (planId, queries) => startPhotoRun({ planId, queries: [...queries] }),
@@ -199,9 +194,9 @@ export function watchMealsForPhotos(searcher: PhotoSearcher): () => void {
 let housekeeping = false;
 
 /**
- * Start looking after the week's pictures on this machine: the search where
- * there is a webview (dishes too when the provider cannot draw), the dish
- * drawings wherever the provider can draw.
+ * Start looking after the week's pictures on this machine: the ingredient
+ * search where there is a webview, the dish drawings wherever the provider can
+ * draw.
  *
  * Called when the meals screen is switched on, from the shell's bootstrap.
  * Idempotent, and never stopped: it costs a route and a read of two files, and
@@ -213,8 +208,4 @@ export function startMealsPhotoHousekeeping(): void {
   const searcher = mealsPhotoSearcher();
   watchMealsForPhotos(searcher);
   watchMealsForDrawings(mealsDishDrawer());
-  // A drawing that failed leaves its dishes to the search straight away.
-  onDishDrawFailed(() => {
-    void searcher.sweep();
-  });
 }

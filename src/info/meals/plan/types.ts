@@ -234,16 +234,17 @@ export const CATEGORY_ORDER: readonly IngredientCategory[] = [
 // Shortest first. The index into this is the sort key inside a category.
 export const KEEPS_ORDER: readonly KeepsClass[] = ["d1-2", "d3-5", "w1", "w2plus", "pantry"];
 
-// One photograph the image search found, for a dish or for an ingredient.
+// One photograph the image search found for an ingredient. Files from older
+// builds also hold dish photographs under `dish:` keys, which nothing shows.
 export interface DishPhoto {
   // The full-size image, what the card loads.
   url: string;
   // The search's own thumbnail, which is what a 40px square wants.
   thumb: string;
-  // The page the picture sits on: what the caption opens, and what the `img:`
-  // proxy sends as Referer (docs/pitfall/30).
+  // The page the picture sits on: what the `img:` proxy sends as Referer
+  // (docs/pitfall/30).
   pageUrl: string;
-  // That page's host without `www.`. The caption reads "Photo: <site>".
+  // That page's host without `www.`.
   site: string;
   foundAt: number;
 }

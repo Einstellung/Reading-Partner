@@ -73,15 +73,23 @@ test("only made meals ask: a delivery with a searchName asks nothing", () => {
   expect(queries).toEqual([]);
 });
 
+// A dish is drawn or shows its ingredient strip; a photograph searched for it
+// was junk. An old `dish:` entry, a miss and no picture at all ask the same.
+test("a week never asks for a photograph of its dishes", () => {
+  const legacy: Record<string, DishPhotoEntry> = {
+    "dish:mapo tofu": { none: true, checkedAt: 1 },
+    "drawing:mapo tofu": { drawingSince: 1 },
+  };
+  for (const cache of [{}, legacy]) {
+    const keys = photoQueriesForPlan(week([meal()]), cache, NOW, { bankImage: noBank, askedAt: NOW }).map(
+      (q) => q.key,
+    );
+    expect(keys).toEqual(["ingredient:bok choy", "ingredient:firm tofu"]);
+  }
+});
+
 test("what the cache already answered is not asked again, and the reader can ask anyway", () => {
   const cache: Record<string, DishPhotoEntry> = {
-    "dish:mapo tofu": {
-      url: "https://cdn/a.jpg",
-      thumb: "",
-      pageUrl: "https://example.com/a",
-      site: "example.com",
-      foundAt: 1,
-    },
     "ingredient:bok choy": { none: true, checkedAt: NOW - 1000 },
   };
   expect(photoQueriesForPlan(week([meal()]), cache, NOW, { bankImage: noBank })).toEqual([
@@ -136,7 +144,7 @@ test("a meal with no searchName and a food with no English name ask nothing", ()
 test("the ask is written, handed to legion, and read back", async () => {
   const ask: MealsPhotoAsk = {
     planId: "week-2026-09-21",
-    queries: [{ key: "dish:mapo tofu", q: "mapo tofu" }],
+    queries: [{ key: "ingredient:firm tofu", q: "firm tofu food" }],
   };
   let sent: { kind: string; brief: string; delegator: unknown } | null = null;
   const started = await startPhotoRun(ask, {
@@ -212,7 +220,7 @@ function ctx(): WorkerContext & { lines: string[] } {
 const ASK = JSON.stringify({
   planId: "week-2026-09-21",
   queries: [
-    { key: "dish:mapo tofu", q: "mapo tofu" },
+    { key: "ingredient:firm tofu", q: "firm tofu food" },
     { key: "ingredient:kale", q: "kale vegetable" },
   ],
 });
@@ -238,9 +246,9 @@ test("each search is written as it lands, and the run says how it went", async (
   const c = ctx();
   const out = await worker("brief", c).done;
   expect(asked.length).toBe(2);
-  expect(asked[0]).toContain("q=mapo+tofu");
+  expect(asked[0]).toContain("q=firm+tofu+food");
   expect(written[0]).toEqual({
-    "dish:mapo tofu": {
+    "ingredient:firm tofu": {
       url: "https://cdn.example/mapo.jpg",
       thumb: "https://ts3.mm.bing.net/th?id=1",
       pageUrl: "https://www.example.com/mapo",
@@ -251,10 +259,10 @@ test("each search is written as it lands, and the run says how it went", async (
   // A search that answered with nothing is remembered as nothing.
   expect(written[1]).toEqual({ "ingredient:kale": { none: true, checkedAt: NOW } });
   expect(out?.progress).toBe("Searched for 2 photographs, found 1.");
-  expect(c.lines[0]).toContain("mapo tofu");
+  expect(c.lines[0]).toContain("firm tofu");
 });
 
-// A page that does not come back is not a fact about the dish: the rest of the
+// A page that does not come back is not a fact about the ingredient: the rest of the
 // queries wait for the next run rather than being written down as misses.
 test("a blocked page fails the run and writes nothing after it", async () => {
   const written: Record<string, DishPhotoEntry>[] = [];

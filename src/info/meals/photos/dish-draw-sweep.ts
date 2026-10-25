@@ -12,9 +12,8 @@
 // cache before the paid call, so the phone and the PC do not both draw the same
 // dish. A failed call is not written down as "no picture": the round stops,
 // takes back its claims on the dishes it did not draw, and this device waits
-// before the next one, longer each time it fails again. Meanwhile the search
-// treats this device as one that cannot draw (mealsCanDraw), so a provider that
-// refuses pictures leaves the dishes to the image search as before.
+// before the next one, longer each time it fails again. Meanwhile the dishes
+// show their ingredient strip.
 
 import { generateImage, imageGenerationReady, type GeneratedImage } from "../../../ai/image-generation";
 import { registerPullRoute, type PullMatcher } from "../../../platform/sync/pull-routes";
@@ -51,8 +50,6 @@ export interface DishDrawPorts {
   now(): number;
   /** A picture landed: the screen re-reads the cache. */
   landed?(): void;
-  /** A call failed: the search may take the dishes over. */
-  failed?(): void;
 }
 
 export type DishDrawSkip = "unavailable" | "busy" | "backing-off" | "no-week" | "nothing-wanted" | "failed";
@@ -105,7 +102,6 @@ export function createDishDrawer(ports: DishDrawPorts): DishDrawer {
         if (image.unavailable) return { drawn, wanted: wanted.length, why: "unavailable" };
         failures += 1;
         pausedUntil = ports.now() + backoffAfter(failures);
-        ports.failed?.();
         return { drawn, wanted: wanted.length, why: "failed" };
       }
       failures = 0;
@@ -137,21 +133,12 @@ export function createDishDrawer(ports: DishDrawPorts): DishDrawer {
 // --- the live one -------------------------------------------------------------
 
 const listeners = new Set<() => void>();
-const failureListeners = new Set<() => void>();
 
 /** Be told when a picture drawn on this device lands. Returns the undo. */
 export function onDishDrawn(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
-  };
-}
-
-/** Be told when a drawing on this device fails. Returns the undo. */
-export function onDishDrawFailed(listener: () => void): () => void {
-  failureListeners.add(listener);
-  return () => {
-    failureListeners.delete(listener);
   };
 }
 
@@ -171,18 +158,15 @@ export function mealsDishDrawer(): DishDrawer {
     landed: () => {
       for (const listener of listeners) listener();
     },
-    failed: () => {
-      for (const listener of failureListeners) listener();
-    },
   });
   return live;
 }
 
 /**
- * Whether the week's dishes are this device's to draw rather than to search:
- * its provider draws, and its last call did not fail. What the search and the
- * reader's "the pictures are wrong" ask; the drawer itself asks only whether
- * the provider draws, so that it tries again after its wait.
+ * Whether the week's dishes are this device's to draw: its provider draws, and
+ * its last call did not fail. What the reader's "the pictures are wrong" asks;
+ * the drawer itself asks only whether the provider draws, so that it tries
+ * again after its wait.
  */
 export async function mealsCanDraw(): Promise<boolean> {
   return !mealsDishDrawer().failing() && (await imageGenerationReady());
