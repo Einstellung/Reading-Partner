@@ -234,6 +234,9 @@ const LAYER: Record<string, Layer> = {
   // The dish library (docs/671 菜库): the dish type, method categories and the
   // storage derived from them, the reference serving and the entry check.
   "info/meals/dishes": "domain",
+  // The library-based plan core (docs/671): the draft the model hands in, the
+  // per-person grams, the draft checks and the shopping list in whole packs.
+  "info/meals/planner": "domain",
   // Everything that fetches or caches a dish or ingredient photo.
   "info/meals/photos": "domain",
   // One made meal's recipe page: the prompt, the stored recipes, the call.

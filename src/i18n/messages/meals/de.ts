@@ -237,4 +237,17 @@ export default {
   "applied.week": "Woche gespeichert · {count} zu kaufen",
   "applied.change": "Geändert: {meals} · {count} zu kaufen",
   "applied.freeze": "{count} bei Ankunft einfrieren",
+  // The shopping list in whole packs (planner/packs.ts)
+  "pack.box": { one: "{count} Packung", other: "{count} Packungen" },
+  "pack.bag": { one: "{count} Beutel", other: "{count} Beutel" },
+  "pack.block": { one: "{count} Block", other: "{count} Blöcke" },
+  "pack.carton": { one: "{count} Karton", other: "{count} Kartons" },
+  "pack.head": { one: "{count} Kopf", other: "{count} Köpfe" },
+  "pack.bunch": { one: "{count} Bund", other: "{count} Bund" },
+  "pack.loaf": { one: "{count} Brot", other: "{count} Brote" },
+  "pack.piece": { one: "{count} Stück", other: "{count} Stück" },
+  "pack.about": "{qty} (etwa {grams} g)",
+  "pack.onHand": "vorrätig",
+  "pack.freeze": "am Einkaufstag portionsweise einfrieren",
+  "pack.pot": { one: "1 Topf, {count} Mahlzeit", other: "1 Topf, {count} Mahlzeiten" },
 } satisfies Translation<typeof en>;

@@ -5,6 +5,7 @@
 // a deviation leaves of a pot. Pure, unit-tested.
 
 import { daysBetween } from "../../../platform/std/day";
+import { FRIDGE_DAYS_AFTER_COOK } from "../dishes/methods";
 import { MEAL_KEYS, type MealRef, type Pot, type PotBox, type WeekPlan } from "./types";
 
 /** Where a share waits until its meal: eaten as cooked, in the fridge, or in the freezer. */
@@ -12,7 +13,7 @@ export type PotStorage = "fresh" | "fridge" | "freezer";
 
 // Cooked meat keeps three days in the fridge: a share eaten up to two days
 // after the cook day waits there, a later one is frozen the day it is cooked.
-export const FRIDGE_DAYS = 2;
+export const FRIDGE_DAYS = FRIDGE_DAYS_AFTER_COOK;
 // The latest a share is eaten, in days after the cook day. Frozen it would keep
 // for months; this keeps a pot inside one week's plan and one trip's shopping.
 export const MAX_POT_DAYS = 6;

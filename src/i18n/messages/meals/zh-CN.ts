@@ -228,4 +228,17 @@ export default {
   "applied.week": "已存好这一周 · 采购单 {count} 样",
   "applied.change": "已改好{meals} · 采购单 {count} 样",
   "applied.freeze": "{count} 样到家冷冻",
+  // The shopping list in whole packs (planner/packs.ts)
+  "pack.box": { other: "{count} 盒" },
+  "pack.bag": { other: "{count} 袋" },
+  "pack.block": { other: "{count} 块" },
+  "pack.carton": { other: "{count} 盒" },
+  "pack.head": { other: "{count} 颗" },
+  "pack.bunch": { other: "{count} 把" },
+  "pack.loaf": { other: "{count} 袋" },
+  "pack.piece": { other: "{count} 个" },
+  "pack.about": "{qty}（约 {grams} g）",
+  "pack.onHand": "家里常备",
+  "pack.freeze": "买回当天分装冷冻",
+  "pack.pot": { other: "一锅分 {count} 顿" },
 } satisfies Translation<typeof en>;

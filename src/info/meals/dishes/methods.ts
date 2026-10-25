@@ -42,7 +42,14 @@ export interface Method {
   storage: Storage | null;
 }
 
-const COOKED: Storage = { fridgeDays: 2, freezeWeeks: 3 };
+/**
+ * The fridge window of a cooked pot (docs/671 一锅): the cooking day and this
+ * many days after it. The one place the number lives; a plan's pot meals must
+ * all fall inside it (planner/checks.ts).
+ */
+export const FRIDGE_DAYS_AFTER_COOK = 2;
+
+const COOKED: Storage = { fridgeDays: FRIDGE_DAYS_AFTER_COOK, freezeWeeks: 3 };
 const GRAIN: Storage = { fridgeDays: 1, freezeWeeks: 3 };
 
 export const METHODS: readonly Method[] = [

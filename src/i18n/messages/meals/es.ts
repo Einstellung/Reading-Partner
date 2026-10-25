@@ -236,4 +236,17 @@ export default {
   "applied.week": "Semana guardada · {count} por comprar",
   "applied.change": "Cambiado: {meals} · {count} por comprar",
   "applied.freeze": "{count} a congelar al llegar",
+  // The shopping list in whole packs (planner/packs.ts)
+  "pack.box": { one: "{count} paquete", other: "{count} paquetes" },
+  "pack.bag": { one: "{count} bolsa", other: "{count} bolsas" },
+  "pack.block": { one: "{count} bloque", other: "{count} bloques" },
+  "pack.carton": { one: "{count} brik", other: "{count} briks" },
+  "pack.head": { one: "{count} pieza", other: "{count} piezas" },
+  "pack.bunch": { one: "{count} manojo", other: "{count} manojos" },
+  "pack.loaf": { one: "{count} paquete de pan", other: "{count} paquetes de pan" },
+  "pack.piece": { one: "{count} unidad", other: "{count} unidades" },
+  "pack.about": "{qty} (unos {grams} g)",
+  "pack.onHand": "en la despensa",
+  "pack.freeze": "congélalo en porciones el día de la compra",
+  "pack.pot": { one: "1 olla, {count} comida", other: "1 olla, {count} comidas" },
 } satisfies Translation<typeof en>;

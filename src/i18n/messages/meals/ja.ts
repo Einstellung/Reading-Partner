@@ -230,4 +230,17 @@ export default {
   "applied.week": "今週の献立を保存 · 買うもの {count} 品",
   "applied.change": "{meals}を変更 · 買うもの {count} 品",
   "applied.freeze": "{count} 品は届いたら冷凍",
+  // The shopping list in whole packs (planner/packs.ts)
+  "pack.box": { other: "{count} パック" },
+  "pack.bag": { other: "{count} 袋" },
+  "pack.block": { other: "{count} 丁" },
+  "pack.carton": { other: "{count} 本" },
+  "pack.head": { other: "{count} 玉" },
+  "pack.bunch": { other: "{count} 束" },
+  "pack.loaf": { other: "{count} 斤" },
+  "pack.piece": { other: "{count} 個" },
+  "pack.about": "{qty}（約 {grams} g）",
+  "pack.onHand": "家にある分",
+  "pack.freeze": "買った日に小分けして冷凍",
+  "pack.pot": { other: "1 鍋で {count} 食分" },
 } satisfies Translation<typeof en>;

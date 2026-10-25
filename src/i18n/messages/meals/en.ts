@@ -267,4 +267,17 @@ export default {
   "applied.week": "Saved the week · {count} to buy",
   "applied.change": "Changed {meals} · {count} to buy",
   "applied.freeze": "{count} to freeze on arrival",
+  // The shopping list in whole packs (planner/packs.ts)
+  "pack.box": { one: "{count} pack", other: "{count} packs" },
+  "pack.bag": { one: "{count} bag", other: "{count} bags" },
+  "pack.block": { one: "{count} block", other: "{count} blocks" },
+  "pack.carton": { one: "{count} carton", other: "{count} cartons" },
+  "pack.head": { one: "{count} head", other: "{count} heads" },
+  "pack.bunch": { one: "{count} bunch", other: "{count} bunches" },
+  "pack.loaf": { one: "{count} loaf", other: "{count} loaves" },
+  "pack.piece": { one: "{count} piece", other: "{count} pieces" },
+  "pack.about": "{qty} (about {grams} g)",
+  "pack.onHand": "on hand",
+  "pack.freeze": "freeze in portions the day you buy it",
+  "pack.pot": { one: "1 pot, {count} meal", other: "1 pot, {count} meals" },
 } as const;
