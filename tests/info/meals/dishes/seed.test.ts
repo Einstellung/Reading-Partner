@@ -207,7 +207,62 @@ describe("seed dishes", () => {
 
   test("frozen edamame is used in several dishes: it keeps indefinitely", () => {
     const using = SEED_DISHES.filter((d) => [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)].some((i) => i.food === "frozen_edamame"));
-    expect(using.length).toBeGreaterThanOrEqual(7);
+    expect(using.length).toBeGreaterThanOrEqual(10);
+  });
+
+  test("names are short and plain: no 和 twice in a Chinese name, no ' and ' twice in an English one, ways within 14 characters", () => {
+    for (const d of SEED_DISHES) {
+      const names = [{ zh: d.name, en: d.nameEn }, ...(d.ways ?? []).map((w) => ({ zh: w.name, en: w.nameEn }))];
+      for (const n of names) {
+        expect(n.zh.split("和").length - 1, `${d.id}: ${n.zh}`).toBeLessThanOrEqual(1);
+        expect(n.en.split(" and ").length - 1, `${d.id}: ${n.en}`).toBeLessThanOrEqual(1);
+      }
+      for (const w of d.ways ?? []) expect([...w.name].length, `${d.id}: ${w.name}`).toBeLessThanOrEqual(14);
+    }
+  });
+
+  test("a way is named for the vegetables it really carries", () => {
+    const VEG_ZH: Record<string, string> = {
+      spinach: "菠菜", broccoli: "西兰花", bok_choy: "上海青", romaine: "生菜", green_beans: "四季豆", green_pepper: "青椒", carrot: "胡萝卜",
+      tomato: "番茄", cherry_tomato: "小番茄", red_bell_pepper: "彩椒", pumpkin: "南瓜", red_cabbage: "紫甘蓝", cucumber: "黄瓜", corn: "玉米", peas: "豌豆", edamame: "毛豆",
+    };
+    const all = Object.values(VEG_ZH);
+    for (const d of SEED_DISHES) {
+      for (const w of d.ways ?? []) {
+        const have = new Set(w.addOns.map((a) => VEG_ZH[a.food.replace(/^frozen_/, "")]).filter(Boolean));
+        const cut = Math.max(w.name.lastIndexOf("配"), w.name.lastIndexOf("拌"));
+        const name = cut < 0 ? "" : w.name.slice(cut).replace(/玉米饼条?|糯玉米/g, "");
+        for (const v of all) if (name.includes(v)) expect(have.has(v) || (v === "番茄" && have.has("小番茄")) || (v === "番茄" && name.includes("小番茄")), `${d.id}: ${w.name} names ${v} not on the plate`).toBe(true);
+      }
+    }
+  });
+
+  test("no vegetable is in more than a quarter of the ways: add-ons are spread over the whole list", () => {
+    const family = (food: string) => food.replace(/^frozen_/, "");
+    const count = new Map<string, number>();
+    let ways = 0;
+    for (const d of SEED_DISHES) {
+      for (const w of d.ways ?? []) {
+        ways++;
+        const seen = new Set(w.addOns.filter((a) => foodById(a.food)?.roles.includes("veg")).map((a) => family(a.food)));
+        for (const f of seen) count.set(f, (count.get(f) ?? 0) + 1);
+      }
+    }
+    expect(ways).toBeGreaterThan(150);
+    for (const [food, n] of count) expect(n / ways, `${food}: ${n} of ${ways} ways`).toBeLessThanOrEqual(0.25);
+    // Every deep-coloured vegetable on the common list shows up as an add-on.
+    for (const f of ["spinach", "broccoli", "bok_choy", "romaine", "green_beans", "green_pepper", "carrot", "tomato", "cherry_tomato", "red_bell_pepper", "pumpkin", "red_cabbage"]) {
+      expect(count.get(f) ?? 0, f).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  test("no fruit in mains, sides, staples or ways: fruit is its own item, breakfasts keep theirs", () => {
+    for (const d of SEED_DISHES.filter((x) => x.role !== "breakfast")) {
+      for (const i of [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)]) expect(i.role, `${d.id}: ${i.food}`).not.toBe("fruit");
+    }
+    for (const d of SEED_DISHES.filter((x) => x.role !== "breakfast")) {
+      expect(/苹果|橙|菠萝|香蕉|apple|orange|pineapple|banana/i.test(`${d.name} ${d.nameEn} ${d.summary} ${d.summaryEn} ${(d.ways ?? []).map((w) => `${w.name} ${w.nameEn}`).join(" ")}`), d.id).toBe(false);
+    }
   });
 
   test("fish and seafood mains are always fresh, never batch", () => {
