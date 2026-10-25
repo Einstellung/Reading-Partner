@@ -263,6 +263,224 @@ const AMERICAN: Dish[] = [
   }),
 ];
 
-const MAINS: Dish[] = [...AMERICAN];
+const MEDITERRANEAN: Dish[] = [
+  dish({
+    id: "lemon_herb_roast_chicken", zh: "柠檬香草烤鸡胸", en: "Lemon-herb roast chicken breast", c: "mediterranean", m: "roast", eq: ["oven"], t: [10, 40],
+    i: [pr("chicken_breast", 108), ve("zucchini", 80), ve("red_onion", 40), se("lemon", 10), se("dried_oregano", 1), se("salt", 0.4), oi("olive_oil", 4)],
+    ways: [
+      way("烤鸡配藜麦和黄瓜番茄", "Chicken over quinoa with cucumber and tomato", QUINOA, [ve("cucumber", 60), ve("tomato", 50)]),
+      way("烤鸡口袋饼配酸奶", "Chicken in pita with yogurt", "whole_wheat_pita", [tp("greek_yogurt", 25), ve("romaine", 50), ve("tomato", 40)]),
+      way("烤鸡配烤小土豆和四季豆", "Chicken with roasted potatoes and green beans", BABY_POTATOES, [ve("frozen_green_beans", 90)]),
+    ],
+  }),
+  dish({
+    id: "greek_lemon_chicken_soup", zh: "希腊柠檬鸡汤", en: "Greek-style lemon chicken soup", c: "mediterranean", m: "simmer", t: [12, 40],
+    i: [pr("chicken_breast", 100), ve("carrot", 50), ve("celery", 40), se("low_sodium_stock", 200), se("lemon", 20), tp("dill", 3)],
+    ways: [
+      way("汤配口袋饼和黄瓜番茄", "Soup with pita and a cucumber tomato plate", "whole_wheat_pita", [ve("cucumber", 60), ve("tomato", 50)]),
+      way("汤泡饭配菠菜", "Soup over rice with spinach", RICE, [ve("frozen_spinach", 70)]),
+      way("汤加全麦意面", "Soup with whole-wheat pasta", WW_PASTA, [ve("cherry_tomato", 60), ve("cucumber", 40)]),
+    ],
+  }),
+  dish({
+    id: "chicken_chickpea_stew", zh: "鸡肉鹰嘴豆炖菜", en: "Chicken and chickpea stew", c: "mediterranean", m: "stew", t: [15, 45],
+    i: [pr("chicken_breast", 100), st("canned_chickpeas", 60), ve("crushed_tomatoes", 100), ve("onion", 40), ve("carrot", 40), se("ground_cumin", 1), se("ground_cinnamon", 0.5), se("harissa", 5)],
+    ways: [
+      way("炖菜配藜麦和黄瓜", "Stew over quinoa with cucumber", QUINOA, [ve("cucumber", 60), tp("parsley", 3)]),
+      way("炖菜口袋饼配酸奶", "Stew in pita with yogurt", "whole_wheat_pita", [tp("greek_yogurt", 30), ve("romaine", 50)]),
+      way("炖菜糙米饭配菠菜", "Stew over brown rice with spinach", BROWN, [ve("frozen_spinach", 70), tp("lemon", 8)]),
+    ],
+  }),
+  dish({
+    id: "baked_turkey_kofta", zh: "烤火鸡肉丸", en: "Baked turkey kofta", c: "mediterranean", m: "bake", eq: ["oven"], t: [15, 35],
+    i: [pr("ground_turkey", 125), ve("red_onion", 30), tp("parsley", 3), se("ground_cumin", 1.5), se("smoked_paprika", 1.5), se("garlic_powder", 1), se("salt", 0.4)],
+    ways: [
+      way("肉丸口袋饼配黄瓜酸奶", "Kofta in pita with cucumber yogurt", "whole_wheat_pita", [tp("greek_yogurt", 25), ve("cucumber", 70), ve("tomato", 40)]),
+      way("肉丸藜麦配番茄沙拉", "Kofta over quinoa with tomato salad", QUINOA, [ve("cherry_tomato", 70), ve("cucumber", 50), tp("mint", 2)]),
+      way("肉丸米饭配紫甘蓝", "Kofta over rice with red cabbage", RICE, [ve("red_cabbage", 70), tp("lemon", 8)]),
+    ],
+  }),
+  dish({
+    id: "lemon_dill_roast_salmon", zh: "柠檬莳萝烤三文鱼", en: "Lemon-dill roast salmon", c: "mediterranean", m: "roast", eq: ["oven"], t: [10, 25],
+    i: [pr("salmon", 120), ve("cherry_tomato", 70), ve("zucchini", 60), se("lemon", 10), tp("dill", 3), oi("olive_oil", 2), se("salt", 0.3)],
+    ways: [
+      way("三文鱼配烤小土豆和四季豆", "Salmon with roasted potatoes and green beans", BABY_POTATOES, [ve("frozen_green_beans", 90)]),
+      way("三文鱼藜麦沙拉", "Salmon over a quinoa salad", QUINOA, [ve("cucumber", 60), ve("romaine", 40)]),
+      way("三文鱼冷意面", "Salmon with cold whole-wheat pasta", WW_PASTA, [ve("cucumber", 60), ve("spinach", 50)]),
+    ],
+  }),
+  dish({
+    id: "tomato_baked_cod", zh: "番茄烤鳕鱼", en: "Tomato baked cod", c: "mediterranean", m: "bake", eq: ["oven"], t: [10, 30],
+    i: [pr("cod", 140), ve("crushed_tomatoes", 100), ve("onion", 40), ve("zucchini", 50), se("dried_oregano", 1), oi("olive_oil", 4), se("salt", 0.3)],
+    ways: [
+      way("烤鳕鱼拌意面", "Cod over pasta with a green salad", PASTA, [ve("romaine", 60)]),
+      way("烤鳕鱼糙米饭配西兰花", "Cod over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 90)]),
+      way("烤鳕鱼口袋饼", "Cod in pita with cucumber and yogurt", "whole_wheat_pita", [ve("cucumber", 60), tp("greek_yogurt", 20)]),
+    ],
+  }),
+  dish({
+    id: "lentil_tomato_stew", zh: "番茄扁豆炖菜", en: "Lentil and tomato stew with feta", c: "mediterranean", m: "stew", t: [12, 45],
+    i: [st("lentils_dry", 75), ve("crushed_tomatoes", 100), ve("carrot", 50), ve("onion", 40), ve("celery", 30), se("low_sodium_stock", 150), se("ground_cumin", 1), se("dried_oregano", 1), tp("feta", 15), se("lemon", 8)],
+    ways: [
+      way("扁豆炖菜口袋饼配酸奶", "Stew in pita with yogurt and cucumber", "whole_wheat_pita", [tp("greek_yogurt", 30), ve("cucumber", 60)]),
+      way("扁豆炖菜糙米饭配菠菜", "Stew over brown rice with spinach", BROWN, [ve("frozen_spinach", 70)]),
+      way("扁豆炖菜烤土豆配菲达", "Stew on a baked potato with feta", BAKED_POTATO, [tp("feta", 10), ve("cherry_tomato", 50)]),
+    ],
+  }),
+  dish({
+    id: "harissa_chicken_traybake", zh: "哈里萨烤鸡腿", en: "Harissa chicken thigh traybake", c: "mediterranean", m: "roast", eq: ["oven"], t: [10, 45],
+    i: [pr("chicken_thigh", 125), ve("red_bell_pepper", 60), ve("zucchini", 50), ve("red_onion", 40), se("harissa", 8), se("ground_cumin", 1), oi("olive_oil", 2), se("salt", 0.3)],
+    ways: [
+      way("鸡腿藜麦配黄瓜", "Chicken over quinoa with cucumber", QUINOA, [ve("cucumber", 60), tp("parsley", 3)]),
+      way("鸡腿口袋饼配酸奶", "Chicken in pita with yogurt", "whole_wheat_pita", [tp("greek_yogurt", 25), ve("romaine", 50), ve("tomato", 40)]),
+      way("鸡腿配烤小土豆和沙拉", "Chicken with roasted potatoes and salad", BABY_POTATOES, [ve("romaine", 60), ve("cucumber", 50)]),
+    ],
+  }),
+  dish({
+    id: "greek_beef_stifado", zh: "希腊炖牛肉", en: "Greek beef stifado", c: "mediterranean", m: "pressure_cook", eq: ["pressure_cooker"], t: [15, 75],
+    i: [pr("beef_shank_raw", 105), ve("onion", 70), ve("crushed_tomatoes", 100), se("ground_cinnamon", 0.5), se("dried_oregano", 1), se("low_sodium_stock", 80), se("salt", 0.4)],
+    ways: [
+      way("炖牛肉拌意面", "Stifado over pasta with salad", PASTA, [ve("romaine", 50), ve("cucumber", 40)]),
+      way("炖牛肉配烤小土豆和四季豆", "Stifado with roasted potatoes and green beans", BABY_POTATOES, [ve("frozen_green_beans", 90)]),
+      way("炖牛肉糙米饭配西兰花", "Stifado over brown rice with broccoli", BROWN, [ve("frozen_broccoli", 90)]),
+    ],
+  }),
+  dish({
+    id: "shakshuka", zh: "番茄红椒煎蛋", en: "Shakshuka with feta", c: "mediterranean", m: "pan_fry", t: [12, 20],
+    staples: ["whole_wheat_pita", "whole_wheat_toast"],
+    i: [pr("egg", 110), pr("egg_white", 40), tp("feta", 8), ve("crushed_tomatoes", 100), ve("red_bell_pepper", 70), ve("onion", 30), se("smoked_paprika", 1.5), oi("olive_oil", 2)],
+  }),
+  dish({
+    id: "greek_chicken_salad", zh: "希腊鸡肉沙拉", en: "Greek chicken salad", c: "mediterranean", m: "assemble", eq: [], t: [10, 10],
+    staples: ["whole_wheat_pita", QUINOA, BABY_POTATOES],
+    i: [pr("ready_chicken_breast", 105), ve("cucumber", 70), ve("tomato", 70), ve("red_onion", 20), tp("feta", 15), oi("olive_oil", 3), se("dried_oregano", 1), se("lemon", 8)],
+  }),
+  dish({
+    id: "tuna_chickpea_salad", zh: "金枪鱼鹰嘴豆沙拉", en: "Tuna and chickpea salad", c: "mediterranean", m: "assemble", eq: [], t: [8, 8],
+    staples: ["whole_wheat_pita", "whole_wheat_toast"],
+    i: [pr("canned_tuna_water", 110), st("canned_chickpeas", 60), ve("cucumber", 60), ve("cherry_tomato", 60), ve("red_onion", 20), oi("olive_oil", 3), se("lemon", 10), tp("parsley", 3)],
+  }),
+  dish({
+    id: "tomato_shrimp_feta_skillet", zh: "番茄菲达虾", en: "Tomato and feta shrimp skillet", c: "mediterranean", m: "stir_fry", t: [12, 18],
+    staples: [PASTA, QUINOA, BROWN],
+    i: [pr("white_shrimp", 110), tp("feta", 10), ve("crushed_tomatoes", 100), ve("zucchini", 60), se("dried_oregano", 1), oi("olive_oil", 3)],
+  }),
+  dish({
+    id: "lemon_seared_cod", zh: "柠檬香煎鳕鱼", en: "Lemon pan-seared cod with tomatoes", c: "mediterranean", m: "pan_fry", t: [12, 15],
+    staples: [BABY_POTATOES, QUINOA, WW_PASTA],
+    i: [pr("cod", 140), ve("cherry_tomato", 100), ve("zucchini", 60), oi("olive_oil", 4), se("lemon", 10), tp("parsley", 3), se("salt", 0.4)],
+  }),
+];
+
+const ITALIAN: Dish[] = [
+  dish({
+    id: "turkey_meatballs_marinara", zh: "烤火鸡肉丸配番茄酱", en: "Baked turkey meatballs in marinara", c: "italian", m: "bake", eq: ["oven"], t: [18, 40],
+    i: [pr("ground_turkey", 105), pr("egg_white", 40), ve("crushed_tomatoes", 150), ve("onion", 30), se("breadcrumbs", 8), se("italian_seasoning", 1.5), se("dried_oregano", 1), tp("basil", 3)],
+    ways: [
+      way("肉丸意面", "Meatballs with spaghetti and salad", PASTA, [ve("romaine", 50)]),
+      way("肉丸配西葫芦", "Meatballs over sauteed zucchini", null, [ve("zucchini", 150)], 5),
+      way("肉丸配吐司和菠菜", "Meatballs on toast with spinach", "white_toast", [ve("spinach", 60)]),
+    ],
+  }),
+  dish({
+    id: "chicken_cacciatore", zh: "猎人炖鸡", en: "Chicken cacciatore", c: "italian", m: "braise", t: [15, 45],
+    i: [pr("chicken_breast", 108), ve("crushed_tomatoes", 100), ve("red_bell_pepper", 50), ve("button_mushroom", 50), ve("onion", 30), se("dried_oregano", 1), se("italian_seasoning", 1.5), oi("olive_oil", 3), se("salt", 0.2)],
+    ways: [
+      way("炖鸡拌全麦意面", "Cacciatore over whole-wheat pasta", WW_PASTA, [ve("romaine", 50)]),
+      way("炖鸡配烤吐司和菠菜", "Cacciatore with toast and spinach", "white_toast", [ve("spinach", 60)]),
+      way("炖鸡配烤土豆", "Cacciatore on a baked potato with broccoli", BAKED_POTATO, [ve("frozen_broccoli", 90)]),
+    ],
+  }),
+  dish({
+    id: "beef_ragu", zh: "牛肉肉酱", en: "Beef ragu", c: "italian", m: "stew", t: [15, 60],
+    i: [pr("lean_beef_mince", 115), ve("crushed_tomatoes", 140), ve("onion", 30), ve("carrot", 30), ve("celery", 20), se("italian_seasoning", 1.5), se("dried_oregano", 1), se("salt", 0.2)],
+    ways: [
+      way("肉酱意面配西葫芦", "Ragu with spaghetti and sauteed zucchini", PASTA, [ve("zucchini", 70)]),
+      way("肉酱全麦意面配沙拉", "Ragu with whole-wheat pasta and salad", WW_PASTA, [ve("cherry_tomato", 40), ve("romaine", 50)]),
+      way("肉酱烤土豆配奶酪", "Ragu on a baked potato with mozzarella", BAKED_POTATO, [tp("mozzarella", 15), ve("frozen_broccoli", 80)]),
+    ],
+  }),
+  dish({
+    id: "chicken_mushroom_ragu", zh: "鸡肉蘑菇肉酱", en: "Chicken and mushroom ragu", c: "italian", m: "stew", t: [15, 45],
+    i: [pr("chicken_mince", 140), ve("button_mushroom", 100), ve("crushed_tomatoes", 100), ve("onion", 30), se("italian_seasoning", 1.5), oi("olive_oil", 2), se("salt", 0.2)],
+    ways: [
+      way("肉酱全麦意面配西葫芦", "Ragu with whole-wheat pasta and zucchini", WW_PASTA, [ve("zucchini", 70)]),
+      way("肉酱藜麦配菠菜", "Ragu over quinoa with spinach", QUINOA, [ve("spinach", 60)]),
+      way("肉酱吐司配番茄", "Ragu on toast with tomato and salad", "white_toast", [ve("romaine", 50), ve("cherry_tomato", 50)]),
+    ],
+  }),
+  dish({
+    id: "chicken_minestrone", zh: "意式鸡肉蔬菜浓汤", en: "Chicken and vegetable minestrone", c: "italian", m: "simmer", t: [15, 45],
+    i: [pr("chicken_breast", 90), ve("crushed_tomatoes", 80), ve("carrot", 40), ve("celery", 30), ve("zucchini", 40), se("low_sodium_stock", 100), tp("basil", 3), se("italian_seasoning", 1), se("salt", 0.3)],
+    ways: [
+      way("浓汤配全麦吐司", "Minestrone with whole-wheat toast and salad", "whole_wheat_toast", [ve("romaine", 50)]),
+      way("浓汤加全麦意面", "Minestrone with whole-wheat pasta", WW_PASTA, [ve("frozen_spinach", 70)]),
+      way("浓汤泡饭配豌豆", "Minestrone over rice with peas", RICE, [ve("frozen_peas", 60)]),
+    ],
+  }),
+  dish({
+    id: "chicken_pizzaiola", zh: "番茄奶酪烤鸡胸", en: "Chicken pizzaiola", c: "italian", m: "bake", eq: ["oven"], t: [12, 35],
+    i: [pr("chicken_breast", 105), ve("crushed_tomatoes", 120), ve("onion", 30), ve("red_bell_pepper", 40), se("dried_oregano", 1), oi("olive_oil", 3), tp("mozzarella", 20), se("salt", 0.2)],
+    ways: [
+      way("烤鸡配意面和沙拉", "Pizzaiola over pasta with salad", PASTA, [ve("romaine", 60)]),
+      way("烤鸡配烤吐司和菠菜", "Pizzaiola on toast with spinach", "whole_wheat_toast", [ve("spinach", 60)]),
+      way("烤鸡配烤小土豆和四季豆", "Pizzaiola with roasted potatoes and green beans", BABY_POTATOES, [ve("frozen_green_beans", 90)]),
+    ],
+  }),
+  dish({
+    id: "herb_roast_pork_tenderloin", zh: "香草烤猪里脊", en: "Herb-roasted pork tenderloin", c: "italian", m: "roast", eq: ["oven"], t: [10, 40],
+    i: [pr("pork_tenderloin", 120), ve("red_bell_pepper", 60), ve("zucchini", 60), ve("red_onion", 30), se("italian_seasoning", 1.5), se("dried_oregano", 0.5), oi("olive_oil", 3), se("salt", 0.3), se("lemon", 8)],
+    ways: [
+      way("猪里脊配烤小土豆和四季豆", "Pork with roasted potatoes and green beans", BABY_POTATOES, [ve("frozen_green_beans", 90)]),
+      way("猪里脊拌全麦意面", "Pork with whole-wheat pasta and tomatoes", WW_PASTA, [ve("cherry_tomato", 60), ve("romaine", 40)]),
+      way("猪里脊藜麦配菠菜", "Pork over quinoa with spinach", QUINOA, [ve("spinach", 60)]),
+    ],
+  }),
+  dish({
+    id: "italian_lentil_soup", zh: "意式扁豆汤", en: "Italian lentil soup", c: "italian", m: "simmer", t: [12, 45],
+    i: [st("lentils_dry", 90), ve("crushed_tomatoes", 80), ve("carrot", 50), ve("celery", 40), ve("onion", 40), se("low_sodium_stock", 250), se("dried_oregano", 1), tp("parsley", 3), se("salt", 0.3)],
+    ways: [
+      way("扁豆汤配全麦吐司", "Soup with whole-wheat toast and salad", "whole_wheat_toast", [ve("romaine", 50), ve("tomato", 40)]),
+      way("扁豆汤加全麦意面", "Soup with whole-wheat pasta and spinach", WW_PASTA, [ve("frozen_spinach", 70)]),
+      way("扁豆汤配藜麦沙拉", "Soup with a cool quinoa salad", QUINOA, [ve("cherry_tomato", 60), ve("cucumber", 40)]),
+    ],
+  }),
+  dish({
+    id: "chicken_meatball_spinach_soup", zh: "鸡肉丸菠菜汤", en: "Chicken meatball and spinach soup", c: "italian", m: "simmer", t: [18, 40],
+    i: [pr("chicken_mince", 100), pr("egg_white", 45), se("breadcrumbs", 8), ve("frozen_spinach", 80), ve("carrot", 40), ve("onion", 30), se("low_sodium_stock", 100), se("italian_seasoning", 1), se("salt", 0.3)],
+    ways: [
+      way("肉丸汤加全麦意面", "Soup with small pasta", WW_PASTA, [ve("romaine", 50)]),
+      way("肉丸汤配吐司和番茄", "Soup with toast and tomato", "whole_wheat_toast", [ve("cherry_tomato", 60)]),
+      way("肉丸汤泡饭配豌豆", "Soup over rice with peas", RICE, [ve("frozen_peas", 60)]),
+    ],
+  }),
+  dish({
+    id: "shrimp_tomato_basil_pasta", zh: "番茄罗勒鲜虾", en: "Shrimp with cherry tomatoes and basil", c: "italian", m: "stir_fry", t: [12, 18],
+    staples: [PASTA, WW_PASTA],
+    i: [pr("white_shrimp", 115), ve("cherry_tomato", 110), ve("zucchini", 60), tp("basil", 4), oi("olive_oil", 4), se("garlic_paste", 2), se("salt", 0.2)],
+  }),
+  dish({
+    id: "lemon_mushroom_chicken", zh: "柠檬蘑菇煎鸡胸", en: "Lemon chicken with mushrooms and spinach", c: "italian", m: "pan_fry", t: [12, 18],
+    staples: [PASTA, BABY_POTATOES, BAKED_POTATO],
+    i: [pr("chicken_breast", 108), ve("button_mushroom", 100), ve("spinach", 60), se("lemon", 12), tp("parsley", 3), oi("olive_oil", 4), se("salt", 0.4), se("low_sodium_stock", 30)],
+  }),
+  dish({
+    id: "caprese_chicken_plate", zh: "卡布里斯鸡肉拼盘", en: "Caprese chicken plate", c: "italian", m: "assemble", eq: [], t: [8, 8],
+    staples: ["whole_wheat_toast", QUINOA],
+    i: [pr("ready_chicken_breast", 100), tp("mozzarella", 25), ve("tomato", 130), tp("basil", 4), oi("olive_oil", 3), se("lemon", 5)],
+  }),
+  dish({
+    id: "tuna_tomato_spaghetti_sauce", zh: "金枪鱼番茄酱", en: "Tuna and tomato sauce", c: "italian", m: "stir_fry", t: [10, 15],
+    staples: [PASTA, WW_PASTA],
+    i: [pr("canned_tuna_water", 100), ve("crushed_tomatoes", 100), ve("zucchini", 50), tp("basil", 3), oi("olive_oil", 3), se("dried_oregano", 0.5), se("garlic_paste", 2)],
+  }),
+  dish({
+    id: "pork_pepper_medallions", zh: "彩椒煎猪里脊", en: "Pork medallions with peppers and zucchini", c: "italian", m: "pan_fry", t: [12, 18],
+    staples: [BABY_POTATOES, QUINOA, WW_PASTA],
+    i: [pr("pork_tenderloin", 118), ve("red_bell_pepper", 70), ve("zucchini", 70), oi("olive_oil", 4), se("italian_seasoning", 1), se("salt", 0.3), se("lemon", 6)],
+  }),
+];
+
+const MAINS: Dish[] = [...AMERICAN, ...MEDITERRANEAN, ...ITALIAN];
 
 export const SEED_DISHES: readonly Dish[] = [...MAINS, ...SIDES, ...STAPLES, ...BREAKFASTS];
