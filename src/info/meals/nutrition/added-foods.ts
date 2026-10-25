@@ -1,5 +1,5 @@
 // Foods the dish library needs that the generated table lacks (docs/671 菜库):
-// salt, citrus, minces, lentils, canned tomatoes, stock, coconut milk, feta,
+// salt, citrus, lentils, canned tomatoes, stock, coconut milk, feta,
 // corn tortillas, breadcrumbs, sesame and fresh herbs. Hand-maintained like
 // seasonings.ts and appended to the generated rows by foods.ts, with the
 // docs/671 columns inline. Every number is read from the record the row
@@ -12,16 +12,12 @@ import type { Food } from "./foods";
 const usda = (fdcId: number, name: string) => ({ kind: "usda", fdcId, dataset: "SR Legacy", name }) as const;
 type Shared = Pick<Food, "category" | "keeps" | "roles" | "minG" | "maxG" | "addedSugar"> & Partial<Food>;
 const herb = (): Shared & Pick<Food, "tags"> => ({ category: "produce", keeps: "d3-5", roles: ["sauce"], minG: 1, maxG: 15, tags: [], addedSugar: 0 });
-const mince = (): Shared => ({ roles: ["protein"], category: "protein", keeps: "d1-2", minG: 80, maxG: 250, potG: 500, addedSugar: 0 });
 
 export const ADDED_FOODS: readonly Food[] = [
   { id: "salt", zh: "盐", aliases: ["食盐", "精盐"], en: "salt", roles: ["sauce"], category: "pantry", keeps: "pantry", kcal: 0, protein: 0, fat: 0, carbs: 0, minG: 0.5, maxG: 5, tags: [], sodium: 38758, addedSugar: 0, source: usda(173468, "Salt, table") },
   { id: "lemon", zh: "柠檬", aliases: ["鲜柠檬", "柠檬汁"], en: "lemon", roles: ["sauce"], category: "produce", keeps: "w2plus", kcal: 29, protein: 1.1, fat: 0.3, carbs: 9.3, minG: 5, maxG: 60, tags: [], sodium: 2, addedSugar: 0, piece: { grams: 84, label: "个" }, source: usda(167746, "Lemons, raw, without peel") },
   { id: "lime", zh: "青柠", aliases: ["青柠檬", "青柠汁"], en: "lime", roles: ["sauce"], category: "produce", keeps: "w2plus", kcal: 30, protein: 0.7, fat: 0.2, carbs: 10.5, minG: 5, maxG: 60, tags: [], sodium: 2, addedSugar: 0, piece: { grams: 67, label: "个" }, source: usda(168155, "Limes, raw") },
   { id: "light_coconut_milk", zh: "低脂椰浆", aliases: ["淡椰浆", "低脂椰奶", "椰浆"], en: "coconut milk", roles: ["sauce"], category: "pantry", keeps: "pantry", kcal: 61, protein: 0.4, fat: 6.0, carbs: 1.3, minG: 30, maxG: 200, tags: [], sodium: 40, addedSugar: 0.8, source: { kind: "label", note: "Tesco Light Coconut Milk, UK label per 100 g (Open Food Facts 5054269746730)" } },
-  { id: "ground_turkey", zh: "火鸡肉末（生）", aliases: ["火鸡肉糜", "火鸡绞肉"], en: "turkey mince", ...mince(), kcal: 150, protein: 18.7, fat: 8.3, carbs: 0, tags: ["poultry"], sodium: 69, proteinCategory: "poultry", source: usda(172850, "Turkey, ground, 93% lean, 7% fat, raw") },
-  { id: "lean_beef_mince", zh: "瘦牛肉末（生）", aliases: ["瘦牛肉糜", "牛肉末", "牛肉馅", "牛绞肉"], en: "minced beef", ...mince(), kcal: 137, protein: 21.4, fat: 5.0, carbs: 0, tags: ["beef"], sodium: 66, proteinCategory: "meat", source: usda(171790, "Beef, ground, 95% lean meat / 5% fat, raw") },
-  { id: "chicken_mince", zh: "鸡肉末（生）", aliases: ["鸡肉糜", "鸡肉馅", "鸡绞肉"], en: "ground chicken", ...mince(), kcal: 143, protein: 17.4, fat: 8.1, carbs: 0, tags: ["poultry"], sodium: 60, proteinCategory: "poultry", source: usda(171116, "Chicken, ground, raw") },
   { id: "crushed_tomatoes", zh: "番茄碎罐头", aliases: ["罐头番茄碎", "碎番茄罐头", "番茄罐头"], en: "tinned tomatoes", roles: ["veg"], category: "pantry", keeps: "pantry", kcal: 32, protein: 1.6, fat: 0.3, carbs: 7.3, minG: 50, maxG: 300, tags: [], sodium: 186, addedSugar: 0, source: usda(170501, "Tomatoes, crushed, canned") },
   { id: "low_sodium_stock", zh: "低钠鸡汤（高汤）", aliases: ["低钠高汤", "低盐高汤", "低钠鸡高汤"], en: "chicken stock", roles: ["sauce"], category: "pantry", keeps: "pantry", kcal: 16, protein: 2.0, fat: 0.6, carbs: 1.2, minG: 50, maxG: 500, tags: ["poultry"], sodium: 30, addedSugar: 0.1, source: usda(171609, "Soup, chicken broth, low sodium, canned") },
   { id: "red_lentils_dry", zh: "红扁豆（干）", aliases: ["红小扁豆", "红兵豆"], en: "lentils", roles: ["protein", "staple"], category: "pantry", keeps: "pantry", kcal: 358, protein: 23.9, fat: 2.2, carbs: 63.1, minG: 30, maxG: 120, tags: [], sodium: 7, addedSugar: 0, proteinCategory: "legume", source: usda(174284, "Lentils, pink or red, raw") },

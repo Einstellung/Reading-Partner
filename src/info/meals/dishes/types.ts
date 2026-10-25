@@ -85,6 +85,13 @@ export interface DishIngredient {
   /** Grams in the template; scaled to the reference serving by serving.ts. */
   grams: number;
   role: IngredientRole;
+  /**
+   * The cut is ground fresh at the counter or at home, for meatballs, kofta
+   * or a loaf, and cooked the same day. Nutrition is the whole cut's. Only a
+   * protein line of a whole meat or poultry cut can be ground; pre-packaged
+   * mince is never allowed (check.ts, minced_meat).
+   */
+  ground?: boolean;
 }
 
 /**

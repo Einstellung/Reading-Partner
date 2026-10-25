@@ -19,7 +19,8 @@
 //   salt Na 38758; honey 308 kcal, Na 4, added sugar 79.6
 
 import { describe, expect, test } from "bun:test";
-import { ACTIVE_MIN, LIMITS, SUMMARY_MAX_CHARS, checkDish, type CheckFailure, type CheckRule } from "../../../../src/info/meals/dishes/check";
+import { ACTIVE_MIN, LIMITS, SUMMARY_MAX_CHARS, checkDish, isMincedMeat, type CheckFailure, type CheckRule } from "../../../../src/info/meals/dishes/check";
+import { FOODS } from "../../../../src/info/meals/nutrition/foods";
 import { CUISINES, type Dish, type DishIngredient, type DishWay } from "../../../../src/info/meals/dishes/types";
 
 // 25.0 g protein as written, so the reference serving is the template itself:
@@ -322,6 +323,63 @@ describe("checkDish fails, with the numbers", () => {
   });
 });
 
+describe("minced meat and fresh-ground cuts", () => {
+  const minced = (d: Dish) => failures(d).filter((x) => x.rule === "minced_meat");
+  const ground = (d: Dish) => failures(d).filter((x) => x.rule === "ground");
+  const withProtein = (line: Partial<DishIngredient>, over: Partial<Dish> = {}) =>
+    dish({ ingredients: [{ food: "chicken_tender", grams: 100, role: "protein", ...line }, ...BASE.slice(1)], ...over });
+  const SAYS_GROUND = { summary: "鸡柳现绞拌匀，和番茄一起炖熟", summaryEn: "Chicken tenders ground fresh, stewed with tomato." };
+
+  test("pre-packaged ground pork is rejected, naming the food", () => {
+    const f = minced(withProtein({ food: "ground_pork" }));
+    expect(f).toHaveLength(1);
+    expect(f[0]!.food).toBe("ground_pork");
+    expect(f[0]!.message).toContain("pre-packaged mince");
+  });
+
+  test("a pre-packaged mince fails even when flagged ground", () => {
+    expect(minced(withProtein({ food: "ground_pork", ground: true }, SAYS_GROUND))).toHaveLength(1);
+  });
+
+  test("a whole lean cut ground fresh passes when the summaries say so", () => {
+    const d = withProtein({ food: "lean_pork_leg", ground: true }, SAYS_GROUND);
+    expect(minced(d)).toEqual([]);
+    expect(ground(d)).toEqual([]);
+    // Its nutrition is the cut's: 100 g of lean pork leg, not a mince row.
+    expect(checkDish(withProtein({ food: "lean_pork_leg", ground: true }, SAYS_GROUND)).serving?.protein).toBeCloseTo(25, 6);
+  });
+
+  test("a ground line needs the summaries to say 现绞 and ground fresh, so the shopping list can ask for it", () => {
+    expect(ground(withProtein({ food: "lean_pork_leg", ground: true }))).toHaveLength(1);
+    expect(ground(withProtein({ food: "lean_pork_leg", ground: true }, { summary: SAYS_GROUND.summary }))).toHaveLength(1);
+    expect(ground(withProtein({ food: "lean_pork_leg", ground: true }, { summaryEn: SAYS_GROUND.summaryEn }))).toHaveLength(1);
+  });
+
+  test("only a protein line of a meat or poultry cut can be ground", () => {
+    expect(ground(withProtein({ food: "salmon", ground: true }, SAYS_GROUND))).toHaveLength(1);
+    expect(ground(withProtein({ food: "firm_tofu", ground: true }, SAYS_GROUND))).toHaveLength(1);
+    const veg = dish({ ...SAYS_GROUND, ingredients: [...BASE.slice(0, 1), { food: "tomato", grams: 130, role: "veg", ground: true }, ...BASE.slice(2)] });
+    expect(ground(veg)).toHaveLength(1);
+    const wayAddOn = batchMain({
+      ways: [OVER_RICE, { ...IN_TORTILLA, addOns: [{ food: "chicken_breast", grams: 20, role: "topping", ground: true }] }],
+    });
+    expect(failures(wayAddOn).filter((x) => x.rule === "ground")).toMatchObject([{ way: 1 }]);
+  });
+
+  test("pre-packaged mince in a way's add-ons is rejected too, and spices named ground pass", () => {
+    const d = batchMain({
+      ways: [OVER_RICE, { ...IN_TORTILLA, addOns: [{ food: "ground_pork", grams: 20, role: "topping" }] }],
+    });
+    expect(minced(d)).toMatchObject([{ way: 1, food: "ground_pork" }]);
+    const cumin = dish({ ingredients: [...BASE, { food: "ground_cumin", grams: 1, role: "seasoning" }] });
+    expect(minced(cumin)).toEqual([]);
+  });
+
+  test("the only pre-packaged mince in the food table is ground_pork", () => {
+    expect(FOODS.filter(isMincedMeat).map((f) => f.id)).toEqual(["ground_pork"]);
+  });
+});
+
 describe("toppings", () => {
   test("a yogurt topping has no gram minimum; as a protein line it does", () => {
     // + greek yogurt 30 g: protein 28.06, factor 0.89095, yogurt 26.7 g
@@ -615,11 +673,14 @@ describe("breakfast templates", () => {
     expect(share.limit).toBe(0.2);
   });
 
-  test("sodium capped at 400 mg", () => {
+  test("no sodium cap: it only counts toward the day total", () => {
     // egg 100 + toast 35 + soy 6: sodium 306.25 + 299.82 = 606.07 mg
-    const f = only(breakfast({ ingredients: [...BREAKFAST, { food: "light_soy_sauce", grams: 6, role: "seasoning" }] }), "sodium");
-    expect(f.actual!).toBeCloseTo(606.07, 2);
-    expect(f.limit).toBe(400);
+    const d = breakfast({ ingredients: [...BREAKFAST, { food: "light_soy_sauce", grams: 6, role: "seasoning" }] });
+    const r = checkDish(d);
+    expect(r.serving?.sodium).toBeCloseTo(606.07, 2);
+    expect(failures(d).filter((x) => x.rule === "sodium")).toEqual([]);
+    expect(LIMITS.breakfast.sodiumMg).toBeNull();
+    expect(LIMITS.main.sodiumMg).toBe(600);
   });
 
   test("a breakfast lists no staples beside its staple line", () => {

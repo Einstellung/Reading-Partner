@@ -4,7 +4,7 @@
 // add-ons) and every way must pass. Every number is computed here from the
 // ingredients and the food table.
 
-import { foodById, type FoodRole } from "../nutrition/foods";
+import { foodById, type Food, type FoodRole } from "../nutrition/foods";
 import { BREAKFAST_METHODS, methodById } from "./methods";
 import { referenceServing, wayServing, type Serving } from "./serving";
 import {
@@ -20,6 +20,8 @@ import {
 
 export type CheckRule =
   | "unknown_food"
+  | "minced_meat"
+  | "ground"
   | "line"
   | "method"
   | "batch_method"
@@ -64,14 +66,15 @@ interface Limits {
   /** The share when a line is a staple (自带主食). */
   proteinShareWithStaple: number | null;
   addedFatG: number;
-  sodiumMg: number;
+  /** null: not checked (breakfast; its sodium still counts in the day total). */
+  sodiumMg: number | null;
   addedSugarG: number;
   vegG: number | null;
 }
 
 export const LIMITS: Readonly<Record<DishRole, Limits>> = {
   main: { proteinShare: 0.3, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: 600, addedSugarG: 10, vegG: 100 },
-  breakfast: { proteinShare: 0.2, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: 400, addedSugarG: 10, vegG: null },
+  breakfast: { proteinShare: 0.2, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: null, addedSugarG: 10, vegG: null },
   staple: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: null },
   side: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150 },
 };
@@ -99,6 +102,22 @@ const LINE_FOOD_ROLES: Readonly<Record<IngredientRole, readonly FoodRole[]>> = {
   topping: ["fat", "dairy", "sauce"],
 };
 
+const MINCE_ZH = /肉末|肉馅|肉糜|绞肉|碎肉/;
+const MINCE_EN = /\b(minced?|ground (pork|beef|turkey|chicken|lamb|meat))\b/i;
+
+/**
+ * Pre-packaged minced or ground meat: its cuts and fat are unknown and it
+ * spoils in a day or two, too short for a pot eaten over up to three meals.
+ * Grinding a named whole cut fresh is allowed (the `ground` flag on a line).
+ */
+export function isMincedMeat(food: Food): boolean {
+  if (!food.roles.includes("protein")) return false;
+  return [food.zh, ...food.aliases].some((n) => MINCE_ZH.test(n)) || MINCE_EN.test(food.en) || /(^|_)(mince|minced|ground_(pork|beef|turkey|chicken|lamb|meat))/.test(food.id);
+}
+
+/** Protein categories of whole cuts that may be ground fresh. */
+const GROUNDABLE: readonly string[] = ["meat", "poultry"];
+
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 export interface CheckOptions {
@@ -122,6 +141,22 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
         add({ rule: "unknown_food", food: line.food, ...tag, message: `${at}${line.food} is not in the food table` });
         continue;
       }
+      if (isMincedMeat(food)) {
+        add({
+          rule: "minced_meat",
+          food: line.food,
+          ...tag,
+          message: `${at}${line.food} is pre-packaged mince; use a whole cut (cubes, slices, shreds), or a named lean cut with ground: true to be ground fresh`,
+        });
+      }
+      if (line.ground && (way != null || line.role !== "protein" || !GROUNDABLE.includes(food.proteinCategory as never))) {
+        add({
+          rule: "ground",
+          food: line.food,
+          ...tag,
+          message: `${at}${line.food}: only a protein line of a whole meat or poultry cut can be ground fresh`,
+        });
+      }
       if (!allowed.includes(line.role)) {
         add({ rule: "line", food: line.food, ...tag, message: `${at}${line.food}: line role ${line.role} is not allowed here` });
       } else if (!LINE_FOOD_ROLES[line.role].some((r) => food.roles.includes(r))) {
@@ -143,6 +178,12 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
   }
 
   checkLines(dish.ingredients, INGREDIENT_ROLES);
+  if (dish.ingredients.some((i) => i.ground) && !(dish.summary.includes("现绞") && /ground fresh|freshly ground/i.test(dish.summaryEn))) {
+    add({
+      rule: "ground",
+      message: "a dish with a freshly ground cut says so in both summaries (现绞 / ground fresh), so the shopping list asks for it ground that day",
+    });
+  }
   if (dish.ingredients.length === 0) add({ rule: "line", message: "the dish has no ingredients" });
 
   const method = methodById(dish.method);
@@ -278,7 +319,7 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
         limit: lim.addedFatG,
       });
     }
-    if (s.sodium > lim.sodiumMg) {
+    if (lim.sodiumMg != null && s.sodium > lim.sodiumMg) {
       add({
         rule: "sodium",
         ...tag,

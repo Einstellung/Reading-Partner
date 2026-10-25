@@ -146,9 +146,6 @@ describe("foods added for the dish library", () => {
       lemon: 2,
       lime: 2,
       light_coconut_milk: 40,
-      ground_turkey: 69,
-      lean_beef_mince: 66,
-      chicken_mince: 60,
       crushed_tomatoes: 186,
       low_sodium_stock: 30,
       red_lentils_dry: 7,
@@ -168,13 +165,9 @@ describe("foods added for the dish library", () => {
   });
 
   test("protein category, added sugar, pieces and packs", () => {
-    expect(foodById("ground_turkey")?.proteinCategory).toBe("poultry");
-    expect(foodById("chicken_mince")?.proteinCategory).toBe("poultry");
-    expect(foodById("lean_beef_mince")?.proteinCategory).toBe("meat");
     expect(foodById("red_lentils_dry")?.proteinCategory).toBe("legume");
     expect(foodById("lentils_dry")?.proteinCategory).toBe("legume");
     expect(foodById("feta")?.proteinCategory).toBe("dairy");
-    for (const id of ["ground_turkey", "lean_beef_mince", "chicken_mince"]) expect(foodById(id)?.potG, id).toBe(500);
     expect(foodById("breadcrumbs")?.addedSugar).toBe(6.2);
     expect(foodById("light_coconut_milk")?.addedSugar).toBe(0.8);
     for (const id of ["salt", "lemon", "lime", "crushed_tomatoes", "coriander", "basil"]) {
