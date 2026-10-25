@@ -19,7 +19,7 @@
 //   salt Na 38758; honey 308 kcal, Na 4, added sugar 79.6
 
 import { describe, expect, test } from "bun:test";
-import { ACTIVE_MIN, LIMITS, checkDish, type CheckFailure, type CheckRule } from "../../../../src/info/meals/dishes/check";
+import { ACTIVE_MIN, LIMITS, SUMMARY_MAX_CHARS, checkDish, type CheckFailure, type CheckRule } from "../../../../src/info/meals/dishes/check";
 import { CUISINES, type Dish, type DishIngredient, type DishWay } from "../../../../src/info/meals/dishes/types";
 
 // 25.0 g protein as written, so the reference serving is the template itself:
@@ -37,6 +37,8 @@ function dish(over: Partial<Dish> = {}): Dish {
     id: "test_dish",
     name: "测试菜",
     nameEn: "Test dish",
+    summary: "鸡柳和番茄用酱油、橄榄油大火快炒",
+    summaryEn: "Chicken tenders and tomato stir-fried hot in soy sauce and olive oil.",
     role: "main",
     cuisine: "chinese",
     method: "stir_fry",
@@ -549,15 +551,29 @@ describe("breakfast templates", () => {
     );
   });
 
-  test("one protein, one staple, at most one fruit", () => {
+  test("at least one protein and one staple, any number of either", () => {
     // egg alone: 12.5 P, 132 kcal, share 37.9%; only the items rule fails
     expect(only(breakfast({ ingredients: [BREAKFAST[0]] }), "breakfast_items").message).toBe(
-      "a breakfast is one protein item, one staple item and at most one fruit; this has 1 protein, 0 staple, 0 fruit",
+      "a breakfast needs at least one protein item and one staple item; this has 1 protein, 0 staple",
     );
-    const twoFruit = [...BREAKFAST, { food: "apple", grams: 80, role: "fruit" as const }, { food: "banana", grams: 60, role: "fruit" as const }];
-    expect(failures(breakfast({ ingredients: twoFruit })).map((x) => x.rule)).toContain("breakfast_items");
-    const twoProtein = [...BREAKFAST, { food: "greek_yogurt", grams: 150, role: "protein" as const }];
-    expect(failures(breakfast({ ingredients: twoProtein })).map((x) => x.rule)).toContain("breakfast_items");
+    const noProtein = failures(breakfast({ ingredients: [BREAKFAST[1]] })).find((x) => x.rule === "breakfast_items");
+    expect(noProtein?.message).toBe("a breakfast needs at least one protein item and one staple item; this has 0 protein, 1 staple");
+  });
+
+  test("two or three protein items, two staples and two fruits are fine", () => {
+    // egg 50 + milk 150 + yogurt 60 + toast 40 + oats 15 + apple 80 + banana 60
+    const many: DishIngredient[] = [
+      { food: "egg", grams: 50, role: "protein" },
+      { food: "low_fat_milk", grams: 150, role: "protein" },
+      { food: "greek_yogurt", grams: 60, role: "protein" },
+      { food: "whole_wheat_toast", grams: 40, role: "staple" },
+      { food: "oats", grams: 15, role: "staple" },
+      { food: "apple", grams: 80, role: "fruit" },
+      { food: "banana", grams: 60, role: "fruit" },
+    ];
+    expect(checkDish(breakfast({ ingredients: many })).ok).toBe(true);
+    const milkAndEgg = [BREAKFAST[0], { food: "low_fat_milk", grams: 200, role: "protein" as const }, BREAKFAST[1]];
+    expect(checkDish(breakfast({ ingredients: milkAndEgg })).ok).toBe(true);
   });
 
   test("protein share under 20%", () => {
@@ -586,6 +602,19 @@ describe("breakfast templates", () => {
 
   test("a breakfast lists no staples beside its staple line", () => {
     expect(only(breakfast({ staples: ["brown_rice_cooked"] }), "staples").rule).toBe("staples");
+  });
+});
+
+describe("summary", () => {
+  test("a dish needs a Chinese and an English summary", () => {
+    expect(only(dish({ summary: "" }), "summary").rule).toBe("summary");
+    expect(only(dish({ summary: "  " }), "summary").rule).toBe("summary");
+    expect(only(dish({ summaryEn: "" }), "summary").rule).toBe("summary");
+  });
+
+  test("the Chinese summary is at most 40 characters", () => {
+    expect(checkDish(dish({ summary: "字".repeat(SUMMARY_MAX_CHARS) })).ok).toBe(true);
+    expect(only(dish({ summary: "字".repeat(SUMMARY_MAX_CHARS + 1) }), "summary")).toMatchObject({ actual: 41, limit: 40 });
   });
 });
 

@@ -36,6 +36,28 @@ describe("seed dishes", () => {
     }
   });
 
+  test("every dish says how it is cooked: a Chinese sentence of at most 40 characters and an English one", () => {
+    for (const d of SEED_DISHES) {
+      expect(d.summary.trim().length, d.id).toBeGreaterThan(0);
+      expect([...d.summary].length, d.id).toBeLessThanOrEqual(40);
+      expect(/[一-鿿]/.test(d.summary), d.id).toBe(true);
+      expect(/^[A-Z]/.test(d.summaryEn) && !/[一-鿿]/.test(d.summaryEn), d.id).toBe(true);
+    }
+    expect(new Set(SEED_DISHES.map((d) => d.summary)).size).toBe(SEED_DISHES.length);
+  });
+
+  test("chili is a stew, not a hot sauce: no dish or way name calls it 辣酱", () => {
+    for (const d of SEED_DISHES) {
+      expect(d.name.includes("辣酱") && d.id.includes("chili"), d.id).toBe(false);
+      for (const w of d.ways ?? []) expect(w.name.includes("辣酱") && d.id.includes("chili"), `${d.id}: ${w.name}`).toBe(false);
+    }
+  });
+
+  test("breakfasts are mostly two-protein combinations", () => {
+    const twoOrMore = byRole("breakfast").filter((d) => d.ingredients.filter((i) => i.role === "protein").length >= 2);
+    expect(twoOrMore.length).toBeGreaterThanOrEqual(6);
+  });
+
   test("role counts", () => {
     expect(mains.length).toBeGreaterThanOrEqual(75);
     expect(mains.length).toBeLessThanOrEqual(90);

@@ -26,6 +26,7 @@ export type CheckRule =
   | "prep"
   | "breakfast_method"
   | "breakfast_items"
+  | "summary"
   | "cuisine"
   | "equipment"
   | "staples"
@@ -77,6 +78,9 @@ export const LIMITS: Readonly<Record<DishRole, Limits>> = {
 /** Hands-on minutes: a batch pot (waiting unlimited), a fresh meal, a breakfast, putting one way together. */
 export const ACTIVE_MIN = { batch: 20, fresh: 15, breakfast: 5, way: 5 } as const;
 
+/** The Chinese summary of how a dish is cooked is one short sentence. */
+export const SUMMARY_MAX_CHARS = 40;
+
 /** A batch main has this many ways to eat it. */
 export const WAYS = { min: 2, max: 3 } as const;
 
@@ -123,6 +127,17 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     }
   };
 
+  if (!dish.summary.trim() || !dish.summaryEn.trim()) {
+    add({ rule: "summary", message: "the dish needs a one-sentence summary of how it is cooked, in Chinese and in English" });
+  } else if ([...dish.summary].length > SUMMARY_MAX_CHARS) {
+    add({
+      rule: "summary",
+      message: `the Chinese summary is ${[...dish.summary].length} characters; it must be at most ${SUMMARY_MAX_CHARS}`,
+      actual: [...dish.summary].length,
+      limit: SUMMARY_MAX_CHARS,
+    });
+  }
+
   checkLines(dish.ingredients, INGREDIENT_ROLES);
   if (dish.ingredients.length === 0) add({ rule: "line", message: "the dish has no ingredients" });
 
@@ -143,11 +158,10 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     const count = (role: IngredientRole) => dish.ingredients.filter((i) => i.role === role).length;
     const protein = count("protein");
     const staple = count("staple");
-    const fruit = count("fruit");
-    if (protein !== 1 || staple !== 1 || fruit > 1) {
+    if (protein < 1 || staple < 1) {
       add({
         rule: "breakfast_items",
-        message: `a breakfast is one protein item, one staple item and at most one fruit; this has ${protein} protein, ${staple} staple, ${fruit} fruit`,
+        message: `a breakfast needs at least one protein item and one staple item; this has ${protein} protein, ${staple} staple`,
       });
     }
   }
@@ -280,12 +294,16 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     }
   }
 
-  // Only protein lines carry a gram range; toppings are small by nature.
+  // Only protein lines carry a gram range; toppings are small by nature. A
+  // breakfast with several protein lines is scaled as a whole to its 12 g, so
+  // its lines are shares of a combination and only the upper bound applies.
+  const proteinLines = serving.ingredients.filter((i) => i.role === "protein").length;
+  const shares = dish.role === "breakfast" && proteinLines > 1;
   for (const line of serving.ingredients) {
     if (line.role !== "protein") continue;
     const f = foodById(line.food);
     if (!f) continue;
-    if (line.grams < f.minG || line.grams > f.maxG) {
+    if ((!shares && line.grams < f.minG) || line.grams > f.maxG) {
       add({
         rule: "protein_grams",
         food: line.food,

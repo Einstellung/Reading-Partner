@@ -109,6 +109,9 @@ export interface Dish {
   id: string;
   name: string;
   nameEn: string;
+  /** One Chinese sentence (at most 40 characters) on how it is cooked, written for the dish, never copied from a recipe. */
+  summary: string;
+  summaryEn: string;
   role: DishRole;
   cuisine: Cuisine;
   method: MethodId;
