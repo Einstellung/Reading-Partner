@@ -79,6 +79,16 @@ export const EQUIPMENT: readonly Equipment[] = [
   "toaster",
 ];
 
+/**
+ * The kitchen every seed dish fits (docs/671 目标用户): a frying pan and a pot
+ * (the pot with a rack is the steamer) on the stove, an electric pressure
+ * cooker, a rice cooker, a microwave and a kettle. A soy milk maker is in it
+ * too but no dish needs it. Oven, slow cooker, air fryer and toaster are
+ * left out; a dish that needs one is only picked when the user says in
+ * conversation that they have it.
+ */
+export const DEFAULT_KITCHEN: readonly Equipment[] = ["stove", "steamer", "pressure_cooker", "rice_cooker", "microwave", "kettle"];
+
 export interface DishIngredient {
   /** Food table id. */
   food: string;
