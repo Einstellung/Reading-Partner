@@ -57,8 +57,8 @@ describe("reference serving", () => {
     doubled.ingredients.forEach((i, n) => expect(i.grams).toBeCloseTo(MAIN[n].grams, 6));
   });
 
-  test("a breakfast scales to 12 g protein", () => {
-    // egg 100 + toast 35: 12.5 + 4.34 = 16.84 g protein
+  test("a breakfast is not scaled: the template grams are the serving", () => {
+    // egg 100 + toast 35: 12.5 + 4.34 = 16.84 g protein, sodium 147 + 159.25
     const s = referenceServing({
       role: "breakfast",
       ingredients: [
@@ -66,11 +66,10 @@ describe("reference serving", () => {
         { food: "whole_wheat_toast", grams: 35, role: "staple" },
       ],
     })!;
-    expect(s.factor).toBeCloseTo(12 / 16.84, 6);
-    expect(s.protein).toBeCloseTo(12, 6);
-    expect(s.ingredients[0].grams).toBeCloseTo(71.259, 2);
-    // (147 + 159.25) * 12 / 16.84
-    expect(s.sodium).toBeCloseTo(218.23, 1);
+    expect(s.factor).toBe(1);
+    expect(s.ingredients.map((i) => i.grams)).toEqual([100, 35]);
+    expect(s.protein).toBeCloseTo(16.84, 2);
+    expect(s.sodium).toBeCloseTo(306.25, 2);
   });
 
   test("a staple scales to 200 kcal", () => {

@@ -1,6 +1,8 @@
 // The reference serving (docs/671 菜库): the template scaled so a main has
-// 25 g protein, a breakfast 12 g (docs/73's normal amounts), a staple 200 kcal
-// and a side 150 g of vegetables, with every figure the entry check reads,
+// 25 g protein (docs/73's normal amount), a staple 200 kcal and a side 150 g of
+// vegetables; a breakfast is not scaled, its template grams are the natural
+// serving (one egg, a glass of milk, a slice of toast). Every figure the entry
+// check reads,
 // computed from the food table. A batch main is also read with each of its
 // ways: the reference serving plus that way's add-ons, which are written for
 // one reference serving and not scaled.
@@ -8,9 +10,9 @@
 import { foodById, type Food } from "../nutrition/foods";
 import type { Dish, DishIngredient, DishRole, DishWay } from "./types";
 
-export const REFERENCE_TARGET: Readonly<Record<DishRole, { by: "protein" | "kcal" | "veg"; value: number }>> = {
+export const REFERENCE_TARGET: Readonly<Record<DishRole, { by: "protein" | "kcal" | "veg" | "as_written"; value: number }>> = {
   main: { by: "protein", value: 25 },
-  breakfast: { by: "protein", value: 12 },
+  breakfast: { by: "as_written", value: 0 },
   staple: { by: "kcal", value: 200 },
   side: { by: "veg", value: 150 },
 };
@@ -34,11 +36,15 @@ export interface Totals {
   addedSugar: number;
   /** Grams of the lines whose role is veg. */
   vegG: number;
+  /** Grams of veg lines that are vegetables eaten: vegG without aromatics and sauce bases (onion, garlic, tinned tomatoes). */
+  realVegG: number;
+  /** Grams of the real vegetables that are deep-coloured (dark green, red, orange, purple). */
+  deepVegG: number;
 }
 
 /** Sums the lines whose food is in the table; unknown foods are skipped (the check reports them). */
 export function totals(lines: readonly DishIngredient[]): Totals {
-  const t: Totals = { kcal: 0, protein: 0, fat: 0, carbs: 0, addedFat: 0, sodium: 0, addedSugar: 0, vegG: 0 };
+  const t: Totals = { kcal: 0, protein: 0, fat: 0, carbs: 0, addedFat: 0, sodium: 0, addedSugar: 0, vegG: 0, realVegG: 0, deepVegG: 0 };
   for (const line of lines) {
     const f = foodById(line.food);
     if (!f) continue;
@@ -50,7 +56,13 @@ export function totals(lines: readonly DishIngredient[]): Totals {
     if (isAddedFat(f) || line.role === "topping") t.addedFat += f.fat * k;
     t.sodium += (f.sodium ?? 0) * k;
     t.addedSugar += (f.addedSugar ?? 0) * k;
-    if (line.role === "veg") t.vegG += line.grams;
+    if (line.role === "veg") {
+      t.vegG += line.grams;
+      if (!f.aromatic) {
+        t.realVegG += line.grams;
+        if (f.deepColor) t.deepVegG += line.grams;
+      }
+    }
   }
   return t;
 }
@@ -65,6 +77,7 @@ export interface Serving extends Totals {
 export function referenceServing(dish: Pick<Dish, "role" | "ingredients">): Serving | null {
   const target = REFERENCE_TARGET[dish.role];
   const base = totals(dish.ingredients);
+  if (target.by === "as_written") return { ...base, factor: 1, ingredients: dish.ingredients.map((i) => ({ ...i })) };
   const have = target.by === "protein" ? base.protein : target.by === "kcal" ? base.kcal : base.vegG;
   if (!(have > 0)) return null;
   const factor = target.value / have;

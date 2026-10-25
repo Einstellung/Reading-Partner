@@ -65,6 +65,7 @@ export type Equipment =
   | "steamer"
   | "microwave"
   | "kettle"
+  | "soy_milk_maker"
   | "toaster";
 export const EQUIPMENT: readonly Equipment[] = [
   "stove",
@@ -76,7 +77,25 @@ export const EQUIPMENT: readonly Equipment[] = [
   "steamer",
   "microwave",
   "kettle",
+  "soy_milk_maker",
   "toaster",
+];
+
+/**
+ * The kitchen every seed dish fits (docs/671 目标用户): a frying pan and a pot
+ * (the pot with a rack is the steamer) on the stove, an electric pressure
+ * cooker, a rice cooker, a soy milk maker, a microwave and a kettle. Oven,
+ * slow cooker, air fryer and toaster are left out; a dish that needs one is
+ * only picked when the user says in conversation that they have it.
+ */
+export const DEFAULT_KITCHEN: readonly Equipment[] = [
+  "stove",
+  "steamer",
+  "pressure_cooker",
+  "rice_cooker",
+  "soy_milk_maker",
+  "microwave",
+  "kettle",
 ];
 
 export interface DishIngredient {
@@ -85,6 +104,13 @@ export interface DishIngredient {
   /** Grams in the template; scaled to the reference serving by serving.ts. */
   grams: number;
   role: IngredientRole;
+  /**
+   * The cut is ground fresh at the counter or at home, for meatballs, kofta
+   * or a loaf, and cooked the same day. Nutrition is the whole cut's. Only a
+   * protein line of a whole meat or poultry cut can be ground; pre-packaged
+   * mince is never allowed (check.ts, minced_meat).
+   */
+  ground?: boolean;
 }
 
 /**
@@ -109,6 +135,9 @@ export interface Dish {
   id: string;
   name: string;
   nameEn: string;
+  /** One Chinese sentence (at most 40 characters) on how it is cooked, written for the dish, never copied from a recipe. */
+  summary: string;
+  summaryEn: string;
   role: DishRole;
   cuisine: Cuisine;
   method: MethodId;

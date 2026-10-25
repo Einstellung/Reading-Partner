@@ -2,7 +2,7 @@
 // category, not-freezable and grams per piece, and the compound seasonings.
 
 import { describe, expect, test } from "bun:test";
-import { ADDED_SUGAR_G, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "../../../../src/info/meals/nutrition/food-columns";
+import { ADDED_SUGAR_G, AROMATIC, DEEP_COLOR, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "../../../../src/info/meals/nutrition/food-columns";
 import { FOOD_TABLE } from "../../../../src/info/meals/nutrition/food-table";
 import { FOODS, PROTEIN_CATEGORIES, foodById, isProduce } from "../../../../src/info/meals/nutrition/foods";
 import { ADDED_FOODS } from "../../../../src/info/meals/nutrition/added-foods";
@@ -65,6 +65,27 @@ describe("food table columns", () => {
     }
     expect(foodById("chicken_breast")?.noFreeze).toBeUndefined();
     expect(foodById("frozen_tofu")?.noFreeze).toBeUndefined();
+  });
+
+  test("deep-coloured vegetables: dark green, red, orange and purple", () => {
+    for (const id of ["spinach", "frozen_spinach", "bok_choy", "frozen_broccoli", "romaine", "frozen_green_beans", "tomato", "cherry_tomato", "carrot", "red_bell_pepper", "pumpkin", "red_cabbage", "green_pepper"]) {
+      expect(foodById(id)?.deepColor, id).toBe(true);
+    }
+    for (const id of ["cabbage", "cucumber", "zucchini", "napa_cabbage", "button_mushroom", "yellow_bell_pepper", "frozen_peas", "crushed_tomatoes"]) {
+      expect(foodById(id)?.deepColor, id).toBeUndefined();
+    }
+    for (const id of DEEP_COLOR) {
+      expect(foodById(id)?.roles, id).toContain("veg");
+      expect(AROMATIC.has(id), id).toBe(false);
+    }
+  });
+
+  test("aromatics and sauce bases are veg lines that do not count as vegetables eaten", () => {
+    for (const id of ["onion", "red_onion", "garlic", "ginger", "scallion", "crushed_tomatoes"]) {
+      expect(foodById(id)?.aromatic, id).toBe(true);
+    }
+    for (const id of ["tomato", "carrot", "celery", "cabbage", "bok_choy"]) expect(foodById(id)?.aromatic, id).toBeUndefined();
+    for (const id of AROMATIC) expect(foodById(id)?.roles, id).toContain("veg");
   });
 
   test("piece weights are on produce, staples and citrus only and leave unit alone", () => {
@@ -135,7 +156,8 @@ describe("foods added for the dish library", () => {
       expect(Number.isFinite(f.addedSugar), f.id).toBe(true);
       const s = f.source;
       if (s.kind === "usda") expect(s.dataset, f.id).toBe("SR Legacy");
-      else expect(s.kind === "label" && /Open Food Facts \d+/.test(s.note), f.id).toBe(true);
+      else if (s.kind === "tw") expect(s.code, f.id).toMatch(/^[A-Z]\d{7}$/);
+      else expect(s.kind === "label" && /Open Food Facts \d+|USDA FDC Branded \d+/.test(s.note), f.id).toBe(true);
       if (f.roles.includes("protein")) expect(f.proteinCategory, f.id).toBeDefined();
     }
   });
@@ -146,13 +168,13 @@ describe("foods added for the dish library", () => {
       lemon: 2,
       lime: 2,
       light_coconut_milk: 40,
-      ground_turkey: 69,
-      lean_beef_mince: 66,
-      chicken_mince: 60,
       crushed_tomatoes: 186,
       low_sodium_stock: 30,
+      stock_paste: 8667,
       red_lentils_dry: 7,
       lentils_dry: 6,
+      chickpeas_dry: 24,
+      kidney_beans_dry: 24,
       feta: 1139,
       corn_tortilla: 45,
       breadcrumbs: 732,
@@ -162,24 +184,28 @@ describe("foods added for the dish library", () => {
       basil: 4,
       dill: 61,
       mint: 30,
+      cornstarch: 9,
+      black_soybean_dry: 4,
+      adzuki_beans_dry: 1,
+      red_dates_dried: 5,
+      basa_fillet: 27,
     };
     expect(ADDED_FOODS.map((f) => f.id).sort()).toEqual(Object.keys(want).sort());
     for (const [id, mg] of Object.entries(want)) expect(foodById(id)?.sodium, id).toBe(mg);
   });
 
   test("protein category, added sugar, pieces and packs", () => {
-    expect(foodById("ground_turkey")?.proteinCategory).toBe("poultry");
-    expect(foodById("chicken_mince")?.proteinCategory).toBe("poultry");
-    expect(foodById("lean_beef_mince")?.proteinCategory).toBe("meat");
     expect(foodById("red_lentils_dry")?.proteinCategory).toBe("legume");
     expect(foodById("lentils_dry")?.proteinCategory).toBe("legume");
+    expect(foodById("chickpeas_dry")?.proteinCategory).toBe("legume");
+    expect(foodById("kidney_beans_dry")?.proteinCategory).toBe("legume");
     expect(foodById("feta")?.proteinCategory).toBe("dairy");
-    for (const id of ["ground_turkey", "lean_beef_mince", "chicken_mince"]) expect(foodById(id)?.potG, id).toBe(500);
     expect(foodById("breadcrumbs")?.addedSugar).toBe(6.2);
     expect(foodById("light_coconut_milk")?.addedSugar).toBe(0.8);
     for (const id of ["salt", "lemon", "lime", "crushed_tomatoes", "coriander", "basil"]) {
       expect(foodById(id)?.addedSugar, id).toBe(0);
     }
+    expect(foodById("basa_fillet")?.proteinCategory).toBe("seafood");
     expect(foodById("lemon")?.piece).toEqual({ grams: 84, label: "个" });
     expect(foodById("lime")?.piece).toEqual({ grams: 67, label: "个" });
     expect(foodById("corn_tortilla")?.piece).toEqual({ grams: 24, label: "张" });
@@ -192,6 +218,7 @@ describe("foods added for the dish library", () => {
       "lemon",
       "lime",
       "low_sodium_stock",
+      "stock_paste",
       "light_coconut_milk",
       "breadcrumbs",
       "coriander",
@@ -206,5 +233,49 @@ describe("foods added for the dish library", () => {
     expect(foodById("feta")?.roles).toEqual(["dairy", "fat"]);
     expect(foodById("sesame_seeds")?.roles).toEqual(["fat"]);
     expect(foodById("lentils_dry")?.roles).toEqual(["protein", "staple"]);
+    for (const id of ["chickpeas_dry", "kidney_beans_dry"]) {
+      const f = foodById(id)!;
+      expect(f.roles, id).toEqual(["protein", "staple"]);
+      expect(f.category, id).toBe("pantry");
+      expect(f.keeps, id).toBe("pantry");
+    }
+    expect(foodById("cornstarch")?.roles).toEqual(["sauce"]);
+    expect(foodById("red_dates_dried")?.roles).toEqual(["fruit"]);
+  });
+
+  test("dry chickpeas and kidney beans are the USDA raw records, with no added sugar", () => {
+    const c = foodById("chickpeas_dry")!;
+    expect([c.kcal, c.protein, c.fat, c.carbs]).toEqual([378, 20.5, 6.0, 63.0]);
+    expect(c.source).toMatchObject({ kind: "usda", fdcId: 173756, dataset: "SR Legacy" });
+    const k = foodById("kidney_beans_dry")!;
+    expect([k.kcal, k.protein, k.fat, k.carbs]).toEqual([333, 23.6, 0.8, 60.0]);
+    expect(k.source).toMatchObject({ kind: "usda", fdcId: 175193, dataset: "SR Legacy" });
+    for (const f of [c, k]) {
+      expect(f.addedSugar).toBe(0);
+      expect(f.tags).toEqual([]);
+    }
+  });
+
+  test("the stock paste is a long-keeping jar, so an opened one never spoils half used", () => {
+    const f = foodById("stock_paste")!;
+    expect(f.keeps).toBe("pantry");
+    expect(f.category).toBe("pantry");
+    expect(f.roles).toEqual(["sauce"]);
+    expect(f.zh).toBe("浓缩高汤膏");
+    expect(f.aliases).toEqual(expect.arrayContaining(["浓汤膏", "高汤膏", "浓汤宝", "bouillon paste"]));
+    expect(f.source).toMatchObject({ kind: "label" });
+    // Far saltier per gram than the carton stock it replaced.
+    expect(f.sodium!).toBeGreaterThan(foodById("low_sodium_stock")!.sodium! * 100);
+  });
+
+  test("the soy milk beans, cornstarch and dried red dates cite their records", () => {
+    expect(foodById("black_soybean_dry")?.source).toEqual({ kind: "tw", code: "H0605101", name: "青仁黑豆" });
+    expect(foodById("adzuki_beans_dry")?.source).toEqual({ kind: "tw", code: "H0405101", name: "紅豆" });
+    expect(foodById("cornstarch")?.source).toMatchObject({ kind: "usda", fdcId: 169698 });
+    expect(foodById("red_dates_dried")?.source).toMatchObject({ kind: "usda", fdcId: 168152 });
+    // Black soybeans count with the soy products, adzuki beans with the pulses.
+    expect(foodById("black_soybean_dry")?.proteinCategory).toBe("soy");
+    expect(foodById("adzuki_beans_dry")?.proteinCategory).toBe("legume");
+    expect(foodById("sesame_seeds")?.aliases).toContain("黑芝麻");
   });
 });

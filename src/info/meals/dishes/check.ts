@@ -4,7 +4,7 @@
 // add-ons) and every way must pass. Every number is computed here from the
 // ingredients and the food table.
 
-import { foodById, type FoodRole } from "../nutrition/foods";
+import { foodById, type Food, type FoodRole } from "../nutrition/foods";
 import { BREAKFAST_METHODS, methodById } from "./methods";
 import { referenceServing, wayServing, type Serving } from "./serving";
 import {
@@ -20,12 +20,17 @@ import {
 
 export type CheckRule =
   | "unknown_food"
+  | "minced_meat"
+  | "ground"
   | "line"
   | "method"
   | "batch_method"
+  | "fresh_fish"
   | "prep"
   | "breakfast_method"
   | "breakfast_items"
+  | "breakfast_protein"
+  | "summary"
   | "cuisine"
   | "equipment"
   | "staples"
@@ -38,6 +43,8 @@ export type CheckRule =
   | "sodium"
   | "added_sugar"
   | "vegetables"
+  | "real_veg"
+  | "deep_veg"
   | "protein_grams";
 
 export interface CheckFailure {
@@ -62,20 +69,39 @@ interface Limits {
   /** The share when a line is a staple (自带主食). */
   proteinShareWithStaple: number | null;
   addedFatG: number;
-  sodiumMg: number;
+  /** null: not checked (breakfast; its sodium still counts in the day total). */
+  sodiumMg: number | null;
   addedSugarG: number;
+  /** Grams of all veg lines (aromatics included); null: not checked. */
   vegG: number | null;
+  /** Grams of real vegetables, aromatics and sauce bases left out; null: not checked. */
+  realVegG: number | null;
+  /** Least share of the real vegetables that are deep-coloured; null: not checked. */
+  deepVegShare: number | null;
 }
 
 export const LIMITS: Readonly<Record<DishRole, Limits>> = {
-  main: { proteinShare: 0.3, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: 600, addedSugarG: 10, vegG: 100 },
-  breakfast: { proteinShare: 0.2, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: 400, addedSugarG: 10, vegG: null },
-  staple: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: null },
-  side: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150 },
+  main: { proteinShare: 0.3, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: 600, addedSugarG: 10, vegG: null, realVegG: 150, deepVegShare: 0.5 },
+  breakfast: { proteinShare: 0.2, proteinShareWithStaple: 0.2, addedFatG: 10, sodiumMg: null, addedSugarG: 10, vegG: null, realVegG: null, deepVegShare: null },
+  staple: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: null, realVegG: null, deepVegShare: null },
+  side: { proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150, realVegG: null, deepVegShare: null },
 };
 
 /** Hands-on minutes: a batch pot (waiting unlimited), a fresh meal, a breakfast, putting one way together. */
 export const ACTIVE_MIN = { batch: 20, fresh: 15, breakfast: 5, way: 5 } as const;
+
+/** A breakfast, as written, has at least this much protein (grams). */
+export const BREAKFAST_PROTEIN_MIN_G = 15;
+
+/**
+ * In a main with two or more protein lines, each line's lower gram bound is
+ * this share of the food's `minG` (meat 80 g becomes 40 g, an egg 50 g becomes
+ * 25 g). The upper bounds stay. A single protein line keeps the full `minG`.
+ */
+export const MULTI_PROTEIN_MIN_SHARE = 0.5;
+
+/** The Chinese summary of how a dish is cooked is one short sentence. */
+export const SUMMARY_MAX_CHARS = 40;
 
 /** A batch main has this many ways to eat it. */
 export const WAYS = { min: 2, max: 3 } as const;
@@ -90,6 +116,31 @@ const LINE_FOOD_ROLES: Readonly<Record<IngredientRole, readonly FoodRole[]>> = {
   fruit: ["fruit"],
   topping: ["fat", "dairy", "sauce"],
 };
+
+const MINCE_ZH = /肉末|肉馅|肉糜|绞肉|碎肉/;
+const MINCE_EN = /\b(minced?|ground (pork|beef|turkey|chicken|lamb|meat))\b/i;
+
+/**
+ * Pre-packaged minced or ground meat: its cuts and fat are unknown and it
+ * spoils in a day or two, too short for a pot eaten over up to three meals.
+ * Grinding a named whole cut fresh is allowed (the `ground` flag on a line).
+ */
+export function isMincedMeat(food: Food): boolean {
+  if (!food.roles.includes("protein")) return false;
+  return [food.zh, ...food.aliases].some((n) => MINCE_ZH.test(n)) || MINCE_EN.test(food.en) || /(^|_)(mince|minced|ground_(pork|beef|turkey|chicken|lamb|meat))/.test(food.id);
+}
+
+/** Protein categories of whole cuts that may be ground fresh. */
+const GROUNDABLE: readonly string[] = ["meat", "poultry"];
+
+/**
+ * Fish and shellfish: reheated, they turn dry and fishy, and fish cooks in
+ * about 10 minutes anyway, so a main with one as a protein line is always made
+ * at the meal (docs/671 能备).
+ */
+export function isFishOrSeafood(food: Food): boolean {
+  return food.proteinCategory === "seafood" || food.tags.includes("fish") || food.tags.includes("seafood");
+}
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -114,6 +165,22 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
         add({ rule: "unknown_food", food: line.food, ...tag, message: `${at}${line.food} is not in the food table` });
         continue;
       }
+      if (isMincedMeat(food)) {
+        add({
+          rule: "minced_meat",
+          food: line.food,
+          ...tag,
+          message: `${at}${line.food} is pre-packaged mince; use a whole cut (cubes, slices, shreds), or a named lean cut with ground: true to be ground fresh`,
+        });
+      }
+      if (line.ground && (way != null || line.role !== "protein" || !GROUNDABLE.includes(food.proteinCategory as never))) {
+        add({
+          rule: "ground",
+          food: line.food,
+          ...tag,
+          message: `${at}${line.food}: only a protein line of a whole meat or poultry cut can be ground fresh`,
+        });
+      }
       if (!allowed.includes(line.role)) {
         add({ rule: "line", food: line.food, ...tag, message: `${at}${line.food}: line role ${line.role} is not allowed here` });
       } else if (!LINE_FOOD_ROLES[line.role].some((r) => food.roles.includes(r))) {
@@ -123,7 +190,24 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     }
   };
 
+  if (!dish.summary.trim() || !dish.summaryEn.trim()) {
+    add({ rule: "summary", message: "the dish needs a one-sentence summary of how it is cooked, in Chinese and in English" });
+  } else if ([...dish.summary].length > SUMMARY_MAX_CHARS) {
+    add({
+      rule: "summary",
+      message: `the Chinese summary is ${[...dish.summary].length} characters; it must be at most ${SUMMARY_MAX_CHARS}`,
+      actual: [...dish.summary].length,
+      limit: SUMMARY_MAX_CHARS,
+    });
+  }
+
   checkLines(dish.ingredients, INGREDIENT_ROLES);
+  if (dish.ingredients.some((i) => i.ground) && !(dish.summary.includes("现绞") && /ground fresh|freshly ground/i.test(dish.summaryEn))) {
+    add({
+      rule: "ground",
+      message: "a dish with a freshly ground cut says so in both summaries (现绞 / ground fresh), so the shopping list asks for it ground that day",
+    });
+  }
   if (dish.ingredients.length === 0) add({ rule: "line", message: "the dish has no ingredients" });
 
   const method = methodById(dish.method);
@@ -135,6 +219,19 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     });
   }
 
+  if (isBatchMain) {
+    for (const line of dish.ingredients) {
+      const food = foodById(line.food);
+      if (line.role === "protein" && food && isFishOrSeafood(food)) {
+        add({
+          rule: "fresh_fish",
+          food: line.food,
+          message: `${line.food} is fish or seafood; reheated it turns dry and fishy, so the main is made fresh at the meal, never batch`,
+        });
+      }
+    }
+  }
+
   if (dish.role === "breakfast") {
     if (dish.prep !== "fresh") add({ rule: "prep", message: "a breakfast is put together at the meal and is never batch" });
     if (method && !BREAKFAST_METHODS.includes(method.id)) {
@@ -143,11 +240,10 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     const count = (role: IngredientRole) => dish.ingredients.filter((i) => i.role === role).length;
     const protein = count("protein");
     const staple = count("staple");
-    const fruit = count("fruit");
-    if (protein !== 1 || staple !== 1 || fruit > 1) {
+    if (protein < 1 || staple < 1) {
       add({
         rule: "breakfast_items",
-        message: `a breakfast is one protein item, one staple item and at most one fruit; this has ${protein} protein, ${staple} staple, ${fruit} fruit`,
+        message: `a breakfast needs at least one protein item and one staple item; this has ${protein} protein, ${staple} staple`,
       });
     }
   }
@@ -221,6 +317,15 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
     return { ok: false, failures: fail, serving: null, ways: [] };
   }
 
+  if (dish.role === "breakfast" && serving.protein < BREAKFAST_PROTEIN_MIN_G) {
+    add({
+      rule: "breakfast_protein",
+      message: `a breakfast has ${r1(serving.protein)} g protein, under ${BREAKFAST_PROTEIN_MIN_G} g`,
+      actual: serving.protein,
+      limit: BREAKFAST_PROTEIN_MIN_G,
+    });
+  }
+
   const lim = LIMITS[dish.role];
   const hasStaple = dish.ingredients.some((i) => i.role === "staple");
   const wayServings = isBatchMain ? ways.map((w) => wayServing(serving, w)) : [];
@@ -251,7 +356,7 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
         limit: lim.addedFatG,
       });
     }
-    if (s.sodium > lim.sodiumMg) {
+    if (lim.sodiumMg != null && s.sodium > lim.sodiumMg) {
       add({
         rule: "sodium",
         ...tag,
@@ -278,20 +383,43 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
         limit: lim.vegG,
       });
     }
+    if (lim.realVegG != null && s.realVegG < lim.realVegG) {
+      add({
+        rule: "real_veg",
+        ...tag,
+        message: `${at}real vegetables ${Math.round(s.realVegG)} g are under ${lim.realVegG} g (onion, garlic, ginger, scallion and tinned tomatoes do not count)`,
+        actual: s.realVegG,
+        limit: lim.realVegG,
+      });
+    }
+    if (lim.deepVegShare != null && s.realVegG > 0 && s.deepVegG < s.realVegG * lim.deepVegShare) {
+      add({
+        rule: "deep_veg",
+        ...tag,
+        message: `${at}deep-coloured vegetables are ${Math.round(s.deepVegG)} g of ${Math.round(s.realVegG)} g real vegetables, under ${Math.round(lim.deepVegShare * 100)}%`,
+        actual: s.deepVegG / s.realVegG,
+        limit: lim.deepVegShare,
+      });
+    }
   }
 
-  // Only protein lines carry a gram range; toppings are small by nature.
+  // Only protein lines carry a gram range; toppings are small by nature. A
+  // main with two or more protein lines shares its 25 g between them, so each
+  // line's lower bound drops to a share of the food's minimum.
+  const proteinLines = serving.ingredients.filter((i) => i.role === "protein").length;
+  const minShare = dish.role === "main" && proteinLines >= 2 ? MULTI_PROTEIN_MIN_SHARE : 1;
   for (const line of serving.ingredients) {
     if (line.role !== "protein") continue;
     const f = foodById(line.food);
     if (!f) continue;
-    if (line.grams < f.minG || line.grams > f.maxG) {
+    const min = f.minG * minShare;
+    if (line.grams < min || line.grams > f.maxG) {
       add({
         rule: "protein_grams",
         food: line.food,
-        message: `${line.food} ${Math.round(line.grams)} g is outside ${f.minG}-${f.maxG} g`,
+        message: `${line.food} ${Math.round(line.grams)} g is outside ${min}-${f.maxG} g`,
         actual: line.grams,
-        limit: line.grams < f.minG ? f.minG : f.maxG,
+        limit: line.grams < min ? min : f.maxG,
       });
     }
   }

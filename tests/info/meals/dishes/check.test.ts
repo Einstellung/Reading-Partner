@@ -19,8 +19,23 @@
 //   salt Na 38758; honey 308 kcal, Na 4, added sugar 79.6
 
 import { describe, expect, test } from "bun:test";
-import { ACTIVE_MIN, LIMITS, checkDish, type CheckFailure, type CheckRule } from "../../../../src/info/meals/dishes/check";
+import { ACTIVE_MIN, LIMITS, SUMMARY_MAX_CHARS, checkDish as checkDishRaw, isMincedMeat, type CheckFailure, type CheckRule, type CheckOptions, type DishCheck } from "../../../../src/info/meals/dishes/check";
+import { FOODS } from "../../../../src/info/meals/nutrition/foods";
 import { CUISINES, type Dish, type DishIngredient, type DishWay } from "../../../../src/info/meals/dishes/types";
+
+/**
+ * The hand-worked fixtures below are small plates (130 g of tomato) built to
+ * show one rule at a time, so checkDish here leaves the real_veg and deep_veg
+ * rules out; the "real and deep-coloured vegetables" block at the end uses
+ * checkDishRaw and tests those two on their own.
+ */
+const VEG_RULES: readonly CheckRule[] = ["real_veg", "deep_veg"];
+function checkDish(d: Dish, opts?: CheckOptions): DishCheck {
+  const r = checkDishRaw(d, opts);
+  if (r.ok) return r;
+  const failures = r.failures.filter((f) => !VEG_RULES.includes(f.rule));
+  return failures.length ? { ...r, failures } : { ok: true, serving: r.serving!, ways: r.ways };
+}
 
 // 25.0 g protein as written, so the reference serving is the template itself:
 // 176.8 kcal, 5 g added fat, 296.55 mg sodium, 0.735 g added sugar, 130 g veg.
@@ -37,6 +52,8 @@ function dish(over: Partial<Dish> = {}): Dish {
     id: "test_dish",
     name: "测试菜",
     nameEn: "Test dish",
+    summary: "鸡柳和番茄用酱油、橄榄油大火快炒",
+    summaryEn: "Chicken tenders and tomato stir-fried hot in soy sauce and olive oil.",
     role: "main",
     cuisine: "chinese",
     method: "stir_fry",
@@ -246,14 +263,6 @@ describe("checkDish fails, with the numbers", () => {
     expect(f.limit).toBe(10);
   });
 
-  test("vegetables", () => {
-    // tomato 50: protein 24.44, factor 25 / 24.44, veg 51.15 g
-    const f = only(dish({ ingredients: [BASE[0], { food: "tomato", grams: 50, role: "veg" }, BASE[2], BASE[3]] }), "vegetables");
-    expect(f.actual!).toBeCloseTo((50 * 25) / 24.44, 6);
-    expect(f.limit).toBe(100);
-    expect(f.message).toBe("vegetables 51 g are under 100 g");
-  });
-
   test("a food not in the table", () => {
     const f = failures(dish({ ingredients: [...BASE, { food: "dragon_meat", grams: 10, role: "seasoning" }] }));
     expect(f).toEqual([{ rule: "unknown_food", food: "dragon_meat", message: "dragon_meat is not in the food table" }]);
@@ -302,7 +311,72 @@ describe("checkDish fails, with the numbers", () => {
     );
     expect(f.food).toBe("chicken_tender");
     expect(f.actual!).toBeCloseTo((30 * 25) / 28.02, 6);
-    expect(f.limit).toBe(80);
+    expect(f.limit).toBe(40);
+  });
+
+  describe("a main with two or more protein lines: each lower bound is half the food's minimum", () => {
+    const proteinFails = (d: Dish) => {
+      const r = checkDishRaw(d);
+      return r.ok ? [] : r.failures.filter((f) => f.rule === "protein_grams");
+    };
+    const chickenEgg = (chicken: number, egg: number) =>
+      dish({
+        ingredients: [
+          { food: "chicken_tender", grams: chicken, role: "protein" },
+          { food: "egg", grams: egg, role: "protein" },
+          { food: "tomato", grams: 130, role: "veg" },
+          { food: "light_soy_sauce", grams: 5, role: "seasoning" },
+          { food: "olive_oil", grams: 5, role: "oil" },
+        ],
+      });
+
+    test("two proteins pass between half the minimum and the minimum", () => {
+      // chicken 45 + egg 115: protein 10.665 + 14.375 + 0.91 + 0.39 = 26.34,
+      // factor 0.949, chicken 42.7 g (under its 80 g minimum, over the half, 40 g)
+      const d = chickenEgg(45, 115);
+      expect(proteinFails(d)).toEqual([]);
+      const r = checkDishRaw(d);
+      const chicken = r.serving!.ingredients.find((i) => i.food === "chicken_tender")!;
+      expect(chicken.grams).toBeGreaterThan(40);
+      expect(chicken.grams).toBeLessThan(80);
+    });
+
+    test("below the half it still fails, naming the lowered bound", () => {
+      // chicken 36 + egg 125: protein 8.532 + 15.625 + 1.3 = 25.46, chicken 35.4 g
+      const f = proteinFails(chickenEgg(36, 125));
+      expect(f).toHaveLength(1);
+      expect(f[0]).toMatchObject({ food: "chicken_tender", limit: 40 });
+      expect(f[0].actual!).toBeCloseTo((36 * 25) / 25.4575, 2);
+      expect(f[0].message).toContain("outside 40-250 g");
+    });
+
+    test("the upper bounds are unchanged", () => {
+      // egg 220 + chicken 30: factor about 0.70, egg 153 g over 150
+      const f = proteinFails(chickenEgg(30, 220));
+      expect(f.find((x) => x.food === "egg")).toMatchObject({ limit: 150 });
+    });
+
+    test("a single protein line still needs the full minimum", () => {
+      // chicken 50 + toast 110 g (a staple line carrying 13.6 g protein): factor
+      // about 0.98, chicken about 49 g, under 80 g
+      const f = proteinFails(
+        dish({
+          ingredients: [
+            { food: "chicken_tender", grams: 50, role: "protein" },
+            { food: "whole_wheat_toast", grams: 110, role: "staple" },
+            { food: "tomato", grams: 130, role: "veg" },
+          ],
+        }),
+      );
+      expect(f).toHaveLength(1);
+      expect(f[0]).toMatchObject({ food: "chicken_tender", limit: 80 });
+    });
+
+    test("a breakfast keeps the full minimum on every line", () => {
+      const f = proteinFails(breakfast({ ingredients: [{ food: "egg", grams: 40, role: "protein" }, { food: "low_fat_milk", grams: 250, role: "protein" }, BREAKFAST[1]] }));
+      expect(f).toHaveLength(1);
+      expect(f[0]).toMatchObject({ food: "egg", limit: 50 });
+    });
   });
 
   test("nothing to scale by", () => {
@@ -317,6 +391,63 @@ describe("checkDish fails, with the numbers", () => {
   test("unknown cuisine, equipment and staple", () => {
     const f = failures(dish({ cuisine: "martian" as never, equipment: ["teleporter" as never], staples: ["tomato"] }));
     expect(f.map((x) => x.rule)).toEqual(["cuisine", "equipment", "staples"]);
+  });
+});
+
+describe("minced meat and fresh-ground cuts", () => {
+  const minced = (d: Dish) => failures(d).filter((x) => x.rule === "minced_meat");
+  const ground = (d: Dish) => failures(d).filter((x) => x.rule === "ground");
+  const withProtein = (line: Partial<DishIngredient>, over: Partial<Dish> = {}) =>
+    dish({ ingredients: [{ food: "chicken_tender", grams: 100, role: "protein", ...line }, ...BASE.slice(1)], ...over });
+  const SAYS_GROUND = { summary: "鸡柳现绞拌匀，和番茄一起炖熟", summaryEn: "Chicken tenders ground fresh, stewed with tomato." };
+
+  test("pre-packaged ground pork is rejected, naming the food", () => {
+    const f = minced(withProtein({ food: "ground_pork" }));
+    expect(f).toHaveLength(1);
+    expect(f[0]!.food).toBe("ground_pork");
+    expect(f[0]!.message).toContain("pre-packaged mince");
+  });
+
+  test("a pre-packaged mince fails even when flagged ground", () => {
+    expect(minced(withProtein({ food: "ground_pork", ground: true }, SAYS_GROUND))).toHaveLength(1);
+  });
+
+  test("a whole lean cut ground fresh passes when the summaries say so", () => {
+    const d = withProtein({ food: "lean_pork_leg", ground: true }, SAYS_GROUND);
+    expect(minced(d)).toEqual([]);
+    expect(ground(d)).toEqual([]);
+    // Its nutrition is the cut's: 100 g of lean pork leg, not a mince row.
+    expect(checkDish(withProtein({ food: "lean_pork_leg", ground: true }, SAYS_GROUND)).serving?.protein).toBeCloseTo(25, 6);
+  });
+
+  test("a ground line needs the summaries to say 现绞 and ground fresh, so the shopping list can ask for it", () => {
+    expect(ground(withProtein({ food: "lean_pork_leg", ground: true }))).toHaveLength(1);
+    expect(ground(withProtein({ food: "lean_pork_leg", ground: true }, { summary: SAYS_GROUND.summary }))).toHaveLength(1);
+    expect(ground(withProtein({ food: "lean_pork_leg", ground: true }, { summaryEn: SAYS_GROUND.summaryEn }))).toHaveLength(1);
+  });
+
+  test("only a protein line of a meat or poultry cut can be ground", () => {
+    expect(ground(withProtein({ food: "salmon", ground: true }, SAYS_GROUND))).toHaveLength(1);
+    expect(ground(withProtein({ food: "firm_tofu", ground: true }, SAYS_GROUND))).toHaveLength(1);
+    const veg = dish({ ...SAYS_GROUND, ingredients: [...BASE.slice(0, 1), { food: "tomato", grams: 130, role: "veg", ground: true }, ...BASE.slice(2)] });
+    expect(ground(veg)).toHaveLength(1);
+    const wayAddOn = batchMain({
+      ways: [OVER_RICE, { ...IN_TORTILLA, addOns: [{ food: "chicken_breast", grams: 20, role: "topping", ground: true }] }],
+    });
+    expect(failures(wayAddOn).filter((x) => x.rule === "ground")).toMatchObject([{ way: 1 }]);
+  });
+
+  test("pre-packaged mince in a way's add-ons is rejected too, and spices named ground pass", () => {
+    const d = batchMain({
+      ways: [OVER_RICE, { ...IN_TORTILLA, addOns: [{ food: "ground_pork", grams: 20, role: "topping" }] }],
+    });
+    expect(minced(d)).toMatchObject([{ way: 1, food: "ground_pork" }]);
+    const cumin = dish({ ingredients: [...BASE, { food: "ground_cumin", grams: 1, role: "seasoning" }] });
+    expect(minced(cumin)).toEqual([]);
+  });
+
+  test("the only pre-packaged mince in the food table is ground_pork", () => {
+    expect(FOODS.filter(isMincedMeat).map((f) => f.id)).toEqual(["ground_pork"]);
   });
 });
 
@@ -359,6 +490,34 @@ describe("batch methods", () => {
   });
 });
 
+describe("fish is always fresh", () => {
+  const withProtein = (food: string, grams: number): DishIngredient[] => [
+    { food, grams, role: "protein" },
+    { food: "tomato", grams: 130, role: "veg" },
+    { food: "olive_oil", grams: 5, role: "oil" },
+  ];
+
+  test("a batch main with a fish or seafood protein line is rejected", () => {
+    for (const [food, grams] of [["cod", 140], ["salmon", 120], ["white_shrimp", 115], ["canned_tuna_water", 125], ["frozen_tilapia_fillet", 140]] as const) {
+      const f = only(batchMain({ ingredients: withProtein(food, grams) }), "fresh_fish");
+      expect(f.food, food).toBe(food);
+    }
+  });
+
+  test("the same fish is fine as a fresh main", () => {
+    for (const [food, grams] of [["cod", 140], ["white_shrimp", 115]] as const) {
+      const r = checkDish(dish({ ingredients: withProtein(food, grams) }));
+      expect(r.ok ? [] : r.failures.map((x) => x.rule), food).toEqual([]);
+    }
+  });
+
+  test("a batch main with chicken is unaffected, and a seafood seasoning is not a protein line", () => {
+    expect(failures(batchMain()).filter((x) => x.rule === "fresh_fish")).toEqual([]);
+    const fishSauce = batchMain({ ingredients: [...BASE, { food: "fish_sauce", grams: 2, role: "seasoning" }] });
+    expect(failures(fishSauce).filter((x) => x.rule === "fresh_fish")).toEqual([]);
+  });
+});
+
 describe("ways to eat a batch main", () => {
   test("each way is checked as the reference serving plus its add-ons", () => {
     // Over rice: the base, 176.8 kcal. In a tortilla: + tomato 50 (8.5 kcal,
@@ -376,20 +535,6 @@ describe("ways to eat a batch main", () => {
     expect(t.addedFat).toBeCloseTo(7.15, 6);
     expect(t.sodium).toBeCloseTo(411.45, 6);
     expect(t.vegG).toBeCloseTo(180, 6);
-  });
-
-  test("a pot short of vegetables passes when every way adds them, and fails on the way that does not", () => {
-    // tomato 60: protein 24.51, factor 25 / 24.51, veg 61.2 g. + 50 g salad
-    // tomato on the way: 111.2 g.
-    const thin = [BASE[0], { food: "tomato", grams: 60, role: "veg" as const }, BASE[2], BASE[3]];
-    const salad: DishWay = { ...OVER_RICE, name: "配沙拉", nameEn: "With salad", addOns: [{ food: "tomato", grams: 50, role: "veg" }] };
-    const r = checkDish(batchMain({ ingredients: thin, ways: [salad, IN_TORTILLA] }));
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.ways[0].vegG).toBeCloseTo((60 * 25) / 24.51 + 50, 6);
-    const f = only(batchMain({ ingredients: thin, ways: [salad, OVER_RICE] }), "vegetables");
-    expect(f.way).toBe(1);
-    expect(f.actual!).toBeCloseTo((60 * 25) / 24.51, 6);
-    expect(f.message).toBe("way 2: vegetables 61 g are under 100 g");
   });
 
   test("a topping that tips one way over the fat limit fails that way", () => {
@@ -462,7 +607,7 @@ describe("sides", () => {
     expect(r.serving.vegG).toBeCloseTo(150, 6);
     expect(r.serving.addedFat).toBeCloseTo(3, 6);
     expect(r.serving.sodium).toBeCloseTo(116.455, 6);
-    expect(LIMITS.side).toEqual({ proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150 });
+    expect(LIMITS.side).toEqual({ proteinShare: null, proteinShareWithStaple: null, addedFatG: 5, sodiumMg: 200, addedSugarG: 5, vegG: 150, realVegG: null, deepVegShare: null });
   });
 
   test("sodium over 200 mg", () => {
@@ -512,17 +657,21 @@ describe("sides", () => {
 
 describe("breakfast templates", () => {
   test("a boiled egg and toast", () => {
-    // factor 12 / 16.84; share 67.36 / 220.2 = 30.6%; sodium 306.25 * 0.7126 = 218.2 mg
+    // as written: 16.84 g protein, share 67.36 / 220.2 = 30.6%, sodium 147 + 159.25 = 306.25 mg
     const r = checkDish(breakfast());
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.serving.sodium).toBeCloseTo(218.23, 1);
+    if (r.ok) {
+      expect(r.serving.factor).toBe(1);
+      expect(r.serving.protein).toBeCloseTo(16.84, 2);
+      expect(r.serving.sodium).toBeCloseTo(306.25, 2);
+    }
   });
 
   test("with a fruit", () => {
     // + apple 100: protein 17.04, kcal 267.2, share 68.16 / 267.2 = 25.5%
     const r = checkDish(breakfast({ ingredients: [...BREAKFAST, { food: "apple", grams: 100, role: "fruit" }] }));
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.serving.factor).toBeCloseTo(12 / 17.04, 6);
+    if (r.ok) expect(r.serving.protein).toBeCloseTo(17.04, 2);
   });
 
   test("each allowed method", () => {
@@ -549,15 +698,47 @@ describe("breakfast templates", () => {
     );
   });
 
-  test("one protein, one staple, at most one fruit", () => {
-    // egg alone: 12.5 P, 132 kcal, share 37.9%; only the items rule fails
-    expect(only(breakfast({ ingredients: [BREAKFAST[0]] }), "breakfast_items").message).toBe(
-      "a breakfast is one protein item, one staple item and at most one fruit; this has 1 protein, 0 staple, 0 fruit",
+  test("at least one protein and one staple, any number of either", () => {
+    // egg alone: 12.5 P, 132 kcal, share 37.9%
+    const noStaple = failures(breakfast({ ingredients: [BREAKFAST[0]] })).find((x) => x.rule === "breakfast_items");
+    expect(noStaple?.message).toBe("a breakfast needs at least one protein item and one staple item; this has 1 protein, 0 staple");
+    const noProtein = failures(breakfast({ ingredients: [BREAKFAST[1]] })).find((x) => x.rule === "breakfast_items");
+    expect(noProtein?.message).toBe("a breakfast needs at least one protein item and one staple item; this has 0 protein, 1 staple");
+  });
+
+  test("two protein items, two staples and two fruits are fine", () => {
+    // egg 50 + milk 250 + toast 35 + oats 20 + apple 80 + banana 60: 6.25 + 8.25 + 4.34 + 2.46 = 21.3 g protein
+    const many: DishIngredient[] = [
+      { food: "egg", grams: 50, role: "protein" },
+      { food: "low_fat_milk", grams: 250, role: "protein" },
+      { food: "whole_wheat_toast", grams: 35, role: "staple" },
+      { food: "oats", grams: 20, role: "staple" },
+      { food: "apple", grams: 80, role: "fruit" },
+      { food: "banana", grams: 60, role: "fruit" },
+    ];
+    expect(checkDish(breakfast({ ingredients: many })).ok).toBe(true);
+  });
+
+  test("a breakfast is not scaled: its grams are the serving", () => {
+    const r = checkDish(breakfast());
+    expect(r.ok && r.serving.ingredients.map((i) => i.grams)).toEqual([100, 35]);
+  });
+
+  test("total protein at least 15 g", () => {
+    // egg 50 + toast 35: 6.25 + 4.34 = 10.6 g, share 42 / 154 = 27%
+    const f = only(breakfast({ ingredients: [{ ...BREAKFAST[0], grams: 50 }, BREAKFAST[1]] }), "breakfast_protein");
+    expect(f.actual!).toBeCloseTo(10.59, 2);
+    expect(f.limit).toBe(15);
+    expect(f.message).toBe("a breakfast has 10.6 g protein, under 15 g");
+  });
+
+  test("each protein line stays inside its own gram range, with several lines too", () => {
+    // egg 40 g is under 50; with milk 250 and toast 35 the total protein is 17.6 g
+    const f = only(
+      breakfast({ ingredients: [{ food: "egg", grams: 40, role: "protein" }, { food: "low_fat_milk", grams: 250, role: "protein" }, BREAKFAST[1]] }),
+      "protein_grams",
     );
-    const twoFruit = [...BREAKFAST, { food: "apple", grams: 80, role: "fruit" as const }, { food: "banana", grams: 60, role: "fruit" as const }];
-    expect(failures(breakfast({ ingredients: twoFruit })).map((x) => x.rule)).toContain("breakfast_items");
-    const twoProtein = [...BREAKFAST, { food: "greek_yogurt", grams: 150, role: "protein" as const }];
-    expect(failures(breakfast({ ingredients: twoProtein })).map((x) => x.rule)).toContain("breakfast_items");
+    expect(f).toMatchObject({ food: "egg", actual: 40, limit: 50 });
   });
 
   test("protein share under 20%", () => {
@@ -577,15 +758,31 @@ describe("breakfast templates", () => {
     expect(share.limit).toBe(0.2);
   });
 
-  test("sodium capped at 400 mg", () => {
-    // egg 100 + toast 35 + soy 6: protein 17.308, sodium (306.25 + 299.82) * 12 / 17.308 = 420.2
-    const f = only(breakfast({ ingredients: [...BREAKFAST, { food: "light_soy_sauce", grams: 6, role: "seasoning" }] }), "sodium");
-    expect(f.actual!).toBeCloseTo((606.07 * 12) / 17.308, 4);
-    expect(f.limit).toBe(400);
+  test("no sodium cap: it only counts toward the day total", () => {
+    // egg 100 + toast 35 + soy 6: sodium 306.25 + 299.82 = 606.07 mg
+    const d = breakfast({ ingredients: [...BREAKFAST, { food: "light_soy_sauce", grams: 6, role: "seasoning" }] });
+    const r = checkDish(d);
+    expect(r.serving?.sodium).toBeCloseTo(606.07, 2);
+    expect(failures(d).filter((x) => x.rule === "sodium")).toEqual([]);
+    expect(LIMITS.breakfast.sodiumMg).toBeNull();
+    expect(LIMITS.main.sodiumMg).toBe(600);
   });
 
   test("a breakfast lists no staples beside its staple line", () => {
     expect(only(breakfast({ staples: ["brown_rice_cooked"] }), "staples").rule).toBe("staples");
+  });
+});
+
+describe("summary", () => {
+  test("a dish needs a Chinese and an English summary", () => {
+    expect(only(dish({ summary: "" }), "summary").rule).toBe("summary");
+    expect(only(dish({ summary: "  " }), "summary").rule).toBe("summary");
+    expect(only(dish({ summaryEn: "" }), "summary").rule).toBe("summary");
+  });
+
+  test("the Chinese summary is at most 40 characters", () => {
+    expect(checkDish(dish({ summary: "字".repeat(SUMMARY_MAX_CHARS) })).ok).toBe(true);
+    expect(only(dish({ summary: "字".repeat(SUMMARY_MAX_CHARS + 1) }), "summary")).toMatchObject({ actual: 41, limit: 40 });
   });
 });
 
@@ -603,5 +800,81 @@ describe("time rules", () => {
 
   test("total minutes below hands-on minutes", () => {
     only(dish({ activeMin: 15, totalMin: 10 }), "times");
+  });
+});
+
+describe("real and deep-coloured vegetables", () => {
+  const SPINACH = { food: "frozen_spinach", role: "veg" as const };
+  const only2 = (d: Dish) => {
+    const r = checkDishRaw(d);
+    return r.ok ? [] : r.failures.filter((f) => VEG_RULES.includes(f.rule));
+  };
+
+  test("limits: a main needs 150 g of real vegetables, half of them deep-coloured; other roles are not checked", () => {
+    expect(LIMITS.main.realVegG).toBe(150);
+    expect(LIMITS.main.deepVegShare).toBe(0.5);
+    for (const role of ["breakfast", "staple", "side"] as const) {
+      expect(LIMITS[role].realVegG, role).toBeNull();
+      expect(LIMITS[role].deepVegShare, role).toBeNull();
+    }
+  });
+
+  test("a fresh main with 160 g of tomato passes both", () => {
+    const d = dish({ ingredients: [BASE[0], { food: "tomato", grams: 160, role: "veg" }, BASE[2], BASE[3]] });
+    expect(only2(d)).toEqual([]);
+    const r = checkDishRaw(d);
+    if (r.ok) {
+      expect(r.serving.realVegG).toBeGreaterThanOrEqual(150);
+      expect(r.serving.deepVegG).toBeCloseTo(r.serving.realVegG, 6);
+    }
+  });
+
+  test("real_veg: onion and tinned tomatoes do not count, and the message says so", () => {
+    // 100 g tomato + 100 g onion + 100 g tinned tomatoes: 300 g veg lines, 100 g real.
+    const d = dish({
+      ingredients: [BASE[0], { food: "tomato", grams: 100, role: "veg" }, { food: "onion", grams: 100, role: "veg" }, { food: "crushed_tomatoes", grams: 100, role: "veg" }, BASE[2], BASE[3]],
+    });
+    const f = only2(d);
+    expect(f.map((x) => x.rule)).toEqual(["real_veg"]);
+    expect(f[0].limit).toBe(150);
+    expect(f[0].actual!).toBeLessThan(110);
+    expect(f[0].message).toContain("real vegetables");
+    expect(f[0].message).toContain("tinned tomatoes do not count");
+    const r = checkDishRaw(d);
+    expect(r.serving!.vegG).toBeGreaterThan(f[0].actual! * 2.5);
+  });
+
+  test("deep_veg: 200 g of cabbage is real but not deep-coloured", () => {
+    const d = dish({ ingredients: [BASE[0], { food: "cabbage", grams: 200, role: "veg" }, BASE[2], BASE[3]] });
+    const f = only2(d);
+    expect(f.map((x) => x.rule)).toEqual(["deep_veg"]);
+    expect(f[0].limit).toBe(0.5);
+    expect(f[0].actual).toBe(0);
+    expect(f[0].message).toContain("deep-coloured");
+  });
+
+  test("deep_veg: exactly half passes, a little under fails", () => {
+    const mk = (spinach: number, cabbage: number) =>
+      dish({ ingredients: [BASE[0], { ...SPINACH, grams: spinach }, { food: "cabbage", grams: cabbage, role: "veg" }, BASE[2], BASE[3]] });
+    expect(only2(mk(100, 100))).toEqual([]);
+    expect(only2(mk(90, 110)).map((x) => x.rule)).toEqual(["deep_veg"]);
+  });
+
+  test("a batch main is checked per way: the pot's vegetables plus the way's add-ons", () => {
+    const pot = [BASE[0], { food: "onion", grams: 60, role: "veg" as const }, BASE[2], BASE[3]];
+    const withSpinach: DishWay = { ...OVER_RICE, name: "配菠菜", nameEn: "With spinach", addOns: [{ ...SPINACH, grams: 160 }] };
+    const withCabbage: DishWay = { ...OVER_RICE, name: "配卷心菜", nameEn: "With cabbage", addOns: [{ food: "cabbage", grams: 160, role: "veg" }] };
+    expect(only2(batchMain({ ingredients: pot, ways: [withSpinach, withSpinach] }))).toEqual([]);
+    const f = only2(batchMain({ ingredients: pot, ways: [withSpinach, withCabbage] }));
+    expect(f.map((x) => [x.rule, x.way])).toEqual([["deep_veg", 1]]);
+    const none = only2(batchMain({ ingredients: pot, ways: [withSpinach, OVER_RICE] }));
+    expect(none.map((x) => [x.rule, x.way])).toEqual([["real_veg", 1]]);
+    expect(none[0].message.startsWith("way 2: ")).toBe(true);
+  });
+
+  test("sides keep the all-veg-lines limit, not the real-veg rules", () => {
+    expect(LIMITS.side.vegG).toBe(150);
+    expect(LIMITS.main.vegG).toBeNull();
+    expect(only2(side())).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 // Columns docs/671 数据模型 adds to the food table: sodium, added sugar,
-// protein category, not-freezable and grams per piece. Kept out of the
+// protein category, not-freezable, grams per piece, deep-coloured vegetable
+// and aromatic. Kept out of the
 // generated food-table.ts, like POT_PACK_G in foods.ts, so a rebuild of the
 // table does not lose them; foods.ts merges them into FOODS. The compound
 // seasonings added for docs/671 carry their columns inline (seasonings.ts).
@@ -155,3 +156,28 @@ export const PIECE_G: Readonly<Record<string, { grams: number; label: string; fd
   cabbage: { grams: 908, label: "颗", fdcId: 169975 }, // 1 head, medium
   shiitake: { grams: 19, label: "朵", fdcId: 169242 }, // 1 piece whole
 };
+
+/**
+ * Deep-coloured vegetables (深色蔬菜, docs/671 入库检查): the Chinese dietary
+ * guideline counts dark green, red, orange and purple ones, and asks that half
+ * of the day's vegetables be of them. Pale or light-green vegetables (cabbage,
+ * cucumber, zucchini, celery, mushrooms, sprouts, legumes) and
+ * yellow ones are not in it.
+ */
+export const DEEP_COLOR: ReadonlySet<string> = new Set([
+  // Dark green
+  "spinach", "frozen_spinach", "broccoli", "frozen_broccoli", "bok_choy", "pak_choi_white", "water_spinach",
+  "choy_sum", "gai_lan", "pea_shoots", "romaine", "green_beans", "frozen_green_beans", "green_pepper", "chinese_chives",
+  // Red, orange and purple
+  "tomato", "cherry_tomato", "carrot", "red_bell_pepper", "pumpkin", "red_cabbage",
+]);
+
+/**
+ * Aromatics and sauce bases (docs/671 入库检查): they season the dish or are
+ * its sauce, so their grams are not vegetables eaten. They are still veg lines
+ * (onion browned in the pot, tinned tomatoes as the sauce); they just do not
+ * count toward the real-vegetable minimum.
+ */
+export const AROMATIC: ReadonlySet<string> = new Set([
+  "onion", "red_onion", "garlic", "ginger", "scallion", "leek", "crushed_tomatoes",
+]);
