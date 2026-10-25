@@ -4,7 +4,9 @@
 // gram, kcal and protein figure from the numbers here. A food the table does
 // not have cannot be planned.
 
+import { ADDED_SUGAR_G, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "./food-columns";
 import { FOOD_TABLE } from "./food-table";
+import { COMPOUND_SEASONINGS } from "./seasonings";
 
 export type FoodRole = "protein" | "staple" | "veg" | "fruit" | "fat" | "sauce" | "dairy";
 
@@ -47,6 +49,19 @@ export type FoodSource =
   | { kind: "usda"; fdcId: number; dataset: "SR Legacy" | "Foundation"; name: string }
   | { kind: "label"; note: string };
 
+/** Docs/671 多样性: 禽 畜 鱼虾 蛋 豆制品 奶, and canned pulses. */
+export type ProteinCategory = "poultry" | "meat" | "seafood" | "egg" | "soy" | "dairy" | "legume";
+
+export const PROTEIN_CATEGORIES: readonly ProteinCategory[] = [
+  "poultry",
+  "meat",
+  "seafood",
+  "egg",
+  "soy",
+  "dairy",
+  "legume",
+];
+
 export interface Food {
   /** Stable snake_case English id; what the model writes. */
   id: string;
@@ -78,6 +93,21 @@ export interface Food {
    * several meals; a food without it is never a pot.
    */
   potG?: number;
+  // The docs/671 columns (food-columns.ts). Optional on the type because the
+  // generated rows do not carry them; every row of FOODS has sodium and
+  // addedSugar, which tests hold.
+  /** Sodium, mg per 100 g. */
+  sodium?: number;
+  /** Where the sodium figure was read when not from `source`. */
+  sodiumSource?: FoodSource;
+  /** Added sugar, g per 100 g (docs/671 入库检查). */
+  addedSugar?: number;
+  /** On every food whose roles include protein. */
+  proteinCategory?: ProteinCategory;
+  /** A dish containing it is not frozen. */
+  noFreeze?: true;
+  /** Edible grams of one piece of countable produce, for lists only. */
+  piece?: { grams: number; label: string };
 }
 
 export const TAIWAN_FDA_CREDIT =
@@ -106,7 +136,26 @@ export const POT_PACK_G: Readonly<Record<string, number>> = {
   beef_shank_raw: 600,
 };
 
-export const FOODS: readonly Food[] = FOOD_TABLE.map((f) => (POT_PACK_G[f.id] ? { ...f, potG: POT_PACK_G[f.id] } : f));
+function withColumns(f: Food): Food {
+  const out: Food = { ...f };
+  const pot = POT_PACK_G[f.id];
+  if (pot) out.potG = pot;
+  const na = SODIUM_MG[f.id];
+  if (typeof na === "number") out.sodium = na;
+  else if (na) {
+    out.sodium = na.mg;
+    out.sodiumSource = na.source;
+  }
+  out.addedSugar ??= ADDED_SUGAR_G[f.id] ?? 0;
+  const cat = PROTEIN_CATEGORY[f.id];
+  if (cat) out.proteinCategory = cat;
+  if (NOT_FREEZABLE.has(f.id)) out.noFreeze = true;
+  const piece = PIECE_G[f.id];
+  if (piece) out.piece = { grams: piece.grams, label: piece.label };
+  return out;
+}
+
+export const FOODS: readonly Food[] = [...FOOD_TABLE, ...COMPOUND_SEASONINGS].map(withColumns);
 
 const BY_ID: ReadonlyMap<string, Food> = new Map(FOODS.map((f) => [f.id, f]));
 

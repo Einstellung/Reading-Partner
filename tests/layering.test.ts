@@ -231,6 +231,9 @@ const LAYER: Record<string, Layer> = {
   // The week's own data: the plan and its charter, the shopping list derived
   // from it, the solver and the persisted store.
   "info/meals/plan": "domain",
+  // The dish library (docs/671 菜库): the dish type, method categories and the
+  // storage derived from them, the reference serving and the entry check.
+  "info/meals/dishes": "domain",
   // Everything that fetches or caches a dish or ingredient photo.
   "info/meals/photos": "domain",
   // One made meal's recipe page: the prompt, the stored recipes, the call.

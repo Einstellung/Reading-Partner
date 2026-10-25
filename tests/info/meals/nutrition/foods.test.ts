@@ -27,7 +27,7 @@ const ROLES = ["protein", "staple", "veg", "fruit", "fat", "sauce", "dairy"];
 describe("food table integrity", () => {
   test("size and unique snake_case ids", () => {
     expect(FOODS.length).toBeGreaterThanOrEqual(150);
-    expect(FOODS.length).toBeLessThanOrEqual(220);
+    expect(FOODS.length).toBeLessThanOrEqual(260);
     const ids = FOODS.map((f) => f.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z][a-z0-9_]*$/);
