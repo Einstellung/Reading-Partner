@@ -687,6 +687,11 @@ const CHINESE: Dish[] = [
     ],
   }),
   dish({
+    id: "tomato_tofu_egg_scramble", zh: "番茄豆腐滑蛋", en: "Tomato tofu and soft scrambled egg", sum: "番茄块炒出汁，下切块北豆腐焖 3 分钟，淋入蛋液炒至刚凝固", sumEn: "Tomato wedges cooked down, firm tofu simmered 3 minutes in the juice, then beaten egg stirred in until just set.", c: "chinese", m: "stir_fry", t: [10, 15],
+    staples: [RICE, BROWN, GRAINS],
+    i: [pr("egg", 100), pr("firm_tofu", 140), ve("tomato", 200), se("reduced_salt_soy_sauce", 3), se("ketchup", 5), se("salt", 0.4), oi("canola_oil", 5)],
+  }),
+  dish({
     id: "tomato_shrimp_egg_stirfry", zh: "番茄虾仁炒蛋", en: "Tomato, shrimp and scrambled eggs", sum: "鸡蛋炒到刚凝固盛出，番茄炒出汁，下虾仁和鸡蛋拌匀", sumEn: "Eggs scrambled until just set and set aside, tomato cooked down, shrimp and eggs folded back in.", c: "chinese", m: "stir_fry", t: [12, 15],
     staples: [RICE, BROWN, GRAINS],
     i: [pr("egg", 52), pr("white_shrimp", 82), ve("tomato", 185), se("reduced_salt_soy_sauce", 3), oi("canola_oil", 5)],
@@ -710,6 +715,20 @@ const CHINESE: Dish[] = [
     id: "sesame_chicken_cucumber_salad", zh: "麻酱鸡丝拌黄瓜", en: "Sesame chicken and cucumber salad", sum: "即食鸡胸肉撕丝，和黄瓜、紫甘蓝用芝麻酱、醋和酱油拌匀", sumEn: "Ready-cooked chicken shredded and tossed with cucumber and red cabbage in sesame paste, vinegar and soy.", c: "chinese", m: "assemble", eq: [], t: [10, 10],
     staples: [RICE, "steamed_bun", SWEET_POTATO],
     i: [pr("ready_chicken_breast", 105), ve("cucumber", 80), ve("red_cabbage", 120), oi("sesame_paste", 8), se("reduced_salt_soy_sauce", 3), se("black_vinegar", 4)],
+  }),
+  dish({
+    id: "tomato_tofu_chicken_stew", zh: "番茄豆腐炖鸡腿", en: "Tomato tofu and chicken thigh stew", sum: "鸡腿肉块与番茄、北豆腐加酱油炖 20 分钟，豆腐吸饱汤汁", sumEn: "Chicken thigh cubes stewed 20 minutes with tomato, firm tofu and soy sauce until the tofu takes up the broth.", c: "chinese", m: "stew", t: [10, 35],
+    i: [pr("chicken_thigh", 90), pr("firm_tofu", 90), ve("tomato", 170), ve("onion", 25), se("reduced_salt_soy_sauce", 4), se("ketchup", 8), se("ginger_paste", 2), oi("sesame_oil", 2), se("salt", 0.3)],
+    ways: [
+      way("a", "a", RICE, [ve("bok_choy", 100)]),
+      way("b", "b", BROWN, [ve("frozen_broccoli", 100)]),
+      way("c", "c", "fresh_noodles", [ve("frozen_spinach", 100)]),
+    ],
+  }),
+  dish({
+    id: "homestyle_tofu_pork_slices", zh: "家常豆腐炒肉片", en: "Home-style tofu with pork slices", sum: "猪大排切片滑炒，下煎黄的北豆腐块，加青椒、胡萝卜、木耳和豆瓣酱炒熟", sumEn: "Pork loin slices stir-fried until pale, then pan-browned firm tofu, green pepper, carrot and wood ear with chili bean sauce.", c: "chinese", m: "stir_fry", t: [14, 15],
+    staples: [RICE, BROWN, GRAINS],
+    i: [pr("pork_loin", 90), pr("firm_tofu", 90), ve("green_pepper", 100), ve("carrot", 45), ve("wood_ear", 25), se("doubanjiang", 3), se("reduced_salt_soy_sauce", 4), se("garlic_paste", 2), oi("canola_oil", 4)],
   }),
 ];
 
@@ -778,9 +797,18 @@ const MEXICAN: Dish[] = [
     i: [pr("frozen_tilapia_fillet", 135), ve("cabbage", 60), ve("red_cabbage", 50), ve("tomato", 80), se("lime", 10), se("taco_seasoning", 1.5), oi("canola_oil", 3)],
   }),
   dish({
-    id: "chicken_burrito_bowl", zh: "鸡肉玉米饭碗", en: "Chicken and corn burrito bowl", sum: "即食鸡胸肉、玉米粒、番茄、生菜摆在饭上，挤青柠汁", sumEn: "Ready-cooked chicken, corn, tomato and lettuce over rice, finished with lime.", c: "mexican", m: "assemble", eq: [], t: [8, 8],
+    id: "chicken_burrito_bowl", zh: "鸡肉玉米饭碗", en: "Chicken and corn burrito bowl", sum: "即食鸡胸肉、毛豆、玉米粒、番茄、生菜摆在饭上，挤青柠汁", sumEn: "Ready-cooked chicken, edamame, corn, tomato and lettuce over rice, finished with lime.", c: "mexican", m: "assemble", eq: [], t: [8, 8],
     staples: [BROWN, RICE, "whole_wheat_tortilla"],
-    i: [pr("ready_chicken_breast", 100), ve("frozen_corn", 50), ve("tomato", 60), ve("romaine", 60), ve("red_onion", 15), se("lime", 8), se("taco_seasoning", 1)],
+    i: [pr("ready_chicken_breast", 85), ve("frozen_edamame", 45), ve("frozen_corn", 50), ve("tomato", 60), ve("romaine", 60), ve("red_onion", 15), se("lime", 8), se("taco_seasoning", 1)],
+  }),
+  dish({
+    id: "mexican_tofu_black_bean_bowl", zh: "墨西哥香料豆腐黑豆碗", en: "Mexican-spiced tofu and black bean bowl", sum: "北豆腐捏碎与黑豆、毛豆、彩椒加塔可调味粉焖煮 15 分钟", sumEn: "Crumbled firm tofu, black beans, edamame and peppers simmered 15 minutes with taco seasoning and lime.", c: "mexican", m: "stew", t: [10, 25],
+    i: [pr("firm_tofu", 130), pr("canned_black_beans", 85), pr("frozen_edamame", 52), ve("red_bell_pepper", 50), ve("green_pepper", 40), ve("onion", 20), se("taco_seasoning", 4), se("lime", 8)],
+    ways: [
+      way("a", "a", BROWN, [ve("romaine", 100)]),
+      way("b", "b", "corn_tortilla", [ve("romaine", 100)]),
+      way("c", "c", MICROWAVE_POTATO, [ve("romaine", 100)]),
+    ],
   }),
 ];
 
@@ -850,9 +878,23 @@ const JAPANESE: Dish[] = [
     i: [pr("canned_mackerel_tomato", 130), ve("cucumber", 60), ve("red_cabbage", 110), se("rice_vinegar", 4), tp("sesame_seeds", 3)],
   }),
   dish({
-    id: "cold_soba_chicken", zh: "凉荞麦面鸡丝", en: "Cold soba with chicken and cucumber", sum: "荞麦面煮熟过凉水，拌鸡丝、黄瓜、胡萝卜、紫甘蓝丝和海苔，淋酱油醋汁", sumEn: "Soba boiled and rinsed cold, tossed with shredded chicken, cucumber, carrot, red cabbage and nori in a soy-vinegar dressing.", c: "japanese", m: "assemble", eq: [], t: [10, 10],
+    id: "cold_soba_chicken", zh: "凉荞麦面鸡丝", en: "Cold soba with chicken and cucumber", sum: "荞麦面煮熟过凉水，拌鸡丝、毛豆、黄瓜、胡萝卜、紫甘蓝丝和海苔，淋酱油醋汁", sumEn: "Soba boiled and rinsed cold, tossed with shredded chicken, edamame, cucumber, carrot, red cabbage and nori in a soy-vinegar dressing.", c: "japanese", m: "assemble", eq: [], t: [10, 10],
     staples: [SOBA],
-    i: [pr("ready_chicken_breast", 105), ve("cucumber", 60), ve("carrot", 60), ve("red_cabbage", 60), ve("nori", 1), tp("sesame_seeds", 3), se("reduced_salt_soy_sauce", 4), se("rice_vinegar", 4), oi("sesame_oil", 2)],
+    i: [pr("ready_chicken_breast", 90), ve("frozen_edamame", 50), ve("cucumber", 60), ve("carrot", 60), ve("red_cabbage", 60), ve("nori", 1), tp("sesame_seeds", 3), se("reduced_salt_soy_sauce", 4), se("rice_vinegar", 4), oi("sesame_oil", 2)],
+  }),
+  dish({
+    id: "teriyaki_tofu_chicken_dice", zh: "照烧豆腐鸡丁", en: "Teriyaki tofu and chicken dice", sum: "鸡腿丁与北豆腐块煎上色，加彩椒、胡萝卜和照烧汁收汁，撒芝麻", sumEn: "Chicken thigh dice and firm tofu browned, then red pepper, carrot and teriyaki sauce reduced to a glaze, sprinkled with sesame.", c: "japanese", m: "pan_fry", t: [12, 15],
+    staples: [RICE, BROWN, SOBA],
+    i: [pr("chicken_thigh", 90), pr("firm_tofu", 90), ve("red_bell_pepper", 125), ve("carrot", 50), se("teriyaki_sauce", 12), tp("sesame_seeds", 2), oi("canola_oil", 3)],
+  }),
+  dish({
+    id: "miso_tofu_chicken_pot", zh: "日式豆腐味噌鸡肉锅", en: "Japanese miso tofu and chicken pot", sum: "鸡腿肉块与白萝卜、胡萝卜、香菇煮 15 分钟，下北豆腐，化入味噌", sumEn: "Chicken thigh cubes simmered 15 minutes with daikon, carrot and shiitake, then firm tofu, with miso stirred in.", c: "japanese", m: "simmer", t: [10, 30],
+    i: [pr("chicken_thigh", 105), pr("firm_tofu", 105), ve("white_radish", 70), ve("carrot", 40), ve("shiitake", 30), se("miso", 9), se("ginger_paste", 2), oi("sesame_oil", 2)],
+    ways: [
+      way("a", "a", RICE, [ve("bok_choy", 100)]),
+      way("b", "b", BROWN, [ve("frozen_spinach", 100)]),
+      way("c", "c", SOBA, [ve("bok_choy", 100)]),
+    ],
   }),
 ];
 
@@ -912,14 +954,14 @@ const SOUTHEAST_ASIAN: Dish[] = [
     ],
   }),
   dish({
-    id: "thai_spicy_chicken_stirfry", zh: "泰式辣炒鸡腿丁", en: "Thai spicy diced chicken stir-fry", sum: "鸡腿肉丁与四季豆、彩椒大火快炒，加蚝油、鱼露和是拉差辣酱", sumEn: "Diced chicken thigh stir-fried hot with green beans and pepper, seasoned with oyster sauce, fish sauce and sriracha.", c: "southeast_asian", m: "stir_fry", t: [12, 15],
+    id: "thai_spicy_chicken_stirfry", zh: "泰式辣炒鸡腿丁", en: "Thai spicy diced chicken stir-fry", sum: "鸡腿肉丁与四季豆、彩椒、毛豆大火快炒，加蚝油、鱼露和是拉差辣酱", sumEn: "Diced chicken thigh stir-fried hot with green beans, pepper and edamame, seasoned with oyster sauce, fish sauce and sriracha.", c: "southeast_asian", m: "stir_fry", t: [12, 15],
     staples: [RICE, BROWN, GRAINS],
-    i: [pr("chicken_thigh", 140), ve("green_beans", 140), ve("red_bell_pepper", 60), se("oyster_sauce", 4), se("fish_sauce", 1.5), se("sriracha", 3), oi("canola_oil", 3)],
+    i: [pr("chicken_thigh", 120), ve("green_beans", 130), ve("red_bell_pepper", 60), ve("frozen_edamame", 40), se("oyster_sauce", 4), se("fish_sauce", 1.5), se("sriracha", 3), oi("canola_oil", 3)],
   }),
   dish({
-    id: "shrimp_rice_noodle_stirfry", zh: "虾仁炒米粉", en: "Shrimp and cabbage rice noodle stir-fry", sum: "虾仁和卷心菜丝、胡萝卜、上海青快炒，拌入泡软的米粉和甜辣酱，撒花生", sumEn: "Shrimp, shredded cabbage, carrot and bok choy stir-fried quickly, tossed with soaked rice noodles and sweet chili sauce, topped with peanuts.", c: "southeast_asian", m: "stir_fry", t: [14, 18],
+    id: "shrimp_rice_noodle_stirfry", zh: "虾仁毛豆炒米粉", en: "Shrimp and edamame rice noodle stir-fry", sum: "虾仁和毛豆、胡萝卜、上海青快炒，拌入泡软的米粉和甜辣酱，撒花生", sumEn: "Shrimp, edamame, carrot and bok choy stir-fried quickly, tossed with soaked rice noodles and sweet chili sauce, topped with peanuts.", c: "southeast_asian", m: "stir_fry", t: [14, 18],
     staples: [VERMICELLI],
-    i: [pr("white_shrimp", 115), ve("cabbage", 60), ve("carrot", 70), ve("bok_choy", 60), se("sweet_chili_sauce", 8), se("fish_sauce", 1.5), se("lime", 10), tp("peanuts", 5), oi("canola_oil", 4)],
+    i: [pr("white_shrimp", 100), ve("frozen_edamame", 50), ve("carrot", 80), ve("bok_choy", 70), se("sweet_chili_sauce", 8), se("fish_sauce", 1.5), se("lime", 10), tp("peanuts", 5), oi("canola_oil", 4)],
   }),
   dish({
     id: "lime_steamed_basa", zh: "青柠蒸龙利鱼", en: "Lime-steamed basa with napa cabbage", sum: "龙利鱼和大白菜、上海青、蘑菇铺盘，淋青柠汁、鱼露和甜辣酱，蒸 10 分钟", sumEn: "Basa fillet on napa cabbage, bok choy and mushroom with lime, fish sauce and sweet chili sauce, steamed 10 minutes.", c: "southeast_asian", m: "steam", eq: ["steamer"], t: [10, 20],
@@ -930,6 +972,11 @@ const SOUTHEAST_ASIAN: Dish[] = [
     id: "chicken_larb_lettuce", zh: "泰式青柠鸡丁生菜包（larb 风味）", en: "Larb-style diced chicken in lettuce", sum: "鸡胸肉切小丁炒熟，拌红洋葱、小番茄、青柠汁和鱼露，用生菜包着吃", sumEn: "Small diced chicken breast cooked through, tossed with red onion, cherry tomato, lime and fish sauce, eaten wrapped in lettuce.", c: "southeast_asian", m: "stir_fry", t: [12, 15],
     staples: [RICE, BROWN, GRAINS],
     i: [pr("chicken_breast", 120), ve("romaine", 120), ve("cucumber", 40), ve("cherry_tomato", 60), ve("red_onion", 20), se("lime", 15), se("fish_sauce", 2.5), se("sriracha", 3)],
+  }),
+  dish({
+    id: "thai_sweet_chili_tofu_chicken", zh: "泰式甜辣豆腐鸡丁", en: "Thai sweet chili tofu and chicken", sum: "鸡腿丁与北豆腐块煎上色，加四季豆、彩椒，拌甜辣酱和鱼露", sumEn: "Chicken thigh dice and firm tofu browned, tossed with green beans and pepper in sweet chili and fish sauce.", c: "southeast_asian", m: "stir_fry", t: [13, 15],
+    staples: [RICE, BROWN, VERMICELLI],
+    i: [pr("chicken_thigh", 90), pr("firm_tofu", 90), ve("green_beans", 110), ve("red_bell_pepper", 60), se("sweet_chili_sauce", 12), se("fish_sauce", 1.5), oi("canola_oil", 3)],
   }),
 ];
 

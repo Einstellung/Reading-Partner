@@ -104,7 +104,7 @@ describe("seed dishes", () => {
 
   test("role counts", () => {
     expect(mains.length).toBeGreaterThanOrEqual(75);
-    expect(mains.length).toBeLessThanOrEqual(90);
+    expect(mains.length).toBeLessThanOrEqual(100);
     expect(byRole("side").length).toBeGreaterThanOrEqual(6);
     expect(byRole("side").length).toBeLessThanOrEqual(16);
     expect(byRole("staple").length).toBeGreaterThanOrEqual(10);
@@ -193,6 +193,21 @@ describe("seed dishes", () => {
     for (const d of SEED_DISHES) {
       expect(/肉末|肉馅|肉糜|绞肉|mince/i.test(`${d.name} ${d.nameEn} ${d.summary} ${d.summaryEn}`), d.id).toBe(false);
     }
+  });
+
+  test("tofu is a main protein in several dishes across cuisines, firm tofu among them, and dried tofu is not used", () => {
+    const tofu = mains.filter((d) => d.ingredients.some((i) => i.role === "protein" && ["firm_tofu", "soft_tofu"].includes(i.food)));
+    expect(tofu.length).toBeGreaterThanOrEqual(8);
+    expect(tofu.filter((d) => d.ingredients.some((i) => i.food === "firm_tofu")).length).toBeGreaterThanOrEqual(6);
+    expect(new Set(tofu.map((d) => d.cuisine)).size).toBeGreaterThanOrEqual(4);
+    expect(tofu.some((d) => d.prep === "batch") && tofu.some((d) => d.prep === "fresh")).toBe(true);
+    const lines = SEED_DISHES.flatMap((d) => [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)]);
+    expect(lines.filter((i) => ["dried_tofu", "spiced_dried_tofu"].includes(i.food))).toEqual([]);
+  });
+
+  test("frozen edamame is used in several dishes: it keeps indefinitely", () => {
+    const using = SEED_DISHES.filter((d) => [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)].some((i) => i.food === "frozen_edamame"));
+    expect(using.length).toBeGreaterThanOrEqual(7);
   });
 
   test("fish and seafood mains are always fresh, never batch", () => {
@@ -382,7 +397,7 @@ describe("seed dishes and partial-pack perishables", () => {
   });
 
   test("no unusual perishable that only one or two dishes would use", () => {
-    const banned = ["avocado", "pineapple", "asparagus", "eggplant", "snow_peas", "enoki", "chinese_chives", "mung_bean_sprouts", "king_oyster_mushroom", "blueberries", "firm_tofu"];
+    const banned = ["avocado", "pineapple", "asparagus", "eggplant", "snow_peas", "enoki", "chinese_chives", "mung_bean_sprouts", "king_oyster_mushroom", "blueberries"];
     for (const f of banned) expect(usedBy(f), f).toEqual([]);
   });
 
