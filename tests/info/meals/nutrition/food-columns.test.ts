@@ -173,6 +173,8 @@ describe("foods added for the dish library", () => {
       stock_paste: 8667,
       red_lentils_dry: 7,
       lentils_dry: 6,
+      chickpeas_dry: 24,
+      kidney_beans_dry: 24,
       feta: 1139,
       corn_tortilla: 45,
       breadcrumbs: 732,
@@ -195,6 +197,8 @@ describe("foods added for the dish library", () => {
   test("protein category, added sugar, pieces and packs", () => {
     expect(foodById("red_lentils_dry")?.proteinCategory).toBe("legume");
     expect(foodById("lentils_dry")?.proteinCategory).toBe("legume");
+    expect(foodById("chickpeas_dry")?.proteinCategory).toBe("legume");
+    expect(foodById("kidney_beans_dry")?.proteinCategory).toBe("legume");
     expect(foodById("feta")?.proteinCategory).toBe("dairy");
     expect(foodById("breadcrumbs")?.addedSugar).toBe(6.2);
     expect(foodById("light_coconut_milk")?.addedSugar).toBe(0.8);
@@ -229,8 +233,27 @@ describe("foods added for the dish library", () => {
     expect(foodById("feta")?.roles).toEqual(["dairy", "fat"]);
     expect(foodById("sesame_seeds")?.roles).toEqual(["fat"]);
     expect(foodById("lentils_dry")?.roles).toEqual(["protein", "staple"]);
+    for (const id of ["chickpeas_dry", "kidney_beans_dry"]) {
+      const f = foodById(id)!;
+      expect(f.roles, id).toEqual(["protein", "staple"]);
+      expect(f.category, id).toBe("pantry");
+      expect(f.keeps, id).toBe("pantry");
+    }
     expect(foodById("cornstarch")?.roles).toEqual(["sauce"]);
     expect(foodById("red_dates_dried")?.roles).toEqual(["fruit"]);
+  });
+
+  test("dry chickpeas and kidney beans are the USDA raw records, with no added sugar", () => {
+    const c = foodById("chickpeas_dry")!;
+    expect([c.kcal, c.protein, c.fat, c.carbs]).toEqual([378, 20.5, 6.0, 63.0]);
+    expect(c.source).toMatchObject({ kind: "usda", fdcId: 173756, dataset: "SR Legacy" });
+    const k = foodById("kidney_beans_dry")!;
+    expect([k.kcal, k.protein, k.fat, k.carbs]).toEqual([333, 23.6, 0.8, 60.0]);
+    expect(k.source).toMatchObject({ kind: "usda", fdcId: 175193, dataset: "SR Legacy" });
+    for (const f of [c, k]) {
+      expect(f.addedSugar).toBe(0);
+      expect(f.tags).toEqual([]);
+    }
   });
 
   test("the stock paste is a long-keeping jar, so an opened one never spoils half used", () => {
