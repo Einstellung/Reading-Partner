@@ -616,12 +616,12 @@ const CHINESE: Dish[] = [
     ],
   }),
   dish({
-    id: "steamed_chicken_shiitake", zh: "香菇蒸鸡", en: "Steamed chicken with shiitake and wood ear", sum: "鸡腿肉块与香菇、木耳用蚝油和酱油拌匀，上锅蒸 20 分钟", sumEn: "Chicken thigh cubes with shiitake and wood ear, mixed with oyster and soy sauce, steamed 20 minutes.", c: "chinese", m: "steam", eq: ["steamer"], t: [12, 30],
-    i: [pr("chicken_thigh", 120), ve("shiitake", 80), ve("wood_ear", 40), se("oyster_sauce", 4), se("reduced_salt_soy_sauce", 3), se("ginger_paste", 3), oi("sesame_oil", 2)],
+    id: "steamed_chicken_shiitake", zh: "香菇滑蒸鸡", en: "Silky steamed chicken with shiitake and wood ear", sum: "鸡腿肉切薄片，拌酱油、姜蓉和少许淀粉，与香菇、木耳铺盘蒸 10 分钟", sumEn: "Chicken thigh sliced thin and coated with soy sauce, ginger paste and a little cornstarch, steamed 10 minutes with shiitake and wood ear.", c: "chinese", m: "steam", eq: ["steamer"], t: [12, 25],
+    i: [pr("chicken_thigh", 120), ve("shiitake", 80), ve("wood_ear", 40), se("oyster_sauce", 4), se("reduced_salt_soy_sauce", 3), se("ginger_paste", 3), se("cornstarch", 3), oi("sesame_oil", 2)],
     ways: [
-      way("香菇蒸鸡配糙米饭和菜心", "Chicken over brown rice with choy sum", BROWN, [ve("choy_sum", 100)]),
-      way("香菇蒸鸡配蒸红薯和上海青", "Chicken with steamed sweet potato and bok choy", SWEET_POTATO, [ve("bok_choy", 100)]),
-      way("香菇蒸鸡配馒头和拍黄瓜", "Chicken with a steamed bun and cucumber", "steamed_bun", [ve("cucumber", 80)]),
+      way("香菇滑蒸鸡配糙米饭和菜心", "Chicken over brown rice with choy sum", BROWN, [ve("choy_sum", 100)]),
+      way("香菇滑蒸鸡配蒸红薯和上海青", "Chicken with steamed sweet potato and bok choy", SWEET_POTATO, [ve("bok_choy", 100)]),
+      way("香菇滑蒸鸡配馒头和拍黄瓜", "Chicken with a steamed bun and cucumber", "steamed_bun", [ve("cucumber", 80)]),
     ],
   }),
   dish({

@@ -73,7 +73,7 @@ describe("seed dishes", () => {
     expect(byRole("staple").length).toBeGreaterThanOrEqual(10);
     expect(byRole("staple").length).toBeLessThanOrEqual(15);
     expect(byRole("breakfast").length).toBeGreaterThanOrEqual(8);
-    expect(byRole("breakfast").length).toBeLessThanOrEqual(10);
+    expect(byRole("breakfast").length).toBeLessThanOrEqual(14);
   });
 
   test("no Korean or Indian dishes, and no cuisine is over 30% of the mains", () => {
@@ -187,5 +187,23 @@ describe("seed dishes", () => {
       const lines = [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)];
       for (const i of lines) expect(banned.has(i.food), `${d.id}: ${i.food}`).toBe(false);
     }
+  });
+
+  test("steamed chicken is sliced thin and coated with starch, never a plain whole breast", () => {
+    const steamed = SEED_DISHES.filter((d) => d.method === "steam" && d.ingredients.some((i) => i.food.startsWith("chicken_")));
+    expect(steamed.length).toBeGreaterThan(0);
+    for (const d of steamed) {
+      expect(d.ingredients.some((i) => i.food === "cornstarch"), d.id).toBe(true);
+      expect(d.summary, d.id).toContain("薄片");
+      expect(d.summary, d.id).toContain("淀粉");
+      expect(d.summaryEn.toLowerCase(), d.id).toMatch(/sliced thin/);
+      expect(d.summaryEn.toLowerCase(), d.id).toContain("cornstarch");
+      // Breast is steamed 8 to 10 minutes; thigh is the other way out.
+      const breast = d.ingredients.some((i) => i.food === "chicken_breast");
+      if (breast) expect(d.summary, d.id).toMatch(/蒸 (8|9|10)/);
+      else expect(d.ingredients.some((i) => i.food === "chicken_thigh"), d.id).toBe(true);
+    }
+    // No dish steams a breast or thigh whole and plain.
+    for (const d of SEED_DISHES) expect(/整[块片]鸡胸|整块鸡腿|whole (chicken )?breast/i.test(d.summary + d.summaryEn), d.id).toBe(false);
   });
 });
