@@ -38,6 +38,27 @@ describe("seed dishes", () => {
     }
   });
 
+  test("the deep-coloured vegetables the seed relies on are common produce, easy to buy in China and the US", () => {
+    const COMMON_DEEP = new Set([
+      "spinach", "frozen_spinach", "broccoli", "frozen_broccoli", "bok_choy", "romaine", "green_beans", "frozen_green_beans", "green_pepper",
+      "carrot", "tomato", "cherry_tomato", "red_bell_pepper", "pumpkin",
+      "red_cabbage",
+    ]);
+    const lines = (d: Dish) => [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)];
+    const used = new Set<string>();
+    for (const d of SEED_DISHES) {
+      for (const i of lines(d)) {
+        if (!foodById(i.food)?.deepColor) continue;
+        used.add(i.food);
+        expect(COMMON_DEEP.has(i.food), `${d.id}: ${i.food}`).toBe(true);
+      }
+    }
+    // The main ways of getting deep colour are all in use.
+    for (const f of ["frozen_spinach", "frozen_broccoli", "bok_choy", "romaine", "frozen_green_beans", "tomato", "carrot", "red_bell_pepper", "red_cabbage"]) {
+      expect(used.has(f), f).toBe(true);
+    }
+  });
+
   test("ids are unique, do not collide with food ids, and every dish is a seed", () => {
     const ids = SEED_DISHES.map((d) => d.id);
     expect(new Set(ids).size).toBe(ids.length);

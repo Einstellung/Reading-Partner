@@ -68,10 +68,10 @@ describe("food table columns", () => {
   });
 
   test("deep-coloured vegetables: dark green, red, orange and purple", () => {
-    for (const id of ["spinach", "frozen_spinach", "bok_choy", "frozen_broccoli", "romaine", "frozen_green_beans", "tomato", "cherry_tomato", "carrot", "red_bell_pepper", "pumpkin", "red_cabbage"]) {
+    for (const id of ["spinach", "frozen_spinach", "bok_choy", "frozen_broccoli", "romaine", "frozen_green_beans", "tomato", "cherry_tomato", "carrot", "red_bell_pepper", "pumpkin", "red_cabbage", "green_pepper"]) {
       expect(foodById(id)?.deepColor, id).toBe(true);
     }
-    for (const id of ["cabbage", "cucumber", "zucchini", "green_pepper", "napa_cabbage", "button_mushroom", "yellow_bell_pepper", "frozen_peas", "crushed_tomatoes"]) {
+    for (const id of ["cabbage", "cucumber", "zucchini", "napa_cabbage", "button_mushroom", "yellow_bell_pepper", "frozen_peas", "crushed_tomatoes"]) {
       expect(foodById(id)?.deepColor, id).toBeUndefined();
     }
     for (const id of DEEP_COLOR) {

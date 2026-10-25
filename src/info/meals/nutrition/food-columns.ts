@@ -161,13 +161,13 @@ export const PIECE_G: Readonly<Record<string, { grams: number; label: string; fd
  * Deep-coloured vegetables (深色蔬菜, docs/671 入库检查): the Chinese dietary
  * guideline counts dark green, red, orange and purple ones, and asks that half
  * of the day's vegetables be of them. Pale or light-green vegetables (cabbage,
- * cucumber, zucchini, green pepper, celery, mushrooms, sprouts, legumes) and
+ * cucumber, zucchini, celery, mushrooms, sprouts, legumes) and
  * yellow ones are not in it.
  */
 export const DEEP_COLOR: ReadonlySet<string> = new Set([
   // Dark green
   "spinach", "frozen_spinach", "broccoli", "frozen_broccoli", "bok_choy", "pak_choi_white", "water_spinach",
-  "choy_sum", "gai_lan", "pea_shoots", "romaine", "green_beans", "frozen_green_beans", "chinese_chives",
+  "choy_sum", "gai_lan", "pea_shoots", "romaine", "green_beans", "frozen_green_beans", "green_pepper", "chinese_chives",
   // Red, orange and purple
   "tomato", "cherry_tomato", "carrot", "red_bell_pepper", "pumpkin", "red_cabbage",
 ]);
