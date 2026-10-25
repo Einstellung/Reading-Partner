@@ -36,11 +36,15 @@ export interface Totals {
   addedSugar: number;
   /** Grams of the lines whose role is veg. */
   vegG: number;
+  /** Grams of veg lines that are vegetables eaten: vegG without aromatics and sauce bases (onion, garlic, tinned tomatoes). */
+  realVegG: number;
+  /** Grams of the real vegetables that are deep-coloured (dark green, red, orange, purple). */
+  deepVegG: number;
 }
 
 /** Sums the lines whose food is in the table; unknown foods are skipped (the check reports them). */
 export function totals(lines: readonly DishIngredient[]): Totals {
-  const t: Totals = { kcal: 0, protein: 0, fat: 0, carbs: 0, addedFat: 0, sodium: 0, addedSugar: 0, vegG: 0 };
+  const t: Totals = { kcal: 0, protein: 0, fat: 0, carbs: 0, addedFat: 0, sodium: 0, addedSugar: 0, vegG: 0, realVegG: 0, deepVegG: 0 };
   for (const line of lines) {
     const f = foodById(line.food);
     if (!f) continue;
@@ -52,7 +56,13 @@ export function totals(lines: readonly DishIngredient[]): Totals {
     if (isAddedFat(f) || line.role === "topping") t.addedFat += f.fat * k;
     t.sodium += (f.sodium ?? 0) * k;
     t.addedSugar += (f.addedSugar ?? 0) * k;
-    if (line.role === "veg") t.vegG += line.grams;
+    if (line.role === "veg") {
+      t.vegG += line.grams;
+      if (!f.aromatic) {
+        t.realVegG += line.grams;
+        if (f.deepColor) t.deepVegG += line.grams;
+      }
+    }
   }
   return t;
 }

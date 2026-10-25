@@ -5,7 +5,7 @@
 // not have cannot be planned.
 
 import { ADDED_FOODS } from "./added-foods";
-import { ADDED_SUGAR_G, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "./food-columns";
+import { ADDED_SUGAR_G, AROMATIC, DEEP_COLOR, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "./food-columns";
 import { FOOD_TABLE } from "./food-table";
 import { COMPOUND_SEASONINGS } from "./seasonings";
 
@@ -107,6 +107,10 @@ export interface Food {
   proteinCategory?: ProteinCategory;
   /** A dish containing it is not frozen. */
   noFreeze?: true;
+  /** A vegetable of dark green, red, orange or purple (深色蔬菜). */
+  deepColor?: true;
+  /** An aromatic or sauce base (onion, garlic, tinned tomatoes): a veg line that is not vegetables eaten. */
+  aromatic?: true;
   /** Edible grams of one piece of countable produce, for lists only. */
   piece?: { grams: number; label: string };
 }
@@ -151,6 +155,8 @@ function withColumns(f: Food): Food {
   const cat = PROTEIN_CATEGORY[f.id];
   if (cat) out.proteinCategory = cat;
   if (NOT_FREEZABLE.has(f.id)) out.noFreeze = true;
+  if (DEEP_COLOR.has(f.id)) out.deepColor = true;
+  if (AROMATIC.has(f.id)) out.aromatic = true;
   const piece = PIECE_G[f.id];
   if (piece) out.piece = { grams: piece.grams, label: piece.label };
   return out;

@@ -2,7 +2,7 @@
 // category, not-freezable and grams per piece, and the compound seasonings.
 
 import { describe, expect, test } from "bun:test";
-import { ADDED_SUGAR_G, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "../../../../src/info/meals/nutrition/food-columns";
+import { ADDED_SUGAR_G, AROMATIC, DEEP_COLOR, NOT_FREEZABLE, PIECE_G, PROTEIN_CATEGORY, SODIUM_MG } from "../../../../src/info/meals/nutrition/food-columns";
 import { FOOD_TABLE } from "../../../../src/info/meals/nutrition/food-table";
 import { FOODS, PROTEIN_CATEGORIES, foodById, isProduce } from "../../../../src/info/meals/nutrition/foods";
 import { ADDED_FOODS } from "../../../../src/info/meals/nutrition/added-foods";
@@ -65,6 +65,27 @@ describe("food table columns", () => {
     }
     expect(foodById("chicken_breast")?.noFreeze).toBeUndefined();
     expect(foodById("frozen_tofu")?.noFreeze).toBeUndefined();
+  });
+
+  test("deep-coloured vegetables: dark green, red, orange and purple", () => {
+    for (const id of ["spinach", "frozen_spinach", "bok_choy", "frozen_broccoli", "romaine", "frozen_green_beans", "tomato", "cherry_tomato", "carrot", "red_bell_pepper", "pumpkin", "red_cabbage"]) {
+      expect(foodById(id)?.deepColor, id).toBe(true);
+    }
+    for (const id of ["cabbage", "cucumber", "zucchini", "green_pepper", "napa_cabbage", "button_mushroom", "yellow_bell_pepper", "frozen_peas", "crushed_tomatoes"]) {
+      expect(foodById(id)?.deepColor, id).toBeUndefined();
+    }
+    for (const id of DEEP_COLOR) {
+      expect(foodById(id)?.roles, id).toContain("veg");
+      expect(AROMATIC.has(id), id).toBe(false);
+    }
+  });
+
+  test("aromatics and sauce bases are veg lines that do not count as vegetables eaten", () => {
+    for (const id of ["onion", "red_onion", "garlic", "ginger", "scallion", "crushed_tomatoes"]) {
+      expect(foodById(id)?.aromatic, id).toBe(true);
+    }
+    for (const id of ["tomato", "carrot", "celery", "cabbage", "bok_choy"]) expect(foodById(id)?.aromatic, id).toBeUndefined();
+    for (const id of AROMATIC) expect(foodById(id)?.roles, id).toContain("veg");
   });
 
   test("piece weights are on produce, staples and citrus only and leave unit alone", () => {
