@@ -21,7 +21,9 @@ afterEach(() => setLocale(initial));
 const line = (over: Partial<PackLine> & Pick<PackLine, "food" | "buy">): PackLine => ({
   grams: 100,
   firstDay: 1,
+  lastDay: 1,
   freeze: false,
+  frozen: false,
   leftover: null,
   ...over,
 });
@@ -90,10 +92,10 @@ describe("the list of a solved plan", () => {
   const list = (people = 1) => packList(plan(), goodDraft(), people);
   const find = (food: string, people = 1) => list(people).find((l) => l.food === food)!;
 
-  test("raw meat comes in packs and is frozen on purchase", () => {
+  test("raw meat comes in packs and stays chilled when the prep session cooks it", () => {
     const thigh = find("chicken_thigh");
     expect(thigh.buy).toEqual({ by: "pack", count: 1, packG: 500, kind: "box" });
-    expect(thigh.freeze).toBe(true);
+    expect(thigh.freeze).toBe(false);
     expect(thigh.leftover).toBeNull();
   });
 
