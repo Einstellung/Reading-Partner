@@ -149,6 +149,7 @@ describe("foods added for the dish library", () => {
       light_coconut_milk: 40,
       crushed_tomatoes: 186,
       low_sodium_stock: 30,
+      stock_paste: 8667,
       red_lentils_dry: 7,
       lentils_dry: 6,
       feta: 1139,
@@ -192,6 +193,7 @@ describe("foods added for the dish library", () => {
       "lemon",
       "lime",
       "low_sodium_stock",
+      "stock_paste",
       "light_coconut_milk",
       "breadcrumbs",
       "coriander",
@@ -208,6 +210,18 @@ describe("foods added for the dish library", () => {
     expect(foodById("lentils_dry")?.roles).toEqual(["protein", "staple"]);
     expect(foodById("cornstarch")?.roles).toEqual(["sauce"]);
     expect(foodById("red_dates_dried")?.roles).toEqual(["fruit"]);
+  });
+
+  test("the stock paste is a long-keeping jar, so an opened one never spoils half used", () => {
+    const f = foodById("stock_paste")!;
+    expect(f.keeps).toBe("pantry");
+    expect(f.category).toBe("pantry");
+    expect(f.roles).toEqual(["sauce"]);
+    expect(f.zh).toBe("浓缩高汤膏");
+    expect(f.aliases).toEqual(expect.arrayContaining(["浓汤膏", "高汤膏", "浓汤宝", "bouillon paste"]));
+    expect(f.source).toMatchObject({ kind: "label" });
+    // Far saltier per gram than the carton stock it replaced.
+    expect(f.sodium!).toBeGreaterThan(foodById("low_sodium_stock")!.sodium! * 100);
   });
 
   test("the soy milk beans, cornstarch and dried red dates cite their records", () => {

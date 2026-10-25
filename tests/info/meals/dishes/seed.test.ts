@@ -22,6 +22,22 @@ describe("seed dishes", () => {
     expect(bad).toEqual([]);
   });
 
+  test("no dish uses the carton stock: an opened carton goes bad half used, the paste keeps", () => {
+    const using = SEED_DISHES.filter((d) => d.ingredients.some((i) => i.food === "low_sodium_stock")).map((d) => d.id);
+    expect(using).toEqual([]);
+    expect(foodById("low_sodium_stock")).toBeDefined();
+  });
+
+  test("no dish or way uses gai lan or choy sum: hard to find outside southern China and Asian markets", () => {
+    const BANNED = new Set(["gai_lan", "choy_sum"]);
+    for (const d of SEED_DISHES) {
+      const foods = [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)].map((i) => i.food);
+      expect(foods.filter((f) => BANNED.has(f)), d.id).toEqual([]);
+      const text = [d.name, d.nameEn, d.summary, d.summaryEn, ...(d.ways ?? []).flatMap((w) => [w.name, w.nameEn])].join(" ");
+      expect(/芥蓝|菜心|gai lan|choy sum/i.test(text), d.id).toBe(false);
+    }
+  });
+
   test("ids are unique, do not collide with food ids, and every dish is a seed", () => {
     const ids = SEED_DISHES.map((d) => d.id);
     expect(new Set(ids).size).toBe(ids.length);

@@ -1,12 +1,14 @@
 // Foods the dish library needs that the generated table lacks (docs/671 菜库):
-// salt, citrus, lentils, canned tomatoes, stock, coconut milk, feta,
+// salt, citrus, lentils, canned tomatoes, stock (the carton, kept in the table
+// but unused by the seed, and the jarred stock paste the seed uses because it
+// keeps for months once opened), coconut milk, feta,
 // corn tortillas, breadcrumbs, sesame, fresh herbs, cornstarch, and the dry
 // black soybeans, adzuki beans and dried red dates of the soy milk maker
 // breakfasts, and frozen basa (pangasius) fillets. Hand-maintained like
 // seasonings.ts and appended to the generated rows by foods.ts, with the
 // docs/671 columns inline. Every number is read from the record the row
 // cites: USDA FDC SR Legacy, Taiwan FDA for the two dry beans (USDA has no
-// black soybean), or the label for the coconut milk. Basa is a USDA FDC
+// black soybean), or the label for the coconut milk and the stock paste (Open Food Facts). Basa is a USDA FDC
 // Branded record (SR Legacy and Foundation have no pangasius), a plain
 // fillet with pangasius as the only ingredient. Added sugar
 // follows food-columns.ts: the record's total sugars for the prepared
@@ -26,6 +28,7 @@ export const ADDED_FOODS: readonly Food[] = [
   { id: "light_coconut_milk", zh: "低脂椰浆", aliases: ["淡椰浆", "低脂椰奶", "椰浆"], en: "coconut milk", roles: ["sauce"], category: "pantry", keeps: "pantry", kcal: 61, protein: 0.4, fat: 6.0, carbs: 1.3, minG: 30, maxG: 200, tags: [], sodium: 40, addedSugar: 0.8, source: { kind: "label", note: "Tesco Light Coconut Milk, UK label per 100 g (Open Food Facts 5054269746730)" } },
   { id: "crushed_tomatoes", zh: "番茄碎罐头", aliases: ["罐头番茄碎", "碎番茄罐头", "番茄罐头"], en: "tinned tomatoes", roles: ["veg"], category: "pantry", keeps: "pantry", kcal: 32, protein: 1.6, fat: 0.3, carbs: 7.3, minG: 50, maxG: 300, tags: [], sodium: 186, addedSugar: 0, source: usda(170501, "Tomatoes, crushed, canned") },
   { id: "low_sodium_stock", zh: "低钠鸡汤（高汤）", aliases: ["低钠高汤", "低盐高汤", "低钠鸡高汤"], en: "chicken stock", roles: ["sauce"], category: "pantry", keeps: "pantry", kcal: 16, protein: 2.0, fat: 0.6, carbs: 1.2, minG: 50, maxG: 500, tags: ["poultry"], sodium: 30, addedSugar: 0.1, source: usda(171609, "Soup, chicken broth, low sodium, canned") },
+  { id: "stock_paste", zh: "浓缩高汤膏", aliases: ["浓汤膏", "高汤膏", "浓汤宝", "高汤浓缩膏", "bouillon paste", "stock paste"], en: "", roles: ["sauce"], category: "pantry", keeps: "pantry", kcal: 250, protein: 8.3, fat: 6.0, carbs: 33.3, minG: 1, maxG: 15, defaultG: 3, tags: ["poultry"], sodium: 8667, addedSugar: 16.7, source: { kind: "label", note: "Better Than Bouillon Organic Reduced Sodium Roasted Chicken Base, jarred paste, label per 100 g (Open Food Facts 0098308242673); the label rounds fat to 0 per 6 g teaspoon, 6 g per 100 g (0.4 g a teaspoon) is the amount that makes its 15 kcal a teaspoon add up" } },
   { id: "red_lentils_dry", zh: "红扁豆（干）", aliases: ["红小扁豆", "红兵豆"], en: "lentils", roles: ["protein", "staple"], category: "pantry", keeps: "pantry", kcal: 358, protein: 23.9, fat: 2.2, carbs: 63.1, minG: 30, maxG: 120, tags: [], sodium: 7, addedSugar: 0, proteinCategory: "legume", source: usda(174284, "Lentils, pink or red, raw") },
   { id: "lentils_dry", zh: "绿扁豆（干）", aliases: ["棕扁豆", "褐扁豆", "兵豆", "小扁豆"], en: "lentils", roles: ["protein", "staple"], category: "pantry", keeps: "pantry", kcal: 352, protein: 24.6, fat: 1.1, carbs: 63.4, minG: 30, maxG: 120, tags: [], sodium: 6, addedSugar: 0, proteinCategory: "legume", source: usda(172420, "Lentils, raw") },
   { id: "feta", zh: "菲达奶酪", aliases: ["菲达", "希腊白奶酪"], en: "feta", roles: ["dairy", "fat"], category: "dairy", keeps: "w1", kcal: 265, protein: 14.2, fat: 21.5, carbs: 3.9, minG: 10, maxG: 40, tags: ["dairy"], sodium: 1139, addedSugar: 0, proteinCategory: "dairy", source: usda(173420, "Cheese, feta") },
