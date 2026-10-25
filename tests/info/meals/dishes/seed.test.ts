@@ -106,7 +106,7 @@ describe("seed dishes", () => {
     expect(mains.length).toBeGreaterThanOrEqual(75);
     expect(mains.length).toBeLessThanOrEqual(90);
     expect(byRole("side").length).toBeGreaterThanOrEqual(6);
-    expect(byRole("side").length).toBeLessThanOrEqual(10);
+    expect(byRole("side").length).toBeLessThanOrEqual(16);
     expect(byRole("staple").length).toBeGreaterThanOrEqual(10);
     expect(byRole("staple").length).toBeLessThanOrEqual(15);
     expect(byRole("breakfast").length).toBeGreaterThanOrEqual(8);
@@ -148,6 +148,25 @@ describe("seed dishes", () => {
       for (const w of d.ways ?? []) if (w.staple) named.add(w.staple);
     }
     for (const id of STAPLE_IDS) expect(named.has(id), `${id} is named by no way or fresh main`).toBe(true);
+  });
+
+  test("quick sides: hands-on 5 minutes or less, deep-coloured, low sodium, default kitchen only", () => {
+    const QUICK = [
+      "microwave_spinach_sesame", "quick_garlic_spinach", "steamed_carrot_coins", "soy_green_beans_microwave",
+      "tomato_cucumber_salad", "purple_cabbage_vinegar", "romaine_cherry_tomato_salad",
+    ];
+    for (const id of QUICK) {
+      const d = SEED_DISHES.find((x) => x.id === id)!;
+      expect(d?.role, id).toBe("side");
+      expect(d.prep, id).toBe("fresh");
+      expect(d.activeMin, id).toBeLessThanOrEqual(5);
+      expect(d.equipment.every((e) => DEFAULT_KITCHEN.includes(e)), id).toBe(true);
+      const r = checkDish(d);
+      expect(r.ok, id).toBe(true);
+      if (!r.ok) continue;
+      expect(r.serving.deepVegG / r.serving.realVegG, id).toBeGreaterThanOrEqual(0.6);
+      expect(r.serving.sodium, id).toBeLessThanOrEqual(200);
+    }
   });
 
   test("sides and breakfasts are fresh; breakfasts take under 5 minutes", () => {
