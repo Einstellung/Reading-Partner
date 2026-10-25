@@ -33,7 +33,9 @@ import {
 } from "./draft";
 import { planLibrary, type PlanLibrary } from "./library";
 import { leftoverMatters, packList, shownName, type PackLine } from "./packs";
-import { solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
+import { DAY_SODIUM_MG, solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
+
+export { DAY_SODIUM_MG };
 
 export type DraftRule =
   | "days"
@@ -106,7 +108,6 @@ export const WHOLE_GRAIN_SHARE = 0.5;
 export const DAY_VEG = { realG: 300, deepShare: 0.5 } as const;
 /** Fruit portions a day (about 2). */
 export const FRUIT_PORTIONS = { min: 2, max: 3 } as const;
-export const DAY_SODIUM_MG = 2000;
 /** One protein food in at most this many lunches and dinners of a plan. */
 export const SAME_PROTEIN_MAX_MEALS = 3;
 /** The day's protein and kcal reach this share of their targets. */
@@ -327,7 +328,7 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
 // --- the solved plan ---------------------------------------------------------
 
 const mainLines = (day: SolvedDay) => [...day.meals.lunch.lines, ...day.meals.dinner.lines];
-const dayLines = (day: SolvedDay) => [...day.meals.breakfast.lines, ...mainLines(day), ...day.fruit];
+const dayLines = (day: SolvedDay) => [...day.meals.breakfast.lines, ...mainLines(day), ...day.fruit, ...day.snack];
 
 function vegOf(lines: readonly PlanLine[]): { real: number; deep: number; kinds: Set<string> } {
   let real = 0;
@@ -506,6 +507,11 @@ export function checkDraft(input: PlanDraft, ctx: DraftContext): DraftResult {
   const first = solveDraft(draft, lib, ctx.targets);
   const notes = topUpVegetables(draft, first, lib);
   const plan = notes.length ? solveDraft(draft, lib, ctx.targets) : first;
+  for (const day of plan.days) {
+    if (!day.snack.length) continue;
+    const what = day.snack.map((l) => `${foodById(l.food)?.zh ?? l.food} ${g(l.grams)} g`).join(" and ");
+    notes.push(`Added a snack of ${what} to Day ${day.day}: lunch and dinner at their largest staples left the day short of kcal.`);
+  }
   const shopping = packList(plan, draft, ctx.people ?? 1);
   const used = draft.days.flatMap((d) => [
     d.breakfast,

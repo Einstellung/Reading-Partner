@@ -32,7 +32,8 @@ describe("the good draft", () => {
     const r = checkDraft(goodDraft(), ctx());
     expect(r.problems.map((p) => p.message)).toEqual([]);
     expect(r.plan?.days).toHaveLength(3);
-    expect(r.notes).toEqual([]);
+    // Day 3's lean mains leave room for the program's snack; no quick side is added.
+    expect(r.notes.filter((n) => !n.startsWith("Added a snack"))).toEqual([]);
   });
 
   test("survives the tool's argument parser unchanged", () => {

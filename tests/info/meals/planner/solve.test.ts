@@ -3,10 +3,9 @@
 
 import { describe, expect, test } from "bun:test";
 import { foodById } from "../../../../src/info/meals/nutrition/foods";
-import { stapleCapG } from "../../../../src/info/meals/nutrition/solve";
 import type { Profile } from "../../../../src/info/meals/nutrition/targets";
 import { planLibrary } from "../../../../src/info/meals/planner/library";
-import { solveDraft, type PlanLine, type SolvedPlan } from "../../../../src/info/meals/planner/solve";
+import { mealStapleCapG, solveDraft, type PlanLine, type SolvedPlan } from "../../../../src/info/meals/planner/solve";
 import { goodDraft, PROFILE, targetsFor } from "./fixture";
 
 function solve(profile: Profile = PROFILE): SolvedPlan {
@@ -101,7 +100,9 @@ describe("staples", () => {
             if (!food) continue;
             seen++;
             expect(l.grams, `${l.food} on day ${d.day} ${slot}`).toBeGreaterThanOrEqual(food.minG - 0.05);
-            expect(l.grams, `${l.food} on day ${d.day} ${slot}`).toBeLessThanOrEqual(stapleCapG(food) + 0.05);
+            expect(l.grams, `${l.food} on day ${d.day} ${slot}`).toBeLessThanOrEqual(
+              mealStapleCapG(food, d.target.kcal) + 0.05,
+            );
           }
         }
       }
@@ -121,10 +122,12 @@ describe("staples", () => {
 });
 
 describe("the day", () => {
-  test("totals add up the four meals' lines, fruit included", () => {
+  test("totals add up the meals' lines, fruit and snack included", () => {
     const plan = solve();
     for (const d of plan.days) {
-      const all = [d.meals.breakfast, d.meals.lunch, d.meals.dinner].flatMap((m) => m.lines).concat(d.fruit);
+      const all = [d.meals.breakfast, d.meals.lunch, d.meals.dinner]
+        .flatMap((m) => m.lines)
+        .concat(d.fruit, d.snack);
       const kcal = all.reduce((s, l) => s + (foodById(l.food)!.kcal * l.grams) / 100, 0);
       expect(d.totals.kcal).toBeCloseTo(kcal, 3);
     }

@@ -86,7 +86,7 @@ export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLi
     for (const slot of ["breakfast", "lunch", "dinner"] as const) {
       for (const l of d.meals[slot].lines) add(l.food, l.grams, l.source === "main" ? dayNeeded(draft, d.day, slot) : d.day);
     }
-    for (const l of d.fruit) add(l.food, l.grams, d.day);
+    for (const l of [...d.fruit, ...d.snack]) add(l.food, l.grams, d.day);
   }
   const out: PackLine[] = [];
   for (const [id, n] of need) {
