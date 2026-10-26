@@ -71,9 +71,8 @@ function mealKey(draft: PlanDraft, meal: DraftMeal | undefined): string {
   return `${head}|${[...meal.sides].sort().join(",")}`;
 }
 
-function nightOf(item: NightItem, lib: PlanLibrary): DraftCardNight {
+function nightOf(item: NightItem): DraftCardNight {
   if (item.kind === "soyMilk") return { kind: "soyMilk", foods: item.foods.map((f) => foodNamed(f).zh), meal: item.meal };
-  if (item.kind === "riceCooker") return { kind: "rice", staple: refNamed(lib, item.staple), meal: item.meal };
   return { kind: "thaw", food: foodNamed(item.food).zh, fromFrozen: item.fromFrozen, meal: item.meal };
 }
 
@@ -156,7 +155,7 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
       lunch: meal(day, "lunch", d.lunch),
       dinner: meal(day, "dinner", d.dinner),
       fruit: d.fruit.map((f) => foodNamed(f).zh),
-      nights: nights.filter((n) => n.day === day).flatMap((n) => n.items.map((item) => nightOf(item, lib))),
+      nights: nights.filter((n) => n.day === day).flatMap((n) => n.items.map((item) => nightOf(item))),
     };
   });
 

@@ -75,7 +75,6 @@ const list = (names: readonly string[]) => names.join(t("meals.listJoin"));
 /** One night-before reminder, worded as the storage plan words it (storage.ts storageText). */
 export function nightLine(n: DraftCardNight): string {
   if (n.kind === "soyMilk") return t("meals.store.night.soyMilk", { foods: list(n.foods), meal: timeText(n.meal) });
-  if (n.kind === "rice") return t("meals.store.night.rice", { staple: pickName(n.staple), meal: timeText(n.meal) });
   return t(n.fromFrozen ? "meals.store.night.thawFish" : "meals.store.night.thaw", { food: n.food, meal: timeText(n.meal) });
 }
 

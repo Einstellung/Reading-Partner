@@ -49,7 +49,6 @@ export interface DraftCardMeal {
 
 export type DraftCardNight =
   | { kind: "soyMilk"; foods: string[]; meal: PlanTime }
-  | { kind: "rice"; staple: Named; meal: PlanTime }
   | { kind: "thaw"; food: string; fromFrozen: boolean; meal: PlanTime };
 
 export interface DraftCardDay {
