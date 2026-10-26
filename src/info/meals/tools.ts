@@ -221,7 +221,7 @@ const HOW_TO_PLAN = [
   "call propose_meal_plan again with the whole revised draft. The card above changes in place to the new",
   "version. Your reply only says that the draft above was changed; do not list the meals again.",
   "When they confirm in words ('就这样', '可以', 'looks good'), call apply_meal_plan. The card's button does the",
-  "same. Nothing is saved before that.",
+  "same. Nothing is saved before that. Don't name the button or tell them to press it; the card shows it.",
 ];
 
 /**
