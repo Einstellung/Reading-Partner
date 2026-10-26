@@ -15,6 +15,8 @@ import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import { MEALS_PICTURES_PULL_ROUTE, onDishDrawn } from "../../../../info/meals/photos/dish-draw-sweep";
 import { weekDishKeys } from "../../../../info/meals/photos/dish-drawing";
 import { loadMealsPhotos, withDrawingSources } from "../../../../info/meals/photos/photo-store";
+import { weekArtIds, withDishArt } from "../../../../info/meals/photos/dish-art";
+import { dishArtStore } from "../../../../info/meals/photos/dish-art-store";
 import { registerPullRoute } from "../../../../platform/sync/pull-routes";
 import { loadMeals, saveShopping } from "../../../../info/meals/plan/store";
 import type { MealsState } from "../../../../info/meals/plan/types";
@@ -41,6 +43,7 @@ export function useMeals(enabled: boolean): MealsController {
   // The reader's own ticks in flight, so a reload that lands between the tick
   // and its write does not put the box back.
   const live = useRef(true);
+  const rounds = useRef(0);
   useEffect(() => {
     live.current = true;
     return () => {
@@ -66,14 +69,25 @@ export function useMeals(enabled: boolean): MealsController {
       },
     );
     // A cache that will not read is no pictures, not a screen that holds: the
-    // week is worth showing without them. The week's drawn dishes are read into
-    // memory before the one set, so a reload never takes a picture down and
-    // puts it back.
+    // week is worth showing without them. The week's drawn dishes and the
+    // library pictures already on disk are read into memory before the one
+    // set, so a reload never takes a picture down and puts it back. The library
+    // pictures not on disk yet are downloaded after it, and set again when they
+    // land; a newer reload by then has the say.
+    const round = ++rounds.current;
+    const current = () => live.current && round === rounds.current;
     void loadMealsPhotos().then(
       async (cache) => {
         const plan = await week.then((s) => s.plan, () => null);
         const drawn = await withDrawingSources(cache, weekDishKeys(plan));
-        if (live.current) setPhotos(drawn);
+        const art = dishArtStore();
+        const ids = weekArtIds(plan);
+        const onDisk = await art.cached(ids);
+        if (current()) setPhotos(withDishArt(drawn, plan, onDisk));
+        const missing = ids.filter((id) => !(id in onDisk));
+        if (!missing.length) return;
+        const landed = await art.download(missing);
+        if (Object.keys(landed).length && current()) setPhotos(withDishArt(drawn, plan, { ...onDisk, ...landed }));
       },
       () => {},
     );

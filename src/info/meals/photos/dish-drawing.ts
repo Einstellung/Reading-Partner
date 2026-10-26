@@ -6,6 +6,7 @@
 // dish's English name, its main foods from the food table, the method line —
 // and never a model's rewording of them (docs/73 事实不经模型).
 
+import { dishArtId } from "./dish-art";
 import { dishDrawingKey, normalizeSearchName, type PhotoCache } from "./dish-photos";
 import { foodById } from "../nutrition/foods";
 import {
@@ -129,7 +130,10 @@ export function weekDishKeys(plan: WeekPlan | null | undefined): string[] {
   return [...keys];
 }
 
-/** The week's made dishes that have no drawing yet, at most one round's worth. */
+/**
+ * The week's made dishes that have no drawing yet, at most one round's worth.
+ * A dish the library has a picture of (dish-art.ts) is never drawn.
+ */
 export function dishesToDraw(
   plan: WeekPlan,
   cache: PhotoCache,
@@ -141,7 +145,7 @@ export function dishesToDraw(
   for (const day of plan.days) {
     for (const k of MEAL_KEYS) {
       const meal = day[k];
-      if (meal.mode !== "make") continue;
+      if (meal.mode !== "make" || dishArtId(meal.searchName)) continue;
       const key = dishDrawingKey(meal.searchName ?? "");
       if (!key || seen.has(key)) continue;
       seen.add(key);

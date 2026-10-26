@@ -1286,6 +1286,18 @@ export const PALACE = [
     note: "named for the hash of its own bytes, so a file is written once and never revised and two devices never conflict; info-meals-photos.json points at it. A dish drawn again leaves its old file behind, which nothing reclaims yet",
   },
   {
+    kind: "meals-art",
+    domain: "info",
+    match: subtree("meals-art/"),
+    samples: ["meals-art/dish-art-v1/beef_ragu--w1-pasta.webp"],
+    id: "fixed",
+    refs: [],
+    sync: "local",
+    deleteWith: "never",
+    retention: NEVER,
+    note: "the library's dish pictures downloaded from a GitHub release, under its tag (info/meals/photos/dish-art-store.ts); immutable per tag, so a file on disk is never fetched again, and every device downloads its own. A new tag leaves the old tag's directory behind, which nothing reclaims yet",
+  },
+  {
     kind: "info-meals-recipes",
     domain: "info",
     match: fixed("info-meals-recipes.json"),
