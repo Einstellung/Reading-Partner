@@ -148,7 +148,7 @@ describe("structure", () => {
     expect(FRIDGE_DAYS_AFTER_COOK).toBe(2);
     const late = check((d) => {
       d.sessions[0] = { id: "s1", day: 1, part: "morning" };
-      d.days[1].lunch.main = { dish: "green_pepper_pork_strips", staple: "multigrain_rice" };
+      d.days[1].lunch.main = { dish: "green_pepper_pork_strips", staple: "steamed_sweet_potato" };
       d.days[2].lunch.main = { batch: "chili", way: 3 };
       d.batches[0].meals = [{ day: 1, slot: "dinner" }, { day: 3, slot: "lunch" }];
     });
@@ -158,6 +158,26 @@ describe("structure", () => {
     });
     expect(rules(before)).toEqual(["fridge"]);
     expect(before.problems[0].message).toBe("Pot chili: Day 1 dinner comes before its prep session (Day 1 evening).");
+  });
+
+  test("one rice per plan: every rice meal uses the plan's rice", () => {
+    const r = check((d) => {
+      d.days[2].lunch.main = { dish: "green_pepper_pork_strips", staple: "multigrain_rice" };
+    });
+    expect(rules(r)).toEqual(["one_rice"]);
+    expect(r.problems[0]).toMatchObject({ day: 3, slot: "lunch" });
+    expect(r.problems[0].message).toBe(
+      "Day 3 lunch uses multigrain rice (multigrain_rice) but the plan's rice is brown rice (brown_rice); one rice batch per plan, so use the same rice or a non-rice staple (steamed buns, tortillas, pita, noodles, potatoes, bread).",
+    );
+    // Non-rice staples vary freely beside the one rice.
+    const ok = check((d) => {
+      d.days[2].lunch.main = { dish: "green_pepper_pork_strips", staple: "multigrain_rice" };
+      d.days[0].lunch.main = { dish: "tomato_tofu_egg_scramble", staple: "multigrain_rice" };
+      d.days[0].dinner.main = { batch: "chili", way: 3 };
+      d.days[1].lunch.main = { batch: "chili", way: 2 };
+      d.days[1].dinner.main = { dish: "salmon_broccoli_skillet", staple: "quinoa" };
+    });
+    expect(rules(ok)).not.toContain("one_rice");
   });
 
   test("the session must sit at a time they can cook, when the profile says", () => {
@@ -184,7 +204,7 @@ describe("structure", () => {
 describe("the solved plan", () => {
   test("red meat over the cap", () => {
     const r = check((d) => {
-      d.days[0].lunch.main = { dish: "green_pepper_pork_strips", staple: "multigrain_rice" };
+      d.days[0].lunch.main = { dish: "green_pepper_pork_strips", staple: "steamed_sweet_potato" };
       d.days[1].dinner.main = { dish: "pork_pepper_medallions", staple: "quinoa" };
     });
     expect(rules(r)).toContain("red_meat");
@@ -203,6 +223,8 @@ describe("the solved plan", () => {
   test("whole grains under half of the staples", () => {
     const r = check((d) => {
       d.days[0].lunch.main = { dish: "kung_pao_chicken", staple: "white_rice" };
+      d.days[0].dinner.main = { batch: "chili", way: 3 };
+      d.days[1].lunch.main = { batch: "chili", way: 2 };
       d.days[1].dinner.main = { dish: "salmon_broccoli_skillet", staple: "steamed_baby_potatoes" };
       d.days[2].lunch.main = { dish: "green_pepper_pork_strips", staple: "white_rice" };
       d.days[2].dinner.main = { dish: "lemon_seared_cod", staple: "steamed_baby_potatoes" };

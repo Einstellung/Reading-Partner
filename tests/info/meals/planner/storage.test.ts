@@ -36,6 +36,7 @@ describe("the fixture plan, boxed", () => {
         meal: { day: 2, slot: "lunch" },
         eatBy: { day: 2, slot: "lunch" },
         count: 1,
+        rice: null,
         staple: "microwave_potato",
         addOns: ["frozen_broccoli"],
         sides: [],
@@ -76,11 +77,9 @@ describe("the fixture plan, boxed", () => {
     expect(rows(storage.freezer, "frozenForMeal")).toContainEqual({ kind: "frozenForMeal", food: "cod", meals: [{ day: 3, slot: "dinner" }], boughtFrozen: true });
     expect(rows(storage.freezer, "frozenOther")[0]?.foods).toEqual(["frozen_spinach", "frozen_broccoli", "frozen_peas"]);
     expect(storage.nights).toEqual([
-      { day: 1, items: [{ kind: "riceCooker", meal: { day: 2, slot: "dinner" }, staple: "brown_rice" }] },
       {
         day: 2,
         items: [
-          { kind: "riceCooker", meal: { day: 3, slot: "lunch" }, staple: "multigrain_rice" },
           { kind: "thaw", food: "lean_pork_leg", meal: { day: 3, slot: "lunch" }, fromFrozen: false },
           { kind: "thaw", food: "cod", meal: { day: 3, slot: "dinner" }, fromFrozen: true },
         ],
@@ -95,7 +94,6 @@ describe("the fixture plan, boxed", () => {
     ]);
     expect(rows(storage.cupboard, "opened")).toEqual([{ kind: "opened", food: "whole_wheat_toast", useBy: 9, how: "bread" }]);
     expect(rows(storage.fridge, "jars")[0]?.foods).toEqual(["chili_sauce", "garlic_paste", "oyster_sauce"]);
-    expect(rows(storage.fridge, "grainsFresh")).toHaveLength(1);
     const room = rows(storage.cupboard, "room")[0]?.foods ?? [];
     expect(room).toContain("onion");
     expect(room).toContain("lemon");
@@ -110,6 +108,82 @@ describe("the fixture plan, boxed", () => {
       "foods" in r ? r.foods : "food" in r && r.kind !== "rawLeftover" ? [r.food] : [],
     );
     for (const line of shopping) expect(placed).toContain(line.food);
+  });
+});
+
+describe("the plan's rice: one rice-cooker batch at the prep session", () => {
+  /** The solved grams of the plan's rice at these meals. */
+  const riceGrams = (plan: NonNullable<ReturnType<typeof run>["plan"]>, meals: { day: number; slot: "lunch" | "dinner" }[], staple = "brown_rice") =>
+    meals.reduce((sum, m) => sum + plan.days[m.day - 1].meals[m.slot].lines.filter((l) => l.source === "staple" && l.dish === staple).reduce((a, l) => a + l.grams, 0), 0);
+
+  test("the fixture: cooked with the pot for every rice meal after the session; Day 1 lunch, before it, cooks its own", () => {
+    const { storage, plan } = run();
+    const meals = [{ day: 1, slot: "dinner" as const }, { day: 2, slot: "dinner" as const }];
+    expect(storage.rice).toEqual({
+      staple: "brown_rice",
+      food: "brown_rice_cooked",
+      grams: Math.round(riceGrams(plan!, meals)),
+      cookedAt: { day: 1, slot: "prep" },
+      meals,
+      portions: 2,
+      eatenNow: { day: 1, slot: "dinner" },
+    });
+    // The Day 2 salmon dinner is cooked fresh; its rice waits in one container.
+    expect(storage.containers).toContainEqual({ kind: "riceContainer", count: 1, staple: "brown_rice", meals: [{ day: 2, slot: "dinner" }] });
+    expect(rows(storage.fridge, "rice")).toEqual([{ kind: "rice", staple: "brown_rice", inBoxes: 0, inContainer: 1, eatBy: { day: 2, slot: "dinner" } }]);
+    expect(storage.nights.flatMap((n) => n.items).map((i) => i.kind)).not.toContain("riceCooker");
+  });
+
+  test("a pot meal with the plan's rice carries it in its box", () => {
+    const draft = goodDraft();
+    draft.days[0].dinner.main = { batch: "chili", way: 3 };
+    draft.days[1].lunch.main = { batch: "chili", way: 1 };
+    const { storage, problems } = run(draft);
+    expect(problems).toEqual([]);
+    expect(storage.boxes[0]).toMatchObject({ meal: { day: 2, slot: "lunch" }, rice: "brown_rice", staple: null, addOns: ["frozen_spinach"] });
+    expect(storage.rice?.eatenNow).toBeNull();
+    expect(rows(storage.fridge, "rice")).toEqual([{ kind: "rice", staple: "brown_rice", inBoxes: 1, inContainer: 1, eatBy: { day: 2, slot: "dinner" } }]);
+    expect(storage.containers).toContainEqual({ kind: "riceContainer", count: 1, staple: "brown_rice", meals: [{ day: 2, slot: "dinner" }] });
+  });
+
+  test("no boxes: all the kept rice goes into one lidded container", () => {
+    const draft = goodDraft();
+    draft.days[0].dinner.main = { batch: "chili", way: 3 };
+    draft.days[1].lunch.main = { batch: "chili", way: 1 };
+    const { storage } = run(draft, { ...PROFILE, boxes: false });
+    expect(storage.boxes).toEqual([]);
+    expect(storage.containers).toContainEqual({ kind: "riceContainer", count: 1, staple: "brown_rice", meals: [{ day: 2, slot: "lunch" }, { day: 2, slot: "dinner" }] });
+    expect(rows(storage.fridge, "rice")[0]).toMatchObject({ inBoxes: 0, inContainer: 2 });
+  });
+
+  test("a fresh-cooked rice dinner on Day 3 is in the batch; two people double it", () => {
+    const draft = goodDraft();
+    draft.days[1].dinner = { main: { dish: "lemon_seared_cod", staple: "quinoa" }, sides: [] };
+    draft.days[2].dinner = { main: { dish: "salmon_broccoli_skillet", staple: "brown_rice" }, sides: [] };
+    draft.days[1].breakfast = "soy_milk_maker_plain";
+    const one = run(draft);
+    expect(one.storage.rice?.meals).toEqual([{ day: 1, slot: "dinner" }, { day: 3, slot: "dinner" }]);
+    expect(one.storage.rice?.grams).toBe(Math.round(riceGrams(one.plan!, [{ day: 1, slot: "dinner" }, { day: 3, slot: "dinner" }])));
+    expect(rows(one.storage.fridge, "rice")[0]?.eatBy).toEqual({ day: 3, slot: "dinner" });
+    const two = run(draft, PROFILE, 2);
+    expect(two.storage.rice?.portions).toBe(4);
+    expect(two.storage.rice?.grams).toBe(Math.round(riceGrams(two.plan!, [{ day: 1, slot: "dinner" }, { day: 3, slot: "dinner" }]) * 2));
+    expect(rows(two.storage.fridge, "rice")[0]).toMatchObject({ inBoxes: 0, inContainer: 2 });
+  });
+
+  test("no prep session: the batch is cooked at the first rice meal", () => {
+    const draft = goodDraft();
+    draft.days[0].dinner.main = { dish: "salmon_broccoli_skillet", staple: "brown_rice" };
+    draft.days[1].lunch.main = { dish: "green_pepper_pork_strips", staple: "steamed_sweet_potato" };
+    draft.batches = [];
+    draft.sessions = [];
+    const { storage } = run(draft);
+    expect(storage.rice).toMatchObject({
+      cookedAt: { day: 1, slot: "lunch" },
+      meals: [{ day: 1, slot: "lunch" }, { day: 1, slot: "dinner" }, { day: 2, slot: "dinner" }],
+      eatenNow: { day: 1, slot: "lunch" },
+    });
+    expect(storage.containers).toContainEqual({ kind: "riceContainer", count: 1, staple: "brown_rice", meals: [{ day: 1, slot: "dinner" }, { day: 2, slot: "dinner" }] });
   });
 });
 
@@ -155,6 +229,9 @@ describe("variants", () => {
     expect(storage.boxes).toEqual([]);
     expect(storage.containers.map((c) => c.kind)).toEqual(["freezerBag"]);
     expect(rows(storage.fridge, "pot")).toEqual([]);
+    // Day 1 lunch cooks its own rice; the batch feeds only the prep meal, eaten as it is cooked.
+    expect(storage.rice).toMatchObject({ meals: [{ day: 1, slot: "dinner" }], eatenNow: { day: 1, slot: "dinner" } });
+    expect(rows(storage.fridge, "rice")).toEqual([]);
     expect(storage.nights).toEqual([]);
     expect(rows(storage.freezer, "rawLeftover").map((r) => r.food)).toEqual(["chicken_breast", "chicken_thigh"]);
   });
@@ -172,7 +249,9 @@ describe("text", () => {
     const { storage } = run();
     const tx = storageText(storage, planLibrary(PROFILE));
     expect(tx.containers[0]).toEqual({ name: "食盒", detail: "约 750 ml、带盖、能进微波炉，玻璃的最好 · 锅里共 2 份，备餐那顿吃 1 份，其余 1 份装盒", count: "1 个" });
-    expect(tx.containers[1]?.count).toBe("5 个");
+    expect(tx.containers[1]).toEqual({ name: "装饭的有盖容器", detail: "装糙米饭，给：第 2 天晚餐", count: "1 个" });
+    expect(tx.containers[2]?.count).toBe("5 个");
+    expect(tx.rice).toEqual({ name: "糙米饭 · 电饭锅一锅 2 份", detail: "第 1 天备餐时用电饭锅一次煮好，分给：第 1 天晚餐、第 2 天晚餐" });
     expect(tx.boxes[0]).toEqual({
       meal: "第 2 天午餐",
       what: "盒里只有：鸡腿丁红芸豆炖菜（chili） 1 份",
@@ -182,24 +261,37 @@ describe("text", () => {
     const fridge = tx.places.find((p) => p.place === "fridge");
     expect(fridge?.label).toBe("冷藏");
     expect(fridge?.rows).toContainEqual({ name: "去皮鸡腿肉（生）", detail: "原包装放冷藏最下层。", until: "第 1 天备餐时用" });
+    expect(fridge?.rows[1]).toEqual({ name: "糙米饭 · 1 份", detail: "装进有盖容器。摊开晾凉，1 小时内放进冷藏；每次取一份，热到冒热气。", until: "第 2 天晚餐前吃完" });
     const freezer = tx.places.find((p) => p.place === "freezer");
     expect(freezer?.rows).toContainEqual({ name: "去皮鸡腿肉（生）· 剩约 290 g", detail: "平铺装进冷冻袋，压出空气，袋上写日期。", until: "4 周内用" });
     // Rice and quinoa are kept dry, by their dry names.
     const cupboard = tx.places.find((p) => p.place === "cupboard")?.rows.map((r) => r.name).join("、") ?? "";
     expect(cupboard).toContain("糙米");
     expect(cupboard).not.toContain("糙米饭");
-    expect(cupboard).toContain("五谷杂粮米");
+    expect(cupboard).toContain("藜麦");
     expect(tx.nights).toEqual([
-      { title: "第 1 天晚上", lines: ["糙米饭：淘洗好放进电饭锅，定好时（第 2 天晚餐）"] },
       {
         title: "第 2 天晚上",
         lines: [
-          "五谷杂粮饭：淘洗好放进电饭锅，定好时（第 3 天午餐）",
           "猪后腿瘦肉那份从冷冻拿到冷藏解冻（第 3 天午餐）",
           "鳕鱼从冷冻拿到冷藏解冻（第 3 天晚餐）；来不及就冻着下锅",
         ],
       },
     ]);
+  });
+
+  test("zh-CN: a pot meal's rice is in its box", () => {
+    setLocale("zh-CN");
+    const draft = goodDraft();
+    draft.days[0].dinner.main = { batch: "chili", way: 3 };
+    draft.days[1].lunch.main = { batch: "chili", way: 1 };
+    const tx = storageText(run(draft).storage, planLibrary(PROFILE));
+    expect(tx.boxes[0]).toEqual({ meal: "第 2 天午餐", what: "盒里有：鸡腿丁红芸豆炖菜（chili） 1 份 + 糙米饭", with: "吃时现配：冷冻菠菜", keep: "冷藏 · 第 2 天午餐前吃完" });
+    expect(tx.places.find((p) => p.place === "fridge")?.rows[1]).toEqual({
+      name: "糙米饭 · 2 份",
+      detail: "1 份随锅分进食盒，其余 1 份装进有盖容器。摊开晾凉，1 小时内放进冷藏；吃前热到冒热气。",
+      until: "第 2 天晚餐前吃完",
+    });
   });
 
   test("en", () => {
