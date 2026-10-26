@@ -53,6 +53,11 @@ const LEFTOVER_CHECKED: ReadonlySet<string> = new Set(["d1-2", "d3-5"]);
 /** Whole packs or pieces for a weight, a few grams over a whole one not counting as another. */
 const wholeCount = (grams: number, unit: number) => Math.max(1, Math.ceil(grams / unit - 0.02));
 
+/** A food whose leftover pack is held to being finished: fresh produce, tofu, fresh noodles bought in packs. */
+export function leftoverChecked(food: Food): boolean {
+  return LEFTOVER_CHECKED.has(food.keeps) && !!food.pack && !onHand(food) && !isRawFlesh(food) && !isBoughtFrozen(food) && !food.boughtDry;
+}
+
 /** The list is bought by day 1: a food's keeping days count from it. */
 export const SHOP_DAY = 1;
 
@@ -130,7 +135,7 @@ export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLi
     const frozen = isBoughtFrozen(food);
     // Loose produce is bought by the piece, so what is left is less than one
     // piece; only packs are held to finishing (docs/671 整包与开封).
-    const checked = LEFTOVER_CHECKED.has(food.keeps) && !raw && !frozen && !food.boughtDry && buy.by === "pack";
+    const checked = leftoverChecked(food) && buy.by === "pack";
     const leftover: PackLine["leftover"] =
       checked && buy.by === "pack"
         ? { grams: Math.max(0, buy.count * buy.packG - n.grams), spoilsDay: n.firstDay + (food.pack?.openDays ?? 0) }

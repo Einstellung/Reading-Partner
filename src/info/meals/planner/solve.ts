@@ -11,7 +11,7 @@
 //   a pot's packed protein rounds to whole packs when that moves it 30 % or
 //   less ("一盒整盒下锅"). Seasoning grows with the square root of the scale
 //   (scaledMain). A day still over DAY_SODIUM_MG steps its mains' scales down
-//   while it keeps its protein target and kcal floor.
+//   while it keeps DAY_PROTEIN_FLOOR of its protein target and its kcal floor.
 // - The staple fills the meal's kcal within its range, the range growing with
 //   a day above 2000 kcal (mealStapleCapG); the day's carbs are held to the
 //   carb floor.
@@ -83,6 +83,8 @@ export const POT_PACK_SNAP = 0.3;
 export const FRUIT_PORTION_G = 125;
 /** Sodium a plan day holds to (checks.ts re-exports it). */
 export const DAY_SODIUM_MG = 2000;
+/** The day's protein and kcal reach this share of their targets (checks.ts re-exports it). */
+export const DAY_PROTEIN_FLOOR = 0.9;
 /** The day the staple caps are written for; a bigger day scales them (mealStapleCapG). */
 export const STAPLE_REFERENCE_DAY_KCAL = 2000;
 
@@ -160,7 +162,7 @@ export function mealStapleCapG(food: Food, dayKcal: number): number {
 }
 
 /** Staple lines filling `kcal`: a staple food in its range, or a staple dish scaled by its staple line's range. */
-function stapleLines(lib: PlanLibrary, ref: string | null, kcal: number, dayKcal: number, boost = 1): PlanLine[] {
+export function stapleLines(lib: PlanLibrary, ref: string | null, kcal: number, dayKcal: number, boost = 1): PlanLine[] {
   if (!ref) return [];
   const food = foodById(ref);
   if (food) {
@@ -242,8 +244,7 @@ export function growBreakfast(lines: readonly DishIngredient[], target: Pick<Day
  * 加餐): a cup of milk or yogurt, then a small pack of nuts, the first of
  * each the user can have that keeps the day within DAY_SODIUM_MG, each only
  * when it brings the day nearer its target.
- * The day's fruit stays its own line. Soy milk is left out: its opened carton
- * keeps 3 to 5 days.
+ * The day's fruit stays its own line. Soy milk is left out (docs/671 克数).
  */
 export const SNACK_UNITS: readonly (readonly { food: string; grams: number; label: string }[])[] = [
   [
@@ -390,8 +391,8 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
     });
 
   // Sodium: a day over DAY_SODIUM_MG steps its mains' scales down, a pot's
-  // with every day it feeds, while each of those days keeps its protein
-  // target and its kcal floor.
+  // with every day it feeds, while each of those days keeps the share of its
+  // protein target the checks hold it to (DAY_PROTEIN_FLOOR) and its kcal floor.
   let solved = solveAll();
   const frozen = new Set<string>();
   for (let round = 0; round < MAX_SODIUM_ROUNDS; round++) {
@@ -405,7 +406,7 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
       scale.set(u, Math.max(1, was - SODIUM_SCALE_STEP));
       const trial = solveAll();
       const keeps = trial.days.every((d, i) =>
-        !fed.has(d.day) || (d.totals.protein >= d.target.protein && d.totals.kcal >= Math.min(DAY_KCAL_FLOOR * d.target.kcal, solved.days[i].totals.kcal)),
+        !fed.has(d.day) || (d.totals.protein >= DAY_PROTEIN_FLOOR * d.target.protein && d.totals.kcal >= Math.min(DAY_KCAL_FLOOR * d.target.kcal, solved.days[i].totals.kcal)),
       );
       if (keeps) solved = trial;
       else {

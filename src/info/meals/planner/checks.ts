@@ -34,10 +34,10 @@ import {
 import { planLibrary, type PlanLibrary } from "./library";
 import { planRice, riceMeals } from "./rice";
 import { leftoverMatters, packList, shownName, type PackLine } from "./packs";
-import { DAY_SODIUM_MG, solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
+import { DAY_PROTEIN_FLOOR, DAY_SODIUM_MG, solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
 import { planStorage, type StoragePlan } from "./storage";
 
-export { DAY_SODIUM_MG };
+export { DAY_PROTEIN_FLOOR, DAY_SODIUM_MG };
 
 export type DraftRule =
   | "days"
@@ -81,6 +81,8 @@ export interface DraftProblem {
   slot?: PlanSlot;
   batch?: string;
   food?: string;
+  /** How far the solved plan is from passing, in the rule's own unit (mg, g, servings); the fill (fill.ts) steers by it. */
+  over?: number;
 }
 
 export interface DraftContext {
@@ -115,8 +117,6 @@ export const DAY_VEG = { realG: 300, deepShare: 0.5 } as const;
 export const FRUIT_PORTIONS = { min: 2, max: 3 } as const;
 /** One protein food in at most this many lunches and dinners of a plan. */
 export const SAME_PROTEIN_MAX_MEALS = 3;
-/** The day's protein and kcal reach this share of their targets. */
-export const DAY_PROTEIN_FLOOR = 0.9;
 /** Quick sides added to one day at most. */
 const MAX_TOP_UPS = 2;
 
@@ -403,7 +403,7 @@ function solvedProblems(plan: SolvedPlan, lib: PlanLibrary, shopping: readonly P
   // Red meat.
   const red = mainMeals.filter((m) => m.lines.some((l) => l.source === "main" && l.role === "protein" && foodById(l.food)?.proteinCategory === "meat"));
   if (red.length > redMeatCap(n)) {
-    out.push({ rule: "red_meat", message: `Red meat (beef, pork, lamb) is in ${red.length} main meals (${red.map((m) => mealName(m.day, m.slot)).join(", ")}); a ${n}-day plan has at most ${redMeatCap(n)}.` });
+    out.push({ rule: "red_meat", message: `Red meat (beef, pork, lamb) is in ${red.length} main meals (${red.map((m) => mealName(m.day, m.slot)).join(", ")}); a ${n}-day plan has at most ${redMeatCap(n)}.`, over: red.length - redMeatCap(n) });
   }
 
   // Legumes: any 3 days in a row, or the whole plan when it is shorter.
@@ -412,7 +412,7 @@ function solvedProblems(plan: SolvedPlan, lib: PlanLibrary, shopping: readonly P
   for (let start = 0; start + span <= n; start++) {
     if (!legumeDay.slice(start, start + span).some(Boolean)) {
       const which = span === n ? "the plan" : `Days ${start + 1} to ${start + span}`;
-      out.push({ rule: "legumes", message: `No beans, lentils, tofu or soy milk anywhere in ${which}; have them at least once (a soy milk breakfast or a tofu dish counts).` });
+      out.push({ rule: "legumes", message: `No beans, lentils, tofu or soy milk anywhere in ${which}; have them at least once (a soy milk breakfast or a tofu dish counts).`, day: start + 1, over: 1 });
     }
   }
 
@@ -433,42 +433,42 @@ function solvedProblems(plan: SolvedPlan, lib: PlanLibrary, shopping: readonly P
     }
   }
   if (servings && whole < WHOLE_GRAIN_SHARE * servings) {
-    out.push({ rule: "whole_grain", message: `${whole} of ${servings} staple servings are whole grain; at least half must be (brown rice, mixed grains, oats, whole-wheat bread or pasta, corn, soba).` });
+    out.push({ rule: "whole_grain", message: `${whole} of ${servings} staple servings are whole grain; at least half must be (brown rice, mixed grains, oats, whole-wheat bread or pasta, corn, soba).`, over: Math.ceil(WHOLE_GRAIN_SHARE * servings) - whole });
   }
 
   const allKinds = new Set<string>();
   for (const d of plan.days) {
     const v = vegOf(mainLines(d));
     if (vegShort(v)) {
-      out.push({ rule: "vegetables", message: `Day ${d.day} lunch and dinner have ${g(v.real)} g of vegetables, ${g(v.deep)} g deep-coloured, even with quick sides added; they need ${DAY_VEG.realG} g, half deep. Pick mains or ways with more vegetables.`, day: d.day });
+      out.push({ rule: "vegetables", message: `Day ${d.day} lunch and dinner have ${g(v.real)} g of vegetables, ${g(v.deep)} g deep-coloured, even with quick sides added; they need ${DAY_VEG.realG} g, half deep. Pick mains or ways with more vegetables.`, day: d.day, over: Math.max(0, DAY_VEG.realG - v.real) + Math.max(0, DAY_VEG.deepShare * Math.max(v.real, DAY_VEG.realG) - v.deep) });
     }
     const kinds = vegOf(dayLines(d)).kinds;
     for (const k of kinds) allKinds.add(k);
-    if (kinds.size < 2) out.push({ rule: "veg_variety", message: `Day ${d.day} has ${kinds.size} kind(s) of vegetable at its meals; at least 2.`, day: d.day });
+    if (kinds.size < 2) out.push({ rule: "veg_variety", message: `Day ${d.day} has ${kinds.size} kind(s) of vegetable at its meals; at least 2.`, day: d.day, over: 2 - kinds.size });
 
     const fruit = d.fruit.length + d.meals.breakfast.lines.filter((l) => l.role === "fruit").length;
     if (fruit < FRUIT_PORTIONS.min || fruit > FRUIT_PORTIONS.max) {
-      out.push({ rule: "fruit", message: `Day ${d.day} has ${fruit} fruit portion(s), breakfast fruit counted; about 2 a day (${FRUIT_PORTIONS.min} to ${FRUIT_PORTIONS.max}): whole fruit that keeps, like apples, bananas, oranges, mandarins, frozen berries.`, day: d.day });
+      out.push({ rule: "fruit", message: `Day ${d.day} has ${fruit} fruit portion(s), breakfast fruit counted; about 2 a day (${FRUIT_PORTIONS.min} to ${FRUIT_PORTIONS.max}): whole fruit that keeps, like apples, bananas, oranges, mandarins, frozen berries.`, day: d.day, over: Math.abs(fruit - 2) });
     }
     if (d.totals.sodium > DAY_SODIUM_MG) {
-      out.push({ rule: "sodium", message: `Day ${d.day} sodium is ${g(d.totals.sodium)} mg; at most ${DAY_SODIUM_MG}.`, day: d.day });
+      out.push({ rule: "sodium", message: `Day ${d.day} sodium is ${g(d.totals.sodium)} mg; at most ${DAY_SODIUM_MG}.`, day: d.day, over: d.totals.sodium - DAY_SODIUM_MG });
     }
     if (d.totals.protein < DAY_PROTEIN_FLOOR * d.target.protein) {
-      out.push({ rule: "protein", message: `Day ${d.day} protein is ${g(d.totals.protein)} g of ${g(d.target.protein)} g even at the dishes' largest portions; pick mains or a breakfast with more protein.`, day: d.day });
+      out.push({ rule: "protein", message: `Day ${d.day} protein is ${g(d.totals.protein)} g of ${g(d.target.protein)} g even at the dishes' largest portions; pick mains or a breakfast with more protein.`, day: d.day, over: DAY_PROTEIN_FLOOR * d.target.protein - d.totals.protein });
     }
     if (d.totals.kcal < DAY_KCAL_FLOOR * d.target.kcal) {
-      out.push({ rule: "kcal", message: `Day ${d.day} comes to ${g(d.totals.kcal)} kcal of ${g(d.target.kcal)}, under ${DAY_KCAL_FLOOR * 100}%; pick mains with a staple or a fuller breakfast.`, day: d.day });
+      out.push({ rule: "kcal", message: `Day ${d.day} comes to ${g(d.totals.kcal)} kcal of ${g(d.target.kcal)}, under ${DAY_KCAL_FLOOR * 100}%; pick mains with a staple or a fuller breakfast.`, day: d.day, over: DAY_KCAL_FLOOR * d.target.kcal - d.totals.kcal });
     }
   }
   if (allKinds.size < vegKindsMinimum(n)) {
-    out.push({ rule: "veg_variety", message: `The plan has ${allKinds.size} kinds of vegetable; a ${n}-day plan needs at least ${vegKindsMinimum(n)}.` });
+    out.push({ rule: "veg_variety", message: `The plan has ${allKinds.size} kinds of vegetable; a ${n}-day plan needs at least ${vegKindsMinimum(n)}.`, over: vegKindsMinimum(n) - allKinds.size });
   }
 
   // Protein: kinds, the same food, fish.
   const proteins = meals.flatMap((m) => m.lines.filter((l) => l.role === "protein").map((l) => ({ ...m, food: foodById(l.food) })));
   const kinds = new Set(proteins.map((p) => p.food?.proteinCategory).filter(Boolean));
   if (kinds.size < proteinKindsMinimum(n)) {
-    out.push({ rule: "protein_variety", message: `All protein comes from ${[...kinds].join(", ") || "nothing"}; a ${n}-day plan uses at least ${proteinKindsMinimum(n)} kinds (poultry, meat, fish, egg, soy, dairy, beans).` });
+    out.push({ rule: "protein_variety", message: `All protein comes from ${[...kinds].join(", ") || "nothing"}; a ${n}-day plan uses at least ${proteinKindsMinimum(n)} kinds (poultry, meat, fish, egg, soy, dairy, beans).`, over: proteinKindsMinimum(n) - kinds.size });
   }
   const perFood = new Map<string, Set<string>>();
   for (const m of mainMeals) {
@@ -479,14 +479,14 @@ function solvedProblems(plan: SolvedPlan, lib: PlanLibrary, shopping: readonly P
   }
   for (const [food, at] of perFood) {
     if (at.size > SAME_PROTEIN_MAX_MEALS) {
-      out.push({ rule: "same_protein", message: `${foodById(food)?.zh} (${food}) is the protein of ${at.size} lunches and dinners; at most ${SAME_PROTEIN_MAX_MEALS}.`, food });
+      out.push({ rule: "same_protein", message: `${foodById(food)?.zh} (${food}) is the protein of ${at.size} lunches and dinners; at most ${SAME_PROTEIN_MAX_MEALS}.`, food, over: at.size - SAME_PROTEIN_MAX_MEALS });
     }
   }
   const fishWanted = fishMinimum(n);
   const canFish = FISH_FOODS.some((id) => !lib.foodBlocked(id));
   const fish = meals.filter((m) => m.lines.some((l) => l.role === "protein" && isFishOrSeafood(foodById(l.food) as Food))).length;
   if (canFish && fish < fishWanted) {
-    out.push({ rule: "fish", message: `No fish or shrimp in the ${n} days; a ${n}-day plan has it at least ${fishWanted === 1 ? "once" : `${fishWanted} times`} (made at the meal).` });
+    out.push({ rule: "fish", message: `No fish or shrimp in the ${n} days; a ${n}-day plan has it at least ${fishWanted === 1 ? "once" : `${fishWanted} times`} (made at the meal).`, over: fishWanted - fish });
   }
 
   // Packs nobody finishes.
@@ -498,6 +498,7 @@ function solvedProblems(plan: SolvedPlan, lib: PlanLibrary, shopping: readonly P
       rule: "leftover",
       message: `${food ? shownName(food) : line.food} (${line.food}): buying ${bought} leaves ${g(line.leftover.grams)} g that no meal uses; opened on Day ${line.firstDay}, it spoils on Day ${line.leftover.spoilsDay}. Use it in another meal or pick another dish.`,
       food: line.food,
+      over: line.leftover.grams,
     });
   }
   return out;

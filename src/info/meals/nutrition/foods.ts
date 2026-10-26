@@ -10,6 +10,7 @@ import {
   AROMATIC,
   BOUGHT_DRY,
   DEEP_COLOR,
+  KEEPS_OVERRIDES,
   NOT_FREEZABLE,
   NUTRIENT_OVERRIDES,
   PIECE_G,
@@ -167,6 +168,8 @@ export const POT_PACK_G: Readonly<Record<string, number>> = {
 
 function withColumns(f: Food): Food {
   const out: Food = { ...f, ...NUTRIENT_OVERRIDES[f.id] };
+  const keeps = KEEPS_OVERRIDES[f.id];
+  if (keeps) out.keeps = keeps;
   if (WHOLE_GRAIN.has(f.id)) out.wholeGrain = true;
   const pack = RETAIL_PACK[f.id];
   if (pack) out.pack = { ...pack };

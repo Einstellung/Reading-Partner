@@ -38,7 +38,7 @@ import {
   removeShoppingItem,
   replaceShoppingItem,
 } from "./plan/shopping";
-import { targetsOf } from "./plan/solve-week";
+import { dayTargetsOn, targetsOf } from "./plan/solve-week";
 import {
   CATEGORY_ORDER,
   KEEPS_ORDER,
@@ -56,7 +56,9 @@ import {
 } from "./plan/types";
 import { WEEK_DAYS, addDays, dayOn, isoWeekday, lastDate, planExhausted } from "./plan/week";
 import { buildDraftCard } from "./build-draft-card";
-import { checkDraft } from "./planner/checks";
+import { SEED_DISHES } from "./dishes/seed";
+import { fillDraft } from "./planner/fill";
+import { readerPortions } from "./planner/portions";
 import { MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft } from "./planner/draft";
 import { planLibrary } from "./planner/library";
 import { libraryListing } from "./planner/listing";
@@ -187,23 +189,27 @@ const HOW_TO_PLAN = [
   "",
   "THE DRAFT (propose_meal_plan)",
   "Days are numbered from 1. Never write a date, a gram or a minute: the program owns them.",
-  "- Each day: a breakfast dish id; lunch and dinner, each a `main` and optional `sides` (side dish ids); `fruit`,",
-  "  2 to 3 fruit ids a day.",
+  "You pick what takes taste, from the LIBRARY and what they said: the main of each lunch and dinner, which",
+  "mains are pots, and the prep session. The program fills in the rest: breakfasts, the staple of each fresh",
+  "main, sides and fruit, chosen to meet the plan rules (legumes, whole grains, vegetables, fruit, sodium, the",
+  "day's protein and calories, every fresh pack used up).",
+  "- Each day: lunch and dinner, each a `main`. Name a `breakfast` only when they asked for a particular one.",
   "- A main is a share of a pot, {batch, way} with the way's number in that dish's ways (a different way for each",
-  "  meal of one pot), or a fresh main made at the meal, {dish, staple} with one of the dish's staples (no staple",
-  "  when it carries its own).",
+  "  meal of one pot), or a fresh main made at the meal, {dish}; add `staple` only when they asked for one.",
   "- `batches`: a pot is one batch main from the library with a short id of yours, cooked in the session and",
   "  eaten at 1 to 3 lunches or dinners listed in `meals`: none before the session, all within the cook day and",
   "  the 2 days after it. One pot per dish; lunch and dinner of one day never the same dish. Fish and seafood are",
   "  always fresh.",
   "- `sessions`: exactly one when there are pots, {id, day, part}, at a time they said they can cook.",
   "- Lean on the pots: most lunches and dinners eat from them, and the fresh ones are quick. About an hour",
-  "  hands-on for the session unless they said otherwise. Plan around whole packs: reuse a vegetable across meals",
-  "  rather than picking one nothing else uses.",
-  "The program solves every gram, adds a quick side where a day is short of vegetables, swaps a food they cannot",
-  "get, and checks the draft: red meat, fish, legumes, whole grains, vegetables, fruit, protein variety, sodium,",
-  "the day's protein and calories, and packs left half used. What fails comes back naming the rule: fix it and",
-  `send the whole draft again. After ${MAX_DRAFT_ROUNDS} refused drafts in a turn, stop and tell them which rule keeps failing.`,
+  "  hands-on for the session unless they said otherwise.",
+  "- What only your picks decide: red meat at most 3 meals a week, fish at least once in 3 days, at least 2",
+  "  protein kinds, one protein food in at most 3 meals; each day's lunch and dinner within the sodium the",
+  "  LIBRARY gives; and the PACKS ONLY MAINS USE UP, finished between the mains you pick.",
+  "The program may change a pot meal's way or a fresh main's staple when that is all a rule needs; it says so.",
+  "When it cannot fill the plan around your picks, it says which rule fails and which of your picks to change:",
+  `change them and send the whole draft again. After ${MAX_DRAFT_ROUNDS} refused drafts in a turn, stop and tell them in plain`,
+  "words what keeps failing and what they could change.",
   "",
   "THE CARD",
   "A passing draft shows on a card in the chat: each meal by name, which meals share a pot, the prep session. It",
@@ -292,7 +298,11 @@ export function mealsGuidance(
   }
 
   out.push("", ...HOW_TO_PLAN);
-  if (profile) out.push("", "LIBRARY (dish ids for the draft; only what they can have and their kitchen can make)", ...libraryListing(planLibrary(profile)));
+  if (profile) {
+    const lib = planLibrary(profile);
+    const portions = targets ? readerPortions(lib, SEED_DISHES, dayTargetsOn(targets, profile, today)) : undefined;
+    out.push("", "LIBRARY (dish ids for the draft; only what they can have and their kitchen can make)", ...libraryListing(lib, SEED_DISHES, portions));
+  }
   out.push(
     "",
     "FOODS (ids for dislikes and for foods they cannot get)",
@@ -324,19 +334,18 @@ const draftMealSchema = Type.Object({
       way: Type.Optional(Type.Number({ description: "With batch: the way's number, from 1, in that dish's ways." })),
       dish: Type.Optional(Type.String({ description: "For a fresh main: its dish id." })),
       staple: Type.Optional(
-        Type.String({ description: "With dish: one of its staples (food or staple dish id). Leave out when it carries its own." }),
+        Type.String({ description: "With dish, only when they asked for it: one of its staples. Otherwise the program picks." }),
       ),
     },
-    { description: "A share of a pot ({batch, way}) or a fresh main ({dish, staple})." },
+    { description: "A share of a pot ({batch, way}) or a fresh main ({dish})." },
   ),
-  sides: Type.Optional(Type.Array(Type.String(), { description: "Side dish ids added to this meal." })),
 });
 
 function refusal(problems: readonly string[], refused: number): string {
-  const lines = ["Nothing was shown — the draft does not hold up:", ...problems.map((p) => `- ${p}`)];
+  const lines = ["Nothing was shown — the program could not fill the plan around these picks:", ...problems.map((p) => `- ${p}`)];
   lines.push(
     refused >= MAX_DRAFT_ROUNDS
-      ? `That is ${refused} refused drafts this turn. Stop drafting and tell them in a line which rule keeps failing.`
+      ? `That is ${refused} refused drafts this turn. Stop drafting and tell them in plain words, in two or three lines, what keeps failing and which of their wishes they could change.`
       : "Fix those and call propose_meal_plan again with the whole draft.",
   );
   return lines.join("\n");
@@ -353,21 +362,21 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
     effect: "write",
     gate: "card",
     description:
-      `Draft a plan of 1 to ${MAX_PLAN_DAYS} days from the library: each day's breakfast, lunch and dinner by dish id, ` +
-      "the pots cooked in the one prep session and which meals eat from them, and the fruit. Days are " +
-      "numbered from 1; never a date, a gram or a minute. The program checks the draft and sends back what " +
-      "fails; a passing draft shows on a card, and a later call in this conversation replaces that card in " +
-      "place with the revised version. It files nothing: they confirm on the card or in words.",
+      `Draft a plan of 1 to ${MAX_PLAN_DAYS} days from the library: each day's lunch and dinner main by dish id, the ` +
+      "pots cooked in the one prep session and which meals eat from them. Days are numbered from 1; never a " +
+      "date, a gram or a minute. The program fills in breakfasts, staples, sides and fruit to meet the plan " +
+      "rules, or sends back which picks to change; a filled draft shows on a card, and a later call in this " +
+      "conversation replaces that card in place with the revised version. It files nothing: they confirm on " +
+      "the card or in words.",
     parameters: Type.Object({
       start: Type.Optional(
         Type.Number({ description: "Days from today the plan starts: 0 today (the default), 1 tomorrow, at most 6." }),
       ),
       days: Type.Array(
         Type.Object({
-          breakfast: Type.String({ description: "A breakfast dish id." }),
+          breakfast: Type.Optional(Type.String({ description: "A breakfast dish id, only when they asked for it; otherwise the program picks." })),
           lunch: draftMealSchema,
           dinner: draftMealSchema,
-          fruit: Type.Optional(Type.Array(Type.String(), { description: "Fruit food ids, one per portion, 2 to 3 a day." })),
         }),
         { description: `Day 1 first, 1 to ${MAX_PLAN_DAYS} days.` },
       ),
@@ -414,18 +423,19 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
       const draft = parseDraft(args);
       const profile = charter.profile;
       const lib = planLibrary(profile);
-      const result = checkDraft(draft, {
+      const filled = fillDraft(draft, {
         profile,
         targets: planDayTargets(targets, profile, start, Math.min(MAX_PLAN_DAYS, Math.max(1, draft.days.length))),
         startWeekday: isoWeekday(start),
         people: profile.people,
         library: lib,
       });
+      const result = filled.result;
       // A refusal, not a thrown error: the model can fix every one of these in
       // the same turn, and the reader never sees the attempt.
       if (result.problems.length || !result.plan) {
         refused += 1;
-        return { receipt: null, text: refusal(result.problems.map((p) => p.message), refused) };
+        return { receipt: null, text: refusal(filled.unfilled, refused) };
       }
       const card = buildDraftCard({
         result,
@@ -437,9 +447,8 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
       });
       deps.onMealsCard(card);
       const when = offset === 0 ? "today" : offset === 1 ? "tomorrow" : `in ${offset} days`;
-      const notes = result.notes.length
-        ? `\nThe program changed on its own; tell them in a few words:\n${result.notes.map((n) => `- ${n}`).join("\n")}`
-        : "";
+      const said = [...filled.changed, ...result.notes];
+      const notes = said.length ? `\nThe program changed on its own; tell them in a few words:\n${said.map((n) => `- ${n}`).join("\n")}` : "";
       return {
         text:
           (card.version > 1

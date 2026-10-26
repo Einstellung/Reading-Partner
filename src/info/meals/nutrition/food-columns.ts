@@ -324,6 +324,18 @@ export const RETAIL_PACK: Readonly<Record<string, { grams: number; kind: PackKin
 };
 
 /**
+ * Shelf-life classes that differ from the generated table's. The table reads
+ * unsweetened soy milk as fresh soy milk (d3-5), but what a plan buys is a
+ * 1 L carton (RETAIL_PACK), sold shelf-stable or chilled with weeks of shelf
+ * life and kept 7 to 10 days once opened (FoodKeeper, soy milk), like the
+ * milk carton beside it: w1, so a carton the plan does not finish waits for
+ * the next plan (docs/671 整包与开封) instead of sending the draft back.
+ */
+export const KEEPS_OVERRIDES: Readonly<Record<string, "w1">> = {
+  soy_milk_unsweetened: "w1",
+};
+
+/**
  * Seasonings kept in the fridge once opened (USDA FoodKeeper, condiments):
  * oyster and hoisin sauce, the bean and chili pastes, tube garlic and ginger,
  * ketchup, mayonnaise and dressings, pesto and jarred pasta sauce, miso and

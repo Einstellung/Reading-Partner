@@ -11,8 +11,12 @@ export const MAX_PLAN_DAYS = 3;
 export const POT_MEALS = { min: 1, max: 3 } as const;
 /** Every pot of a plan is cooked in one prep session. */
 export const MAX_PREP_SESSIONS = 1;
-/** Drafts sent back to the model in one turn before it has to tell the user (docs/73). */
-export const MAX_DRAFT_ROUNDS = 8;
+/**
+ * Drafts sent back to the model in one turn before it has to tell the user
+ * (docs/671 对话). The turn's own round cap (legion DEFAULT_MAX_ROUNDS) is above
+ * it, so the explanation after the last refusal still reaches them.
+ */
+export const MAX_DRAFT_ROUNDS = 4;
 
 export type PlanSlot = "breakfast" | "lunch" | "dinner";
 export type MainSlot = "lunch" | "dinner";
@@ -39,7 +43,7 @@ export interface DraftMeal {
 }
 
 export interface DraftDay {
-  /** A breakfast template's dish id. */
+  /** A breakfast template's dish id; empty in the model's picks unless they asked for one (fill.ts picks it). */
   breakfast: string;
   lunch: DraftMeal;
   dinner: DraftMeal;

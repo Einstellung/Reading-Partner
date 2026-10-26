@@ -91,6 +91,24 @@ test("a passing draft draws a card from today and saves nothing", async () => {
   expect(out.receipt?.summary).toBe(card.pots.map((p) => p.name.en).join(" · "));
 });
 
+test("mains and pots alone draw a card: the program fills breakfasts, staples, sides and fruit", async () => {
+  const th = thread();
+  const picks = JSON.parse(JSON.stringify(goodDraft())) as { days: Record<string, unknown>[] };
+  for (const day of picks.days) {
+    delete day.breakfast;
+    delete day.fruit;
+    for (const slot of ["lunch", "dinner"]) {
+      const meal = day[slot] as { main: Record<string, unknown>; sides?: unknown };
+      delete meal.sides;
+      delete meal.main.staple;
+    }
+  }
+  const out = await call(buildProposeMealPlanTool(th.deps), picks);
+  expect(out.text).toContain("A draft card now shows the 3-day plan");
+  const card = th.raised[0] as MealsDraftCardData;
+  expect(card.days.every((d) => d.breakfast.en.length > 0)).toBe(true);
+});
+
 test("a revision in the same conversation replaces the card in place as its next version", async () => {
   const th = thread();
   await call(buildProposeMealPlanTool(th.deps), args());
