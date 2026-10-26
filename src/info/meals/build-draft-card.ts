@@ -113,6 +113,8 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
     const cooked = batches.filter((b) => b.session === s.id);
     const minutes = prepMinutes(cooked.flatMap((b) => lib.dish(b.dish) ?? []));
     session = { day: s.day, part: s.part, pots: cooked.map((b) => letterOf.get(b.id) ?? ""), ...minutes };
+    const rice = result.storage?.rice;
+    if (rice && rice.cookedAt.slot === "prep" && rice.cookedAt.day === s.day) session.rice = refNamed(lib, rice.staple);
   }
   const nowSlot = s ? mealAtSession(s.part) : null;
   const prevDraft = previous?.draft ?? null;

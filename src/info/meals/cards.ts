@@ -72,6 +72,8 @@ export interface DraftCardSession {
   pots: string[];
   activeMin: number;
   totalMin: number;
+  /** The plan's rice when it is cooked at this session (planner/rice.ts); absent when none is, and on cards from before it. */
+  rice?: Named;
 }
 
 export interface MealsDraftCardData {

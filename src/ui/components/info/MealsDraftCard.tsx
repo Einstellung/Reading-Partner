@@ -50,6 +50,7 @@ function Row({ row }: { row: DraftRow }) {
             {row.pots.map((p) => (
               <Chip key={p.letter} chip={p} />
             ))}
+            {row.rice && <span className="text-muted-foreground">{row.rice}</span>}
           </span>
           <span className="text-[13px] tabular-nums text-muted-foreground">{row.time}</span>
         </span>
