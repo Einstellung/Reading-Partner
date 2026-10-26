@@ -476,8 +476,8 @@
 - [663-a-single-call-writes-its-whole-prompt-to-the-cache](./ai/663-a-single-call-writes-its-whole-prompt-to-the-cache.md) — pi 默认在最后一个用户块上打缓存断点，只调一次的调用（主题搜索的重排、开口）把整份提示按 1.25 倍写进缓存却没人读；整份用户文字拼成一个字符串时，重写那次也只读回 system。只调一次的传 `cacheRetention: "none"`；会被复用的前缀单独成块（`ChatMessage.parts`），变的部分另起块接在后面
 - [665-codex-reads-no-cache-without-a-prompt-cache-key](./ai/665-codex-reads-no-cache-without-a-prompt-cache-key.md) — `streamChat` 的单次调用在 Codex 上不带 `prompt_cache_key`（`call-setup.ts` 不给 openai 传 `sessionId`），同一份提示两分钟内重发也读不到缓存；会重发提示的调用传稳定的 `cacheKey`（主题搜索按主题一个）
 - [666-codex-catalog-lists-a-model-chatgpt-accounts-cannot-use](./ai/666-codex-catalog-lists-a-model-chatgpt-accounts-cannot-use.md) — pi-ai 的 openai-codex 目录列着 `gpt-5.5`，ChatGPT 账号调它被后端拒（"not supported when using Codex with a ChatGPT account"），`enforceKnownModel` 只查目录拦不住；失败记进书架 `stalls` 和盒子，选单里拿不拿掉等用户定
-- [671-codex-reasoning-is-silence-to-the-stall-watch](./ai/671-codex-reasoning-is-silence-to-the-stall-watch.md) — Codex 思考时 `pi.live` 不动，停摆看门狗最长 32 s 收不到节拍；线上每 5 s 有一行 SSE 注释、解析后的事件最长隔 30 s，pi 都不认。前台 90 秒够用，回前台的 `back()` 却会掐掉活过冻结的连接，要改得看连接上的字节，先上 iPhone 量
-- [672-a-meals-plan-turn-runs-out-the-round-cap-on-refused-drafts](./ai/672-a-meals-plan-turn-runs-out-the-round-cap-on-refused-drafts.md) — v0.27.2 饮食出计划，模型看不到包装规格，14 份草稿拒 13 份（多是整包剩余和钠），第一个回合 8 轮 254 s 撞回合上限以 `REFUSE_ROUNDS` 结束；拒稿上限和回合上限都是 8，「告诉用户哪条过不去」那句永远轮不到。怎么改待饮食这边定
+- [672-a-meals-plan-turn-runs-out-the-round-cap-on-refused-drafts](./ai/672-a-meals-plan-turn-runs-out-the-round-cap-on-refused-drafts.md) — v0.27.2 饮食出计划，模型看不到包装规格，14 份草稿拒 13 份（多是整包剩余和钠），第一个回合 8 轮 254 s 撞回合上限以 `REFUSE_ROUNDS` 结束；拒稿上限和回合上限都是 8，「告诉用户哪条过不去」那句永远轮不到。改成模型只挑主菜和锅、程序补其余，拒稿上限降到 4
+- [673-codex-reasoning-is-silence-to-the-stall-watch](./ai/673-codex-reasoning-is-silence-to-the-stall-watch.md) — Codex 思考时 `pi.live` 不动，停摆看门狗最长 32 s 收不到节拍；线上每 5 s 有一行 SSE 注释、解析后的事件最长隔 30 s，pi 都不认。前台 90 秒够用，回前台的 `back()` 却会掐掉活过冻结的连接，要改得看连接上的字节，先上 iPhone 量
 
 ## 开发环境
 
