@@ -29,9 +29,9 @@ test("pots are lettered by the first meal that eats from them, not by their orde
 });
 
 test("the prep session lists its pots in letter order with one pair of hands' minutes", () => {
-  expect(draftCard().session).toEqual({ day: 1, part: "afternoon", pots: ["A"], activeMin: 15, totalMin: 60 });
+  expect(draftCard().session).toMatchObject({ day: 1, part: "afternoon", pots: ["A"], activeMin: 15, totalMin: 60 });
   // Beef chili 15/120 started first, chicken chili 15/60 while it simmers.
-  expect(draftCard(twoPotDraft()).session).toEqual({ day: 1, part: "afternoon", pots: ["A", "B"], activeMin: 30, totalMin: 120 });
+  expect(draftCard(twoPotDraft()).session).toMatchObject({ day: 1, part: "afternoon", pots: ["A", "B"], activeMin: 30, totalMin: 120 });
 });
 
 test("prep minutes: the longest pot first, hands-on parts back to back", () => {

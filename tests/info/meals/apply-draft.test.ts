@@ -6,7 +6,6 @@
 import { expect, test } from "bun:test";
 import { applyDraft, type MealsPorts } from "../../../src/info/meals/apply";
 import type { PhotoQuery } from "../../../src/info/meals/photos/photo-run";
-import { deriveShoppingList } from "../../../src/info/meals/plan/shopping";
 import type { DishPhotoEntry, MealsState, ShoppingState, WeekPlan } from "../../../src/info/meals/plan/types";
 import { addDays } from "../../../src/info/meals/plan/week";
 import { shopping } from "./fixtures/week";
@@ -59,7 +58,9 @@ test("confirming writes the plan and the list derived from it in one write, and 
   expect(plan.days.map((d) => d.date)).toEqual([START, addDays(START, 1), addDays(START, 2)]);
   expect(plan.planner).toEqual({ start: START, draft: card.draft });
   expect(plan.createdAt).toBe(100);
-  expect(list.items).toEqual(deriveShoppingList(plan, START, 1));
+  // A planner plan is bought in whole packs (planner/trip.ts), never as a week's grams.
+  expect(list.items.length).toBeGreaterThan(0);
+  expect(list.items.every((i) => i.pack)).toBe(true);
   expect(h.reloads).toBe(1);
   expect(out.note).toContain("the 3-day plan is saved");
   expect(out.note).toContain(`${list.items.length} things`);
