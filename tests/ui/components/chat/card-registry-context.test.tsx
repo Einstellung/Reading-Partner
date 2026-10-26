@@ -105,6 +105,31 @@ test("a card kind with no component is skipped and the rest of the thread render
   expect(html).toContain("and the question after it");
 });
 
+// The weekly meals card the draft card replaced (docs/671), as an older thread
+// stored it: no component, so the row draws nothing and none of its payload.
+test("an old weekly meals-plan card draws nothing", () => {
+  expect(Object.keys(CARD_REGISTRY)).not.toContain("meals-plan");
+  const old = {
+    kind: "meals-plan",
+    phase: "proposed",
+    adjustment: false,
+    plan: { startDate: "2026-09-21", days: [{ date: "2026-09-21", lunch: { mode: "make", name: "old weekly lunch" } }] },
+  } as unknown as CardPayload;
+  const messages: ThreadMessage[] = [
+    { role: "ai", text: "", ts: 1, parts: [{ type: "card", id: "meals-1", card: old }] },
+    { role: "user", text: "the question after it", ts: 2 },
+  ];
+  const html = renderToStaticMarkup(
+    <CardRegistryProvider>
+      <MessageList messages={messages} />
+    </CardRegistryProvider>,
+  );
+  expect(html).toContain("the question after it");
+  expect(html).not.toContain("old weekly lunch");
+  expect(html).not.toContain("2026-09-21");
+  expect(html).not.toContain("[object");
+});
+
 // The shells themselves. Each mounts InfoHome where its screens go, and every
 // chat either of them shows is under that point in the tree — so a chat is put
 // there and asked to render a card. Under the provider the card comes out;

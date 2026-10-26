@@ -230,3 +230,16 @@ test("a file body round-trips through the parser", () => {
   expect(parseMealsFile(JSON.parse(mealsFileBody(state)))).toEqual(state);
 });
 
+test("a planner plan keeps its draft through the file; a draft it cannot solve again is dropped, the days kept", () => {
+  const draft = { days: [{ breakfast: "milk_oats_banana" }], batches: [], sessions: [] };
+  const withDraft = plan({ planner: { start: "2026-09-21", draft } });
+  const state = { charter: charter(), plan: withDraft, shopping: trip(), deviations: [] };
+  expect(parseMealsFile(JSON.parse(mealsFileBody(state)))?.plan?.planner).toEqual({ start: "2026-09-21", draft });
+
+  for (const planner of [{ draft }, { start: "2026-09-21", draft: { batches: [] } }, { start: 7, draft }, "draft"]) {
+    const read = parseMealsFile({ version: MEALS_VERSION, charter: charter(), plan: { ...plan(), planner }, deviations: [] });
+    expect(read?.plan).not.toBeNull();
+    expect(read?.plan).not.toHaveProperty("planner");
+    expect(read?.plan?.days).toEqual(plan().days);
+  }
+});
