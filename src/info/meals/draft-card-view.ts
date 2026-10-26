@@ -37,7 +37,16 @@ export type DraftRow =
       subs: { text: string; indent: boolean }[];
       changed: boolean;
     }
-  | { kind: "prep"; key: string; label: string; lead: string; pots: PotChip[]; time: string }
+  | {
+      kind: "prep";
+      key: string;
+      label: string;
+      lead: string;
+      pots: PotChip[];
+      /** 「糙米饭 一锅」 after the pots when the plan's rice is cooked at this session, else null. */
+      rice: string | null;
+      time: string;
+    }
   | { kind: "night"; key: string; label: string; lines: string[] };
 
 export interface DraftDayView {
@@ -125,6 +134,7 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
         label: t("meals.draft.row.prep"),
         lead: t("meals.draft.prepAt", { part: t(`meals.draft.part.${s.part}`) }),
         pots: s.pots.map(chip),
+        rice: s.rice ? t("meals.draft.prepRice", { rice: pickName(s.rice) }) : null,
         time: t("meals.draft.prepTime", { active: s.activeMin, total: s.totalMin }),
       };
       // Morning cooks before lunch, afternoon before dinner, evening after it.

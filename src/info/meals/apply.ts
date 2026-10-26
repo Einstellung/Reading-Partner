@@ -27,7 +27,8 @@ import { applyDeviation, isoWeekday } from "./plan/week";
 import { checkDraft } from "./planner/checks";
 import { planLibrary } from "./planner/library";
 import { planDayTargets } from "./planner/solve";
-import { resolvePlannerWeek, weekFromDraft } from "./planner/to-week";
+import { resolvePlannerWeek, solvePlannerRecord, weekFromDraft } from "./planner/to-week";
+import { plannerShoppingList } from "./planner/trip";
 
 export interface MealsPorts {
   // The profile, the week and the list as they are NOW.
@@ -90,15 +91,17 @@ export function resolvedWeek(
   today: string,
 ): { plan: WeekPlan; shopping: ShoppingState } {
   const targets = targetsOf(charter, region);
-  // A planner plan is solved again from its draft (planner/to-week.ts); the
-  // weekly solver would re-read its stored grams as a template.
-  const solved =
-    targets && charter
-      ? plan.planner
-        ? resolvePlannerWeek(plan, charter.profile, targets)
-        : solvePlan(plan, targets, charter.profile)
-      : plan;
   const people = charter?.profile.people ?? 1;
+  if (plan.planner) {
+    // A planner plan is solved again from its draft (planner/to-week.ts); the
+    // weekly solver would re-read its stored grams as a template. Its list is
+    // whole packs; a draft that no longer solves keeps its plan and its list.
+    const again = targets && charter ? solvePlannerRecord(plan, charter.profile, targets) : null;
+    if (!again || !charter || !targets) return { plan, shopping };
+    const next = resolvePlannerWeek(plan, charter.profile, targets, again);
+    return { plan: next, shopping: reconcileShoppingList(shopping, plannerShoppingList(again.solved, again.draft, next, people)) };
+  }
+  const solved = targets && charter ? solvePlan(plan, targets, charter.profile) : plan;
   return { plan: solved, shopping: reconcileShoppingList(shopping, deriveShoppingList(solved, today, people)) };
 }
 
@@ -157,7 +160,7 @@ export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): P
   });
   if (!result.plan) return NOTHING;
   const plan = weekFromDraft({ result, lib, start: card.startDate, now: ports.now(), previous: state.plan });
-  const shopping = reconcileShoppingList(state.shopping, deriveShoppingList(plan, ports.today(), profile.people));
+  const shopping = reconcileShoppingList(state.shopping, plannerShoppingList(result.plan, result.draft, plan, profile.people));
   try {
     await ports.savePlan(plan, shopping);
   } catch {
