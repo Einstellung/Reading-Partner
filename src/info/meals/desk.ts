@@ -14,6 +14,7 @@ import {
   type DeskItemKind,
 } from "../../desk";
 import type { AgentTool } from "../../legion/durable/contract";
+import type { MealsDraftCardData } from "./cards";
 import { mealsGuidance, type MealsFocus } from "./tools";
 import { hostRegion } from "./region";
 import type { MealsState } from "./plan/types";
@@ -40,7 +41,14 @@ export interface MealsDeskRef {
   // focus rides on the desk rather than forking the thread (docs/73).
   focus?: MealsFocus;
   tools?: MealsTools;
+  // The draft card waiting in this conversation, read when the desk opens.
+  // The conversation replays words, not cards (turn-rows.ts
+  // replayableHistory), so this is how a revision sees what it revises.
+  draft?: MealsDraft;
 }
+
+/** The draft card the surface is showing, still waiting for 「就这样」, or null. */
+export type MealsDraft = () => MealsDraftCardData | null;
 
 const mealsKind: DeskItemKind<MealsDeskRef> = {
   kind: INFO_MEALS_KIND,
@@ -66,7 +74,8 @@ const DUTY = [
 async function openMeals(ref: MealsDeskRef, env: DeskEnv): Promise<DeskItem | null> {
   const tools = ref.tools ? await ref.tools() : [];
   if (env.signal?.aborted) return null;
-  const prompt = `${DUTY}\n\n${mealsGuidance(ref.state, ref.today, { focus: ref.focus, region: hostRegion() })}`;
+  const draft = ref.draft?.() ?? null;
+  const prompt = `${DUTY}\n\n${mealsGuidance(ref.state, ref.today, { focus: ref.focus, region: hostRegion(), draft })}`;
   return {
     kind: INFO_MEALS_KIND,
     label: "Meals",

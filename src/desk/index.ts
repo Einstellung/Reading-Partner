@@ -9,7 +9,7 @@ export {
   registeredDeskKinds,
   type OpenedDesk,
 } from "./registry";
-export { bindItemTools } from "./bind";
+export { bindItemRef, bindItemTools } from "./bind";
 export { listPlaces, registerPlaces, type Place } from "./places";
 export type {
   DeskEnv,

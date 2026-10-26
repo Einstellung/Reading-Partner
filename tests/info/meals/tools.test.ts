@@ -33,6 +33,7 @@ import {
   type WeekPlan,
 } from "../../../src/info/meals/plan/types";
 import { MON, charter, draftWeek, profile, shopping, state, week } from "./fixtures/week";
+import { draftCard } from "./planner/card-fixture";
 
 function deps(current: MealsState): MealsToolDeps & { cards: MealsCard[] } {
   const cards: MealsCard[] = [];
@@ -111,6 +112,21 @@ test("with no body data there are no targets and nothing is planned", async () =
   expect(said(await buildProposeMealPlanTool(none).execute({ days: [] }))).toContain(
     "have not answered the opening questions",
   );
+});
+
+test("a draft card waiting on screen is shown as the picks a revision starts from", () => {
+  const card = draftCard();
+  const text = mealsGuidance(state(), MON, { draft: card });
+  expect(text).toContain("THE DRAFT ON THE CARD (version 1, not confirmed yet)");
+  const json = text.split("\n").find((l) => l.startsWith('{"days"'))!;
+  const picks = JSON.parse(json) as { days: Record<string, { main: Record<string, unknown> }>[]; batches: unknown[]; sessions: unknown[] };
+  // Mains and pots only: the program fills breakfasts, staples, sides and fruit again.
+  expect(picks.days[0]).toEqual({ lunch: { main: { dish: "kung_pao_chicken" } }, dinner: { main: { batch: "chili", way: 1 } } });
+  expect(picks.batches).toEqual(card.draft.batches);
+  expect(picks.sessions).toEqual(card.draft.sessions);
+  // Once confirmed it is no longer a draft to revise.
+  expect(mealsGuidance(state(), MON, { draft: { ...card, phase: "applied" } })).not.toContain("THE DRAFT ON THE CARD (");
+  expect(mealsGuidance(state(), MON)).not.toContain("THE DRAFT ON THE CARD (");
 });
 
 test("the focus says what the reader has open", () => {

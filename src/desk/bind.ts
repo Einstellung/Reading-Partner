@@ -6,11 +6,16 @@
 
 import type { DeskRef } from "./types";
 
-/** Every ref of `kind` gets `tools` on it; every other ref is passed through. */
-export function bindItemTools(refs: readonly DeskRef[], kind: string, tools: unknown): DeskRef[] {
+/** Every ref of `kind` gets `fields` merged onto it; every other ref is passed through. */
+export function bindItemRef(refs: readonly DeskRef[], kind: string, fields: object): DeskRef[] {
   return refs.map((r) =>
     r.kind === kind
-      ? { kind: r.kind, ref: { ...(r.ref as object), tools } }
+      ? { kind: r.kind, ref: { ...(r.ref as object), ...fields } }
       : { kind: r.kind, ref: r.ref },
   );
+}
+
+/** Every ref of `kind` gets `tools` on it; every other ref is passed through. */
+export function bindItemTools(refs: readonly DeskRef[], kind: string, tools: unknown): DeskRef[] {
+  return bindItemRef(refs, kind, { tools });
 }

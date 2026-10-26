@@ -635,6 +635,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           today: () => todayLocal(),
           changed: () => onMealsChanged?.(),
         }),
+      mealsDraft: currentDraft,
       topic: { onCard: (payload) => raiseCard("topic", payload) },
     });
     if (prepared.kind === "failed") return prepared;

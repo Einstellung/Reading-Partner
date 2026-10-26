@@ -59,7 +59,7 @@ import { buildDraftCard } from "./build-draft-card";
 import { SEED_DISHES } from "./dishes/seed";
 import { fillDraft } from "./planner/fill";
 import { readerPortions } from "./planner/portions";
-import { MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft } from "./planner/draft";
+import { isBatchMain, MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft, type DraftMain } from "./planner/draft";
 import { planLibrary } from "./planner/library";
 import { libraryListing } from "./planner/listing";
 import { planDayTargets } from "./planner/solve";
@@ -215,12 +215,32 @@ const HOW_TO_PLAN = [
   "A passing draft shows on a card in the chat: each meal by name, which meals share a pot, the prep session. It",
   "has no grams; they come once the plan is confirmed. Do not repeat the meals in your reply: say in a sentence",
   "or two what the plan is built around and what the program changed on its own.",
-  "When they want a change ('第二天晚饭不想吃牛肉'), call propose_meal_plan again with the whole revised draft.",
-  "The card above changes in place to the new version. Your reply only says that the draft above was changed;",
-  "do not list the meals again.",
+  "When they want a change ('第二天晚饭不想吃牛肉'), take THE DRAFT ON THE CARD, change only what they asked, and",
+  "call propose_meal_plan again with the whole revised draft. The card above changes in place to the new",
+  "version. Your reply only says that the draft above was changed; do not list the meals again.",
   "When they confirm in words ('就这样', '可以', 'looks good'), call apply_meal_plan. The card's button does the",
   "same. Nothing is saved before that.",
 ];
+
+/**
+ * The draft card waiting for 「就这样」, as the picks a revision starts from,
+ * in propose_meal_plan's own shape. The mains as the card shows them (a way
+ * the program changed included), the pots and the session; breakfasts, fresh
+ * staples, sides and fruit are the program's and are filled again.
+ */
+export function draftOnCard(card: MealsDraftCardData): string[] {
+  const main = (m: DraftMain): DraftMain => (isBatchMain(m) ? { batch: m.batch, way: m.way } : { dish: m.dish });
+  const picks = {
+    days: card.draft.days.map((d) => ({ lunch: { main: main(d.lunch.main) }, dinner: { main: main(d.dinner.main) } })),
+    batches: card.draft.batches,
+    sessions: card.draft.sessions,
+  };
+  return [
+    `THE DRAFT ON THE CARD (version ${card.version}, not confirmed yet)`,
+    "Your picks as the card shows them. A change keeps everything they did not ask to change.",
+    JSON.stringify(picks),
+  ];
+}
 
 /**
  * What the meals desk is told before it says anything: the reader's profile
@@ -230,7 +250,7 @@ const HOW_TO_PLAN = [
 export function mealsGuidance(
   state: MealsState,
   today: string,
-  opts: { focus?: MealsFocus; region?: Region } = {},
+  opts: { focus?: MealsFocus; region?: Region; draft?: MealsDraftCardData | null } = {},
 ): string {
   const out: string[] = ["MEALS", `Today is ${today}.`, ""];
   const charter = state.charter;
@@ -298,6 +318,7 @@ export function mealsGuidance(
   }
 
   out.push("", ...HOW_TO_PLAN);
+  if (opts.draft?.phase === "proposed") out.push("", ...draftOnCard(opts.draft));
   if (profile) {
     const lib = planLibrary(profile);
     const portions = targets ? readerPortions(lib, SEED_DISHES, dayTargetsOn(targets, profile, today)) : undefined;

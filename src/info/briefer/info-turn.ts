@@ -5,11 +5,11 @@
 // (voice-call-live.ts) both lay it here, so the two open the same conversation.
 
 import type { BoxOrigin } from "../../box";
-import { bindItemTools, openDesk, type DeskItem } from "../../desk";
+import { bindItemRef, bindItemTools, openDesk, type DeskItem } from "../../desk";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { Settings } from "../../platform/app/settings";
 import { assembleTurn, type AssembleInput, type AssembledTurn } from "../../soul";
-import { INFO_MEALS_KIND, type MealsTools } from "../meals/desk";
+import { INFO_MEALS_KIND, type MealsDraft, type MealsTools } from "../meals/desk";
 import { MEALS_THREAD_ID, type InfoCallAnchor } from "./anchors";
 import { INFO_BRIEFING_KIND } from "./desk";
 import { SECRETARY_ROLE_ID } from "./role";
@@ -28,6 +28,8 @@ export interface InfoTurnInput {
   // The meals tools, where the surface has them to give. Without them a meals
   // item on the desk opens with none.
   mealsTools?: MealsTools;
+  // The meals draft card on screen, which the meals desk shows the model.
+  mealsDraft?: MealsDraft;
   // Where a proposal for this conversation's topic is drawn (memory/filing).
   topic?: AssembleInput["topic"];
 }
@@ -50,9 +52,11 @@ export function infoOrigin(anchor: InfoCallAnchor, dateKey: string): BoxOrigin {
 }
 
 export async function assembleInfoTurn(input: InfoTurnInput): Promise<InfoTurn> {
-  const { anchor, mealsTools } = input;
-  const refs = bindItemTools(anchor.desk, INFO_BRIEFING_KIND, input.companionTools);
-  const desk = await openDesk(mealsTools ? bindItemTools(refs, INFO_MEALS_KIND, mealsTools) : refs, {
+  const { anchor, mealsTools, mealsDraft } = input;
+  let refs = bindItemTools(anchor.desk, INFO_BRIEFING_KIND, input.companionTools);
+  if (mealsTools) refs = bindItemTools(refs, INFO_MEALS_KIND, mealsTools);
+  if (mealsDraft) refs = bindItemRef(refs, INFO_MEALS_KIND, { draft: mealsDraft });
+  const desk = await openDesk(refs, {
     settings: input.settings,
     thread: { key: input.key, id: anchor.threadId },
     ...(input.signal ? { signal: input.signal } : {}),

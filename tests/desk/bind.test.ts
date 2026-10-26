@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { bindItemTools } from "../../src/desk";
+import { bindItemRef, bindItemTools } from "../../src/desk";
+
+test("a ref binding merges its fields onto the named kind and keeps earlier bindings", () => {
+  const tools = async () => [];
+  const draft = () => null;
+  const out = bindItemRef(bindItemTools([{ kind: "a", ref: { x: 1 } }, { kind: "b", ref: {} }], "a", tools), "a", { draft });
+  expect(out).toEqual([
+    { kind: "a", ref: { x: 1, tools, draft } },
+    { kind: "b", ref: {} },
+  ]);
+});
 
 test("only refs of the named kind get the tools", () => {
   const tools = async () => [];
