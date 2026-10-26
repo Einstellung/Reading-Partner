@@ -1,23 +1,27 @@
 // The stall watch on a book turn (reading/turn/durable-turn.ts, docs/soul/87
 // "停摆"), on a clock the test moves: 90 seconds without progress supersedes
-// the turn so it lands nothing; a running tool holds the watch; coming back to
-// the app after longer than that judges it at once; the caller asks again once
-// and shows the second stall as a failure (reading/turn/book-turn-rows.ts).
-// A turn joined after a restart (resumedBookTurn) is watched the same way.
-// The turn log's end line says the turn stalled.
+// the turn so it lands nothing; bytes on the provider connection are progress,
+// keepalive comments included; a running tool holds the watch; coming back to
+// the app after a long absence judges it once the connection has had its
+// grace; the caller asks again once and shows the second stall as a failure
+// (reading/turn/book-turn-rows.ts). A turn joined after a restart
+// (resumedBookTurn) is watched the same way. The turn log's end line says the
+// turn stalled.
 
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, FetchFunction, Provider } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { tappingBytes } from "../../../src/ai/provider-bytes";
 import { startTurn } from "../../../src/legion/durable/turn";
 import type { AgentTool } from "../../../src/legion/durable/contract";
 import {
   createStallWatches,
+  STALL_GRACE_MS,
   STALL_MESSAGE,
   TURN_STALL_MS,
   type SilenceRecord,
@@ -34,6 +38,7 @@ import {
 import type { CallRow } from "../../../src/reading/turn/call-state";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin } from "../../../src/reading/turn/durable-book";
 import { openReadingDurable, TURN_SECTION, type ReadingDurable } from "../../../src/reading/turn/durable-runtime";
+import { createPlaceSession, withPlaceTurnRows } from "../../../src/reading/turn/place-session";
 import { testHost, deferred } from "../../legion/durable/support/runtime";
 import { fakeThreads } from "./support/durable-threads";
 
@@ -56,6 +61,10 @@ function fakeClock() {
       now += ms;
       for (const tick of [...ticks]) tick();
     },
+    /** The process is frozen: the wall clock moves on and no tick runs. */
+    freeze(ms: number) {
+      now += ms;
+    },
   };
 }
 
@@ -65,11 +74,58 @@ const silent = (_c: unknown, options: { signal?: AbortSignal } | undefined) =>
     options?.signal?.addEventListener("abort", () => resolve({ ...fauxAssistantMessage(""), stopReason: "aborted" }));
   });
 
-async function setup(responses: Parameters<ReturnType<typeof fauxProvider>["setResponses"]>[0], tools: AgentTool[] = []) {
+/**
+ * A provider connection the test feeds by hand. While the model reasons it
+ * carries only SSE comment lines, as the ChatGPT backend's every 5 s.
+ */
+function wire() {
+  let feed!: ReadableStreamDefaultController<Uint8Array>;
+  let opened!: () => void;
+  const open = new Promise<void>((resolve) => (opened = resolve));
+  const fetch = (async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        feed = controller;
+        opened();
+      },
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as unknown as FetchFunction;
+  return {
+    fetch,
+    open,
+    keepalive: () => feed.enqueue(new TextEncoder().encode(": keepalive\n\n")),
+    end: () => feed.close(),
+  };
+}
+
+/** A reasoning model: reads its connection until it closes, then answers. No partial until then. */
+const reasoning = async (_c: unknown, options: { signal?: AbortSignal; fetch?: FetchFunction } | undefined) => {
+  const response = await options!.fetch!("https://provider.test/responses");
+  const reader = response.body!.getReader();
+  const aborted = new Promise<"aborted">((resolve) => options?.signal?.addEventListener("abort", () => resolve("aborted")));
+  for (;;) {
+    const next = await Promise.race([reader.read(), aborted]);
+    if (next === "aborted") return { ...fauxAssistantMessage(""), stopReason: "aborted" as const };
+    if (next.done) return fauxAssistantMessage(fauxText("The moon."));
+  }
+};
+
+async function setup(
+  responses: Parameters<ReturnType<typeof fauxProvider>["setResponses"]>[0],
+  tools: AgentTool[] = [],
+  fetch?: FetchFunction,
+) {
   const faux = fauxProvider({ models: [{ id: "faux-1", contextWindow: 200_000, maxTokens: 4096 }] });
   faux.setResponses(responses);
   const models = createModels();
-  models.setProvider(faux.provider);
+  // The connection reports its bytes as the app's providers' do (ai/durable-models.ts).
+  const wired = fetch ? { fetch } : {};
+  const stream: Provider["stream"] = (model, context, options) =>
+    faux.provider.stream(model, context, tappingBytes({ ...options, ...wired }) as typeof options);
+  const streamSimple: Provider["streamSimple"] = (model, context, options) =>
+    faux.provider.streamSimple(model, context, tappingBytes({ ...options, ...wired }) as typeof options);
+  models.setProvider(Object.assign(Object.create(faux.provider) as Provider, { stream, streamSimple }));
   const { threads, messages } = fakeThreads([{ role: "user", ts: 1000, text: "Why tides?" }]);
   const lines: TurnLogLine[] = [];
   const durable = await openReadingDurable({
@@ -82,7 +138,7 @@ async function setup(responses: Parameters<ReturnType<typeof fauxProvider>["setR
     now: () => 1000,
     log: (line) => lines.push(line),
   });
-  return { durable, messages, lines };
+  return { durable, messages, lines, faux };
 }
 
 function request(clock: ReturnType<typeof fakeClock>, tools: AgentTool[] = []) {
@@ -181,20 +237,136 @@ test(`${how}: a running tool holds the watch, and the turn answers after it`, as
   await durable.runtime.close(ctx);
 });
 
-test(`${how}: back in the app after longer than the stall window: judged at once`, async () => {
-  const { durable, messages } = await setup([silent]);
+test(`${how}: a reasoning stream that sends only comment lines stays alive, and is cut once they stop`, async () => {
+  const w = wire();
+  const { durable, messages } = await setup([reasoning], [], w.fetch);
   const clock = fakeClock();
-  const req = request(clock);
-  const turn = await drive(durable, req, () => {});
+  const turn = await drive(durable, request(clock), () => {});
+  let ended: string | undefined;
+  void turn.ended.then((end) => (ended = end.kind));
+  await w.open;
   await settle();
-  req.watches.away(clock.now());
-  clock.advance(0);
-  req.watches.back(clock.now() + TURN_STALL_MS + 5_000);
+  // Four minutes with no partial at all, a keepalive every half minute.
+  for (let i = 0; i < 8; i++) {
+    clock.advance(30_000);
+    w.keepalive();
+    await settle();
+  }
+  expect(ended).toBeUndefined();
+  clock.advance(TURN_STALL_MS);
   const end = await turn.ended;
   expect(end.kind).toBe("stalled");
   expect(messages.length).toBe(1);
   await durable.runtime.close(ctx);
 });
+
+test(`${how}: back in the app after a long absence, bytes within the grace keep the turn`, async () => {
+  const w = wire();
+  const { durable, messages } = await setup([reasoning], [], w.fetch);
+  const clock = fakeClock();
+  const req = request(clock);
+  const turn = await drive(durable, req, () => {});
+  let ended: string | undefined;
+  void turn.ended.then((end) => (ended = end.kind));
+  await w.open;
+  await settle();
+  req.watches.away(clock.now());
+  clock.freeze(TURN_STALL_MS + 30_000);
+  // The first tick after the thaw lands before the way back is heard.
+  clock.advance(0);
+  req.watches.back(clock.now());
+  await settle();
+  clock.advance(2_000);
+  // What the socket kept through the freeze.
+  w.keepalive();
+  await settle();
+  clock.advance(STALL_GRACE_MS);
+  await settle();
+  expect(ended).toBeUndefined();
+  w.end();
+  const end = await turn.ended;
+  expect(end.kind).toBe("answered");
+  expect(messages[messages.length - 1]?.text).toBe("The moon.");
+  await durable.runtime.close(ctx);
+});
+
+test(`${how}: back in the app after a long absence with nothing on the connection: cut when the grace runs out`, async () => {
+  const { durable, messages } = await setup([silent]);
+  const clock = fakeClock();
+  const req = request(clock);
+  const turn = await drive(durable, req, () => {});
+  let ended: string | undefined;
+  void turn.ended.then((end) => (ended = end.kind));
+  await settle();
+  req.watches.away(clock.now());
+  clock.freeze(60_000);
+  req.watches.back(clock.now());
+  clock.advance(STALL_GRACE_MS - 1_000);
+  await settle();
+  expect(ended).toBeUndefined();
+  clock.advance(1_000);
+  const end = await turn.ended;
+  expect(end.kind).toBe("stalled");
+  expect(messages.length).toBe(1);
+  await durable.runtime.close(ctx);
+});
+}
+
+// The rule after a stall is the same however the cut came (docs/soul/87 "停摆").
+test("cut on the way back with nothing in the grace, the turn is asked again once; the second cut is a failure", async () => {
+  const { durable, faux } = await setup([silent, silent, fauxAssistantMessage(fauxText("The moon."))]);
+  const clock = fakeClock();
+  const watches = createStallWatches({ timers: clock.timers });
+  const key = bookThreadKey(BOOK);
+  let screen: CallRow[] = [{ role: "user", text: "Why tides?", ts: 1000 }];
+  const s = createPlaceSession({
+    durable: () => Promise.resolve(durable),
+    key,
+    surface: "reading",
+    assemble: async () => {
+      durable.assembled.put(key, { history: [], tools: [] });
+      return {
+        kind: "turn",
+        request: {
+          key,
+          origin: bookThreadOrigin(BOOK),
+          conversation: BOOK.threadId,
+          surface: "reading",
+          line: { text: "Why tides?", ts: 1000 },
+          systemPrompt: "You are a reading partner.",
+          tools: [],
+          model: { provider: "faux", modelId: "faux-1" },
+        },
+      };
+    },
+    lastLine: () => 1000,
+    draw: (after, rows) => (screen = withPlaceTurnRows(screen, after, rows)),
+    file: () => {},
+    streaming: () => {},
+    stall: { watches },
+  });
+  s.ask();
+  for (let trip = 1; trip <= 2; trip++) {
+    await until(() => faux.state.callCount === trip);
+    await settle();
+    watches.away(clock.now());
+    clock.freeze(60_000);
+    watches.back(clock.now());
+    clock.advance(STALL_GRACE_MS);
+  }
+  await until(() => JSON.stringify(screen).includes(STALL_MESSAGE));
+  await settle();
+  expect(faux.state.callCount).toBe(2);
+  expect(screen.map((row) => row.role)).toEqual(["user", "ai"]);
+  await durable.runtime.close(ctx);
+});
+
+async function until(check: () => boolean, ms = 5_000) {
+  const end = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > end) throw new Error("timed out");
+    await settle();
+  }
 }
 
 test("a development build keeps each turn's longest silence", async () => {

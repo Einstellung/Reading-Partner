@@ -2,8 +2,9 @@
 // (docs/soul/87, "一个回合"; docs/72): start it, follow the conversation's view
 // state as the turn's rows, steer it, stop it, and cut it when the stream goes
 // silent (legion/durable/stall.ts's watch, 90 seconds, judged again when the
-// app comes back). A cut turn is superseded, so it lands nothing; the caller
-// asks again once, as today.
+// app comes back). The partial changing and any bytes on the conversation's
+// provider connection count as the stream speaking. A cut turn is superseded,
+// so it lands nothing; the caller asks again once, as today.
 //
 // A turn already in flight when the reader opens its thread — one recovery
 // resumed after a restart — is followed, steered, stopped and watched the same
@@ -33,6 +34,7 @@ import {
 } from "../../legion/durable/turn";
 import type { AgentTool } from "../../legion/durable/contract";
 import { recordLongestSilence, stallWatches, type StallWatches } from "../../legion/durable/stall";
+import { onProviderBytes } from "../../ai/provider-bytes";
 import type { ReadingTurnMessage } from "../desk-history";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin, type BookTelemetry } from "./durable-book";
 import { projectView, runStart, type TurnView, type ViewSource } from "./durable-view";
@@ -87,8 +89,8 @@ interface Following {
   startedAt: number;
   describe(name: string, args: unknown): { label: string; quiet?: true };
   onView(view: TurnView): void;
-  /** Every view's `pi.live`, before it is projected. */
-  pulse?(live: Live | undefined): void;
+  /** Every view's `pi.live` and provider session, before it is projected. */
+  pulse?(live: Live | undefined, providerSession: string | undefined): void;
 }
 
 /**
@@ -108,7 +110,10 @@ async function followTurn(
   let steerEntries = 0;
   const view = await conversation.viewState(context);
   const follow = async (value: ViewSource) => {
-    following.pulse?.(value.docs["pi.live"] as Live | undefined);
+    following.pulse?.(
+      value.docs["pi.live"] as Live | undefined,
+      (value.docs["pi.provider"] as { sessionId?: string } | undefined)?.sessionId,
+    );
     for (const item of (value.docs["pi.inbox"] as { items?: { id: number; mode: string }[] } | undefined)?.items ?? []) {
       if (item.mode !== "steer" || queuedTs.has(item.id)) continue;
       const record = await (await runtime.harness.submission(item.id as never, context))?.status(context);
@@ -134,8 +139,11 @@ async function followTurn(
 }
 
 interface TurnWatch {
-  /** Every view's `pi.live`: generation progress beats the watch, a running tool holds it. */
-  pulse(live: Live | undefined): void;
+  /**
+   * Every view's `pi.live` and provider session: generation progress beats the
+   * watch, a running tool holds it, and bytes on the session's connection beat it.
+   */
+  pulse(live: Live | undefined, providerSession: string | undefined): void;
   /** The steers the cut withdrew; undefined unless the watch cut the turn. */
   stalled(): WithdrawnSteer[] | undefined;
   /** Stop watching, recording nothing: another follower watches the turn now. */
@@ -163,6 +171,16 @@ function watchTurn(
   let stalled: WithdrawnSteer[] | undefined;
   let lastHalf = "";
   let holding = false;
+  // The conversation's provider session is written before its first request,
+  // so the view has it before that request's first byte.
+  let session: string | undefined;
+  let unheard: (() => void) | undefined;
+  let over = false;
+  const deaf = () => {
+    over = true;
+    unheard?.();
+    unheard = undefined;
+  };
   const watch = (stall.watches ?? stallWatches()).watch({
     ...(stall.stallMs ? { stallMs: stall.stallMs } : {}),
     onStall: () => {
@@ -176,7 +194,12 @@ function watchTurn(
     },
   });
   return {
-    pulse(live) {
+    pulse(live, providerSession) {
+      if (!over && providerSession !== undefined && providerSession !== session) {
+        unheard?.();
+        session = providerSession;
+        unheard = onProviderBytes(providerSession, () => watch.beat());
+      }
       const message = live?.generation?.message;
       if (message?.timestamp !== undefined) {
         if (joining) durable.turnLog.joined(key, message.timestamp);
@@ -196,8 +219,12 @@ function watchTurn(
       }
     },
     stalled: () => stalled,
-    unwatch: () => watch.stop(),
+    unwatch: () => {
+      deaf();
+      watch.stop();
+    },
     stop() {
+      deaf();
       // What the stall window has to clear, measured on a real turn; read back
       // off a development build only (the old turn loop did the same).
       if (import.meta.env?.DEV) {
