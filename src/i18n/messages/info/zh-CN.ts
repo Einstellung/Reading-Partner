@@ -201,12 +201,6 @@ export default {
   "cards.closeIt": "关闭",
   "cards.briefingFailed": "简报生成失败",
   "cards.tryAgain": "重试",
-  "cards.planned": "已规划",
-  "cards.weekChange": "本周计划有变动",
-  "cards.thisWeeksMeals": "本周的餐食",
-  "cards.onMealsPage": "已放到你的三餐页面，购物清单也一并更新。",
-  "cards.changeIt": "修改",
-  "cards.planTheWeek": "规划本周",
 
   "anchor.briefingTitle": "今日简报",
   "anchor.briefingPlaceholder": "就今日简报提问…",

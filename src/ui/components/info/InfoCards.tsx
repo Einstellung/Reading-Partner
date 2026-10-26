@@ -19,8 +19,9 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
 } from "../../../info/boxes/cards";
-import type { MealsAppliedCardData, MealsPlanCardData } from "../../../info/meals/cards";
-import { appliedLine, modeWord, weekdayName } from "../../../info/meals/screen/view";
+import type { MealsAppliedCardData } from "../../../info/meals/cards";
+import { appliedLine } from "../../../info/meals/screen/view";
+import { MealsDraftCard } from "./MealsDraftCard";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -322,74 +323,13 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 // The info domain's share of the card registry, merged with the other domains'
 // in ui/components/cardRegistry.ts — which is where the render layer looks a card
 // up.
-// The week, or the night or two a deviation reopened. Seven rows either way —
-// the card always carries the whole week as it would stand once applied — with
-// the days this call actually changes marked, since on an adjustment those are
-// the only ones the reader has to read.
-export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPlanCardData>) {
-  const t = useT();
-  const applied = payload.phase === "applied";
-  const changed = new Set(payload.changedDates);
-  return (
-    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? t("info.cards.planned") : payload.adjustment ? t("info.cards.weekChange") : t("info.cards.thisWeeksMeals")}
-      </div>
-      <ul className="m-0 mt-1.5 flex list-none flex-col p-0">
-        {payload.days.map((day) => {
-          const mark = changed.has(day.date);
-          const cell = (meal: (typeof day)["lunch"]) => {
-            return (
-              <span className="min-w-0 flex-1 truncate">
-                <span className={mark ? "text-muted-foreground" : "text-faint-foreground"}>
-                  {modeWord(meal.mode)}
-                </span>{" "}
-                {meal.name ?? meal.place ?? ""}
-              </span>
-            );
-          };
-          return (
-            <li
-              key={day.date}
-              className={
-                "flex items-center gap-2 py-1 text-[13px] leading-snug " +
-                (mark ? "font-medium text-foreground" : "text-muted-foreground")
-              }
-            >
-              <span className="w-12 flex-none text-faint-foreground">
-                {weekdayName(day.date).slice(0, 3)}
-              </span>
-              {cell(day.lunch)}
-              {cell(day.dinner)}
-            </li>
-          );
-        })}
-      </ul>
-      <div className="mt-3.5 flex items-center justify-end gap-2">
-        {applied ? (
-          <span className="text-[12px] text-faint-foreground">
-            {t("info.cards.onMealsPage")}
-          </span>
-        ) : (
-          <Button
-            type="button"
-            variant="cta"
-            size="chip"
-            className="px-3.5 py-1.5"
-            onClick={() => dispatch({ kind: "mutate", op: "apply-meals-plan" })}
-          >
-            {payload.adjustment ? t("info.cards.changeIt") : t("info.cards.planTheWeek")}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// The row the plan card's Apply leaves: one quiet line in the reader's language.
-// The row's text is the model's note and is not drawn (info/meals/cards.ts).
+// The row an Apply leaves: one quiet line in the reader's language for a week
+// applied from the old weekly card, nothing for a draft (its card above has
+// collapsed to say it). The row's text is the model's note and is not drawn
+// (info/meals/cards.ts).
 export function MealsAppliedCard({ payload }: CardComponentProps<MealsAppliedCardData>) {
   useT();
+  if (payload.draft) return null;
   return <div className="text-[12px] leading-snug text-faint-foreground">{appliedLine(payload)}</div>;
 }
 
@@ -415,7 +355,7 @@ export function infoCardRegistry(
     "lab-proposal": old(LabProposalCard),
     "lab-archive": old(LabArchiveCard),
     "briefing-failed": old(BriefingFailedCard),
-    "meals-plan": MealsPlanCard,
+    "meals-draft": MealsDraftCard,
     "meals-applied": MealsAppliedCard,
   };
 }

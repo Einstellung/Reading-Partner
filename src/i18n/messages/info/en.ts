@@ -211,12 +211,6 @@ export default {
   "cards.closeIt": "Close it",
   "cards.briefingFailed": "Briefing failed",
   "cards.tryAgain": "Try again",
-  "cards.planned": "Planned",
-  "cards.weekChange": "A change to the week",
-  "cards.thisWeeksMeals": "This week's meals",
-  "cards.onMealsPage": "It's on your Meals page, shopping list and all.",
-  "cards.changeIt": "Change it",
-  "cards.planTheWeek": "Plan the week",
 
   // --- Call anchors (info/briefer/anchors.ts) ---------------------------------
   "anchor.briefingTitle": "Today's briefing",

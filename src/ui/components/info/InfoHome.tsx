@@ -480,6 +480,7 @@ export default function InfoHome(props: {
           onTopicsChanged={() => void props.onTopicsChanged()}
           onOpenBriefing={() => onNavigate("briefing")}
           onMealsChanged={meals.reload}
+          onOpenMeals={(to) => onNavigate(to)}
           pipCards={props.pipCards}
         />
       )}

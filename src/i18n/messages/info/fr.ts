@@ -201,12 +201,6 @@ export default {
   "cards.closeIt": "Fermer",
   "cards.briefingFailed": "Échec de la génération du point du jour",
   "cards.tryAgain": "Réessayer",
-  "cards.planned": "Planifié",
-  "cards.weekChange": "Un changement dans la semaine",
-  "cards.thisWeeksMeals": "Les repas de cette semaine",
-  "cards.onMealsPage": "C'est sur votre page Repas, liste de courses comprise.",
-  "cards.changeIt": "Modifier",
-  "cards.planTheWeek": "Planifier la semaine",
 
   "anchor.briefingTitle": "Point du jour",
   "anchor.briefingPlaceholder": "Poser une question sur le point du jour…",

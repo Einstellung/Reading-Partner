@@ -55,8 +55,8 @@ import {
   applyLabProposal,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
-import { applyPlan } from "../../../info/meals/apply";
-import type { MealsPlanCardData } from "../../../info/meals/cards";
+import { applyDraft, type Applied } from "../../../info/meals/apply";
+import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../info/meals/cards";
 import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
 import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
@@ -76,6 +76,7 @@ import {
   rehydrateMessage,
   toPersistedCardPart,
   upsertCardRow,
+  latestCardOf,
   type CardAction,
   type CardPayload,
 } from "../chat/chatParts";
@@ -102,6 +103,8 @@ export interface InfoCallOptions {
   // The meals screen reloads. Applying a plan and recording a deviation both
   // write without the screen asking, so nothing else would tell it.
   onMealsChanged?: () => void;
+  // Open a meals screen from a card's link (the draft card's 查看计划 and 采购单).
+  onOpenMeals?: (screen: "meals" | "meals-shopping") => void;
 }
 
 export interface InfoCallController {
@@ -131,7 +134,7 @@ export function infoStickKey(dateKey: string, threadId: string): string {
 const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
 
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
-  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged } =
+  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged, onOpenMeals } =
     opts;
   const [swapped, setSwapped] = useState(false);
   // A conversation anchored to a date lives in that day's file; a standing one
@@ -234,8 +237,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // A receipt for something the AI just wrote, shown above the turn's rows and
   // persisted, so a reopened conversation still shows what landed.
   const raiseCard = useCallback(
-    (prefix: string, payload: CardPayload) => {
-      const cardId = nextCardId(prefix);
+    (prefix: string, payload: CardPayload, id?: string) => {
+      const cardId = id ?? nextCardId(prefix);
       const cardTs = stamp();
       setMessages((prev) => {
         const card = cardRow(cardId, payload, cardTs);
@@ -245,6 +248,21 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       appendMessage(bookId, anchor.threadId, { role: "ai", text: "", ts: cardTs, parts: [toPersistedCardPart(cardId, payload)] });
     },
     [bookId, anchor.threadId, setMessages, stamp],
+  );
+
+  // A meals card from the planning tool. A draft revising the one still on
+  // screen replaces it in place under the draft's card id: no row is added, so
+  // the conversation does not move (docs/671 对话).
+  const showMealsCard = useCallback(
+    (payload: MealsCard) => {
+      if (payload.kind !== "meals-draft") return raiseCard("meals", payload);
+      const cardId = draftCardId(payload.draftId);
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found) return raiseCard("meals", payload, cardId);
+      setMessages((prev) => upsertCardRow(prev, cardId, payload));
+      patchThreadMessage(bookId, anchor.threadId, found.ts, { parts: [toPersistedCardPart(cardId, payload)] });
+    },
+    [bookId, anchor.threadId, raiseCard, setMessages],
   );
 
   // Load (or start) the anchor's thread whenever it changes, and join a turn
@@ -483,30 +501,37 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, noteTurn, onSourcesChanged],
   );
 
-  // The week's Apply: the plan and the shopping list derived from it, in one
-  // write, and the screen reloaded through the ports' `changed`.
-  const handleApplyMealsPlan = useCallback(
-    async (cardId: string) => {
+  // The draft's 「就这样」, or apply_meal_plan: the plan and the shopping list
+  // derived from it in one write, the screen reloaded through the ports'
+  // `changed`, and the card collapsed to its applied form. The model is told in
+  // a row that draws nothing (info/meals/cards.ts) unless the tool asked, whose
+  // own result tells it.
+  const handleApplyMealsDraft = useCallback(
+    async (cardId: string, fromTool = false): Promise<Applied | null> => {
       const found = findCardPart(messagesRef.current, cardId);
-      if (!found || found.payload.kind !== "meals-plan") return;
+      if (!found || found.payload.kind !== "meals-draft") return null;
       const card = found.payload;
-      const { ok, note, shown } = await applyPlan(
+      const result = await applyDraft(
         card,
         liveMealsPorts({ today: () => todayLocal(), changed: () => onMealsChanged?.() }),
       );
-      if (!ok) return;
-      const applied: MealsPlanCardData = { ...card, phase: "applied" };
+      if (!result.ok) return result;
+      const applied: MealsDraftCardData = { ...card, phase: "applied" };
       setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
       patchThreadMessage(bookId, anchor.threadId, found.ts, {
         parts: [toPersistedCardPart(cardId, applied)],
       });
-      // The model is told in its own row, with the assistant's role; the reader
-      // sees the applied card's line, not the note (info/meals/cards.ts).
-      if (shown) noteCardTurn(note, nextCardId("meals"), shown);
-      else noteTurn(note);
+      if (!fromTool && result.shown) noteCardTurn(result.note, nextCardId("meals"), result.shown);
+      return result;
     },
-    [bookId, anchor.threadId, noteTurn, noteCardTurn, onMealsChanged],
+    [bookId, anchor.threadId, noteCardTurn, onMealsChanged],
   );
+
+  // The draft card still waiting for its 「就这样」, which a new draft revises.
+  const currentDraft = (): MealsDraftCardData | null => {
+    const hit = latestCardOf(messagesRef.current, "meals-draft");
+    return hit && hit.payload.phase === "proposed" ? hit.payload : null;
+  };
 
   // The card action dispatcher wired into the message list. Stable across
   // streaming deltas, so the memoized rows never churn. It owns orchestration:
@@ -519,7 +544,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           else if (action.op === "apply-topic") void handleApplyTopic(cardId);
           else if (action.op === "apply-lab") void handleApplyLab(cardId);
           else if (action.op === "apply-lab-archive") void handleArchiveLab(cardId);
-          else if (action.op === "apply-meals-plan") void handleApplyMealsPlan(cardId);
+          else if (action.op === "apply-meals-draft") void handleApplyMealsDraft(cardId);
           else if (action.op === "retriage") runBriefingJob("retriage");
           else if (action.op === "retry-briefing") runBriefingJob(lastJobRef.current);
           break;
@@ -529,6 +554,10 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
             if (date) onOpenBriefing?.(date);
             // Get out of the way of the screen just opened: shrink into the pip
             // where there is one, hang up where the chat is the whole screen.
+            if (navigateAway(pipCards) === "swap") setSwapped(true);
+            else onHangUp();
+          } else if (action.to === "meals" || action.to === "meals-shopping") {
+            onOpenMeals?.(action.to);
             if (navigateAway(pipCards) === "swap") setSwapped(true);
             else onHangUp();
           }
@@ -551,8 +580,9 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       handleApplyTopic,
       handleApplyLab,
       handleArchiveLab,
-      handleApplyMealsPlan,
+      handleApplyMealsDraft,
       onOpenBriefing,
+      onOpenMeals,
       onHangUp,
       pipCards,
       noteTurn,
@@ -596,7 +626,12 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       mealsTools: async () =>
         buildLiveMealsTools({
           threadId: anchor.threadId,
-          onMealsCard: (payload) => raiseCard("meals", payload),
+          onMealsCard: showMealsCard,
+          currentDraft,
+          applyDraft: async () => {
+            const hit = currentDraft();
+            return hit ? handleApplyMealsDraft(draftCardId(hit.draftId), true) : null;
+          },
           today: () => todayLocal(),
           changed: () => onMealsChanged?.(),
         }),

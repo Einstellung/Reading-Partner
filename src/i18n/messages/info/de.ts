@@ -201,12 +201,6 @@ export default {
   "cards.closeIt": "Schließen",
   "cards.briefingFailed": "Briefing fehlgeschlagen",
   "cards.tryAgain": "Erneut versuchen",
-  "cards.planned": "Geplant",
-  "cards.weekChange": "Eine Änderung für die Woche",
-  "cards.thisWeeksMeals": "Die Mahlzeiten dieser Woche",
-  "cards.onMealsPage": "Auf deiner Mahlzeiten-Seite, samt Einkaufsliste.",
-  "cards.changeIt": "Ändern",
-  "cards.planTheWeek": "Die Woche planen",
 
   "anchor.briefingTitle": "Heutiges Briefing",
   "anchor.briefingPlaceholder": "Zum heutigen Briefing fragen…",

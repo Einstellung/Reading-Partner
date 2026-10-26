@@ -201,12 +201,6 @@ export default {
   "cards.closeIt": "Закрыть",
   "cards.briefingFailed": "Не удалось собрать сводку",
   "cards.tryAgain": "Повторить",
-  "cards.planned": "Запланировано",
-  "cards.weekChange": "Изменение в плане недели",
-  "cards.thisWeeksMeals": "Меню на эту неделю",
-  "cards.onMealsPage": "Уже на странице «Питание», вместе со списком покупок.",
-  "cards.changeIt": "Изменить",
-  "cards.planTheWeek": "Спланировать неделю",
 
   "anchor.briefingTitle": "Сегодняшняя сводка",
   "anchor.briefingPlaceholder": "Спросить о сегодняшней сводке…",

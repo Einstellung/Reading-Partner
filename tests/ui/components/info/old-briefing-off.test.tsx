@@ -33,7 +33,7 @@ test("with the old briefing's UI off its cards draw nothing and the rest are unt
   expect(on["briefing-ready"]).toBe(cards.BriefingReadyCard);
   expect(on["probe-confirm"]).toBe(cards.ProbeConfirmCard);
   // The door files with the topic card too, and meals are not the briefing's.
-  for (const kind of ["topic-proposal", "meals-plan", "meals-applied"] as const) {
+  for (const kind of ["topic-proposal", "meals-draft", "meals-applied"] as const) {
     expect(off[kind]).toBe(on[kind]);
   }
   expect(cards.INFO_CARD_REGISTRY["lab-proposal"]).toBe(off["lab-proposal"]);

@@ -201,12 +201,6 @@ export default {
   "cards.closeIt": "閉鎖する",
   "cards.briefingFailed": "ブリーフィングの作成に失敗",
   "cards.tryAgain": "再試行",
-  "cards.planned": "計画済み",
-  "cards.weekChange": "今週の予定に変更",
-  "cards.thisWeeksMeals": "今週の食事",
-  "cards.onMealsPage": "Meals ページと買い物リストに反映しました。",
-  "cards.changeIt": "変更する",
-  "cards.planTheWeek": "今週を計画",
 
   "anchor.briefingTitle": "今日のブリーフィング",
   "anchor.briefingPlaceholder": "今日のブリーフィングについて質問…",

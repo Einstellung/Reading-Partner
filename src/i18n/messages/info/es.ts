@@ -201,12 +201,6 @@ export default {
   "cards.closeIt": "Cerrar",
   "cards.briefingFailed": "Error al generar el resumen",
   "cards.tryAgain": "Reintentar",
-  "cards.planned": "Planificado",
-  "cards.weekChange": "Un cambio en la semana",
-  "cards.thisWeeksMeals": "Las comidas de esta semana",
-  "cards.onMealsPage": "Ya está en tu página de Comidas, con la lista de la compra incluida.",
-  "cards.changeIt": "Cambiarlo",
-  "cards.planTheWeek": "Planificar la semana",
 
   "anchor.briefingTitle": "Resumen de hoy",
   "anchor.briefingPlaceholder": "Pregunta sobre el resumen de hoy…",

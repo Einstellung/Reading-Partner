@@ -201,12 +201,6 @@ export default {
   "cards.closeIt": "닫기",
   "cards.briefingFailed": "브리핑 생성 실패",
   "cards.tryAgain": "다시 시도",
-  "cards.planned": "계획됨",
-  "cards.weekChange": "이번 주 계획 변경",
-  "cards.thisWeeksMeals": "이번 주 식단",
-  "cards.onMealsPage": "식단 페이지와 장보기 목록에 반영했습니다.",
-  "cards.changeIt": "변경",
-  "cards.planTheWeek": "이번 주 계획하기",
 
   "anchor.briefingTitle": "오늘의 브리핑",
   "anchor.briefingPlaceholder": "오늘의 브리핑에 대해 질문…",
