@@ -32,6 +32,7 @@ import {
   type PlanSlot,
 } from "./draft";
 import { planLibrary, type PlanLibrary } from "./library";
+import { planRice, riceMeals } from "./rice";
 import { leftoverMatters, packList, shownName, type PackLine } from "./packs";
 import { DAY_SODIUM_MG, solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
 import { planStorage, type StoragePlan } from "./storage";
@@ -49,6 +50,7 @@ export type DraftRule =
   | "pot_meals"
   | "pot_link"
   | "one_pot_per_dish"
+  | "one_rice"
   | "session"
   | "sessions"
   | "cook_slot"
@@ -324,6 +326,20 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
   }
   for (const [id, pots] of potsByDish) {
     if (pots.length > 1) out.push({ rule: "one_pot_per_dish", message: `${lib.stored(id)?.name} is cooked in ${pots.length} pots (${pots.join(", ")}); a dish is cooked once per plan.` });
+  }
+
+  // One rice batch per plan, cooked at the prep session.
+  const rice = planRice(draft, lib);
+  const riceName = (id: string) => `${(lib.dish(id)?.nameEn ?? id).toLowerCase()} (${id})`;
+  for (const { meal, staple } of riceMeals(draft, lib)) {
+    if (rice && staple !== rice) {
+      out.push({
+        rule: "one_rice",
+        message: `${mealName(meal.day, meal.slot)} uses ${riceName(staple)} but the plan's rice is ${riceName(rice)}; one rice batch per plan, so use the same rice or a non-rice staple (steamed buns, tortillas, pita, noodles, potatoes, bread).`,
+        day: meal.day,
+        slot: meal.slot,
+      });
+    }
   }
   return out;
 }

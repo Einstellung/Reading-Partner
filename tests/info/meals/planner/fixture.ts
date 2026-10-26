@@ -48,7 +48,7 @@ export function goodDraft(): PlanDraft {
       },
       {
         breakfast: "milk_oats_banana",
-        lunch: { main: { dish: "green_pepper_pork_strips", staple: "multigrain_rice" }, sides: [] },
+        lunch: { main: { dish: "green_pepper_pork_strips", staple: "steamed_sweet_potato" }, sides: [] },
         dinner: { main: { dish: "lemon_seared_cod", staple: "quinoa" }, sides: [] },
         fruit: ["orange"],
       },
