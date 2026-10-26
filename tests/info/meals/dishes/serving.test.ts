@@ -6,7 +6,7 @@
 // brown_rice_cooked 123 kcal 2.7 P 1.0 F, Na 4.
 
 import { describe, expect, test } from "bun:test";
-import { BREAKFAST_METHODS, METHODS, canBatch, dishStorage } from "../../../../src/info/meals/dishes/methods";
+import { BREAKFAST_METHODS, FRIDGE_DAYS_AFTER_COOK, METHODS, canBatch, dishStorage } from "../../../../src/info/meals/dishes/methods";
 import { referenceServing, totals, wayServing } from "../../../../src/info/meals/dishes/serving";
 import type { DishIngredient } from "../../../../src/info/meals/dishes/types";
 
@@ -142,9 +142,9 @@ describe("storage from the method", () => {
     }
   });
 
-  test("cooked grains keep one day and freeze", () => {
+  test("cooked grains keep like a pot and freeze", () => {
     expect(dishStorage({ method: "grain", ingredients: [{ food: "brown_rice_cooked", grams: 200, role: "staple" }] })).toEqual({
-      fridgeDays: 1,
+      fridgeDays: FRIDGE_DAYS_AFTER_COOK,
       freezable: true,
       freezeWeeks: 3,
     });

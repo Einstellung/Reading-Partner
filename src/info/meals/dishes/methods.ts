@@ -50,7 +50,12 @@ export interface Method {
 export const FRIDGE_DAYS_AFTER_COOK = 2;
 
 const COOKED: Storage = { fridgeDays: FRIDGE_DAYS_AFTER_COOK, freezeWeeks: 3 };
-const GRAIN: Storage = { fridgeDays: 1, freezeWeeks: 3 };
+/**
+ * Cooked rice and grains keep the same window as a pot (FoodKeeper lists
+ * cooked rice at 4-6 days in the fridge): a plan's rice is cooked in one batch
+ * at the prep session (planner/rice.ts).
+ */
+const GRAIN: Storage = { fridgeDays: FRIDGE_DAYS_AFTER_COOK, freezeWeeks: 3 };
 
 export const METHODS: readonly Method[] = [
   { id: "stew", zh: "炖煮", storage: COOKED },
