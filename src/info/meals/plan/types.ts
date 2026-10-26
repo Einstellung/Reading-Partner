@@ -333,6 +333,9 @@ export interface ShoppingItem {
   // Raw protein that keeps a day or two and is not needed for another two:
   // freeze it the moment it is home.
   freezeOnArrival: boolean;
+  // Set on the lines of a plan made by the planner, bought in whole packs
+  // (planner/trip.ts); absent on a week from the old weekly card.
+  pack?: PackNote;
   // The earliest day a meal needs it, local date. Empty on a line the reader
   // asked for, which no meal is waiting on.
   neededBy: string;
@@ -342,6 +345,17 @@ export interface ShoppingItem {
   // Added after the trip was called done: it belongs to "still to get" rather
   // than to the aisles that were already walked.
   afterDone?: boolean;
+}
+
+/** What a whole-pack line says under its name. */
+export interface PackNote {
+  // Bought frozen and kept frozen.
+  frozen?: true;
+  // A seasoning, oil or dry staple kept at home rather than bought.
+  onHand?: true;
+  // What a perishable pack leaves that no meal uses, and the day an opened
+  // pack of it spoils. Only a leftover worth saying (packs.ts leftoverMatters).
+  leftover?: { grams: number; useBy: string };
 }
 
 /**
@@ -354,7 +368,8 @@ export interface ShoppingItem {
  * together, and it is pure.
  */
 export interface ShoppingState {
-  // Derived from the week's made meals. Rebuilt whole by deriveShoppingList.
+  // Derived from the week's made meals. Rebuilt whole by deriveShoppingList, or
+  // by planner/trip.ts plannerShoppingList on a planner plan.
   items: ShoppingItem[];
   // Lines the reader asked for, in the order they asked.
   reader: ShoppingItem[];

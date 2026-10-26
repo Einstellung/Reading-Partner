@@ -26,6 +26,7 @@ import {
   type MealKey,
   type MealMode,
   type MealsState,
+  type PackNote,
   type ShoppingItem,
   type WeekPlan,
 } from "../plan/types";
@@ -456,9 +457,22 @@ export function dishThumbnails(
 
 /** The second line of a shopping row: how long it keeps, and the one instruction a line can carry. */
 export function shoppingNote(item: ShoppingItem): string {
+  if (item.pack) return packNote(item, item.pack);
   return item.freezeOnArrival
     ? t("meals.shoppingNoteFreeze", { keeps: keepsLabel(item.keeps) })
     : keepsLabel(item.keeps);
+}
+
+/** A whole-pack line's note: what to do once it is home, else how long it keeps, then any leftover. */
+function packNote(item: ShoppingItem, pack: PackNote): string {
+  // An on-hand line is kept the way it is bought (dry rice, not cooked rice).
+  const head = pack.frozen
+    ? t("meals.pack.keepFrozen")
+    : item.freezeOnArrival
+      ? t("meals.pack.freeze")
+      : keepsLabel(pack.onHand ? "pantry" : item.keeps);
+  if (!pack.leftover) return head;
+  return `${head} · ${t("meals.pack.leftover", { grams: pack.leftover.grams, weekday: weekdayName(pack.leftover.useBy) })}`;
 }
 
 /** A run of meals by weekday and label, joined the way the language lists them. */

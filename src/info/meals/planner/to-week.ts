@@ -97,15 +97,16 @@ export function weekFromDraft(input: WeekFromDraft): WeekPlan {
   };
 }
 
-/**
- * A stored plan's draft solved again for a changed profile, its meals that
- * went differently (any mode but make) kept as they were. The plan as it was
- * when the draft no longer solves (a new dislike breaks its structure): the
- * next plan picks other dishes.
- */
-export function resolvePlannerWeek(plan: WeekPlan, profile: Profile, targets: Targets): WeekPlan {
+/** A stored plan's draft checked and solved for a profile; null when it has none or it no longer solves. */
+export interface PlannerSolve {
+  draft: PlanDraft;
+  lib: PlanLibrary;
+  solved: SolvedPlan;
+}
+
+export function solvePlannerRecord(plan: WeekPlan, profile: Profile, targets: Targets): PlannerSolve | null {
   const rec: PlannerRecord | undefined = plan.planner;
-  if (!rec) return plan;
+  if (!rec) return null;
   const draft = parseDraft(rec.draft);
   const lib = planLibrary(profile);
   const result = checkDraft(draft, {
@@ -115,8 +116,25 @@ export function resolvePlannerWeek(plan: WeekPlan, profile: Profile, targets: Ta
     people: profile.people,
     library: lib,
   });
-  if (!result.plan) return plan;
-  const fresh = dayPlansFromSolved(result.plan, draft, lib, rec.start);
+  return result.plan ? { draft, lib, solved: result.plan } : null;
+}
+
+/**
+ * A stored plan's draft solved again for a changed profile, its meals that
+ * went differently (any mode but make) kept as they were. The plan as it was
+ * when the draft no longer solves (a new dislike breaks its structure): the
+ * next plan picks other dishes.
+ */
+export function resolvePlannerWeek(
+  plan: WeekPlan,
+  profile: Profile,
+  targets: Targets,
+  again: PlannerSolve | null = solvePlannerRecord(plan, profile, targets),
+): WeekPlan {
+  const rec = plan.planner;
+  if (!rec || !again) return plan;
+  const { draft, lib } = again;
+  const fresh = dayPlansFromSolved(again.solved, draft, lib, rec.start);
   const byDate = new Map(fresh.map((d) => [d.date, d]));
   const days = plan.days.map((old) => {
     const next = byDate.get(old.date);
