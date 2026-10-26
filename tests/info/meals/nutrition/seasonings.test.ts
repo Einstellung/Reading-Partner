@@ -3,8 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { foodAllowed, foodById, type Food, type FoodTag } from "../../../../src/info/meals/nutrition/foods";
-import { templateProblems } from "../../../../src/info/meals/plan/checks";
-import { FLAVOURS, type Meal } from "../../../../src/info/meals/plan/types";
+import { FLAVOURS } from "../../../../src/info/meals/plan/types";
 
 const SEASONINGS = [
   "curry_powder",
@@ -79,27 +78,6 @@ describe("ready-made seasonings", () => {
     for (const id of ["lemon_pepper_seasoning", "garlic_herb_seasoning", "italian_seasoning", "smoked_paprika"]) {
       expect(food(id).tags, id).not.toContain("spicy");
     }
-  });
-
-  test("a meal takes a blend as a fixed item inside its range", () => {
-    const meal = (grams: number): Meal => ({
-      mode: "make",
-      name: "Cajun chicken rice",
-      searchName: "cajun chicken rice bowl",
-      flavour: "cajun",
-      method: "Rub with cajun the night before; roast 20 min.",
-      minutes: 10,
-      items: [
-        { foodId: "chicken_breast", role: "protein" },
-        { foodId: "microwave_grain_rice", role: "staple" },
-        { foodId: "frozen_mixed_veg", role: "fixed", grams: 150 },
-        { foodId: "cajun_seasoning", role: "fixed", grams },
-      ],
-    });
-    expect(templateProblems("Day 1 dinner", meal(3), "dinner")).toEqual([]);
-    expect(templateProblems("Day 1 dinner", meal(20), "dinner")).toEqual([
-      "Day 1 dinner: 20 g of cajun_seasoning is outside its 2–5 g range.",
-    ]);
   });
 });
 

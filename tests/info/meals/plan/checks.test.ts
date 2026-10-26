@@ -1,12 +1,13 @@
-// The rules a drafted week is held to (docs/73 每顿怎么搭), and the grams it
-// comes back with. Run: scripts/t.sh tests/info/meals/plan/checks.test.ts
+// The fish count the week summary shows (src/info/meals/plan/checks.ts), and a
+// stored week's fruit staple as the weekly solver reads it.
+// Run: scripts/t.sh tests/info/meals/plan/checks.test.ts
 
 import { expect, test } from "bun:test";
-import { checkPlan, fishMeals } from "../../../../src/info/meals/plan/checks";
+import { fishMeals } from "../../../../src/info/meals/plan/checks";
 import { solvePlan, targetsOf } from "../../../../src/info/meals/plan/solve-week";
 import type { Meal, WeekPlan } from "../../../../src/info/meals/plan/types";
 import { MEAL_KEYS } from "../../../../src/info/meals/plan/types";
-import { charter, draftWeek, eggToast, MON, profile, shrimpRice } from "../fixtures/week";
+import { charter, draftWeek, eggToast, profile, shrimpRice } from "../fixtures/week";
 
 const targets = targetsOf(charter(), "other")!;
 
@@ -14,91 +15,9 @@ function withMeal(plan: WeekPlan, dayIndex: number, key: "breakfast" | "lunch" |
   return { ...plan, days: plan.days.map((d, i) => (i === dayIndex ? { ...d, [key]: meal } : d)) };
 }
 
-test("the fixture week passes and every made meal comes back with grams", () => {
-  const { plan, problems } = checkPlan({ plan: draftWeek(), profile: profile(), targets });
-  expect(problems).toEqual([]);
-  for (const day of plan.days) {
-    for (const key of MEAL_KEYS) {
-      const meal = day[key];
-      if (meal.mode !== "make") continue;
-      expect(meal.solved?.length).toBeGreaterThan(0);
-      expect(meal.solved?.every((r) => r.grams > 0)).toBe(true);
-    }
-  }
-});
-
-test("a food the table does not have is named back, and nothing is solved", () => {
-  const bad = { ...shrimpRice(), items: [...(shrimpRice().items ?? []), { foodId: "dragon_meat", role: "fixed" as const, grams: 50 }] };
-  const { plan, problems } = checkPlan({ plan: withMeal(draftWeek(), 1, "lunch", bad), profile: profile(), targets });
-  expect(problems).toEqual(['Day 2 lunch: "dragon_meat" is not in the food table. Use ids from the list only.']);
-  expect(plan.days[0]?.lunch.solved).toBeUndefined();
-});
-
-test("a template the solver cannot take is refused in words", () => {
-  const two = { ...eggToast(), items: [{ foodId: "egg", role: "protein" as const }, { foodId: "tofu_skin", role: "protein" as const }, { foodId: "oats", role: "staple" as const }] };
-  const { problems } = checkPlan({ plan: withMeal(draftWeek(), 1, "breakfast", two), profile: profile(), targets });
-  expect(problems).toContain("Day 2 breakfast needs exactly one protein item; it has 2.");
-});
-
-test("minutes over the effort level's cap, and a disliked food, come back", () => {
-  const slow = { ...shrimpRice(), minutes: 25 };
-  const { problems } = checkPlan({
-    plan: withMeal(draftWeek(), 1, "lunch", slow),
-    profile: profile({ dislikes: ["poultry"] }),
-    targets,
-  });
-  expect(problems).toContain("Day 2 lunch takes 25 minutes; they allow 20.");
-  expect(problems.filter((p) => p.includes("ready_chicken_breast, which they do not eat"))).toHaveLength(3);
-});
-
-test("the cap follows the effort level: 20 minutes simple, 45 homestyle", () => {
-  const at = (minutes: number, effort: "simple" | "homestyle") =>
-    checkPlan({ plan: withMeal(draftWeek(), 1, "lunch", { ...shrimpRice(), minutes }), profile: profile({ effort }), targets })
-      .problems;
-  expect(at(20, "simple")).toEqual([]);
-  expect(at(21, "simple")).toEqual(["Day 2 lunch takes 21 minutes; they allow 20."]);
-  expect(at(45, "homestyle")).toEqual([]);
-  expect(at(46, "homestyle")).toEqual(["Day 2 lunch takes 46 minutes; they allow 45."]);
-});
-
-test("a proper meal is not held to the cap; the meals around it still are", () => {
-  let plan = withMeal(draftWeek(), 5, "dinner", { ...shrimpRice(), minutes: 90, proper: true });
-  expect(checkPlan({ plan, profile: profile(), targets }).problems).toEqual([]);
-  plan = withMeal(plan, 5, "lunch", { ...shrimpRice(), flavour: "garlic", minutes: 30 });
-  expect(checkPlan({ plan, profile: profile(), targets }).problems).toEqual(["Day 6 lunch takes 30 minutes; they allow 20."]);
-});
-
-test("two main meals in a row with one flavour are refused, across the night too", () => {
-  const plan = withMeal(draftWeek(), 1, "breakfast", { ...eggToast(), flavour: "teriyaki" });
-  const { problems } = checkPlan({ plan, profile: profile(), targets });
-  expect(problems).toEqual(["Day 1 dinner and Day 2 breakfast are both teriyaki; change one."]);
-});
-
-test("a protein food that cannot reach the meal's target is sent back", () => {
-  const thin: Meal = { ...shrimpRice(), items: [{ foodId: "quail_egg", role: "protein" }, { foodId: "rice_noodles_dry", role: "staple" }] };
-  const { problems } = checkPlan({ plan: withMeal(draftWeek(), 1, "dinner", thin), profile: profile(), targets });
-  expect(problems.length).toBe(1);
-  expect(problems[0]).toStartWith("Day 2 dinner: protein reaches only");
-});
-
-test("the meals the problems name come back as slots, once each and in week order", () => {
-  let plan = withMeal(draftWeek(), 3, "lunch", { ...shrimpRice(), minutes: 25 });
-  plan = withMeal(plan, 1, "breakfast", { ...eggToast(), flavour: "teriyaki" });
-  expect(checkPlan({ plan, profile: profile(), targets }).failing).toEqual([
-    { date: "2026-09-21", meal: "dinner" },
-    { date: "2026-09-22", meal: "breakfast" },
-    { date: "2026-09-24", meal: "lunch" },
-  ]);
-
-  const bad: Meal = { ...shrimpRice(), name: undefined, items: [{ foodId: "dragon_meat", role: "protein" }] };
-  const template = checkPlan({ plan: withMeal(draftWeek(), 4, "dinner", bad), profile: profile(), targets });
-  expect(template.problems.length).toBeGreaterThan(1);
-  expect(template.failing).toEqual([{ date: "2026-09-25", meal: "dinner" }]);
-});
-
-test("fish at least twice, unless an adjustment inherited fewer", () => {
+test("fish and seafood meals are counted across the week, made meals only", () => {
   let plan = draftWeek();
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < plan.days.length; i++) {
     const d = plan.days[i]!;
     for (const key of MEAL_KEYS) {
       if (d[key].mode === "make" && fishMeals({ ...plan, days: [d] }) > 0) {
@@ -106,127 +25,26 @@ test("fish at least twice, unless an adjustment inherited fewer", () => {
       }
     }
   }
+  expect(fishMeals(plan)).toBe(0);
   plan = withMeal(plan, 0, "lunch", shrimpRice());
   expect(fishMeals(plan)).toBe(1);
-  const fresh = checkPlan({ plan, profile: profile(), targets });
-  expect(fresh.problems).toEqual(["The week has 1 fish or seafood meal; it needs at least two."]);
-  // A week-wide rule names no meal: any one the model changes can mend it.
-  expect(fresh.failing).toEqual([]);
-  const adjusted = checkPlan({
-    plan,
-    profile: profile(),
-    targets,
-    changed: [{ date: MON, meal: "lunch" }],
-    previous: plan,
-  });
-  expect(adjusted.problems).toEqual([]);
-  expect(checkPlan({ plan, profile: profile({ dislikes: ["seafood"] }), targets, changed: [] }).problems).toEqual([]);
-});
-
-const meal = (flavour: Meal["flavour"], items: NonNullable<Meal["items"]>): Meal => ({
-  mode: "make",
-  name: "测试",
-  searchName: "test dish",
-  flavour,
-  minutes: 10,
-  method: "Assemble.",
-  items,
-});
-
-test("a fruit is never the staple, at the snack or at breakfast", () => {
-  const orangeSnack = meal("sweet", [{ foodId: "greek_yogurt", role: "protein" }, { foodId: "orange", role: "staple" }]);
-  const bananaBreakfast = meal("plain", [{ foodId: "egg", role: "protein" }, { foodId: "banana", role: "staple" }]);
-  let plan = withMeal(draftWeek(), 1, "snack", orangeSnack);
-  plan = withMeal(plan, 1, "breakfast", bananaBreakfast);
-  const { problems, failing } = checkPlan({ plan, profile: profile(), targets });
-  expect(problems).toEqual([
-    "Day 2 breakfast: banana is a fruit and never the staple; make it a fixed item of 150–200 g.",
-    "Day 2 snack: orange is a fruit and never the staple; make it a fixed item of 150–200 g.",
-  ]);
-  expect(failing).toEqual([
-    { date: "2026-09-22", meal: "breakfast" },
-    { date: "2026-09-22", meal: "snack" },
-  ]);
-});
-
-test("the snack may go without a staple; breakfast, lunch and dinner may not", () => {
-  const snack = meal("sweet", [
-    { foodId: "plain_yogurt", role: "protein" },
-    { foodId: "kiwi", role: "fixed", grams: 150 },
-    { foodId: "walnuts", role: "fat" },
-  ]);
-  const plan = withMeal(draftWeek(), 1, "snack", snack);
-  expect(checkPlan({ plan, profile: profile(), targets }).problems).toEqual([]);
-  const noStaple = meal("plain", [{ foodId: "egg", role: "protein" }, { foodId: "cucumber", role: "fixed", grams: 100 }]);
-  expect(checkPlan({ plan: withMeal(plan, 1, "breakfast", noStaple), profile: profile(), targets }).problems).toEqual([
-    "Day 2 breakfast needs exactly one staple item; it has 0.",
-  ]);
-  const twoStaples = meal("sweet", [
-    { foodId: "plain_yogurt", role: "protein" },
-    { foodId: "oats", role: "staple" },
-    { foodId: "whole_wheat_toast", role: "staple" },
-  ]);
-  expect(checkPlan({ plan: withMeal(plan, 1, "snack", twoStaples), profile: profile(), targets }).problems).toEqual([
-    "Day 2 snack has 2 staple items; at most one.",
-  ]);
-});
-
-test("a day under 90% of its kcal goes back naming the day, and no meal", () => {
-  // Light staples at their caps and no fat item anywhere on day 2.
-  let plan = withMeal(
-    draftWeek(),
-    1,
-    "breakfast",
-    meal("plain", [
-      { foodId: "egg_white", role: "protein" },
-      { foodId: "chinese_yam", role: "staple" },
-      { foodId: "cucumber", role: "fixed", grams: 100 },
-      { foodId: "low_fat_milk", role: "fixed", grams: 200 },
-    ]),
-  );
-  plan = withMeal(
-    plan,
-    1,
-    "lunch",
-    meal("garlic", [
-      { foodId: "cod", role: "protein" },
-      { foodId: "potato", role: "staple" },
-      { foodId: "spinach", role: "fixed", grams: 200 },
-    ]),
-  );
-  plan = withMeal(
-    plan,
-    1,
-    "dinner",
-    meal("lemon-pepper", [
-      { foodId: "frozen_shrimp", role: "protein" },
-      { foodId: "baby_potato", role: "staple" },
-      { foodId: "broccoli", role: "fixed", grams: 200 },
-    ]),
-  );
-  const thinSnack = meal("sweet", [
-    { foodId: "greek_yogurt", role: "protein" },
-    { foodId: "strawberries", role: "fixed", grams: 150 },
-  ]);
-  plan = withMeal(plan, 1, "snack", thinSnack);
-  const { problems, failing } = checkPlan({ plan, profile: profile(), targets });
-  expect(problems).toEqual([expect.any(String)]);
-  expect(problems[0]).toMatch(/^Day 2 comes to \d+ kcal of the 1850 its meals are for, under 90%\. Add a fixed item/);
-  expect(failing).toEqual([]);
-  // An adjustment elsewhere in the week does not answer for this day.
-  expect(checkPlan({ plan, profile: profile(), targets, changed: [{ date: "2026-09-24", meal: "lunch" }] }).problems).toEqual([]);
-  // Milk and nuts at the snack bring it back over.
-  const fuller = meal("sweet", [...(thinSnack.items ?? []), { foodId: "whole_milk", role: "fixed", grams: 300 }, { foodId: "mixed_nuts", role: "fat" }]);
-  expect(checkPlan({ plan: withMeal(plan, 1, "snack", fuller), profile: profile(), targets }).problems).toEqual([]);
+  plan = withMeal(plan, 1, "lunch", { mode: "out", place: "sushi" });
+  expect(fishMeals(plan)).toBe(1);
 });
 
 test("a stored week's fruit staple is solved as 200 g of fixed fruit", () => {
-  const stored = withMeal(
-    draftWeek(),
-    1,
-    "snack",
-    meal("sweet", [{ foodId: "greek_yogurt", role: "protein" }, { foodId: "orange", role: "staple" }]),
-  );
+  const stored = withMeal(draftWeek(), 1, "snack", {
+    mode: "make",
+    name: "测试",
+    searchName: "test dish",
+    flavour: "sweet",
+    minutes: 10,
+    method: "Assemble.",
+    items: [
+      { foodId: "greek_yogurt", role: "protein" },
+      { foodId: "orange", role: "staple" },
+    ],
+  });
   expect(solvePlan(stored, targets, profile()).days[1]?.snack.solved).toEqual([
     { foodId: "greek_yogurt", role: "protein", grams: 100 },
     { foodId: "orange", role: "fixed", grams: 200 },

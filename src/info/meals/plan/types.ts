@@ -99,12 +99,6 @@ export const FLAVOURS: readonly { id: Flavour; zh: string; en: string; local?: t
   { id: "miso", zh: "味噌", en: "Miso", local: true },
 ];
 
-/** The flavour an id names, or null for anything off the list. */
-export function flavourOf(raw: unknown): Flavour | null {
-  const v = String(raw ?? "").trim().toLowerCase();
-  return FLAVOURS.some((f) => f.id === v) ? (v as Flavour) : null;
-}
-
 /** One food of a made meal at its solved weight, as stored. */
 export interface SolvedItem {
   foodId: string;
