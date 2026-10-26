@@ -56,12 +56,20 @@ describe("buy text", () => {
   test("every pack kind has words in both languages", () => {
     for (const locale of ["zh-CN", "en"] as const) {
       setLocale(locale);
-      for (const kind of ["box", "bag", "block", "carton", "head", "bunch", "loaf"] as const) {
+      for (const kind of ["box", "bag", "block", "carton", "head", "bunch", "loaf", "can"] as const) {
         const text = buyText(line({ food: "x", buy: { by: "pack", count: 2, packG: 300, kind } }));
         expect(text, `${locale} ${kind}`).not.toContain("meals.pack");
         expect(text, `${locale} ${kind}`).toContain("600");
       }
     }
+  });
+
+  test("a tin shows the weight on its label, though the plan counts it drained", () => {
+    setLocale("zh-CN");
+    expect(buyText(line({ food: "canned_kidney_beans", buy: { by: "pack", count: 2, packG: 240, labelG: 400, kind: "can" } }))).toBe("2 罐（约 800 g）");
+    expect(buyText(line({ food: "crushed_tomatoes", buy: { by: "pack", count: 1, packG: 400, kind: "can" } }))).toBe("1 罐（约 400 g）");
+    setLocale("en");
+    expect(buyText(line({ food: "canned_kidney_beans", buy: { by: "pack", count: 1, packG: 240, labelG: 400, kind: "can" } }))).toBe("1 can (about 400 g)");
   });
 });
 

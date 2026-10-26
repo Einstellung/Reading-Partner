@@ -77,6 +77,8 @@ export default {
   didntGet: "没买到的",
   didntGetHint: "在对话里说一声，这一周会跟着调整",
   stillToBuy: "还要买",
+  onHandTitle: "家里应该有",
+  onHandHint: "看一眼橱柜，缺的补上",
   left: { other: "还剩 {count} 项" },
   added: "手动加的",
 
@@ -232,6 +234,7 @@ export default {
   "pack.head": { other: "{count} 颗" },
   "pack.bunch": { other: "{count} 把" },
   "pack.loaf": { other: "{count} 袋" },
+  "pack.can": { other: "{count} 罐" },
   "pack.piece": { other: "{count} 个" },
   "pack.about": "{qty}（约 {grams} g）",
   "pack.aboutWeight": "约 {grams} g",

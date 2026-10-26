@@ -7,7 +7,7 @@ import { NUTRIENT_OVERRIDES, RETAIL_PACK, WHOLE_GRAIN, type PackKind } from "../
 import { FOODS, foodById } from "../../../../src/info/meals/nutrition/foods";
 import { SWAP_GROUPS, SWAP_GROUP_OF } from "../../../../src/info/meals/nutrition/swap-groups";
 
-const PACK_KINDS: readonly PackKind[] = ["box", "bag", "block", "carton", "head", "bunch", "loaf"];
+const PACK_KINDS: readonly PackKind[] = ["box", "bag", "block", "carton", "head", "bunch", "loaf", "can"];
 const ids = new Set(FOODS.map((f) => f.id));
 
 describe("whole grain", () => {

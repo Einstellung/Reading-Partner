@@ -79,6 +79,8 @@ export default {
   didntGet: "買えなかったもの",
   didntGetHint: "会話で伝えれば今週の計画が調整されます",
   stillToBuy: "残りの買い物",
+  onHandTitle: "家にあるはずのもの",
+  onHandHint: "戸棚を見て、足りないものは買い足しましょう",
   left: { other: "残り{count}件" },
   added: "追加分",
 
@@ -234,6 +236,7 @@ export default {
   "pack.head": { other: "{count} 玉" },
   "pack.bunch": { other: "{count} 束" },
   "pack.loaf": { other: "{count} 斤" },
+  "pack.can": { other: "{count} 缶" },
   "pack.piece": { other: "{count} 個" },
   "pack.about": "{qty}（約 {grams} g）",
   "pack.aboutWeight": "約 {grams} g",

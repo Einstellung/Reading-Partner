@@ -96,6 +96,8 @@ export default {
   didntGet: "Didn't get",
   didntGetHint: "Say so in Ask and the week adjusts",
   stillToBuy: "Still to buy",
+  onHandTitle: "Should be at home",
+  onHandHint: "Check the cupboard and add what's missing",
   left: { one: "{count} left", other: "{count} left" },
   added: "added",
 
@@ -271,6 +273,7 @@ export default {
   "pack.head": { one: "{count} head", other: "{count} heads" },
   "pack.bunch": { one: "{count} bunch", other: "{count} bunches" },
   "pack.loaf": { one: "{count} loaf", other: "{count} loaves" },
+  "pack.can": { one: "{count} can", other: "{count} cans" },
   "pack.piece": { one: "{count} piece", other: "{count} pieces" },
   "pack.about": "{qty} (about {grams} g)",
   "pack.aboutWeight": "about {grams} g",

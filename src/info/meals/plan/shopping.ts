@@ -142,12 +142,20 @@ export function isChecked(state: ShoppingState, item: ShoppingItem): boolean {
 // The three below read the list, or the lines the caller is drawing it as
 // (list-order.ts), so a count beside the list is a count of what is drawn.
 
-/** The lines still to be bought. The only count the list shows. */
+/**
+ * A line of a planner plan that is kept at home (a seasoning, an oil, dry rice):
+ * the list shows it as a cupboard check, and it is never counted as to buy.
+ */
+export function isOnHand(item: ShoppingItem): boolean {
+  return item.pack?.onHand === true;
+}
+
+/** The lines still to be bought: not ticked, and not a cupboard check. The only count the list shows. */
 export function leftToBuy(
   state: ShoppingState,
   lines: readonly ShoppingItem[] = currentList(state),
 ): number {
-  return lines.filter((i) => !isChecked(state, i)).length;
+  return lines.filter((i) => !isOnHand(i) && !isChecked(state, i)).length;
 }
 
 /** Lines added after the trip was called done, not yet picked up. */
@@ -155,7 +163,7 @@ export function stillToGet(
   state: ShoppingState,
   lines: readonly ShoppingItem[] = currentList(state),
 ): ShoppingItem[] {
-  return lines.filter((i) => i.afterDone && !isChecked(state, i));
+  return lines.filter((i) => i.afterDone && !isOnHand(i) && !isChecked(state, i));
 }
 
 /** Lines the trip was supposed to bring home and did not. */
@@ -163,7 +171,7 @@ export function missed(
   state: ShoppingState,
   lines: readonly ShoppingItem[] = currentList(state),
 ): ShoppingItem[] {
-  return lines.filter((i) => !i.afterDone && !isChecked(state, i));
+  return lines.filter((i) => !i.afterDone && !isOnHand(i) && !isChecked(state, i));
 }
 
 /**

@@ -83,6 +83,8 @@ export default {
   didntGet: "Não conseguiu",
   didntGetHint: "Diga em Perguntar e a semana se ajusta",
   stillToBuy: "Ainda falta comprar",
+  onHandTitle: "Deve haver em casa",
+  onHandHint: "Confira o armário e compre o que faltar",
   left: { one: "falta {count}", other: "faltam {count}" },
   added: "adicionado",
 
@@ -240,6 +242,7 @@ export default {
   "pack.head": { one: "{count} pé", other: "{count} pés" },
   "pack.bunch": { one: "{count} maço", other: "{count} maços" },
   "pack.loaf": { one: "{count} pão de forma", other: "{count} pães de forma" },
+  "pack.can": { one: "{count} lata", other: "{count} latas" },
   "pack.piece": { one: "{count} unidade", other: "{count} unidades" },
   "pack.about": "{qty} (cerca de {grams} g)",
   "pack.aboutWeight": "cerca de {grams} g",

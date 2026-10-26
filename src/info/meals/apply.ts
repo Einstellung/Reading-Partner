@@ -12,7 +12,7 @@ import type { PhotoCache } from "./photos/dish-photos";
 import type { Profile, Region, Targets } from "./nutrition/targets";
 import { dishesToDraw } from "./photos/dish-drawing";
 import { photoQueriesForPlan, type PhotoQuery } from "./photos/photo-run";
-import { currentList, deriveShoppingList, isChecked, reconcileShoppingList } from "./plan/shopping";
+import { currentList, deriveShoppingList, isChecked, isOnHand, reconcileShoppingList } from "./plan/shopping";
 import { solvePlan, targetsOf } from "./plan/solve-week";
 import type {
   Deviation,
@@ -290,7 +290,8 @@ export function mealWords(ref: MealRef): string {
 }
 
 function stillToBuy(shopping: ShoppingState): { toBuy: number; freeze: number } {
-  const list = currentList(shopping).filter((i) => !isChecked(shopping, i));
+  // A cupboard check (seasonings, oils, dry rice) is not something to buy.
+  const list = currentList(shopping).filter((i) => !isOnHand(i) && !isChecked(shopping, i));
   return { toBuy: list.length, freeze: list.filter((i) => i.freezeOnArrival).length };
 }
 

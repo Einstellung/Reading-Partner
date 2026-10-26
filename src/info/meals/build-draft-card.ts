@@ -30,8 +30,14 @@ export function foodNamed(id: string): Named {
   return { zh: name, en: name };
 }
 
+/**
+ * A dish by the name the card shows. Many seed dishes carry the foreign dish's
+ * own name in a trailing （…） after the Chinese one (鸡腿丁红芸豆炖菜（chili）);
+ * it reads like a batch id on a pot legend, so the card drops it, the way
+ * foodNamed drops a food's trailing note.
+ */
 function dishNamed(d: Dish | undefined, id: string): Named {
-  return d ? { zh: d.name, en: d.nameEn } : { zh: id, en: id };
+  return d ? { zh: d.name.replace(/（[^）]*）$/, ""), en: d.nameEn } : { zh: id, en: id };
 }
 
 /** A staple or side ref: a dish id from the library, else a food id. */

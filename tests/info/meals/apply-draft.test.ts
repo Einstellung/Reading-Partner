@@ -63,9 +63,12 @@ test("confirming writes the plan and the list derived from it in one write, and 
   expect(list.items.every((i) => i.pack)).toBe(true);
   expect(h.reloads).toBe(1);
   expect(out.note).toContain("the 3-day plan is saved");
-  expect(out.note).toContain(`${list.items.length} things`);
+  // Seasonings and dry staples kept at home are a cupboard check, not something to buy.
+  const toBuy = list.items.filter((i) => !i.pack?.onHand).length;
+  expect(toBuy).toBeLessThan(list.items.length);
+  expect(out.note).toContain(`${toBuy} things`);
   // The row left for the model draws nothing: it names the draft it confirmed.
-  expect(out.shown).toMatchObject({ kind: "meals-applied", draft: "42", toBuy: list.items.length });
+  expect(out.shown).toMatchObject({ kind: "meals-applied", draft: "42", toBuy });
 });
 
 test("a card already applied, a reader without targets, or a failed write changes nothing", async () => {

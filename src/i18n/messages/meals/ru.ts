@@ -83,6 +83,8 @@ export default {
   didntGet: "Не куплено",
   didntGetHint: "Скажите об этом в разделе «Спросить», и неделя подстроится",
   stillToBuy: "Ещё нужно купить",
+  onHandTitle: "Должно быть дома",
+  onHandHint: "Проверьте шкаф и докупите то, чего нет",
   left: {
     one: "осталась {count}",
     few: "осталось {count}",
@@ -245,6 +247,7 @@ export default {
   "pack.head": { one: "{count} кочан", few: "{count} кочана", many: "{count} кочанов", other: "{count} кочана" },
   "pack.bunch": { one: "{count} пучок", few: "{count} пучка", many: "{count} пучков", other: "{count} пучка" },
   "pack.loaf": { one: "{count} буханка", few: "{count} буханки", many: "{count} буханок", other: "{count} буханки" },
+  "pack.can": { one: "{count} банка", few: "{count} банки", many: "{count} банок", other: "{count} банки" },
   "pack.piece": { one: "{count} штука", few: "{count} штуки", many: "{count} штук", other: "{count} штуки" },
   "pack.about": "{qty} (около {grams} г)",
   "pack.aboutWeight": "около {grams} г",

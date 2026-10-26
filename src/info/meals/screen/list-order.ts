@@ -9,7 +9,7 @@
 // Pure, and apart from the .tsx, so the rule can be tested without React.
 
 import { t } from "../../../i18n";
-import { currentList, isChecked, leftToBuy, missed, shoppingItemKey, stillToGet } from "../plan/shopping";
+import { currentList, isChecked, isOnHand, leftToBuy, missed, shoppingItemKey, stillToGet } from "../plan/shopping";
 import { CATEGORY_ORDER, type IngredientCategory, type ShoppingItem, type ShoppingState } from "../plan/types";
 import { categoryLabel, weekdayName } from "./view";
 
@@ -120,7 +120,7 @@ export function shoppingPreview(
       more: missedCount ? t("meals.shopping.missed", { count: missedCount }) : t("meals.shopping.allGot"),
     };
   }
-  const left = lines.filter((i) => !isChecked(state, i));
+  const left = lines.filter((i) => !isOnHand(i) && !isChecked(state, i));
   const rest = Math.max(0, left.length - limit);
   return { items: left.slice(0, limit), more: rest ? t("meals.shopping.more", { count: rest }) : null };
 }

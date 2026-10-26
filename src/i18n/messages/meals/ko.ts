@@ -79,6 +79,8 @@ export default {
   didntGet: "못 산 것",
   didntGetHint: "물어보기에서 말하면 이번 주 계획이 조정돼요",
   stillToBuy: "더 살 것",
+  onHandTitle: "집에 있어야 할 것",
+  onHandHint: "찬장을 확인하고 없는 것은 사세요",
   left: { other: "{count}개 남음" },
   added: "직접 추가함",
 
@@ -234,6 +236,7 @@ export default {
   "pack.head": { other: "{count}통" },
   "pack.bunch": { other: "{count}단" },
   "pack.loaf": { other: "{count}봉지" },
+  "pack.can": { other: "{count}캔" },
   "pack.piece": { other: "{count}개" },
   "pack.about": "{qty} (약 {grams} g)",
   "pack.aboutWeight": "약 {grams} g",

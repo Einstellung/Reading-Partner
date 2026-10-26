@@ -103,3 +103,12 @@ test("the applied card says how many days and pots and when the prep is", () => 
   expect(prepWhen(noPrep)).toBe("");
   expect(draftAppliedView(noPrep).meta).toBe(t("meals.draft.days", { count: 3 }));
 });
+
+test("a pot's name has no trailing (original name) after it, in the data or on the legend", () => {
+  // The seed dish is 鸡腿丁红芸豆炖菜（chili）; the （chili） reads like the model's batch id.
+  const card = draftCard();
+  expect(card.pots[0]!.batch).toBe("chili");
+  expect(card.pots[0]!.name.zh).toBe("鸡腿丁红芸豆炖菜");
+  expect(draftCardView(card).pots.map((p) => p.name)).toEqual(["鸡腿丁红芸豆炖菜"]);
+  expect(JSON.stringify(draftCardView(card).days)).not.toContain("chili");
+});

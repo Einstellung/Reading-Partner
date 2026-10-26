@@ -159,6 +159,20 @@ export const PIECE_G: Readonly<Record<string, { grams: number; label: string; fd
 };
 
 /**
+ * Edible grams of one whole fruit as a shop sells it, for the fruits PIECE_G
+ * has no USDA household measure for. Common retail sizes, not a database
+ * figure: a hami melon is about 1.5 kg whole and 800 g of flesh, a pineapple
+ * about 1.6 kg whole and 900 g of flesh.
+ */
+export const SOLD_PIECE_G: Readonly<Record<string, { grams: number; label: string }>> = {
+  cantaloupe: { grams: 800, label: "个" },
+  pineapple: { grams: 900, label: "个" },
+  papaya: { grams: 350, label: "个" },
+  guava: { grams: 150, label: "个" },
+  dragon_fruit: { grams: 300, label: "个" },
+};
+
+/**
  * Deep-coloured vegetables (深色蔬菜, docs/671 入库检查): the Chinese dietary
  * guideline counts dark green, red, orange and purple ones, and asks that half
  * of the day's vegetables be of them. Pale or light-green vegetables (cabbage,
@@ -196,8 +210,8 @@ export const WHOLE_GRAIN: ReadonlySet<string> = new Set([
   "frozen_corn", "corn_tortilla",
 ]);
 
-/** How a pack is sold, for the shopping list's words (盒、袋、块、盒装奶、颗、把、条). */
-export type PackKind = "box" | "bag" | "block" | "carton" | "head" | "bunch" | "loaf";
+/** How a pack is sold, for the shopping list's words (盒、袋、块、盒装奶、颗、把、条、罐). */
+export type PackKind = "box" | "bag" | "block" | "carton" | "head" | "bunch" | "loaf" | "can";
 
 /**
  * The usual retail pack and how many days it keeps once opened or cut
@@ -211,9 +225,11 @@ export type PackKind = "box" | "bag" | "block" | "carton" | "head" | "bunch" | "
  * they carry the pack for the list.
  * Countable produce bought loose (tomatoes, peppers, cucumbers) has no pack:
  * one piece (PIECE_G) is the unit and PIECE_OPEN_DAYS says how long a cut one
- * keeps.
+ * keeps. Foods that keep (frozen, tinned, dry, nuts, sliced cheese) carry a
+ * pack too, so the list never has to say "about 300 g" of them; their opened
+ * days are not checked.
  */
-export const RETAIL_PACK: Readonly<Record<string, { grams: number; kind: PackKind; openDays: number }>> = {
+export const RETAIL_PACK: Readonly<Record<string, { grams: number; kind: PackKind; openDays: number; labelG?: number }>> = {
   chicken_thigh: { grams: 500, kind: "box", openDays: 1 },
   chicken_breast: { grams: 500, kind: "box", openDays: 1 },
   beef_shank_raw: { grams: 600, kind: "box", openDays: 1 },
@@ -253,6 +269,58 @@ export const RETAIL_PACK: Readonly<Record<string, { grams: number; kind: PackKin
   blueberries: { grams: 170, kind: "box", openDays: 5 },
   strawberries: { grams: 450, kind: "box", openDays: 3 },
   grapes: { grams: 500, kind: "bag", openDays: 5 },
+  cherries: { grams: 450, kind: "box", openDays: 4 },
+  watermelon: { grams: 1000, kind: "block", openDays: 3 },
+  pumpkin: { grams: 600, kind: "block", openDays: 5 },
+  baby_potato: { grams: 700, kind: "bag", openDays: 14 },
+  // Sold frozen, a pack each (1 lb bags of vegetables and fish fillets, a 12 oz
+  // bag of berries or shelled edamame). Kept frozen, so the days once opened
+  // are only a bound.
+  frozen_spinach: { grams: 450, kind: "bag", openDays: 30 },
+  frozen_broccoli: { grams: 450, kind: "bag", openDays: 30 },
+  frozen_peas: { grams: 450, kind: "bag", openDays: 30 },
+  frozen_corn: { grams: 450, kind: "bag", openDays: 30 },
+  frozen_green_beans: { grams: 450, kind: "bag", openDays: 30 },
+  frozen_edamame: { grams: 350, kind: "bag", openDays: 30 },
+  frozen_blueberries: { grams: 340, kind: "bag", openDays: 30 },
+  cod: { grams: 450, kind: "bag", openDays: 30 },
+  basa_fillet: { grams: 450, kind: "bag", openDays: 30 },
+  frozen_tilapia_fillet: { grams: 450, kind: "bag", openDays: 30 },
+  beef_hotpot_slices: { grams: 500, kind: "box", openDays: 30 },
+  sirloin_steak: { grams: 400, kind: "box", openDays: 30 },
+  // Tins. `grams` is what a tin gives the plan (drained for beans and fish,
+  // since the table's weights are drained: a 15 oz tin of beans drains to about
+  // 240 g) and counts the tins; `labelG` is the weight on the label, which the
+  // list shows (「1 罐（约 400 g）」).
+  canned_kidney_beans: { grams: 240, labelG: 400, kind: "can", openDays: 3 },
+  canned_black_beans: { grams: 240, labelG: 400, kind: "can", openDays: 3 },
+  canned_chickpeas: { grams: 240, labelG: 400, kind: "can", openDays: 3 },
+  crushed_tomatoes: { grams: 400, kind: "can", openDays: 3 },
+  canned_mackerel_tomato: { grams: 400, kind: "can", openDays: 3 },
+  canned_tuna_water: { grams: 120, labelG: 150, kind: "can", openDays: 3 },
+  canned_sardine: { grams: 90, labelG: 120, kind: "can", openDays: 3 },
+  // Shelf-stable bags and boxes of the pantry (grains, noodles, dried beans,
+  // nuts, bread, wraps, sliced cheese), bought whole when a plan uses them.
+  oats: { grams: 500, kind: "bag", openDays: 90 },
+  millet_raw: { grams: 500, kind: "bag", openDays: 90 },
+  multigrain_rice_raw: { grams: 1000, kind: "bag", openDays: 90 },
+  pasta_dry: { grams: 500, kind: "box", openDays: 90 },
+  whole_wheat_pasta_dry: { grams: 500, kind: "box", openDays: 90 },
+  rice_noodles_dry: { grams: 400, kind: "bag", openDays: 90 },
+  steamed_bun: { grams: 400, kind: "bag", openDays: 7 },
+  whole_wheat_tortilla: { grams: 300, kind: "bag", openDays: 10 },
+  adzuki_beans_dry: { grams: 500, kind: "bag", openDays: 90 },
+  black_soybean_dry: { grams: 500, kind: "bag", openDays: 90 },
+  soybean_dry: { grams: 500, kind: "bag", openDays: 90 },
+  lentils_dry: { grams: 500, kind: "bag", openDays: 90 },
+  red_dates_dried: { grams: 250, kind: "bag", openDays: 90 },
+  nori: { grams: 50, kind: "bag", openDays: 90 },
+  almonds: { grams: 200, kind: "bag", openDays: 90 },
+  walnuts: { grams: 200, kind: "bag", openDays: 90 },
+  peanuts: { grams: 200, kind: "bag", openDays: 90 },
+  mixed_nuts: { grams: 175, kind: "box", openDays: 90 },
+  cheese_slice: { grams: 200, kind: "box", openDays: 14 },
+  low_fat_cheese_slice: { grams: 200, kind: "box", openDays: 14 },
 };
 
 /**

@@ -20,7 +20,7 @@ import {
   LONG_LIST,
   orderShoppingLines,
 } from "../../../../info/meals/screen/list-order";
-import { isChecked, missed, shoppingItemKey, stillToGet } from "../../../../info/meals/plan/shopping";
+import { isChecked, isOnHand, missed, shoppingItemKey, stillToGet } from "../../../../info/meals/plan/shopping";
 import { EMPTY_SHOPPING } from "../../../../info/meals/plan/types";
 import { ingredientPicture, shoppingNote, weekdayName } from "../../../../info/meals/screen/view";
 import { Button } from "../../ui/button";
@@ -181,10 +181,26 @@ export function MealsShopping(props: MealsShoppingProps) {
   const lines = linesInOrder(shopping, order);
   const done = shopping.doneOn;
 
-  const left = lines.filter((i) => !isChecked(shopping, i));
-  const bought = lines.filter((i) => isChecked(shopping, i));
+  // What is kept at home is a cupboard check at the foot of the list, not a
+  // thing to buy: it is in neither count.
+  const cupboard = lines.filter(isOnHand);
+  const buyLines = lines.filter((i) => !isOnHand(i));
+  const left = buyLines.filter((i) => !isChecked(shopping, i));
+  const bought = buyLines.filter((i) => isChecked(shopping, i));
   const toGet = stillToGet(shopping, lines);
   const missedLines = missed(shopping, lines);
+  const cupboardGroup =
+    state !== null && cupboard.length > 0 ? (
+      <FlatGroup
+        title={t("meals.onHandTitle")}
+        hint={t("meals.onHandHint")}
+        items={cupboard}
+        state={state}
+        photos={photos}
+        mark={false}
+        onToggleItem={props.onToggleItem}
+      />
+    ) : null;
 
   return (
     <MealsColumn>
@@ -205,7 +221,7 @@ export function MealsShopping(props: MealsShoppingProps) {
             </h2>
             <span className="flex-1" />
             <span className="text-[13px] text-faint-foreground">
-              {t("meals.progress", { bought: bought.length, total: lines.length })}
+              {t("meals.progress", { bought: bought.length, total: buyLines.length })}
             </span>
           </div>
           <Aisles
@@ -236,6 +252,7 @@ export function MealsShopping(props: MealsShoppingProps) {
               onToggleItem={props.onToggleItem}
             />
           )}
+          {cupboardGroup}
         </>
       ) : (
         <>
@@ -247,15 +264,16 @@ export function MealsShopping(props: MealsShoppingProps) {
             <span className="text-[13px] text-faint-foreground">{t("meals.left", { count: left.length })}</span>
           </div>
           <Aisles
-            items={lines}
+            items={buyLines}
             state={state}
             photos={photos}
             mark={false}
             onToggleItem={props.onToggleItem}
           />
+          {cupboardGroup}
           {/* A trip has an end. On a long list the button rides the bottom of
               the screen rather than waiting at the foot of two dozen lines. */}
-          {lines.length > LONG_LIST ? (
+          {buyLines.length > LONG_LIST ? (
             <div className="sticky bottom-0 -mx-4 mt-5 flex border-t border-border-subtle bg-background/90 px-4 py-2.5 pb-safe backdrop-blur sm:-mx-6 sm:px-6">
               <Button variant="cta" className="flex-1" onClick={props.onDone}>
                 {t("meals.done")}

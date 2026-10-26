@@ -83,6 +83,8 @@ export default {
   didntGet: "Pas trouvé",
   didntGetHint: "Dites-le dans Question et la semaine s'ajuste",
   stillToBuy: "Encore à acheter",
+  onHandTitle: "À avoir à la maison",
+  onHandHint: "Vérifiez le placard et achetez ce qui manque",
   left: { one: "{count} restant", other: "{count} restants" },
   added: "ajouté",
 
@@ -240,6 +242,7 @@ export default {
   "pack.head": { one: "{count} tête", other: "{count} têtes" },
   "pack.bunch": { one: "{count} botte", other: "{count} bottes" },
   "pack.loaf": { one: "{count} paquet de pain", other: "{count} paquets de pain" },
+  "pack.can": { one: "{count} boîte de conserve", other: "{count} boîtes de conserve" },
   "pack.piece": { one: "{count} pièce", other: "{count} pièces" },
   "pack.about": "{qty} (environ {grams} g)",
   "pack.aboutWeight": "environ {grams} g",

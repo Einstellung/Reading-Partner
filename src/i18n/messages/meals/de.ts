@@ -84,6 +84,8 @@ export default {
   didntGet: "Nicht bekommen",
   didntGetHint: "Sag es unter Fragen, dann passt sich die Woche an",
   stillToBuy: "Noch zu kaufen",
+  onHandTitle: "Sollte zu Hause sein",
+  onHandHint: "Schau in den Vorratsschrank und kauf nach, was fehlt",
   left: { one: "noch {count}", other: "noch {count}" },
   added: "hinzugefügt",
 
@@ -241,6 +243,7 @@ export default {
   "pack.head": { one: "{count} Kopf", other: "{count} Köpfe" },
   "pack.bunch": { one: "{count} Bund", other: "{count} Bund" },
   "pack.loaf": { one: "{count} Brot", other: "{count} Brote" },
+  "pack.can": { one: "{count} Dose", other: "{count} Dosen" },
   "pack.piece": { one: "{count} Stück", other: "{count} Stück" },
   "pack.about": "{qty} (etwa {grams} g)",
   "pack.aboutWeight": "etwa {grams} g",

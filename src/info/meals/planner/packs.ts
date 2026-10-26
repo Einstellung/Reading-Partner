@@ -17,7 +17,7 @@ import { isBatchMain, type PlanDraft, type PlanSlot } from "./draft";
 import type { SolvedPlan } from "./solve";
 
 export type PackBuy =
-  | { by: "pack"; count: number; packG: number; kind: PackKind }
+  | { by: "pack"; count: number; packG: number; kind: PackKind; /** The weight on the label when it is not what the plan counts (a tin of beans is drained). */ labelG?: number }
   | { by: "piece"; count: number; pieceG: number }
   | { by: "unit"; count: number }
   | { by: "onHand" }
@@ -74,16 +74,21 @@ export function isBoughtFrozen(food: Food): boolean {
   return food.category === "frozen";
 }
 
-/** A seasoning, oil or spread: kept on hand, never bought for one plan. */
+/**
+ * A seasoning, oil or spread: kept on hand, never bought for one plan. Fresh
+ * produce is not (a lemon is bought), nor is a food with a retail pack (nuts,
+ * sliced cheese).
+ */
 function onHand(food: Food): boolean {
   if (food.boughtDry) return true;
+  if (food.category === "produce" || food.pack) return false;
   const keeps = food.keeps === "pantry" || food.keeps === "w2plus";
   return keeps && (food.roles.includes("sauce") || food.roles.includes("fat")) && !food.roles.includes("protein");
 }
 
-function buyFor(food: Food, grams: number): PackBuy {
+export function buyFor(food: Food, grams: number): PackBuy {
   if (onHand(food)) return { by: "onHand" };
-  if (food.pack) return { by: "pack", count: wholeCount(grams, food.pack.grams), packG: food.pack.grams, kind: food.pack.kind };
+  if (food.pack) return { by: "pack", count: wholeCount(grams, food.pack.grams), packG: food.pack.grams, kind: food.pack.kind, ...(food.pack.labelG ? { labelG: food.pack.labelG } : {}) };
   if (food.unit) return { by: "unit", count: Math.max(1, Math.round(grams / food.unit.grams)) };
   if (food.piece) return { by: "piece", count: wholeCount(grams, food.piece.grams), pieceG: food.piece.grams };
   return { by: "weight" };
@@ -156,7 +161,7 @@ const about = (g: number) => Math.max(10, Math.round(g / 10) * 10);
 /** How much to buy, in the reader's language: "1 盒（约 500 g）", "2 个（约 250 g）", "家里常备". */
 export function buyText(line: PackLine): string {
   const b = line.buy;
-  if (b.by === "pack") return t("meals.pack.about", { qty: t(`meals.pack.${b.kind}`, { count: b.count }), grams: b.count * b.packG });
+  if (b.by === "pack") return t("meals.pack.about", { qty: t(`meals.pack.${b.kind}`, { count: b.count }), grams: b.count * (b.labelG ?? b.packG) });
   if (b.by === "piece") return t("meals.pack.about", { qty: t("meals.pack.piece", { count: b.count }), grams: about(b.count * b.pieceG) });
   if (b.by === "unit") return t("meals.pack.piece", { count: b.count });
   if (b.by === "onHand") return t("meals.pack.onHand");

@@ -16,6 +16,7 @@ import {
   PROTEIN_CATEGORY,
   RETAIL_PACK,
   SODIUM_MG,
+  SOLD_PIECE_G,
   WHOLE_GRAIN,
   type PackKind,
 } from "./food-columns";
@@ -131,7 +132,7 @@ export interface Food {
   /** A whole-grain staple. */
   wholeGrain?: true;
   /** The usual retail pack of a perishable food and the days it keeps once opened. */
-  pack?: { grams: number; kind: PackKind; openDays: number };
+  pack?: { grams: number; kind: PackKind; openDays: number; labelG?: number };
   /** Planned cooked or soaked but bought dry and kept on hand (rice, quinoa); `zh` is the dry food's name (糙米 for 糙米饭). */
   boughtDry?: { zh: string };
   /** The swap group it belongs to (swap-groups.ts). */
@@ -187,7 +188,7 @@ function withColumns(f: Food): Food {
   if (NOT_FREEZABLE.has(f.id)) out.noFreeze = true;
   if (DEEP_COLOR.has(f.id)) out.deepColor = true;
   if (AROMATIC.has(f.id)) out.aromatic = true;
-  const piece = PIECE_G[f.id];
+  const piece = PIECE_G[f.id] ?? SOLD_PIECE_G[f.id];
   if (piece) out.piece = { grams: piece.grams, label: piece.label };
   return out;
 }
