@@ -191,18 +191,32 @@ export interface PotBox {
   storage: "fridge" | "freezer";
 }
 
+/**
+ * The draft a plan was made from (docs/671 数据模型), day 1 on `start`. A
+ * profile change solves it again through the planner core (planner/to-week.ts)
+ * rather than the weekly solver. Absent on weeks planned before.
+ */
+export interface PlannerRecord {
+  start: string;
+  // planner/draft.ts PlanDraft, read back through parseDraft: plan/ does not
+  // import the planner.
+  draft: unknown;
+}
+
 export interface WeekPlan {
   // "week-" + startDate.
   id: string;
   // Local date of day one. days[i] is startDate + i.
   startDate: string;
-  // Seven, in date order.
+  // In date order: seven on a week planned before docs/671; on a planner plan,
+  // its 1 to 3 days after the old plan's days that ran straight into them.
   days: DayPlan[];
   // What is cooked once and eaten over several meals. Absent on a week with none.
   pots?: Pot[];
   createdAt: number;
   // Bumped by every applied adjustment, deviation and re-solve.
   revision: number;
+  planner?: PlannerRecord;
 }
 
 // The aisle a food is bought in. A shopping list is walked through a store, so

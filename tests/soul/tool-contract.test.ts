@@ -217,7 +217,8 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     where: "info/meals",
     tools: buildMealsCatalogTools(any({ threadId: "meals", ports: {} })),
     names: [
-      "propose_meals_plan",
+      "propose_meal_plan",
+      "apply_meal_plan",
       "update_meals_profile",
       "record_meals_deviation",
       "add_shopping_items",

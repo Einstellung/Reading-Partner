@@ -1,33 +1,28 @@
 // The meals desk's tools and the standing instruction that goes with them
-// (docs/73), modelled on info/briefer/lab-tool.ts: the planning tool drafts a
-// card and writes nothing, the card's Apply performs the write, and a
-// synthetic user turn afterwards tells the model what landed.
+// (docs/671 对话, docs/73), modelled on info/briefer/lab-tool.ts: the planning
+// tool raises a draft card and writes nothing; 「就这样」 on the card, or
+// apply_meal_plan when the reader confirms in words, performs the write, and a
+// row afterwards tells the model what landed.
 //
 // The others write straight through. That is the harness principle, not an
 // exception to it: a profile change, a deviation, a line on the shopping list
 // and a method line are the reader's own instruction carried out.
 //
-// The model chooses foods from the food table by id, their roles, a flavour, a
-// one-line method and the minutes. It supplies no dates, no grams for the
-// solved roles, no nutrition numbers and no shopping list: the program solves,
-// checks and derives them (docs/73 事实不经模型).
+// The model picks dishes from the library by id, the pots and the prep
+// session. It supplies no dates, no grams, no minutes and no shopping list:
+// the program checks the draft, solves and derives them (docs/671 事实不经模型).
 
 import { Type } from "@earendil-works/pi-ai";
-import { t } from "../../i18n";
+import { getLocale, t } from "../../i18n";
 import type { AgentTool } from "../../legion/durable/contract";
 import { asStrings } from "../../platform/std/json";
-import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
-import type { MealsCard, MealsPlanCardData } from "./cards";
-import { checkPlan } from "./plan/checks";
-import { boxName, mealsList, modeWord, profileFieldsLine, weekdayName } from "./screen/view";
+import { mealWords, recordDeviation, refreshPhotos, saveProfile, type Applied, type MealsPorts } from "./apply";
+import type { MealsCard, MealsDraftCardData } from "./cards";
+import { boxName, profileFieldsLine } from "./screen/view";
 import { FOOD_TAGS, FOODS, foodAllowed, foodById } from "./nutrition/foods";
-import type { TemplateItem, TemplateRole } from "./nutrition/solve";
 import {
   COOK_PARTS,
-  DEFAULT_EFFORT,
   EFFORTS,
-  minuteCap,
-  type Effort,
   type Goal,
   type Profile,
   type Region,
@@ -43,39 +38,29 @@ import {
   removeShoppingItem,
   replaceShoppingItem,
 } from "./plan/shopping";
-import { FRIDGE_DAYS, MAX_POT_MEALS, MIN_POT_MEALS, potBoxing, potPortions } from "./plan/pots";
 import { targetsOf } from "./plan/solve-week";
 import {
   CATEGORY_ORDER,
-  FLAVOURS,
   KEEPS_ORDER,
   MEAL_KEYS,
   MEAL_MODES,
-  flavourOf,
   type Deviation,
   type IngredientCategory,
   type KeepsClass,
   type Meal,
   type MealKey,
   type MealMode,
-  type MealRef,
   type MealsState,
   type ShoppingItem,
   type WeekPlan,
 } from "./plan/types";
-import {
-  WEEK_DAYS,
-  addDays,
-  assembleWeekPlan,
-  dayIndexOf,
-  dayOn,
-  isoWeekday,
-  lastDate,
-  planExhausted,
-  type DayDraft,
-  type MealDraft,
-  type PotDraft,
-} from "./plan/week";
+import { WEEK_DAYS, addDays, dayOn, isoWeekday, lastDate, planExhausted } from "./plan/week";
+import { buildDraftCard } from "./build-draft-card";
+import { checkDraft } from "./planner/checks";
+import { MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft } from "./planner/draft";
+import { planLibrary } from "./planner/library";
+import { libraryListing } from "./planner/listing";
+import { planDayTargets } from "./planner/solve";
 
 /** What the reader has in front of them when they open the conversation. */
 export type MealsFocus =
@@ -94,29 +79,25 @@ export interface MealsToolDeps {
   now(): number;
   // Which BMI cut points and fat range apply (region.ts).
   region(): Region;
-  // Surface the card. The host owns Apply; the planning tool never writes.
+  // Surface the card, or replace the draft card it revises. The host owns
+  // Apply; the planning tool never writes.
   onMealsCard(card: MealsCard): void;
+  // The draft card still waiting in this conversation, which the next draft
+  // revises in place. Absent where no card is drawn.
+  currentDraft?(): MealsDraftCardData | null;
+  // Apply that card, as its button does. Null when there is none.
+  applyDraft?(): Promise<Applied | null>;
 }
 
 // --- the instruction ---------------------------------------------------------
 
 const WEEKDAY_SHORT = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-function templateLine(items: readonly TemplateItem[] | undefined): string {
-  return (items ?? [])
-    .map((i) => (i.role === "fixed" ? `${i.foodId} ${i.grams ?? "?"} g` : `${i.foodId} (${i.role})`))
-    .join(", ");
-}
+const PART_WORDS = { morning: "morning", afternoon: "afternoon", evening: "evening" } as const;
 
 function mealLine(meal: Meal): string {
   switch (meal.mode) {
-    case "make": {
-      const head = `${meal.name ?? "no foods yet"}${meal.flavour ? ` [${meal.flavour}]` : ""}`;
-      const mins = (meal.minutes ? `, ${meal.minutes} min` : "") + (meal.proper ? ", proper" : "");
-      const items = meal.pot ? (meal.items ?? []).filter((i) => i.role !== "protein") : meal.items;
-      const pot = meal.pot ? `pot ${meal.pot}; ` : "";
-      return meal.items?.length ? `${head}${mins}: ${pot}${templateLine(items)}` : `${head} — needs foods`;
-    }
+    case "make":
+      return `${meal.name ?? "no dish yet"}${meal.minutes ? `, ${meal.minutes} min` : ""}`;
     case "out":
       return meal.place ? `out at ${meal.place}` : "out";
     case "delivery":
@@ -144,20 +125,20 @@ function focusLines(state: MealsState, focus: MealsFocus): string[] {
     return [
       `They are looking at the shopping list: ${list.length} lines, ${left} not ticked off.`,
       done
-        ? `The week's shop was done on ${done}. Anything new goes on next week's list, unless ` +
+        ? `The shop was done on ${done}. Anything new goes on the next plan's list, unless ` +
           "they say they are passing a shop today."
-        : "The week's shop has not been done yet.",
+        : "The shop has not been done yet.",
     ];
   }
   if (focus.kind === "day") {
     const day = dayOn(state.plan, focus.date);
-    if (!day) return [`They are looking at ${focus.date}, which this week does not cover.`];
+    if (!day) return [`They are looking at ${focus.date}, which the plan does not cover.`];
     return [
       `They are looking at ${focus.date}. Its method lines are on their screen; do not read them back. ` +
         "Call write_meals_method only if they want one made another way.",
     ];
   }
-  return ["They are looking at the week."];
+  return ["They are looking at the plan."];
 }
 
 function targetsLine(label: string, t: Targets["training"]): string {
@@ -170,46 +151,75 @@ const GOAL_WORDS: Record<Goal, string> = {
   steady: "steady energy",
 };
 
-const EFFORT_ADVICE: Record<Effort, string> = {
-  simple:
-    "Simple food: one pot, a microwave or plain assembly, mostly from ready foods — ready-to-eat " +
-    "chicken breast, frozen shrimp, eggs, tofu, Greek yogurt, frozen vegetables, microwave grain " +
-    "rice, oats.",
-  homestyle:
-    "Ordinary home cooking: a pan-seared or oven-roasted protein, a tray bake, a pot of stew, " +
-    "from the foods below.",
-};
+/** The standing habits a plan is drafted around, and which of them nobody has asked yet. */
+export function habitsLine(profile: Profile): string {
+  const slots = profile.cookSlots?.length
+    ? profile.cookSlots.map((s) => `${WEEKDAY_SHORT[s.weekday] ?? s.weekday} ${PART_WORDS[s.part]}`).join(", ")
+    : "not said";
+  const boxes = profile.boxes === undefined ? "not asked yet" : profile.boxes ? "yes" : "no";
+  const burners = profile.burners ? String(profile.burners) : "not said";
+  const gone = profile.unavailable?.length ? profile.unavailable.join(", ") : "nothing named";
+  return `Can cook a prep session: ${slots}. Packs meals into boxes: ${boxes}. Burners: ${burners}. Cannot get: ${gone}.`;
+}
 
-const GOAL_ADVICE: Record<Goal, string> = {
-  cut:
-    "Losing fat: lean protein foods (chicken breast, shrimp, white fish, egg whites, tofu, Greek " +
-    "yogurt), plenty of vegetables, whole-grain or root staples, one spoon of oil.",
-  gain:
-    "Building muscle: a protein food at every meal including the snack, denser staples (rice, " +
-    "oats, noodles, bread), fattier fish, milk and nuts are fine. Portions stay normal: a big " +
-    "day's extra calories come from milk, nuts or a second staple serving, not from more meat.",
-  steady:
-    "Steady energy: slow staples (whole grains, oats, sweet potato), a protein food at every " +
-    "meal, vegetables at lunch and dinner.",
-};
-
-/**
- * The food table as the model chooses from it: id, name, roles, tags, a
- * seasoning's gram range (the model gives its grams) and the pack a pot cooks.
- */
+/** The food table by id and name, for dislikes and foods they cannot get. */
 export function foodListing(dislikes: readonly string[]): string[] {
   return FOODS.filter((f) => foodAllowed(f, dislikes)).map(
-    (f) =>
-      `${f.id} ${f.zh} ${f.roles.join("/")}${f.tags.length ? ` [${f.tags.join(",")}]` : ""}` +
-      (f.roles.includes("sauce") ? ` ${f.minG}–${f.maxG} g` : "") +
-      (f.potG ? ` pot ${f.potG} g` : ""),
+    (f) => `${f.id} ${f.zh}${f.tags.length ? ` [${f.tags.join(",")}]` : ""}`,
   );
 }
 
+const HOW_TO_PLAN = [
+  "HOW TO PLAN",
+  `A plan covers 1 to ${MAX_PLAN_DAYS} days, from today unless they name another day, with one shopping trip and one`,
+  `prep session. Longer is two plans: say you will plan ${MAX_PLAN_DAYS} days now and the next one after they are eaten.`,
+  "Before the first draft, ask what you do not know yet, a question or two at a time, and nothing the profile",
+  "already answers:",
+  `- How many days, 1 to ${MAX_PLAN_DAYS}.`,
+  "- When they can cook the prep session: which day, and morning (before lunch), afternoon (before dinner) or",
+  "  evening (after dinner). A standing habit goes into the profile with update_meals_profile (cookSlots).",
+  "- Whether they pack meals into boxes to eat later. Ask it before the first plan even though the program",
+  "  assumes boxes while it is unset, and record the answer with update_meals_profile (boxes). Never assume it.",
+  "- What they feel like eating lately and what they do not want. This plan's tastes stay with this draft; only",
+  "  standing dislikes and foods they cannot buy go into the profile.",
+  "Never infer a cuisine, a taste or a dislike from where they live, their name or the language they write in.",
+  "Tastes come only from what they have said and from the profile.",
+  "",
+  "THE DRAFT (propose_meal_plan)",
+  "Days are numbered from 1. Never write a date, a gram or a minute: the program owns them.",
+  "- Each day: a breakfast dish id; lunch and dinner, each a `main` and optional `sides` (side dish ids); `fruit`,",
+  "  2 to 3 fruit ids a day.",
+  "- A main is a share of a pot, {batch, way} with the way's number in that dish's ways (a different way for each",
+  "  meal of one pot), or a fresh main made at the meal, {dish, staple} with one of the dish's staples (no staple",
+  "  when it carries its own).",
+  "- `batches`: a pot is one batch main from the library with a short id of yours, cooked in the session and",
+  "  eaten at 1 to 3 lunches or dinners listed in `meals`: none before the session, all within the cook day and",
+  "  the 2 days after it. One pot per dish; lunch and dinner of one day never the same dish. Fish and seafood are",
+  "  always fresh.",
+  "- `sessions`: exactly one when there are pots, {id, day, part}, at a time they said they can cook.",
+  "- Lean on the pots: most lunches and dinners eat from them, and the fresh ones are quick. About an hour",
+  "  hands-on for the session unless they said otherwise. Plan around whole packs: reuse a vegetable across meals",
+  "  rather than picking one nothing else uses.",
+  "The program solves every gram, adds a quick side where a day is short of vegetables, swaps a food they cannot",
+  "get, and checks the draft: red meat, fish, legumes, whole grains, vegetables, fruit, protein variety, sodium,",
+  "the day's protein and calories, and packs left half used. What fails comes back naming the rule: fix it and",
+  `send the whole draft again. After ${MAX_DRAFT_ROUNDS} refused drafts in a turn, stop and tell them which rule keeps failing.`,
+  "",
+  "THE CARD",
+  "A passing draft shows on a card in the chat: each meal by name, which meals share a pot, the prep session. It",
+  "has no grams; they come once the plan is confirmed. Do not repeat the meals in your reply: say in a sentence",
+  "or two what the plan is built around and what the program changed on its own.",
+  "When they want a change ('第二天晚饭不想吃牛肉'), call propose_meal_plan again with the whole revised draft.",
+  "The card above changes in place to the new version. Your reply only says that the draft above was changed;",
+  "do not list the meals again.",
+  "When they confirm in words ('就这样', '可以', 'looks good'), call apply_meal_plan. The card's button does the",
+  "same. Nothing is saved before that.",
+];
+
 /**
  * What the meals desk is told before it says anything: the reader's profile
- * and the program's targets, the week as it stands with today marked, what
- * they are looking at, and the rules the program will hold a plan to anyway.
+ * and the program's targets, the plan as it stands with today marked, what
+ * they are looking at, how a plan is drafted, and the library to draft from.
  */
 export function mealsGuidance(
   state: MealsState,
@@ -230,9 +240,9 @@ export function mealsGuidance(
     const days = profile.trainingDays.map((d) => WEEKDAY_SHORT[d]).join(", ");
     out.push(
       `Goal: ${GOAL_WORDS[profile.goal]}. ${days ? `Trains ${days} (${profile.trainTime}).` : "Does not train."}`,
-      `Effort: ${profile.effort}. ${profile.people} eating.`,
-      `Shops: ${profile.shops.join(", ") || "none named"}. Kitchen: ${profile.kitchen.join(", ") || "not said"}.`,
+      `${profile.people} eating. Shops: ${profile.shops.join(", ") || "none named"}. Kitchen beyond the default: ${profile.kitchen.join(", ") || "nothing said"}.`,
       `Never use: ${profile.dislikes.join(", ") || "nothing named"}.`,
+      habitsLine(profile),
     );
     if (charter?.text) out.push(`In their words: ${charter.text}`);
     if (targets) {
@@ -250,60 +260,28 @@ export function mealsGuidance(
     }
     out.push(
       "When they state a change — a new weight ('称了 71'), another goal, other training days, a " +
-        "new dislike — call update_meals_profile with just that. It writes at once and re-solves " +
-        "the week; say one line.",
+        "new dislike, when they can cook, whether they box meals — call update_meals_profile with just " +
+        "that. It writes at once and re-solves the plan; say one line.",
     );
   }
   out.push("");
 
   if (state.plan && !planExhausted(state.plan, today)) {
     const plan = state.plan;
-    out.push("This week:");
+    out.push("The plan they have:");
     for (let i = 0; i < plan.days.length; i++) {
       const day = plan.days[i];
       if (!day) continue;
       out.push(dayHeading(plan, i, profile, today));
       for (const key of MEAL_KEYS) out.push(`    ${key}: ${mealLine(day[key])}`);
     }
-    const portions = potPortions(plan);
-    if (plan.pots?.length) {
-      out.push("Pots:");
-      let spare = false;
-      for (const pot of plan.pots) {
-        const cook = dayIndexOf(plan, pot.cook.date);
-        const shares = [...portions.values()].filter((p) => p.pot.id === pot.id);
-        const share = shares[0]?.shareG;
-        const spares = potBoxing(plan, pot)?.spares ?? [];
-        const boxes = spares.map((b) => `${b.storage}, from Day ${dayIndexOf(plan, b.for.date)} ${b.for.meal}`);
-        if (spares.length) spare = true;
-        out.push(
-          `- ${pot.id}: ${pot.name}, ${pot.rawG} g ${pot.foodId}, cooked Day ${cook} ${pot.cook.meal} (${pot.method}); ` +
-            (share ? `${shares.length} meals of ${share} g` : "no longer split: fewer than two meals eat from it") +
-            (spares.length ? `; ${spares.length} spare box${spares.length === 1 ? "" : "es"}: ${boxes.join("; ")}` : ""),
-        );
-      }
-      if (spare) {
-        out.push(
-          "A spare box is a share already cooked and packed that no meal eats. To use it, set `pot` on a",
-          "later made meal in an adjustment and do not send the pot again. A fridge box keeps until",
-          `${FRIDGE_DAYS} days after the cook day; a freezer box keeps to the end of the week.`,
-        );
-      }
-    }
     out.push(
-      "",
-      "Refer to a meal by its day number and which meal it is. Never write a date yourself — the",
-      "program owns every date, every gram and the shopping list, and it will contradict you.",
+      "Refer to a meal by its day number and which meal it is. A new plan replaces the days it covers.",
     );
   } else if (state.plan) {
-    out.push(
-      `The week they had ended on ${lastDate(state.plan)}. Nothing is planned from today on.`,
-      "To plan, call propose_meals_plan without adjustment and send a whole fresh week of 7 days that",
-      "starts today, even when they ask for fewer days; say in your reply that the plan covers the week",
-      "from today. Never use adjustment while no current week exists.",
-    );
+    out.push(`Their last plan ended on ${lastDate(state.plan)}. Nothing is planned from today on.`);
   } else {
-    out.push("No week is planned. Call propose_meals_plan when they ask what to eat this week.");
+    out.push("Nothing is planned yet.");
   }
 
   out.push("", ...focusLines(state, opts.focus ?? { kind: "week" }));
@@ -313,226 +291,109 @@ export function mealsGuidance(
     for (const d of state.deviations.slice(-3)) out.push(`- ${d.date} ${d.meal}: ${d.said}`);
   }
 
-  const effort = profile?.effort ?? DEFAULT_EFFORT;
+  out.push("", ...HOW_TO_PLAN);
+  if (profile) out.push("", "LIBRARY (dish ids for the draft; only what they can have and their kitchen can make)", ...libraryListing(planLibrary(profile)));
   out.push(
     "",
-    "HOW TO PLAN",
-    "Seven days, four meals each: breakfast, lunch, dinner and a snack.",
-    `${EFFORT_ADVICE[effort]} At most ${minuteCap({ effort })} minutes hands-on a made meal.`,
-    "When they say one meal should be a proper one ('周六想好好做一顿'), rework only that meal with",
-    "propose_meals_plan, adjustment set and `proper` true on it: it may take longer. Nothing else",
-    "changes and the effort level stays.",
-    "The effort level (simple or homestyle) changes only when they keep saying the meals are too",
-    "sloppy (homestyle) or too much work (simple): update_meals_profile with effort. Not on one remark.",
-    "A made meal is a list of foods from FOODS by id, each with a role. Exactly one `protein`, which",
-    "the program gives a normal portion: about 25 g of protein at lunch and dinner, 12 g at breakfast",
-    "(two eggs), 9 g at the snack. The protein target is a floor these portions usually clear; never",
-    "add meat to chase it. One `staple` at breakfast, lunch and dinner (the snack needs none): the",
-    "program fills the meal's calories with it, within its usual range and at most 400 kcal of it.",
-    "At most one `fat` (an oil, nuts, a fatty spread), which the program raises when the staple is",
-    "full. Any number of `fixed` items with grams you give: vegetables (150–250 g at lunch and",
-    "dinner, 80 g or more at breakfast), fruit (150–200 g; a fruit is never the staple), the",
-    "seasoning (inside its range in FOODS: a few grams for a dry blend), milk, a second protein.",
-    "Give no grams for the solved roles and never a calorie or protein number: the program",
-    "computes every one.",
-    profile ? GOAL_ADVICE[profile.goal] : "",
-    "SEASONING: a made meal tastes of one ready-made seasoning bought as a single jar or packet,",
-    "listed as a `fixed` item: a dry blend (herb rub, lemon pepper, cajun, taco or fajita, BBQ,",
-    "garlic and herb, Italian herbs, smoked paprika, cumin, curry powder, black pepper) or one",
-    "ready sauce (pesto, tomato pasta sauce). Pick what their shops sell and their kitchen can",
-    "use. Do not build a taste out of several single condiments (soy sauce with vinegar and",
-    "oyster sauce), and no fresh ginger, garlic, scallion or chilli as items, unless their words",
-    "ask for that dish or that food. Salt, cooking oil and water need no item; black pepper is an",
-    "item only when it is the meal's flavour. Flavours marked `local` in FLAVOURS belong to one",
-    "cuisine: plan them only when their words ask for that cuisine.",
-    "A dry rub can go on the evening before: rub the meat, keep it covered in the fridge overnight,",
-    "cook it the next day. Say so in the method when it saves hands-on time ('rub with cajun the",
-    "night before; roast 20 min').",
-    "Each made meal has a `flavour` from FLAVOURS that matches its seasoning. Two main meals in a",
-    "row — dinner and the next breakfast included — never share one; rotate through the list over",
-    "the week.",
-    "Fish or seafood in at least two meals a week. Nothing they do not eat. Only what their kitchen",
-    "can do and their shops sell.",
-    "POTS: cook a meat once and eat it over several meals. Only foods marked `pot` in FOODS can be",
-    "one (raw meat bought by the pack); fish fillets, shrimp, eggs, ready-to-eat chicken and tofu",
-    `are portioned per meal. A pot feeds ${MIN_POT_MEALS} to ${MAX_POT_MEALS} main meals, the first of them the meal it is cooked`,
-    "at, the rest within the next few days; make the dish different across them (the same roast",
-    "chicken sliced over rice, then in a wrap) and keep the flavour rule. Send it in `pots`: an id, the",
-    "food, the day and meal it is cooked at, a short `name` in their language ('roast chicken') and a",
-    "one-line `method` their kitchen can do. Its weight is the food's pack; give `grams` only for",
-    "another size. Each meal that eats from it sets `pot` to that id and has no protein item. The",
-    "program splits the weight evenly, solves the rest of each meal around its share, decides",
-    "which shares go in the fridge or the freezer, writes the packing step and lists the whole pack",
-    "on the shopping list. Leafy greens are never cooked ahead; each meal makes its own.",
-    "The snack is a protein food (yogurt, soy milk, milk), a fixed fruit and, if they like nuts, the",
-    "nuts as its `fat`: the program sizes them to close the day's calories. On a training day it is",
-    "eaten right after training.",
-    "Out, delivery, bought and skip are ordinary plans, from the places they actually go. They have",
-    "no foods and no grams. Do not apologise for them.",
-    "Give each made meal a `name` in their language, a `searchName` (the dish's common English",
-    "name, what an image search would find), a short one-line `method` in their language and",
-    "`minutes`.",
-    "The program solves the grams and checks the week: foods in the table, roles, minutes,",
-    "dislikes, flavours in a row, fish twice, whether the protein reaches the meal's target, and",
-    "whether each day reaches 90% of its calories. A day that falls short needs a fixed item on one",
-    "of its meals: milk, a second serving of a staple, or nuts.",
-    "What fails comes back to you with the meals it names. For a fresh week the rest of the draft",
-    "is kept: call propose_meals_plan again with only the meals you fix, never the whole week",
-    "again. An adjustment that fails is sent again with all of its meals.",
-    "",
-    "FLAVOURS",
-    FLAVOURS.map((f) => `${f.id} (${f.en}${f.local ? ", local" : ""})`).join(", "),
-    "",
-    "FOODS (id, name, roles, [tags], a seasoning's grams, a pot's pack)",
+    "FOODS (ids for dislikes and for foods they cannot get)",
     ...foodListing(profile?.dislikes ?? []),
     "",
     "WHEN A MEAL GOES DIFFERENTLY",
-    "They will say one sentence ('中午没带饭，食堂吃的'). Call record_meals_deviation. It answers",
-    "with at most two meals to re-pick; call propose_meals_plan with adjustment set for those",
-    "meals only. Never re-plan the week over one meal. Boredom and 'too much hassle' are not",
-    "adjustments — remember them for the next week, or, said again and again, change the effort level.",
+    "They will say one sentence ('中午没带饭，食堂吃的'). Call record_meals_deviation. Never re-plan over one",
+    "meal. When they want the rest of their days planned again, draft a new plan from today with",
+    "propose_meal_plan; it replaces the days it covers. Boredom and 'too much hassle' are not deviations:",
+    "remember them for the next plan.",
     "",
     "THE SHOPPING LIST",
-    "Derived by the program from the solved grams, one trip a week. Before it is done, add,",
+    "Derived by the program from the solved grams, one trip a plan. Before it is done, add,",
     "remove and swap lines as they ask. Once it is done, the list is what is in the fridge:",
-    "something new is next week's business, unless they say they are passing a shop today, and",
+    "something new is the next plan's business, unless they say they are passing a shop today, and",
     "then add_shopping_items with today set. Never read the list back to them.",
   );
   return out.filter((l, i, all) => l !== "" || all[i - 1] !== "").join("\n");
 }
 
-// --- the week ----------------------------------------------------------------
+// --- the draft ---------------------------------------------------------------
 
-// Only `mode` is on every meal. The rest belong to made meals or to the other
-// modes, so they are optional: a required property the model has nothing to
-// put in fails validation and the loop retries for ever (docs/pitfall/379).
-const mealSchema = (which: MealKey) =>
-  Type.Object({
-    mode: Type.String({ description: `What this ${which} is: ${MEAL_MODES.join(", ")}.` }),
-    name: Type.Optional(Type.String({ description: "For make: the meal's name in their language." })),
-    searchName: Type.Optional(
-      Type.String({
-        description:
-          "For make: the dish's common English name as people search for it, lower case " +
-          "('shrimp fried rice', 'greek yogurt bowl'). It finds the photograph.",
-      }),
-    ),
-    flavour: Type.Optional(Type.String({ description: "For make: one id from FLAVOURS." })),
-    method: Type.Optional(
-      Type.String({ description: "For make: one line on how it is put together, in their language." }),
-    ),
-    minutes: Type.Optional(Type.Number({ description: "For make: hands-on minutes." })),
-    proper: Type.Optional(
-      Type.Boolean({
-        description:
-          "For make: true only on a meal they asked to cook properly; its minutes may go past their effort level's limit.",
-      }),
-    ),
-    items: Type.Optional(
-      Type.Array(
-        Type.Object({
-          food: Type.String({ description: "A food id from FOODS." }),
-          role: Type.String({ description: "protein, staple, fat or fixed." }),
-          grams: Type.Optional(Type.Number({ description: "For fixed items only: the grams." })),
-        }),
-        {
-          description:
-            "For make: the foods, one protein, one staple (none needed at the snack), at most one fat, any fixed.",
-        },
+// Every property the model may have nothing for is optional: a required one
+// fails validation and the loop retries for ever (docs/pitfall/379).
+const draftMealSchema = Type.Object({
+  main: Type.Object(
+    {
+      batch: Type.Optional(Type.String({ description: "For a meal eating from a pot: the pot's id from `batches`." })),
+      way: Type.Optional(Type.Number({ description: "With batch: the way's number, from 1, in that dish's ways." })),
+      dish: Type.Optional(Type.String({ description: "For a fresh main: its dish id." })),
+      staple: Type.Optional(
+        Type.String({ description: "With dish: one of its staples (food or staple dish id). Leave out when it carries its own." }),
       ),
-    ),
-    place: Type.Optional(
-      Type.String({ description: "For out, delivery and bought: where, in their own words." }),
-    ),
-    pot: Type.Optional(
-      Type.String({
-        description: "For make: the id of a pot from `pots` this meal eats a share of. The meal then has no protein item.",
-      }),
-    ),
-    note: Type.Optional(Type.String({ description: "One short line of theirs about this meal." })),
-  });
-
-const potSchema = Type.Object({
-  id: Type.String({ description: "A short id of your own, unique in the week ('A', 'beef')." }),
-  food: Type.String({ description: "A food id from FOODS marked `pot`." }),
-  grams: Type.Optional(
-    Type.Number({ description: "Raw grams of the whole pot, only when it is not the food's usual pack." }),
+    },
+    { description: "A share of a pot ({batch, way}) or a fresh main ({dish, staple})." },
   ),
-  day: Type.Number({ description: "1 to 7: the day it is cooked." }),
-  meal: Type.String({ description: "breakfast, lunch or dinner: the meal it is cooked at, which eats the first share." }),
-  name: Type.Optional(Type.String({ description: "What it is called, in their language ('卤牛腱')." })),
-  method: Type.Optional(
-    Type.String({ description: "One line on how it is cooked with their kitchen, in their language." }),
-  ),
+  sides: Type.Optional(Type.Array(Type.String(), { description: "Side dish ids added to this meal." })),
 });
 
-/**
- * What a refused proposal tells the model: every problem, then the meals to
- * send again. `patch` means the rest of the draft is held for the next call.
- */
-function refusalText(
-  checked: { plan: WeekPlan; problems: readonly string[]; failing?: readonly MealRef[] },
-  kind: "adjustment" | "patch" | "week",
-): string {
-  const lines = ["Nothing was proposed — the plan does not hold up:", ...checked.problems.map((p) => `- ${p}`)];
-  const named = (checked.failing ?? []).map((r) => `Day ${dayIndexOf(checked.plan, r.date)} ${r.meal}`);
-  if (kind === "week") {
-    lines.push(`Fix those meals and call propose_meals_plan again with the whole week, all ${WEEK_DAYS} days.`);
-  } else if (kind === "adjustment") {
-    lines.push("Fix those meals and call propose_meals_plan again with adjustment set and every meal of this change.");
-  } else {
-    lines.push(
-      "Every other meal of this draft is kept. Call propose_meals_plan again, without adjustment, " +
-        "sending only the meals you change" +
-        (named.length ? `: ${named.join(", ")}.` : ".") +
-        " Do not send the whole week again.",
-    );
-  }
+function refusal(problems: readonly string[], refused: number): string {
+  const lines = ["Nothing was shown — the draft does not hold up:", ...problems.map((p) => `- ${p}`)];
+  lines.push(
+    refused >= MAX_DRAFT_ROUNDS
+      ? `That is ${refused} refused drafts this turn. Stop drafting and tell them in a line which rule keeps failing.`
+      : "Fix those and call propose_meal_plan again with the whole draft.",
+  );
   return lines.join("\n");
 }
 
-export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
-  // A fresh week the checks refused, as drafted (grams unsolved). The next call
-  // without adjustment patches it: the meals it sends replace theirs and the
-  // rest stand, so a failed meal costs one meal resent, not the week. Tools are
-  // built per turn, so this goes when the turn does.
-  let pending: WeekPlan | null = null;
+const pickName = (n: { zh: string; en: string }) => (getLocale() === "zh-CN" ? n.zh : n.en);
+
+export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
+  // Drafts refused this turn. Tools are built per turn, so this goes when the turn does.
+  let refused = 0;
   return {
-    name: "propose_meals_plan",
-    label: (args) => (args.adjustment ? t("meals.tool.reworkingMeal") : t("meals.tool.draftingWeek")),
+    name: "propose_meal_plan",
+    label: () => t("meals.tool.draftingPlan"),
     effect: "write",
     gate: "card",
     description:
-      "Propose the week's meals, or re-pick the one or two meals a change left open. `days` gives " +
-      "a day per entry, `day` being its number from 1 to 7 exactly as your instructions print " +
-      "them — never a date — each with `breakfast`, `lunch`, `dinner` and `snack`. A `make` meal " +
-      "lists its foods by id with roles, plus name, searchName, flavour, method and minutes; " +
-      "`out`, `delivery` and `bought` give `place`. Set `adjustment` to rework meals of the week " +
-      "they already have — then send only those meals. The program solves every gram, checks the " +
-      "week and derives the shopping list; anything that fails comes back to you naming its " +
-      "meals. For a fresh week the rest of the draft is kept, so the next call sends only the " +
-      "meals it fixes. " +
-      "It files nothing: the user sees a card and applies it.",
+      `Draft a plan of 1 to ${MAX_PLAN_DAYS} days from the library: each day's breakfast, lunch and dinner by dish id, ` +
+      "the pots cooked in the one prep session and which meals eat from them, and the fruit. Days are " +
+      "numbered from 1; never a date, a gram or a minute. The program checks the draft and sends back what " +
+      "fails; a passing draft shows on a card, and a later call in this conversation replaces that card in " +
+      "place with the revised version. It files nothing: they confirm on the card or in words.",
     parameters: Type.Object({
-      adjustment: Type.Optional(
-        Type.Boolean({ description: "True when this reworks meals of the week already planned." }),
+      start: Type.Optional(
+        Type.Number({ description: "Days from today the plan starts: 0 today (the default), 1 tomorrow, at most 6." }),
       ),
       days: Type.Array(
         Type.Object({
-          day: Type.Number({ description: "1 to 7, the day number from your instructions." }),
-          breakfast: Type.Optional(mealSchema("breakfast")),
-          lunch: Type.Optional(mealSchema("lunch")),
-          dinner: Type.Optional(mealSchema("dinner")),
-          snack: Type.Optional(mealSchema("snack")),
+          breakfast: Type.String({ description: "A breakfast dish id." }),
+          lunch: draftMealSchema,
+          dinner: draftMealSchema,
+          fruit: Type.Optional(Type.Array(Type.String(), { description: "Fruit food ids, one per portion, 2 to 3 a day." })),
         }),
-        { description: "The days this call plans." },
+        { description: `Day 1 first, 1 to ${MAX_PLAN_DAYS} days.` },
       ),
-      pots: Type.Optional(
-        Type.Array(potSchema, {
-          description:
-            "What is cooked once and eaten over several meals. In a patch or an adjustment, send only " +
-            "the pots you add or change; the week's others stay.",
-        }),
+      batches: Type.Optional(
+        Type.Array(
+          Type.Object({
+            id: Type.String({ description: "A short id of yours, unique in the draft." }),
+            dish: Type.String({ description: "A batch main's dish id." }),
+            session: Type.String({ description: "The session it is cooked in." }),
+            meals: Type.Array(
+              Type.Object({ day: Type.Number(), slot: Type.String({ description: "lunch or dinner." }) }),
+              { description: "1 to 3 meals eating from it." },
+            ),
+          }),
+          { description: "The pots." },
+        ),
+      ),
+      sessions: Type.Optional(
+        Type.Array(
+          Type.Object({
+            id: Type.String(),
+            day: Type.Number({ description: "The day number it is cooked on." }),
+            part: Type.String({ description: `One of: ${COOK_PARTS.join(", ")}.` }),
+          }),
+          { description: "The one prep session, when there are pots." },
+        ),
       ),
     }),
     execute: async (args) => {
@@ -547,115 +408,70 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
             : "They have not answered the opening questions, so there is nothing to plan against. Ask them to go through them on the Meals screen.",
         };
       }
-      const adjustment = args.adjustment === true;
-      if (adjustment && !state.plan) {
-        return {
-          receipt: null,
-          text: "There is no week planned yet, so there is nothing to adjust. Propose a whole week instead.",
-        };
-      }
-      if (adjustment && planExhausted(state.plan, deps.today())) {
-        return {
-          receipt: null,
-          text:
-            "Their week is over, so there is nothing current to adjust. Call propose_meals_plan again " +
-            "without adjustment and send a whole fresh week of 7 days; it starts today.",
-        };
-      }
-      const days = toDayDrafts(args.days);
-      const pots = toPotDrafts(args.pots);
-      if (days.length === 0) throw new Error("propose_meals_plan needs at least one day.");
-      const patching = !adjustment && pending !== null;
-      if (!adjustment && !patching) {
-        const distinct = new Set(days.map((d) => Math.round(d.day))).size;
-        if (distinct < WEEK_DAYS) {
-          return {
-            receipt: null,
-            text:
-              `A fresh week needs all ${WEEK_DAYS} days; you sent ${distinct}. Send the whole ` +
-              "week, or set adjustment if you meant to rework meals of the week they have.",
-          };
-        }
-        const thin = days.filter((d) => MEAL_KEYS.some((k) => !d[k]));
-        if (thin.length) {
-          return {
-            receipt: null,
-            text:
-              `A fresh week needs breakfast, lunch, dinner and snack on every day; day ` +
-              `${thin.map((d) => d.day).join(", ")} is missing one. Send all four.`,
-          };
-        }
-      }
-
-      const assembled = assembleWeekPlan(
-        { days, pots },
-        {
-          startDate: deps.today(),
-          createdAt: deps.now(),
-          previous: adjustment ? state.plan : patching ? pending : null,
-        },
-      );
-      if (adjustment && !assembled.problems.length && assembled.changedDates.length) {
-        const today = deps.today();
-        if (assembled.changedDates.every((date) => date < today)) {
-          return {
-            receipt: null,
-            text:
-              "Those meals are on days that have passed, and meals on past days cannot be changed. " +
-              "Adjust a meal of today or a later day, or propose a whole fresh week without adjustment.",
-          };
-        }
-      }
-      const checked = assembled.problems.length
-        ? { plan: assembled.plan, problems: assembled.problems }
-        : checkPlan({
-            plan: assembled.plan,
-            profile: charter.profile,
-            targets,
-            changed: adjustment ? assembled.changed : null,
-            previous: adjustment ? state.plan : null,
-            pots: pots.map((p) => p.id),
-          });
+      if (refused >= MAX_DRAFT_ROUNDS) return { receipt: null, text: refusal([], refused) };
+      const offset = Math.min(6, Math.max(0, Math.round(Number(args.start ?? 0)) || 0));
+      const start = addDays(deps.today(), offset);
+      const draft = parseDraft(args);
+      const profile = charter.profile;
+      const lib = planLibrary(profile);
+      const result = checkDraft(draft, {
+        profile,
+        targets: planDayTargets(targets, profile, start, Math.min(MAX_PLAN_DAYS, Math.max(1, draft.days.length))),
+        startWeekday: isoWeekday(start),
+        people: profile.people,
+        library: lib,
+      });
       // A refusal, not a thrown error: the model can fix every one of these in
-      // the same turn, and the user should never see the attempt.
-      if (checked.problems.length) {
-        // A day number outside the week changed nothing, so the draft stands.
-        if (!adjustment && !assembled.problems.length) pending = assembled.plan;
-        return {
-          receipt: null,
-          text: refusalText(checked, adjustment ? "adjustment" : pending ? "patch" : "week"),
-        };
+      // the same turn, and the reader never sees the attempt.
+      if (result.problems.length || !result.plan) {
+        refused += 1;
+        return { receipt: null, text: refusal(result.problems.map((p) => p.message), refused) };
       }
-      if (!adjustment) pending = null;
-
-      const card: MealsPlanCardData = {
-        kind: "meals-plan",
+      const card = buildDraftCard({
+        result,
+        lib,
+        startDate: start,
         threadId: deps.threadId,
-        startDate: checked.plan.startDate,
-        days: checked.plan.days,
-        ...(checked.plan.pots?.length ? { pots: checked.plan.pots } : {}),
-        adjustment,
-        changed: adjustment ? assembled.changed : [],
-        changedDates: adjustment ? assembled.changedDates : [],
-        phase: "proposed",
-      };
+        previous: deps.currentDraft?.() ?? null,
+        newId: String(deps.now()),
+      });
       deps.onMealsCard(card);
+      const when = offset === 0 ? "today" : offset === 1 ? "tomorrow" : `in ${offset} days`;
+      const notes = result.notes.length
+        ? `\nThe program changed on its own; tell them in a few words:\n${result.notes.map((n) => `- ${n}`).join("\n")}`
+        : "";
       return {
         text:
-          (adjustment
-            ? `Proposed a change to ${assembled.changed.length} meal(s).`
-            : "Proposed the week's meals.") +
-          " A card now shows the user the days with the grams the program solved. Nothing is " +
-          "saved until they apply it. Do not recite amounts or the shopping list — they are on the card.",
+          (card.version > 1
+            ? `The draft card above now shows version ${card.version}. Say in one short line that the draft above was changed; do not list the meals again.`
+            : `A draft card now shows the ${card.days.length}-day plan starting ${when}. Do not repeat its meals. Nothing is saved until they confirm it.`) +
+          notes,
         receipt: {
-          label: adjustment ? t("meals.receipt.reworkedMeal") : t("meals.receipt.draftedWeek"),
-          summary: adjustment
-            ? mealsList(assembled.changed)
-            : checked.plan.days
-                .map((d) => `${weekdayName(d.date)}: ${d.dinner.name ?? modeWord(d.dinner.mode)}`)
-                .join("; "),
+          label: card.version > 1 ? t("meals.receipt.revisedPlan") : t("meals.receipt.draftedPlan"),
+          summary: card.pots.map((p) => pickName(p.name)).join(" · "),
         },
       };
+    },
+  };
+}
+
+/** The reader's confirmation in words: the same write as the card's 「就这样」. */
+export function buildApplyMealPlanTool(deps: MealsToolDeps): AgentTool {
+  return {
+    name: "apply_meal_plan",
+    label: () => t("meals.tool.applyingPlan"),
+    effect: "write",
+    description:
+      "Save the draft on the card, only when they confirm it in words ('就这样', '可以', 'looks good'). The " +
+      "program solves the grams and writes the plan and the shopping list; the card collapses to say so.",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const applied = deps.applyDraft ? await deps.applyDraft() : null;
+      if (!applied) {
+        return { receipt: null, text: "No draft card is waiting to be confirmed. Draft one with propose_meal_plan first." };
+      }
+      if (!applied.ok) return { receipt: null, text: "The plan could not be saved. Nothing changed; tell them so." };
+      return { text: `${applied.note} Say it in one line.`, receipt: { label: t("meals.receipt.appliedPlan"), summary: "" } };
     },
   };
 }
@@ -822,7 +638,7 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
 /**
  * Record what actually happened at a meal, from the reader's own sentence. It
  * writes; what the program did with it comes back in the result, so the model
- * can follow with propose_meals_plan for exactly the meals named.
+ * can say which meals are left without food.
  */
 export function buildRecordDeviationTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
   return {
@@ -831,9 +647,9 @@ export function buildRecordDeviationTool(deps: MealsToolDeps & { ports: MealsPor
     effect: "write",
     description:
       "Call this the moment they say a meal went differently from the plan ('we ordered in', " +
-      "'didn't take lunch'). It writes that meal down and re-solves the week. It answers with the " +
-      "meals whose foods to pick again: plan only those, with propose_meals_plan and adjustment " +
-      "set. Do not call it for boredom or 'too much hassle' — that is next week's business.",
+      "'didn't take lunch'). It writes that meal down and re-solves the plan. It answers with the " +
+      "meals left without food; a new plan from today (propose_meal_plan) replaces the days it covers. " +
+      "Do not call it for boredom or 'too much hassle' — that is the next plan's business.",
     parameters: Type.Object({
       day: Type.String({
         description: "Which day: 'today', 'yesterday', or the day number 1 to 7 from your instructions.",
@@ -875,9 +691,9 @@ export function buildRecordDeviationTool(deps: MealsToolDeps & { ports: MealsPor
       if (!ok) return { receipt: null, text: "The change could not be written. Nothing was recorded." };
       return {
         text: attention.length
-          ? `Recorded. ${attention.map(mealWords).join(" and ")} needs its foods picked again — call ` +
-            "propose_meals_plan with adjustment set for those meals only."
-          : "Recorded. Nothing else in the week moved, so there is nothing to re-plan.",
+          ? `Recorded. ${attention.map(mealWords).join(" and ")} is left without food. If they want it ` +
+            "planned again, draft a new plan from today with propose_meal_plan."
+          : "Recorded. Nothing else in the plan moved, so there is nothing to re-plan.",
         receipt: { label: t("meals.receipt.recordedDeviation"), summary: `${boxName({ date, meal })}: ${said}` },
       };
     },
@@ -1234,94 +1050,11 @@ function toReaderItems(raw: unknown): ShoppingItem[] {
     .filter((i) => i.name !== "");
 }
 
-const ROLES: readonly TemplateRole[] = ["protein", "staple", "fat", "fixed"];
-
-// The foods as the model sent them. An id the table does not know is kept as
-// written, so the check can name it back; a role off the list becomes fixed
-// with no grams, which the check also names.
-function toItems(raw: unknown): TemplateItem[] {
-  if (!Array.isArray(raw)) return [];
-  const out: TemplateItem[] = [];
-  for (const entry of raw) {
-    const e = record(entry);
-    const foodId = String(e.food ?? e.foodId ?? "").trim();
-    if (!foodId) continue;
-    const role = oneOf(e.role, ROLES) ?? "fixed";
-    const grams = Number(e.grams);
-    out.push(role === "fixed" && Number.isFinite(grams) && grams > 0 ? { foodId, role, grams: Math.round(grams) } : { foodId, role });
-  }
-  return out;
-}
-
-function toMealDraft(raw: unknown): MealDraft | null {
-  const e = record(raw);
-  const mode = oneOf(e.mode, MEAL_MODES);
-  if (!mode) return null;
-  const draft: MealDraft = { mode };
-  const text = (k: string) => String(e[k] ?? "").trim();
-  if (mode === "make") {
-    draft.items = toItems(e.items);
-    if (text("name")) draft.name = text("name");
-    if (text("searchName")) draft.searchName = text("searchName").toLowerCase();
-    const flavour = flavourOf(e.flavour);
-    if (flavour) draft.flavour = flavour;
-    if (text("method")) draft.method = text("method");
-    const minutes = Number(e.minutes);
-    if (Number.isFinite(minutes) && minutes > 0) draft.minutes = Math.round(minutes);
-    if (e.proper === true) draft.proper = true;
-    if (text("pot")) draft.pot = text("pot");
-  } else if (text("place")) {
-    draft.place = text("place");
-  }
-  if (text("note")) draft.note = text("note");
-  return draft;
-}
-
-// The pots as the model sent them. One with no id is dropped; the rest are
-// kept as written for the checks to name back.
-export function toPotDrafts(raw: unknown): PotDraft[] {
-  if (!Array.isArray(raw)) return [];
-  const out: PotDraft[] = [];
-  for (const entry of raw) {
-    const e = record(entry);
-    const id = String(e.id ?? "").trim();
-    if (!id) continue;
-    const day = Number(e.day);
-    const grams = Number(e.grams);
-    const meal = toMealKey(e.meal);
-    out.push({
-      id,
-      food: String(e.food ?? e.foodId ?? "").trim(),
-      ...(e.grams !== undefined && Number.isFinite(grams) && grams > 0 ? { grams } : {}),
-      day: Number.isFinite(day) ? Math.round(day) : 0,
-      meal: meal === "snack" ? null : meal,
-      name: String(e.name ?? "").trim(),
-      method: String(e.method ?? "").trim(),
-    });
-  }
-  return out;
-}
-
-export function toDayDrafts(raw: unknown): DayDraft[] {
-  if (!Array.isArray(raw)) return [];
-  const out: DayDraft[] = [];
-  for (const entry of raw) {
-    const e = record(entry);
-    const n = Number(e.day);
-    const day: DayDraft = { day: Number.isFinite(n) ? Math.round(n) : 0 };
-    for (const key of MEAL_KEYS) {
-      const meal = toMealDraft(e[key]);
-      if (meal) day[key] = meal;
-    }
-    out.push(day);
-  }
-  return out;
-}
-
 /** Every meals tool over `deps`: the desk mounts them through live.ts, the durable catalog registers them. */
 export function buildMealsCatalogTools(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool[] {
   return [
-    buildProposeMealsPlanTool(deps),
+    buildProposeMealPlanTool(deps),
+    buildApplyMealPlanTool(deps),
     buildUpdateProfileTool(deps),
     buildRecordDeviationTool(deps),
     buildAddShoppingItemsTool(deps),

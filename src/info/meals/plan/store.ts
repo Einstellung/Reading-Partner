@@ -129,11 +129,20 @@ function validatePlan(raw: unknown): WeekPlan | null {
   const dayOk = (d: unknown) =>
     isObject(d) && typeof d.date === "string" && MEAL_KEYS.every((k) => isObject(d[k]) && typeof d[k].mode === "string");
   if (!raw.days.every(dayOk)) return null;
-  const plan = raw as unknown as WeekPlan;
+  let plan = raw as unknown as WeekPlan;
+  if (raw.planner !== undefined && !isPlanner(raw.planner)) {
+    const { planner: _drop, ...rest } = plan;
+    plan = rest;
+  }
   if (raw.pots === undefined) return plan;
   const pots = Array.isArray(raw.pots) ? raw.pots.filter(isPot) : [];
   const { pots: _, ...rest } = plan;
   return pots.length ? { ...rest, pots } : rest;
+}
+
+/** A planner record that can be solved again: its start and a draft with days. */
+function isPlanner(raw: unknown): boolean {
+  return isObject(raw) && typeof raw.start === "string" && isObject(raw.draft) && Array.isArray(raw.draft.days);
 }
 
 function isPot(raw: unknown): raw is Pot {

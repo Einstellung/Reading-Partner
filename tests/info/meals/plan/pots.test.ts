@@ -234,7 +234,6 @@ test("a deviation after a pot is cooked keeps the boxes and sets the meal's box 
   const lunch = dayViewOn(state({ plan }), D(4), MON, "other")!.meals.find((m) => m.key === "lunch")!;
   expect(lunch.rows.find((r) => r.role === "protein")).toMatchObject({ potLabel: "卤牛腱一锅的 1/4", grams: 150 });
   expect(dayViewOn(state({ plan }), D(2), MON, "other")!.meals.flatMap((m) => m.rows).some((r) => r.potLabel)).toBe(false);
-  expect(mealsGuidance(state({ plan }), D(1))).toContain("3 meals of 150 g; 1 spare box: fridge, from Day 3 lunch");
 
   // A second deviation leaves the packing as it was.
   const again = applyDeviation(plan, out(D(4), "lunch"), null, D(3)).plan;

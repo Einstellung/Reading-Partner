@@ -68,8 +68,7 @@ test("a lunch that was not made is recorded, and the next made meal is handed ba
     place: "the canteen",
     at: 9,
   });
-  expect(out).toContain("2026-09-21 dinner needs its foods picked again");
-  expect(out).toContain("adjustment set");
+  expect(out).toContain("2026-09-21 dinner is left without food");
   expect(t.reloads()).toBe(1);
 });
 
@@ -85,20 +84,20 @@ test("a snack not eaten hands back that evening's dinner", async () => {
   const t = tool(state());
   const out = await t.run({ day: "2", meal: "Snack", became: "skip", said: "wasn't hungry" });
   expect(t.written[0]!.deviation).toMatchObject({ date: "2026-09-22", meal: "snack", became: "skip" });
-  expect(out).toContain("2026-09-22 dinner needs its foods picked again");
+  expect(out).toContain("2026-09-22 dinner is left without food");
   expect(mealOn(t.written[0]!.plan, "2026-09-22", "snack")).toEqual({ mode: "skip" });
 });
 
 test("a meal that becomes made hands back that meal itself", async () => {
   const t = tool(state());
   const out = await t.run({ day: "3", meal: "dinner", became: "make", said: "I'll cook tonight" });
-  expect(out).toContain("2026-09-23 dinner needs its foods picked again");
+  expect(out).toContain("2026-09-23 dinner is left without food");
 });
 
 test("a meal that was never made moves nothing else", async () => {
   const t = tool(state());
   const out = await t.run({ day: "6", meal: "breakfast", became: "out", place: "a cafe", said: "sat down for it" });
-  expect(out).toContain("Nothing else in the week moved");
+  expect(out).toContain("Nothing else in the plan moved");
   expect(mealOn(t.written[0]!.plan, "2026-09-26", "breakfast")).toEqual({ mode: "out", place: "a cafe" });
 });
 

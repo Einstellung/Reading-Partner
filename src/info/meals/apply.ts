@@ -7,7 +7,7 @@
 // deviation write straight through: they are the reader's own answers and
 // sentences, with nothing to approve.
 
-import type { MealsAppliedCardData, MealsPlanCardData } from "./cards";
+import type { MealsAppliedCardData, MealsDraftCardData } from "./cards";
 import type { PhotoCache } from "./photos/dish-photos";
 import type { Profile, Region, Targets } from "./nutrition/targets";
 import { dishesToDraw } from "./photos/dish-drawing";
@@ -23,7 +23,11 @@ import type {
   ShoppingState,
   WeekPlan,
 } from "./plan/types";
-import { applyDeviation, weekId } from "./plan/week";
+import { applyDeviation, isoWeekday } from "./plan/week";
+import { checkDraft } from "./planner/checks";
+import { planLibrary } from "./planner/library";
+import { planDayTargets } from "./planner/solve";
+import { resolvePlannerWeek, weekFromDraft } from "./planner/to-week";
 
 export interface MealsPorts {
   // The profile, the week and the list as they are NOW.
@@ -86,7 +90,14 @@ export function resolvedWeek(
   today: string,
 ): { plan: WeekPlan; shopping: ShoppingState } {
   const targets = targetsOf(charter, region);
-  const solved = targets && charter ? solvePlan(plan, targets, charter.profile) : plan;
+  // A planner plan is solved again from its draft (planner/to-week.ts); the
+  // weekly solver would re-read its stored grams as a template.
+  const solved =
+    targets && charter
+      ? plan.planner
+        ? resolvePlannerWeek(plan, charter.profile, targets)
+        : solvePlan(plan, targets, charter.profile)
+      : plan;
   const people = charter?.profile.people ?? 1;
   return { plan: solved, shopping: reconcileShoppingList(shopping, deriveShoppingList(solved, today, people)) };
 }
@@ -124,22 +135,29 @@ export async function saveProfile(
 }
 
 /**
- * The plan card's Apply: write the week, re-solved against the profile as it
- * is now, and the shopping list derived from it in the same write.
+ * The draft card's 「就这样」, or apply_meal_plan: solve the draft against the
+ * profile as it is now, write the plan and the shopping list derived from it
+ * in one write (docs/671 对话). The draft's days replace the plan's days they
+ * cover; the old plan's days before them stay when they run straight in.
  */
-export async function applyPlan(card: MealsPlanCardData, ports: MealsPorts): Promise<Applied> {
+export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): Promise<Applied> {
   if (card.phase === "applied") return NOTHING;
   const state = await ports.current();
-  const previous = card.adjustment ? state.plan : null;
-  const drafted: WeekPlan = {
-    id: weekId(card.startDate),
-    startDate: card.startDate,
-    days: card.days,
-    createdAt: previous?.createdAt ?? ports.now(),
-    revision: (previous?.revision ?? 0) + 1,
-  };
-  if (card.pots?.length) drafted.pots = card.pots;
-  const { plan, shopping } = resolvedWeek(drafted, state.shopping, state.charter, ports.region(), ports.today());
+  const charter = state.charter;
+  const targets = targetsOf(charter, ports.region());
+  if (!charter || !targets) return NOTHING;
+  const profile = charter.profile;
+  const lib = planLibrary(profile);
+  const result = checkDraft(card.draft, {
+    profile,
+    targets: planDayTargets(targets, profile, card.startDate, card.draft.days.length),
+    startWeekday: isoWeekday(card.startDate),
+    people: profile.people,
+    library: lib,
+  });
+  if (!result.plan) return NOTHING;
+  const plan = weekFromDraft({ result, lib, start: card.startDate, now: ports.now(), previous: state.plan });
+  const shopping = reconcileShoppingList(state.shopping, deriveShoppingList(plan, ports.today(), profile.people));
   try {
     await ports.savePlan(plan, shopping);
   } catch {
@@ -150,14 +168,14 @@ export async function applyPlan(card: MealsPlanCardData, ports: MealsPorts): Pro
   // the screen shows the ingredient strip until each one lands.
   void ports.drawDishes?.().catch(() => {});
   const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
-  // The photographs are asked for after the week is on disk and after the note
+  // The photographs are asked for after the plan is on disk and after the note
   // is handed back: the search takes minutes and the screen is usable without
   // it (photo-sweep.ts).
   const pending = startPhotoSearch(plan, cache, ports, state.photosAskedAt ?? 0).then(
     () => {},
     () => {},
   );
-  return { ok: true, note: planNote(card, shopping), shown: appliedCard(card, shopping), pending };
+  return { ok: true, note: draftNote(card, shopping), shown: draftApplied(card, shopping), pending };
 }
 
 async function canDrawHere(ports: MealsPorts): Promise<boolean> {
@@ -274,26 +292,24 @@ function stillToBuy(shopping: ShoppingState): { toBuy: number; freeze: number } 
 }
 
 /**
- * The note left in the thread after Apply, for the model. Bracketed and about
- * the reader, on a row with the assistant's role, the way an aside's receipt is
- * (reading/aside.ts): the reader did not say it, and the row draws the applied
- * card in place of these words.
+ * The note left in the thread after the draft is applied, for the model, on a
+ * row with the assistant's role that draws nothing: the draft card above has
+ * collapsed to say it (cards.ts MealsAppliedCardData).
  */
-export function planNote(card: MealsPlanCardData, shopping: ShoppingState): string {
+export function draftNote(card: MealsDraftCardData, shopping: ShoppingState): string {
   const { toBuy, freeze } = stillToBuy(shopping);
-  const head = card.adjustment
-    ? `The reader applied the change to ${card.changed.map(mealWords).join(", ")}.`
-    : "The reader saved this week's meals.";
-  const tail =
+  const days = card.days.length;
+  return (
+    `[The reader confirmed the draft: the ${days}-day plan is saved and its grams solved.` +
     ` The shopping list is on their screen — ${toBuy} things` +
     (freeze ? `, ${freeze} to freeze on arrival.` : ".") +
-    " Do not read it back to them.";
-  return `[${head}${tail}]`;
+    " Do not read it back to them.]"
+  );
 }
 
-/** What the reader sees after Apply (cards.ts MealsAppliedCardData). */
-export function appliedCard(card: MealsPlanCardData, shopping: ShoppingState): MealsAppliedCardData {
-  return { kind: "meals-applied", adjustment: card.adjustment, changed: card.changed, ...stillToBuy(shopping) };
+/** The row the draft's Apply leaves (cards.ts MealsAppliedCardData): it draws nothing. */
+export function draftApplied(card: MealsDraftCardData, shopping: ShoppingState): MealsAppliedCardData {
+  return { kind: "meals-applied", adjustment: false, changed: [], ...stillToBuy(shopping), draft: card.draftId };
 }
 
 export function deviationNote(deviation: Deviation, attention: readonly MealRef[]): string {

@@ -6,7 +6,7 @@
 // the screen's reload come from whoever is running the turn.
 
 import type { MealsPorts } from "./apply";
-import type { MealsCard } from "./cards";
+import type { MealsCard, MealsDraftCardData } from "./cards";
 import { ingredientImageUrl } from "./photos/images";
 import { mealsCanDraw, mealsDishDrawer } from "./photos/dish-draw-sweep";
 import { mealsPhotoSearcher } from "./photos/photo-sweep";
@@ -26,14 +26,18 @@ import {
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { localDate } from "../../platform/std/day";
 import { buildMealsCatalogTools } from "./tools";
+import type { Applied } from "./apply";
 import { hostRegion } from "./region";
 import type { AgentTool } from "../../legion/durable/contract";
 
 export interface LiveMealsOptions {
   // The conversation the cards belong to.
   threadId: string;
-  // Where a drafted card goes.
+  // Where a drafted card goes: raised, or the draft card it revises replaced in place.
   onMealsCard(card: MealsCard): void;
+  // The draft card waiting in this conversation, and its Apply (tools.ts MealsToolDeps).
+  currentDraft?(): MealsDraftCardData | null;
+  applyDraft?(): Promise<Applied | null>;
   // The host's local date, so the tools and the screen agree on which night it
   // is without either of them asking the model.
   today(): string;
@@ -119,6 +123,8 @@ export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
     now: () => Date.now(),
     region: () => hostRegion(),
     onMealsCard: opts.onMealsCard,
+    ...(opts.currentDraft ? { currentDraft: opts.currentDraft } : {}),
+    ...(opts.applyDraft ? { applyDraft: opts.applyDraft } : {}),
   };
   return buildMealsCatalogTools({ ...deps, ports });
 }

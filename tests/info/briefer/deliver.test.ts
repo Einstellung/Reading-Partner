@@ -85,7 +85,7 @@ test("a briefing nothing was said in that day still has somewhere to land", asyn
 // meals desk with the meals tools, and not that day's briefing.
 test("a turn asked from the meals conversation is rebuilt in the meals thread, on the meals desk", async () => {
   const mealsTool: AgentTool = {
-    name: "propose_meals_plan",
+    name: "propose_meal_plan",
     label: () => "Propose",
     description: "stand-in",
     parameters: { type: "object", properties: {} } as never,
@@ -104,7 +104,7 @@ test("a turn asked from the meals conversation is rebuilt in the meals thread, o
     expect(delivery?.key).toBe("info-meals");
     expect(delivery?.threadId).toBe("meals");
     expect(delivery?.turn.systemPrompt).toContain("You plan their meals");
-    expect(delivery?.turn.tools.map((t) => t.name)).toContain("propose_meals_plan");
+    expect(delivery?.turn.tools.map((t) => t.name)).toContain("propose_meal_plan");
   } finally {
     off();
   }

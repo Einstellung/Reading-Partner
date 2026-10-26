@@ -4,26 +4,16 @@
 
 import { expect, test } from "bun:test";
 import {
-  applyPlan,
   deviationNote,
-  planNote,
   recordDeviation,
   refreshPhotos,
   saveProfile,
   type MealsPorts,
 } from "../../../src/info/meals/apply";
-import type { MealsPlanCardData } from "../../../src/info/meals/cards";
 import type { PhotoQuery } from "../../../src/info/meals/photos/photo-run";
 import { currentList, deriveShoppingList, shoppingItemKey } from "../../../src/info/meals/plan/shopping";
 import { solvePlan, targetsOf } from "../../../src/info/meals/plan/solve-week";
-import type {
-  Deviation,
-  DishPhotoEntry,
-  MealsCharter,
-  MealsState,
-  ShoppingState,
-  WeekPlan,
-} from "../../../src/info/meals/plan/types";
+import type { Deviation, MealsCharter, MealsState, ShoppingState, WeekPlan } from "../../../src/info/meals/plan/types";
 import { mealOn } from "../../../src/info/meals/plan/week";
 import { MON, charter, draftWeek, profile, shopping, state, week } from "./fixtures/week";
 
@@ -73,102 +63,11 @@ function harness(over: Partial<MealsState> = {}, fail = false): Harness {
   return h;
 }
 
-function planCard(over: Partial<MealsPlanCardData> = {}): MealsPlanCardData {
-  const plan = draftWeek();
-  return {
-    kind: "meals-plan",
-    threadId: "meals",
-    startDate: plan.startDate,
-    days: plan.days,
-    adjustment: false,
-    changed: [],
-    changedDates: [],
-    phase: "proposed",
-    ...over,
-  };
-}
-
 // The week as the program solves it for a profile.
 function solvedFor(over: Parameters<typeof profile>[0]): WeekPlan {
   const c = charter(over);
   return solvePlan(draftWeek(), targetsOf(c, "other")!, c.profile);
 }
-
-test("applying a plan writes the week with its grams solved and the list derived from them", async () => {
-  const h = harness({ plan: null });
-  const applied = await applyPlan(planCard(), h.ports);
-  await applied.pending;
-  expect(applied.ok).toBe(true);
-  expect(h.saved.plan!.days).toEqual(week().days);
-  expect(h.saved.plan!.revision).toBe(1);
-  expect(mealOn(h.saved.plan, MON, "lunch")!.solved!.length).toBe(5);
-  const list = currentList(h.saved.shopping!);
-  expect(list).toEqual(deriveShoppingList(week(), MON, 1));
-  // Three salmon dinners at a 25 g-protein portion each, 120 g.
-  expect(list.find((i) => i.foodId === "salmon")?.qty).toBe("360 g");
-  expect(h.reloads).toBe(1);
-  expect(applied.note).toContain(`${list.length} things`);
-  // The reader is shown counts on a card, never the model's note.
-  expect(applied.note.startsWith("[")).toBe(true);
-  expect(applied.shown).toEqual({
-    kind: "meals-applied",
-    adjustment: false,
-    changed: [],
-    toBuy: list.length,
-    freeze: list.filter((i) => i.freezeOnArrival).length,
-  });
-});
-
-test("Apply re-solves against the profile as it is now, not the one the card was drafted for", async () => {
-  // The card carries grams solved for 60 kg; the reader has since said 80.
-  const h = harness({ charter: charter({ weightKg: 80 }) });
-  await (await applyPlan(planCard({ days: week().days, adjustment: true }), h.ports)).pending;
-  const heavier = solvedFor({ weightKg: 80 });
-  expect(h.saved.plan!.days).toEqual(heavier.days);
-  expect(h.saved.plan!.days).not.toEqual(week().days);
-  expect(currentList(h.saved.shopping!)).toEqual(deriveShoppingList(heavier, MON, 1));
-  // An adjustment keeps the week's identity and counts one more revision.
-  expect(h.saved.plan!.revision).toBe(2);
-});
-
-test("a re-derive keeps the ticks and the reader's own lines", async () => {
-  const salmon = deriveShoppingList(week(), MON, 1).find((i) => i.foodId === "salmon")!;
-  const before = shopping({
-    items: [],
-    reader: [
-      {
-        name: "milk",
-        en: "milk",
-        qty: "two",
-        category: "other",
-        keeps: "w1",
-        freezeOnArrival: false,
-        neededBy: "",
-        source: "reader",
-      },
-    ],
-    checked: { [shoppingItemKey(salmon)]: true },
-  });
-  const h = harness({ shopping: before });
-  await (await applyPlan(planCard({ adjustment: true }), h.ports)).pending;
-  const list = currentList(h.saved.shopping!);
-  expect(list.map((i) => i.name)).toContain("milk");
-  expect(h.saved.shopping!.checked).toEqual(before.checked);
-});
-
-test("a second Apply does nothing", async () => {
-  const h = harness();
-  const applied = await applyPlan(planCard({ phase: "applied" }), h.ports);
-  expect(applied.ok).toBe(false);
-  expect(h.saved.plan).toBeNull();
-});
-
-test("a failed write changes nothing on screen", async () => {
-  const h = harness({}, true);
-  const applied = await applyPlan(planCard(), h.ports);
-  expect(applied.ok).toBe(false);
-  expect(h.reloads).toBe(0);
-});
 
 // --- the profile --------------------------------------------------------------
 
@@ -264,25 +163,7 @@ test("nothing is recorded against a week that does not exist", async () => {
   expect(h.deviations).toEqual([]);
 });
 
-test("the notes are said in the reader's voice and never read the list back", () => {
-  const list = shopping({
-    items: [
-      {
-        name: "三文鱼",
-        en: "salmon",
-        qty: "240 g",
-        category: "protein",
-        keeps: "d1-2",
-        freezeOnArrival: true,
-        neededBy: MON,
-      },
-    ],
-  });
-  expect(planNote(planCard(), list)).toContain("1 things, 1 to freeze");
-  expect(planNote(planCard(), list)).toContain("Do not read it back");
-  expect(
-    planNote(planCard({ adjustment: true, changed: [{ date: MON, meal: "lunch" }] }), list),
-  ).toContain("2026-09-21 lunch");
+test("a deviation note says nothing else needs to change", () => {
   expect(
     deviationNote(
       { date: MON, meal: "lunch", said: "canteen", became: "out", changed: "", at: 0 },
@@ -298,16 +179,6 @@ test("the notes are said in the reader's voice and never read the list back", ()
 // starts a run is present only there, and what the reader asks for travels as a
 // time written on the week.
 
-function found(at: number): DishPhotoEntry {
-  return {
-    url: "https://cdn.example/a.jpg",
-    thumb: "",
-    pageUrl: "https://example.com/a",
-    site: "example.com",
-    foundAt: at,
-  };
-}
-
 // A harness that can search, and the names it was asked to search for.
 function searching(h: Harness): string[][] {
   const asked: string[][] = [];
@@ -316,65 +187,6 @@ function searching(h: Harness): string[][] {
   };
   return asked;
 }
-
-test("the machine the reader is holding starts no search and still applies the week", async () => {
-  const h = harness({ plan: null });
-  const applied = await applyPlan(planCard(), h.ports);
-  await applied.pending;
-  expect(applied.ok).toBe(true);
-  expect(h.saved.plan).not.toBeNull();
-});
-
-test("applying a week on the machine that searches asks for what it is missing", async () => {
-  const h = harness({ plan: null });
-  const asked = searching(h);
-  await (await applyPlan(planCard(), h.ports)).pending;
-  expect(asked[0]).toContain("ingredient:salmon");
-  // The dishes are drawn or show their ingredients; they are never searched.
-  expect(asked[0]?.every((k) => k.startsWith("ingredient:"))).toBe(true);
-
-  // Where the provider draws, the same: only the foods are searched.
-  const drawing = harness({ plan: null });
-  drawing.ports.drawDishes = async () => {};
-  drawing.ports.canDraw = async () => true;
-  const foods = searching(drawing);
-  await (await applyPlan(planCard(), drawing.ports)).pending;
-  expect(foods[0]).toContain("ingredient:salmon");
-  expect(foods[0]?.some((k) => k.startsWith("dish:"))).toBe(false);
-});
-
-test("applying a week starts drawing its dishes without waiting for them", async () => {
-  const h = harness({ plan: null });
-  let draws = 0;
-  let finish: () => void = () => {};
-  h.ports.drawDishes = () => {
-    draws += 1;
-    return new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-  };
-  const applied = await applyPlan(planCard(), h.ports);
-  await applied.pending;
-  expect(applied.ok).toBe(true);
-  expect(draws).toBe(1);
-  finish();
-});
-
-// The reader said a picture is wrong before this week was applied: a picture
-// found before they said so is looked for again.
-test("a week applied after the reader asked is searched from before their ask", async () => {
-  const h = harness({ plan: null, photosAskedAt: 500 });
-  h.ports.photos = async () => ({ "ingredient:salmon": found(400) });
-  const asked = searching(h);
-  await (await applyPlan(planCard(), h.ports)).pending;
-  expect(asked[0]).toContain("ingredient:salmon");
-
-  const after = harness({ plan: null, photosAskedAt: 300 });
-  after.ports.photos = async () => ({ "ingredient:salmon": found(400) });
-  const later = searching(after);
-  await (await applyPlan(planCard(), after.ports)).pending;
-  expect(later[0]).not.toContain("ingredient:salmon");
-});
 
 test("asking for better pictures writes down when they asked, wherever they are", async () => {
   const h = harness();

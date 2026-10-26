@@ -124,7 +124,7 @@ test("the trace the reader sees drops quiet calls and keeps the ones that failed
 test("the grey line under a settled answer leaves out what its receipt already says", () => {
   const read: ToolStatus = { name: "read_pages", label: "Reading page 7", state: "done" };
   const wrote: ToolStatus = {
-    name: "propose_meals_plan",
+    name: "propose_meal_plan",
     label: "Drafting this week's meals",
     state: "done",
     receipt: { label: "Drafted the week", summary: "Mon: soup" },
