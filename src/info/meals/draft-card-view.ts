@@ -5,7 +5,7 @@
 // No grams and no controls besides 「就这样」 and the two links.
 
 import { formatDateTime, getLocale, t } from "../../i18n";
-import type { DraftCardDay, DraftCardMeal, DraftCardNight, MealsDraftCardData, Named } from "./cards";
+import type { DraftCardDay, DraftCardMeal, DraftCardNight, DraftCardPrepDay, MealsDraftCardData, Named } from "./cards";
 import { addDays } from "./plan/week";
 import { timeText } from "./planner/storage";
 
@@ -120,6 +120,22 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
     return { kind: "meal", key, label, pot: m.pot ? chip(m.pot) : null, name: pickName(m.name), tags, subs, changed: m.changed };
   };
 
+  const prepRow = (): DraftRow | null => {
+    const s = card.session;
+    if (!s) return null;
+    return {
+      kind: "prep",
+      key: "prep",
+      label: t("meals.draft.row.prep"),
+      lead: t("meals.draft.prepAt", { part: t(`meals.draft.part.${s.part}`) }),
+      pots: s.pots.map(chip),
+      rice: s.rice ? t("meals.draft.prepRice", { rice: pickName(s.rice) }) : null,
+      time: t("meals.draft.prepTime", { active: s.activeMin, total: s.totalMin }),
+    };
+  };
+  const nightRows = (nights: readonly DraftCardNight[]): DraftRow[] =>
+    nights.length ? [{ kind: "night", key: "night", label: t("meals.draft.row.night"), lines: nights.map(nightLine) }] : [];
+
   const dayRows = (d: DraftCardDay): DraftRow[] => {
     const rows: DraftRow[] = [
       { kind: "plain", key: "breakfast", label: t("meals.draft.row.breakfast"), text: pickName(d.breakfast), changed: d.breakfastChanged },
@@ -127,22 +143,20 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
       mealRow("dinner", t("meals.draft.row.dinner"), d.dinner),
     ];
     const s = card.session;
-    if (s && s.day === d.day) {
-      const prep: DraftRow = {
-        kind: "prep",
-        key: "prep",
-        label: t("meals.draft.row.prep"),
-        lead: t("meals.draft.prepAt", { part: t(`meals.draft.part.${s.part}`) }),
-        pots: s.pots.map(chip),
-        rice: s.rice ? t("meals.draft.prepRice", { rice: pickName(s.rice) }) : null,
-        time: t("meals.draft.prepTime", { active: s.activeMin, total: s.totalMin }),
-      };
-      // Morning cooks before lunch, afternoon before dinner, evening after it.
-      rows.splice(s.part === "morning" ? 1 : s.part === "afternoon" ? 2 : 3, 0, prep);
-    }
+    const prep = prepRow();
+    // Morning cooks before lunch, afternoon before dinner, evening after it.
+    if (s && prep && s.day === d.day) rows.splice(s.part === "morning" ? 1 : s.part === "afternoon" ? 2 : 3, 0, prep);
     if (d.fruit.length) rows.push({ kind: "plain", key: "fruit", label: t("meals.draft.row.fruit"), text: d.fruit.join(" · "), changed: false });
-    if (d.nights.length) rows.push({ kind: "night", key: "night", label: t("meals.draft.row.night"), lines: d.nights.map(nightLine) });
-    return rows;
+    return [...rows, ...nightRows(d.nights)];
+  };
+
+  // The day before day 1: the session, the dinner eaten from it when there is one, and that night's reminders.
+  const prepDayView = (p: DraftCardPrepDay): DraftDayView => {
+    const prep = prepRow();
+    const prepRows = prep ? [prep] : [];
+    const dinner = p.dinner ? [mealRow("dinner", t("meals.draft.row.dinner"), p.dinner)] : [];
+    const rows = card.session?.part === "evening" ? [...dinner, ...prepRows] : [...prepRows, ...dinner];
+    return { key: "0", title: t("meals.draft.prepDay"), weekday: shortWeekday(p.date), rows: [...rows, ...nightRows(p.nights)] };
   };
 
   return {
@@ -156,12 +170,15 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
       how: `${t(`meals.equipment.${p.equipment}`)} · ${t(`meals.cuisine.${p.cuisine}`)}`,
       meals: t("meals.draft.potMeals", { count: p.meals }),
     })),
-    days: card.days.map((d) => ({
-      key: String(d.day),
-      title: t("meals.draft.day", { day: d.day }),
-      weekday: shortWeekday(d.date),
-      rows: dayRows(d),
-    })),
+    days: [
+      ...(card.prepDay ? [prepDayView(card.prepDay)] : []),
+      ...card.days.map((d) => ({
+        key: String(d.day),
+        title: t("meals.draft.day", { day: d.day }),
+        weekday: shortWeekday(d.date),
+        rows: dayRows(d),
+      })),
+    ],
     wideLabels: getLocale() !== "zh-CN",
     confirm: t("meals.draft.confirm"),
     hint: t("meals.draft.hint"),

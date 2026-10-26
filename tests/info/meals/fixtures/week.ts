@@ -124,7 +124,7 @@ export function potMeal(name: string, flavour: Flavour, pot: string, foodId: str
  * The fixture week with two pots: beef shank, 600 g cooked at Monday's dinner
  * for four meals (Tuesday and Wednesday from the fridge, Friday from the
  * freezer), and chicken breast, 400 g cooked at Thursday's lunch for three
- * (Saturday from the fridge, Sunday from the freezer).
+ * (Saturday and Sunday from the fridge).
  */
 export function draftPotWeek(): WeekPlan {
   const plan = draftWeek();

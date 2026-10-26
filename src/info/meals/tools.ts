@@ -59,10 +59,11 @@ import { buildDraftCard } from "./build-draft-card";
 import { SEED_DISHES } from "./dishes/seed";
 import { fillDraft } from "./planner/fill";
 import { readerPortions } from "./planner/portions";
-import { isBatchMain, MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft, type DraftMain } from "./planner/draft";
+import { FRIDGE_DAYS_AFTER_COOK } from "./dishes/methods";
+import { isBatchMain, MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft, PREP_DAY, type DraftMain } from "./planner/draft";
 import { planLibrary } from "./planner/library";
 import { libraryListing } from "./planner/listing";
-import { planDayTargets } from "./planner/solve";
+import { planDayTargets, prepDayTargets } from "./planner/solve";
 
 /** What the reader has in front of them when they open the conversation. */
 export type MealsFocus =
@@ -180,6 +181,10 @@ const HOW_TO_PLAN = [
   `- How many days, 1 to ${MAX_PLAN_DAYS}.`,
   "- When they can cook the prep session: which day, and morning (before lunch), afternoon (before dinner) or",
   "  evening (after dinner). A standing habit goes into the profile with update_meals_profile (cookSlots).",
+  "  The session may be on the day before Day 1 ('明天晚饭后备餐，吃后面三天', '前一天晚上做'): that is day 0, the",
+  "  prep day, not a plan day, so start the plan the day after it. When they cook on it before dinner and eat",
+  "  that dinner from the pots ('今晚做今晚就吃，再吃三天'), that dinner is `prepDinner`. The prep day has no",
+  "  breakfast or lunch from the plan.",
   "- Whether they pack meals into boxes to eat later. Ask it before the first plan even though the program",
   "  assumes boxes while it is unset, and record the answer with update_meals_profile (boxes). Never assume it.",
   "- What they feel like eating lately and what they do not want. This plan's tastes stay with this draft; only",
@@ -200,9 +205,13 @@ const HOW_TO_PLAN = [
   "  meal of one pot), or a fresh main made at the meal, {dish}; add `staple` only when they asked for one.",
   "- `batches`: a pot is one batch main from the library with a short id of yours, cooked in the session and",
   "  eaten at 1 to 3 lunches or dinners listed in `meals`: none before the session, all within the cook day and",
-  "  the 2 days after it. One pot per dish; lunch and dinner of one day never the same dish. Fish and seafood are",
+  `  the ${FRIDGE_DAYS_AFTER_COOK} days after it. One pot per dish; lunch and dinner of one day never the same dish. Fish and seafood are`,
   "  always fresh.",
-  "- `sessions`: exactly one when there are pots, {id, day, part}, at a time they said they can cook.",
+  "- `sessions`: exactly one when there are pots, {id, day, part}, at a time they said they can cook. `day` is a",
+  `  plan day, or ${PREP_DAY} for the prep day before Day 1.`,
+  "- `prepDinner`: only with a day-0 session in the morning or afternoon, when they eat that dinner from it:",
+  "  {main: {batch, way}}, with {day: 0, slot: 'dinner'} in that pot's `meals`. At most 7 lunches and dinners in",
+  `  all: ${MAX_PLAN_DAYS} days and the prep day's dinner.`,
   "- Lean on the pots: most lunches and dinners eat from them, and the fresh ones are quick. About an hour",
   "  hands-on for the session unless they said otherwise.",
   "- What only your picks decide: red meat at most 3 meals a week, fish at least once in 3 days, at least 2",
@@ -249,6 +258,7 @@ export function draftOnCard(card: MealsDraftCardData): string[] {
     }),
     batches: card.draft.batches,
     sessions: card.draft.sessions,
+    ...(card.draft.prepDinner ? { prepDinner: { main: main(card.draft.prepDinner.main, undefined) } } : {}),
     ...(asked?.asked ? { asked: asked.asked } : {}),
   };
   return [
@@ -315,7 +325,7 @@ export function mealsGuidance(
       const day = plan.days[i];
       if (!day) continue;
       out.push(dayHeading(plan, i, profile, today));
-      for (const key of MEAL_KEYS) out.push(`    ${key}: ${mealLine(day[key])}`);
+      for (const key of day.planned ?? MEAL_KEYS) out.push(`    ${key}: ${mealLine(day[key])}`);
     }
     out.push(
       "Refer to a meal by its day number and which meal it is. A new plan replaces the days it covers.",
@@ -433,7 +443,10 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
             dish: Type.String({ description: "A batch main's dish id." }),
             session: Type.String({ description: "The session it is cooked in." }),
             meals: Type.Array(
-              Type.Object({ day: Type.Number(), slot: Type.String({ description: "lunch or dinner." }) }),
+              Type.Object({
+                day: Type.Number({ description: "A plan day, or 0 for the prep day's dinner (prepDinner)." }),
+                slot: Type.String({ description: "lunch or dinner." }),
+              }),
               { description: "1 to 3 meals eating from it." },
             ),
           }),
@@ -444,10 +457,16 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
         Type.Array(
           Type.Object({
             id: Type.String(),
-            day: Type.Number({ description: "The day number it is cooked on." }),
+            day: Type.Number({ description: "The day number it is cooked on: a plan day, or 0 for the day before Day 1." }),
             part: Type.String({ description: `One of: ${COOK_PARTS.join(", ")}.` }),
           }),
           { description: "The one prep session, when there are pots." },
+        ),
+      ),
+      prepDinner: Type.Optional(
+        Type.Object(
+          { main: draftMealSchema.properties.main },
+          { description: "The prep day's dinner, only when a day-0 session before dinner feeds it: a share of a pot, {batch, way}." },
         ),
       ),
     }),
@@ -467,11 +486,24 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
       const offset = Math.min(6, Math.max(0, Math.round(Number(args.start ?? 0)) || 0));
       const start = addDays(deps.today(), offset);
       const draft = parseDraft(args);
+      if (offset === 0 && draft.sessions.some((s) => s.day === PREP_DAY)) {
+        refused += 1;
+        return {
+          receipt: null,
+          text: refusal(
+            [
+              "The session is on day 0, the day before Day 1, but the plan starts today, so day 0 is yesterday. To cook today and eat from tomorrow, start the plan tomorrow (start 1); otherwise put the session on a plan day.",
+            ],
+            refused,
+          ),
+        };
+      }
       const profile = charter.profile;
       const lib = planLibrary(profile);
       const filled = fillDraft(draft, {
         profile,
         targets: planDayTargets(targets, profile, start, Math.min(MAX_PLAN_DAYS, Math.max(1, draft.days.length))),
+        prepTarget: prepDayTargets(targets, profile, start),
         startWeekday: isoWeekday(start),
         people: profile.people,
         library: lib,
@@ -500,7 +532,7 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
         text:
           (card.version > 1
             ? `The draft card above now shows version ${card.version}. Say in one short line that the draft above was changed; do not list the meals again.`
-            : `A draft card now shows the ${card.days.length}-day plan starting ${when}. Do not repeat its meals. Nothing is saved until they confirm it.`) +
+            : `A draft card now shows the ${card.days.length}-day plan starting ${when}${card.prepDay ? `, cooked the day before${card.prepDay.dinner ? " with that dinner from the pots" : ""}` : ""}. Do not repeat its meals. Nothing is saved until they confirm it.`) +
           notes,
         receipt: {
           label: card.version > 1 ? t("meals.receipt.revisedPlan") : t("meals.receipt.draftedPlan"),

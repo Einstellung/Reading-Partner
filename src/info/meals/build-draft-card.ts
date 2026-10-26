@@ -8,6 +8,7 @@ import type {
   DraftCardMeal,
   DraftCardNight,
   DraftCardPot,
+  DraftCardPrepDay,
   DraftCardSession,
   MealsDraftCardData,
   Named,
@@ -16,7 +17,7 @@ import type { Dish } from "./dishes/types";
 import { foodById } from "./nutrition/foods";
 import { addDays } from "./plan/week";
 import type { DraftResult } from "./planner/checks";
-import { isBatchMain, type DraftMeal, type MainSlot, type PlanDraft } from "./planner/draft";
+import { draftMeal, isBatchMain, PREP_DAY, type DraftMeal, type MainSlot, type PlanDraft } from "./planner/draft";
 import type { PlanLibrary } from "./planner/library";
 import { shownName } from "./planner/packs";
 import type { NightItem } from "./planner/storage";
@@ -130,7 +131,7 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
   const meal = (day: number, slot: MainSlot, m: DraftMeal): DraftCardMeal => {
     const main = m.main;
     const sides = m.sides.map((id) => refNamed(lib, id));
-    const changed = prevDraft !== null && mealKey(prevDraft, prevDraft.days[day - 1]?.[slot]) !== mealKey(draft, m);
+    const changed = prevDraft !== null && mealKey(prevDraft, draftMeal(prevDraft, day, slot)) !== mealKey(draft, m);
     if (isBatchMain(main)) {
       const batch = draft.batches.find((b) => b.id === main.batch);
       const dish = batch ? lib.dish(batch.dish) : undefined;
@@ -155,6 +156,7 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
   };
 
   const nights = result.storage?.nights ?? [];
+  const nightsOn = (day: number) => nights.filter((n) => n.day === day).flatMap((n) => n.items.map((item) => nightOf(item)));
   const days: DraftCardDay[] = draft.days.map((d, i) => {
     const day = i + 1;
     return {
@@ -165,9 +167,17 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
       lunch: meal(day, "lunch", d.lunch),
       dinner: meal(day, "dinner", d.dinner),
       fruit: d.fruit.map((f) => foodNamed(f).zh),
-      nights: nights.filter((n) => n.day === day).flatMap((n) => n.items.map((item) => nightOf(item))),
+      nights: nightsOn(day),
     };
   });
+  const prepDay: DraftCardPrepDay | null =
+    s?.day === PREP_DAY
+      ? {
+          date: addDays(input.startDate, -1),
+          dinner: draft.prepDinner ? meal(PREP_DAY, "dinner", draft.prepDinner) : null,
+          nights: nightsOn(PREP_DAY),
+        }
+      : null;
 
   return {
     kind: "meals-draft",
@@ -177,6 +187,7 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
     startDate: input.startDate,
     draft,
     pots,
+    ...(prepDay ? { prepDay } : {}),
     days,
     session,
     phase: "proposed",

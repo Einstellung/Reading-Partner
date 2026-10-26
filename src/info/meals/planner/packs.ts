@@ -13,7 +13,7 @@
 import { t } from "../../../i18n";
 import { foodById, type Food } from "../nutrition/foods";
 import type { PackKind } from "../nutrition/food-columns";
-import { isBatchMain, type PlanDraft, type PlanSlot } from "./draft";
+import { draftMeal, isBatchMain, PREP_DAY, type PlanDraft, type PlanSlot } from "./draft";
 import type { SolvedPlan } from "./solve";
 
 export type PackBuy =
@@ -61,6 +61,11 @@ export function leftoverChecked(food: Food): boolean {
 /** The list is bought by day 1: a food's keeping days count from it. */
 export const SHOP_DAY = 1;
 
+/** The day the list is bought by: the prep day (0) when the session is cooked on it, else day 1. */
+export function shopDay(draft: Pick<PlanDraft, "sessions">): number {
+  return Math.min(SHOP_DAY, ...draft.sessions.map((s) => s.day).filter((d) => Number.isFinite(d)));
+}
+
 /** Days raw meat and fish keep in the fridge after the day they are bought, by shelf-life class (the low end). */
 const RAW_KEEP_DAYS: Readonly<Record<string, number>> = { "d1-2": 1, "d3-5": 3 };
 
@@ -69,9 +74,9 @@ export function isRawFlesh(food: Food): boolean {
   return food.category === "protein" && food.keeps in RAW_KEEP_DAYS && ["meat", "poultry", "seafood"].includes(food.proteinCategory ?? "");
 }
 
-/** The last plan day raw meat or fish bought on SHOP_DAY can be cooked without freezing it first. */
-export function rawKeepsUntil(food: Food): number {
-  return SHOP_DAY + (RAW_KEEP_DAYS[food.keeps] ?? 0);
+/** The last plan day raw meat or fish bought on the shop day can be cooked without freezing it first. */
+export function rawKeepsUntil(food: Food, shop = SHOP_DAY): number {
+  return shop + (RAW_KEEP_DAYS[food.keeps] ?? 0);
 }
 
 /** Sold frozen and kept frozen. */
@@ -102,7 +107,7 @@ export function buyFor(food: Food, grams: number): PackBuy {
 /** The day each meal's main lines are needed: a pot's on its prep session's day. */
 function dayNeeded(draft: PlanDraft, day: number, slot: PlanSlot): number {
   if (slot === "breakfast") return day;
-  const main = draft.days[day - 1]?.[slot].main;
+  const main = draftMeal(draft, day, slot)?.main;
   if (!main || !isBatchMain(main)) return day;
   const batch = draft.batches.find((b) => b.id === main.batch);
   const session = draft.sessions.find((s) => s.id === batch?.session);
@@ -125,13 +130,17 @@ export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLi
     }
     for (const l of [...d.fruit, ...d.snack]) add(l.food, l.grams, d.day);
   }
+  if (plan.prepDinner) {
+    for (const l of plan.prepDinner.lines) add(l.food, l.grams, l.source === "main" ? dayNeeded(draft, PREP_DAY, "dinner") : PREP_DAY);
+  }
+  const shop = shopDay(draft);
   const out: PackLine[] = [];
   for (const [id, n] of need) {
     const food = foodById(id);
     if (!food) continue;
     const buy = buyFor(food, n.grams);
     const raw = isRawFlesh(food);
-    const freeze = raw && n.lastDay > rawKeepsUntil(food);
+    const freeze = raw && n.lastDay > rawKeepsUntil(food, shop);
     const frozen = isBoughtFrozen(food);
     // Loose produce is bought by the piece, so what is left is less than one
     // piece; only packs are held to finishing (docs/671 整包与开封).

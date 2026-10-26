@@ -11,8 +11,9 @@ import { MEAL_KEYS, type MealRef, type Pot, type PotBox, type WeekPlan } from ".
 /** Where a share waits until its meal: eaten as cooked, in the fridge, or in the freezer. */
 export type PotStorage = "fresh" | "fridge" | "freezer";
 
-// Cooked meat keeps three days in the fridge: a share eaten up to two days
-// after the cook day waits there, a later one is frozen the day it is cooked.
+// Cooked meat keeps the cook day and three more in the fridge: a share eaten up
+// to FRIDGE_DAYS after the cook day waits there, a later one is frozen the day
+// it is cooked.
 export const FRIDGE_DAYS = FRIDGE_DAYS_AFTER_COOK;
 // The latest a share is eaten, in days after the cook day. Frozen it would keep
 // for months; this keeps a pot inside one week's plan and one trip's shopping.
@@ -53,7 +54,7 @@ export function potShareG(rawG: number, meals: number): number {
   return meals > 0 ? Math.round(rawG / meals / 5) * 5 : 0;
 }
 
-/** Where a share waits: the cook meal eats it fresh, the next two days keep it cold, later ones freeze. */
+/** Where a share waits: the cook meal eats it fresh, the next FRIDGE_DAYS days keep it cold, later ones freeze. */
 export function potStorage(cook: MealRef, ref: MealRef): PotStorage {
   if (same(cook, ref)) return "fresh";
   const days = daysBetween(cook.date, ref.date) ?? 0;

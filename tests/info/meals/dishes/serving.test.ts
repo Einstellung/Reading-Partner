@@ -131,11 +131,11 @@ describe("reference serving", () => {
 describe("storage from the method", () => {
   const chicken: DishIngredient[] = [{ food: "chicken_breast", grams: 100, role: "protein" }];
 
-  test("the hands-off methods keep two days after cooking and freeze for three weeks", () => {
+  test("the hands-off methods keep three days after cooking and freeze for three weeks", () => {
     for (const method of ["stew", "braise", "pressure_cook", "slow_cook", "roast", "bake", "steam", "simmer"]) {
       expect(canBatch(method), method).toBe(true);
       expect(dishStorage({ method: method as never, ingredients: chicken }), method).toEqual({
-        fridgeDays: 2,
+        fridgeDays: 3,
         freezable: true,
         freezeWeeks: 3,
       });
@@ -153,7 +153,7 @@ describe("storage from the method", () => {
   test("a not-freezable food stops the whole pot freezing", () => {
     for (const food of ["egg", "firm_tofu", "potato", "spinach"]) {
       const s = dishStorage({ method: "stew", ingredients: [...chicken, { food, grams: 50, role: "veg" }] });
-      expect(s, food).toEqual({ fridgeDays: 2, freezable: false, freezeWeeks: 0 });
+      expect(s, food).toEqual({ fridgeDays: 3, freezable: false, freezeWeeks: 0 });
     }
   });
 

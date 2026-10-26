@@ -51,12 +51,12 @@ test("a share is the raw weight over the meals, to 5 g", () => {
   expect(potShareG(450, 0)).toBe(0);
 });
 
-test("the cook meal eats it fresh, the next two days from the fridge, later ones from the freezer", () => {
+test("the cook meal eats it fresh, the next three days from the fridge, later ones from the freezer", () => {
   const cook = { date: MON, meal: "dinner" as const };
   expect(potStorage(cook, cook)).toBe("fresh");
   expect(potStorage(cook, { date: MON, meal: "snack" })).toBe("fridge");
-  expect(potStorage(cook, { date: D(2), meal: "dinner" })).toBe("fridge");
-  expect(potStorage(cook, { date: D(3), meal: "breakfast" })).toBe("freezer");
+  expect(potStorage(cook, { date: D(3), meal: "dinner" })).toBe("fridge");
+  expect(potStorage(cook, { date: D(4), meal: "breakfast" })).toBe("freezer");
 });
 
 test("every meal of a pot gets its share as its protein grams, and the rest is solved around it", () => {
@@ -79,7 +79,8 @@ test("every meal of a pot gets its share as its protein grams, and the rest is s
 test("the night before a frozen share is eaten, it comes out of the freezer", () => {
   const plan = potWeek();
   expect(thawTonight(plan, D(3)).map((t) => [t.pot.id, t.ref.date, t.ref.meal])).toEqual([["A", D(4), "lunch"]]);
-  expect(thawTonight(plan, D(5)).map((t) => [t.pot.id, t.ref.date])).toEqual([["B", D(6)]]);
+  // Pot B's Sunday share is three days after Thursday's cooking: still the fridge.
+  expect(thawTonight(plan, D(5))).toEqual([]);
   expect(thawTonight(plan, D(1))).toEqual([]);
   const thu = dayViewOn(state({ plan }), D(3), MON, "other")!;
   expect(thu.thaw).toEqual(["今晚把星期五午餐那盒卤牛腱从冷冻拿到冷藏"]);

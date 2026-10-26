@@ -26,7 +26,7 @@ import type {
 import { applyDeviation, isoWeekday } from "./plan/week";
 import { checkDraft } from "./planner/checks";
 import { planLibrary } from "./planner/library";
-import { planDayTargets } from "./planner/solve";
+import { planDayTargets, prepDayTargets } from "./planner/solve";
 import { resolvePlannerWeek, solvePlannerRecord, weekFromDraft } from "./planner/to-week";
 import { plannerShoppingList } from "./planner/trip";
 
@@ -154,6 +154,7 @@ export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): P
   const result = checkDraft(card.draft, {
     profile,
     targets: planDayTargets(targets, profile, card.startDate, card.draft.days.length),
+    prepTarget: prepDayTargets(targets, profile, card.startDate),
     startWeekday: isoWeekday(card.startDate),
     people: profile.people,
     library: lib,

@@ -11,13 +11,13 @@ import { getLocale } from "../../../i18n";
 import type { Dish, IngredientRole } from "../dishes/types";
 import type { TemplateRole } from "../nutrition/solve";
 import type { Profile, Targets } from "../nutrition/targets";
-import type { DayPlan, Meal, PlannerRecord, SolvedItem, WeekPlan } from "../plan/types";
+import { MEAL_KEYS, type DayPlan, type Meal, type MealKey, type PlannerRecord, type SolvedItem, type WeekPlan } from "../plan/types";
 import { addDays, isoWeekday, weekId } from "../plan/week";
 import { checkDraft, type DraftResult } from "./checks";
-import { isBatchMain, parseDraft, type PlanDraft } from "./draft";
+import { isBatchMain, parseDraft, type DraftMain, type PlanDraft } from "./draft";
 import { planLibrary, type PlanLibrary } from "./library";
 import { shownName } from "./packs";
-import { planDayTargets, type PlanLine, type SolvedPlan } from "./solve";
+import { planDayTargets, prepDayTargets, type PlanLine, type SolvedPlan } from "./solve";
 import { foodById } from "../nutrition/foods";
 
 const zh = () => getLocale() === "zh-CN";
@@ -40,34 +40,52 @@ function dishMeal(d: Dish | undefined, id: string, minutes: number, lines: reado
   return made(zh() ? n.zh : n.en, n.en, d ? (zh() ? d.summary : d.summaryEn) : "", minutes, lines);
 }
 
-/** The plan days as stored meals, day 1 on `start`. */
+/**
+ * The plan days as stored meals, day 1 on `start`; before them the prep day
+ * when the plan eats its dinner, covering only that dinner (DayPlan.planned).
+ */
 export function dayPlansFromSolved(plan: SolvedPlan, draft: PlanDraft, lib: PlanLibrary, start: string): DayPlan[] {
-  return plan.days.map((solved, i) => {
+  const main = (m: DraftMain | undefined, lines: readonly PlanLine[]): Meal => {
+    if (!m) return { mode: "skip" };
+    if (isBatchMain(m)) {
+      const batch = draft.batches.find((x) => x.id === m.batch);
+      const dish = batch ? lib.dish(batch.dish) : undefined;
+      const way = dish?.ways?.[m.way - 1];
+      return dishMeal(dish, batch?.dish ?? m.batch, way?.activeMin ?? 5, lines, way ? { zh: way.name, en: way.nameEn } : undefined);
+    }
+    const dish = lib.dish(m.dish);
+    return dishMeal(dish, m.dish, dish?.activeMin ?? 0, lines);
+  };
+  const days = plan.days.map((solved, i): DayPlan => {
     const d = draft.days[i];
     const b = d ? lib.dish(d.breakfast) : undefined;
-    const main = (slot: "lunch" | "dinner"): Meal => {
-      const lines = solved.meals[slot].lines;
-      const m = d?.[slot].main;
-      if (!m) return { mode: "skip" };
-      if (isBatchMain(m)) {
-        const batch = draft.batches.find((x) => x.id === m.batch);
-        const dish = batch ? lib.dish(batch.dish) : undefined;
-        const way = dish?.ways?.[m.way - 1];
-        return dishMeal(dish, batch?.dish ?? m.batch, way?.activeMin ?? 5, lines, way ? { zh: way.name, en: way.nameEn } : undefined);
-      }
-      const dish = lib.dish(m.dish);
-      return dishMeal(dish, m.dish, dish?.activeMin ?? 0, lines);
-    };
     const extra = [...solved.fruit, ...solved.snack];
     const names = [...new Set(extra.map((l) => foodById(l.food)).flatMap((f) => (f ? [shownName(f)] : [])))];
     return {
       date: addDays(start, i),
       breakfast: dishMeal(b, d?.breakfast ?? "", b?.activeMin ?? 0, solved.meals.breakfast.lines),
-      lunch: main("lunch"),
-      dinner: main("dinner"),
+      lunch: main(d?.lunch.main, solved.meals.lunch.lines),
+      dinner: main(d?.dinner.main, solved.meals.dinner.lines),
       snack: extra.length ? made(names.join(zh() ? "、" : ", "), names.join(" "), "", 0, extra) : { mode: "skip" },
     };
   });
+  if (!plan.prepDinner || !draft.prepDinner) return days;
+  const prep: DayPlan = {
+    date: addDays(start, -1),
+    breakfast: { mode: "skip" },
+    lunch: { mode: "skip" },
+    dinner: main(draft.prepDinner.main, plan.prepDinner.lines),
+    snack: { mode: "skip" },
+    planned: ["dinner"],
+  };
+  return [prep, ...days];
+}
+
+/** A stored day with a fresh one's planned meals put in: the prep day's dinner over the old plan's day. */
+function overlay(old: DayPlan, next: DayPlan, onlyMade: boolean): DayPlan {
+  const keys = next.planned ?? MEAL_KEYS;
+  const pick = (k: MealKey) => (keys.includes(k) && (!onlyMade || old[k].mode === "make") ? next[k] : old[k]);
+  return { ...old, breakfast: pick("breakfast"), lunch: pick("lunch"), dinner: pick("dinner"), snack: pick("snack") };
 }
 
 export interface WeekFromDraft {
@@ -79,18 +97,26 @@ export interface WeekFromDraft {
   previous: WeekPlan | null;
 }
 
-/** The plan to store: the draft's days, after the old plan's days that run straight into them. */
+/**
+ * The plan to store: the draft's days, after the old plan's days that run
+ * straight into them. A prep-day dinner goes in over the old plan's dinner
+ * that day, or on a day of its own.
+ */
 export function weekFromDraft(input: WeekFromDraft): WeekPlan {
   const { result, previous, start } = input;
   if (!result.plan) throw new Error("weekFromDraft needs a solved draft.");
   const fresh = dayPlansFromSolved(result.plan, result.draft, input.lib, start);
   const joins = !!previous?.days.some((d) => d.date === addDays(start, -1));
   const kept = joins && previous ? previous.days.filter((d) => d.date < start) : [];
-  const startDate = kept[0]?.date ?? start;
+  const prep = fresh[0]?.planned ? fresh[0] : null;
+  const old = prep ? kept.find((d) => d.date === prep.date) : undefined;
+  const days =
+    prep && old ? [...kept.filter((d) => d.date < prep.date), overlay(old, prep, false), ...fresh.slice(1)] : [...kept, ...fresh];
+  const startDate = days[0]?.date ?? start;
   return {
-    id: kept.length && previous ? previous.id : weekId(start),
+    id: kept.length && previous ? previous.id : weekId(startDate),
     startDate,
-    days: [...kept, ...fresh],
+    days,
     createdAt: input.now,
     revision: (previous?.revision ?? 0) + 1,
     planner: { start, draft: result.draft },
@@ -112,6 +138,7 @@ export function solvePlannerRecord(plan: WeekPlan, profile: Profile, targets: Ta
   const result = checkDraft(draft, {
     profile,
     targets: planDayTargets(targets, profile, rec.start, draft.days.length),
+    prepTarget: prepDayTargets(targets, profile, rec.start),
     startWeekday: isoWeekday(rec.start),
     people: profile.people,
     library: lib,
@@ -138,9 +165,7 @@ export function resolvePlannerWeek(
   const byDate = new Map(fresh.map((d) => [d.date, d]));
   const days = plan.days.map((old) => {
     const next = byDate.get(old.date);
-    if (!next) return old;
-    const keep = (k: "breakfast" | "lunch" | "dinner" | "snack") => (old[k].mode === "make" ? next[k] : old[k]);
-    return { date: old.date, breakfast: keep("breakfast"), lunch: keep("lunch"), dinner: keep("dinner"), snack: keep("snack") };
+    return next ? overlay(old, next, true) : old;
   });
   return { ...plan, days };
 }

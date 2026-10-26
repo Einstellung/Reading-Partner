@@ -1,7 +1,8 @@
 // Containers, boxes and where everything is kept (docs/671 一锅, 整包与开封),
 // computed from the checked draft, its solved plan and the shopping list. No
 // dates: days are plan days and a time is a day plus a meal or the prep
-// session.
+// session. Day 0 is the prep day before Day 1: the list is bought by it, and
+// its evening has the night-before reminders for Day 1.
 //
 // - Every pot is cooked at the one prep session and eaten inside the cooking
 //   day plus FRIDGE_DAYS_AFTER_COOK, so cooked food is only refrigerated.
@@ -28,11 +29,11 @@ import type { Dish } from "../dishes/types";
 import { CHILL_AFTER_OPENING, ROOM_TEMPERATURE } from "../nutrition/food-columns";
 import { foodById, type Food } from "../nutrition/foods";
 import type { Profile } from "../nutrition/targets";
-import { isBatchMain, MAIN_SLOTS, type MainSlot, type MealAt, type PlanDraft, type PlanSlot } from "./draft";
+import { draftMeal, isBatchMain, MAIN_SLOTS, PREP_DAY, type MainSlot, type MealAt, type PlanDraft, type PlanSlot } from "./draft";
 import type { PlanLibrary } from "./library";
-import { boughtName, isRawFlesh, LEFTOVER_IGNORE, rawKeepsUntil, shownName, type PackLine } from "./packs";
+import { boughtName, isRawFlesh, LEFTOVER_IGNORE, rawKeepsUntil, shopDay, shownName, type PackLine } from "./packs";
 import { planRice, riceMeals, stapleOf } from "./rice";
-import type { SolvedPlan } from "./solve";
+import type { PlanLine, SolvedPlan } from "./solve";
 
 /** The box to get: about this many millilitres, lidded, microwave-safe, glass preferred. */
 export const BOX_ML = 750;
@@ -151,6 +152,11 @@ const timeAt = (p: PlanTime) => p.day * 10 + (p.slot ? SLOT_AT[p.slot] : 0);
 const sameTime = (a: PlanTime, b: PlanTime) => a.day === b.day && a.slot === b.slot;
 const byTime = (a: PlanTime, b: PlanTime) => timeAt(a) - timeAt(b);
 
+/** The solved lines of a lunch or dinner, the prep day's dinner at day 0. */
+function linesAt(plan: SolvedPlan, m: MealAt): PlanLine[] {
+  return m.day === PREP_DAY ? (m.slot === "dinner" ? (plan.prepDinner?.lines ?? []) : []) : (plan.days[m.day - 1]?.meals[m.slot].lines ?? []);
+}
+
 /** The session of a pot, or null for a draft that did not hold. */
 function sessionOf(draft: PlanDraft, batchId: string) {
   const batch = draft.batches.find((b) => b.id === batchId);
@@ -179,9 +185,7 @@ function riceBatch(draft: PlanDraft, plan: SolvedPlan, lib: PlanLibrary, people:
   const meals = session ? all.filter((m) => afterSession(session, m)) : all;
   const first = meals[0];
   if (!first) return null;
-  const lines = meals.flatMap((m) =>
-    (plan.days[m.day - 1]?.meals[m.slot].lines ?? []).filter((l) => l.source === "staple" && l.role === "staple" && l.dish === staple),
-  );
+  const lines = meals.flatMap((m) => linesAt(plan, m).filter((l) => l.source === "staple" && l.role === "staple" && l.dish === staple));
   const food = lines[0]?.food ?? lib.dish(staple)?.ingredients.find((l) => l.role === "staple")?.food ?? staple;
   const grams = lines.filter((l) => l.food === food).reduce((sum, l) => sum + l.grams, 0) * people;
   let eatenNow: MealAt | null = { ...first };
@@ -201,7 +205,7 @@ function riceBatch(draft: PlanDraft, plan: SolvedPlan, lib: PlanLibrary, people:
 }
 
 function addOnsOf(draft: PlanDraft, lib: PlanLibrary, day: number, slot: MainSlot): string[] {
-  const main = draft.days[day - 1]?.[slot].main;
+  const main = draftMeal(draft, day, slot)?.main;
   if (!main || !isBatchMain(main)) return [];
   const batch = draft.batches.find((b) => b.id === main.batch);
   return (lib.dish(batch?.dish ?? "")?.ways?.[main.way - 1]?.addOns ?? []).map((l) => l.food);
@@ -226,6 +230,16 @@ function usesByFood(draft: PlanDraft, plan: SolvedPlan, rice: RiceBatch | null):
       }
     }
     for (const l of d.fruit) add(l.food, { day: d.day });
+  }
+  if (plan.prepDinner && draft.prepDinner) {
+    const main = draft.prepDinner.main;
+    const pot = isBatchMain(main) ? sessionOf(draft, main.batch) : null;
+    const at: PlanTime = { day: PREP_DAY, slot: "dinner" };
+    const batchRice = rice && rice.meals.some((m) => sameTime(m, at)) ? rice : null;
+    for (const l of plan.prepDinner.lines) {
+      if (batchRice && l.source === "staple" && l.dish === batchRice.staple) add(l.food, batchRice.cookedAt);
+      else add(l.food, pot && l.source === "main" ? { day: pot.day, slot: "prep" } : at);
+    }
   }
   for (const list of out.values()) list.sort(byTime);
   return out;
@@ -275,7 +289,7 @@ export function planStorage(input: StorageInput): StoragePlan {
         rice: withRice ? staple : null,
         staple: withRice ? null : staple,
         addOns: addOnsOf(draft, lib, m.day, m.slot),
-        sides: [...(draft.days[m.day - 1]?.[m.slot].sides ?? [])],
+        sides: [...(draftMeal(draft, m.day, m.slot)?.sides ?? [])],
       });
     }
   }
@@ -307,6 +321,7 @@ export function planStorage(input: StorageInput): StoragePlan {
   const leftovers: StoreRow[] = [];
   const frozenMeals: StoreRow[] = [];
 
+  const shop = shopDay(draft);
   for (const line of shopping) {
     const food = foodById(line.food);
     if (!food) continue;
@@ -314,7 +329,7 @@ export function planStorage(input: StorageInput): StoragePlan {
     if (line.buy.by === "onHand" && food.category !== "produce") {
       (CHILL_AFTER_OPENING.has(food.id) ? jars : pantry).push(food.id);
     } else if (isRawFlesh(food)) {
-      const keeps = rawKeepsUntil(food);
+      const keeps = rawKeepsUntil(food, shop);
       const cold = at.filter((p) => p.day <= keeps);
       const frozen = at.filter((p) => p.day > keeps);
       if (cold.length) rawFridge.push({ kind: "rawForMeal", food: food.id, meals: cold });
@@ -371,9 +386,9 @@ export function planStorage(input: StorageInput): StoragePlan {
   if (rice && riceInContainer.length) containers.push({ kind: "riceContainer", count: 1, staple: rice.staple, meals: riceInContainer.map((m) => ({ ...m })) });
   if (bagFoods.length) containers.push({ kind: "freezerBag", count: bagFoods.length, foods: [...new Set(bagFoods)] });
 
-  // The night before each day after the first.
+  // The night before each day after the one the list is bought by.
   const nights: NightBefore[] = [];
-  for (let day = 2; day <= n; day++) {
+  for (let day = shop + 1; day <= n; day++) {
     const items: NightItem[] = [];
     const breakfast = lib.dish(draft.days[day - 1]?.breakfast ?? "");
     if (breakfast?.equipment.includes("soy_milk_maker")) {
@@ -437,6 +452,11 @@ function refName(lib: PlanLibrary, id: string): string {
 const list = (names: string[]) => names.join(t("meals.listJoin"));
 
 export function timeText(p: PlanTime): string {
+  if (p.day === PREP_DAY) {
+    if (!p.slot) return t("meals.store.prepDay");
+    if (p.slot === "prep") return t("meals.store.prepDayPrep");
+    return t("meals.store.prepDayMeal", { slot: t(`meals.meal.${p.slot}`) });
+  }
   if (!p.slot) return t("meals.store.day", { day: p.day });
   if (p.slot === "prep") return t("meals.store.prep", { day: p.day });
   return t("meals.store.meal", { day: p.day, slot: t(`meals.meal.${p.slot}`) });
@@ -539,7 +559,10 @@ export function storageText(sp: StoragePlan, lib: PlanLibrary): StorageText {
   const places = (["fridge", "freezer", "cupboard"] as const)
     .map((place) => ({ place, label: t(`meals.store.place.${place}`), rows: sp[place].map((r) => rowText(r, lib)) }))
     .filter((p) => p.rows.length);
-  const nights = sp.nights.map((nb) => ({ title: t("meals.store.night.title", { day: nb.day }), lines: nb.items.map((i) => nightText(i)) }));
+  const nights = sp.nights.map((nb) => ({
+    title: nb.day === PREP_DAY ? t("meals.store.night.prepDayTitle") : t("meals.store.night.title", { day: nb.day }),
+    lines: nb.items.map((i) => nightText(i)),
+  }));
   const rice = sp.rice
     ? {
         name: t("meals.store.rice.cook", { rice: refName(lib, sp.rice.staple), count: sp.rice.portions }),

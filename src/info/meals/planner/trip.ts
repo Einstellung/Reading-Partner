@@ -16,7 +16,7 @@ import type { SolvedPlan } from "./solve";
 
 const about = (g: number) => Math.max(10, Math.round(g / 10) * 10);
 
-/** One whole-pack line as a stored list line, day 1 on `start`. */
+/** One whole-pack line as a stored list line, day 1 on `start` (a line first needed at a prep-day session is needed the day before). */
 export function packItem(line: PackLine, start: string): ShoppingItem | null {
   const food = foodById(line.food);
   if (!food) return null;
@@ -44,8 +44,11 @@ export function packItem(line: PackLine, start: string): ShoppingItem | null {
 /** The solved plan with the meals the stored plan no longer makes taken out. */
 function madeOnly(solved: SolvedPlan, plan: WeekPlan, start: string): SolvedPlan {
   const byDate = new Map(plan.days.map((d) => [d.date, d]));
+  const prepDay = byDate.get(addDays(start, -1));
+  const prep = solved.prepDinner;
   return {
     ...solved,
+    ...(prep && prepDay && prepDay.dinner.mode !== "make" ? { prepDinner: { ...prep, lines: [] } } : {}),
     days: solved.days.map((d) => {
       const stored = byDate.get(addDays(start, d.day - 1));
       if (!stored) return d;

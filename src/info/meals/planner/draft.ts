@@ -2,11 +2,18 @@
 // each meal eats, which meals share a pot, and when the pots are cooked. It
 // never carries grams or dates: days are numbered from 1, and the program
 // solves every amount (solve.ts) and holds the draft to its rules (checks.ts).
+//
+// Day 0 is the prep day: the day before Day 1, when the prep session may be
+// cooked (any part of it). It is not a plan day. A session on it before
+// dinner may feed that dinner (`prepDinner`); its breakfast and lunch are not
+// the plan's.
 
 import type { CookPart } from "../nutrition/targets";
 
 /** A plan covers 1 to 3 days; a user who wants longer plans again after it. */
 export const MAX_PLAN_DAYS = 3;
+/** The day before Day 1, when the prep session may be cooked; not a plan day. */
+export const PREP_DAY = 0;
 /** A pot feeds 1 to 3 meals, the meal it is cooked at counted. */
 export const POT_MEALS = { min: 1, max: 3 } as const;
 /** Every pot of a plan is cooked in one prep session. */
@@ -23,7 +30,7 @@ export type MainSlot = "lunch" | "dinner";
 export const PLAN_SLOTS: readonly PlanSlot[] = ["breakfast", "lunch", "dinner"];
 export const MAIN_SLOTS: readonly MainSlot[] = ["lunch", "dinner"];
 
-/** A lunch or dinner, by day number (1-based). */
+/** A lunch or dinner, by day number (1-based; 0 is the prep day's dinner). */
 export interface MealAt {
   day: number;
   slot: MainSlot;
@@ -81,15 +88,31 @@ export interface PlanDraft {
   batches: DraftBatch[];
   sessions: DraftSession[];
   asked?: DraftAsked;
+  /** The prep day's dinner, eaten from a pot of a session cooked on day 0 before it; absent when the plan has none. */
+  prepDinner?: DraftMeal;
 }
 
 export function isBatchMain(main: DraftMain): main is { batch: string; way: number } {
   return "batch" in main;
 }
 
-/** "Day 2 lunch". */
+/** "Day 2 lunch"; the prep day's dinner is "Day 0 dinner (the prep day)". */
 export function mealName(day: number, slot: PlanSlot): string {
-  return `Day ${day} ${slot}`;
+  return day === PREP_DAY ? `Day 0 ${slot} (the prep day)` : `Day ${day} ${slot}`;
+}
+
+/** The lunch or dinner at a day number: a plan day's, or the prep day's dinner. */
+export function draftMeal(draft: PlanDraft, day: number, slot: MainSlot): DraftMeal | undefined {
+  if (day === PREP_DAY) return slot === "dinner" ? draft.prepDinner : undefined;
+  return draft.days[day - 1]?.[slot];
+}
+
+/** Every lunch and dinner of the draft in time order, the prep day's dinner first. */
+export function draftMeals(draft: PlanDraft): { day: number; slot: MainSlot; meal: DraftMeal }[] {
+  return [
+    ...(draft.prepDinner ? [{ day: PREP_DAY, slot: "dinner" as MainSlot, meal: draft.prepDinner }] : []),
+    ...draft.days.flatMap((d, i) => MAIN_SLOTS.map((slot) => ({ day: i + 1, slot, meal: d[slot] }))),
+  ];
 }
 
 // --- reading the tool's arguments --------------------------------------------
@@ -120,6 +143,7 @@ export function parseDraft(raw: unknown): PlanDraft {
   const r = obj(raw);
   const asked = { breakfast: str(obj(r.asked).breakfast), staple: str(obj(r.asked).staple) };
   return {
+    ...(r.prepDinner && typeof r.prepDinner === "object" ? { prepDinner: toMeal(r.prepDinner) } : {}),
     ...(asked.breakfast || asked.staple
       ? { asked: { ...(asked.breakfast ? { breakfast: asked.breakfast } : {}), ...(asked.staple ? { staple: asked.staple } : {}) } }
       : {}),

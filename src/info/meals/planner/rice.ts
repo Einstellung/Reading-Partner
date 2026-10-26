@@ -2,12 +2,12 @@
 // same rice, cooked as one batch at the prep session and kept like a pot.
 // Staple variety comes from the staples that are not rice.
 
-import { isBatchMain, MAIN_SLOTS, type MainSlot, type MealAt, type PlanDraft } from "./draft";
+import { draftMeal, draftMeals, isBatchMain, type MainSlot, type MealAt, type PlanDraft } from "./draft";
 import type { PlanLibrary } from "./library";
 
-/** The staple eaten with a lunch or dinner: a food or staple dish id. */
+/** The staple eaten with a lunch or dinner (the prep day's dinner at day 0): a food or staple dish id. */
 export function stapleOf(draft: PlanDraft, lib: PlanLibrary, day: number, slot: MainSlot): string | null {
-  const main = draft.days[day - 1]?.[slot].main;
+  const main = draftMeal(draft, day, slot)?.main;
   if (!main) return null;
   if (!isBatchMain(main)) return main.staple ?? null;
   const batch = draft.batches.find((b) => b.id === main.batch);
@@ -19,15 +19,13 @@ export function isRiceStaple(lib: PlanLibrary, ref: string | null): ref is strin
   return !!ref && !!lib.dish(ref)?.equipment.includes("rice_cooker");
 }
 
-/** The lunches and dinners whose staple is a rice, in time order. */
+/** The lunches and dinners whose staple is a rice, in time order, the prep day's dinner first. */
 export function riceMeals(draft: PlanDraft, lib: PlanLibrary): { meal: MealAt; staple: string }[] {
   const out: { meal: MealAt; staple: string }[] = [];
-  draft.days.forEach((_, i) => {
-    for (const slot of MAIN_SLOTS) {
-      const staple = stapleOf(draft, lib, i + 1, slot);
-      if (isRiceStaple(lib, staple)) out.push({ meal: { day: i + 1, slot }, staple });
-    }
-  });
+  for (const { day, slot } of draftMeals(draft)) {
+    const staple = stapleOf(draft, lib, day, slot);
+    if (isRiceStaple(lib, staple)) out.push({ meal: { day, slot }, staple });
+  }
   return out;
 }
 

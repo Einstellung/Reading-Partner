@@ -44,16 +44,17 @@ export interface Method {
 
 /**
  * The fridge window of a cooked pot (docs/671 一锅): the cooking day and this
- * many days after it. The one place the number lives; a plan's pot meals must
- * all fall inside it (planner/checks.ts).
+ * many days after it (FoodKeeper and USDA give cooked leftovers 3 to 4 days).
+ * The one place the number lives; a plan's pot meals must all fall inside it
+ * (planner/checks.ts).
  */
-export const FRIDGE_DAYS_AFTER_COOK = 2;
+export const FRIDGE_DAYS_AFTER_COOK = 3;
 
 const COOKED: Storage = { fridgeDays: FRIDGE_DAYS_AFTER_COOK, freezeWeeks: 3 };
 /**
- * Cooked rice and grains keep the same window as a pot (FoodKeeper lists
- * cooked rice at 4-6 days in the fridge): a plan's rice is cooked in one batch
- * at the prep session (planner/rice.ts).
+ * Cooked rice and grains keep the same window as a pot, inside the 4-6 days
+ * FoodKeeper lists for cooked rice in the fridge: a plan's rice is cooked in
+ * one batch at the prep session (planner/rice.ts).
  */
 const GRAIN: Storage = { fridgeDays: FRIDGE_DAYS_AFTER_COOK, freezeWeeks: 3 };
 

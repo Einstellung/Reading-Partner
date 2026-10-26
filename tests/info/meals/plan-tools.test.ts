@@ -109,6 +109,38 @@ test("mains and pots alone draw a card: the program fills breakfasts, staples, s
   expect(card.days.every((d) => d.breakfast.en.length > 0)).toBe(true);
 });
 
+function prepDinnerDraft(): PlanDraft {
+  const d = goodDraft();
+  d.sessions[0] = { id: "s1", day: 0, part: "afternoon" };
+  d.prepDinner = { main: { batch: "chili", way: 2 }, sides: [] };
+  d.batches[0]!.meals.unshift({ day: 0, slot: "dinner" });
+  return d;
+}
+
+test("a session the day before day 1 draws a card with the prep day, and passes the schema", async () => {
+  const th = thread();
+  const tool = buildProposeMealPlanTool(th.deps);
+  const { name, description, parameters } = tool;
+  const valid = validateToolCall([{ name, description, parameters }], {
+    type: "toolCall",
+    id: "c",
+    name,
+    arguments: { ...args(prepDinnerDraft()), start: 1 } as Record<string, any>,
+  });
+  expect(valid.prepDinner).toBeDefined();
+  const out = await call(tool, { ...args(prepDinnerDraft()), start: 1 });
+  expect(out.text).toContain("3-day plan starting tomorrow, cooked the day before with that dinner from the pots");
+  const card = th.raised[0] as MealsDraftCardData;
+  expect(card.prepDay).toMatchObject({ date: START, dinner: { now: true } });
+});
+
+test("a prep day before a plan starting today goes back: it would be yesterday", async () => {
+  const th = thread();
+  const out = await call(buildProposeMealPlanTool(th.deps), { ...args(prepDinnerDraft()), start: 0 });
+  expect(th.raised).toHaveLength(0);
+  expect(out.text).toContain("start the plan tomorrow (start 1)");
+});
+
 test("a revision in the same conversation replaces the card in place as its next version", async () => {
   const th = thread();
   await call(buildProposeMealPlanTool(th.deps), args());

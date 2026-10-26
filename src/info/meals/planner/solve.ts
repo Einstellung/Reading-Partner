@@ -26,6 +26,9 @@
 //   of (PACK_TRIM_SHARE) is trimmed to them; what a bought pack leaves over
 //   grows the vegetable sides and a way's fresh vegetables that use it, up to
 //   the food's maximum a meal.
+// - The prep day's dinner (draft.ts prepDinner) is solved as one dinner
+//   against the prep day's dinner target: its pot share at the pot's scale,
+//   its staple filling the rest of the dinner's kcal. No day rule reads it.
 //
 // The draft must have passed the structural checks (checks.ts) first.
 
@@ -37,7 +40,7 @@ import type { DayTargets, Profile, Targets } from "../nutrition/targets";
 import { DAY_KCAL_FLOOR } from "../plan/checks";
 import { dayTargetsOn } from "../plan/solve-week";
 import { addDays } from "../plan/week";
-import { isBatchMain, MAIN_SLOTS, type DraftDay, type MainSlot, type MealAt, type PlanDraft, type PlanSlot } from "./draft";
+import { isBatchMain, MAIN_SLOTS, PREP_DAY, type DraftMeal, type MainSlot, type MealAt, type PlanDraft, type PlanSlot } from "./draft";
 import type { PlanLibrary } from "./library";
 import { leftoverChecked, packList } from "./packs";
 
@@ -80,6 +83,8 @@ export interface SolvedBatch {
 export interface SolvedPlan {
   days: SolvedDay[];
   batches: SolvedBatch[];
+  /** The prep day's dinner (day 0); absent when the plan has none. */
+  prepDinner?: SolvedMeal;
 }
 
 const FAT_BUMP_STEP = 5;
@@ -121,6 +126,11 @@ export function planDayTargets(targets: Targets, profile: Pick<Profile, "trainin
   return Array.from({ length: days }, (_, i) => dayTargetsOn(targets, profile, addDays(startDate, i)));
 }
 
+/** The prep day's targets (the day before day 1), which its dinner is solved against. */
+export function prepDayTargets(targets: Targets, profile: Pick<Profile, "trainingDays">, startDate: string): DayTargets {
+  return dayTargetsOn(targets, profile, addDays(startDate, -1));
+}
+
 function need(lib: PlanLibrary, id: string): Dish {
   const d = lib.dish(id);
   if (!d) throw new Error(`Dish not in the library: ${id}`);
@@ -156,8 +166,8 @@ export function maxMainScale(dish: Dish): number {
 }
 
 /** The main dish and how it is eaten at one lunch or dinner. */
-function mainOf(draft: PlanDraft, lib: PlanLibrary, day: DraftDay, slot: MainSlot) {
-  const main = day[slot].main;
+function mainOf(draft: PlanDraft, lib: PlanLibrary, meal: DraftMeal) {
+  const main = meal.main;
   if (isBatchMain(main)) {
     const batch = draft.batches.find((b) => b.id === main.batch);
     const dish = need(lib, batch?.dish ?? "");
@@ -330,9 +340,9 @@ function fitLines(fit: PackFit, lines: PlanLine[], day: number, slot: PlanSlot, 
  * fresh vegetables use the food, opened and not yet spoiled, each up to the
  * food's maximum a meal, in proportion to the room each has.
  */
-function packFit(days: readonly SolvedDay[], draft: PlanDraft, people: number): PackFit {
+function packFit(days: readonly SolvedDay[], prepDinner: SolvedMeal | undefined, draft: PlanDraft, people: number): PackFit {
   const fit: PackFit = { scale: new Map(), extra: new Map() };
-  for (const line of packList({ days: [...days], batches: [] }, draft, people)) {
+  for (const line of packList({ days: [...days], batches: [], ...(prepDinner ? { prepDinner } : {}) }, draft, people)) {
     const food = foodById(line.food);
     if (!food || !leftoverChecked(food) || line.buy.by !== "pack") continue;
     const bought = line.buy.count * line.buy.packG;
@@ -361,16 +371,22 @@ function packFit(days: readonly SolvedDay[], draft: PlanDraft, people: number): 
   return fit;
 }
 
-export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly DayTargets[], people = 1): SolvedPlan {
+export function solveDraft(
+  draft: PlanDraft,
+  lib: PlanLibrary,
+  targets: readonly DayTargets[],
+  people = 1,
+  prepTarget: DayTargets | undefined = targets[0],
+): SolvedPlan {
   let fit = NO_FIT;
+  const sides = (ids: readonly string[]) =>
+    ids.flatMap((id) => {
+      const s = referenceServing(need(lib, id));
+      return s ? tag(s.ingredients, "side", id) : [];
+    });
   const fixed = draft.days.map((d, i) => {
     const breakfast = need(lib, d.breakfast);
     const breakfastLines = growBreakfast(breakfast.ingredients, targets[i]);
-    const sides = (ids: readonly string[]) =>
-      ids.flatMap((id) => {
-        const s = referenceServing(need(lib, id));
-        return s ? tag(s.ingredients, "side", id) : [];
-      });
     return {
       template: breakfast,
       breakfast: tag(breakfastLines, "breakfast", breakfast.id),
@@ -387,6 +403,10 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
     const around = totals([...f.breakfast, ...f.fruit, ...f.sides.lunch, ...f.sides.dinner]).protein;
     return Math.max(REFERENCE_TARGET.main.value, (targets[i].protein - around) / 2);
   });
+  // The prep day's dinner: its own dinner target less its sides.
+  const prepSides = draft.prepDinner ? sides(draft.prepDinner.sides) : [];
+  const prepProtein = prepTarget ? Math.max(REFERENCE_TARGET.main.value, prepTarget.meals.dinner.protein - totals(prepSides).protein) : REFERENCE_TARGET.main.value;
+  const proteinOf = (day: number) => (day === PREP_DAY ? prepProtein : mainProtein[day - 1]);
 
   // One scale per meal, kept by its unit: a pot's meals share their pot's.
   const meal = (day: number, slot: MainSlot) => `${day}:${slot}`;
@@ -394,35 +414,39 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
   const scale = new Map<string, number>();
   for (const b of draft.batches) {
     const dish = need(lib, b.dish);
-    const want = b.meals.reduce((s, m) => s + mainProtein[m.day - 1], 0) / Math.max(1, b.meals.length);
+    const want = b.meals.reduce((s, m) => s + proteinOf(m.day), 0) / Math.max(1, b.meals.length);
     scale.set(b.id, clamp(want / REFERENCE_TARGET.main.value, 1, maxMainScale(dish)));
     for (const m of b.meals) unitOf.set(meal(m.day, m.slot), b.id);
   }
+  const ownUnit = (day: number, slot: MainSlot, m: DraftMeal) => {
+    const at = meal(day, slot);
+    if (unitOf.has(at)) return;
+    unitOf.set(at, at);
+    scale.set(at, clamp(proteinOf(day) / REFERENCE_TARGET.main.value, 1, maxMainScale(mainOf(draft, lib, m).dish)));
+  };
   draft.days.forEach((d, i) => {
-    for (const slot of MAIN_SLOTS) {
-      const at = meal(i + 1, slot);
-      if (unitOf.has(at)) continue;
-      unitOf.set(at, at);
-      scale.set(at, clamp(mainProtein[i] / REFERENCE_TARGET.main.value, 1, maxMainScale(mainOf(draft, lib, d, slot).dish)));
-    }
+    for (const slot of MAIN_SLOTS) ownUnit(i + 1, slot, d[slot]);
   });
+  if (draft.prepDinner) ownUnit(PREP_DAY, "dinner", draft.prepDinner);
 
+  type SolvedMain = ReturnType<typeof mainOf> & { lines: PlanLine[] };
   const solveAll = () => {
-    const mains = draft.days.map((d, i) =>
-      Object.fromEntries(
-        MAIN_SLOTS.map((slot) => {
-          const m = mainOf(draft, lib, d, slot);
-          const serving = referenceServing(m.dish);
-          const k = scale.get(unitOf.get(meal(i + 1, slot)) ?? "") ?? 1;
-          const lines = serving ? fitLines(fit, tag(scaledMain(serving.ingredients, k), "main", m.dish.id), i + 1, slot, false) : [];
-          return [slot, { ...m, lines }];
-        }),
-      ) as Record<MainSlot, ReturnType<typeof mainOf> & { lines: PlanLine[] }>,
+    const mainAt = (day: number, slot: MainSlot, m: DraftMeal): SolvedMain => {
+      const main = mainOf(draft, lib, m);
+      const serving = referenceServing(main.dish);
+      const k = scale.get(unitOf.get(meal(day, slot)) ?? "") ?? 1;
+      const lines = serving ? fitLines(fit, tag(scaledMain(serving.ingredients, k), "main", main.dish.id), day, slot, false) : [];
+      return { ...main, lines };
+    };
+    const mains = draft.days.map(
+      (d, i) => Object.fromEntries(MAIN_SLOTS.map((slot) => [slot, mainAt(i + 1, slot, d[slot])])) as Record<MainSlot, SolvedMain>,
     );
+    const prepMain = draft.prepDinner ? mainAt(PREP_DAY, "dinner", draft.prepDinner) : null;
+    const linesAt = (m: MealAt) => (m.day === PREP_DAY ? (prepMain?.lines ?? []) : (mains[m.day - 1]?.[m.slot].lines ?? []));
 
     // Whole packs into the pot.
     for (const b of draft.batches) {
-      const meals = b.meals.map((m) => mains[m.day - 1][m.slot].lines);
+      const meals = b.meals.map(linesAt);
       const foods = new Set(meals.flat().filter((l) => l.role === "protein" && foodById(l.food)?.pack).map((l) => l.food));
       for (const food of foods) {
         const total = meals.flat().filter((l) => l.food === food).reduce((s, l) => s + l.grams, 0);
@@ -433,10 +457,18 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
         for (const lines of meals) for (const l of lines) if (l.food === food) l.grams = r1(l.grams * ratio);
       }
     }
-    return { mains, days: solveDays(mains) };
+    return { linesAt, days: solveDays(mains), prepDinner: prepMain && prepTarget ? solvePrepDinner(prepMain, prepTarget) : undefined };
   };
 
-  const solveDays = (mains: Record<MainSlot, ReturnType<typeof mainOf> & { lines: PlanLine[] }>[]): SolvedDay[] =>
+  /** The prep day's dinner: the pot share, the way's add-ons and the sides, and the staple filling the dinner's kcal. */
+  const solvePrepDinner = (m: SolvedMain, target: DayTargets): SolvedMeal => {
+    const base = fitLines(fit, [...m.lines, ...tag(m.addOns, "addOn", m.dish.id), ...prepSides], PREP_DAY, "dinner");
+    const want = target.meals.dinner.kcal - totals(base).kcal;
+    const lines = [...base, ...fitLines(fit, stapleLines(lib, m.staple, want, target.kcal), PREP_DAY, "dinner")];
+    return { day: PREP_DAY, slot: "dinner", lines, totals: totals(lines) };
+  };
+
+  const solveDays = (mains: Record<MainSlot, SolvedMain>[]): SolvedDay[] =>
     draft.days.map((_, i) => {
       const target = targets[i];
       const f = fixed[i];
@@ -520,17 +552,17 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
     }
   }
   // Whole packs: solved once more with the perishables trimmed or their leftover shared out.
-  const fitted = packFit(solved.days, draft, people);
+  const fitted = packFit(solved.days, solved.prepDinner, draft, people);
   if (fitted.scale.size || fitted.extra.size) {
     fit = fitted;
     solved = solveAll();
   }
-  const { mains, days } = solved;
+  const { linesAt, days, prepDinner } = solved;
 
   const batches: SolvedBatch[] = draft.batches.map((b) => {
     const sum = new Map<string, DishIngredient>();
     for (const m of b.meals) {
-      for (const l of mains[m.day - 1][m.slot].lines) {
+      for (const l of linesAt(m)) {
         const k = `${l.food}\u0000${l.role}`;
         const had = sum.get(k);
         sum.set(k, { food: l.food, role: l.role, grams: r1((had?.grams ?? 0) + l.grams), ...(l.ground ? { ground: true } : {}) });
@@ -539,5 +571,5 @@ export function solveDraft(draft: PlanDraft, lib: PlanLibrary, targets: readonly
     return { id: b.id, dish: b.dish, session: b.session, meals: b.meals.map((m) => ({ ...m })), lines: [...sum.values()] };
   });
 
-  return { days, batches };
+  return { days, batches, ...(prepDinner ? { prepDinner } : {}) };
 }

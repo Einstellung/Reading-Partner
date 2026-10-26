@@ -297,7 +297,8 @@ export function dayView(
   plan: WeekPlan | null = null,
 ): DayView {
   const dayT = targets && profile ? dayTargetsOn(targets, profile, day.date) : null;
-  const order: readonly MealKey[] = dayT?.order ?? MEAL_KEYS;
+  // The prep day draws only the meals the plan covers on it (its dinner).
+  const order: readonly MealKey[] = (dayT?.order ?? MEAL_KEYS).filter((k) => !day.planned || day.planned.includes(k));
   const portions = plan ? potPortions(plan) : new Map<string, PotPortion>();
   const meals = order.map((k) => mealView(day[k], k, dayT, portions.get(refKey({ date: day.date, meal: k })) ?? null));
   const training = dayT?.kind === "training";
@@ -307,7 +308,8 @@ export function dayView(
     weekday: weekdayName(day.date),
     training,
     kindLabel: training ? t("meals.trainingDay") : t("meals.restDay"),
-    targets: dayT,
+    // A day the plan covers only part of has no day total to hold its meals to.
+    targets: day.planned ? null : dayT,
     totals: sumNutrition(meals.flatMap((m) => (m.totals ? [m.totals] : []))),
     meals,
     arrangement: training ? t("meals.arrangementTraining") : t("meals.arrangementRest"),
@@ -332,7 +334,8 @@ export interface WeekSummary {
 }
 
 export function weekSummary(plan: WeekPlan, days: readonly DayView[]): WeekSummary {
-  const counted = days.filter((d) => d.meals.some((m) => m.totals));
+  // A day the plan covers only part of (the prep day) is not a day's average.
+  const counted = days.filter((d) => !d.day.planned && d.meals.some((m) => m.totals));
   const avg = (f: (n: Nutrition) => number) =>
     counted.length ? counted.reduce((s, d) => s + f(d.totals), 0) / counted.length : 0;
   return {

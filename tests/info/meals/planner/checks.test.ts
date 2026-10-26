@@ -10,6 +10,7 @@ import {
   type DraftRule,
 } from "../../../../src/info/meals/planner/checks";
 import { MAX_PLAN_DAYS, parseDraft, type PlanDraft } from "../../../../src/info/meals/planner/draft";
+import { fillDraft } from "../../../../src/info/meals/planner/fill";
 import { goodDraft, PROFILE, START_WEEKDAY, targetsFor } from "./fixture";
 
 const ctx = (over: Partial<DraftContext> = {}): DraftContext => ({
@@ -144,8 +145,8 @@ describe("structure", () => {
     expect(rules(r)).toEqual(["sessions"]);
   });
 
-  test("the fridge window: the cooking day and two more", () => {
-    expect(FRIDGE_DAYS_AFTER_COOK).toBe(2);
+  test("the fridge window: the cooking day and three more", () => {
+    expect(FRIDGE_DAYS_AFTER_COOK).toBe(3);
     const late = check((d) => {
       d.sessions[0] = { id: "s1", day: 1, part: "morning" };
       d.days[1].lunch.main = { dish: "green_pepper_pork_strips", staple: "steamed_sweet_potato" };
@@ -158,6 +159,22 @@ describe("structure", () => {
     });
     expect(rules(before)).toEqual(["fridge"]);
     expect(before.problems[0].message).toBe("Pot chili: Day 1 dinner comes before its prep session (Day 1 evening).");
+  });
+
+  test("a pot meal three days after its cooking is fine; four days goes back", () => {
+    const last = (d: PlanDraft) => {
+      d.sessions[0] = { id: "s1", day: 0, part: "evening" };
+      d.days[2].lunch.main = { batch: "chili", way: 2 };
+      d.batches[0].meals.push({ day: 3, slot: "lunch" });
+    };
+    expect(rules(check(last))).not.toContain("fridge");
+    // Day 4 is past the plan's three days, so the draft never reaches the fridge check.
+    const r = check((d) => {
+      last(d);
+      d.days.push(structuredClone(d.days[2]));
+      d.days[3].lunch.main = { dish: "green_pepper_pork_strips", staple: "steamed_sweet_potato" };
+    });
+    expect(rules(r)).toEqual(["days"]);
   });
 
   test("one rice per plan: every rice meal uses the plan's rice", () => {
@@ -198,6 +215,64 @@ describe("structure", () => {
       d.days[0].fruit = ["chicken_breast"];
     });
     expect(rules(r)).toContain("fruit_food");
+  });
+});
+
+describe("the prep day before day 1", () => {
+  test("cooked the evening before, eaten over the next three days", () => {
+    const r = check((d) => {
+      d.sessions[0] = { id: "s1", day: 0, part: "evening" };
+    });
+    expect(r.problems.map((p) => p.message)).toEqual([]);
+    expect(r.plan?.days).toHaveLength(3);
+    expect(r.plan?.prepDinner).toBeUndefined();
+  });
+
+  test("cooked the afternoon before, that dinner and three days: seven meals", () => {
+    const draft = goodDraft();
+    draft.sessions[0] = { id: "s1", day: 0, part: "afternoon" };
+    draft.prepDinner = { main: { batch: "chili", way: 2 }, sides: [] };
+    draft.batches[0].meals.unshift({ day: 0, slot: "dinner" });
+    // Filled as the tool does: way 2's tomatoes and lettuce are opened on the prep day and need using up.
+    const filled = fillDraft(draft, ctx());
+    expect(filled.unfilled).toEqual([]);
+    const r = filled.result;
+    expect(r.problems.map((p) => p.message)).toEqual([]);
+    expect(r.draft.days.length * 2 + (r.draft.prepDinner ? 1 : 0)).toBe(7);
+    expect(r.plan?.days).toHaveLength(3);
+    expect(r.plan?.prepDinner?.lines.some((l) => l.source === "main")).toBe(true);
+    expect(r.plan?.prepDinner?.totals.kcal).toBeGreaterThan(300);
+  });
+
+  test("an eighth meal goes back: a fourth day, a prep-day lunch, or that dinner after the session", () => {
+    const fourth = check((d) => {
+      d.sessions[0] = { id: "s1", day: 0, part: "afternoon" };
+      d.prepDinner = { main: { batch: "chili", way: 2 }, sides: [] };
+      d.batches[0].meals.unshift({ day: 0, slot: "dinner" });
+      d.days.push(structuredClone(d.days[2]));
+    });
+    expect(rules(fourth)).toContain("days");
+    expect(fourth.plan).toBeNull();
+
+    const lunch = check((d) => {
+      d.sessions[0] = { id: "s1", day: 0, part: "morning" };
+      d.batches[0].meals.unshift({ day: 0, slot: "lunch" });
+    });
+    expect(rules(lunch)).toContain("prep_dinner");
+
+    const after = check((d) => {
+      d.sessions[0] = { id: "s1", day: 0, part: "evening" };
+      d.prepDinner = { main: { batch: "chili", way: 2 }, sides: [] };
+      d.batches[0].meals.unshift({ day: 0, slot: "dinner" });
+    });
+    expect(rules(after)).toContain("prep_dinner");
+  });
+
+  test("a session before the prep day goes back", () => {
+    const r = check((d) => {
+      d.sessions[0] = { id: "s1", day: -1, part: "evening" };
+    });
+    expect(rules(r)).toContain("session");
   });
 });
 

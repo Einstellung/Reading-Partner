@@ -65,6 +65,16 @@ export interface DraftCardDay {
   nights: DraftCardNight[];
 }
 
+/** The day before day 1 when the prep session is on it: not a plan day, at most its dinner from the pots. */
+export interface DraftCardPrepDay {
+  /** Local date, written by the program. */
+  date: string;
+  /** The dinner eaten from the pots, or null when the session is after dinner. */
+  dinner: DraftCardMeal | null;
+  /** What to do that evening for day 1. */
+  nights: DraftCardNight[];
+}
+
 export interface DraftCardSession {
   day: number;
   part: CookPart;
@@ -90,6 +100,8 @@ export interface MealsDraftCardData {
   /** The model's picks it was filled from: the breakfasts and staples they asked for, which a revision keeps. */
   picks?: PlanDraft;
   pots: DraftCardPot[];
+  /** Present when the session is on the day before day 1. */
+  prepDay?: DraftCardPrepDay;
   days: DraftCardDay[];
   session: DraftCardSession | null;
   phase: "proposed" | "applied";

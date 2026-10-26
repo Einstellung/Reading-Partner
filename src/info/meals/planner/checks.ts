@@ -19,6 +19,7 @@ import { foodById, type Food } from "../nutrition/foods";
 import type { DayTargets, Profile } from "../nutrition/targets";
 import { DAY_KCAL_FLOOR } from "../plan/checks";
 import {
+  draftMeal,
   isBatchMain,
   MAIN_SLOTS,
   MAX_PLAN_DAYS,
@@ -26,7 +27,9 @@ import {
   mealName,
   PLAN_SLOTS,
   POT_MEALS,
+  PREP_DAY,
   type DraftDay,
+  type DraftMeal,
   type MainSlot,
   type PlanDraft,
   type PlanSlot,
@@ -53,6 +56,7 @@ export type DraftRule =
   | "one_rice"
   | "session"
   | "sessions"
+  | "prep_dinner"
   | "cook_slot"
   | "fridge"
   | "same_day_dish"
@@ -89,6 +93,8 @@ export interface DraftContext {
   profile: Pick<Profile, "dislikes" | "kitchen" | "unavailable" | "cookSlots" | "boxes">;
   /** Each plan day's targets (solve.ts planDayTargets). */
   targets: readonly DayTargets[];
+  /** The prep day's targets, for its dinner (solve.ts prepDayTargets); Day 1's when absent. */
+  prepTarget?: DayTargets;
   /** ISO weekday of day 1, for the profile's cooking times. */
   startWeekday: number;
   people?: number;
@@ -161,6 +167,8 @@ const SLOT_AT = { lunch: 0.5, dinner: 1.5 } as const;
 
 const isPulse = (f: Food | undefined) => f?.proteinCategory === "soy" || f?.proteinCategory === "legume";
 const g = (n: number) => Math.round(n);
+/** "Day 2", or "Day 0 (the prep day)". */
+const dayWord = (day: number) => (day === PREP_DAY ? "Day 0 (the prep day)" : `Day ${day}`);
 
 // --- structure ---------------------------------------------------------------
 
@@ -209,6 +217,44 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
   };
 
   const mainDish = new Map<string, string>();
+  const mainMeal = (day: number, slot: MainSlot, meal: DraftMeal) => {
+    const at = mealName(day, slot);
+    for (const s of meal.sides) {
+      const side = known(s, at, day, slot);
+      if (side) role(side, "side", at, day, slot);
+    }
+    const main = meal.main;
+    if (isBatchMain(main)) {
+      const batch = draft.batches.find((x) => x.id === main.batch);
+      if (!batch) {
+        out.push({ rule: "pot", message: `${at} eats from pot "${main.batch}", which is not in batches.`, day, slot });
+        return;
+      }
+      const dish = lib.dish(batch.dish);
+      if (!dish) return; // named on the batch
+      mainDish.set(`${day}:${slot}`, dish.id);
+      const ways = dish.ways ?? [];
+      const way = ways[main.way - 1];
+      if (!way) out.push({ rule: "way", message: `${at}: ${dish.name} has ways 1 to ${ways.length}; way ${main.way} is not one of them.`, day, slot });
+      else if (way.staple) stapleRef(way.staple, at, day, slot);
+      if (!batch.meals.some((m) => m.day === day && m.slot === slot)) {
+        out.push({ rule: "pot_link", message: `${at} eats from pot ${batch.id}, but the pot does not list ${at} among its meals.`, day, slot, batch: batch.id });
+      }
+      return;
+    }
+    const dish = known(main.dish, at, day, slot);
+    if (!dish || !role(dish, "main", at, day, slot)) return;
+    mainDish.set(`${day}:${slot}`, dish.id);
+    if (dish.prep === "batch") {
+      out.push({ rule: "pot", message: `${at}: ${dish.name} is a batch dish; cook it in a pot (batches) and point the meal at the pot.`, day, slot });
+      return;
+    }
+    if (dish.staples.length && !main.staple) {
+      out.push({ rule: "staple", message: `${at}: ${dish.name} needs one of its staples: ${dish.staples.join(", ")}.`, day, slot });
+    } else if (main.staple && !dish.staples.includes(main.staple)) {
+      out.push({ rule: "staple", message: `${at}: ${dish.name} goes with ${dish.staples.join(", ") || "no staple"}; "${main.staple}" is not one of them.`, day, slot });
+    } else if (main.staple) stapleRef(main.staple, at, day, slot);
+  };
   draft.days.forEach((d: DraftDay, i) => {
     const day = i + 1;
     const b = known(d.breakfast, mealName(day, "breakfast"), day, "breakfast");
@@ -218,63 +264,45 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
       if (!f?.roles.includes("fruit")) out.push({ rule: "fruit_food", message: `Day ${day} fruit: "${id}" is not a fruit in the food table.`, day });
       else if (lib.foodBlocked(id)) out.push({ rule: "dish_blocked", message: `Day ${day} fruit: they cannot have ${f.zh} (${id}).`, day, food: id });
     }
-    for (const slot of MAIN_SLOTS) {
-      const at = mealName(day, slot);
-      const meal = d[slot];
-      for (const s of meal.sides) {
-        const side = known(s, at, day, slot);
-        if (side) role(side, "side", at, day, slot);
-      }
-      const main = meal.main;
-      if (isBatchMain(main)) {
-        const batch = draft.batches.find((x) => x.id === main.batch);
-        if (!batch) {
-          out.push({ rule: "pot", message: `${at} eats from pot "${main.batch}", which is not in batches.`, day, slot });
-          continue;
-        }
-        const dish = lib.dish(batch.dish);
-        if (!dish) continue; // named on the batch
-        mainDish.set(`${day}:${slot}`, dish.id);
-        const ways = dish.ways ?? [];
-        const way = ways[main.way - 1];
-        if (!way) out.push({ rule: "way", message: `${at}: ${dish.name} has ways 1 to ${ways.length}; way ${main.way} is not one of them.`, day, slot });
-        else if (way.staple) stapleRef(way.staple, at, day, slot);
-        if (!batch.meals.some((m) => m.day === day && m.slot === slot)) {
-          out.push({ rule: "pot_link", message: `${at} eats from pot ${batch.id}, but the pot does not list ${at} among its meals.`, day, slot, batch: batch.id });
-        }
-      } else {
-        const dish = known(main.dish, at, day, slot);
-        if (!dish || !role(dish, "main", at, day, slot)) continue;
-        mainDish.set(`${day}:${slot}`, dish.id);
-        if (dish.prep === "batch") {
-          out.push({ rule: "pot", message: `${at}: ${dish.name} is a batch dish; cook it in a pot (batches) and point the meal at the pot.`, day, slot });
-          continue;
-        }
-        if (dish.staples.length && !main.staple) {
-          out.push({ rule: "staple", message: `${at}: ${dish.name} needs one of its staples: ${dish.staples.join(", ")}.`, day, slot });
-        } else if (main.staple && !dish.staples.includes(main.staple)) {
-          out.push({ rule: "staple", message: `${at}: ${dish.name} goes with ${dish.staples.join(", ") || "no staple"}; "${main.staple}" is not one of them.`, day, slot });
-        } else if (main.staple) stapleRef(main.staple, at, day, slot);
-      }
-    }
+    for (const slot of MAIN_SLOTS) mainMeal(day, slot, d[slot]);
     if (mainDish.get(`${day}:lunch`) && mainDish.get(`${day}:lunch`) === mainDish.get(`${day}:dinner`)) {
       const dish = lib.stored(mainDish.get(`${day}:lunch`) as string);
       out.push({ rule: "same_day_dish", message: `Day ${day} has ${dish?.name} at both lunch and dinner.`, day });
     }
   });
 
+  // The prep day's dinner: only from a pot of the session cooked that day before it.
+  if (draft.prepDinner) {
+    const at = mealName(PREP_DAY, "dinner");
+    const s = draft.sessions[0];
+    if (!s || s.day !== PREP_DAY || (s.part !== "morning" && s.part !== "afternoon")) {
+      const where = s ? `the session is on ${dayWord(s.day)} ${s.part}` : "there is no session";
+      out.push({
+        rule: "prep_dinner",
+        message: `${at} is eaten only from a session cooked on day 0 in the morning or afternoon; ${where}. Drop prepDinner or move the session.`,
+        day: PREP_DAY,
+        slot: "dinner",
+      });
+    } else if (!isBatchMain(draft.prepDinner.main)) {
+      out.push({ rule: "prep_dinner", message: `${at} eats from a pot of the prep session ({batch, way}); no fresh main is planned on the prep day.`, day: PREP_DAY, slot: "dinner" });
+    } else mainMeal(PREP_DAY, "dinner", draft.prepDinner);
+  }
+
   if (draft.sessions.length > MAX_PREP_SESSIONS) {
     out.push({ rule: "sessions", message: `The draft has ${draft.sessions.length} prep sessions; a plan has at most ${MAX_PREP_SESSIONS}: cook every pot in it.` });
   }
   for (const s of draft.sessions) {
-    if (!(s.day >= 1 && s.day <= n) || !(s.part in PART_AT)) {
-      out.push({ rule: "session", message: `Session ${s.id} is on day ${s.day} ${s.part}; it must be a plan day (1 to ${n}) and morning, afternoon or evening.` });
+    if (!(s.day >= PREP_DAY && s.day <= n) || !(s.part in PART_AT)) {
+      out.push({
+        rule: "session",
+        message: `Session ${s.id} is on day ${s.day} ${s.part}; it must be on a plan day (1 to ${n}) or day 0, the day before Day 1, and morning, afternoon or evening.`,
+      });
       continue;
     }
     const slots = ctx.profile.cookSlots ?? [];
-    const weekday = ((ctx.startWeekday - 1 + s.day - 1) % 7) + 1;
+    const weekday = ((ctx.startWeekday - 1 + s.day - 1 + 7) % 7) + 1;
     if (slots.length && !slots.some((c) => c.weekday === weekday && c.part === s.part)) {
-      out.push({ rule: "cook_slot", message: `Session ${s.id} is on Day ${s.day} ${s.part}, which is not one of the times they can cook.` });
+      out.push({ rule: "cook_slot", message: `Session ${s.id} is on ${dayWord(s.day)} ${s.part}, which is not one of the times they can cook.` });
     }
   }
 
@@ -294,7 +322,17 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
       out.push({ rule: "pot_meals", message: `Pot ${b.id} (${dish.name}) feeds ${b.meals.length} meals; a pot feeds ${POT_MEALS.min} to ${POT_MEALS.max}, the cooking meal counted.`, batch: b.id });
     }
     for (const m of b.meals) {
-      const main = draft.days[m.day - 1]?.[m.slot as MainSlot]?.main;
+      if (m.day === PREP_DAY && (m.slot !== "dinner" || !draft.prepDinner)) {
+        out.push({
+          rule: "prep_dinner",
+          message: `Pot ${b.id} lists Day 0 ${m.slot}; on the prep day only its dinner eats from a pot, as prepDinner, after a morning or afternoon session.`,
+          batch: b.id,
+          day: m.day,
+          slot: m.slot,
+        });
+        continue;
+      }
+      const main = draftMeal(draft, m.day, m.slot as MainSlot)?.main;
       if (!main || !isBatchMain(main) || main.batch !== b.id) {
         out.push({ rule: "pot_link", message: `Pot ${b.id} lists ${mealName(m.day, m.slot)}, but that meal does not eat from it.`, batch: b.id });
       }
@@ -307,7 +345,7 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
       for (const m of b.meals) {
         const after = m.day - session.day;
         if (after < 0 || (after === 0 && SLOT_AT[m.slot] < PART_AT[session.part])) {
-          out.push({ rule: "fridge", message: `Pot ${b.id}: ${mealName(m.day, m.slot)} comes before its prep session (Day ${session.day} ${session.part}).`, batch: b.id, day: m.day, slot: m.slot });
+          out.push({ rule: "fridge", message: `Pot ${b.id}: ${mealName(m.day, m.slot)} comes before its prep session (${dayWord(session.day)} ${session.part}).`, batch: b.id, day: m.day, slot: m.slot });
         } else if (after > fridgeDays) {
           out.push({ rule: "fridge", message: `Pot ${b.id} (${dish.name}): ${mealName(m.day, m.slot)} is ${after} days after it is cooked; it keeps the cooking day and ${fridgeDays} more in the fridge.`, batch: b.id, day: m.day, slot: m.slot });
         }
@@ -315,7 +353,7 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
     }
     const ways = new Set(
       b.meals.flatMap((m) => {
-        const main = draft.days[m.day - 1]?.[m.slot as MainSlot]?.main;
+        const main = draftMeal(draft, m.day, m.slot as MainSlot)?.main;
         return main && isBatchMain(main) && main.batch === b.id ? [main.way] : [];
       }),
     );
@@ -397,7 +435,9 @@ function topUpVegetables(draft: PlanDraft, plan: SolvedPlan, lib: PlanLibrary): 
 function solvedProblems(plan: SolvedPlan, lib: PlanLibrary, shopping: readonly PackLine[]): DraftProblem[] {
   const out: DraftProblem[] = [];
   const n = plan.days.length;
-  const meals = plan.days.flatMap((d) => PLAN_SLOTS.map((slot) => ({ day: d.day, slot, lines: d.meals[slot].lines })));
+  // The prep day's dinner counts with the meals (red meat, staples, protein, fish), never with a day.
+  const prep = plan.prepDinner ? [{ day: PREP_DAY, slot: "dinner" as PlanSlot, lines: plan.prepDinner.lines }] : [];
+  const meals = [...prep, ...plan.days.flatMap((d) => PLAN_SLOTS.map((slot) => ({ day: d.day, slot, lines: d.meals[slot].lines })))];
   const mainMeals = meals.filter((m) => m.slot !== "breakfast");
 
   // Red meat.
@@ -496,7 +536,7 @@ function solvedProblems(plan: SolvedPlan, lib: PlanLibrary, shopping: readonly P
     const bought = line.buy.by === "pack" ? `${line.buy.count} ${line.buy.kind} of ${line.buy.packG} g` : line.buy.by === "piece" ? `${line.buy.count} piece(s)` : "";
     out.push({
       rule: "leftover",
-      message: `${food ? shownName(food) : line.food} (${line.food}): buying ${bought} leaves ${g(line.leftover.grams)} g that no meal uses; opened on Day ${line.firstDay}, it spoils on Day ${line.leftover.spoilsDay}. Use it in another meal or pick another dish.`,
+      message: `${food ? shownName(food) : line.food} (${line.food}): buying ${bought} leaves ${g(line.leftover.grams)} g that no meal uses; opened on ${dayWord(line.firstDay)}, it spoils on Day ${line.leftover.spoilsDay}. Use it in another meal or pick another dish.`,
       food: line.food,
       over: line.leftover.grams,
     });
@@ -515,6 +555,7 @@ function cloneDraft(draft: PlanDraft): PlanDraft {
     batches: draft.batches.map((b) => ({ ...b, meals: b.meals.map((m) => ({ ...m })) })),
     sessions: draft.sessions.map((s) => ({ ...s })),
     ...(draft.asked ? { asked: { ...draft.asked } } : {}),
+    ...(draft.prepDinner ? { prepDinner: { main: { ...draft.prepDinner.main }, sides: [...draft.prepDinner.sides] } } : {}),
   };
 }
 
@@ -525,22 +566,25 @@ export function checkDraft(input: PlanDraft, ctx: DraftContext, opts: { storage?
   if (structure.length || ctx.targets.length < draft.days.length) {
     return { problems: structure, notes: [], draft, plan: null, shopping: [], storage: null };
   }
-  const first = solveDraft(draft, lib, ctx.targets, ctx.people ?? 1);
+  const first = solveDraft(draft, lib, ctx.targets, ctx.people ?? 1, ctx.prepTarget);
   const notes = topUpVegetables(draft, first, lib);
-  const plan = notes.length ? solveDraft(draft, lib, ctx.targets, ctx.people ?? 1) : first;
+  const plan = notes.length ? solveDraft(draft, lib, ctx.targets, ctx.people ?? 1, ctx.prepTarget) : first;
   for (const day of plan.days) {
     if (!day.snack.length) continue;
     const what = day.snack.map((l) => `${foodById(l.food)?.zh ?? l.food} ${g(l.grams)} g`).join(" and ");
     notes.push(`Added a snack of ${what} to Day ${day.day}: lunch and dinner at their largest staples left the day short of kcal.`);
   }
   const shopping = packList(plan, draft, ctx.people ?? 1);
-  const used = draft.days.flatMap((d) => [
-    d.breakfast,
-    ...MAIN_SLOTS.flatMap((s) => {
-      const main = d[s].main;
-      return [...d[s].sides, ...(isBatchMain(main) ? [] : [main.dish, main.staple ?? ""])];
-    }),
-  ]);
+  const used = [
+    ...(draft.prepDinner?.sides ?? []),
+    ...draft.days.flatMap((d) => [
+      d.breakfast,
+      ...MAIN_SLOTS.flatMap((s) => {
+        const main = d[s].main;
+        return [...d[s].sides, ...(isBatchMain(main) ? [] : [main.dish, main.staple ?? ""])];
+      }),
+    ]),
+  ];
   for (const id of new Set([...used, ...draft.batches.map((b) => b.dish)])) {
     for (const s of lib.swaps(id)) {
       notes.push(`${lib.dish(id)?.name} uses ${foodById(s.to)?.zh} (${s.to}) in place of ${foodById(s.from)?.zh} (${s.from}), which they cannot get.`);

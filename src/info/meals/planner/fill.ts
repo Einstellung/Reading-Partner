@@ -19,7 +19,7 @@ import { SEED_DISHES } from "../dishes/seed";
 import type { Dish } from "../dishes/types";
 import { FOODS, foodById, type Food } from "../nutrition/foods";
 import { checkDraft, FRUIT_PORTIONS, type DraftContext, type DraftProblem, type DraftResult } from "./checks";
-import { isBatchMain, MAIN_SLOTS, mealName, type DraftMain, type MainSlot, type PlanDraft } from "./draft";
+import { draftMeal, isBatchMain, MAIN_SLOTS, mealName, type DraftMain, type MainSlot, type PlanDraft } from "./draft";
 import { planLibrary, type PlanLibrary } from "./library";
 import { buyFor, shownName } from "./packs";
 import { gramsOf, mainsUsing, readerPortions, sodiumOf, type ReaderPortions } from "./portions";
@@ -94,6 +94,7 @@ function clone(d: PlanDraft): PlanDraft {
     batches: d.batches.map((b) => ({ ...b, meals: b.meals.map((m) => ({ ...m })) })),
     sessions: d.sessions.map((s) => ({ ...s })),
     ...(d.asked ? { asked: { ...d.asked } } : {}),
+    ...(d.prepDinner ? { prepDinner: { main: { ...d.prepDinner.main }, sides: [...d.prepDinner.sides] } } : {}),
   };
 }
 
@@ -178,7 +179,7 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
     const seen = new Set<number>();
     const meals = [...b.meals].sort((x, y) => x.day - y.day || (x.slot === y.slot ? 0 : x.slot === "lunch" ? -1 : 1));
     for (const m of meals) {
-      const main = first.days[m.day - 1]?.[m.slot]?.main;
+      const main = draftMeal(first, m.day, m.slot)?.main;
       if (!main || !isBatchMain(main) || main.batch !== b.id) continue;
       if (seen.has(main.way)) {
         const free = Array.from({ length: ways }, (_, i) => i + 1).find((w) => !seen.has(w) && !meals.some((o) => o !== m && wayOf(first, o.day, o.slot) === w));
@@ -368,7 +369,7 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
 }
 
 function wayOf(d: PlanDraft, day: number, slot: MainSlot): number | null {
-  const m = d.days[day - 1]?.[slot]?.main;
+  const m = draftMeal(d, day, slot)?.main;
   return m && isBatchMain(m) ? m.way : null;
 }
 
@@ -579,7 +580,7 @@ function explain(r: DraftResult, lib: PlanLibrary, menu: Menu, ctx: DraftContext
 
   /** "Day 2 lunch beef_pot_roast (pot A, way 1)". */
   const pickName = (day: number, slot: MainSlot) => {
-    const m = draft.days[day - 1]?.[slot].main;
+    const m = draftMeal(draft, day, slot)?.main;
     if (!m) return mealName(day, slot);
     if (isBatchMain(m)) {
       const dish = draft.batches.find((b) => b.id === m.batch)?.dish ?? "";
