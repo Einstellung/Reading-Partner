@@ -514,19 +514,20 @@ function cloneDraft(draft: PlanDraft): PlanDraft {
     })),
     batches: draft.batches.map((b) => ({ ...b, meals: b.meals.map((m) => ({ ...m })) })),
     sessions: draft.sessions.map((s) => ({ ...s })),
+    ...(draft.asked ? { asked: { ...draft.asked } } : {}),
   };
 }
 
-export function checkDraft(input: PlanDraft, ctx: DraftContext): DraftResult {
+export function checkDraft(input: PlanDraft, ctx: DraftContext, opts: { storage?: boolean } = {}): DraftResult {
   const lib = ctx.library ?? planLibrary(ctx.profile);
   const draft = cloneDraft(input);
   const structure = structureProblems(draft, lib, ctx);
   if (structure.length || ctx.targets.length < draft.days.length) {
     return { problems: structure, notes: [], draft, plan: null, shopping: [], storage: null };
   }
-  const first = solveDraft(draft, lib, ctx.targets);
+  const first = solveDraft(draft, lib, ctx.targets, ctx.people ?? 1);
   const notes = topUpVegetables(draft, first, lib);
-  const plan = notes.length ? solveDraft(draft, lib, ctx.targets) : first;
+  const plan = notes.length ? solveDraft(draft, lib, ctx.targets, ctx.people ?? 1) : first;
   for (const day of plan.days) {
     if (!day.snack.length) continue;
     const what = day.snack.map((l) => `${foodById(l.food)?.zh ?? l.food} ${g(l.grams)} g`).join(" and ");
@@ -545,6 +546,6 @@ export function checkDraft(input: PlanDraft, ctx: DraftContext): DraftResult {
       notes.push(`${lib.dish(id)?.name} uses ${foodById(s.to)?.zh} (${s.to}) in place of ${foodById(s.from)?.zh} (${s.from}), which they cannot get.`);
     }
   }
-  const storage = planStorage({ draft, plan, shopping, profile: ctx.profile, library: lib, people: ctx.people ?? 1 });
+  const storage = opts.storage === false ? null : planStorage({ draft, plan, shopping, profile: ctx.profile, library: lib, people: ctx.people ?? 1 });
   return { problems: solvedProblems(plan, lib, shopping), notes, draft, plan, shopping, storage };
 }

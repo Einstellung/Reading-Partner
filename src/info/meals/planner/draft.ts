@@ -66,10 +66,21 @@ export interface DraftSession {
   part: CookPart;
 }
 
+/**
+ * What they asked for that the program otherwise picks, for the whole plan: a
+ * breakfast for every day that names none, a staple for every fresh main that
+ * takes it and names none (fill.ts holds to them).
+ */
+export interface DraftAsked {
+  breakfast?: string;
+  staple?: string;
+}
+
 export interface PlanDraft {
   days: DraftDay[];
   batches: DraftBatch[];
   sessions: DraftSession[];
+  asked?: DraftAsked;
 }
 
 export function isBatchMain(main: DraftMain): main is { batch: string; way: number } {
@@ -107,7 +118,11 @@ function toMeal(raw: unknown): DraftMeal {
  */
 export function parseDraft(raw: unknown): PlanDraft {
   const r = obj(raw);
+  const asked = { breakfast: str(obj(r.asked).breakfast), staple: str(obj(r.asked).staple) };
   return {
+    ...(asked.breakfast || asked.staple
+      ? { asked: { ...(asked.breakfast ? { breakfast: asked.breakfast } : {}), ...(asked.staple ? { staple: asked.staple } : {}) } }
+      : {}),
     days: list(r.days).map((d) => {
       const day = obj(d);
       return {

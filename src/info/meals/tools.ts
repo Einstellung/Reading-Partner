@@ -194,6 +194,8 @@ const HOW_TO_PLAN = [
   "main, sides and fruit, chosen to meet the plan rules (legumes, whole grains, vegetables, fruit, sodium, the",
   "day's protein and calories, every fresh pack used up).",
   "- Each day: lunch and dinner, each a `main`. Name a `breakfast` only when they asked for a particular one.",
+  "- `asked`: a breakfast or a staple they named for the whole plan ('早餐都吃燕麦', '主食想吃面'), by id; the program",
+  "  holds to it on every day and fresh main that takes it. Keep what they asked for in every revision.",
   "- A main is a share of a pot, {batch, way} with the way's number in that dish's ways (a different way for each",
   "  meal of one pot), or a fresh main made at the meal, {dish}; add `staple` only when they asked for one.",
   "- `batches`: a pot is one batch main from the library with a short id of yours, cooked in the session and",
@@ -225,19 +227,33 @@ const HOW_TO_PLAN = [
 /**
  * The draft card waiting for 「就这样」, as the picks a revision starts from,
  * in propose_meal_plan's own shape. The mains as the card shows them (a way
- * the program changed included), the pots and the session; breakfasts, fresh
- * staples, sides and fruit are the program's and are filled again.
+ * the program changed included), the pots and the session, and the
+ * breakfasts and staples they asked for (the picks the card was filled from);
+ * the rest is the program's and is filled again.
  */
 export function draftOnCard(card: MealsDraftCardData): string[] {
-  const main = (m: DraftMain): DraftMain => (isBatchMain(m) ? { batch: m.batch, way: m.way } : { dish: m.dish });
+  const asked = card.picks;
+  const main = (m: DraftMain, was: DraftMain | undefined): DraftMain => {
+    if (isBatchMain(m)) return { batch: m.batch, way: m.way };
+    const staple = was && !isBatchMain(was) && was.dish === m.dish ? was.staple : undefined;
+    return staple ? { dish: m.dish, staple } : { dish: m.dish };
+  };
   const picks = {
-    days: card.draft.days.map((d) => ({ lunch: { main: main(d.lunch.main) }, dinner: { main: main(d.dinner.main) } })),
+    days: card.draft.days.map((d, i) => {
+      const was = asked?.days[i];
+      return {
+        ...(was?.breakfast ? { breakfast: was.breakfast } : {}),
+        lunch: { main: main(d.lunch.main, was?.lunch.main) },
+        dinner: { main: main(d.dinner.main, was?.dinner.main) },
+      };
+    }),
     batches: card.draft.batches,
     sessions: card.draft.sessions,
+    ...(asked?.asked ? { asked: asked.asked } : {}),
   };
   return [
     `THE DRAFT ON THE CARD (version ${card.version}, not confirmed yet)`,
-    "Your picks as the card shows them. A change keeps everything they did not ask to change.",
+    "Your picks as the card shows them, with what they asked for. A change keeps everything they did not ask to change.",
     JSON.stringify(picks),
   ];
 }
@@ -393,6 +409,15 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
       start: Type.Optional(
         Type.Number({ description: "Days from today the plan starts: 0 today (the default), 1 tomorrow, at most 6." }),
       ),
+      asked: Type.Optional(
+        Type.Object(
+          {
+            breakfast: Type.Optional(Type.String({ description: "A breakfast dish id they named for every day." })),
+            staple: Type.Optional(Type.String({ description: "A staple food or staple dish id they named, for every fresh main that takes it." })),
+          },
+          { description: "Only what they named for the whole plan; the program picks the rest." },
+        ),
+      ),
       days: Type.Array(
         Type.Object({
           breakfast: Type.Optional(Type.String({ description: "A breakfast dish id, only when they asked for it; otherwise the program picks." })),
@@ -465,6 +490,7 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
         threadId: deps.threadId,
         previous: deps.currentDraft?.() ?? null,
         newId: String(deps.now()),
+        picks: draft,
       });
       deps.onMealsCard(card);
       const when = offset === 0 ? "today" : offset === 1 ? "tomorrow" : `in ${offset} days`;

@@ -92,6 +92,8 @@ export interface DraftCardInput {
   previous: MealsDraftCardData | null;
   /** The id a first draft is given. */
   newId: string;
+  /** The model's picks the draft was filled from, kept on the card for a revision. */
+  picks?: PlanDraft;
 }
 
 export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
@@ -178,5 +180,6 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
     days,
     session,
     phase: "proposed",
+    ...(input.picks ? { picks: input.picks } : {}),
   };
 }

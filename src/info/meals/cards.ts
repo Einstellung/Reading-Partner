@@ -87,6 +87,8 @@ export interface MealsDraftCardData {
   startDate: string;
   /** The checked draft with the program's additions, solved again on apply. */
   draft: PlanDraft;
+  /** The model's picks it was filled from: the breakfasts and staples they asked for, which a revision keeps. */
+  picks?: PlanDraft;
   pots: DraftCardPot[];
   days: DraftCardDay[];
   session: DraftCardSession | null;

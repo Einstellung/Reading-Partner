@@ -76,7 +76,8 @@ test("a pack only mains use, half used by a pick, comes back naming the food and
 });
 
 test("a day short of kcal names each pick's kcal and the staple-less way, and asks for a fuller main", () => {
-  // A probe draft: day 3 eats a fish main and a pot's way that comes without a staple.
+  // A probe draft: day 3 eats a fish main and a pot's way that comes without a staple, on a day
+  // asking half again its kcal, more than the other staple, the snack and the breakfast can fill.
   const fresh = (dish: string) => ({ main: { dish }, sides: [] });
   const pot = (batch: string, way: number) => ({ main: { batch, way }, sides: [] });
   const p: PlanDraft = {
@@ -91,7 +92,8 @@ test("a day short of kcal names each pick's kcal and the staple-less way, and as
     ],
     sessions: [{ id: "prep", day: 1, part: "evening" }],
   };
-  const text = fillDraft(p, ctx).unfilled.join("\n");
+  const targets = targetsFor().map((t, i) => (i === 2 ? { ...t, kcal: Math.round(t.kcal * 1.5) } : t));
+  const text = fillDraft(p, { ...ctx, targets }).unfilled.join("\n");
   expect(text).toMatch(/Day 3 comes to \d+ kcal of \d+, under 90%, after the breakfast/);
   expect(text).toMatch(/Day 3 dinner five_spice_braised_chicken \(pot chicken, way 3\) \d+ kcal, no staple/);
   expect(text).toContain("a way with a staple or a fuller main");

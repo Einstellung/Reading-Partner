@@ -5,15 +5,16 @@
 // the staples of fresh mains, sides and fruit.
 //
 // It fills toward the plan rules (legumes, whole grains, vegetables, fruit,
-// sodium, the day's protein and kcal, packs finished) by a greedy search: from
-// a first fill it tries one change at a time (a breakfast, a staple, a side
-// added, dropped or swapped, a pot meal's way), judges each by checkDraft, and
-// keeps the one that leaves the plan nearest to passing. Same picks, same
-// plan: there is no randomness. A way or staple the model picked changes only
+// sodium, the day's protein and kcal, packs finished) by a best-first search
+// over changes (a breakfast, a staple, a side added, dropped or swapped, a pot
+// meal's way), each judged by checkDraft, so changes that only pass together
+// are found; then it takes back each change the plan passes as well without.
+// Same picks, same plan: there is no randomness. A breakfast or staple they
+// asked for across the plan (`asked`) stands like one the model wrote per day. A way or staple the model picked changes only
 // when that is what fixes a rule, and says so in `changed`. What the fill
 // cannot fix goes back naming the picks to change (explain).
 
-import { referenceServing, totals } from "../dishes/serving";
+import { referenceServing, totals, type Totals } from "../dishes/serving";
 import { SEED_DISHES } from "../dishes/seed";
 import type { Dish } from "../dishes/types";
 import { FOODS, foodById, type Food } from "../nutrition/foods";
@@ -34,8 +35,12 @@ export interface FillOutcome {
   unfilled: string[];
 }
 
-/** Changes the search makes at most. */
-const MAX_FILL_STEPS = 12;
+/** Changes the search puts on top of each other at most. */
+const MAX_FILL_DEPTH = 6;
+/** Drafts the search judges at most, under a millisecond each: the bound on its time. */
+const MAX_JUDGED = 400;
+/** Drafts with the same problems left that the search expands. */
+const SAME_PROBLEMS_EXPANDED = 2;
 /** Sides one lunch or dinner gets at most. */
 const MAX_SIDES = 2;
 /** Fruit tried first, in this order: whole fruit bought by the piece that keeps. */
@@ -88,8 +93,30 @@ function clone(d: PlanDraft): PlanDraft {
     })),
     batches: d.batches.map((b) => ({ ...b, meals: b.meals.map((m) => ({ ...m })) })),
     sessions: d.sessions.map((s) => ({ ...s })),
+    ...(d.asked ? { asked: { ...d.asked } } : {}),
   };
 }
+
+/** A searched draft: its check, its score and why each changed pick changed. */
+interface Node {
+  draft: PlanDraft;
+  r: DraftResult;
+  s: number;
+  reasons: Map<string, string[]>;
+  /** Changes on top of the first fill. */
+  depth: number;
+}
+
+const problemKey = (p: DraftProblem) => `${p.rule}:${p.day ?? ""}:${p.food ?? ""}`;
+
+/** Whether `after` is free of a problem `before` had. */
+function clears(before: DraftResult, after: DraftResult): boolean {
+  const left = new Set(after.problems.map(problemKey));
+  return before.problems.some((p) => !left.has(problemKey(p)));
+}
+
+/** What the search can change in a draft, as one string: two drafts alike in it are judged once. */
+const shape = (d: PlanDraft) => JSON.stringify(d.days.map((x) => [x.breakfast, x.lunch, x.dinner]));
 
 const key = (day: number, slot: MainSlot) => `${day}:${slot}`;
 
@@ -107,26 +134,40 @@ function stapleUses(lib: PlanLibrary, ref: string | null | undefined, food: stri
   return !!lib.dish(ref)?.ingredients.some((l) => l.food === food);
 }
 
+/** A breakfast's totals as grown for a plan day; zero for none. */
+type BreakfastTotals = (id: string | undefined, day: number) => Totals;
+
+const wholeGrainBreakfast = (d: Dish | undefined) => !!d?.ingredients.some((l) => l.role === "staple" && foodById(l.food)?.wholeGrain);
+
 const dishUses = (dish: Dish | undefined, food: string) => !!dish?.ingredients.some((l) => l.food === food);
 
 export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
   const lib = ctx.library ?? planLibrary(ctx.profile);
   const context: DraftContext = { ...ctx, library: lib };
   const menu = menuOf(lib);
-  const pinned = new Set(picks.days.flatMap((d, i) => (d.breakfast ? [i + 1] : [])));
-  const pickedWay = new Map<string, { batch: string; way: number }>();
-  const pickedStaple = new Map<string, string>();
-  picks.days.forEach((d, i) => {
+  // What they asked for across the plan stands for each day or fresh main that has none of its own.
+  const asked = picks.asked ?? {};
+  const first = clone(picks);
+  first.days.forEach((d) => {
+    if (!d.breakfast && asked.breakfast) d.breakfast = asked.breakfast;
     for (const slot of MAIN_SLOTS) {
       const m = d[slot].main;
-      if (isBatchMain(m)) pickedWay.set(key(i + 1, slot), m);
+      if (!isBatchMain(m) && !m.staple && asked.staple && lib.dish(m.dish)?.staples.includes(asked.staple)) m.staple = asked.staple;
+    }
+  });
+  const pinned = new Set(first.days.flatMap((d, i) => (d.breakfast ? [i + 1] : [])));
+  const pickedWay = new Map<string, { batch: string; way: number }>();
+  const pickedStaple = new Map<string, string>();
+  first.days.forEach((d, i) => {
+    for (const slot of MAIN_SLOTS) {
+      const m = d[slot].main;
+      if (isBatchMain(m)) pickedWay.set(key(i + 1, slot), { ...m });
       else if (m.staple) pickedStaple.set(key(i + 1, slot), m.staple);
     }
   });
   const reasons = new Map<string, string[]>();
 
   // --- the first fill ---------------------------------------------------------
-  const first = clone(picks);
   for (const d of first.days) {
     d.lunch.sides = [];
     d.dinner.sides = [];
@@ -171,11 +212,19 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
     }
   });
   // Breakfasts: the least salty for each day not pinned, a different one each day.
-  const bfSodium = (id: string, day: number) => {
-    const b = lib.dish(id);
-    const target = ctx.targets[day - 1];
-    return b && target ? totals(growBreakfast(b.ingredients, target)).sodium : Number.POSITIVE_INFINITY;
+  const grown = new Map<string, Totals>();
+  const bfTotals: BreakfastTotals = (id, day) => {
+    const k = `${id}:${day}`;
+    let t = grown.get(k);
+    if (!t) {
+      const b = lib.dish(id ?? "");
+      const target = ctx.targets[day - 1];
+      t = b && target ? totals(growBreakfast(b.ingredients, target)) : totals([]);
+      grown.set(k, t);
+    }
+    return t;
   };
+  const bfSodium = (id: string, day: number) => (lib.dish(id) && ctx.targets[day - 1] ? bfTotals(id, day).sodium : Number.POSITIVE_INFINITY);
   first.days.forEach((d, i) => {
     if (pinned.has(i + 1)) return;
     const taken = new Set(first.days.map((x) => x.breakfast).filter(Boolean));
@@ -193,7 +242,8 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
     return d;
   };
 
-  const evaluate = (d: PlanDraft) => checkDraft(withFruit(d), context);
+  // The search judges without the storage plan; the last check below makes it.
+  const evaluate = (d: PlanDraft) => checkDraft(withFruit(d), context, { storage: false });
 
   const changes = (d: PlanDraft) => {
     let c = 0;
@@ -221,30 +271,80 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
   // A draft whose structure fails is searched too: one rice per plan is a
   // structure rule the fill can meet by a way or a staple. Any draft that
   // solves scores below one that does not.
-  let result = evaluate(first);
-  let state = result.draft;
-  let best = score(result);
+  const root = evaluate(first);
+  let best: Node = { draft: root.draft, r: root, s: score(root), reasons, depth: 0 };
 
   // --- the search ---------------------------------------------------------------
-  for (let step = 0; step < MAX_FILL_STEPS && result.problems.length; step++) {
-    let won: { r: DraftResult; s: number; edit: Edit } | null = null;
-    for (const edit of candidates(state, result, lib, menu, pinned)) {
-      const d = clone(state);
-      edit.apply(d);
-      const r = evaluate(d);
-      const s = score(r);
-      if (s < (won?.s ?? best)) won = { r, s, edit };
+  // Best-first: the draft nearest to passing of all judged so far is expanded
+  // next, by every change its problems allow, worse children kept in the queue,
+  // so changes that only pass together are found and a dead end goes back to
+  // the next best draft. Ties go in the order they were judged, so the same
+  // picks fill the same way. It stops at the first round that passes, or after
+  // MAX_JUDGED drafts.
+  const open: Node[] = [best];
+  const seen = new Set([shape(first)]);
+  const judge = (from: Node, d: PlanDraft, meal?: string): Node => {
+    const r = evaluate(d);
+    let why = from.reasons;
+    if (meal) {
+      const fixed = [...new Set(from.r.problems.map((p) => p.rule))].filter((rule) => !r.problems.some((p) => p.rule === rule));
+      why = new Map(why).set(meal, fixed.length ? fixed : ["the plan rules"]);
     }
-    if (!won) break;
-    const fixed = [...new Set(result.problems.map((p) => p.rule))].filter((rule) => !won.r.problems.some((p) => p.rule === rule));
-    if (won.edit.meal) reasons.set(won.edit.meal, fixed.length ? fixed : ["the plan rules"]);
-    result = won.r;
-    state = result.draft;
-    best = won.s;
+    return { draft: r.draft, r, s: score(r), reasons: why, depth: from.depth + 1 };
+  };
+  let judged = 0;
+  const expanded = new Map<string, number>();
+  while (open.length && best.r.problems.length && judged < MAX_JUDGED) {
+    const node = open.shift() as Node;
+    if (node.depth >= MAX_FILL_DEPTH) continue;
+    // Drafts left with the same problems differ in what does not matter to them (another breakfast): a few stand for all.
+    const sig = node.r.problems.map(problemKey).sort().join("|");
+    const times = expanded.get(sig) ?? 0;
+    if (times >= SAME_PROBLEMS_EXPANDED) continue;
+    expanded.set(sig, times + 1);
+    for (const edit of candidates(node.draft, node.r, lib, menu, pinned, bfTotals)) {
+      if (judged >= MAX_JUDGED) break;
+      const d = clone(node.draft);
+      edit.apply(d);
+      const k = shape(d);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const child = judge(node, d, edit.meal);
+      judged++;
+      if (child.s < best.s) best = child;
+      // A change that neither scores better nor clears one of the problems leads nowhere.
+      if (child.s >= node.s && !clears(node.r, child.r)) continue;
+      let at = open.length;
+      while (at > 0 && (open[at - 1] as Node).s > child.s) at--;
+      open.splice(at, 0, child);
+    }
   }
 
+  // Polish: a pick the search changed goes back to the model's, and a side
+  // goes, whenever the plan scores no worse without the change.
+  for (let pass = 0; pass < 2; pass++) {
+    let kept = false;
+    for (const undo of undos(best.draft, pickedWay, pickedStaple)) {
+      const d = clone(best.draft);
+      undo.apply(d);
+      const child = judge(best, d);
+      if (child.s > best.s) continue;
+      if (undo.meal) {
+        child.reasons = new Map(child.reasons);
+        child.reasons.delete(undo.meal);
+      }
+      best = child;
+      kept = true;
+    }
+    if (!kept) break;
+  }
+  const state = best.draft;
+  const why = new Map(best.reasons);
+  reasons.clear();
+  for (const [at, w] of why) reasons.set(at, w);
+
   // The sides and fruit are part of the draft now; a last check gives the notes without the quick sides already in it.
-  result = checkDraft(clone(state), context);
+  const result = checkDraft(clone(state), context);
   const changed: string[] = [];
   result.draft.days.forEach((day, i) => {
     for (const slot of MAIN_SLOTS) {
@@ -281,7 +381,7 @@ interface Edit {
 }
 
 /** Rules the fill works on and the days each problem lets it touch; null for every day. */
-function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Menu, pinned: ReadonlySet<number>): Edit[] {
+function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Menu, pinned: ReadonlySet<number>, bf: BreakfastTotals): Edit[] {
   const n = state.days.length;
   const all = Array.from({ length: n }, (_, i) => i + 1);
   const out = new Map<string, Edit>();
@@ -289,12 +389,12 @@ function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Me
     if (!out.has(id)) out.set(id, e);
   };
 
-  const breakfasts = (days: number[], keep: (b: Dish, now: Dish | undefined) => boolean = () => true) => {
+  const breakfasts = (days: number[], keep: (b: Dish, now: Dish | undefined, day: number) => boolean = () => true) => {
     for (const day of days) {
       if (pinned.has(day)) continue;
       const now = lib.dish(state.days[day - 1]?.breakfast ?? "");
       for (const b of menu.breakfasts) {
-        if (b.id === now?.id || !keep(b, now)) continue;
+        if (b.id === now?.id || !keep(b, now, day)) continue;
         add(`bf:${day}:${b.id}`, { apply: (d) => void ((d.days[day - 1] as PlanDraft["days"][number]).breakfast = b.id) });
       }
     }
@@ -368,14 +468,14 @@ function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Me
     const days = p.day ? [p.day] : all;
     switch (p.rule) {
       case "sodium":
-        breakfasts(days);
+        breakfasts(days, (b, now, day) => bf(b.id, day).sodium < bf(now?.id, day).sodium);
         staples(days);
         ways(days);
         sides(days, { drop: any, swapTo: any });
         break;
       case "protein":
       case "kcal":
-        breakfasts(days);
+        breakfasts(days, (b, now, day) => bf(b.id, day)[p.rule === "kcal" ? "kcal" : "protein"] > bf(now?.id, day)[p.rule === "kcal" ? "kcal" : "protein"]);
         staples(days);
         ways(days);
         sides(days, { add: protein, swapTo: protein });
@@ -397,7 +497,7 @@ function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Me
         ways(all);
         break;
       case "whole_grain":
-        breakfasts(all);
+        breakfasts(all, (b, now) => wholeGrainBreakfast(b) && !wholeGrainBreakfast(now));
         staples(all, (s) => wholeGrainStaple(lib, s));
         ways(all, (w, dish) => !!dish.ways?.[w - 1]?.staple && wholeGrainStaple(lib, dish.ways[w - 1]?.staple as string));
         break;
@@ -427,6 +527,28 @@ function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Me
     }
   }
   return [...out.values()];
+}
+
+/** The search's changes taken back one at a time: a way or staple back to the model's pick, a side dropped. */
+function undos(state: PlanDraft, pickedWay: ReadonlyMap<string, { way: number }>, pickedStaple: ReadonlyMap<string, string>): Edit[] {
+  const out: Edit[] = [];
+  const drops: Edit[] = [];
+  state.days.forEach((day, i) => {
+    for (const slot of MAIN_SLOTS) {
+      const at = key(i + 1, slot);
+      const m = day[slot].main;
+      const way = pickedWay.get(at)?.way;
+      if (way !== undefined && isBatchMain(m) && m.way !== way) {
+        out.push({ meal: at, apply: (d) => void ((d.days[i]?.[slot].main as { way: number }).way = way) });
+      }
+      const staple = pickedStaple.get(at);
+      if (staple && !isBatchMain(m) && m.staple !== staple) {
+        out.push({ meal: at, apply: (d) => void ((d.days[i]?.[slot].main as { staple?: string }).staple = staple) });
+      }
+      for (const id of day[slot].sides) drops.push({ apply: (d) => remove(d.days[i]?.[slot].sides, id) });
+    }
+  });
+  return [...out, ...drops];
 }
 
 function remove(list: string[] | undefined, id: string) {
