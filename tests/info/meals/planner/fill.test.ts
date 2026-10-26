@@ -55,6 +55,15 @@ test("a pot eaten twice the same way takes another way, and says so", () => {
   expect(out.changed.join("\n")).toContain("Day 2 lunch eats pot chili as way");
 });
 
+test("a second rice is a structure rule the fill meets by a staple or a way, and says so", () => {
+  const p = picks();
+  (p.days[0]!.lunch.main as { dish: string; staple?: string }).staple = "white_rice";
+  const out = fillDraft(p, ctx);
+  expect(out.result.problems.map((x) => x.rule)).not.toContain("one_rice");
+  expect(out.result.plan).not.toBeNull();
+  expect(out.changed.join("\n")).toContain("for one_rice");
+});
+
 test("a pack only mains use, half used by a pick, comes back naming the food and the pick", () => {
   const p = picks();
   p.days[2]!.dinner = { main: { dish: "lemon_dill_steamed_salmon" }, sides: [] };
@@ -64,6 +73,29 @@ test("a pack only mains use, half used by a pick, comes back naming the food and
   expect(text).toContain("(green_beans)");
   expect(text).toContain("Day 3 dinner lemon_dill_steamed_salmon");
   expect(text).toContain("lubia_beef_green_beans");
+});
+
+test("a day short of kcal names each pick's kcal and the staple-less way, and asks for a fuller main", () => {
+  // A probe draft: day 3 eats a fish main and a pot's way that comes without a staple.
+  const fresh = (dish: string) => ({ main: { dish }, sides: [] });
+  const pot = (batch: string, way: number) => ({ main: { batch, way }, sides: [] });
+  const p: PlanDraft = {
+    days: [
+      { breakfast: "", lunch: fresh("sesame_chicken_cucumber_salad"), dinner: fresh("salmon_broccoli_skillet"), fruit: [] },
+      { breakfast: "", lunch: pot("chicken", 1), dinner: pot("beef", 3), fruit: [] },
+      { breakfast: "", lunch: fresh("lemon_dill_steamed_salmon"), dinner: pot("chicken", 3), fruit: [] },
+    ],
+    batches: [
+      { id: "chicken", dish: "five_spice_braised_chicken", session: "prep", meals: [{ day: 2, slot: "lunch" }, { day: 3, slot: "dinner" }] },
+      { id: "beef", dish: "tomato_braised_beef_shank", session: "prep", meals: [{ day: 2, slot: "dinner" }] },
+    ],
+    sessions: [{ id: "prep", day: 1, part: "evening" }],
+  };
+  const text = fillDraft(p, ctx).unfilled.join("\n");
+  expect(text).toMatch(/Day 3 comes to \d+ kcal of \d+, under 90%, after the breakfast/);
+  expect(text).toMatch(/Day 3 dinner five_spice_braised_chicken \(pot chicken, way 3\) \d+ kcal, no staple/);
+  expect(text).toContain("a way with a staple or a fuller main");
+  expect(text).not.toContain("fuller breakfast");
 });
 
 test("soy milk keeps like milk once opened, so its leftover carton is not held to the plan", () => {

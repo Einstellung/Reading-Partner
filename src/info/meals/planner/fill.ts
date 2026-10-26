@@ -218,8 +218,10 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
     return s + sides * SIDE_COST + changes(d) * CHANGE_COST + (bfs.length - new Set(bfs).size) * REPEAT_COST;
   };
 
+  // A draft whose structure fails is searched too: one rice per plan is a
+  // structure rule the fill can meet by a way or a staple. Any draft that
+  // solves scores below one that does not.
   let result = evaluate(first);
-  if (!result.plan) return { result, changed: [], unfilled: result.problems.map((p) => p.message) };
   let state = result.draft;
   let best = score(result);
 
@@ -390,6 +392,10 @@ function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Me
         staples(window);
         break;
       }
+      case "one_rice":
+        staples(all);
+        ways(all);
+        break;
       case "whole_grain":
         breakfasts(all);
         staples(all, (s) => wholeGrainStaple(lib, s));
@@ -515,8 +521,19 @@ function explain(r: DraftResult, lib: PlanLibrary, menu: Menu, ctx: DraftContext
           .map((d) => d.id);
         return `${p.message} The program chose whole-grain breakfasts and staples wherever the picks allow; these picks come only with a refined staple: ${refined.join(", ") || "none"}. Change one of them to a main with a whole-grain staple (${list(whole)}).`;
       }
-      case "protein":
       case "kcal": {
+        const day = p.day ?? 1;
+        const by = MAIN_SLOTS.map((slot) => {
+          const lines = (plan.days[day - 1]?.meals[slot].lines ?? []).filter((l) => l.source === "main" || l.source === "addOn" || l.source === "staple");
+          const staple = lines.some((l) => l.source === "staple") ? " with its staple" : ", no staple";
+          return `${pickName(day, slot)} ${Math.round(totals(lines).kcal)} kcal${staple}`;
+        });
+        const fuller = portions
+          ? others.map((d) => ({ d, kcal: totals(portions.main(d)).kcal })).sort((a, b) => b.kcal - a.kcal).map((x) => `${x.d.id} ${Math.round(x.kcal)} kcal`)
+          : [];
+        return `${p.message.split(";")[0]}, after the breakfast, staples, sides and snack the program could add. The meals: ${by.join(", ")}. Change one of them to a way with a staple or a fuller main (a meal's main before its staple: ${list(fuller)}).`;
+      }
+      case "protein": {
         const day = p.day ?? 1;
         const by = mainsOf(day).map((m) => `${pickName(day, m.slot)} ${Math.round(totals(m.lines).protein)} g protein`);
         const strong = others
