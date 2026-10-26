@@ -2,19 +2,22 @@
 // (docs/soul/87, "存储与 Harness"): the same provider objects, keys and
 // transport the agent loop uses (providers.ts). Auth is resolved per request
 // from the app's key store; the transport and pi-ai's own retry count are
-// written into every request.
+// written into every request, and every request's body reports its bytes for
+// the request's provider session (provider-bytes.ts), which a turn's stall
+// watch counts as the connection being alive.
 
 import { createModels, type MutableModels, type Provider } from "@earendil-works/pi-ai/models";
 import type { ProviderId } from ".";
+import { tappingBytes } from "./provider-bytes";
 import { DEFAULT_MAX_RETRIES, providers, resolveApiKey, transportFor } from "./providers";
 
 function appProvider(id: ProviderId, provider: Provider): Provider {
   const transport = transportFor(id);
   const extra = { maxRetries: DEFAULT_MAX_RETRIES, ...(transport ? { transport } : {}) };
   const stream: Provider["stream"] = (model, context, options) =>
-    provider.stream(model, context, { ...options, ...extra } as typeof options);
+    provider.stream(model, context, tappingBytes({ ...options, ...extra }) as typeof options);
   const streamSimple: Provider["streamSimple"] = (model, context, options) =>
-    provider.streamSimple(model, context, { ...options, ...extra } as typeof options);
+    provider.streamSimple(model, context, tappingBytes({ ...options, ...extra }) as typeof options);
   const auth: Provider["auth"] = {
     apiKey: {
       name: `${provider.name} API key`,

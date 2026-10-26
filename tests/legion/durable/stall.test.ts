@@ -3,16 +3,19 @@
 // What it has to get right is the iPad case: the app is switched away
 // mid-answer, iOS freezes the process, and the stream that was being read is
 // dead by the time it thaws — no bytes, no error, no end. Nothing in the turn
-// notices, so the run stays open and the thread stays busy.
+// notices, so the run stays open and the thread stays busy. And the other iPad
+// case: the connection outlived the freeze and what it kept arrives just after
+// the thaw, which must not be cut.
 // Run: scripts/t.sh tests/legion/durable/stall.test.ts
 
 import { expect, test } from "bun:test";
-import { createStallWatches, type StallTimers } from "../../../src/legion/durable/stall";
+import { createStallWatches, STALL_GRACE_MS, type StallTimers } from "../../../src/legion/durable/stall";
 
 // A clock the test moves by hand. Every tick registered on it is called once
 // per `advance`, which is enough: the watch reads the wall clock rather than
-// counting ticks, so how many landed never changes the answer.
-function clock(): StallTimers & { advance: (ms: number) => void; tickers: number } {
+// counting ticks, so how many landed never changes the answer. `freeze` is the
+// process frozen: the wall clock moves on and no tick runs.
+function clock(): StallTimers & { advance: (ms: number) => void; freeze: (ms: number) => void; tickers: number } {
   let at = 1_000_000;
   const ticks = new Set<() => void>();
   return {
@@ -24,6 +27,9 @@ function clock(): StallTimers & { advance: (ms: number) => void; tickers: number
     advance(ms) {
       at += ms;
       for (const tick of [...ticks]) tick();
+    },
+    freeze(ms) {
+      at += ms;
     },
     get tickers() {
       return ticks.size;
@@ -87,7 +93,7 @@ test("a stopped watch is neither fired nor left ticking", () => {
   expect(stalls).toBe(0);
 });
 
-test("coming back from a long absence cuts a stream that said nothing while away", () => {
+test("coming back from a long absence cuts a stream that said nothing while away, once the grace is out", () => {
   const timers = clock();
   const watches = createStallWatches({ timers });
   let stalls = 0;
@@ -95,11 +101,73 @@ test("coming back from a long absence cuts a stream that said nothing while away
   watch.beat();
 
   watches.away(timers.now());
-  // The process is frozen: no tick runs, and the wall clock moves on anyway.
+  timers.freeze(30_000);
+  watches.back(timers.now());
+  // Not on the spot: what the connection kept through the freeze may still come.
+  expect(stalls).toBe(0);
+  timers.advance(STALL_GRACE_MS - 1);
+  expect(stalls).toBe(0);
+  // Then cut, well inside the ordinary window, and only once.
+  timers.advance(1);
+  expect(stalls).toBe(1);
+  timers.advance(200_000);
+  expect(stalls).toBe(1);
+});
+
+test("bytes that arrive within the grace keep the stream, and the ordinary window runs from them", () => {
+  const timers = clock();
+  const watches = createStallWatches({ timers });
+  let stalls = 0;
+  const watch = watches.watch({ stallMs: 90_000, awayMs: 20_000, onStall: () => (stalls += 1) });
+  watch.beat();
+
+  watches.away(timers.now());
+  timers.freeze(30_000);
+  watches.back(timers.now());
+  timers.advance(3_000);
+  watch.beat();
+  timers.advance(STALL_GRACE_MS);
+  expect(stalls).toBe(0);
+  timers.advance(80_000);
+  expect(stalls).toBe(0);
+  timers.advance(10_000);
+  expect(stalls).toBe(1);
+});
+
+// docs/pitfall/522: away longer than the window, the first tick after the thaw
+// can run before the way back is heard and before the bytes the socket kept.
+test("the first tick after a freeze longer than the window waits for the grace", () => {
+  const timers = clock();
+  const watches = createStallWatches({ timers });
+  let stalls = 0;
+  const watch = watches.watch({ stallMs: 90_000, awayMs: 20_000, onStall: () => (stalls += 1) });
+  watch.beat();
+
+  watches.away(timers.now());
+  timers.freeze(120_000);
   timers.advance(0);
-  const back = timers.now() + 30_000;
-  watches.back(back);
-  // Cut at once, well inside the ordinary window.
+  expect(stalls).toBe(0);
+  watches.back(timers.now());
+  timers.advance(1_000);
+  watch.beat();
+  timers.advance(STALL_GRACE_MS);
+  expect(stalls).toBe(0);
+});
+
+test("a freeze longer than the window with nothing after it is cut when the grace is out", () => {
+  const timers = clock();
+  const watches = createStallWatches({ timers });
+  let stalls = 0;
+  const watch = watches.watch({ stallMs: 90_000, awayMs: 20_000, onStall: () => (stalls += 1) });
+  watch.beat();
+
+  watches.away(timers.now());
+  timers.freeze(120_000);
+  timers.advance(0);
+  watches.back(timers.now());
+  timers.advance(STALL_GRACE_MS - 1);
+  expect(stalls).toBe(0);
+  timers.advance(1);
   expect(stalls).toBe(1);
 });
 
@@ -111,7 +179,9 @@ test("a short trip out of the app leaves a live stream alone", () => {
   watch.beat();
 
   watches.away(timers.now());
-  watches.back(timers.now() + 5_000);
+  timers.freeze(5_000);
+  watches.back(timers.now());
+  timers.advance(STALL_GRACE_MS);
   expect(stalls).toBe(0);
 });
 
@@ -125,7 +195,9 @@ test("a stream that spoke while the app was away is left alone", () => {
   watches.away(left);
   timers.advance(10_000);
   watch.beat();
-  watches.back(timers.now() + 20_000);
+  timers.freeze(20_000);
+  watches.back(timers.now());
+  timers.advance(STALL_GRACE_MS);
   expect(stalls).toBe(0);
 });
 
@@ -137,7 +209,9 @@ test("a tool still running is not cut by the way back either", () => {
   watch.hold();
 
   watches.away(timers.now());
-  watches.back(timers.now() + 120_000);
+  timers.freeze(120_000);
+  watches.back(timers.now());
+  timers.advance(STALL_GRACE_MS);
   expect(stalls).toBe(0);
 });
 
@@ -148,10 +222,11 @@ test("the first of the two leaving events is when the app left", () => {
   const watch = watches.watch({ stallMs: 90_000, awayMs: 20_000, onStall: () => (stalls += 1) });
   watch.beat();
 
-  const left = timers.now();
-  watches.away(left);
-  watches.away(left + 25_000);
-  watches.back(left + 25_000);
+  watches.away(timers.now());
+  timers.freeze(25_000);
+  watches.away(timers.now());
+  watches.back(timers.now());
+  timers.advance(STALL_GRACE_MS);
   expect(stalls).toBe(1);
 });
 

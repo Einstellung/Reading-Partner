@@ -16,7 +16,7 @@
 //
 // Two things end a watch:
 //
-//   silence    no event from the provider for `stallMs`, read off the wall
+//   silence    nothing from the provider for `stallMs`, read off the wall
 //              clock rather than off a timer that was armed before the freeze.
 //              A frozen webview's timers do not fire, and what they do on the
 //              way back is the platform's business; the wall clock jumped
@@ -29,6 +29,17 @@
 //              window for it. A short absence does not count: switching apps
 //              for a moment does not stop a stream, and cutting a live one
 //              costs a whole turn.
+//
+// Neither cuts on the spot when the app comes back from an absence. A
+// connection can outlive the freeze (docs/pitfall/522): what the provider sent
+// meanwhile sits in the socket and arrives after the thaw, and that may be
+// after the way back is heard or after the first late tick. So for
+// STALL_GRACE_MS after the way back, or after a tick that comes late while the
+// app is away, nothing is cut, and anything that arrives in it keeps the stream.
+//
+// What counts as the provider saying something is the caller's: a turn beats
+// on every chunk of bytes its connection receives, keepalives included
+// (ai/provider-bytes.ts), not only on what parses into progress.
 //
 // The clock is paused while a tool runs. A sub-agent or a page fetch can take
 // minutes and says nothing in between; what is being measured is the provider's
@@ -47,6 +58,16 @@ const AWAY_STALL_MS = 20_000;
 
 /** How often the wall clock is read. */
 const STALL_TICK_MS = 5_000;
+
+/**
+ * How long a stream gets, once the app is back from an absence, for its
+ * connection to say something before it is judged. Bytes that piled up in the
+ * socket during the freeze come in at once; a live connection with nothing
+ * buffered still carries the provider's keepalive, which the ChatGPT backend
+ * sends every 5 s. One keepalive interval, plus 3 s for the thawed app to read
+ * it off the native side and get to it behind everything queued in the freeze.
+ */
+export const STALL_GRACE_MS = 8_000;
 
 /** What the reader's surface is told. */
 export const STALL_MESSAGE = "the model stopped answering partway through";
@@ -104,7 +125,10 @@ export interface StallWatches {
   watch(options: StallOptions): StallWatch;
   /** The app went away at `at`. */
   away(at: number): void;
-  /** The app came back at `at`: anything silent for the whole absence is cut. */
+  /**
+   * The app came back at `at`: anything silent for the whole absence is cut
+   * unless it says something within STALL_GRACE_MS.
+   */
   back(at: number): void;
 }
 
@@ -114,6 +138,10 @@ interface Entry {
   held: number;
   /** The absence this watch is cut by, kept per watch rather than per registry. */
   awayMs: number;
+  /** Nothing is cut before this: the app is just back, and the connection gets its grace. */
+  graceUntil: number;
+  /** Set on the way back when the stream said nothing after this: cut when the grace ends, unless it speaks. */
+  silentSince: number | undefined;
   fire: () => void;
 }
 
@@ -133,6 +161,8 @@ export function createStallWatches(defaults: { timers?: StallTimers } = {}): Sta
         longest: 0,
         held: 0,
         awayMs,
+        graceUntil: 0,
+        silentSince: undefined,
         fire: () => {},
       };
       const end = (): void => {
@@ -147,10 +177,23 @@ export function createStallWatches(defaults: { timers?: StallTimers } = {}): Sta
         options.onStall();
       };
 
+      let lastTick = timers.now();
       const cancel = timers.every(tickMs, () => {
         if (done) return;
+        const at = timers.now();
+        // A tick this late while the app is away means the timers stood still:
+        // the process was frozen and has just thawed, possibly before the way
+        // back is heard. The connection gets its grace before anything is judged.
+        if (awaySince !== null && at - lastTick >= awayMs) {
+          entry.graceUntil = Math.max(entry.graceUntil, at + STALL_GRACE_MS);
+        }
+        lastTick = at;
+        if (at < entry.graceUntil) return;
+        const silentSince = entry.silentSince;
+        entry.silentSince = undefined;
         if (entry.held > 0) return;
-        if (timers.now() - entry.lastBeat >= stallMs) entry.fire();
+        if (silentSince !== undefined && entry.lastBeat <= silentSince) entry.fire();
+        else if (at - entry.lastBeat >= stallMs) entry.fire();
       });
       live.add(entry);
 
@@ -187,13 +230,14 @@ export function createStallWatches(defaults: { timers?: StallTimers } = {}): Sta
       const since = awaySince;
       awaySince = null;
       if (since === null) return;
-      for (const entry of [...live]) {
+      for (const entry of live) {
         if (at - since < entry.awayMs) continue;
+        entry.graceUntil = Math.max(entry.graceUntil, at + STALL_GRACE_MS);
         // Something arrived while the app was away, so the connection outlived
         // the absence and the ordinary window applies to it.
         if (entry.lastBeat > since) continue;
         if (entry.held > 0) continue;
-        entry.fire();
+        entry.silentSince = since;
       }
     },
   };
