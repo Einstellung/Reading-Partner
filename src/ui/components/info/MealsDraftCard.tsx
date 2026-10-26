@@ -1,6 +1,6 @@
 // The meals draft card (docs/671 对话): the plan without grams, patched in place
 // when the reader asks for a change, and collapsed to its short form once
-// applied. Rendering only; the words come from info/meals/screen/draft-card.ts
+// applied. Rendering only; the words come from info/meals/draft-card-view.ts
 // and every write goes through `dispatch` to the host.
 
 import type { MealsDraftCardData } from "../../../info/meals/cards";
@@ -34,7 +34,11 @@ function Chip({ chip, small }: { chip: PotChip; small?: boolean }) {
 
 const CHANGED_ROW = "bg-[color-mix(in_srgb,var(--color-accent-line)_8%,var(--color-card))] shadow-[inset_3px_0_0_var(--color-accent-line)]";
 
-function Row({ row }: { row: DraftRow }) {
+// The label column: 34px holds a Chinese label, the spelled-out ones take 72px.
+const COLS = { narrow: "grid-cols-[34px_1fr]", wide: "grid-cols-[72px_1fr]" } as const;
+
+function Row({ row, wide }: { row: DraftRow; wide: boolean }) {
+  const cols = wide ? COLS.wide : COLS.narrow;
   const label = (
     <span className={"whitespace-nowrap pt-px text-[13px] " + (row.kind === "prep" ? "font-semibold text-foreground" : "text-faint-foreground")}>
       {row.label}
@@ -42,7 +46,7 @@ function Row({ row }: { row: DraftRow }) {
   );
   if (row.kind === "prep") {
     return (
-      <div className="mx-3.5 my-1 grid grid-cols-[34px_1fr] items-start gap-2 rounded-[10px] bg-muted px-2.5 py-2">
+      <div className={`mx-3.5 my-1 grid ${cols} items-start gap-2 rounded-[10px] bg-muted px-2.5 py-2`}>
         {label}
         <span className="flex min-w-0 flex-col gap-[3px]">
           <span className="flex flex-wrap items-center gap-1.5 text-[14px]">
@@ -58,7 +62,7 @@ function Row({ row }: { row: DraftRow }) {
   }
   if (row.kind === "night") {
     return (
-      <div className="grid grid-cols-[34px_1fr] items-start gap-2 px-3.5 py-[7px]">
+      <div className={`grid ${cols} items-start gap-2 px-3.5 py-[7px]`}>
         {label}
         <span className="flex min-w-0 flex-col text-[13px] text-muted-foreground">
           {row.lines.map((l) => (
@@ -71,7 +75,7 @@ function Row({ row }: { row: DraftRow }) {
   const changed = row.changed ? ` ${CHANGED_ROW}` : "";
   if (row.kind === "plain") {
     return (
-      <div className={"grid grid-cols-[34px_1fr] items-start gap-2 px-3.5 py-[7px]" + changed}>
+      <div className={`grid ${cols} items-start gap-2 px-3.5 py-[7px]` + changed}>
         {label}
         <span className="min-w-0 text-[15px] leading-[1.45]">{row.text}</span>
       </div>
@@ -96,7 +100,7 @@ function Row({ row }: { row: DraftRow }) {
     </span>
   );
   return (
-    <div className={"grid grid-cols-[34px_1fr] items-start gap-2 px-3.5 py-[7px]" + changed}>
+    <div className={`grid ${cols} items-start gap-2 px-3.5 py-[7px]` + changed}>
       {label}
       <span className="flex min-w-0 flex-col gap-[3px]">
         {row.pot ? (
@@ -188,7 +192,7 @@ export function MealsDraftCard(props: CardComponentProps<MealsDraftCardData>) {
           </div>
           <div className="pb-2">
             {d.rows.map((row) => (
-              <Row key={row.key} row={row} />
+              <Row key={row.key} row={row} wide={v.wideLabels} />
             ))}
           </div>
         </section>

@@ -5,7 +5,7 @@
 // The draft card is what propose_meal_plan raises. It carries no grams: which
 // dish each meal eats, which meals share a pot, the prep session and the
 // night-before reminders, all written by the program from the checked draft
-// (planner/card.ts). A revision replaces the payload of the same card in place
+// (build-draft-card.ts). A revision replaces the payload of the same card in place
 // (the patchPart channel, keyed by `draftId`) and bumps `version`. 「就这样」 or
 // apply_meal_plan is the only write (apply.ts applyDraft); `phase` is what a
 // second click reads to do nothing, and the applied card draws its short form.

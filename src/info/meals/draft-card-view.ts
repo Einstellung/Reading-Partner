@@ -55,6 +55,8 @@ export interface DraftCardView {
   note: string;
   pots: { chip: PotChip; name: string; how: string; meals: string }[];
   days: DraftDayView[];
+  /** The row labels need the wide column: Chinese labels are one or two characters, every other language spells them out. */
+  wideLabels: boolean;
   confirm: string;
   hint: string;
 }
@@ -150,6 +152,7 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
       weekday: shortWeekday(d.date),
       rows: dayRows(d),
     })),
+    wideLabels: getLocale() !== "zh-CN",
     confirm: t("meals.draft.confirm"),
     hint: t("meals.draft.hint"),
   };
