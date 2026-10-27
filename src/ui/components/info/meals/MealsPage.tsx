@@ -1,4 +1,4 @@
-// The meals page (docs/73): the daily targets at the top, the shopping trip,
+// The meals page (docs/73): the batch-cook card first, then the daily targets, the shopping trip,
 // today and tomorrow under it, and the rest of the week below that. Every card
 // is a button into its own screen — the method, the trip, or one day's meals.
 //
@@ -364,8 +364,13 @@ export function MealsHome(props: MealsHomeProps) {
   return (
     <MealsColumn>
       <MealsHeader title={t("meals.title")} askLabel={t("meals.askPlan")} onAsk={props.onAsk} />
+      {card && (
+        <div className="mb-4">
+          <BatchCookCard view={card} onAction={act} />
+        </div>
+      )}
       {state !== null && (
-        <div className="mb-3 flex flex-wrap gap-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           <Button variant="outline" size="chip" onClick={props.onReplayOnboarding}>
             {t("meals.replayOnboarding")}
           </Button>
@@ -382,11 +387,6 @@ export function MealsHome(props: MealsHomeProps) {
         </div>
       )}
       {plan && <MealsPlanNote today={today} />}
-      {card && (
-        <div className="mb-4">
-          <BatchCookCard view={card} onAction={act} />
-        </div>
-      )}
 
       {state === null ? (
         <div className="h-24" />
