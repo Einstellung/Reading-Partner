@@ -24,6 +24,7 @@ import { nativeConversation } from "../conversation";
 import { createVoiceCall, voiceOpeningKickoff, type VoiceCall } from "../voice-call";
 import { harnessLocale, traceModel, traceSource, voiceTrace } from "../harness/trace";
 import { callTranscriptWriter, type CallThread } from "./call-transcript";
+import { callExtra, openCall } from "./call-host";
 
 /** Nothing to hold a call with: no plugin, so no microphone and no player. */
 export const NO_VOICE_CALL = "This device cannot hold a voice call.";
@@ -100,6 +101,9 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
     place,
     name,
     write,
+    // Whatever a screen lays on the call while it lasts (call-host.ts): a prep's steps and its two tools.
+    attached: () => callExtra()?.place() ?? null,
+    extraTools: () => callExtra()?.tools() ?? [],
     filler,
     locale,
     marks: logMarks,
@@ -123,7 +127,21 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
     kickoff: (spec.kickoff ?? voiceOpeningKickoff)(locale),
   });
   const report = () => spec.onRunning?.(front.list().filter((row) => row.status === "running").length);
-  const reporting = [call.subscribePhase(report), back.subscribe(report)];
+  // Open from the first phase past idle until it falls back to idle or the call
+  // is stopped: what the program says in the call goes through the front.
+  let closeCall: (() => void) | null = null;
+  const closed = () => {
+    closeCall?.();
+    closeCall = null;
+  };
+  const reporting = [
+    call.subscribePhase(report),
+    back.subscribe(report),
+    call.subscribePhase((phase) => {
+      if (phase === "idle") closed();
+      else closeCall ??= openCall((text) => front.say(text));
+    }),
+  ];
   return {
     ...call,
     async start(): Promise<void> {
@@ -133,6 +151,7 @@ export async function createLiveCall(spec: LiveCallSpec): Promise<VoiceCall | nu
       await call.start();
     },
     async stop(): Promise<void> {
+      closed();
       await call.stop();
       for (const off of reporting) off();
       spec.onRunning?.(0);

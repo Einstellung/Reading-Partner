@@ -22,6 +22,7 @@ import type {
 import type { MealsAppliedCardData } from "../../../info/meals/cards";
 import { appliedLine } from "../../../info/meals/screen/view";
 import { MealsDraftCard } from "./MealsDraftCard";
+import { MealsPrepCard } from "./MealsPrepCard";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -357,6 +358,7 @@ export function infoCardRegistry(
     "briefing-failed": old(BriefingFailedCard),
     "meals-draft": MealsDraftCard,
     "meals-applied": MealsAppliedCard,
+    "meals-prep": MealsPrepCard,
   };
 }
 

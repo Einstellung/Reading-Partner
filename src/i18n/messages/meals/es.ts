@@ -170,6 +170,9 @@ export default {
   "tool.removingFromList": "Quitando una línea de la lista",
   "tool.swappingLine": "Cambiando una línea de la lista",
   "tool.rewritingMethod": "Reescribiendo cómo se prepara",
+  "tool.startingPrep": "Empezando la preparación",
+  "tool.prepStep": "Anotando el paso",
+  "tool.prepSay": "Mirando el cronograma",
   "tool.refreshingPhotos": "Buscando mejores fotos",
 
   "flavour.soy-ginger": "Soja y jengibre",
@@ -465,4 +468,8 @@ export default {
   "timeline.legendHands": "Trabajo",
   "timeline.unit": "min",
   "timeline.overview": "Pasos por aparato",
+  "timeline.resumeVoice": "Volver a la voz",
+  "timeline.voiceOff": "Este dispositivo no tiene voz, así que el cronograma sigue sin ella.",
+  "prepCard.title": "Cocinado por tandas",
+  "prepCard.allDone": "Todos los pasos hechos",
 } satisfies Translation<typeof en>;

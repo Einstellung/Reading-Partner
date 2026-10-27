@@ -170,6 +170,9 @@ export default {
   "tool.removingFromList": "Retrait d'une ligne de la liste",
   "tool.swappingLine": "Remplacement d'une ligne de la liste",
   "tool.rewritingMethod": "Réécriture de la préparation",
+  "tool.startingPrep": "Démarrage de la préparation",
+  "tool.prepStep": "Étape notée",
+  "tool.prepSay": "Lecture du déroulé",
   "tool.refreshingPhotos": "Recherche de meilleures photos",
 
   "flavour.soy-ginger": "Soja et gingembre",
@@ -465,4 +468,8 @@ export default {
   "timeline.legendHands": "Actif",
   "timeline.unit": "min",
   "timeline.overview": "Étapes par appareil",
+  "timeline.resumeVoice": "Reprendre la voix",
+  "timeline.voiceOff": "La voix n'est pas disponible sur cet appareil : le déroulé avance sans elle.",
+  "prepCard.title": "Cuisine en lot",
+  "prepCard.allDone": "Toutes les étapes faites",
 } satisfies Translation<typeof en>;

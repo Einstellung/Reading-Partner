@@ -31,6 +31,7 @@ import { MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
 import { MealsTimeline } from "./MealsTimeline";
 import { useOnForeground, useRunClock, useScreenWakeLock } from "./use-prep-steps";
+import type { PrepVoiceState } from "../../../../info/meals/prep-voice";
 
 export interface MealsPrepProps {
   state: MealsState | null;
@@ -47,6 +48,9 @@ export interface MealsPrepProps {
   // Start the run; resolves false when it could not be written.
   onStart?: () => Promise<boolean>;
   onStep?: (event: StepEvent) => void;
+  // The prep's voice and its way back after a hang-up (use-prep-voice.ts).
+  voice?: PrepVoiceState;
+  onResumeVoice?: () => void;
   // The app came back to the front: read the plan again (a run moved on another device).
   onForeground?: () => void;
   // The clock the timeline is read by; tests pin it.
@@ -237,6 +241,8 @@ export function MealsPrep(props: MealsPrepProps) {
           onRetry={props.onRetrySteps ?? (() => {})}
           onStart={start}
           onStep={props.onStep ?? (() => {})}
+          {...(props.voice ? { voice: props.voice } : {})}
+          {...(props.onResumeVoice ? { onResumeVoice: props.onResumeVoice } : {})}
         />
       </section>
 

@@ -170,6 +170,9 @@ export default {
   "tool.removingFromList": "Removendo um item da lista",
   "tool.swappingLine": "Trocando um item da lista",
   "tool.rewritingMethod": "Reescrevendo o modo de preparo",
+  "tool.startingPrep": "Começando o preparo",
+  "tool.prepStep": "Anotando o passo",
+  "tool.prepSay": "Consultando a linha do tempo",
   "tool.refreshingPhotos": "Procurando fotos melhores",
 
   "flavour.soy-ginger": "Molho de soja e gengibre",
@@ -465,4 +468,8 @@ export default {
   "timeline.legendHands": "Mão na massa",
   "timeline.unit": "min",
   "timeline.overview": "Passos por aparelho",
+  "timeline.resumeVoice": "Retomar a voz",
+  "timeline.voiceOff": "Este aparelho não tem voz, então a linha do tempo segue sem ela.",
+  "prepCard.title": "Preparo em lote",
+  "prepCard.allDone": "Todos os passos feitos",
 } satisfies Translation<typeof en>;

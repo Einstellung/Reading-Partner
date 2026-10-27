@@ -74,6 +74,7 @@ import { planLibrary } from "./planner/library";
 import { cardMealLabel, changesWords, draftContext, heldWords, redraft, revisionPicks, type MealLabel } from "./planner/redraft";
 import { libraryListing } from "./planner/listing";
 import { planDayTargets, prepDayTargets } from "./planner/solve";
+import { buildStartPrepTool, type PrepStartOutcome } from "./prep-voice";
 
 /** What the reader has in front of them when they open the conversation. */
 export type MealsFocus =
@@ -103,6 +104,8 @@ export interface MealsToolDeps {
   // What the draft rules found in the week a profile change re-solved, null
   // when nothing was checked: the meals page's note (screen/plan-note.ts).
   onPlanCheck?(check: PlanCheck | null): void;
+  // Start the prep timeline and its voice call (start_prep). Absent where nobody is there to cook.
+  startPrep?(): Promise<PrepStartOutcome>;
 }
 
 // --- the instruction ---------------------------------------------------------
@@ -1289,5 +1292,6 @@ export function buildMealsCatalogTools(deps: MealsToolDeps & { ports: MealsPorts
     buildReplaceShoppingItemTool(deps),
     buildWriteMethodTool(deps),
     buildRefreshMealsPhotosTool(deps),
+    buildStartPrepTool(deps),
   ];
 }

@@ -12,7 +12,7 @@ import { storedPrepSteps, writePrepStepsOnce } from "../../../../info/meals/reci
 import { hostRegion } from "../../../../info/meals/region";
 import { msToNextMinute, type PrepStepsStatus } from "../../../../info/meals/screen/prep-timeline";
 import { observeAppLifecycle } from "../../../../platform/app/lifecycle";
-import { browserWakeLockTarget, createScreenWakeLock, type ScreenWakeLock } from "../../../../platform/app/wake-lock";
+import { heldScreenWakeLock, type ScreenWakeLock } from "../../../../platform/app/wake-lock";
 import { useRecipeLanguage } from "./use-recipe";
 
 /**
@@ -96,11 +96,12 @@ export function useRunClock(startedAt: number | null, clock: () => number): [num
 /**
  * The screen kept on while `wanted`, given up on leaving the page. The lock
  * itself is handed back so a tap can ask for it inside the gesture, which
- * Safari wants (platform/app/wake-lock.ts).
+ * Safari wants (platform/app/wake-lock.ts). The prep's call holds the same
+ * lock under its own name (use-prep-voice.ts), so neither drops the other's.
  */
-export function useScreenWakeLock(wanted: boolean): ScreenWakeLock {
+export function useScreenWakeLock(wanted: boolean, holder = "prep-run"): ScreenWakeLock {
   const ref = useRef<ScreenWakeLock | null>(null);
-  ref.current ??= createScreenWakeLock(browserWakeLockTarget());
+  ref.current ??= heldScreenWakeLock(holder);
   const lock = ref.current;
   useEffect(() => lock.set(wanted), [lock, wanted]);
   useEffect(() => () => lock.set(false), [lock]);

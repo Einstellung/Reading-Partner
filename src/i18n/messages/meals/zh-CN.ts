@@ -162,6 +162,9 @@ export default {
   "tool.removingFromList": "正在从购物清单去掉一项",
   "tool.swappingLine": "正在替换购物清单里的一项",
   "tool.rewritingMethod": "正在重写做法",
+  "tool.startingPrep": "正在开始备餐",
+  "tool.prepStep": "正在记下这一步",
+  "tool.prepSay": "正在看时间线",
   "tool.refreshingPhotos": "正在重新找图片",
 
   "flavour.soy-ginger": "姜葱酱油",
@@ -454,4 +457,8 @@ export default {
   "timeline.legendHands": "动手",
   "timeline.unit": "分",
   "timeline.overview": "按设备分的总览",
+  "timeline.resumeVoice": "接回语音",
+  "timeline.voiceOff": "这台设备不能语音，时间线照走，不出声。",
+  "prepCard.title": "备餐",
+  "prepCard.allDone": "步骤都做完了",
 } satisfies Translation<typeof en>;

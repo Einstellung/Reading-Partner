@@ -171,6 +171,9 @@ export default {
   "tool.removingFromList": "Wird von der Einkaufsliste entfernt",
   "tool.swappingLine": "Ein Eintrag der Einkaufsliste wird ersetzt",
   "tool.rewritingMethod": "Die Zubereitung wird neu geschrieben",
+  "tool.startingPrep": "Die Vorbereitung startet",
+  "tool.prepStep": "Der Schritt wird notiert",
+  "tool.prepSay": "Der Zeitplan wird gelesen",
   "tool.refreshingPhotos": "Bessere Fotos werden gesucht",
 
   "flavour.soy-ginger": "Soja-Ingwer",
@@ -466,4 +469,8 @@ export default {
   "timeline.legendHands": "Aktiv",
   "timeline.unit": "Min.",
   "timeline.overview": "Schritte nach Gerät",
+  "timeline.resumeVoice": "Sprachanruf fortsetzen",
+  "timeline.voiceOff": "Auf diesem Gerät gibt es keine Sprache, der Zeitplan läuft ohne sie.",
+  "prepCard.title": "Vorkochen",
+  "prepCard.allDone": "Alle Schritte erledigt",
 } satisfies Translation<typeof en>;

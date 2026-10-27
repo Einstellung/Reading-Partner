@@ -14,7 +14,8 @@ import type { CookPart } from "./nutrition/targets";
 import type { Cuisine, Equipment } from "./dishes/types";
 import type { PlanDraft } from "./planner/draft";
 import type { PlanTime } from "./planner/storage";
-import type { MealRef } from "./plan/types";
+import type { MealRef, PrepRun } from "./plan/types";
+import type { PrepStep } from "./timeline/steps";
 
 /** A name in the two languages the dish library is written in. Foods carry their Chinese name in both. */
 export interface Named {
@@ -123,10 +124,25 @@ export interface MealsAppliedCardData {
   draft?: string;
 }
 
-export type MealsCard = MealsDraftCardData | MealsAppliedCardData;
+// The prep under way, in the meals conversation (docs/671 时间线与语音): placed
+// when it starts, its `run` replaced in place on each event under `prepId`.
+// It carries what the prep page reads the timeline from, so both draw the same
+// view (prep-voice.ts prepCardView); states and clock times are read, not stored.
+export interface MealsPrepCardData {
+  kind: "meals-prep";
+  prepId: string;
+  /** The stored steps' key (recipe/prep-steps.ts). */
+  key: string;
+  steps: PrepStep[];
+  burners: number;
+  boxes: boolean;
+  run: PrepRun;
+}
+
+export type MealsCard = MealsDraftCardData | MealsAppliedCardData | MealsPrepCardData;
 
 /** The kinds this domain contributes, for the registry the UI assembles. */
-export const MEALS_CARD_KINDS = ["meals-draft", "meals-applied"] as const;
+export const MEALS_CARD_KINDS = ["meals-draft", "meals-applied", "meals-prep"] as const;
 
 /** The card id a draft is raised and patched under. */
 export function draftCardId(draftId: string): string {

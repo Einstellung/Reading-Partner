@@ -187,6 +187,9 @@ export default {
   "tool.removingFromList": "Taking a line off the shopping list",
   "tool.swappingLine": "Swapping a line on the shopping list",
   "tool.rewritingMethod": "Rewriting how it's made",
+  "tool.startingPrep": "Starting the prep",
+  "tool.prepStep": "Noting the step",
+  "tool.prepSay": "Checking the timeline",
   "tool.refreshingPhotos": "Looking for better photographs",
 
   // plan/types.ts FLAVOURS, as displayed (the ids and their English names in
@@ -496,4 +499,8 @@ export default {
   "timeline.legendHands": "Hands-on",
   "timeline.unit": "min",
   "timeline.overview": "Steps by device",
+  "timeline.resumeVoice": "Resume voice",
+  "timeline.voiceOff": "Voice isn't available on this device, so the timeline runs without it.",
+  "prepCard.title": "Batch cook",
+  "prepCard.allDone": "Every step done",
 } as const;

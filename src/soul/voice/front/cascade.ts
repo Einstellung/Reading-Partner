@@ -16,6 +16,7 @@ import type { SessionEffect, SessionPhase, VoiceTurn } from "../voice-session";
 import { INTERRUPTED_MARK } from "../voice-session";
 import { KICKOFF_TURN, type VoiceCallModel, type VoiceCallTranscript } from "../voice-call";
 import type { CallNote } from "../../think/contract";
+import type { AgentTool } from "../../../legion/durable/contract";
 import type { CallBack } from "./backend";
 import { frontRequest } from "./context";
 import type { CallLine, FrontCall, FrontContext, FrontListRow, FrontNote, HeardUpTo, VoiceFront } from "./contract";
@@ -70,6 +71,12 @@ export interface CascadeFrontDeps {
   backend: CallBack;
   /** Where the call is held, as the front is told it. Read at every turn. */
   place: () => string | Promise<string>;
+  /**
+   * What a screen laid on the call (live/call-host.ts), read at every turn:
+   * lines for the place section under their own cap, and tools on top of the four.
+   */
+  attached?: () => string | null;
+  extraTools?: () => readonly AgentTool[];
   /** The companion's name (companionNameOf), fixed for the call; the default when absent. */
   name?: string;
   /** The conversation file. Read-outs are not written: the result is in it already. */
@@ -92,9 +99,12 @@ export interface CascadeFrontDeps {
   stall?: StallWatches;
 }
 
+// A `say` is the program's own sentence (a prep timer running out, the next
+// step asked for), spoken as it is through the read-out path: no model turn.
 type Program =
   | { kind: "notify"; notes: FrontNote[] }
-  | { kind: "read"; number: number; from: number };
+  | { kind: "read"; number: number; from: number }
+  | { kind: "say"; text: string };
 
 export interface CascadeFront extends VoiceFront {
   model: VoiceCallModel;
@@ -106,6 +116,8 @@ export interface CascadeFront extends VoiceFront {
   event(event: ConversationEvent): void;
   /** The numbered list as the front sees it now. */
   list(): FrontListRow[];
+  /** Speak the program's sentence word for word when the floor is next free: nobody talking, no 2 s gap. */
+  say(text: string): void;
 }
 
 const BOUNDARY = /[。！？；.!?\n]/;
@@ -165,7 +177,8 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
   // and the lines are the ones standing when the turn was asked.
   function context(): FrontContext | Promise<FrontContext> {
     const place = deps.place();
-    const named = deps.name === undefined ? {} : { name: deps.name };
+    const attached = deps.attached?.();
+    const named = { ...(deps.name === undefined ? {} : { name: deps.name }), ...(attached ? { attached } : {}) };
     if (typeof place === "string") return { ...named, place, list: list(), lines };
     const now = { ...named, list: list(), lines: [...lines] };
     return place.then((p) => ({ place: p, ...now }));
@@ -208,7 +221,8 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     if (program.kind === "read") {
       reads.shift();
       held = true;
-    } else notes = notes.filter((n) => !program.notes.includes(n));
+    } else if (program.kind === "say") reads.shift();
+    else notes = notes.filter((n) => !program.notes.includes(n));
   }
 
   // A notice whose request was cut before it was said goes back in line, ahead
@@ -240,7 +254,6 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     },
   };
   const tools = buildFrontTools(deps.backend.delegateTool(), actions);
-  const byName = new Map(tools.map((t) => [t.name, t]));
 
   // The model call under the stall limits: silent past FRONT_FIRST_BYTE_MS
   // before it says anything, or past FRONT_CHUNK_STALL_MS once it has, and the
@@ -346,10 +359,12 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     let handed = false;
     let calledBack = false;
     const calls: Promise<void>[] = [];
+    const offered = [...tools, ...(deps.extraTools?.() ?? [])];
+    const byName = new Map(offered.map((t) => [t.name, t]));
     const asked = request(turn, {
       system,
       messages,
-      tools,
+      tools: offered,
       signal: req.signal,
       onSent: () => marks.mark(turn, "request-sent"),
       onText: (chunk) => {
@@ -409,13 +424,18 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     async ask(req) {
       const program = programs.get(req.turn);
       if (program) {
-        trace(program.kind === "read" ? "front:read-out-start" : "front:notify", {
+        trace(program.kind === "read" ? "front:read-out-start" : program.kind === "say" ? "front:say" : "front:notify", {
           turn: req.turn,
-          ...(program.kind === "read" ? { number: program.number } : { numbers: program.notes.map((n) => n.number) }),
+          ...(program.kind === "read"
+            ? { number: program.number }
+            : program.kind === "say"
+              ? { chars: program.text.length }
+              : { numbers: program.notes.map((n) => n.number) }),
         });
       }
       try {
         if (program?.kind === "read") await readOut(program, req.onDelta);
+        else if (program?.kind === "say") req.onDelta(program.text);
         else if (program?.kind === "notify") {
           await notify(req.turn, program, req).catch((e) => {
             if (!req.signal.aborted) throw e;
@@ -426,7 +446,7 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
           }
         } else await answer(req);
       } finally {
-        marks.flush(req.turn, program ? (program.kind === "read" ? "read-out" : "notify") : undefined);
+        marks.flush(req.turn, program ? (program.kind === "notify" ? "notify" : "read-out") : undefined);
       }
     },
   };
@@ -488,6 +508,11 @@ export function createCascadeFront(deps: CascadeFrontDeps): CascadeFront {
     model,
     transcript,
     list,
+    say(text) {
+      if (!text.trim()) return;
+      reads.push({ kind: "say", text });
+      schedule();
+    },
     async open(c: FrontCall) {
       void c;
       unsubscribe = deps.backend.subscribe(onNote);
