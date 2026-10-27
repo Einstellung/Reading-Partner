@@ -67,15 +67,15 @@ describe("the fixture plan, boxed", () => {
   test("what a raw pack leaves over goes in the freezer, one bag each", () => {
     const left = rows(storage.freezer, "rawLeftover");
     expect(left.map((r) => r.food)).toEqual(["chicken_breast", "chicken_thigh", "salmon", "lean_pork_leg"]);
-    // 500 g of thighs, about 206 g into the pot.
-    expect(left.find((r) => r.food === "chicken_thigh")?.grams).toBe(294);
+    // 500 g of thighs, about 213 g into the pot.
+    expect(left.find((r) => r.food === "chicken_thigh")?.grams).toBe(287);
     // Four leftovers and the pork portion frozen for Day 3.
     expect(storage.containers).toContainEqual({ kind: "freezerBag", count: 5, foods: ["chicken_breast", "chicken_thigh", "salmon", "lean_pork_leg"] });
   });
 
   test("food bought frozen stays frozen; the Day 3 cod dinner is moved to the fridge the evening of Day 2", () => {
     expect(rows(storage.freezer, "frozenForMeal")).toContainEqual({ kind: "frozenForMeal", food: "cod", meals: [{ day: 3, slot: "dinner" }], boughtFrozen: true });
-    expect(rows(storage.freezer, "frozenOther")[0]?.foods).toEqual(["frozen_spinach", "frozen_broccoli", "frozen_peas"]);
+    expect(rows(storage.freezer, "frozenOther")[0]?.foods).toEqual(["frozen_blueberries", "frozen_spinach", "frozen_broccoli", "frozen_peas"]);
     expect(storage.nights).toEqual([
       {
         day: 2,
@@ -90,9 +90,13 @@ describe("the fixture plan, boxed", () => {
   test("opened packs carry their use-by day; jars, produce and dry goods are placed", () => {
     expect(rows(storage.fridge, "opened")).toEqual([
       { kind: "opened", food: "celery", useBy: 8, how: "produce" },
+      { kind: "opened", food: "plain_yogurt", useBy: 8, how: "lid" },
       { kind: "opened", food: "low_fat_milk", useBy: 9, how: "lid" },
     ]);
-    expect(rows(storage.cupboard, "opened")).toEqual([{ kind: "opened", food: "whole_wheat_toast", useBy: 9, how: "bread" }]);
+    expect(rows(storage.cupboard, "opened")).toEqual([
+      { kind: "opened", food: "wholegrain_toast", useBy: 8, how: "bread" },
+      { kind: "opened", food: "whole_wheat_toast", useBy: 9, how: "bread" },
+    ]);
     expect(rows(storage.fridge, "jars")[0]?.foods).toEqual(["chili_sauce", "garlic_paste", "oyster_sauce"]);
     const room = rows(storage.cupboard, "room")[0]?.foods ?? [];
     expect(room).toContain("onion");

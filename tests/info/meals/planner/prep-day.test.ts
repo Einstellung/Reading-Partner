@@ -27,11 +27,16 @@ afterEach(() => setLocale(before));
 
 const PREP = addDays(START, -1);
 
-/** 「明天晚饭后备餐，吃后面三天」: the session the evening before, three plan days. */
-function eveningBefore(): PlanDraft {
+/**
+ * 「明天晚饭后备餐，吃后面三天」: the session the evening before, three plan days,
+ * Day 1's breakfast soy milk from the maker (as they asked); the program fills
+ * the rest, Day 1's calcium source included.
+ */
+function eveningBefore(): DraftResult {
   const d = goodDraft();
   d.sessions[0] = { id: "s1", day: 0, part: "evening" };
-  return d;
+  d.days[0]!.breakfast = "soy_milk_maker_plain";
+  return filled(d);
 }
 
 /** 「今晚做今晚就吃，再吃三天」: the session the afternoon before, that dinner from the pot. */
@@ -40,6 +45,10 @@ function afternoonBefore(): DraftResult {
   d.sessions[0] = { id: "s1", day: 0, part: "afternoon" };
   d.prepDinner = { main: { batch: "chili", way: 2 }, sides: [] };
   d.batches[0]!.meals.unshift({ day: 0, slot: "dinner" });
+  return filled(d);
+}
+
+function filled(d: PlanDraft): DraftResult {
   const filled = fillDraft(d, {
     profile: PROFILE,
     targets: targetsFor(),
@@ -54,7 +63,7 @@ function afternoonBefore(): DraftResult {
 const card = (result: DraftResult) => buildDraftCard({ result, lib: LIB, startDate: START, threadId: "meals", previous: null, newId: "1" });
 
 test("the card shows the evening before as its own block: 前一天 晚上 备餐, no meal", () => {
-  const c = card(checked(eveningBefore()));
+  const c = card(eveningBefore());
   expect(c.prepDay).toMatchObject({ date: PREP, dinner: null });
   expect(c.days).toHaveLength(3);
   const view = draftCardView(c);

@@ -9,6 +9,7 @@ import {
   ADDED_SUGAR_G,
   AROMATIC,
   BOUGHT_DRY,
+  CALCIUM_SOURCE,
   DEEP_COLOR,
   KEEPS_OVERRIDES,
   NOT_FREEZABLE,
@@ -132,6 +133,8 @@ export interface Food {
   // The planner's columns (docs/671 多样性, 整包与开封, 替换组).
   /** A whole-grain staple. */
   wholeGrain?: true;
+  /** A calcium source: the grams of it that make one source in a day (CALCIUM_SOURCE). */
+  calciumSourceG?: number;
   /** The usual retail pack of a perishable food and the days it keeps once opened. */
   pack?: { grams: number; kind: PackKind; openDays: number; labelG?: number };
   /** Planned cooked or soaked but bought dry and kept on hand (rice, quinoa); `zh` is the dry food's name (糙米 for 糙米饭). */
@@ -171,6 +174,8 @@ function withColumns(f: Food): Food {
   const keeps = KEEPS_OVERRIDES[f.id];
   if (keeps) out.keeps = keeps;
   if (WHOLE_GRAIN.has(f.id)) out.wholeGrain = true;
+  const calcium = CALCIUM_SOURCE[f.id];
+  if (calcium) out.calciumSourceG = calcium;
   const pack = RETAIL_PACK[f.id];
   if (pack) out.pack = { ...pack };
   const dry = BOUGHT_DRY[f.id];

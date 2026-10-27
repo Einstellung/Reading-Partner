@@ -35,7 +35,8 @@ export function goodDraft(): PlanDraft {
   return {
     days: [
       {
-        breakfast: "soy_milk_maker_plain",
+        // Day 1's mains bring no calcium source; the yogurt is it (soy milk would not be).
+        breakfast: "yogurt_blueberry_toast_egg",
         lunch: { main: { dish: "kung_pao_chicken", staple: "brown_rice" }, sides: [] },
         dinner: { main: { batch: "chili", way: 1 }, sides: [] },
         fruit: ["apple"],
