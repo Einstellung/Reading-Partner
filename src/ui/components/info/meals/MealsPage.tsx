@@ -63,6 +63,9 @@ export interface MealsHomeProps {
   // The hour of today, which decides whether the next meal is lunch or dinner.
   // The host's clock; tests pass one.
   hour?: number;
+  // The prep timeline's minutes once its steps are written (screen/prep-timeline.ts
+  // writtenMinutes), so the card and the prep row agree with the prep page.
+  written?: { activeMin: number; totalMin: number } | null;
   // The Meals planning chat, opened with its kickoff.
   onPlan: () => void;
   onOpenPrep: (session: string) => void;
@@ -350,7 +353,7 @@ export function MealsHome(props: MealsHomeProps) {
   // settled here rather than carried: nothing is ticked from this screen.
   const lines = linesInOrder(shopping, orderShoppingLines(shopping));
   const preview = shoppingPreview(shopping, lines);
-  const entry = batchCookEntry(state, today, props.hour ?? new Date().getHours());
+  const entry = batchCookEntry(state, today, props.hour ?? new Date().getHours(), props.written);
   const card = entryCardView(entry, today);
   const prepDate = prepRowDate(entry);
   const prep = entry?.kind === "prep" ? entry.prep : entry?.kind === "next" ? entry.prep : null;

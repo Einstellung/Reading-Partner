@@ -55,6 +55,7 @@ function BackArrow() {
 export function MealsHeader({
   title,
   weekday,
+  note,
   askLabel,
   onAsk,
   onBack,
@@ -62,6 +63,8 @@ export function MealsHeader({
   title: string;
   // Beside the title when the title is not already a weekday ("Today Monday").
   weekday?: string | null;
+  // A short line after the title (the prep's end time while it runs).
+  note?: string | null;
   // Left out on the onboarding thread, which is a conversation of its own.
   askLabel?: string;
   onAsk?: () => void;
@@ -80,9 +83,16 @@ export function MealsHeader({
           <BackArrow />
         </button>
       )}
-      <span className="min-w-0 truncate font-display text-[17px] font-semibold text-foreground">
-        {title}
-      </span>
+      {note ? (
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate font-display text-[17px] font-semibold leading-tight text-foreground">{title}</span>
+          <span className="truncate text-[12px] font-medium leading-tight tabular-nums text-accent-line">{note}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 truncate font-display text-[17px] font-semibold text-foreground">
+          {title}
+        </span>
+      )}
       {weekday && <span className="flex-none text-[13px] text-faint-foreground">{weekday}</span>}
       <span className="flex-1" />
       {askLabel && onAsk && (

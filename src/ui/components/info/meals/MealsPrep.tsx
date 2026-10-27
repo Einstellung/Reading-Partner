@@ -3,19 +3,34 @@
 // packed, where everything goes, and what the evenings and breakfasts need.
 // No checkboxes: the hands doing this are busy. Done at the bottom.
 //
-// The timeline and the voice (section 3) are not here yet. Rendering and event
-// binding only: every line comes from info/meals/screen/prep-view.ts.
+// Section 3 is the timeline (MealsTimeline.tsx); the voice is not here yet.
+// Rendering and event binding only: every line comes from
+// info/meals/screen/prep-view.ts and prep-timeline.ts, the steps, the clock and
+// the screen lock from use-prep-steps.ts.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useT } from "../../../../i18n";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import type { MealsState } from "../../../../info/meals/plan/types";
 import { hostRegion } from "../../../../info/meals/region";
+import {
+  clockText,
+  endsText,
+  prepPhase,
+  wantsWakeLock,
+  writtenMinutes,
+  type PrepStepsStatus,
+} from "../../../../info/meals/screen/prep-timeline";
 import { prepView, type PrepPotView } from "../../../../info/meals/screen/prep-view";
+import type { StepEvent } from "../../../../info/meals/timeline/run";
+import { kitchenFor } from "../../../../info/meals/timeline/schedule";
+import { runFor, timelineView } from "../../../../info/meals/timeline/view";
 import { dishPicture, dishThumbnails, ingredientPicture } from "../../../../info/meals/screen/view";
 import { Button } from "../../ui/button";
 import { MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
+import { MealsTimeline } from "./MealsTimeline";
+import { useOnForeground, useRunClock, useScreenWakeLock } from "./use-prep-steps";
 
 export interface MealsPrepProps {
   state: MealsState | null;
@@ -26,7 +41,20 @@ export interface MealsPrepProps {
   onBack: () => void;
   onAsk: () => void;
   onDone: () => void;
+  // The session's stored steps (use-prep-steps.ts); left out, section 3 waits.
+  steps?: PrepStepsStatus;
+  onRetrySteps?: () => void;
+  // Start the run; resolves false when it could not be written.
+  onStart?: () => Promise<boolean>;
+  onStep?: (event: StepEvent) => void;
+  // The app came back to the front: read the plan again (a run moved on another device).
+  onForeground?: () => void;
+  // The clock the timeline is read by; tests pin it.
+  clock?: () => number;
 }
+
+const NONE: PrepStepsStatus = { kind: "none" };
+const systemClock = () => Date.now();
 
 const SECTION = "mb-2 mt-7 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground";
 const CARD = "rounded-2xl border border-border-soft bg-card";
@@ -70,9 +98,57 @@ function PotCard({ pot, photos }: { pot: PrepPotView; photos: PhotoCache }) {
 export function MealsPrep(props: MealsPrepProps) {
   const t = useT();
   const { state, today, session, photos } = props;
-  const view = useMemo(() => (state ? prepView(state, session, today, hostRegion()) : null), [state, session, today]);
+  const steps = props.steps ?? NONE;
+  const clock = props.clock ?? systemClock;
+  const profile = state?.charter?.profile ?? null;
+  const burners = kitchenFor(profile).burners;
+  const written = useMemo(() => writtenMinutes(steps, { burners }), [steps, burners]);
+  const view = useMemo(() => (state ? prepView(state, session, today, hostRegion(), written) : null), [state, session, today, written]);
+  const ready = steps.kind === "ready" ? steps : null;
+  const run = ready ? runFor(state?.plan?.planner?.prepRun, ready.key) : null;
+  const done = view?.done ?? false;
+  const [now, refresh] = useRunClock(run && !done ? run.startedAt : null, clock);
+  const boxes = profile?.boxes !== false;
+  const timeline = useMemo(
+    () => (ready && view ? timelineView({ steps: ready.steps, kitchen: { burners }, boxes, run, now }) : null),
+    [ready, view, burners, boxes, run, now],
+  );
+  const phase = prepPhase(timeline, done);
+  const lock = useScreenWakeLock(wantsWakeLock(phase));
+  useOnForeground(() => {
+    refresh();
+    props.onForeground?.();
+  });
+
+  // Opened while a run is under way: the timeline is what the cook came back for.
+  const timelineRef = useRef<HTMLElement>(null);
+  const settled = useRef(false);
+  useEffect(() => {
+    if (settled.current || !timeline) return;
+    settled.current = true;
+    if (phase === "running") timelineRef.current?.scrollIntoView?.({ block: "start" });
+  }, [timeline, phase]);
+
+  const start = () => {
+    // Asked for inside the tap, which Safari wants; let go if the start was not written.
+    lock.set(true);
+    void (props.onStart?.() ?? Promise.resolve(false)).then((ok) => {
+      if (!ok) lock.set(false);
+    });
+  };
+  const finish = () => {
+    lock.set(false);
+    props.onDone();
+  };
+
   const header = (
-    <MealsHeader title={view?.title ?? t("meals.entry.kicker")} askLabel={t("meals.askPlan")} onAsk={props.onAsk} onBack={props.onBack} />
+    <MealsHeader
+      title={view?.title ?? t("meals.entry.kicker")}
+      note={endsText(timeline, phase)}
+      askLabel={t("meals.askPlan")}
+      onAsk={props.onAsk}
+      onBack={props.onBack}
+    />
   );
   if (state === null) return <MealsColumn>{header}<div className="h-24" /></MealsColumn>;
   if (!view) {
@@ -147,7 +223,22 @@ export function MealsPrep(props: MealsPrepProps) {
         </>
       )}
 
-      {/* Section 3, the timeline, comes with the voice (docs/671 时间线与语音). */}
+      <section ref={timelineRef} className="scroll-mt-14">
+        <h2 className={SECTION}>{t("meals.timeline.title")}</h2>
+        {timeline?.startedAt != null && phase === "running" && (
+          <p className="m-0 mb-2 text-[13px] tabular-nums text-muted-foreground">
+            {t("meals.timeline.startedAt", { time: clockText(timeline.startedAt) })}
+          </p>
+        )}
+        <MealsTimeline
+          status={steps}
+          view={timeline}
+          phase={phase}
+          onRetry={props.onRetrySteps ?? (() => {})}
+          onStart={start}
+          onStep={props.onStep ?? (() => {})}
+        />
+      </section>
 
       {view.boxes.length > 0 && (
         <>
@@ -213,7 +304,7 @@ export function MealsPrep(props: MealsPrepProps) {
           </p>
         ) : (
           <>
-            <Button variant="cta" size="lg" className="w-full" onClick={props.onDone}>
+            <Button variant="cta" size="lg" className="w-full" onClick={finish}>
               {t("meals.prep.done")}
             </Button>
             <p className="m-0 mt-2 text-[13px] leading-snug text-faint-foreground">{t("meals.prep.doneHint")}</p>

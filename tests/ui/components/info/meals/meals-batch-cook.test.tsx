@@ -145,7 +145,7 @@ function prepPage(s: MealsState | null, session: string | null, today = START) {
 test("the prep page draws its sections in order, and Done reports the tap", async () => {
   const { container, getByRole, calls } = prepPage(plannerState(), "s1");
   const heads = [...container.querySelectorAll("h2")].map((h) => h.textContent);
-  expect(heads).toEqual(["What you cook", "Have ready", "Packing", "Into the fridge", "Breakfast and the evenings"]);
+  expect(heads).toEqual(["What you cook", "Have ready", "Timeline", "Packing", "Into the fridge", "Breakfast and the evenings"]);
   expect(container.textContent).toContain("Prep · Mon, 11/2");
   expect(container.textContent).toContain("Chicken and kidney bean chili");
   expect(container.textContent).toContain("Containers");
