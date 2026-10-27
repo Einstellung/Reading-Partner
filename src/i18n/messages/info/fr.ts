@@ -174,7 +174,7 @@ export default {
   "cards.studyMovedKicker": "Rangé dans la lecture",
   "cards.studyMovedEnded": "Cette étude est close et n'est plus mise à jour.",
   "cards.studyMovedKept": "Les {pins} articles épinglés et les {marks} lignes notées restent avec cette étude.",
-  "shelf.title": "Bulletins",
+  "shelf.title": "Renseignement",
   "shelf.issues": "Numéros",
   "shelf.volumes": "Volumes thématiques",
   "shelf.issueTitle": "Bulletin n° {number}",

@@ -174,7 +174,7 @@ export default {
   "cards.studyMovedKicker": "Pasado a lectura",
   "cards.studyMovedEnded": "Este estudio está cerrado y ya no se actualiza.",
   "cards.studyMovedKept": "Los {pins} artículos fijados y las {marks} líneas anotadas se quedan con este estudio.",
-  "shelf.title": "Boletines",
+  "shelf.title": "Inteligencia",
   "shelf.issues": "Números",
   "shelf.volumes": "Volúmenes por tema",
   "shelf.issueTitle": "Boletín n.º {number}",

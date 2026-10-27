@@ -60,7 +60,7 @@ export default function PhoneHome({
   // in its place at the top while it is not.
   const briefsCard = (
     <Card>
-      <CardLabel>{t("phone.home.briefsLabel")}</CardLabel>
+      <CardLabel>{t("phone.home.intelLabel")}</CardLabel>
       <button
         className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
         onClick={onOpenBriefs}

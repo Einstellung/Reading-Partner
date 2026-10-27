@@ -103,7 +103,7 @@ export default {
 
   "nav.today": "今天",
   "nav.briefing": "简报",
-  "nav.briefs": "简报书",
+  "nav.briefs": "情报",
   "nav.meals": "三餐",
   "nav.topics": "主题",
 

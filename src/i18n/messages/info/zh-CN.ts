@@ -174,7 +174,7 @@ export default {
   "cards.studyMovedKicker": "已移进阅读",
   "cards.studyMovedEnded": "这次调研已结束，不再更新。",
   "cards.studyMovedKept": "你钉住的 {pins} 篇和记下的 {marks} 条留在这次调研里。",
-  "shelf.title": "简报书",
+  "shelf.title": "情报",
   "shelf.issues": "各期",
   "shelf.volumes": "专题册",
   "shelf.issueTitle": "第 {number} 期",

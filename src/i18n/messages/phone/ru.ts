@@ -47,7 +47,7 @@ export default {
   "home.mealsBlurb": "Завтраки, обеды и ужины на эту неделю и что купить.",
   "home.open": "Открыть →",
   "home.savedLabel": "Сохранённое",
-  "home.briefsLabel": "Выпуски",
+  "home.intelLabel": "Разведка",
   "home.briefsBlurb": "Ночная сводка книгой и тематические тома.",
   "home.savedBlurb": "Статьи, которые вы сохранили, чтобы прочитать в любое время.",
   "home.savedCount": {

@@ -174,7 +174,7 @@ export default {
   "cards.studyMovedKicker": "In die Lektüre verschoben",
   "cards.studyMovedEnded": "Diese Recherche ist beendet und wird nicht mehr aktualisiert.",
   "cards.studyMovedKept": "Die {pins} angehefteten Arbeiten und die {marks} festgehaltenen Zeilen bleiben bei dieser Recherche.",
-  "shelf.title": "Briefs",
+  "shelf.title": "Intel",
   "shelf.issues": "Ausgaben",
   "shelf.volumes": "Themenbände",
   "shelf.issueTitle": "Brief Nr. {number}",

@@ -16,7 +16,7 @@ import {
 
 test("the sidebar's items are in the order a day uses them", () => {
   expect(SHELL_NAV_ITEMS.map((i) => i.id)).toEqual(["today", "briefing", "briefs", "meals", "topics"]);
-  expect(SHELL_NAV_ITEMS.map((i) => translate("en", i.labelKey))).toEqual(["Today", "Briefing", "Briefs", "Meals", "Topics"]);
+  expect(SHELL_NAV_ITEMS.map((i) => translate("en", i.labelKey))).toEqual(["Today", "Briefing", "Intel", "Meals", "Topics"]);
 });
 
 // Meals is opt-in (settings.meals, docs/73), and off it is not in the column

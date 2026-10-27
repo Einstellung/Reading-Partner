@@ -38,7 +38,7 @@ export default {
   "home.mealsBlurb": "本周的早餐、午餐和晚餐，以及要买的东西。",
   "home.open": "打开 →",
   "home.savedLabel": "收藏",
-  "home.briefsLabel": "简报书",
+  "home.intelLabel": "情报",
   "home.briefsBlurb": "每晚一期的简报书，和专题册。",
   "home.savedBlurb": "你收藏的文章，随时可以读。",
   "home.savedCount": { other: "{count} 篇文章" },

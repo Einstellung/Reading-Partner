@@ -49,7 +49,7 @@ export default {
   "home.mealsBlurb": "This week's breakfasts, lunches and dinners, and what to buy.",
   "home.open": "Open →",
   "home.savedLabel": "Saved",
-  "home.briefsLabel": "Briefs",
+  "home.intelLabel": "Intel",
   "home.briefsBlurb": "Each night's brief as a book, and the topic volumes.",
   "home.savedBlurb": "Articles you kept, to read whenever.",
   "home.savedCount": { one: "{count} article", other: "{count} articles" },

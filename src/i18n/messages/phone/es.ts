@@ -42,7 +42,7 @@ export default {
   "home.mealsBlurb": "Los desayunos, comidas y cenas de esta semana, y qué comprar.",
   "home.open": "Abrir →",
   "home.savedLabel": "Guardados",
-  "home.briefsLabel": "Boletines",
+  "home.intelLabel": "Inteligencia",
   "home.briefsBlurb": "El boletín de cada noche como libro, y los volúmenes por tema.",
   "home.savedBlurb": "Artículos que guardaste, para leer cuando quieras.",
   "home.savedCount": { one: "{count} artículo", other: "{count} artículos" },

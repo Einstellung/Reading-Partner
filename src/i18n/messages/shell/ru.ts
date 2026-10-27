@@ -111,7 +111,7 @@ export default {
 
   "nav.today": "Сегодня",
   "nav.briefing": "Сводка",
-  "nav.briefs": "Выпуски",
+  "nav.briefs": "Разведка",
   "nav.meals": "Питание",
   "nav.topics": "Темы",
 
