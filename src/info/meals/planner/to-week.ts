@@ -130,7 +130,14 @@ export interface PlannerSolve {
   solved: SolvedPlan;
 }
 
-export function solvePlannerRecord(plan: WeekPlan, profile: Profile, targets: Targets): PlannerSolve | null {
+/** A stored plan's draft checked for a profile, problems and all; null when the plan has no draft. */
+export interface PlannerCheck {
+  draft: PlanDraft;
+  lib: PlanLibrary;
+  result: DraftResult;
+}
+
+export function checkPlannerRecord(plan: WeekPlan, profile: Profile, targets: Targets): PlannerCheck | null {
   const rec: PlannerRecord | undefined = plan.planner;
   if (!rec) return null;
   const draft = parseDraft(rec.draft);
@@ -143,7 +150,16 @@ export function solvePlannerRecord(plan: WeekPlan, profile: Profile, targets: Ta
     people: profile.people,
     library: lib,
   });
-  return result.plan ? { draft, lib, solved: result.plan } : null;
+  return { draft, lib, result };
+}
+
+/** The solve out of a check; null when it did not solve. */
+export function plannerSolveOf(check: PlannerCheck | null): PlannerSolve | null {
+  return check?.result.plan ? { draft: check.draft, lib: check.lib, solved: check.result.plan } : null;
+}
+
+export function solvePlannerRecord(plan: WeekPlan, profile: Profile, targets: Targets): PlannerSolve | null {
+  return plannerSolveOf(checkPlannerRecord(plan, profile, targets));
 }
 
 /**

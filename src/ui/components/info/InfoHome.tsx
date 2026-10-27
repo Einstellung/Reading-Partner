@@ -26,6 +26,7 @@ import { MealsShopping } from "./meals/MealsShopping";
 import { MealsMethod } from "./meals/MealsMethod";
 import { MealsOnboarding } from "./meals/MealsOnboarding";
 import { saveProfile } from "../../../info/meals/apply";
+import { planNote } from "../../../info/meals/screen/plan-note";
 import { liveMealsPorts } from "../../../info/meals/live";
 import { loadMeals } from "../../../info/meals/plan/store";
 import type { Profile } from "../../../info/meals/nutrition/targets";
@@ -324,6 +325,7 @@ export default function InfoHome(props: {
             liveMealsPorts({ today: () => meals.today, changed: meals.reload }),
           );
           if (!saved.ok) return false;
+          planNote.show(saved.check ?? null);
           const fresh = await loadMeals().catch(() => null);
           if (screen !== "meals") onNavigate("meals");
           info.askMeals(fresh ?? meals.state ?? EMPTY_MEALS, meals.today, {

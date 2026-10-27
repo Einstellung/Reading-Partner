@@ -42,6 +42,7 @@ import {
   TargetsCard,
 } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
+import { MealsPlanNote } from "./MealsPlanNote";
 
 export interface MealsHomeProps {
   // Null while info-meals.json is being read: the screen holds rather than
@@ -327,6 +328,7 @@ export function MealsHome(props: MealsHomeProps) {
           <TargetsCard summary={view.summary} onMethod={props.onOpenMethod} />
         </div>
       )}
+      {plan && <MealsPlanNote today={today} />}
 
       {state === null ? (
         <div className="h-24" />
