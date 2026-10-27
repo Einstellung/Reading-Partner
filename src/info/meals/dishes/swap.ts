@@ -100,11 +100,17 @@ export function dishFoods(dish: Dish): string[] {
 /**
  * The dish made with what this user can get. `blocked` says which foods they
  * cannot buy, do not want or dislike; a swapped-in food must pass it too.
+ * `swapOut` says which of the dish's foods are swapped, `blocked` when absent.
  */
-export function swapUnavailable(dish: Dish, blocked: (foodId: string) => boolean, opts: CheckOptions = {}): SwapResult {
+export function swapUnavailable(
+  dish: Dish,
+  blocked: (foodId: string) => boolean,
+  opts: CheckOptions = {},
+  swapOut: (foodId: string) => boolean = blocked,
+): SwapResult {
   let current = dish;
   const swaps: FoodSwap[] = [];
-  for (const food of dishFoods(dish).filter(blocked)) {
+  for (const food of dishFoods(dish).filter(swapOut)) {
     const candidates = swapCandidates(food).filter((id) => !blocked(id));
     if (!foodById(food)?.swapGroup) return { ok: false, food, reason: "no_group" };
     const next = candidates.map((to) => ({ to, dish: swapFood(current, food, to) })).find((c) => checkDish(c.dish, opts).ok);

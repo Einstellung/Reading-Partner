@@ -28,7 +28,7 @@ import {
 } from "./apply";
 import type { MealsCard, MealsDraftCardData } from "./cards";
 import { boxName, profileFieldsLine } from "./screen/view";
-import { FOOD_TAGS, FOODS, foodAllowed, foodById } from "./nutrition/foods";
+import { dislikeKnown, dislikeTag, FOOD_TAGS, FOODS, foodAllowed, foodById, findFood, foodsNamed } from "./nutrition/foods";
 import {
   COOK_PARTS,
   EFFORTS,
@@ -69,8 +69,9 @@ import { SEED_DISHES } from "./dishes/seed";
 import { fillDraft } from "./planner/fill";
 import { readerPortions } from "./planner/portions";
 import { FRIDGE_DAYS_AFTER_COOK } from "./dishes/methods";
-import { isBatchMain, MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft, PREP_DAY, type DraftMain } from "./planner/draft";
+import { MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft, PREP_DAY } from "./planner/draft";
 import { planLibrary } from "./planner/library";
+import { cardMealLabel, changesWords, draftContext, heldWords, redraft, revisionPicks, type MealLabel } from "./planner/redraft";
 import { libraryListing } from "./planner/listing";
 import { planDayTargets, prepDayTargets } from "./planner/solve";
 
@@ -241,6 +242,10 @@ const HOW_TO_PLAN = [
   "When they want a change ('第二天晚饭不想吃牛肉'), take THE DRAFT ON THE CARD, change only what they asked, and",
   "call propose_meal_plan again with the whole revised draft. The card above changes in place to the new",
   "version. Your reply only says that the draft above was changed; do not list the meals again.",
+  "A standing dislike or a food they cannot get ('我不吃西兰花') goes into the profile with update_meals_profile,",
+  "not into a new draft first: the program then changes the card itself where it can and its result says which",
+  "meals still have the food. Only those need a new draft. Never say the card or the plan was changed unless a",
+  "tool result says so.",
   "When they confirm in words ('就这样', '可以', 'looks good'), call apply_meal_plan. The card's button does the",
   "same. Nothing is saved before that. Don't name the button or tell them to press it; the card shows it.",
 ];
@@ -253,30 +258,10 @@ const HOW_TO_PLAN = [
  * the rest is the program's and is filled again.
  */
 export function draftOnCard(card: MealsDraftCardData): string[] {
-  const asked = card.picks;
-  const main = (m: DraftMain, was: DraftMain | undefined): DraftMain => {
-    if (isBatchMain(m)) return { batch: m.batch, way: m.way };
-    const staple = was && !isBatchMain(was) && was.dish === m.dish ? was.staple : undefined;
-    return staple ? { dish: m.dish, staple } : { dish: m.dish };
-  };
-  const picks = {
-    days: card.draft.days.map((d, i) => {
-      const was = asked?.days[i];
-      return {
-        ...(was?.breakfast ? { breakfast: was.breakfast } : {}),
-        lunch: { main: main(d.lunch.main, was?.lunch.main) },
-        dinner: { main: main(d.dinner.main, was?.dinner.main) },
-      };
-    }),
-    batches: card.draft.batches,
-    sessions: card.draft.sessions,
-    ...(card.draft.prepDinner ? { prepDinner: { main: main(card.draft.prepDinner.main, undefined) } } : {}),
-    ...(asked?.asked ? { asked: asked.asked } : {}),
-  };
   return [
     `THE DRAFT ON THE CARD (version ${card.version}, not confirmed yet)`,
     "Your picks as the card shows them, with what they asked for. A change keeps everything they did not ask to change.",
-    JSON.stringify(picks),
+    JSON.stringify(revisionPicks(card.draft, card.picks)),
   ];
 }
 
@@ -305,7 +290,7 @@ export function mealsGuidance(
     out.push(
       `Goal: ${GOAL_WORDS[profile.goal]}. ${days ? `Trains ${days} (${profile.trainTime}).` : "Does not train."}`,
       `${profile.people} eating. Shops: ${profile.shops.join(", ") || "none named"}. Kitchen beyond the default: ${profile.kitchen.join(", ") || "nothing said"}.`,
-      `Never use: ${profile.dislikes.join(", ") || "nothing named"}.`,
+      `Never use: ${profile.dislikes.map(dislikeWords).join("; ") || "nothing named"}.`,
       habitsLine(profile),
     );
     if (charter?.text) out.push(`In their words: ${charter.text}`);
@@ -325,7 +310,8 @@ export function mealsGuidance(
     out.push(
       "When they state a change — a new weight ('称了 71'), another goal, other training days, a " +
         "new dislike, when they can cook, whether they box meals — call update_meals_profile with just " +
-        "that. It writes at once and re-solves the plan; say one line.",
+        "that. It writes at once; its result says what the program changed on the draft card and in the " +
+        "saved plan, and what it could not. Say only that, in a line or two.",
     );
   }
   out.push("");
@@ -599,6 +585,41 @@ function oneOf<T extends string>(raw: unknown, list: readonly T[]): T | null {
 }
 
 /**
+ * A dislikes list as sent, read against the food table: an entry naming a tag
+ * or a food (foodsNamed) is kept, and so is one the profile already held; a
+ * new one the program cannot check is left out and returned, never kept as
+ * words nothing reads.
+ */
+export function readDislikes(held: readonly string[], sent: readonly string[]): { dislikes: string[]; unknown: string[] } {
+  const dislikes: string[] = [];
+  const unknown: string[] = [];
+  for (const w of sent) {
+    if (dislikes.includes(w) || unknown.includes(w)) continue;
+    (dislikeKnown(w) || held.includes(w) ? dislikes : unknown).push(w);
+  }
+  return { dislikes, unknown };
+}
+
+/** Foods they cannot get as sent, by id or name: the ids, and the words the table has no food for. */
+export function readUnavailable(sent: readonly string[]): { ids: string[]; unknown: string[] } {
+  const ids: string[] = [];
+  const unknown: string[] = [];
+  for (const w of sent) {
+    const f = foodById(w) ?? findFood(w);
+    if (!f) unknown.push(w);
+    else if (!ids.includes(f.id)) ids.push(f.id);
+  }
+  return { ids, unknown };
+}
+
+/** "西兰花 (西兰花, 冷冻西兰花)": a dislike and the foods it keeps out. */
+function dislikeWords(word: string): string {
+  if (dislikeTag(word)) return `${word} (every food tagged ${dislikeTag(word)})`;
+  const foods = foodsNamed(word);
+  return foods.length ? `${word} (${foods.map((f) => f.zh).join(", ")})` : word;
+}
+
+/**
  * The profile with the fields the reader just stated, or null when none of
  * them was usable. Pure; the tool below writes it.
  */
@@ -626,10 +647,10 @@ export function patchProfile(profile: Profile, args: Record<string, unknown>): P
       .sort();
     set("trainingDays", days);
   }
-  if (Array.isArray(args.dislikes)) set("dislikes", asStrings(args.dislikes));
+  if (Array.isArray(args.dislikes)) set("dislikes", readDislikes(profile.dislikes, asStrings(args.dislikes)).dislikes);
   if (Array.isArray(args.shops)) set("shops", asStrings(args.shops));
   if (Array.isArray(args.kitchen)) set("kitchen", asStrings(args.kitchen));
-  if (Array.isArray(args.unavailable)) set("unavailable", asStrings(args.unavailable).filter((id) => foodById(id)));
+  if (Array.isArray(args.unavailable)) set("unavailable", readUnavailable(asStrings(args.unavailable)).ids);
   if (typeof args.boxes === "boolean") set("boxes", args.boxes);
   const burners = positive(args.burners, 10);
   set("burners", burners === null ? null : Math.round(burners));
@@ -647,8 +668,10 @@ export function patchProfile(profile: Profile, args: Record<string, unknown>): P
 
 /**
  * Change the profile because the reader said so (docs/73 体重变化). Direct
- * write, no card: the program re-solves the week against the new targets and
- * the model says one line.
+ * write, no card of its own: the program re-solves the week against the new
+ * targets, and when the profile now refuses something the draft card or the
+ * saved plan eats, redrafts them itself where it can (planner/redraft.ts).
+ * The result says what changed and what did not; the model says only that.
  */
 export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
   return {
@@ -663,7 +686,10 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       "shops, kitchen) replace the whole list, so send the full list as it now stands. `notes` " +
       "replaces what they have said about their meals in their own words. It writes at once and " +
       "re-solves the week; when the re-solved week breaks a plan rule, it is kept all the same and the " +
-      "result names the rules.",
+      "result names the rules. After a new dislike or a food they cannot get, the program itself changes " +
+      "the draft card and the saved plan where it can (another way of a pot, another breakfast, staple or " +
+      "side), and the result says exactly which meals it changed and which still have the food. Tell them " +
+      "that and nothing more: never say a meal was changed unless the result says so.",
     parameters: Type.Object({
       weightKg: Type.Optional(Type.Number()),
       heightCm: Type.Optional(Type.Number()),
@@ -686,8 +712,9 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       dislikes: Type.Optional(
         Type.Array(Type.String(), {
           description:
-            `Each one a food tag where one fits (${FOOD_TAGS.join(", ")}), else a food id from the ` +
-            "listing; free text only for what neither covers, since the program cannot check it.",
+            `Each one a food tag where one fits (${FOOD_TAGS.join(", ")}), else a food from FOODS by id or ` +
+            "name ('西兰花', 'broccoli'); a food sold fresh and frozen is one dislike. A word that names no tag " +
+            "and no food is not recorded, and the result says so.",
         }),
       ),
       shops: Type.Optional(Type.Array(Type.String())),
@@ -696,7 +723,8 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
         Type.Array(Type.String(), {
           description:
             "Food ids from the listing they cannot buy where they live or do not want (canned kidney beans, " +
-            "pita), kept beside dislikes. The planner swaps them for another food of the same group.",
+            "pita), kept beside dislikes. The planner swaps them for another food of the same group. A word " +
+            "that names no food is not recorded, and the result says so.",
         }),
       ),
       cookSlots: Type.Optional(
@@ -720,26 +748,115 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
           text: "They have not answered the opening questions, so there is no profile to change.",
         };
       }
+      const raw = args as Record<string, unknown>;
       const notes = typeof args.notes === "string" ? args.notes.trim() : undefined;
-      const profile = patchProfile(state.charter.profile, args as Record<string, unknown>);
+      const held = state.charter.profile;
+      const profile = patchProfile(held, raw);
+      const unknown = [
+        ...(Array.isArray(raw.dislikes) ? readDislikes(held.dislikes, asStrings(raw.dislikes)).unknown : []),
+        ...(Array.isArray(raw.unavailable) ? readUnavailable(asStrings(raw.unavailable)).unknown : []),
+      ];
+      const notRecorded = unknown.length
+        ? ` ${unknown.map((w) => `"${w}"`).join(", ")} not recorded: the food table has no food or tag by that name, so the program could not keep it out of a plan. Ask them which food they mean, and send it by a name or id from FOODS.`
+        : "";
       if (!profile && notes === undefined) {
-        return { receipt: null, text: "None of those fields was usable, so nothing changed." };
+        return { receipt: null, text: `None of those fields was usable, so nothing changed.${notRecorded}` };
       }
-      const { ok, targets, check } = await saveProfile(profile ?? state.charter.profile, deps.ports, notes);
+      // The card as it stood before the change: the redraft below starts from it.
+      const card = deps.currentDraft?.() ?? null;
+      const { ok, targets, check, redraft: planRedraft } = await saveProfile(profile ?? held, deps.ports, notes);
       if (!ok) return { receipt: null, text: "The change could not be written. Nothing changed." };
       deps.onPlanCheck?.(check ?? null);
-      const numbers = targets
-        ? ` Daily targets now — ${targetsLine("training day", targets.training)}; ${targetsLine("rest day", targets.rest)}.`
-        : "";
-      const broken = checkNote(check);
+
+      const out: string[] = ["Saved."];
+      const numbers = !!targets && TARGET_FIELDS.some((f) => raw[f] !== undefined);
+      if (targets && numbers) {
+        out.push(`Daily targets now — ${targetsLine("training day", targets.training)}; ${targetsLine("rest day", targets.rest)}.`);
+      }
+      const added = (profile?.dislikes ?? []).filter((d) => !held.dislikes.includes(d));
+      if (added.length) out.push(`New dislikes, kept out of every plan: ${added.map(dislikeWords).join("; ")}.`);
+      if (notRecorded) out.push(notRecorded.trim());
+      const foods = Array.isArray(raw.dislikes) || Array.isArray(raw.unavailable);
+      const onCard = card?.phase === "proposed" && profile && targets ? redraftCard(deps, card, held, profile, targets) : null;
+      if (onCard?.words) out.push(onCard.words);
+      else if (card?.phase === "proposed" && foods) out.push("The draft card above has none of it and stands as it is.");
+      if (planRedraft?.kind === "redrafted") {
+        out.push(
+          `The program changed the saved plan: ${changesWords(planRedraft.changes, dateLabel(planRedraft.start))}. Its grams are solved again and the shopping list follows.`,
+        );
+      } else if (planRedraft?.kind === "stuck") {
+        out.push(
+          `The saved plan still has what they now refuse: ${heldWords(planRedraft.held, dateLabel(planRedraft.start))}.` +
+            (planRedraft.unfilled.length ? ` The program could not plan around it: ${planRedraft.unfilled.join(" ")}` : "") +
+            " The program did not change the saved plan. Those meals need other mains, which only a new draft gives: tell them which meals, and draft one with propose_meal_plan if they want it.",
+        );
+      } else if (state.plan) out.push("The week's grams are re-solved and the list follows.");
+      out.push(
+        onCard || planRedraft
+          ? "Tell them in a line or two what this result says the program changed and what it did not. Never say a meal was changed unless this result says so."
+          : `Say it in one line${numbers ? "; the numbers are on their screen" : ""}.`,
+      );
+      // The meals still holding the food are named above; the rule list need not name them again.
+      const broken = checkNote(
+        planRedraft?.kind === "stuck" && check ? { ...check, problems: check.problems.filter((p) => p.rule !== "dish_blocked") } : check,
+      );
+      if (broken) out.push(broken);
+      // The card changed under the model: the picks a later revision starts from.
+      const text = onCard?.card ? [out.join(" "), "", ...draftOnCard(onCard.card)].join("\n") : out.join(" ");
       return {
-        text:
-          `Saved.${numbers}${state.plan ? " The week's grams are re-solved and the list follows." : ""}` +
-          " Say it in one line; the numbers are on their screen." +
-          (broken ? ` ${broken}` : ""),
+        text,
         receipt: { label: t("meals.receipt.updatedProfile"), summary: profileFieldsLine(Object.keys(args)) },
       };
     },
+  };
+}
+
+/** The profile fields the daily targets are computed from. */
+const TARGET_FIELDS = ["weightKg", "heightCm", "bodyFatPct", "waistCm", "goal", "trainingDays", "trainTime", "work"] as const;
+
+/** A saved plan's meal by date: "2026-11-03 lunch". */
+const dateLabel =
+  (start: string): MealLabel =>
+  (day, slot) =>
+    `${addDays(start, day - 1)} ${slot}`;
+
+/**
+ * The draft card waiting for 「就这样」 after a profile change: filled again
+ * around what the profile now refuses and raised in place as the next
+ * version, or left as it is with the meals that still have it. Null when
+ * nothing on it is refused.
+ */
+function redraftCard(
+  deps: MealsToolDeps,
+  card: MealsDraftCardData,
+  before: Profile,
+  profile: Profile,
+  targets: Targets,
+): { words: string; card?: MealsDraftCardData } | null {
+  const lib = planLibrary(profile);
+  const r = redraft(card.draft, card.picks, draftContext(profile, targets, card.startDate, card.draft.days.length, lib), planLibrary(before));
+  if (r.kind === "kept") return null;
+  if (r.kind === "stuck") {
+    return {
+      words:
+        `The draft card above still has what they now refuse, and the program could not draft around it: ${heldWords(r.held, cardMealLabel)}.` +
+        (r.unfilled.length ? ` The program's reasons: ${r.unfilled.join(" ")}` : "") +
+        " The card is unchanged. Tell them which meals; to change them, take THE DRAFT ON THE CARD, pick other mains for those meals and call propose_meal_plan with the whole draft.",
+    };
+  }
+  const next = buildDraftCard({
+    result: r.result,
+    lib,
+    startDate: card.startDate,
+    threadId: card.threadId,
+    previous: card,
+    newId: card.draftId,
+    picks: r.picks,
+  });
+  deps.onMealsCard(next);
+  return {
+    words: `The draft card above now shows version ${next.version}, changed by the program: ${changesWords(r.changes, cardMealLabel)}. Do not list the other meals.`,
+    card: next,
   };
 }
 

@@ -34,7 +34,7 @@ import {
   type PlanDraft,
   type PlanSlot,
 } from "./draft";
-import { planLibrary, type PlanLibrary } from "./library";
+import { planLibrary, type DishBlock, type PlanLibrary } from "./library";
 import { planRice, riceMeals } from "./rice";
 import { leftoverMatters, packList, shownName, type PackLine } from "./packs";
 import { DAY_PROTEIN_FLOOR, DAY_SODIUM_MG, solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
@@ -190,6 +190,9 @@ const isPulse = (f: Food | undefined) => f?.proteinCategory === "soy" || f?.prot
 const g = (n: number) => Math.round(n);
 /** "Day 2", or "Day 0 (the prep day)". */
 const dayWord = (day: number) => (day === PREP_DAY ? "Day 0 (the prep day)" : `Day ${day}`);
+/** "冷冻西兰花 (frozen_broccoli), which they dislike". */
+const blockWords = (block: DishBlock) =>
+  `${foodById(block.food)?.zh ?? block.food} (${block.food}), ${block.reason === "dislike" ? "which they dislike" : "which they cannot get, and nothing in its swap group fits"}`;
 
 // --- structure ---------------------------------------------------------------
 
@@ -210,9 +213,7 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
     }
     const block = lib.blocked(id);
     if (block) {
-      const food = foodById(block.food);
-      const why = block.reason === "dislike" ? "which they dislike" : "which they cannot get, and nothing in its swap group fits";
-      out.push({ rule: "dish_blocked", message: `${at}: ${stored.name} uses ${food?.zh ?? block.food} (${block.food}), ${why}. Pick another dish.`, day, slot, food: block.food });
+      out.push({ rule: "dish_blocked", message: `${at}: ${stored.name} uses ${blockWords(block)}. Pick another dish.`, day, slot, food: block.food });
       return null;
     }
     const dish = lib.dish(id) ?? null;
@@ -256,8 +257,18 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
       mainDish.set(`${day}:${slot}`, dish.id);
       const ways = dish.ways ?? [];
       const way = ways[main.way - 1];
+      const wayBlock = way ? lib.wayBlocked(dish.id, main.way) : null;
       if (!way) out.push({ rule: "way", message: `${at}: ${dish.name} has ways 1 to ${ways.length}; way ${main.way} is not one of them.`, day, slot });
-      else if (way.staple) stapleRef(way.staple, at, day, slot);
+      else if (wayBlock) {
+        out.push({
+          rule: "dish_blocked",
+          message: `${at}: way ${main.way} of ${dish.name} (${way.name}) uses ${blockWords(wayBlock)}. Pick another way.`,
+          day,
+          slot,
+          food: wayBlock.food,
+          batch: batch.id,
+        });
+      } else if (way.staple) stapleRef(way.staple, at, day, slot);
       if (!batch.meals.some((m) => m.day === day && m.slot === slot)) {
         out.push({ rule: "pot_link", message: `${at} eats from pot ${batch.id}, but the pot does not list ${at} among its meals.`, day, slot, batch: batch.id });
       }
@@ -378,9 +389,11 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
         return main && isBatchMain(main) && main.batch === b.id ? [main.way] : [];
       }),
     );
-    const want = Math.min(b.meals.length, dish.ways?.length ?? 1);
+    // Only the ways they can eat count: a way with a food they dislike is never one of them.
+    const open = (dish.ways ?? []).filter((_, i) => !lib.wayBlocked(dish.id, i + 1)).length;
+    const want = Math.min(b.meals.length, dish.ways ? open : 1);
     if (ways.size < want) {
-      out.push({ rule: "ways_vary", message: `Pot ${b.id} (${dish.name}) is eaten ${b.meals.length} times with ${ways.size} way(s); it has ${dish.ways?.length} ways, so use ${want} different ones.`, batch: b.id });
+      out.push({ rule: "ways_vary", message: `Pot ${b.id} (${dish.name}) is eaten ${b.meals.length} times with ${ways.size} way(s); it has ${open} ways they can eat, so use ${want} different ones.`, batch: b.id });
     }
   }
   for (const [id, pots] of potsByDish) {

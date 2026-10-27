@@ -199,6 +199,10 @@ export interface PlannerRecord {
   // planner/draft.ts PlanDraft, read back through parseDraft: plan/ does not
   // import the planner.
   draft: unknown;
+  // The model's picks the draft was filled from (the breakfasts and staples
+  // they asked for), the same shape; a redraft after a profile change keeps
+  // them. Absent on plans written before it was kept.
+  picks?: unknown;
 }
 
 export interface WeekPlan {

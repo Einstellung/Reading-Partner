@@ -479,6 +479,7 @@
 - [672-a-meals-plan-turn-runs-out-the-round-cap-on-refused-drafts](./ai/672-a-meals-plan-turn-runs-out-the-round-cap-on-refused-drafts.md) — v0.27.2 饮食出计划，模型看不到包装规格，14 份草稿拒 13 份（多是整包剩余和钠），第一个回合 8 轮 254 s 撞回合上限以 `REFUSE_ROUNDS` 结束；拒稿上限和回合上限都是 8，「告诉用户哪条过不去」那句永远轮不到。改成模型只挑主菜和锅、程序补其余，拒稿上限降到 4
 - [673-codex-reasoning-is-silence-to-the-stall-watch](./ai/673-codex-reasoning-is-silence-to-the-stall-watch.md) — Codex 思考时 `pi.live` 不动，停摆看门狗最长 32 s 收不到节拍；线上每 5 s 有一行 SSE 注释、解析后的事件最长隔 30 s，pi 都不认。前台 90 秒够用，回前台的 `back()` 却会掐掉活过冻结的连接，要改得看连接上的字节，先上 iPhone 量
 - [674-a-meals-revision-cannot-see-the-draft-card](./ai/674-a-meals-revision-cannot-see-the-draft-card.md) — 对话回放只带文字，草稿卡和上一回合的工具调用都不回放；改一顿的回合模型看不到卡，搜完对话说「已生成卡片不准确」。卡没确认时把卡上的主菜、锅、备餐写进三餐说明
+- [685-a-meals-dislike-is-saved-but-never-applied](./ai/685-a-meals-dislike-is-saved-but-never-applied.md) — 说「我不吃西兰花」，档案存了「西兰花」，可种子菜用的全是冷冻西兰花，`foodAllowed` 一对一比名字，一道菜都没挡；`update_meals_profile` 不碰草稿卡，结果只说已保存，模型就说改好了。名字按 id、中文名、别名、英文名认，鲜品冻品算一样，认不出的不存；改档案后程序自己重补卡和计划，结果逐顿写改了什么、哪几顿还有
 
 ## 开发环境
 
