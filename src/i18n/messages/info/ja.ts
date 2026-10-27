@@ -327,6 +327,7 @@ export default {
   "issue.book.name": "デイリーブリーフ第 {number} 号 · {date}",
   "issue.book.coverKicker": "Lumen デイリーブリーフ",
   "issue.book.coverNumber": "第 {number} 号",
+  "issue.book.volumeCount": { other: "{count} 本" },
   "issue.facts.notLookedUp": "事実は未確認",
   "issue.facts.dateUnknown": "日付不明",
   "issue.facts.none": "なし",

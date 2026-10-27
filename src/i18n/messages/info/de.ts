@@ -327,6 +327,7 @@ export default {
   "issue.book.name": "Tagesbrief Nr. {number} · {date}",
   "issue.book.coverKicker": "Lumen Tagesbrief",
   "issue.book.coverNumber": "Nr. {number}",
+  "issue.book.volumeCount": { one: "{count} Beitrag", other: "{count} Beiträge" },
   "issue.facts.notLookedUp": "Fakten nicht abgerufen",
   "issue.facts.dateUnknown": "Datum unbekannt",
   "issue.facts.none": "keine",

@@ -309,8 +309,10 @@ describe("a run whose candidates no model judged (topic-search 88 「判不了�
   });
 });
 
-// Taken on the code before the study path existed (2026-10-21).
-const PINNED = ["bea2fad002b5da33", "27231d7f6da3b332", "5b56bb47fdc77fb7", "b0dc384cd3281ebf", "3204bf3cc53d512b", "0f7e72c173edf42e", "73d5ef1b0da23473", "fc611c60c3aecffe", "8eb4b158fcdcec08", "b607ace087461c91", "81927f6a6cc55f8e", "905121ed4f983188", "1e4792ca0619596c", "e822ddf58236c2c0", "38957b783aa417ff", "a8ae1a12628df25e"];
+// Taken on the code before the study path existed (2026-10-21), and retaken
+// when the covers were redrawn (2026-10-27): with the old cover swapped back in,
+// that code still gave the 2026-10-21 digests, so the cover is all that moved.
+const PINNED = ["080325c4e1391a72", "56a8ea30383e5af9", "22ca6a0d63476fa6", "1e7b51e7270c245b", "1059698e0215d2ea", "aba1fd54f9125e92", "76ed161618f50703", "eaeae632795d8401", "3a3c4651f3defb51", "8c1d118b3117d117", "91d6d9e868431251", "5fce94f054112afc", "77e090a23b57898c", "41e1821e91c78168", "98c7d404ac11a26a", "6c8faa8c8fe4ce5e"];
 
 describe("a non-study issue's bytes do not move (docs/info/91 G: the study path is apart)", () => {
   test("the night's issue, a first look's, a split first look's and an unjudged run's, in English and Chinese", async () => {

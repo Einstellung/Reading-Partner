@@ -327,6 +327,7 @@ export default {
   "issue.book.name": "Ежедневный брифинг № {number} · {date}",
   "issue.book.coverKicker": "Ежедневный брифинг Lumen",
   "issue.book.coverNumber": "№ {number}",
+  "issue.book.volumeCount": { one: "{count} материал", few: "{count} материала", many: "{count} материалов", other: "{count} материала" },
   "issue.facts.notLookedUp": "факты не запрашивались",
   "issue.facts.dateUnknown": "дата неизвестна",
   "issue.facts.none": "нет",

@@ -40,7 +40,11 @@ PDF 用第一页，EPUB 用它自己声明的封面，文章还是没封面的�
 
 排版是纸色底加衬线字，三行：顶行研究室名 · 日期，中间是文档自己的标题，底行是最强的几个源，取裸主机名，最多三个，按稿末源基评估的强弱排，次要源不上封面。中间那行只能是标题本身，不另外生成一句——封面是标题的再压缩，63 的「标题不强于正文」在封面上同样管用。存疑点和限定语不上封面。
 
-合订本同一套版：中间是卷名，底行 `N 篇 · <日期区间>`，顶行是 topic 或系列名。
+封面在手机书架上约 172pt 宽（缩到 0.29），所以字号下限 40（封面单位），到手机上是 11pt；标题 60。字少、行少，书架卡片下面标签已经写了的（主题、条数）不再上封面。放不下的标签折成两行，列表在两项之间折，不在一项中间折。
+
+四种是一家，靠纸色和版式区分，不画图、不用渐变：稿是奶油色纸、左对齐；每日简报同一张奶油纸，顶上报头式粗细双线，期号做最大的字，下面短日期——三段合起来就是这期书名「Daily Brief No. 14 · Oct 27」本身，不用长日期；专题是浅灰绿纸，顶上一条书架同款的专题绿色带，反白写「专题 · 只看这一次」，中间是题目，底下「第 N 版 · 短日期」；合订本是深色布面、居中、内框一道线，顶行 topic 或系列名，中间卷名，底下「N 篇 · <日期区间>」，「N 篇」按书的语言出（`info.issue.book.volumeCount`），放不下就分两行。
+
+已经生成的简报书保留旧封面，不迁移。
 
 不做：拿源站的 og:image（那是那篇报道自己的编辑选择，稿要纠正的报道更是如此），模型生成的图。
 
@@ -114,7 +118,7 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 - 摄入：URL → `fetchWithRetry` 取页面 → `extractReadable` 出 HTML → 下图 → `buildArticleEpub` → `importBook` → 补 kind 和来源字段 → 确认卡。PDF 链接照旧走 `sniffContentType` 分流，直接 `importBook`。
 - 书架：topic 内文章行没有封面，一行标题加来源域名加日期。
 - `ingest_url` 改成上面这条摄入路；落成书的 supplement、digest 挂在产出的文档上都已做。
-- 封面：`src/workshop/bindery/cover-svg.ts` 的纯函数 `typographicCover` / `volumeCover` 出 SVG，`packArticleEpub` 收一个可选 `cover`，写成 `cover.svg` 并在 manifest 上标 `properties="cover-image"`（另写 EPUB 2 的 `<meta name="cover">`），书架原有的取封面那条路不动。稿和合订本的构建器还没有，先只有这一层。
+- 封面：`src/workshop/bindery/cover-svg.ts` 的纯函数 `typographicCover`（稿）/ `issueCover` / `studyCover` / `volumeCover` 出 SVG，`packArticleEpub` 收一个可选 `cover`，写成 `cover.svg` 并在 manifest 上标 `properties="cover-image"`（另写 EPUB 2 的 `<meta name="cover">`），书架原有的取封面那条路不动。稿和合订本的构建器还没有，先只有这一层。
 - 翻译核心：`translateArticleEpub(epubBytes, deps) → { bytes, blocks, glossary }`，术语表一趟、切批并发一趟、写回、重新打包，两个模型调用都注入；`carryMarks` 按引文把划线搬到译本。单测覆盖：可译块各多一个兄弟块、公式代码表格逐字不变、nav 和图片不变、再翻一次被拒。
 
 不在 v1，各一句：

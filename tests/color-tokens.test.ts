@@ -55,6 +55,13 @@ const BY_VALUE_ALLOWED: Record<string, { values: string[]; why: string }> = {
     values: ["#ffffff"],
     why: "the white a generated cover is drawn on, not a foreground colour",
   },
+  // A generated cover (docs/67) is an image packed into the book's file: it
+  // cannot name a token, and a book already built must not change colour when
+  // the app is rethemed. It takes its values from the palette once, by copy.
+  "workshop/bindery/cover-svg.ts": {
+    values: ["#252922", "#52664e", "#f1f1ea", "#6f726a"],
+    why: "a cover's ink and paper, baked into the archive at build time",
+  },
   "smoke/dictation-bench.tsx": {
     values: ["#b91c1c"],
     why: "a crash net that paints when the app, and possibly its stylesheet, did not come up",

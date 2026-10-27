@@ -327,6 +327,7 @@ export default {
   "issue.book.name": "데일리 브리프 {number}호 · {date}",
   "issue.book.coverKicker": "Lumen 데일리 브리프",
   "issue.book.coverNumber": "{number}호",
+  "issue.book.volumeCount": { other: "{count}편" },
   "issue.facts.notLookedUp": "사실 확인 안 함",
   "issue.facts.dateUnknown": "날짜 미상",
   "issue.facts.none": "없음",

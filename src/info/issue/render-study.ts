@@ -13,7 +13,7 @@
 import type { Locale } from "../../i18n/locale";
 import { translate, type Params } from "../../i18n/translate";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
-import { typographicCover } from "../../workshop/bindery/cover-svg";
+import { studyCover } from "../../workshop/bindery/cover-svg";
 import { factsLine } from "../topic-search/facts-line";
 import { SOURCE_NAME, type RunSource } from "../topic-search/pace";
 import { FIRST_LOOK_BACK_DAYS } from "../topic-search/windows";
@@ -479,11 +479,10 @@ export function studyEpubInput(plan: IssuePlan, meta: StudyMeta, excerpts?: Stud
     sections,
     images: [],
     cover: {
-      svg: typographicCover({
+      svg: studyCover({
         kicker: s(locale, "kicker"),
-        date: studyVersionLabel(study.version.n, locale),
         title: topic,
-        footer: [shortDate(meta.date, locale)],
+        edition: [studyVersionLabel(study.version.n, locale), shortDate(meta.date, locale)],
       }),
     },
   };

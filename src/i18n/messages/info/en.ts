@@ -340,6 +340,7 @@ export default {
   "issue.book.name": "Daily Brief No. {number} · {date}",
   "issue.book.coverKicker": "Lumen Daily Brief",
   "issue.book.coverNumber": "No. {number}",
+  "issue.book.volumeCount": { one: "{count} piece", other: "{count} pieces" },
   "issue.facts.notLookedUp": "facts not looked up",
   "issue.facts.dateUnknown": "date unknown",
   "issue.facts.none": "none",

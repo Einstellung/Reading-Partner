@@ -327,6 +327,7 @@ export default {
   "issue.book.name": "Resumo diário n.º {number} · {date}",
   "issue.book.coverKicker": "Resumo diário do Lumen",
   "issue.book.coverNumber": "N.º {number}",
+  "issue.book.volumeCount": { one: "{count} artigo", other: "{count} artigos" },
   "issue.facts.notLookedUp": "fatos não consultados",
   "issue.facts.dateUnknown": "data desconhecida",
   "issue.facts.none": "nenhuma",

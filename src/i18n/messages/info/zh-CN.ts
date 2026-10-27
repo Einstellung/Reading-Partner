@@ -327,6 +327,7 @@ export default {
   "issue.book.name": "每日简报第 {number} 期 · {date}",
   "issue.book.coverKicker": "Lumen 每日简报",
   "issue.book.coverNumber": "第 {number} 期",
+  "issue.book.volumeCount": { other: "{count} 篇" },
   "issue.facts.notLookedUp": "未查询事实",
   "issue.facts.dateUnknown": "日期不详",
   "issue.facts.none": "无",

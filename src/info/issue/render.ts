@@ -12,7 +12,7 @@
 // the conclusions, paragraphs, unknowns and panoramas are a model's, and the
 // result files have already checked their numbers.
 
-import { typographicCover } from "../../workshop/bindery/cover-svg";
+import { issueCover } from "../../workshop/bindery/cover-svg";
 import type { SectionedEpubInput } from "../../workshop/bindery/build-article";
 import type { Locale } from "../../i18n/locale";
 import { translate, type Params } from "../../i18n/translate";
@@ -229,11 +229,11 @@ export function issueEpubInput(plan: IssuePlan, meta: IssueMeta): SectionedEpubI
     sections,
     images: [],
     cover: {
-      svg: typographicCover({
+      // The book's own name (issueBookName) in its three pieces, the number large.
+      svg: issueCover({
         kicker: translate(locale, "info.issue.book.coverKicker"),
-        date: translate(locale, "info.issue.book.coverNumber", { number: meta.number }),
-        title: longDate(meta.date, locale),
-        footer: names,
+        number: translate(locale, "info.issue.book.coverNumber", { number: meta.number }),
+        date: shortDate(meta.date, locale),
       }),
     },
   };

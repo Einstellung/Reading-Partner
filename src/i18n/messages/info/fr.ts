@@ -327,6 +327,7 @@ export default {
   "issue.book.name": "Brief quotidien n° {number} · {date}",
   "issue.book.coverKicker": "Brief quotidien Lumen",
   "issue.book.coverNumber": "N° {number}",
+  "issue.book.volumeCount": { one: "{count} article", other: "{count} articles" },
   "issue.facts.notLookedUp": "faits non consultés",
   "issue.facts.dateUnknown": "date inconnue",
   "issue.facts.none": "aucune",
