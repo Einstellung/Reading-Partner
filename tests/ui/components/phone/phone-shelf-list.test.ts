@@ -213,6 +213,7 @@ test("Continue reading skips the PDF that was opened more recently", () => {
     bookId: "h1",
     path: "/books/book.epub",
     title: "book",
+    file: topics[0].files[1],
   });
 });
 

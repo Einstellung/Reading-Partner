@@ -67,6 +67,13 @@ test("issues newest first; New on today's and on any not opened here; volumes fi
   expect(view.volumes.map((v) => v.id)).toEqual(["v1"]);
 });
 
+test("each card carries when its book was made and how many pieces are in it", () => {
+  const withCount = { ...shelf(), volumes: [{ ...shelf().volumes[0], items: 12 }, shelf().volumes[1]] };
+  const view = infoShelfView(withCount, { library: LIBRARY, filed: new Set(), opened: new Set(), today: "2026-10-15" });
+  expect(view.issues.map((i) => [i.at, i.items])).toEqual([[3, 1], [2, 4], [1, 4]]);
+  expect(view.volumes.map((v) => [v.id, v.createdAt, v.items])).toEqual([["v2", 2, null], ["v1", 1, 12]]);
+});
+
 test("an issue whose book is gone from the library is not drawn", () => {
   const library = { ...LIBRARY };
   delete library["issue-2"];
@@ -110,11 +117,13 @@ test("the screen's data: the index, the library, what is filed and what was open
     readText: async () => JSON.stringify(shelf()),
     library: async () => LIBRARY,
     topics: async () => topics,
-    opened: async (bookId) => bookId === "issue-2",
+    // A position with no time was kept before the time was recorded: opened, but not when.
+    position: async (bookId) => (bookId === "issue-2" ? { readAt: 70 } : bookId === "vol-1" ? {} : null),
     today: () => "2026-10-15",
   });
   expect(data.shelf.issues).toHaveLength(3);
-  expect([...data.ctx.opened]).toEqual(["issue-2"]);
+  expect([...data.ctx.opened].sort()).toEqual(["issue-2", "vol-1"]);
+  expect(data.ctx.readAt).toEqual({ "issue-2": 70 });
   expect([...data.ctx.filed]).toEqual(["vol-3"]);
 });
 
@@ -158,7 +167,7 @@ test("the screen's data reads each study's rollbacks from its record", async () 
     readText: async (p) => files[p] ?? null,
     library: async () => ({}),
     topics: async () => [],
-    opened: async (bookId) => bookId === "study-1",
+    position: async (bookId) => (bookId === "study-1" ? {} : null),
     today: () => "2026-10-21",
   });
   expect(data.ctx.rollbacks).toEqual({ "ts-s": [{ to: 1, at: 99 }] });

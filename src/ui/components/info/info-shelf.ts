@@ -44,12 +44,19 @@ export interface IssueCard {
   study: { name: string; version: number } | null;
   /** Why the search's last run failed, one line; null when it did not. A card with no book (`bookId` "") has only this to say. */
   failure: string | null;
+  /** When the book was made, epoch ms: the issue's, the study version's, or the stall's. */
+  at: number;
+  /** Entries plus notes in the book; 0 on a card with no book. */
+  items: number;
 }
 
 export interface VolumeCard {
   id: string;
   bookId: string;
   title: string;
+  createdAt: number;
+  /** Pieces bound into it; null on a row written before the count was kept. */
+  items: number | null;
 }
 
 export interface InfoShelfView {
@@ -62,8 +69,10 @@ export interface ShelfContext {
   library: Readonly<Record<string, LibraryEntry>>;
   /** Every book id on some reading topic. */
   filed: ReadonlySet<string>;
-  /** The issues' books that have been opened on this device. */
+  /** The issues' and volumes' books that have been opened on this device. */
   opened: ReadonlySet<string>;
+  /** When each opened book was last read (ViewState.readAt), where its position says. */
+  readAt?: Readonly<Record<string, number>>;
   /** Local date, YYYY-MM-DD. */
   today: string;
   /** Each study's rollbacks by search id, from its record; absent for none. */
@@ -111,6 +120,8 @@ function stallCard(stall: ShelfStall, failure: string): IssueCard {
     isNew: false,
     study: null,
     failure,
+    at: stall.at,
+    items: 0,
   };
 }
 
@@ -131,6 +142,8 @@ function studyCard(issue: IssueEntry, ctx: ShelfContext, stall?: ShelfStall): Is
     isNew: !ctx.opened.has(v.bookId),
     study: { name, version: v.n },
     failure: stallLine(stall),
+    at: v.at,
+    items: v.items,
   };
 }
 
@@ -163,12 +176,14 @@ export function infoShelfView(shelf: InfoShelf, ctx: ShelfContext): InfoShelfVie
         isNew: issue.date === ctx.today || !ctx.opened.has(issue.bookId),
         study: null,
         failure: null,
+        at: issue.createdAt,
+        items: issue.items,
       }),
     );
   const volumes = shelf.volumes
     .filter((v) => ctx.library[v.bookId] && !ctx.filed.has(v.bookId))
     .sort((a, b) => b.createdAt - a.createdAt)
-    .map((v): VolumeCard => ({ id: v.id, bookId: v.bookId, title: v.title }));
+    .map((v): VolumeCard => ({ id: v.id, bookId: v.bookId, title: v.title, createdAt: v.createdAt, items: v.items ?? null }));
   return { issues: [...stalls, ...studies, ...issues], volumes };
 }
 
@@ -201,8 +216,8 @@ export interface InfoShelfIo {
   readText(path: string): Promise<string | null>;
   library(): Promise<Record<string, LibraryEntry>>;
   topics(): Promise<Topic[]>;
-  /** Whether this device has a reading position for the book. */
-  opened(bookId: string): Promise<boolean>;
+  /** This device's reading position for the book (getViewState), null when it was never opened here. */
+  position(bookId: string): Promise<{ readAt?: number } | null>;
   today(): string;
 }
 
@@ -215,11 +230,18 @@ export interface InfoShelfData {
 export async function loadInfoShelf(io: InfoShelfIo): Promise<InfoShelfData> {
   const [text, library, topics] = await Promise.all([io.readText(INFO_SHELF_FILE), io.library(), io.topics()]);
   const shelf = parseShelf(text);
-  const books = shelf.issues.flatMap((issue) => [issue.bookId, ...(issue.study?.versions.map((v) => v.bookId) ?? [])]);
+  const books = [
+    ...shelf.issues.flatMap((issue) => [issue.bookId, ...(issue.study?.versions.map((v) => v.bookId) ?? [])]),
+    ...shelf.volumes.map((v) => v.bookId),
+  ];
   const opened = new Set<string>();
+  const readAt: Record<string, number> = {};
   await Promise.all(
     [...new Set(books)].map(async (bookId) => {
-      if (await io.opened(bookId).catch(() => false)) opened.add(bookId);
+      const position = await io.position(bookId).catch(() => null);
+      if (!position) return;
+      opened.add(bookId);
+      if (typeof position.readAt === "number") readAt[bookId] = position.readAt;
     }),
   );
   const rollbacks: Record<string, readonly StudyRollback[]> = {};
@@ -237,5 +259,5 @@ export async function loadInfoShelf(io: InfoShelfIo): Promise<InfoShelfData> {
         }
       }),
   );
-  return { shelf, ctx: { library, filed: filedBookIds(topics), opened, today: io.today(), rollbacks } };
+  return { shelf, ctx: { library, filed: filedBookIds(topics), opened, readAt, today: io.today(), rollbacks } };
 }
