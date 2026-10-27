@@ -12,7 +12,7 @@
 import { t } from "../../../i18n";
 import { documentPath, type LibraryEntry } from "../../../platform/app/library";
 import type { FileRef } from "../../../platform/app/topics";
-import { volumeCover } from "../../../workshop/bindery/cover-svg";
+import { typographicCover } from "../../../workshop/bindery/cover-svg";
 import type { InfoShelfView, IssueCard, VolumeCard } from "../info/info-shelf";
 
 export const HOME_INTEL_COUNT = 4;
@@ -103,11 +103,15 @@ export function intelFile(item: IntelItem, library: Readonly<Record<string, Libr
 
 /**
  * The cover a volume is drawn with when its book has none of its own: the
- * bindery's volume cover from what the card knows. Null without a count, which
- * the cover would print as nought.
+ * bindery's typographic cover from what the card knows. Not volumeCover, which
+ * writes the count in Chinese whatever the locale.
  */
-export function volumeFallbackCover(card: VolumeCard): string | null {
-  if (card.items === null) return null;
-  const svg = volumeCover({ series: t("phone.home.volumeLine"), title: card.title, count: card.items, dateRange: "" });
+export function volumeFallbackCover(card: VolumeCard): string {
+  const svg = typographicCover({
+    kicker: t("phone.home.volumeLine"),
+    date: "",
+    title: card.title,
+    footer: card.items === null ? [] : [t("info.shelf.items", { count: card.items })],
+  });
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

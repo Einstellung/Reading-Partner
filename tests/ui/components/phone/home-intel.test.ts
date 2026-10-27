@@ -93,9 +93,10 @@ test("the cover comes through the library's own path: the book as a shelf file u
   expect(intelFile({ kind: "volume", card: volume("v9", 1) }, {}).name).toBe("Volume v9.epub");
 });
 
-test("a volume with no cover of its own is drawn the bindery's way, but only with a count", () => {
-  const url = volumeFallbackCover(volume("v1", 1, 18));
-  expect(url?.startsWith("data:image/svg+xml")).toBe(true);
-  expect(decodeURIComponent(url!.split(",")[1])).toContain("Volume v1");
-  expect(volumeFallbackCover(volume("v1", 1, null))).toBeNull();
+test("a volume with no cover of its own is drawn the bindery's way, its count in the UI's words", () => {
+  const svg = (count: number | null) => decodeURIComponent(volumeFallbackCover(volume("v1", 1, count)).split(",")[1]);
+  expect(volumeFallbackCover(volume("v1", 1, 18)).startsWith("data:image/svg+xml")).toBe(true);
+  expect(svg(18)).toContain("Volume v1");
+  expect(svg(18)).toContain("18 items");
+  expect(svg(null)).not.toContain("items");
 });
