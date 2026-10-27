@@ -63,7 +63,7 @@ test("an id the release does not carry is left out, so the meal shows what it sh
 
 test("the picture lives at the release under its tag, and on disk under the tag too", () => {
   expect(dishArtUrl("beef_ragu--w1-pasta")).toBe(
-    `https://github.com/Einstellung/Reading-Partner/releases/download/${DISH_ART_TAG}/beef_ragu--w1-pasta.webp`,
+    `https://github.com/Einstellung/lumen-assets/releases/download/${DISH_ART_TAG}/beef_ragu--w1-pasta.webp`,
   );
   expect(dishArtPath("beef_ragu--w1-pasta")).toBe(`meals-art/${DISH_ART_TAG}/beef_ragu--w1-pasta.webp`);
 });

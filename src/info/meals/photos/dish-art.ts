@@ -19,7 +19,7 @@ import { dishDrawingKey, normalizeSearchName, type PhotoCache } from "./dish-pho
 /** The release the pictures are published under. Its files never change; new pictures get a new tag. */
 export const DISH_ART_TAG = "dish-art-v1";
 
-const RELEASE_BASE = "https://github.com/Einstellung/Reading-Partner/releases/download";
+const RELEASE_BASE = "https://github.com/Einstellung/lumen-assets/releases/download";
 
 /** Where one picture is downloaded from. */
 export function dishArtUrl(id: string, tag = DISH_ART_TAG): string {
