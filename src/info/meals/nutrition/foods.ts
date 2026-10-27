@@ -236,13 +236,101 @@ export function isProduce(food: Food): boolean {
   return food.roles.includes("veg") || food.roles.includes("fruit");
 }
 
-/** False when a dislike names one of the food's tags, its id, its name or an alias. */
+// A dislike names foods the way people say them: by id, Chinese name (with or
+// without its （…） note), alias or English name. Every row a name fits counts,
+// not only the first, and a food sold both fresh and frozen is one dislike:
+// 西兰花 is broccoli and frozen_broccoli, and the seed dishes only use the
+// frozen row (docs/pitfall/ai/685).
+const ALL_BY_NAME: ReadonlyMap<string, readonly Food[]> = (() => {
+  const m = new Map<string, Food[]>();
+  const add = (key: string, f: Food) => {
+    const k = norm(key);
+    if (!k) return;
+    const list = m.get(k) ?? [];
+    if (!list.includes(f)) list.push(f);
+    m.set(k, list);
+  };
+  for (const f of FOODS) {
+    add(f.zh, f);
+    add(stripNote(f.zh), f);
+    for (const a of f.aliases) add(a, f);
+  }
+  return m;
+})();
+
+/** An English name compared without case, spaces or a plural ending. */
+const enKey = (s: string) => norm(s).replace(/ies$/, "y").replace(/oes$/, "o").replace(/([^s])s$/, "$1");
+
+const BY_EN: ReadonlyMap<string, readonly Food[]> = (() => {
+  const m = new Map<string, Food[]>();
+  for (const f of FOODS) {
+    if (!f.en) continue;
+    const k = enKey(f.en);
+    m.set(k, [...(m.get(k) ?? []), f]);
+  }
+  return m;
+})();
+
+// A frozen row and the fresh row its name is made from: 冷冻西兰花 and 西兰花.
+const OTHER_FORM: ReadonlyMap<string, readonly string[]> = (() => {
+  const m = new Map<string, string[]>();
+  for (const f of FOODS) {
+    const name = stripNote(f.zh);
+    const base = name.replace(/^冷?冻/, "");
+    if (base === name) continue;
+    const fresh = BY_NAME.get(norm(base));
+    if (!fresh || fresh.id === f.id) continue;
+    m.set(f.id, [...(m.get(f.id) ?? []), fresh.id]);
+    m.set(fresh.id, [...(m.get(fresh.id) ?? []), f.id]);
+  }
+  return m;
+})();
+
+const NAMED = new Map<string, readonly Food[]>();
+
+/**
+ * The foods a word names: by id, Chinese name, alias or English name, each
+ * with its fresh or frozen form. Empty for a tag and for a word the table has
+ * no name for.
+ */
+export function foodsNamed(word: string): readonly Food[] {
+  const k = word.trim();
+  if (!k) return [];
+  const hit = NAMED.get(k);
+  if (hit) return hit;
+  const direct = new Set<Food>(ALL_BY_NAME.get(norm(k)) ?? []);
+  const byId = BY_ID.get(k) ?? BY_ID.get(k.toLowerCase().replace(/\s+/g, "_"));
+  if (byId) direct.add(byId);
+  for (const f of BY_EN.get(enKey(k)) ?? []) direct.add(f);
+  const out = new Map<string, Food>();
+  for (const f of direct) {
+    out.set(f.id, f);
+    for (const id of OTHER_FORM.get(f.id) ?? []) out.set(id, BY_ID.get(id) as Food);
+  }
+  const foods = [...out.values()];
+  NAMED.set(k, foods);
+  return foods;
+}
+
+/** The tag a dislike names (fish, pork, ...), or null. */
+export function dislikeTag(word: string): FoodTag | null {
+  const k = word.trim().toLowerCase();
+  return (FOOD_TAGS as readonly string[]).includes(k) ? (k as FoodTag) : null;
+}
+
+/** Whether the program can check a dislike: it names a tag or at least one food. */
+export function dislikeKnown(word: string): boolean {
+  return !!dislikeTag(word) || foodsNamed(word).length > 0;
+}
+
+/** False when a dislike names one of the food's tags or the food itself (foodsNamed). */
 export function foodAllowed(food: Food, dislikes: readonly string[]): boolean {
   for (const d of dislikes) {
     const k = d.trim();
     if (!k) continue;
-    if ((food.tags as string[]).includes(k)) return false;
-    if (k === food.id || norm(k) === norm(food.zh) || food.aliases.some((a) => norm(a) === norm(k))) return false;
+    const tag = dislikeTag(k);
+    if (tag && food.tags.includes(tag)) return false;
+    if (foodsNamed(k).some((f) => f.id === food.id)) return false;
   }
   return true;
 }

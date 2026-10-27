@@ -189,19 +189,23 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
     d.lunch.sides = [];
     d.dinner.sides = [];
   }
-  // A pot eaten twice the same way: the later meals take the lowest ways not used.
+  // A pot eaten twice the same way, or a way with a food they dislike: the
+  // meal takes the lowest way they can eat that no other meal of the pot has.
   for (const b of first.batches) {
-    const ways = lib.dish(b.dish)?.ways?.length ?? 0;
+    const open = Array.from({ length: lib.dish(b.dish)?.ways?.length ?? 0 }, (_, i) => i + 1).filter((w) => !lib.wayBlocked(b.dish, w));
     const seen = new Set<number>();
     const meals = [...b.meals].sort((x, y) => x.day - y.day || (x.slot === y.slot ? 0 : x.slot === "lunch" ? -1 : 1));
     for (const m of meals) {
       const main = draftMeal(first, m.day, m.slot)?.main;
       if (!main || !isBatchMain(main) || main.batch !== b.id) continue;
-      if (seen.has(main.way)) {
-        const free = Array.from({ length: ways }, (_, i) => i + 1).find((w) => !seen.has(w) && !meals.some((o) => o !== m && wayOf(first, o.day, o.slot) === w));
+      const block = (main.way >= 1 && lib.wayBlocked(b.dish, main.way)) || null;
+      if (block || seen.has(main.way)) {
+        const unused = open.find((w) => !seen.has(w) && !meals.some((o) => o !== m && wayOf(first, o.day, o.slot) === w));
+        const free = unused ?? (block ? (open.find((w) => !seen.has(w)) ?? open[0]) : undefined);
         if (free) {
           main.way = free;
-          reasons.set(key(m.day, m.slot), ["ways_vary"]);
+          const food = block ? (foodById(block.food)?.zh ?? block.food) : "";
+          reasons.set(key(m.day, m.slot), [block ? `${food}, which they ${block.reason === "dislike" ? "dislike" : "cannot get"}` : "ways_vary"]);
         }
       }
       seen.add(main.way);
@@ -441,7 +445,7 @@ function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Me
         if (!dish) continue;
         (dish.ways ?? []).forEach((_, i) => {
           const w = i + 1;
-          if (w === m.way || !keep(w, dish, m.way)) return;
+          if (w === m.way || lib.wayBlocked(dish.id, w) || !keep(w, dish, m.way)) return;
           add(`way:${day}:${slot}:${w}`, { meal: key(day, slot), apply: (d) => void ((d.days[day - 1]?.[slot].main as { way: number }).way = w) });
         });
       }

@@ -95,6 +95,8 @@ export interface WeekFromDraft {
   start: string;
   now: number;
   previous: WeekPlan | null;
+  /** The model's picks the draft was filled from, kept for a redraft. */
+  picks?: PlanDraft;
 }
 
 /**
@@ -119,7 +121,7 @@ export function weekFromDraft(input: WeekFromDraft): WeekPlan {
     days,
     createdAt: input.now,
     revision: (previous?.revision ?? 0) + 1,
-    planner: { start, draft: result.draft },
+    planner: { start, draft: result.draft, ...(input.picks ? { picks: input.picks } : {}) },
   };
 }
 

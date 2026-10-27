@@ -25,8 +25,10 @@ import type {
 } from "./plan/types";
 import { applyDeviation, isoWeekday } from "./plan/week";
 import { checkDraft, type DraftProblem } from "./planner/checks";
-import { planLibrary } from "./planner/library";
-import { planDayTargets, prepDayTargets } from "./planner/solve";
+import { parseDraft } from "./planner/draft";
+import { planLibrary, type PlanLibrary } from "./planner/library";
+import { draftContext, redraft, type MealChange, type MealHeld } from "./planner/redraft";
+import { planDayTargets, prepDayTargets, type SolvedPlan } from "./planner/solve";
 import { checkPlannerRecord, plannerSolveOf, resolvePlannerWeek, weekFromDraft } from "./planner/to-week";
 import { plannerShoppingList } from "./planner/trip";
 
@@ -125,28 +127,75 @@ export function resolvedWeek(
 }
 
 /**
+ * What a profile change did to the saved plan's draft (planner/redraft.ts):
+ * filled again around a food they now refuse, with every meal that changed,
+ * or kept as it was, with the meals that still eat it. `start` is the plan's
+ * Day 1, for naming meals by date.
+ */
+export type PlanRedraft =
+  | { kind: "redrafted"; start: string; changes: MealChange[] }
+  | { kind: "stuck"; start: string; held: MealHeld[]; unfilled: string[] };
+
+/**
+ * The saved plan filled again under a profile that refuses something its
+ * draft eats; null when nothing in it is refused. A redraft that passes comes
+ * with its week, re-solved, and the trip derived again; one that does not
+ * leaves the plan to resolvedWeek, which keeps it.
+ */
+function redraftedWeek(
+  plan: WeekPlan,
+  shopping: ShoppingState,
+  profile: Profile,
+  targets: Targets,
+  before: PlanLibrary,
+): { week?: { plan: WeekPlan; shopping: ShoppingState; check: PlanCheck }; redraft: PlanRedraft } | null {
+  const rec = plan.planner;
+  if (!rec) return null;
+  const draft = parseDraft(rec.draft);
+  const lib = planLibrary(profile);
+  const r = redraft(draft, rec.picks ? parseDraft(rec.picks) : undefined, draftContext(profile, targets, rec.start, draft.days.length, lib), before);
+  if (r.kind === "kept") return null;
+  if (r.kind === "stuck") return { redraft: { kind: "stuck", start: rec.start, held: r.held, unfilled: r.unfilled } };
+  const solved = r.result.plan as SolvedPlan;
+  const days = resolvePlannerWeek(plan, profile, targets, { draft: r.result.draft, lib, solved });
+  const next: WeekPlan = { ...days, planner: { start: rec.start, draft: r.result.draft, picks: r.picks } };
+  return {
+    week: {
+      plan: next,
+      shopping: reconcileShoppingList(shopping, plannerShoppingList(solved, r.result.draft, next, profile.people)),
+      check: { start: rec.start, problems: r.result.problems },
+    },
+    redraft: { kind: "redrafted", start: rec.start, changes: r.changes },
+  };
+}
+
+/**
  * Write a profile — the end of onboarding, a replay of it, or a field the
  * reader changed in conversation — and re-solve the week against it in the
  * same write. No model is involved.
  *
  * The targets it now gives, or null when nothing was written or the reader
- * withheld body data; and, when the stored plan came from a draft, what the
- * draft rules find in it now (written all the same).
+ * withheld body data; when the stored plan came from a draft, what the draft
+ * rules find in it now (written all the same); and when the profile now
+ * refuses something that draft eats, what the program did about it: the draft
+ * filled again and written, or kept with the meals that still eat it.
  */
 export async function saveProfile(
   profile: Profile,
   ports: MealsPorts,
   text?: string,
-): Promise<{ ok: boolean; targets: Targets | null; check?: PlanCheck }> {
+): Promise<{ ok: boolean; targets: Targets | null; check?: PlanCheck; redraft?: PlanRedraft }> {
   const state = await ports.current();
   const charter: MealsCharter = {
     profile,
     text: text ?? state.charter?.text ?? "",
     updatedAt: ports.now(),
   };
-  const week = state.plan
-    ? resolvedWeek(state.plan, state.shopping, charter, ports.region(), ports.today())
-    : null;
+  const targets = targetsOf(charter, ports.region());
+  const before = planLibrary(state.charter?.profile ?? profile);
+  const redrafted = state.plan && targets ? redraftedWeek(state.plan, state.shopping, profile, targets, before) : null;
+  const week =
+    redrafted?.week ?? (state.plan ? resolvedWeek(state.plan, state.shopping, charter, ports.region(), ports.today()) : null);
   const check = week?.check ? { check: week.check } : {};
   const written = week ? { plan: { ...week.plan, revision: week.plan.revision + 1 }, shopping: week.shopping } : null;
   try {
@@ -155,7 +204,7 @@ export async function saveProfile(
     return { ok: false, targets: null };
   }
   ports.changed();
-  return { ok: true, targets: targetsOf(charter, ports.region()), ...check };
+  return { ok: true, targets, ...check, ...(redrafted ? { redraft: redrafted.redraft } : {}) };
 }
 
 /**
@@ -181,7 +230,7 @@ export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): P
     library: lib,
   });
   if (!result.plan) return NOTHING;
-  const plan = weekFromDraft({ result, lib, start: card.startDate, now: ports.now(), previous: state.plan });
+  const plan = weekFromDraft({ result, lib, start: card.startDate, now: ports.now(), previous: state.plan, picks: card.picks });
   const shopping = reconcileShoppingList(state.shopping, plannerShoppingList(result.plan, result.draft, plan, profile.people));
   try {
     await ports.savePlan(plan, shopping);

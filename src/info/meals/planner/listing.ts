@@ -66,10 +66,12 @@ export function libraryListing(lib: PlanLibrary, dishes: readonly Dish[] = SEED_
   }
   out.push("BATCH MAINS (cooked in the prep session; `ways` are numbered from 1, each with its staple)");
   for (const d of of((d) => d.role === "main" && d.prep === "batch")) {
+    // A way they cannot eat is left out; the others keep their numbers.
     const ways = (d.ways ?? [])
-      .map((w, i) => {
+      .flatMap((w, i) => {
+        if (lib.wayBlocked(d.id, i + 1)) return [];
         const na = portions ? sodiumOf([...portions.main(d, i + 1), ...(w.staple ? portions.staple(w.staple) : [])]) : 0;
-        return `${i + 1} ${w.name}${w.staple ? ` (${stapleWord(lib, w.staple)})` : ""}${mg(na)}`;
+        return [`${i + 1} ${w.name}${w.staple ? ` (${stapleWord(lib, w.staple)})` : ""}${mg(na)}`];
       })
       .join("; ");
     out.push(`- ${head(d)} protein ${proteinWords(d)}, hands-on ${d.activeMin} / total ${d.totalMin} min. ways: ${ways}`);
@@ -88,8 +90,9 @@ export function libraryListing(lib: PlanLibrary, dishes: readonly Dish[] = SEED_
     const packs: string[] = [];
     const seen = new Set<string>();
     for (const d of mains) {
-      const foods = [...d.ingredients, ...(d.ways ?? []).flatMap((w) => w.addOns)].map((l) => l.food);
-      for (const w of d.ways ?? []) if (w.staple) foods.push(w.staple, ...(lib.dish(w.staple)?.ingredients.map((l) => l.food) ?? []));
+      const ways = (d.ways ?? []).filter((_, i) => !lib.wayBlocked(d.id, i + 1));
+      const foods = [...d.ingredients, ...ways.flatMap((w) => w.addOns)].map((l) => l.food);
+      for (const w of ways) if (w.staple) foods.push(w.staple, ...(lib.dish(w.staple)?.ingredients.map((l) => l.food) ?? []));
       for (const id of foods) {
         if (seen.has(id)) continue;
         seen.add(id);
