@@ -58,6 +58,18 @@ export default {
   "home.continueReading": "Continue reading · {topicName}",
   "home.libraryBlurb": "Your topics and the books filed under them.",
   "home.allTopics": "All topics",
+  "home.allIntel": "All intel",
+  "home.intelIssues": { one: "{count} issue", other: "{count} issues" },
+  "home.intelVolumes": { one: "{count} volume", other: "{count} volumes" },
+  "home.intelEmpty": "No intel yet. Tell {name} a topic you follow and the first issue comes the morning after.",
+  "home.studyLine": "Study · version {n}",
+  "home.volumeLine": "Topic volume",
+  "home.mealsWeek": "This week",
+  "home.mealsFoot": "Plan and shopping list",
+  "home.savedFoot": { one: "article kept to read", other: "articles kept to read" },
+  "home.continue": "Continue",
+  "home.continuePercent": "Continue · {percent}%",
+  "home.noTopics": "No topics yet",
 
   // ---- NewTopicSheet.tsx: naming a new topic.
   "newTopic.title": "New topic",
