@@ -133,6 +133,10 @@ function validatePlan(raw: unknown): WeekPlan | null {
   if (raw.planner !== undefined && !isPlanner(raw.planner)) {
     const { planner: _drop, ...rest } = plan;
     plan = rest;
+  } else if (plan.planner?.prepRun !== undefined && !isPrepRun(plan.planner.prepRun)) {
+    // A run that does not read is dropped alone; the plan and its draft stay.
+    const { prepRun: _run, ...planner } = plan.planner;
+    plan = { ...plan, planner };
   }
   if (raw.pots === undefined) return plan;
   const pots = Array.isArray(raw.pots) ? raw.pots.filter(isPot) : [];
@@ -143,6 +147,16 @@ function validatePlan(raw: unknown): WeekPlan | null {
 /** A planner record that can be solved again: its start and a draft with days. */
 function isPlanner(raw: unknown): boolean {
   return isObject(raw) && typeof raw.start === "string" && isObject(raw.draft) && Array.isArray(raw.draft.days);
+}
+
+const STEP_RUN_FIELDS = ["started", "handsDone", "done", "handsUntil", "waitUntil"] as const;
+
+/** A prep run (docs/671 时间线与语音): its steps' key, its start, and numbers for what happened. */
+function isPrepRun(raw: unknown): boolean {
+  if (!isObject(raw) || typeof raw.key !== "string" || typeof raw.startedAt !== "number" || !isObject(raw.steps)) return false;
+  return Object.values(raw.steps).every(
+    (s) => isObject(s) && STEP_RUN_FIELDS.every((f) => s[f] === undefined || (typeof s[f] === "number" && Number.isFinite(s[f]))),
+  );
 }
 
 function isPot(raw: unknown): raw is Pot {

@@ -12,6 +12,7 @@ import type { ThinkingKind } from "../../../ai/model-tier";
 import type { Locale } from "../../../i18n/locale";
 import { loadSettings } from "../../../platform/app/settings";
 import { newTally, reportParse } from "../../../platform/app/structured-output";
+import { writePrepSteps, type PrepStepsEntry, type PrepStepsRequest } from "./prep-steps";
 import {
   parseRecipe,
   recipeLanguage,
@@ -20,26 +21,39 @@ import {
   type RecipeEntry,
   type RecipeRequest,
 } from "./recipe";
-import { loadRecipe, saveRecipe } from "./recipe-store";
+import { loadPrepSteps, loadRecipe, savePrepSteps, saveRecipe } from "./recipe-store";
 
 /** Who is asking: the page the reader is watching, or the background sweep. */
 export type RecipeTier = Extract<ThinkingKind, "chat" | "meals">;
 
 // One call per key at a time, whoever started it. Leaving the page does not
 // cancel it — the recipe is saved when it lands — and the page opened while
-// the sweep writes its meal, or opened again, waits on the same call.
-const inFlight = new Map<string, Promise<RecipeEntry>>();
+// the sweep writes its meal, or opened again, waits on the same call. A prep
+// session's steps go through the same map under their own key.
+const inFlight = new Map<string, Promise<unknown>>();
 
-async function writeRecipe(request: RecipeRequest, tier: RecipeTier): Promise<RecipeEntry> {
-  const model = await resolveModel(tier);
-  const text = await callModel(
+function once<T>(key: string, start: () => Promise<T>): Promise<T> {
+  const running = inFlight.get(key) as Promise<T> | undefined;
+  if (running) return running;
+  const call = start().finally(() => inFlight.delete(key));
+  inFlight.set(key, call);
+  return call;
+}
+
+function callOn(tier: RecipeTier, system: string, user: string): Promise<string> {
+  return callModel(
     tier,
     "plan",
-    recipeSystemPrompt(request),
-    recipeUserText(request),
+    system,
+    user,
     { signal: new AbortController().signal, onProgress: () => {} },
     { spend: { caller: "info" } },
   );
+}
+
+async function writeRecipe(request: RecipeRequest, tier: RecipeTier): Promise<RecipeEntry> {
+  const model = await resolveModel(tier);
+  const text = await callOn(tier, recipeSystemPrompt(request), recipeUserText(request));
   const tally = newTally();
   const parsed = parseRecipe(text, tally);
   reportParse({ site: "meals-recipe", model, text, tally, error: parsed.ok ? undefined : parsed.error });
@@ -63,11 +77,29 @@ export function storedRecipe(request: RecipeRequest): Promise<RecipeEntry | null
  * A call already running keeps the tier it started on.
  */
 export function writeRecipeOnce(request: RecipeRequest, tier: RecipeTier = "chat"): Promise<RecipeEntry> {
-  const running = inFlight.get(request.key);
-  if (running) return running;
-  const call = writeRecipe(request, tier).finally(() => inFlight.delete(request.key));
-  inFlight.set(request.key, call);
-  return call;
+  return once(request.key, () => writeRecipe(request, tier));
+}
+
+/** The stored steps of a prep session, or null when none have been written. */
+export function storedPrepSteps(request: Pick<PrepStepsRequest, "key">): Promise<PrepStepsEntry | null> {
+  return loadPrepSteps(request.key);
+}
+
+/**
+ * A prep session's steps: the call being made, or a new one on `tier`
+ * (docs/671 菜品图): the background sweep on "meals", the prep page opened
+ * before it on "chat".
+ */
+export function writePrepStepsOnce(request: PrepStepsRequest, tier: RecipeTier = "chat"): Promise<PrepStepsEntry> {
+  return once(request.key, async () => {
+    const model = await resolveModel(tier);
+    return writePrepSteps(request, {
+      call: (system, user) => callOn(tier, system, user),
+      save: (key, entry) => savePrepSteps(key, entry),
+      now: () => Date.now(),
+      report: (text, tally, error) => reportParse({ site: "meals-recipe", model, text, tally, error }),
+    });
+  });
 }
 
 /** Whether a call for this key is running now. */

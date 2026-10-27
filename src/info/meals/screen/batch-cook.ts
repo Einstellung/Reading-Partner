@@ -15,6 +15,7 @@ import type { MealKey, MealsState, WeekPlan } from "../plan/types";
 import { addDays, planExhausted } from "../plan/week";
 import { parseDraft, type DraftSession, type PlanDraft } from "../planner/draft";
 import { planLibrary } from "../planner/library";
+import { kitchenFor } from "../timeline/schedule";
 import { dayWord, mealLabel } from "./view";
 
 export type PrepPart = DraftSession["part"];
@@ -62,8 +63,13 @@ function draftOf(plan: WeekPlan): PlanDraft | null {
   }
 }
 
-/** The plan's prep session, or null when the plan cooks nothing ahead or has no draft. */
-export function planPrep(state: MealsState, today: string): PrepSlot | null {
+/**
+ * The plan's prep session, or null when the plan cooks nothing ahead or has no
+ * draft. Its minutes are the estimate from the pots' library minutes, or
+ * `written`, the timeline's minutes once the session's steps are written
+ * (timeline/view.ts timelineMinutes), which win.
+ */
+export function planPrep(state: MealsState, today: string, written?: { activeMin: number; totalMin: number } | null): PrepSlot | null {
   const plan = state.plan;
   const rec = plan?.planner;
   const profile = state.charter?.profile;
@@ -74,7 +80,7 @@ export function planPrep(state: MealsState, today: string): PrepSlot | null {
   const lib = planLibrary(profile);
   const dishes = draft.batches.filter((b) => b.session === s.id).flatMap((b) => lib.dish(b.dish) ?? []);
   if (!dishes.length) return null;
-  const { activeMin, totalMin } = prepMinutes(dishes);
+  const { activeMin, totalMin } = written ?? prepMinutes(dishes, kitchenFor(profile));
   const date = addDays(rec.start, s.day - 1);
   const zh = getLocale() === "zh-CN";
   return {
@@ -104,12 +110,17 @@ export function nextMeal(plan: WeekPlan, today: string, hour: number): NextMeal 
   return null;
 }
 
-export function batchCookEntry(state: MealsState | null, today: string, hour = 0): BatchCookEntry | null {
+export function batchCookEntry(
+  state: MealsState | null,
+  today: string,
+  hour = 0,
+  written?: { activeMin: number; totalMin: number } | null,
+): BatchCookEntry | null {
   if (!state) return null;
   if (!state.charter) return { kind: "setup" };
   const plan = state.plan;
   if (!plan || !plan.days.length) return { kind: "plan" };
-  const prep = planPrep(state, today);
+  const prep = planPrep(state, today, written);
   if (prep && !prep.done) return { kind: "prep", prep };
   if (planExhausted(plan, today)) return { kind: "planNext" };
   return { kind: "next", next: nextMeal(plan, today, hour), prep };

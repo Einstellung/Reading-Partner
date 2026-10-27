@@ -243,6 +243,9 @@ const LAYER: Record<string, Layer> = {
   "info/meals/recipe": "domain",
   // The day and week screens' text and layout, plus onboarding.
   "info/meals/screen": "domain",
+  // The prep session's timeline (docs/671 时间线与语音): the steps, the
+  // scheduler, the running state and the words read out.
+  "info/meals/timeline": "domain",
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",

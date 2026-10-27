@@ -2,22 +2,22 @@
 // the batch cook's screens (screen/batch-cook.ts, screen/prep-view.ts).
 
 import type { Dish } from "../dishes/types";
+import { estimateMinutes, type Kitchen } from "../timeline/schedule";
 import type { MainSlot, PlanDraft } from "./draft";
 
 /**
- * Hands-on and start-to-finish minutes of one prep session: one pair of hands,
- * the longest pot started first, each pot's hands-on part before its waiting.
- * Shown as 「共约」, an estimate until the timeline (docs/671 时间线与语音).
+ * Hands-on and start-to-finish minutes of one prep session before its steps
+ * are written: the timeline's scheduler (timeline/schedule.ts) over one step
+ * per pot, each pot's library minutes, hands-on then waiting on its device.
+ * One pair of hands, the longest pot first, one pot per device and one per
+ * burner. Shown as 「共约」. Once the steps are written the timeline's own
+ * minutes are the session's (timeline/view.ts timelineMinutes).
  */
-export function prepMinutes(dishes: readonly Pick<Dish, "activeMin" | "totalMin">[]): { activeMin: number; totalMin: number } {
-  const sorted = [...dishes].sort((a, b) => b.totalMin - a.totalMin);
-  let hands = 0;
-  let end = 0;
-  for (const d of sorted) {
-    end = Math.max(end, hands + Math.max(d.totalMin, d.activeMin));
-    hands += d.activeMin;
-  }
-  return { activeMin: hands, totalMin: Math.max(end, hands) };
+export function prepMinutes(
+  dishes: readonly (Pick<Dish, "activeMin" | "totalMin"> & Partial<Pick<Dish, "equipment">>)[],
+  kitchen?: Kitchen,
+): { activeMin: number; totalMin: number } {
+  return estimateMinutes(dishes, kitchen);
 }
 
 /** The meal a prep session's pots are first eaten at: lunch after a morning session, dinner after an afternoon one. */
