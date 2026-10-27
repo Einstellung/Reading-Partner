@@ -5,17 +5,12 @@
 // menu item to move it into reading and end the study (docs/info/91 结束): it
 // raises end_study's move card as the confirmation (companion/study-end.ts).
 
-import { prepareStudyBook } from "../reader/study/study-live";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../../../i18n";
-import { todayLocal } from "../../../info/collect/store";
 import { studySearchIdOf } from "../../../info/issue/study-reader";
 import { STUDY_MOVE_LATER_OP, STUDY_MOVE_OP, type StudyMoveCardData } from "../../../info/topic-search/cards";
 import { parseMoveTarget } from "../../../info/topic-search/study-lines";
-import { appData } from "../../../platform/app/appdata";
-import { listLibraryEntries } from "../../../platform/app/library";
-import { getViewState } from "../../../platform/app/storage";
-import { addFileToTopic, listTopics, type Topic } from "../../../platform/app/topics";
+import { addFileToTopic, type Topic } from "../../../platform/app/topics";
 import { deleteBook } from "../../../reading/delete/delete-book";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import { useCompanionName } from "../base/use-companion-name";
@@ -25,11 +20,12 @@ import { endStudyLive, shelfStudyMoveCardLive } from "../companion/study-end";
 import CardMenu from "../shelf/CardMenu";
 import MoveToTopicDialog from "../shelf/MoveToTopicDialog";
 import { moveFailedLine, moveTargets } from "../shelf/move-to";
+import { NEW_BADGE, SECTION_LABEL } from "../shelf/cardStyles";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogSheetContent, DialogTitle } from "../ui/dialog";
 import { cn } from "../lib/utils";
+import { liveInfoShelfIo, openShelfCard } from "./info-shelf-live";
 import {
-  cardBookName,
   fileVolume,
   infoShelfView,
   loadInfoShelf,
@@ -38,14 +34,6 @@ import {
   type IssueCard,
   type VolumeCard,
 } from "./info-shelf";
-
-const liveIo: InfoShelfIo = {
-  readText: async (path) => ((await appData.exists(path)) ? await appData.readText(path) : null),
-  library: listLibraryEntries,
-  topics: listTopics,
-  opened: async (bookId) => (await getViewState(bookId)) !== null,
-  today: () => todayLocal(),
-};
 
 export default function InfoShelf(props: {
   onOpenBook: (bookId: string, name: string) => void;
@@ -61,7 +49,7 @@ export default function InfoShelf(props: {
 }) {
   const t = useT();
   const companionName = useCompanionName();
-  const io = props.io ?? liveIo;
+  const io = props.io ?? liveInfoShelfIo;
   const [data, setData] = useState<InfoShelfData | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [moving, setMoving] = useState<VolumeCard | null>(null);
@@ -84,12 +72,7 @@ export default function InfoShelf(props: {
   }, [reload]);
 
   const view = data ? infoShelfView(data.shelf, data.ctx) : null;
-  // A study's newest version takes the reader's marks from the one before it first (docs/info/91 「版本」).
-  const open = (card: IssueCard | VolumeCard) => {
-    const go = () => props.onOpenBook(card.bookId, cardBookName(card, data?.ctx.library ?? {}));
-    if ("study" in card && card.study) void prepareStudyBook(card.bookId).catch(() => null).finally(go);
-    else go();
-  };
+  const open = (card: IssueCard | VolumeCard) => openShelfCard(card, data?.ctx.library ?? {}, props.onOpenBook);
 
   const startEnding = (issue: IssueCard) => {
     if (!issue.study) return;
@@ -130,7 +113,7 @@ export default function InfoShelf(props: {
           <h1 className="m-0 text-[17px] font-semibold text-foreground">{t("info.shelf.title")}</h1>
         </div>
 
-        <h2 className="mt-0 mb-3 text-[12px] font-medium tracking-[0.08em] text-faint-foreground uppercase">
+        <h2 className={SECTION_LABEL}>
           {t("info.shelf.issues")}
         </h2>
         {view && view.issues.length === 0 && (
@@ -179,7 +162,7 @@ export default function InfoShelf(props: {
                   {issue.failure && <span className="line-clamp-3 text-[12px] leading-snug text-destructive">{issue.failure}</span>}
                 </span>
                 {issue.isNew && (
-                  <span className="absolute top-3 right-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold tracking-[0.06em] text-primary-foreground uppercase">
+                  <span className={cn(NEW_BADGE, "absolute top-3 right-3 py-0.5")}>
                     {t("info.shelf.new")}
                   </span>
                 )}
@@ -200,7 +183,7 @@ export default function InfoShelf(props: {
           ))}
         </ul>
 
-        <h2 className="mt-0 mb-3 text-[12px] font-medium tracking-[0.08em] text-faint-foreground uppercase">
+        <h2 className={SECTION_LABEL}>
           {t("info.shelf.volumes")}
         </h2>
         {view && view.volumes.length === 0 && (

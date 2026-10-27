@@ -184,7 +184,7 @@ export default {
   "cards.studyMovedKept": "The {pins} papers you pinned and the {marks} lines you noted are kept with this study.",
 
   // --- The info shelf (InfoShelf.tsx, docs/info/88) ------------------------------
-  "shelf.title": "Briefs",
+  "shelf.title": "Intel",
   "shelf.issues": "Issues",
   "shelf.volumes": "Topic volumes",
   "shelf.issueTitle": "Brief No. {number}",

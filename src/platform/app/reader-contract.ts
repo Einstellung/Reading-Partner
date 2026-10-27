@@ -39,6 +39,11 @@ export interface ViewState {
   // it — a page plus an in-page offset is already exact — so a state that
   // carries one was written by the EPUB reader.
   cfi?: string;
+  // When the position was last kept, epoch ms (reading/reading-position.ts):
+  // when the book was last read, on whichever device. What the phone home
+  // orders the info books by, which are on no topic and so have no
+  // lastOpenedAt. Absent on a position kept before it was recorded.
+  readAt?: number;
 }
 
 export interface ViewStats {

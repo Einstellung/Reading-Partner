@@ -174,7 +174,7 @@ export default {
   "cards.studyMovedKicker": "読書に移しました",
   "cards.studyMovedEnded": "この調査は終了し、もう更新されません。",
   "cards.studyMovedKept": "固定した {pins} 本と書き留めた {marks} 件は、この調査に残します。",
-  "shelf.title": "ブリーフ",
+  "shelf.title": "情報",
   "shelf.issues": "各号",
   "shelf.volumes": "トピック合本",
   "shelf.issueTitle": "第 {number} 号",

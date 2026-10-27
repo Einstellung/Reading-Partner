@@ -90,6 +90,25 @@ test("a seeded position is what the book last says", () => {
   expect(positions.last("book")).toBeNull();
 });
 
+// The time is what the phone home orders the info books by (ViewState.readAt).
+test("with a clock, a kept position says when it was kept and a seeded one keeps its own time", async () => {
+  let now = 1_000;
+  const timed = createReadingPositions({
+    write: async (bookId, state) => {
+      writes.push({ bookId, state });
+    },
+    timer,
+    now: () => now,
+  });
+  timed.seed("book", { ...at(3), readAt: 5 });
+  expect(timed.last("book")?.readAt).toBe(5);
+  timed.keep("book", at(4));
+  now = 2_000;
+  timed.keep("book", { ...at(5), readAt: 5 });
+  await advance(500);
+  expect(writes).toEqual([{ bookId: "book", state: { ...at(5), readAt: 2_000 } }]);
+});
+
 test("two books are kept apart", async () => {
   positions.keep("one", at(1));
   positions.keep("two", at(2));

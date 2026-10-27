@@ -27,6 +27,9 @@ export interface ReadingPositionIo {
   onError?: (e: unknown) => void;
   timer?: WriterTimer;
   exit?: (onExit: () => void) => void;
+  // The clock. When given, every kept position carries the time it was kept
+  // (ViewState.readAt); a seeded one keeps whatever time it was saved with.
+  now?: () => number;
 }
 
 export interface ReadingPositions {
@@ -69,7 +72,7 @@ export function createReadingPositions(io: ReadingPositionIo): ReadingPositions 
       else latest.delete(bookId);
     },
     keep: (bookId, state) => {
-      latest.set(bookId, state);
+      latest.set(bookId, io.now ? { ...state, readAt: io.now() } : state);
       writer.schedule(bookId);
     },
     last: (bookId) => latest.get(bookId) ?? null,
@@ -82,6 +85,7 @@ function livePositions(): ReadingPositions {
     write: saveViewState,
     writeOnExit: saveViewStateOnExit,
     onError: (e) => reportStoreError("reading-position", e),
+    now: Date.now,
   });
 }
 
@@ -91,3 +95,6 @@ export const seedReadingPosition = (bookId: string, state: ViewState | null): vo
   positions.seed(bookId, state);
 export const keepReadingPosition = (bookId: string, state: ViewState): void =>
   positions.keep(bookId, state);
+// What this session last kept or seeded for a book, which a debounced write may
+// not have put on disk yet: the phone home reads it on the way out of a book.
+export const lastReadingPosition = (bookId: string): ViewState | null => positions.last(bookId);

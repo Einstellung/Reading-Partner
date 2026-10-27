@@ -39,6 +39,8 @@ import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import InfoShelf from "./ui/components/info/InfoShelf";
 import PhoneHome from "./ui/components/phone/PhoneHome";
+import { openShelfCard } from "./ui/components/info/info-shelf-live";
+import { useHomeIntel } from "./ui/components/phone/use-home-data";
 import { CompanionCorner } from "./ui/components/companion/CompanionCorner";
 import { useCornerLift } from "./ui/components/companion/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
@@ -140,6 +142,9 @@ export default function PhoneApp({
   // entry carries what back and the title need; the topic and the path are what
   // leaving the book writes to, and only the shelf knew them.
   const [openedBook, setOpenedBook] = useState<PhoneBookOpen | null>(null);
+  // The home's Intel covers (docs/ui/22), read again whenever the registry is:
+  // a pull, and every way out of a book.
+  const homeIntel = useHomeIntel(entries);
   const refreshShelf = useCallback(async () => {
     const [list, registry] = await Promise.all([
       listTopics().catch((): Topic[] => []),
@@ -414,11 +419,23 @@ export default function PhoneApp({
             renderLaunch={(launch) => (
               <PhoneHome
                 launch={launch}
+                intel={homeIntel}
+                // An issue or a volume is on no topic: the reader opens it from the library alone.
+                onOpenIntel={(item) =>
+                  openShelfCard(item.card, homeIntel?.library ?? {}, (bookId, name) =>
+                    openReader({ bookId, name, topicId: "", path: "" }),
+                  )
+                }
                 savedCount={savedArticles?.length ?? null}
                 onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
                 onOpenBriefs={() => setStack((s) => push(s, screen("briefs")))}
+                topics={topics}
                 continueBook={topics === null ? undefined : continueReading(topics, entries)}
                 onContinue={(book) => openReader({ ...book, name: book.title })}
+                // Through the topic list, so the topic's back lands where its label says.
+                onOpenTopic={(topicId) =>
+                  setStack((s) => push(push(s, screen("library")), { kind: "topic", topicId }))
+                }
                 onOpenLibrary={() => setStack((s) => push(s, screen("library")))}
                 settingsAlert={syncReport.alert !== "none"}
                 meals={settings.meals}

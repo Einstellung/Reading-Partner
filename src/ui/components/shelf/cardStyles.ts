@@ -38,6 +38,20 @@ export const BOOK_TITLE = "block truncate font-display text-[15px] leading-[18px
 export const BOOK_AUTHOR =
   "mt-0.5 block h-4 truncate text-[13px] leading-[16px] text-muted-foreground";
 export const BOOK_READ = "mt-1 block truncate text-[12px] leading-[14px] text-faint-foreground";
+// The same bottom line when it holds a mark beside the text (the phone's Lesson
+// mark, the home's New badge), so it is a row. Spelled out rather than appended
+// to BOOK_READ: the two would set `display` twice and which one won would be
+// Tailwind's emission order (docs/pitfall/78).
+export const BOOK_READ_ROW =
+  "mt-1 flex items-center gap-1.5 overflow-hidden text-[12px] leading-[14px] whitespace-nowrap text-faint-foreground";
+
+// The pill on a book nobody has opened yet (the info shelf, the phone home).
+export const NEW_BADGE =
+  "flex-none rounded-full bg-primary px-2 text-[10px] leading-[14px] font-semibold tracking-[0.06em] text-primary-foreground uppercase";
+
+// A section's name over a grid of covers: the info shelf's Issues and Topic
+// volumes, the phone home's Intel and Library.
+export const SECTION_LABEL = "mt-0 mb-3 text-[12px] font-medium tracking-[0.08em] text-faint-foreground uppercase";
 
 // How far in, on the bottom edge of the label. The track is always drawn, so an
 // unopened book is a card with an empty line rather than a shorter card.

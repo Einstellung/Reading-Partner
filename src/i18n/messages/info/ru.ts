@@ -174,7 +174,7 @@ export default {
   "cards.studyMovedKicker": "Перенесено в чтение",
   "cards.studyMovedEnded": "Это исследование завершено и больше не обновляется.",
   "cards.studyMovedKept": "Закреплённые статьи ({pins}) и записанные строки ({marks}) остаются в этом исследовании.",
-  "shelf.title": "Выпуски",
+  "shelf.title": "Разведка",
   "shelf.issues": "Выпуски",
   "shelf.volumes": "Тематические тома",
   "shelf.issueTitle": "Выпуск № {number}",

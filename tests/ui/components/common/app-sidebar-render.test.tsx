@@ -48,8 +48,8 @@ test("the three items and Settings read as text, in order", () => {
 test("with the old briefing's UI off there is no Briefing row", () => {
   const html = render({ oldBriefing: false });
   expect(html).not.toContain(">Briefing<");
-  expect(html.indexOf(">Briefs<")).toBeGreaterThan(html.indexOf(">Today<"));
-  expect(html.indexOf(">Topics<")).toBeGreaterThan(html.indexOf(">Briefs<"));
+  expect(html.indexOf(">Intel<")).toBeGreaterThan(html.indexOf(">Today<"));
+  expect(html.indexOf(">Topics<")).toBeGreaterThan(html.indexOf(">Intel<"));
   expect(html.match(/h-11 w-11/g)?.length).toBe(5);
 });
 

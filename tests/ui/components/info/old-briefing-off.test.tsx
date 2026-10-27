@@ -60,11 +60,15 @@ async function home(over: { oldBriefing?: boolean; savedCount: number | null }) 
     result = render(
       <PhoneHome
         launch={LAUNCH}
+        intel={{ items: [], totals: { issues: 0, volumes: 0 }, library: {} }}
+        onOpenIntel={() => {}}
         savedCount={over.savedCount}
         onOpenSaved={() => {}}
         onOpenBriefs={() => {}}
+        topics={[]}
         continueBook={null}
         onContinue={() => {}}
+        onOpenTopic={() => {}}
         onOpenLibrary={() => {}}
         settingsAlert={false}
         meals={true}
@@ -82,8 +86,8 @@ test("off, the phone home leads with the briefs and shows Saved only when someth
   const empty = await home({ savedCount: 0 });
   expect(empty).not.toContain("Today's briefing");
   expect(empty).not.toContain("Saved");
-  expect(empty.indexOf("Briefs")).toBeGreaterThan(-1);
-  expect(empty.indexOf("Briefs")).toBeLessThan(empty.indexOf("Meals"));
+  expect(empty.indexOf("Intel")).toBeGreaterThan(-1);
+  expect(empty.indexOf("Intel")).toBeLessThan(empty.indexOf("Meals"));
   cleanup();
 
   const kept = await home({ savedCount: 2 });
@@ -94,5 +98,5 @@ test("on, the briefing card is back on top and Saved is always there", async () 
   const text = await home({ savedCount: 0, oldBriefing: true });
   expect(text).toContain("Today's briefing");
   expect(text).toContain("Saved");
-  expect(text.indexOf("Today's briefing")).toBeLessThan(text.indexOf("Briefs"));
+  expect(text.indexOf("Today's briefing")).toBeLessThan(text.indexOf("Intel"));
 });

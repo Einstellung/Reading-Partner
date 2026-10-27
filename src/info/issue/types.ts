@@ -81,6 +81,8 @@ export interface VolumeEntry {
   bookId: string;
   searchId: string | null;
   createdAt: number;
+  /** Pieces bound into it, for the line under its cover; absent on a row written without it. */
+  items?: number;
 }
 
 /**

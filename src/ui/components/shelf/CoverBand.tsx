@@ -24,13 +24,17 @@ const PLACEHOLDER =
   "flex h-full w-full items-start justify-start overflow-hidden bg-secondary p-2 text-lg leading-none font-medium text-secondary-foreground";
 
 // `revision` is passed through to useCovers: a host that has just put a book on
-// the device bumps it and the band asks for that cover again.
+// the device bumps it and the band asks for that cover again. `fallback` is an
+// image for a book that turns out to have no cover, in place of the initial: a
+// topic volume, whose cover the home draws from what its card knows.
 export default function CoverBand({
   tiles,
   revision = 0,
+  fallback = null,
 }: {
   tiles: CoverTile[];
   revision?: number;
+  fallback?: string | null;
 }) {
   const { covers, markFailed } = useCovers(
     tiles.map((t) => t.file),
@@ -64,7 +68,7 @@ export default function CoverBand({
     >
       {tiles.map((tile) => {
         const path = tile.file.path;
-        const url = covers[path];
+        const url = covers[path] === null && fallback ? fallback : covers[path];
         return (
           <span key={path} className="relative block overflow-hidden" style={tileStyle(tile)}>
             {url === undefined ? (

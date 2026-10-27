@@ -174,7 +174,7 @@ export default {
   "cards.studyMovedKicker": "읽기로 옮겼어요",
   "cards.studyMovedEnded": "이 조사는 끝났고 더 이상 업데이트되지 않아요.",
   "cards.studyMovedKept": "고정한 {pins}편과 적어 둔 {marks}건은 이 조사에 남겨 둬요.",
-  "shelf.title": "브리프",
+  "shelf.title": "정보",
   "shelf.issues": "호",
   "shelf.volumes": "주제 합본",
   "shelf.issueTitle": "제 {number}호",

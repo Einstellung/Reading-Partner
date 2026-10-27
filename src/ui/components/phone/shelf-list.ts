@@ -109,6 +109,8 @@ export interface ContinueBook {
   bookId: string;
   path: string;
   title: string;
+  // The topic's row for it, which is what its cover is drawn from.
+  file: FileRef;
 }
 
 export function continueReading(
@@ -127,6 +129,7 @@ export function continueReading(
     bookId: recent.file.hash,
     path: recent.file.path,
     title: displayFileTitle(recent.file.name),
+    file: recent.file,
   };
 }
 
