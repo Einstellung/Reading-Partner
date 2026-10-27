@@ -6,7 +6,7 @@
 // Out of scope (docs/ui/81): info/meals/screen/onboarding.ts (the scripted
 // questions and their answer options) is not an area this catalog covers — see
 // the migration report. method-screen.ts's worked formulas and citations stay
-// English; only its section titles and the three standing notes are here.
+// English; only its section titles and the standing notes are here.
 
 export default {
   title: "Meals",
@@ -39,6 +39,12 @@ export default {
   "section.splitting": "Splitting across meals",
   "section.foodNumbers": "Food numbers",
   "section.weightChange": "When your weight changes",
+  vitaminDTitle: "A note on vitamin D",
+  vitaminDNote:
+    "Food rarely reaches the recommended vitamin D intake on its own, even with fish, eggs and milk, and milk is not fortified in most of Europe or China. " +
+    "A common preventive supplement amount is 400 IU (10 micrograms) a day, taken with a meal that has some fat; the usual upper limit for adults is 4000 IU a day. " +
+    "You may need more if you use a lot of sunscreen, stay indoors, live far from the equator in winter, have darker skin, carry more body weight or are older, and a blood test for 25-hydroxyvitamin D shows where you stand; talk to a doctor or pharmacist before starting if you have kidney stones, high blood calcium or sarcoidosis, or take medicines such as diuretics or anti-seizure drugs. " +
+    "Meals does not put supplements in the plan or the shopping list, and this note is general information, not medical advice.",
   medicalNote:
     "Not medical advice. This is a meal plan, not a diagnosis or treatment. Talk to a doctor or registered " +
     "dietitian before changing how you eat if you are pregnant or breastfeeding, under 18, have diabetes, " +

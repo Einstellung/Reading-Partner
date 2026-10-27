@@ -4,7 +4,7 @@
 // Run: scripts/t.sh tests/info/meals/screen/method-screen.test.ts
 
 import { expect, test } from "bun:test";
-import { foodTableRows, linkSegments, methodSections } from "../../../../src/info/meals/screen/method-screen";
+import { foodTableRows, linkSegments, methodSections, vitaminDNote } from "../../../../src/info/meals/screen/method-screen";
 import { FOODS } from "../../../../src/info/meals/nutrition/foods";
 import { computeTargets } from "../../../../src/info/meals/nutrition/targets";
 import { profile } from "../fixtures/week";
@@ -95,4 +95,20 @@ test("the food table lists every food with where its numbers come from", () => {
   const rows = foodTableRows();
   expect(rows).toHaveLength(FOODS.length);
   expect(rows.every((r) => r.source.length > 0)).toBe(true);
+});
+
+test("the vitamin D note is one standing note, not a numbered section, and not tied to the plan", () => {
+  const note = vitaminDNote();
+  expect(note.title).toBe("A note on vitamin D");
+  expect(note.body).toContain("400 IU");
+  expect(note.body).toContain("4000 IU");
+  expect(note.body).toContain("25-hydroxyvitamin D");
+  expect(note.body).toContain("not medical advice");
+  expect(note.body).toContain("does not put supplements in the plan or the shopping list");
+  expect(note.body).not.toMatch(/sun ?bath|sunlight|\bsun\b/i);
+  // Present once: no numbered section repeats it.
+  const all = sections()
+    .flatMap((s) => [s.title, s.formula, s.yours, ...s.sources.map((x) => x.text)])
+    .join("\n");
+  expect(all).not.toMatch(/vitamin D/i);
 });
