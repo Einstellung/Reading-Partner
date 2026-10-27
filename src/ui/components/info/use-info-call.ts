@@ -55,7 +55,8 @@ import {
   applyLabProposal,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
-import { applyDraft, type Applied } from "../../../info/meals/apply";
+import { applyDraft, checkNote, type Applied } from "../../../info/meals/apply";
+import { planNote } from "../../../info/meals/screen/plan-note";
 import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../info/meals/cards";
 import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
 import { todayLocal } from "../../../info/collect/store";
@@ -516,12 +517,18 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         liveMealsPorts({ today: () => todayLocal(), changed: () => onMealsChanged?.() }),
       );
       if (!result.ok) return result;
+      // What the draft rules still find goes on the meals page as a note the
+      // reader can wipe away; the plan is written either way.
+      planNote.show(result.check ?? null);
       const applied: MealsDraftCardData = { ...card, phase: "applied" };
       setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
       patchThreadMessage(bookId, anchor.threadId, found.ts, {
         parts: [toPersistedCardPart(cardId, applied)],
       });
-      if (!fromTool && result.shown) noteCardTurn(result.note, nextCardId("meals"), result.shown);
+      const broken = checkNote(result.check);
+      if (!fromTool && result.shown) {
+        noteCardTurn(broken ? `${result.note} ${broken}` : result.note, nextCardId("meals"), result.shown);
+      }
       return result;
     },
     [bookId, anchor.threadId, noteCardTurn, onMealsChanged],

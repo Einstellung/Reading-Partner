@@ -16,7 +16,16 @@ import { Type } from "@earendil-works/pi-ai";
 import { getLocale, t } from "../../i18n";
 import type { AgentTool } from "../../legion/durable/contract";
 import { asStrings } from "../../platform/std/json";
-import { mealWords, recordDeviation, refreshPhotos, saveProfile, type Applied, type MealsPorts } from "./apply";
+import {
+  checkNote,
+  mealWords,
+  recordDeviation,
+  refreshPhotos,
+  saveProfile,
+  type Applied,
+  type MealsPorts,
+  type PlanCheck,
+} from "./apply";
 import type { MealsCard, MealsDraftCardData } from "./cards";
 import { boxName, profileFieldsLine } from "./screen/view";
 import { FOOD_TAGS, FOODS, foodAllowed, foodById } from "./nutrition/foods";
@@ -90,6 +99,9 @@ export interface MealsToolDeps {
   currentDraft?(): MealsDraftCardData | null;
   // Apply that card, as its button does. Null when there is none.
   applyDraft?(): Promise<Applied | null>;
+  // What the draft rules found in the week a profile change re-solved, null
+  // when nothing was checked: the meals page's note (screen/plan-note.ts).
+  onPlanCheck?(check: PlanCheck | null): void;
 }
 
 // --- the instruction ---------------------------------------------------------
@@ -551,7 +563,9 @@ export function buildApplyMealPlanTool(deps: MealsToolDeps): AgentTool {
     effect: "write",
     description:
       "Save the draft on the card, only when they confirm it in words ('就这样', '可以', 'looks good'). The " +
-      "program solves the grams and writes the plan and the shopping list; the card collapses to say so.",
+      "program solves the grams and writes the plan and the shopping list; the card collapses to say so. " +
+      "The plan is checked again against their profile as it is now; when it breaks a plan rule, it is " +
+      "saved all the same and the result names the rules.",
     parameters: Type.Object({}),
     execute: async () => {
       const applied = deps.applyDraft ? await deps.applyDraft() : null;
@@ -559,7 +573,11 @@ export function buildApplyMealPlanTool(deps: MealsToolDeps): AgentTool {
         return { receipt: null, text: "No draft card is waiting to be confirmed. Draft one with propose_meal_plan first." };
       }
       if (!applied.ok) return { receipt: null, text: "The plan could not be saved. Nothing changed; tell them so." };
-      return { text: `${applied.note} Say it in one line.`, receipt: { label: t("meals.receipt.appliedPlan"), summary: "" } };
+      const broken = checkNote(applied.check);
+      return {
+        text: `${applied.note} Say it in one line.${broken ? ` ${broken}` : ""}`,
+        receipt: { label: t("meals.receipt.appliedPlan"), summary: "" },
+      };
     },
   };
 }
@@ -644,7 +662,8 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       "too much work. Send only the fields that changed. Lists (trainingDays, dislikes, " +
       "shops, kitchen) replace the whole list, so send the full list as it now stands. `notes` " +
       "replaces what they have said about their meals in their own words. It writes at once and " +
-      "re-solves the week.",
+      "re-solves the week; when the re-solved week breaks a plan rule, it is kept all the same and the " +
+      "result names the rules.",
     parameters: Type.Object({
       weightKg: Type.Optional(Type.Number()),
       heightCm: Type.Optional(Type.Number()),
@@ -706,15 +725,18 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       if (!profile && notes === undefined) {
         return { receipt: null, text: "None of those fields was usable, so nothing changed." };
       }
-      const { ok, targets } = await saveProfile(profile ?? state.charter.profile, deps.ports, notes);
+      const { ok, targets, check } = await saveProfile(profile ?? state.charter.profile, deps.ports, notes);
       if (!ok) return { receipt: null, text: "The change could not be written. Nothing changed." };
+      deps.onPlanCheck?.(check ?? null);
       const numbers = targets
         ? ` Daily targets now — ${targetsLine("training day", targets.training)}; ${targetsLine("rest day", targets.rest)}.`
         : "";
+      const broken = checkNote(check);
       return {
         text:
           `Saved.${numbers}${state.plan ? " The week's grams are re-solved and the list follows." : ""}` +
-          " Say it in one line; the numbers are on their screen.",
+          " Say it in one line; the numbers are on their screen." +
+          (broken ? ` ${broken}` : ""),
         receipt: { label: t("meals.receipt.updatedProfile"), summary: profileFieldsLine(Object.keys(args)) },
       };
     },

@@ -5,7 +5,8 @@
 // where those ports become loadMeals and the four writes. The card sink and
 // the screen's reload come from whoever is running the turn.
 
-import type { MealsPorts } from "./apply";
+import type { MealsPorts, PlanCheck } from "./apply";
+import { planNote } from "./screen/plan-note";
 import type { MealsCard, MealsDraftCardData } from "./cards";
 import { ingredientImageUrl } from "./photos/images";
 import { mealsCanDraw, mealsDishDrawer } from "./photos/dish-draw-sweep";
@@ -125,6 +126,8 @@ export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
     onMealsCard: opts.onMealsCard,
     ...(opts.currentDraft ? { currentDraft: opts.currentDraft } : {}),
     ...(opts.applyDraft ? { applyDraft: opts.applyDraft } : {}),
+    // A profile change said in any conversation reaches the meals page's note.
+    onPlanCheck: (check: PlanCheck | null) => planNote.show(check),
   };
   return buildMealsCatalogTools({ ...deps, ports });
 }

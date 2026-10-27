@@ -24,10 +24,10 @@ import type {
   WeekPlan,
 } from "./plan/types";
 import { applyDeviation, isoWeekday } from "./plan/week";
-import { checkDraft } from "./planner/checks";
+import { checkDraft, type DraftProblem } from "./planner/checks";
 import { planLibrary } from "./planner/library";
 import { planDayTargets, prepDayTargets } from "./planner/solve";
-import { resolvePlannerWeek, solvePlannerRecord, weekFromDraft } from "./planner/to-week";
+import { checkPlannerRecord, plannerSolveOf, resolvePlannerWeek, weekFromDraft } from "./planner/to-week";
 import { plannerShoppingList } from "./planner/trip";
 
 export interface MealsPorts {
@@ -64,9 +64,22 @@ export interface MealsPorts {
   changed(): void;
 }
 
+/**
+ * What the draft rules (planner/checks.ts) still find in a plan that was
+ * written: after Apply on a draft checked against an older profile, or after a
+ * profile change re-solved the stored draft. It only informs; the write happens
+ * as it would without it. `start` is the date Day 1 falls on.
+ */
+export interface PlanCheck {
+  start: string;
+  problems: DraftProblem[];
+}
+
 export interface Applied {
   // False when nothing was written.
   ok: boolean;
+  // The draft rules' problems with what was written (applyDraft only).
+  check?: PlanCheck;
   // What the AI is told the reader just did. Empty when nothing happened.
   note: string;
   // What the reader is shown in place of the note, after the plan card's Apply.
@@ -89,17 +102,23 @@ export function resolvedWeek(
   charter: MealsCharter | null,
   region: Region,
   today: string,
-): { plan: WeekPlan; shopping: ShoppingState } {
+): { plan: WeekPlan; shopping: ShoppingState; check?: PlanCheck } {
   const targets = targetsOf(charter, region);
   const people = charter?.profile.people ?? 1;
   if (plan.planner) {
     // A planner plan is solved again from its draft (planner/to-week.ts); the
     // weekly solver would re-read its stored grams as a template. Its list is
     // whole packs; a draft that no longer solves keeps its plan and its list.
-    const again = targets && charter ? solvePlannerRecord(plan, charter.profile, targets) : null;
-    if (!again || !charter || !targets) return { plan, shopping };
+    const checked = targets && charter ? checkPlannerRecord(plan, charter.profile, targets) : null;
+    const check = checked ? { check: { start: plan.planner.start, problems: checked.result.problems } } : {};
+    const again = plannerSolveOf(checked);
+    if (!again || !charter || !targets) return { plan, shopping, ...check };
     const next = resolvePlannerWeek(plan, charter.profile, targets, again);
-    return { plan: next, shopping: reconcileShoppingList(shopping, plannerShoppingList(again.solved, again.draft, next, people)) };
+    return {
+      plan: next,
+      shopping: reconcileShoppingList(shopping, plannerShoppingList(again.solved, again.draft, next, people)),
+      ...check,
+    };
   }
   const solved = targets && charter ? solvePlan(plan, targets, charter.profile) : plan;
   return { plan: solved, shopping: reconcileShoppingList(shopping, deriveShoppingList(solved, today, people)) };
@@ -111,13 +130,14 @@ export function resolvedWeek(
  * same write. No model is involved.
  *
  * The targets it now gives, or null when nothing was written or the reader
- * withheld body data.
+ * withheld body data; and, when the stored plan came from a draft, what the
+ * draft rules find in it now (written all the same).
  */
 export async function saveProfile(
   profile: Profile,
   ports: MealsPorts,
   text?: string,
-): Promise<{ ok: boolean; targets: Targets | null }> {
+): Promise<{ ok: boolean; targets: Targets | null; check?: PlanCheck }> {
   const state = await ports.current();
   const charter: MealsCharter = {
     profile,
@@ -127,14 +147,15 @@ export async function saveProfile(
   const week = state.plan
     ? resolvedWeek(state.plan, state.shopping, charter, ports.region(), ports.today())
     : null;
-  if (week) week.plan = { ...week.plan, revision: week.plan.revision + 1 };
+  const check = week?.check ? { check: week.check } : {};
+  const written = week ? { plan: { ...week.plan, revision: week.plan.revision + 1 }, shopping: week.shopping } : null;
   try {
-    await ports.saveCharter(charter, week);
+    await ports.saveCharter(charter, written);
   } catch {
     return { ok: false, targets: null };
   }
   ports.changed();
-  return { ok: true, targets: targetsOf(charter, ports.region()) };
+  return { ok: true, targets: targetsOf(charter, ports.region()), ...check };
 }
 
 /**
@@ -179,7 +200,13 @@ export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): P
     () => {},
     () => {},
   );
-  return { ok: true, note: draftNote(card, shopping), shown: draftApplied(card, shopping), pending };
+  return {
+    ok: true,
+    note: draftNote(card, shopping),
+    shown: draftApplied(card, shopping),
+    check: { start: card.startDate, problems: result.problems },
+    pending,
+  };
 }
 
 async function canDrawHere(ports: MealsPorts): Promise<boolean> {
@@ -315,6 +342,27 @@ export function draftNote(card: MealsDraftCardData, shopping: ShoppingState): st
 /** The row the draft's Apply leaves (cards.ts MealsAppliedCardData): it draws nothing. */
 export function draftApplied(card: MealsDraftCardData, shopping: ShoppingState): MealsAppliedCardData {
   return { kind: "meals-applied", adjustment: false, changed: [], ...stillToBuy(shopping), draft: card.draftId };
+}
+
+/**
+ * One line for the model when a plan was written although the draft rules
+ * still find problems in it, so it does not tell the reader all is well. Empty
+ * when there are none. The reader sees the same on the meals page
+ * (screen/plan-note.ts).
+ */
+export function checkNote(check: PlanCheck | null | undefined): string {
+  if (!check?.problems.length) return "";
+  const byRule = new Map<string, Set<string>>();
+  for (const p of check.problems) {
+    const days = byRule.get(p.rule) ?? new Set<string>();
+    byRule.set(p.rule, days);
+    if (p.day !== undefined) days.add(p.day === 0 ? "the prep day" : `Day ${p.day}`);
+  }
+  const rules = [...byRule].map(([rule, days]) => (days.size ? `${rule} (${[...days].join(", ")})` : rule));
+  return (
+    `The saved plan still breaks these plan rules: ${rules.join("; ")}. A note on their Meals screen says so; ` +
+    "do not tell them the plan is all fine, and offer to change those days if they want."
+  );
 }
 
 export function deviationNote(deviation: Deviation, attention: readonly MealRef[]): string {
