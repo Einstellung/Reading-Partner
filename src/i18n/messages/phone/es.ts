@@ -51,8 +51,6 @@ export default {
   "home.intelEmpty": "Aún no hay nada. Dile a {name} un tema que sigues y el primer número llega a la mañana siguiente.",
   "home.studyLine": "Estudio · versión {n}",
   "home.volumeLine": "Volumen temático",
-  "home.mealsWeek": "Esta semana",
-  "home.mealsFoot": "Plan y lista de la compra",
   "home.savedFoot": { one: "artículo guardado para leer", other: "artículos guardados para leer" },
   "home.continue": "Continuar",
   "home.continuePercent": "Continuar · {percent} %",

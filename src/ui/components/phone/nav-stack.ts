@@ -23,6 +23,7 @@ export type ScreenKind =
   | "meals-shopping"
   | "meals-day"
   | "meals-recipe"
+  | "meals-prep"
   | "meals-method"
   | "meals-onboarding"
   | "saved"
@@ -50,6 +51,9 @@ export type PhoneScreen =
   | { kind: "meals-day"; date: string }
   // One made meal's recipe, pushed over its day.
   | { kind: "meals-recipe"; date: string; meal: MealKey }
+  // The plan's batch cook (docs/671 备餐页), by its prep session's id. Pushed
+  // over the Meals page, so back lands there wherever it was opened from.
+  | { kind: "meals-prep"; session: string }
   | { kind: "meals-method" }
   | { kind: "meals-onboarding" }
   | { kind: "saved" }
@@ -67,7 +71,7 @@ export type PhoneScreen =
 
 export type PayloadFreeKind = Exclude<
   ScreenKind,
-  "savedArticle" | "topic" | "reader" | "lesson" | "meals-day" | "meals-recipe"
+  "savedArticle" | "topic" | "reader" | "lesson" | "meals-day" | "meals-recipe" | "meals-prep"
 >;
 
 export type NavStack = readonly PhoneScreen[];
@@ -134,6 +138,13 @@ export function goTo(stack: NavStack, next: PhoneScreen): NavStack {
     if (stack[i].kind === next.kind) return stack.slice(0, i + 1);
   }
   return push(stack, next);
+}
+
+// Into the prep page: over the Meals page, which is unwound to when it is on the
+// stack and pushed when it is not, so back from the prep is always the Meals
+// page (docs/671 备餐页) — from the home tile and from a planning chat alike.
+export function openPrep(stack: NavStack, session: string): NavStack {
+  return push(goTo(stack, { kind: "meals" }), { kind: "meals-prep", session });
 }
 
 // The screen that draws the page itself: the top one, or the one below Settings

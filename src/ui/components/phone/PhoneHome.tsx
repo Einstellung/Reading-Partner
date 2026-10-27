@@ -108,12 +108,18 @@ export default function PhoneHome({
   const tiles: ReactNode[] = [];
   if (meals) {
     tiles.push(
-      <button key="meals" className={TILE} onClick={onOpenMeals}>
+      // The batch cook's state (info/meals/screen/batch-cook.ts): plan one, the
+      // prep ahead, or the next meal; a tap goes where the state says.
+      <button key="meals" className={TILE} onClick={launch.onMealsTile ?? onOpenMeals}>
         <span className={KICKER}>{t("phone.home.mealsLabel")}</span>
         <span className={TILE_MID}>
-          <span className="font-serif text-[19px] leading-tight text-foreground">{t("phone.home.mealsWeek")}</span>
+          {launch.mealsTile ? (
+            <span className="line-clamp-2 font-serif text-[19px] leading-tight text-foreground">{launch.mealsTile.mid}</span>
+          ) : (
+            <span className="block h-[24px] w-20 animate-pulse rounded-md bg-muted" aria-hidden="true" />
+          )}
         </span>
-        <span className={TILE_FOOT}>{t("phone.home.mealsFoot")}</span>
+        <span className={TILE_FOOT}>{launch.mealsTile?.foot ?? ""}</span>
       </button>,
     );
   }

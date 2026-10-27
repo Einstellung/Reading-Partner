@@ -473,7 +473,7 @@ export default {
   "ask.aboutShopping": "Ask about shopping",
   "ask.aboutToday": "Ask about today",
   "ask.aboutWeekday": "Ask about {weekday}",
-  "ask.aboutThisWeek": "Ask about this week",
+  "ask.aboutPlan": "Ask about the plan",
 
   // --- Misc (use-info-home.ts) -------------------------------------------------
   "errors.noProvider": "No AI provider configured (Settings).",

@@ -457,7 +457,7 @@ export default {
   "ask.aboutShopping": "Спросить о покупках",
   "ask.aboutToday": "Спросить о сегодняшнем дне",
   "ask.aboutWeekday": "Спросить о {weekday}",
-  "ask.aboutThisWeek": "Спросить об этой неделе",
+  "ask.aboutPlan": "Спросить о плане",
 
   "errors.noProvider": "Провайдер ИИ не настроен (Настройки).",
   "errors.extractorFailed": "Не удалось загрузить модуль извлечения статей. Попробуйте снова.",

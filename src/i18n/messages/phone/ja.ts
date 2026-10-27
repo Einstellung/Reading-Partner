@@ -47,8 +47,6 @@ export default {
   "home.intelEmpty": "まだ何もありません。追いたいトピックを {name} に伝えると、翌朝に第 1 号が届きます。",
   "home.studyLine": "スタディ · 第 {n} 版",
   "home.volumeLine": "トピック合本",
-  "home.mealsWeek": "今週",
-  "home.mealsFoot": "献立と買い物リスト",
   "home.savedFoot": { other: "件の記事を保存中" },
   "home.continue": "続きを読む",
   "home.continuePercent": "続きを読む · {percent}%",

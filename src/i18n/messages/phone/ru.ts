@@ -56,8 +56,6 @@ export default {
   "home.intelEmpty": "Пока ничего нет. Расскажите {name} о теме, за которой следите, и первый выпуск придёт на следующее утро.",
   "home.studyLine": "Исследование · версия {n}",
   "home.volumeLine": "Тематический том",
-  "home.mealsWeek": "Эта неделя",
-  "home.mealsFoot": "План и список покупок",
   "home.savedFoot": { one: "статья отложена для чтения", few: "статьи отложены для чтения", many: "статей отложено для чтения", other: "статьи отложено для чтения" },
   "home.continue": "Продолжить",
   "home.continuePercent": "Продолжить · {percent}%",

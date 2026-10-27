@@ -89,6 +89,9 @@ export interface Applied {
   // Work still running after the note was handed back: starting the photograph
   // run. A test awaits it.
   pending?: Promise<void>;
+  // applyDraft only: the written plan's prep session, which the host opens the
+  // prep page on; null when the plan cooks everything on the day.
+  session?: string | null;
 }
 
 const NOTHING: Applied = { ok: false, note: "" };
@@ -255,7 +258,27 @@ export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): P
     shown: draftApplied(card, shopping),
     check: { start: card.startDate, problems: result.problems },
     pending,
+    session: result.draft.sessions[0]?.id ?? null,
   };
+}
+
+/**
+ * The prep page's Done (docs/671 备餐页 7): the stored plan records that its
+ * prep is cooked. The meals after it already eat the pots; nothing else moves.
+ * False when there is no planner plan to mark.
+ */
+export async function markPrepDone(ports: MealsPorts): Promise<boolean> {
+  const state = await ports.current();
+  const plan = state.plan;
+  if (!plan?.planner) return false;
+  const next: WeekPlan = { ...plan, planner: { ...plan.planner, preppedAt: ports.now() }, revision: plan.revision + 1 };
+  try {
+    await ports.savePlan(next, state.shopping);
+  } catch {
+    return false;
+  }
+  ports.changed();
+  return true;
 }
 
 async function canDrawHere(ports: MealsPorts): Promise<boolean> {

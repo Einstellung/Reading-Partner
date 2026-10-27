@@ -51,8 +51,6 @@ export default {
   "home.intelEmpty": "Noch keine Intel. Nenne {name} ein Thema, das du verfolgst, und die erste Ausgabe kommt am nächsten Morgen.",
   "home.studyLine": "Studie · Version {n}",
   "home.volumeLine": "Themenband",
-  "home.mealsWeek": "Diese Woche",
-  "home.mealsFoot": "Plan und Einkaufsliste",
   "home.savedFoot": { one: "Artikel zum Lesen gespeichert", other: "Artikel zum Lesen gespeichert" },
   "home.continue": "Weiterlesen",
   "home.continuePercent": "Weiterlesen · {percent} %",

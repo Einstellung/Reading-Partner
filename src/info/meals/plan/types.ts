@@ -203,6 +203,9 @@ export interface PlannerRecord {
   // they asked for), the same shape; a redraft after a profile change keeps
   // them. Absent on plans written before it was kept.
   picks?: unknown;
+  // When the reader tapped Done on the prep page (docs/671 备餐页). A prep
+  // whose day is past counts as done without it: the plan is the record.
+  preppedAt?: number;
 }
 
 export interface WeekPlan {

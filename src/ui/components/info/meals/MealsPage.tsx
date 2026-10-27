@@ -22,7 +22,14 @@ import {
   shoppingStatus,
 } from "../../../../info/meals/screen/list-order";
 import { EMPTY_SHOPPING } from "../../../../info/meals/plan/types";
-import { planExhausted } from "../../../../info/meals/plan/week";
+import {
+  batchCookEntry,
+  entryCardView,
+  prepRowDate,
+  prepRowText,
+  type EntryAction,
+  type PrepSlot,
+} from "../../../../info/meals/screen/batch-cook";
 import {
   dishPicture,
   dishThumbnails,
@@ -43,6 +50,7 @@ import {
 } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
 import { MealsPlanNote } from "./MealsPlanNote";
+import { BatchCookCard } from "./MealsBatchCook";
 
 export interface MealsHomeProps {
   // Null while info-meals.json is being read: the screen holds rather than
@@ -52,7 +60,12 @@ export interface MealsHomeProps {
   // until the run lands, and a week without it is drawn from its ingredients.
   photos: PhotoCache;
   today: string;
-  onPlanWeek: () => void;
+  // The hour of today, which decides whether the next meal is lunch or dinner.
+  // The host's clock; tests pass one.
+  hour?: number;
+  // The Meals planning chat, opened with its kickoff.
+  onPlan: () => void;
+  onOpenPrep: (session: string) => void;
   onAsk: () => void;
   onOpenShopping: () => void;
   onOpenDay: (date: string) => void;
@@ -106,18 +119,25 @@ function DayCard({
   view,
   photos,
   big,
+  prep,
   onOpen,
+  onOpenPrep,
 }: {
   view: DayView;
   photos: PhotoCache;
   big: boolean;
+  // The plan's batch cook when it is on this day: the card carries its row.
+  prep: PrepSlot | null;
   onOpen: () => void;
+  onOpenPrep: (session: string) => void;
 }) {
   return (
+    <div className="overflow-hidden rounded-2xl border border-border-soft bg-card">
+    {prep && <PrepRow prep={prep} onOpen={() => onOpenPrep(prep.session)} />}
     <button
       type="button"
       onClick={onOpen}
-      className="block w-full rounded-2xl border border-border-soft bg-card p-5 text-left can-hover:hover:bg-secondary-faint coarse:min-h-[44px]"
+      className="block w-full p-5 text-left can-hover:hover:bg-secondary-faint coarse:min-h-[44px]"
     >
       <div className="flex items-center gap-2">
         <span
@@ -169,6 +189,21 @@ function DayCard({
           );
         })}
       </ul>
+    </button>
+    </div>
+  );
+}
+
+/** 「备餐 · 下午 · 动手 72 分 · 共 95 分」, a button into the prep page. */
+function PrepRow({ prep, onOpen }: { prep: PrepSlot; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex min-h-[44px] w-full items-center gap-2 border-b border-border-subtle bg-secondary-faint px-5 py-2.5 text-left text-[14px] text-foreground can-hover:hover:bg-muted-soft"
+    >
+      <span className="min-w-0 flex-1 tabular-nums">{prepRowText(prep)}</span>
+      <Chevron />
     </button>
   );
 }
@@ -232,11 +267,15 @@ function ShoppingCard({
 function WeekRow({
   view,
   photos,
+  prep,
   onOpen,
+  onOpenPrep,
 }: {
   view: DayView;
   photos: PhotoCache;
+  prep: PrepSlot | null;
   onOpen: () => void;
+  onOpenPrep: (session: string) => void;
 }) {
   const t = useT();
   const lead = leadMeal(view);
@@ -290,6 +329,11 @@ function WeekRow({
         )}
         <Chevron />
       </button>
+      {prep && (
+        <div className="mb-2 overflow-hidden rounded-lg border border-border-subtle">
+          <PrepRow prep={prep} onOpen={() => onOpenPrep(prep.session)} />
+        </div>
+      )}
     </li>
   );
 }
@@ -306,11 +350,20 @@ export function MealsHome(props: MealsHomeProps) {
   // settled here rather than carried: nothing is ticked from this screen.
   const lines = linesInOrder(shopping, orderShoppingLines(shopping));
   const preview = shoppingPreview(shopping, lines);
-  const exhausted = planExhausted(plan, today);
+  const entry = batchCookEntry(state, today, props.hour ?? new Date().getHours());
+  const card = entryCardView(entry, today);
+  const prepDate = prepRowDate(entry);
+  const prep = entry?.kind === "prep" ? entry.prep : entry?.kind === "next" ? entry.prep : null;
+  const prepOn = (date: string) => (prep && prepDate === date ? prep : null);
+  const act = (action: EntryAction) => {
+    if (action.kind === "plan") props.onPlan();
+    else if (action.kind === "prep") props.onOpenPrep(action.session);
+    else if (action.kind === "day") props.onOpenDay(action.date);
+  };
 
   return (
     <MealsColumn>
-      <MealsHeader title={t("meals.title")} askLabel={t("meals.askWeek")} onAsk={props.onAsk} />
+      <MealsHeader title={t("meals.title")} askLabel={t("meals.askPlan")} onAsk={props.onAsk} />
       {state !== null && (
         <div className="mb-3 flex flex-wrap gap-2">
           <Button variant="outline" size="chip" onClick={props.onReplayOnboarding}>
@@ -329,21 +382,15 @@ export function MealsHome(props: MealsHomeProps) {
         </div>
       )}
       {plan && <MealsPlanNote today={today} />}
+      {card && (
+        <div className="mb-4">
+          <BatchCookCard view={card} onAction={act} />
+        </div>
+      )}
 
       {state === null ? (
         <div className="h-24" />
-      ) : !plan || head.length === 0 ? (
-        <div className="rounded-2xl border border-border-soft bg-card p-5">
-          <p className="m-0 font-display text-[17px] leading-relaxed text-foreground">
-            {t("meals.nothingPlanned")}
-          </p>
-          <div className="mt-4">
-            <Button variant="cta" onClick={props.onPlanWeek}>
-              {t("meals.planThisWeek")}
-            </Button>
-          </div>
-        </div>
-      ) : (
+      ) : !plan || head.length === 0 ? null : (
         <>
           <div className="flex flex-col gap-4">
             {lines.length > 0 && (
@@ -360,7 +407,9 @@ export function MealsHome(props: MealsHomeProps) {
                 view={head[0]}
                 photos={photos}
                 big
+                prep={prepOn(head[0].day.date)}
                 onOpen={() => props.onOpenDay(head[0].day.date)}
+                onOpenPrep={props.onOpenPrep}
               />
             )}
             {head[1] && (
@@ -368,7 +417,9 @@ export function MealsHome(props: MealsHomeProps) {
                 view={head[1]}
                 photos={photos}
                 big={false}
+                prep={prepOn(head[1].day.date)}
                 onOpen={() => props.onOpenDay(head[1].day.date)}
+                onOpenPrep={props.onOpenPrep}
               />
             )}
           </div>
@@ -376,7 +427,7 @@ export function MealsHome(props: MealsHomeProps) {
           {later.length > 0 && (
             <section className="mt-6">
               <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
-                {t("meals.restOfWeek")}
+                {t("meals.restOfPlan")}
               </h2>
               <ul className="m-0 flex list-none flex-col p-0">
                 {later.map((v) => (
@@ -384,25 +435,15 @@ export function MealsHome(props: MealsHomeProps) {
                     key={v.day.date}
                     view={v}
                     photos={photos}
+                    prep={prepOn(v.day.date)}
                     onOpen={() => props.onOpenDay(v.day.date)}
+                    onOpenPrep={props.onOpenPrep}
                   />
                 ))}
               </ul>
             </section>
           )}
 
-          {exhausted && (
-            <div className="mt-6 rounded-2xl border border-border-soft bg-card p-5">
-              <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">
-                {t("meals.weekRunsOut")}
-              </p>
-              <div className="mt-3">
-                <Button variant="cta" size="chip" className="px-3.5 py-1.5" onClick={props.onPlanWeek}>
-                  {t("meals.planNextWeek")}
-                </Button>
-              </div>
-            </div>
-          )}
         </>
       )}
       <p className="m-0 mt-7 text-[11px] leading-snug text-faint-foreground">{footNote()}</p>

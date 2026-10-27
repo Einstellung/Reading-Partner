@@ -58,8 +58,6 @@ export default {
   "home.intelEmpty": "No intel yet. Tell {name} a topic you follow and the first issue comes the morning after.",
   "home.studyLine": "Study · version {n}",
   "home.volumeLine": "Topic volume",
-  "home.mealsWeek": "This week",
-  "home.mealsFoot": "Plan and shopping list",
   "home.savedFoot": { one: "article kept to read", other: "articles kept to read" },
   "home.continue": "Continue",
   "home.continuePercent": "Continue · {percent}%",

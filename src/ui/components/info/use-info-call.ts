@@ -106,6 +106,9 @@ export interface InfoCallOptions {
   onMealsChanged?: () => void;
   // Open a meals screen from a card's link (the draft card's 查看计划 and 采购单).
   onOpenMeals?: (screen: "meals" | "meals-shopping") => void;
+  // A meal plan was just applied (the draft card's button or apply_meal_plan):
+  // the host opens its batch cook, or the Meals page when it cooks nothing ahead.
+  onMealsApplied?: (session: string | null) => void;
 }
 
 export interface InfoCallController {
@@ -134,8 +137,24 @@ export function infoStickKey(dateKey: string, threadId: string): string {
 
 const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
 
+/**
+ * After a plan is applied: the host opens the plan's batch cook (or the Meals
+ * page for null), and the call gets out of its way the way a card that opens
+ * content does (docs/ui/22): into the pip where there is one, hung up where
+ * the chat is the whole screen.
+ */
+export function leaveForAppliedPlan(
+  session: string | null,
+  pipCards: boolean,
+  to: { open: (session: string | null) => void; swap: () => void; hangUp: () => void },
+): void {
+  to.open(session);
+  if (navigateAway(pipCards) === "swap") to.swap();
+  else to.hangUp();
+}
+
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
-  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged, onOpenMeals } =
+  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged, onOpenMeals, onMealsApplied } =
     opts;
   const [swapped, setSwapped] = useState(false);
   // A conversation anchored to a date lives in that day's file; a standing one
@@ -529,9 +548,11 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       if (!fromTool && result.shown) {
         noteCardTurn(broken ? `${result.note} ${broken}` : result.note, nextCardId("meals"), result.shown);
       }
+      // Into the batch cook just planned (docs/671 备餐页).
+      if (onMealsApplied) leaveForAppliedPlan(result.session ?? null, pipCards, { open: onMealsApplied, swap: () => setSwapped(true), hangUp: onHangUp });
       return result;
     },
-    [bookId, anchor.threadId, noteCardTurn, onMealsChanged],
+    [bookId, anchor.threadId, noteCardTurn, onMealsChanged, onMealsApplied, pipCards, onHangUp],
   );
 
   // The draft card still waiting for its 「就这样」, which a new draft revises.

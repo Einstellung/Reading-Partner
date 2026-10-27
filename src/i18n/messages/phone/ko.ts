@@ -47,8 +47,6 @@ export default {
   "home.intelEmpty": "아직 없습니다. 관심 있는 주제를 {name}에게 말하면 다음 날 아침 첫 호가 나옵니다.",
   "home.studyLine": "스터디 · 버전 {n}",
   "home.volumeLine": "주제 합본",
-  "home.mealsWeek": "이번 주",
-  "home.mealsFoot": "식단과 장보기 목록",
   "home.savedFoot": { other: "개의 읽을 기사" },
   "home.continue": "이어 읽기",
   "home.continuePercent": "이어 읽기 · {percent}%",

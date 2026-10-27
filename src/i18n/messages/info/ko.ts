@@ -457,7 +457,7 @@ export default {
   "ask.aboutShopping": "장보기에 대해 질문",
   "ask.aboutToday": "오늘에 대해 질문",
   "ask.aboutWeekday": "{weekday}에 대해 질문",
-  "ask.aboutThisWeek": "이번 주에 대해 질문",
+  "ask.aboutPlan": "계획에 대해 질문",
 
   "errors.noProvider": "AI 제공자가 설정되지 않았습니다 (설정에서 확인).",
   "errors.extractorFailed": "기사 추출기를 불러오지 못했습니다. 다시 시도하세요.",

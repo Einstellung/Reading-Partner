@@ -11,6 +11,7 @@ import {
   goTo,
   HOME,
   INITIAL_STACK,
+  openPrep,
   push,
   resolveBack,
   screen,
@@ -159,4 +160,18 @@ test("an overlay on the floor is still something to go back from", () => {
   expect(backIsAvailable(INITIAL_STACK, false)).toBe(false);
   expect(backIsAvailable(INITIAL_STACK, true)).toBe(true);
   expect(backIsAvailable([HOME, screen("briefing")], false)).toBe(true);
+});
+
+test("the prep page opens over the Meals page, so back from it is the Meals page wherever it was opened", () => {
+  const prep = { kind: "meals-prep", session: "s1" } as const;
+  // From the home tile: Meals is pushed under it.
+  const fromHome = openPrep(INITIAL_STACK, "s1");
+  expect(kinds(fromHome)).toEqual(["home", "meals", "meals-prep"]);
+  expect(top(fromHome)).toEqual(prep);
+  expect(kinds(back(fromHome))).toEqual(["home", "meals"]);
+  // From a day over the Meals page (or a planning chat over it): unwound to Meals.
+  const onDay = push(push(INITIAL_STACK, screen("meals")), { kind: "meals-day", date: "2026-11-02" });
+  expect(kinds(openPrep(onDay, "s1"))).toEqual(["home", "meals", "meals-prep"]);
+  // Opened again from the prep itself it is still one prep over Meals.
+  expect(kinds(openPrep(fromHome, "s1"))).toEqual(["home", "meals", "meals-prep"]);
 });

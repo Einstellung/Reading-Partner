@@ -41,6 +41,7 @@ export function InfoCall({
   onOpenBriefing,
   onMealsChanged,
   onOpenMeals,
+  onMealsApplied,
   pipCards = true,
 }: {
   anchor: InfoCallAnchor;
@@ -64,6 +65,8 @@ export function InfoCall({
   // The meals screen reloads after a plan lands or a deviation is recorded.
   onMealsChanged?: () => void;
   onOpenMeals?: (screen: "meals" | "meals-shopping") => void;
+  // A meal plan was just applied: open its prep session's page, or the Meals page for null.
+  onMealsApplied?: (session: string | null) => void;
   // Whether the call keeps its corner cards, and with them the swapped layout.
   // The shell decides — no shape is detected here. False on the phone (docs/22),
   // where the chat is a screen the reader pushed and pops with a back.
@@ -81,6 +84,7 @@ export function InfoCall({
     onOpenBriefing,
     onMealsChanged,
     onOpenMeals,
+    onMealsApplied,
   });
   // Whether the reader has tapped the call out of the way. With no corner cards
   // there is no way to set it and no layout to set it to (call-layout.ts).
