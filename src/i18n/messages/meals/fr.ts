@@ -30,6 +30,12 @@ export default {
   "section.splitting": "Répartition entre les repas",
   "section.foodNumbers": "Données des aliments",
   "section.weightChange": "Quand votre poids change",
+  vitaminDTitle: "Une note sur la vitamine D",
+  vitaminDNote:
+    "L'alimentation seule atteint rarement l'apport recommandé en vitamine D, même avec du poisson, des œufs et du lait, et le lait n'est pas enrichi dans la majeure partie de l'Europe ni en Chine. " +
+    "Une dose préventive courante de complément est de 400 UI (10 microgrammes) par jour, prise avec un repas contenant un peu de matières grasses ; la limite supérieure habituelle pour un adulte est de 4000 UI par jour. " +
+    "Vous pouvez en avoir besoin de plus si vous utilisez beaucoup de crème solaire, restez surtout à l'intérieur, vivez loin de l'équateur en hiver, avez la peau plus foncée, êtes plus corpulent ou plus âgé ; une prise de sang pour la 25-hydroxyvitamine D montre où vous en êtes. Parlez-en à un médecin ou à un pharmacien avant de commencer si vous avez des calculs rénaux, un taux de calcium sanguin élevé ou une sarcoïdose, ou si vous prenez des médicaments comme des diurétiques ou des antiépileptiques. " +
+    "Meals ne met pas de compléments dans le plan ni dans la liste de courses, et cette note est une information générale, pas un avis médical.",
   medicalNote:
     "Ceci n'est pas un avis médical. Il s'agit d'un plan de repas, pas d'un diagnostic ni d'un traitement. Parlez-en " +
     "à un médecin ou à un diététicien avant de changer votre alimentation si vous êtes enceinte ou allaitez, avez " +

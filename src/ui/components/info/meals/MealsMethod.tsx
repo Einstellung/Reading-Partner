@@ -10,6 +10,7 @@ import {
   healthDataNote,
   medicalNote,
   methodSections,
+  vitaminDNote,
   type TextSegment,
 } from "../../../../info/meals/screen/method-screen";
 import { targetsOf } from "../../../../info/meals/plan/solve-week";
@@ -79,6 +80,7 @@ export function MealsMethod(props: MealsMethodProps) {
   const profile = props.state?.charter?.profile ?? null;
   const targets = props.state ? targetsOf(props.state.charter, hostRegion()) : null;
   const sections = targets && profile ? methodSections(targets, profile) : [];
+  const vitaminD = vitaminDNote();
 
   return (
     <MealsColumn>
@@ -112,6 +114,10 @@ export function MealsMethod(props: MealsMethodProps) {
             )}
           </section>
         ))}
+        <section className="rounded-2xl border border-border-soft bg-card p-5">
+          <h2 className="m-0 font-display text-[17px] font-medium text-foreground">{vitaminD.title}</h2>
+          <p className="m-0 mt-2 text-[14px] leading-relaxed text-foreground">{vitaminD.body}</p>
+        </section>
         <div className="rounded-xl border border-secondary-border bg-secondary-faint px-4 py-3.5 text-[14px] leading-relaxed text-foreground">
           {medicalNote()}
         </div>

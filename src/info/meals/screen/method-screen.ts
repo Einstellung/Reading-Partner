@@ -256,6 +256,11 @@ export function medicalNote(): string {
   return tMsg("meals.medicalNote");
 }
 
+/** A static, general note on vitamin D; not tied to the plan (docs/north-star/diet.md, 补剂). */
+export function vitaminDNote(): { title: string; body: string } {
+  return { title: tMsg("meals.vitaminDTitle"), body: tMsg("meals.vitaminDNote") };
+}
+
 export function healthDataNote(): string {
   return tMsg("meals.healthDataNote");
 }

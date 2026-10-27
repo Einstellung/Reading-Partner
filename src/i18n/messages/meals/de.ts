@@ -30,6 +30,12 @@ export default {
   "section.splitting": "Aufteilung auf die Mahlzeiten",
   "section.foodNumbers": "Nährwerttabelle",
   "section.weightChange": "Wenn sich dein Gewicht ändert",
+  vitaminDTitle: "Ein Hinweis zu Vitamin D",
+  vitaminDNote:
+    "Über die Ernährung allein wird die empfohlene Vitamin-D-Zufuhr selten erreicht, auch mit Fisch, Eiern und Milch, und Milch ist in den meisten Ländern Europas und in China nicht angereichert. " +
+    "Eine übliche vorbeugende Menge als Nahrungsergänzung sind 400 IE (10 Mikrogramm) pro Tag, eingenommen zu einer Mahlzeit mit etwas Fett; die übliche Obergrenze für Erwachsene liegt bei 4000 IE pro Tag. " +
+    "Du brauchst eventuell mehr, wenn du viel Sonnencreme benutzt, dich meist drinnen aufhältst, im Winter weit vom Äquator entfernt lebst, eine dunklere Haut hast, mehr Körpergewicht trägst oder älter bist; ein Bluttest auf 25-Hydroxyvitamin D zeigt, wo du stehst. Sprich vor dem Beginn mit einem Arzt oder Apotheker, wenn du Nierensteine, einen hohen Blutkalziumspiegel oder Sarkoidose hast oder Medikamente wie Diuretika oder Antiepileptika nimmst. " +
+    "Meals nimmt keine Nahrungsergänzungsmittel in den Plan oder die Einkaufsliste auf, und dieser Hinweis ist eine allgemeine Information, kein medizinischer Rat.",
   medicalNote:
     "Dies ist kein medizinischer Rat. Es handelt sich um einen Essensplan, keine Diagnose oder Behandlung. " +
     "Sprich mit einem Arzt oder einer Ernährungsfachkraft, bevor du deine Ernährung änderst, wenn du schwanger " +

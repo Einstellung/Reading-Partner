@@ -30,6 +30,12 @@ export default {
   "section.splitting": "Distribuição entre as refeições",
   "section.foodNumbers": "Tabela de alimentos",
   "section.weightChange": "Quando seu peso muda",
+  vitaminDTitle: "Uma nota sobre a vitamina D",
+  vitaminDNote:
+    "A alimentação sozinha raramente atinge a ingestão recomendada de vitamina D, mesmo com peixe, ovos e leite, e o leite não é fortificado na maior parte da Europa nem na China. " +
+    "Uma quantidade preventiva comum de suplemento é 400 UI (10 microgramas) por dia, tomada com uma refeição que tenha alguma gordura; o limite superior habitual para adultos é 4000 UI por dia. " +
+    "Você pode precisar de mais se usa muito protetor solar, fica a maior parte do tempo em ambientes fechados, mora longe do equador no inverno, tem pele mais escura, tem mais peso corporal ou é mais velho; um exame de sangue de 25-hidroxivitamina D mostra como você está. Converse com um médico ou farmacêutico antes de começar se tiver cálculos renais, cálcio alto no sangue ou sarcoidose, ou tomar medicamentos como diuréticos ou anticonvulsivantes. " +
+    "O Meals não coloca suplementos no plano nem na lista de compras, e esta nota é uma informação geral, não um conselho médico.",
   medicalNote:
     "Isto não é um conselho médico. É um plano de refeições, não um diagnóstico ou tratamento. Converse com um " +
     "médico ou nutricionista antes de mudar sua alimentação se você estiver grávida ou amamentando, tiver menos " +
