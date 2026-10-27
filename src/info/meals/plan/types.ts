@@ -206,6 +206,33 @@ export interface PlannerRecord {
   // When the reader tapped Done on the prep page (docs/671 备餐页). A prep
   // whose day is past counts as done without it: the plan is the record.
   preppedAt?: number;
+  // The prep under way (docs/671 时间线与语音): set by Start, written on
+  // every step event, kept after Done. Absent until the reader starts.
+  prepRun?: PrepRun;
+}
+
+/**
+ * One step's progress in a prep run, in whole minutes from its start. Only
+ * what happened is kept; the timeline is laid out again from it on every read
+ * (info/meals/timeline/run.ts).
+ */
+export interface PrepStepRun {
+  started?: number;
+  // The hands-on part ended; the waiting part, if any, runs from here.
+  handsDone?: number;
+  done?: number;
+  // "More": the part under way is now expected to end at this minute.
+  handsUntil?: number;
+  waitUntil?: number;
+}
+
+export interface PrepRun {
+  // The stored steps it follows (info-meals-recipes.json); a run over other
+  // steps than the ones stored now is not shown.
+  key: string;
+  // Milliseconds; the only clock time kept.
+  startedAt: number;
+  steps: Record<string, PrepStepRun>;
 }
 
 export interface WeekPlan {

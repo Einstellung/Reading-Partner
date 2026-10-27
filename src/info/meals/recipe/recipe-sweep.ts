@@ -24,8 +24,13 @@ import { registerPullRoute } from "../../../platform/sync/pull-routes";
 import type { Region } from "../nutrition/targets";
 import { MEALS_FILE } from "../plan/store";
 import type { MealsState } from "../plan/types";
+import { planPrep } from "../screen/batch-cook";
 import { dayViewOn } from "../screen/view";
+import { prepStepsRequest, type PrepStepsRequest } from "./prep-steps";
 import { recipeRequest, type RecipeRequest } from "./recipe";
+
+/** What one sweep call writes: a meal's recipe, or a prep session's steps (docs/671 菜品图). */
+export type SweepRequest = RecipeRequest | PrepStepsRequest;
 
 export const MAX_RECIPES_PER_ROUND = 6;
 
@@ -70,6 +75,21 @@ export function recipesToWrite(
   return out.slice(0, opts.limit ?? MAX_RECIPES_PER_ROUND);
 }
 
+/**
+ * The prep session's steps when the plan has a prep still ahead whose steps
+ * are not stored: the request the prep page would make. Put before the meals'
+ * recipes, since Apply lands on the prep page.
+ */
+export function prepStepsToWrite(
+  state: MealsState,
+  opts: { today: string; region: Region; language: Locale; stored: ReadonlySet<string> },
+): PrepStepsRequest[] {
+  const prep = planPrep(state, opts.today);
+  if (!prep || prep.done) return [];
+  const request = prepStepsRequest(state, opts);
+  return request && !opts.stored.has(request.key) ? [request] : [];
+}
+
 /** Everything the sweep touches, so it is testable without a host. */
 export interface RecipeSweepPorts {
   state(): Promise<MealsState>;
@@ -78,8 +98,8 @@ export interface RecipeSweepPorts {
   region(): Region;
   /** The keys stored right now, synced from the other device included. */
   stored(): Promise<ReadonlySet<string>>;
-  /** Write and keep one recipe, or throw. */
-  write(request: RecipeRequest): Promise<unknown>;
+  /** Write and keep one recipe or one prep session's steps, or throw. */
+  write(request: SweepRequest): Promise<unknown>;
   /** The host's local date. */
   today(): string;
   now(): number;
@@ -114,12 +134,13 @@ export function createRecipeWriter(ports: RecipeSweepPorts): RecipeWriter {
     if (ports.now() < pausedUntil) return { written: 0, wanted: 0, why: "backing-off" };
     const state = await ports.state();
     if (!state.plan) return { written: 0, wanted: 0, why: "no-week" };
-    const wanted = recipesToWrite(state, {
+    const opts = {
       today: ports.today(),
       region: ports.region(),
       language: await ports.language(),
       stored: await ports.stored(),
-    });
+    };
+    const wanted: SweepRequest[] = [...prepStepsToWrite(state, opts), ...recipesToWrite(state, opts)].slice(0, MAX_RECIPES_PER_ROUND);
     if (!wanted.length) return { written: 0, wanted: 0, why: "nothing-wanted" };
     let written = 0;
     for (const request of wanted) {

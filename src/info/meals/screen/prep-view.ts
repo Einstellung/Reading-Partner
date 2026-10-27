@@ -168,11 +168,18 @@ function shopRows(draft: PlanDraft, lib: PlanLibrary, solved: SolvedPlan, shoppi
  * no prep, its draft no longer solves, or the session is not this plan's (a
  * newer plan replaced it).
  */
-export function prepView(state: MealsState, session: string | null, today: string, region: Region): PrepView | null {
+export function prepView(
+  state: MealsState,
+  session: string | null,
+  today: string,
+  region: Region,
+  // The timeline's minutes once the session's steps are written (batch-cook.ts planPrep).
+  written?: { activeMin: number; totalMin: number } | null,
+): PrepView | null {
   const plan = state.plan;
   const charter = state.charter;
   const targets = targetsOf(charter, region);
-  const prep = planPrep(state, today);
+  const prep = planPrep(state, today, written);
   if (!plan?.planner || !charter || !targets || !prep) return null;
   if (session && session !== prep.session) return null;
   const check = checkPlannerRecord(plan, charter.profile, targets);

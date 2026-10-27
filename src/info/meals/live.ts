@@ -12,7 +12,8 @@ import { ingredientImageUrl } from "./photos/images";
 import { mealsCanDraw, mealsDishDrawer } from "./photos/dish-draw-sweep";
 import { mealsPhotoSearcher } from "./photos/photo-sweep";
 import { loadMealsPhotos } from "./photos/photo-store";
-import { recipeLanguageNow, writeRecipeOnce } from "./recipe/recipe-live";
+import { isPrepRequest } from "./recipe/prep-steps";
+import { recipeLanguageNow, writePrepStepsOnce, writeRecipeOnce } from "./recipe/recipe-live";
 import { storedRecipeKeys } from "./recipe/recipe-store";
 import { createRecipeWriter, watchMealsForRecipes, type RecipeWriter } from "./recipe/recipe-sweep";
 import {
@@ -56,7 +57,7 @@ export function mealsRecipeWriter(): RecipeWriter {
     language: () => recipeLanguageNow(),
     region: () => hostRegion(),
     stored: () => storedRecipeKeys(),
-    write: (request) => writeRecipeOnce(request, "meals"),
+    write: (request) => (isPrepRequest(request) ? writePrepStepsOnce(request, "meals") : writeRecipeOnce(request, "meals")),
     today: () => localDate(Date.now()),
     now: () => Date.now(),
   });
