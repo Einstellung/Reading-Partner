@@ -163,6 +163,11 @@ export interface EntryCardView {
 
 const PLAN: EntryAction = { kind: "plan" };
 
+/** Where Apply lands: the new plan's prep page, or the Meals page when it cooks nothing ahead. */
+export function appliedAction(session: string | null): EntryAction {
+  return session ? { kind: "prep", session } : { kind: "meals" };
+}
+
 export function entryCardView(entry: BatchCookEntry | null, today: string): EntryCardView | null {
   if (!entry || entry.kind === "setup") return null;
   const kicker = t("meals.entry.kicker");

@@ -100,7 +100,7 @@ test("Done moves the entry on to the next meal, by the hour", () => {
   expect(card.primary).toBeNull();
   // The prep list stays reachable after it is done, and the next batch cook can be planned.
   expect(card.secondary.map((b) => b.action)).toEqual([{ kind: "prep", session: "s1" }, { kind: "plan" }]);
-  expect(entryTileView(at(15), START)).toEqual({ mid: nameOf(days[0]!.dinner), foot: "Today · Dinner", action: { kind: "meals" } });
+  expect(entryTileView(at(15), START)).toEqual({ mid: nameOf(days[0]!.dinner) ?? "", foot: "Today · Dinner", action: { kind: "meals" } });
   expect(prepRowDate(at(15))).toBe(START);
 });
 

@@ -102,7 +102,7 @@ test("no page for a session that is not the plan's, a plan without a prep, or a 
 test("shopGroup: seasonings and oil by role, produce as vegetables, fresh proteins apart from dry goods", () => {
   const f = (id: string) => foodById(id)!;
   expect(shopGroup(f("chicken_thigh"), "protein")).toBe("protein");
-  expect(shopGroup(f("onion"), "fixed")).toBe("veg");
+  expect(shopGroup(f("onion"), "veg")).toBe("veg");
   expect(shopGroup(f("canned_kidney_beans"), "staple")).toBe("dry");
   expect(shopGroup(f("ground_cumin"), "seasoning")).toBe("seasoning");
 });

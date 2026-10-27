@@ -137,6 +137,22 @@ export function infoStickKey(dateKey: string, threadId: string): string {
 
 const isCardRow = (m: UiMessage) => m.parts?.some((part) => part.type === "card") ?? false;
 
+/**
+ * After a plan is applied: the host opens the plan's batch cook (or the Meals
+ * page for null), and the call gets out of its way the way a card that opens
+ * content does (docs/ui/22): into the pip where there is one, hung up where
+ * the chat is the whole screen.
+ */
+export function leaveForAppliedPlan(
+  session: string | null,
+  pipCards: boolean,
+  to: { open: (session: string | null) => void; swap: () => void; hangUp: () => void },
+): void {
+  to.open(session);
+  if (navigateAway(pipCards) === "swap") to.swap();
+  else to.hangUp();
+}
+
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged, onOpenMeals, onMealsApplied } =
     opts;
@@ -532,14 +548,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       if (!fromTool && result.shown) {
         noteCardTurn(broken ? `${result.note} ${broken}` : result.note, nextCardId("meals"), result.shown);
       }
-      // Into the batch cook just planned (docs/671 备餐页), and out of its way
-      // the way a card that opens content is (docs/ui/22): into the pip where
-      // there is one, hung up where the chat is the whole screen.
-      if (onMealsApplied) {
-        onMealsApplied(result.session ?? null);
-        if (navigateAway(pipCards) === "swap") setSwapped(true);
-        else onHangUp();
-      }
+      // Into the batch cook just planned (docs/671 备餐页).
+      if (onMealsApplied) leaveForAppliedPlan(result.session ?? null, pipCards, { open: onMealsApplied, swap: () => setSwapped(true), hangUp: onHangUp });
       return result;
     },
     [bookId, anchor.threadId, noteCardTurn, onMealsChanged, onMealsApplied, pipCards, onHangUp],

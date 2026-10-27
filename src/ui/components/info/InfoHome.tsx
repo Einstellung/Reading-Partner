@@ -26,7 +26,7 @@ import { MealsShopping } from "./meals/MealsShopping";
 import { MealsMethod } from "./meals/MealsMethod";
 import { MealsOnboarding } from "./meals/MealsOnboarding";
 import { MealsPrep } from "./meals/MealsPrep";
-import { batchCookEntry, entryTileView, type EntryAction, type EntryTileView } from "../../../info/meals/screen/batch-cook";
+import { appliedAction, batchCookEntry, entryTileView, type EntryAction, type EntryTileView } from "../../../info/meals/screen/batch-cook";
 import { markPrepDone, saveProfile } from "../../../info/meals/apply";
 import { planNote } from "../../../info/meals/screen/plan-note";
 import { liveMealsPorts } from "../../../info/meals/live";
@@ -534,7 +534,7 @@ export default function InfoHome(props: {
           onOpenMeals={(to) => onNavigate(to)}
           // After a plan is applied, into its batch cook; a plan that cooks
           // nothing ahead lands on the Meals page.
-          onMealsApplied={(session) => (session ? openMealsPrep(session) : onNavigate("meals"))}
+          onMealsApplied={(session) => runMealsAction(appliedAction(session))}
           pipCards={props.pipCards}
         />
       )}
