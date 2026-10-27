@@ -210,6 +210,34 @@ export const WHOLE_GRAIN: ReadonlySet<string> = new Set([
   "frozen_corn", "corn_tortilla",
 ]);
 
+/**
+ * Calcium sources (docs/671 多样性, 钙): the foods a plan day's calcium comes
+ * from, each with the grams of it that make one source, an ordinary serving
+ * (a glass of milk, a pot of yogurt, a slice of cheese, a block of tofu, a
+ * dish's worth of greens). A day's share of each is its grams over these,
+ * summed. A rule, not an amount: the planner will compute the day's calcium
+ * from the rows' own nutrient records instead.
+ *
+ * Dairy: milk, yogurt and cheese. Tofu pressed firm (北豆腐, frozen tofu,
+ * dried tofu), set with gypsum or brine, both of which leave calcium in it
+ * (USDA FDC 172475 and 172448); soft tofu is left out because the row also
+ * stands for 内酯豆腐, set with glucono-delta-lactone, and tofu skin because
+ * the row also stands for yuba, which is not set at all. Soy milk is left
+ * out: the table has no fortified one. Tinned fish eaten with its bones
+ * (sardines, salmon, whose USDA records are drained solids with bone); the
+ * tinned mackerel's record does not say. Sesame paste, not whole seeds.
+ * Low-oxalate greens: bok choy, pak choi and gai lan; spinach is left out,
+ * its oxalate binds most of its calcium.
+ */
+export const CALCIUM_SOURCE: Readonly<Record<string, number>> = {
+  low_fat_milk: 200, whole_milk: 200, plain_yogurt: 100, greek_yogurt: 100, cottage_cheese: 200,
+  cheese_slice: 20, low_fat_cheese_slice: 20, mozzarella: 20, feta: 20,
+  firm_tofu: 100, frozen_tofu: 100, dried_tofu: 50, spiced_dried_tofu: 50,
+  canned_sardine: 50, canned_salmon: 60,
+  sesame_paste: 15,
+  bok_choy: 100, pak_choi_white: 100, gai_lan: 100,
+};
+
 /** How a pack is sold, for the shopping list's words (盒、袋、块、盒装奶、颗、把、条、罐). */
 export type PackKind = "box" | "bag" | "block" | "carton" | "head" | "bunch" | "loaf" | "can";
 

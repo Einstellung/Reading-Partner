@@ -5,7 +5,7 @@
 // the staples of fresh mains, sides and fruit.
 //
 // It fills toward the plan rules (legumes, whole grains, vegetables, fruit,
-// sodium, the day's protein and kcal, packs finished) by a best-first search
+// a calcium source each day, sodium, the day's protein and kcal, packs finished) by a best-first search
 // over changes (a breakfast, a staple, a side added, dropped or swapped, a pot
 // meal's way), each judged by checkDraft, so changes that only pass together
 // are found; then it takes back each change the plan passes as well without.
@@ -18,7 +18,7 @@ import { referenceServing, totals, type Totals } from "../dishes/serving";
 import { SEED_DISHES } from "../dishes/seed";
 import type { Dish } from "../dishes/types";
 import { FOODS, foodById, type Food } from "../nutrition/foods";
-import { checkDraft, FRUIT_PORTIONS, type DraftContext, type DraftProblem, type DraftResult } from "./checks";
+import { calciumSources, checkDraft, FRUIT_PORTIONS, type DraftContext, type DraftProblem, type DraftResult } from "./checks";
 import { draftMeal, isBatchMain, MAIN_SLOTS, mealName, type DraftMain, type MainSlot, type PlanDraft } from "./draft";
 import { planLibrary, type PlanLibrary } from "./library";
 import { buyFor, shownName } from "./packs";
@@ -142,6 +142,22 @@ const wholeGrainBreakfast = (d: Dish | undefined) => !!d?.ingredients.some((l) =
 
 const dishUses = (dish: Dish | undefined, food: string) => !!dish?.ingredients.some((l) => l.food === food);
 
+/** The calcium sources in a dish's reference serving, a way's add-ons on the plate when one is named. */
+function servingCalcium(dish: Dish | undefined, way?: number): number {
+  const lines = dish ? (referenceServing(dish)?.ingredients ?? []) : [];
+  return calciumSources([...lines, ...(way ? (dish?.ways?.[way - 1]?.addOns ?? []) : [])]);
+}
+
+/** The calcium sources a day's lunch and dinner mains bring at their reference servings (they only grow from there). */
+function mainsCalcium(d: PlanDraft, day: number, lib: PlanLibrary): number {
+  return MAIN_SLOTS.reduce((sum, slot) => {
+    const m = draftMeal(d, day, slot)?.main;
+    if (!m) return sum;
+    if (isBatchMain(m)) return sum + servingCalcium(lib.dish(d.batches.find((b) => b.id === m.batch)?.dish ?? ""), m.way);
+    return sum + servingCalcium(lib.dish(m.dish));
+  }, 0);
+}
+
 export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
   const lib = ctx.library ?? planLibrary(ctx.profile);
   const context: DraftContext = { ...ctx, library: lib };
@@ -212,7 +228,8 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
       if (pickedStaple.has(key(i + 1, slot))) reasons.set(key(i + 1, slot), ["staple"]);
     }
   });
-  // Breakfasts: the least salty for each day not pinned, a different one each day.
+  // Breakfasts: the least salty for each day not pinned, a different one each
+  // day; one with a calcium source first on a day whose mains bring none.
   const grown = new Map<string, Totals>();
   const bfTotals: BreakfastTotals = (id, day) => {
     const k = `${id}:${day}`;
@@ -229,7 +246,9 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
   first.days.forEach((d, i) => {
     if (pinned.has(i + 1)) return;
     const taken = new Set(first.days.map((x) => x.breakfast).filter(Boolean));
-    const ranked = [...menu.breakfasts].sort((a, b) => bfSodium(a.id, i + 1) - bfSodium(b.id, i + 1));
+    const wantCalcium = mainsCalcium(first, i + 1, lib) < 1;
+    const lacks = (b: Dish) => (wantCalcium && servingCalcium(b) < 1 ? 1 : 0);
+    const ranked = [...menu.breakfasts].sort((a, b) => lacks(a) - lacks(b) || bfSodium(a.id, i + 1) - bfSodium(b.id, i + 1));
     d.breakfast = (ranked.find((b) => !taken.has(b.id)) ?? ranked[0])?.id ?? "";
   });
 
@@ -364,7 +383,7 @@ export function fillDraft(picks: PlanDraft, ctx: DraftContext): FillOutcome {
       }
     }
   });
-  const unfilled = result.problems.length ? explain(result, lib, menu, ctx) : [];
+  const unfilled = result.problems.length ? explain(result, lib, menu, ctx, pinned) : [];
   return { result, changed, unfilled };
 }
 
@@ -493,6 +512,12 @@ function candidates(state: PlanDraft, r: DraftResult, lib: PlanLibrary, menu: Me
         staples(window);
         break;
       }
+      case "calcium": {
+        breakfasts(days, (b, now) => servingCalcium(b) > servingCalcium(now));
+        sides(days, { add: (s) => servingCalcium(s) > 0, swapTo: (s) => servingCalcium(s) > 0 });
+        ways(days, (w, dish, now) => servingCalcium(dish, w) > servingCalcium(dish, now));
+        break;
+      }
       case "one_rice":
         staples(all);
         ways(all);
@@ -563,7 +588,7 @@ function remove(list: string[] | undefined, id: string) {
 const NAMED = 6;
 
 /** Each problem the fill could not fix, with the model's picks that drive it and mains that would not. */
-function explain(r: DraftResult, lib: PlanLibrary, menu: Menu, ctx: DraftContext): string[] {
+function explain(r: DraftResult, lib: PlanLibrary, menu: Menu, ctx: DraftContext, pinned: ReadonlySet<number>): string[] {
   const plan = r.plan;
   if (!plan) return r.problems.map((p) => p.message);
   const draft = r.draft;
@@ -675,6 +700,14 @@ function explain(r: DraftResult, lib: PlanLibrary, menu: Menu, ctx: DraftContext
           .sort((a, b) => b.g - a.g)
           .map((x) => x.d.id);
         return `${p.message} That is with sides added; change a main to one with more vegetables (${list(veggy)}).`;
+      }
+      case "calcium": {
+        const day = p.day ?? 1;
+        const rich = others
+          .filter((d) => servingCalcium(d) >= 1 || (d.ways ?? []).some((_, w) => servingCalcium(d, w + 1) >= 1))
+          .map((d) => d.id);
+        const breakfast = pinned.has(day) ? `, or the breakfast they asked for (${draft.days[day - 1]?.breakfast}) to one with milk or yogurt` : "";
+        return `${p.message} No breakfast, side or way the program can pick brings one in; change one of Day ${day}'s mains to one that has it (${list(rich)})${breakfast}.`;
       }
       case "legumes": {
         const soy = others.filter((d) => d.ingredients.some((l) => ["soy", "legume"].includes(foodById(l.food)?.proteinCategory ?? ""))).map((d) => d.id);

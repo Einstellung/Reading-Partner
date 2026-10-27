@@ -7,9 +7,9 @@
 // session consistent, the fridge window), because nothing can be solved until
 // it holds. Then the grams are solved, a day short of vegetables gets a quick
 // side added by the program (said in `notes`), and the rules that read the
-// solved plan run: red meat, legumes, whole grains, vegetables, fruit,
-// protein variety, fish, sodium, the day's protein and kcal, and the packs
-// nobody finishes.
+// solved plan run: red meat, legumes, whole grains, vegetables, fruit, a
+// calcium source each day, protein variety, fish, sodium, the day's protein
+// and kcal, and the packs nobody finishes.
 
 import { dishStorage } from "../dishes/methods";
 import { referenceServing } from "../dishes/serving";
@@ -70,6 +70,7 @@ export type DraftRule =
   | "vegetables"
   | "veg_variety"
   | "fruit"
+  | "calcium"
   | "protein_variety"
   | "same_protein"
   | "fish"
@@ -155,6 +156,26 @@ export function proteinKindsMinimum(days: number): number {
 /** Vegetable kinds over the whole plan: the days plus 2, at most 8. */
 export function vegKindsMinimum(days: number): number {
   return Math.min(days + 2, 8);
+}
+
+/**
+ * How many calcium sources the lines hold: each calcium food's grams over the
+ * grams that make one source (CALCIUM_SOURCE), summed, so half a pot of yogurt
+ * and half a block of tofu make one. The one place the calcium rule reads
+ * food; a computed calcium amount replaces it.
+ */
+export function calciumSources(lines: readonly { food: string; grams: number }[]): number {
+  let n = 0;
+  for (const l of lines) {
+    const per = foodById(l.food)?.calciumSourceG;
+    if (per) n += l.grams / per;
+  }
+  return n;
+}
+
+/** Whether the lines (a day's) hold at least one calcium source. */
+export function hasCalciumSource(lines: readonly { food: string; grams: number }[]): boolean {
+  return calciumSources(lines) >= 1 - 1e-6;
 }
 
 const FISH_FOODS = [
@@ -489,6 +510,10 @@ function solvedProblems(plan: SolvedPlan, lib: PlanLibrary, shopping: readonly P
     const fruit = d.fruit.length + d.meals.breakfast.lines.filter((l) => l.role === "fruit").length;
     if (fruit < FRUIT_PORTIONS.min || fruit > FRUIT_PORTIONS.max) {
       out.push({ rule: "fruit", message: `Day ${d.day} has ${fruit} fruit portion(s), breakfast fruit counted; about 2 a day (${FRUIT_PORTIONS.min} to ${FRUIT_PORTIONS.max}): whole fruit that keeps, like apples, bananas, oranges, mandarins, frozen berries.`, day: d.day, over: Math.abs(fruit - 2) });
+    }
+    // Snack included; the prep day's dinner belongs to no day.
+    if (!hasCalciumSource(dayLines(d))) {
+      out.push({ rule: "calcium", message: `Day ${d.day} has no calcium source; every day needs one: a glass of milk or a pot of yogurt, a slice of cheese, firm or dried tofu (soft tofu and soy milk do not count), tinned sardines or salmon with their bones, a spoon of sesame paste, or 100 g of bok choy, pak choi or gai lan.`, day: d.day, over: 1 - calciumSources(dayLines(d)) });
     }
     if (d.totals.sodium > DAY_SODIUM_MG) {
       out.push({ rule: "sodium", message: `Day ${d.day} sodium is ${g(d.totals.sodium)} mg; at most ${DAY_SODIUM_MG}.`, day: d.day, over: d.totals.sodium - DAY_SODIUM_MG });
