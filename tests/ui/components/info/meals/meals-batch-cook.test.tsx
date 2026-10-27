@@ -73,17 +73,16 @@ test("a used-up plan: plan the next batch cook", async () => {
   expect(actions).toEqual([{ kind: "plan" }]);
 });
 
-test("the Meals page puts the card on top and the prep row on the prep day's card", async () => {
-  const opened: string[] = [];
+function mealsHome(s: MealsState | null, opened: string[] = []) {
   const noop = () => {};
-  const { getByRole, getAllByRole } = render(
+  return render(
     <MealsHome
-      state={plannerState()}
+      state={s}
       photos={{}}
       today={START}
       hour={9}
       onPlan={noop}
-      onOpenPrep={(s) => opened.push(s)}
+      onOpenPrep={(id) => opened.push(id)}
       onAsk={noop}
       onOpenShopping={noop}
       onOpenDay={noop}
@@ -91,11 +90,40 @@ test("the Meals page puts the card on top and the prep row on the prep day's car
       onReplayOnboarding={noop}
     />,
   );
-  expect(getByRole("region", { name: "Batch cook" })).toBeTruthy();
+}
+
+// The page's blocks in order: the column's children, the sticky header first.
+function blocksAfterHeader(container: HTMLElement): Element[] {
+  const column = container.firstElementChild!;
+  return [...column.children].slice(1);
+}
+
+test("the Meals page prep row sits on the prep day's card", async () => {
+  const opened: string[] = [];
+  const { getAllByRole } = mealsHome(plannerState(), opened);
   const row = getAllByRole("button").find((b) => b.textContent?.startsWith("Prep · afternoon"));
   expect(row).toBeTruthy();
   await act(async () => fireEvent.click(row!));
   expect(opened).toEqual(["s1"]);
+});
+
+test("the batch-cook card is the first block under the header, ahead of the chips and the targets", () => {
+  // Setup: no plan yet.
+  const setup = mealsHome({ ...weekState(), plan: null });
+  const first = blocksAfterHeader(setup.container)[0]!;
+  expect(first.querySelector('section[aria-label="Batch cook"]')).toBeTruthy();
+  expect(setup.getByRole("button", { name: "Replay onboarding" })).toBeTruthy();
+  expect(first.compareDocumentPosition(setup.getByRole("button", { name: "Replay onboarding" })) & 4).toBe(4);
+  cleanup();
+
+  // Prep: a prep ahead, with the targets card and the day cards under it.
+  const prep = mealsHome(plannerState());
+  const blocks = blocksAfterHeader(prep.container);
+  expect(blocks[0]!.querySelector('section[aria-label="Batch cook"]')).toBeTruthy();
+  const chips = prep.getByRole("button", { name: "Replay onboarding" });
+  expect(blocks[0]!.compareDocumentPosition(chips) & 4).toBe(4);
+  const targets = prep.container.textContent!.indexOf("Calories");
+  expect(targets).toBeGreaterThan(prep.container.textContent!.indexOf("Batch cook"));
 });
 
 function prepPage(s: MealsState | null, session: string | null, today = START) {
