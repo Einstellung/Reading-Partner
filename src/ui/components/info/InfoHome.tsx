@@ -33,7 +33,12 @@ import { liveMealsPorts } from "../../../info/meals/live";
 import { loadMeals } from "../../../info/meals/plan/store";
 import type { Profile } from "../../../info/meals/nutrition/targets";
 import { useMeals } from "./meals/use-meals";
+import { usePrepSteps } from "./meals/use-prep-steps";
+import { writtenMinutes } from "../../../info/meals/screen/prep-timeline";
+import { recordPrepEvent, startPrep } from "../../../info/meals/prep-progress";
+import { kitchenFor } from "../../../info/meals/timeline/schedule";
 import type { MealsFocus } from "../../../info/meals/tools";
+import type { StepEvent } from "../../../info/meals/timeline/run";
 import { weekdayName } from "../../../info/meals/screen/view";
 import { useInfoHome } from "./use-info-home";
 import { useRegisterVoiceContext } from "../companion/voice-context";
@@ -194,6 +199,11 @@ export default function InfoHome(props: {
     [navigate, oldBriefing],
   );
   const meals = useMeals(props.mealsEnabled === true);
+  // The batch cook's written steps: read for every place that shows its
+  // minutes, and written on the spot when the prep page opens before the sweep
+  // got to them (docs/671 菜品图).
+  const prepSteps = usePrepSteps(meals.state, meals.today, screen === "meals-prep");
+  const prepWritten = writtenMinutes(prepSteps.status, meals.state?.charter?.profile);
   // The day the desktop shell has open. It has no navigation stack to hold it,
   // and the phone's entry overrides this the moment it supplies one.
   const [localMealsDay, setLocalMealsDay] = useState<string | null>(null);
@@ -230,7 +240,19 @@ export default function InfoHome(props: {
     else if (action.kind === "prep") openMealsPrep(action.session);
     else onNavigate("meals");
   };
-  const mealsTile = props.mealsEnabled ? entryTileView(batchCookEntry(meals.state, meals.today, new Date().getHours()), meals.today) : null;
+  const mealsTile = props.mealsEnabled
+    ? entryTileView(batchCookEntry(meals.state, meals.today, new Date().getHours(), prepWritten), meals.today)
+    : null;
+  const prepPorts = () => liveMealsPorts({ today: () => meals.today, changed: meals.reload });
+  const startMealsPrep = async () => {
+    const s = prepSteps.status;
+    return s.kind === "ready" && (await startPrep(prepPorts(), s.key)) !== null;
+  };
+  const recordMealsPrep = (event: StepEvent) => {
+    const s = prepSteps.status;
+    if (s.kind !== "ready") return;
+    void recordPrepEvent(prepPorts(), { key: s.key, steps: s.steps, kitchen: kitchenFor(meals.state?.charter?.profile) }, event).catch(() => {});
+  };
 
   useRegisterVoiceContext(
     screen === "briefing" && info.snap?.briefing && !info.infoCall
@@ -449,7 +471,12 @@ export default function InfoHome(props: {
               session={props.mealsPrep ?? localMealsPrep}
               onBack={back}
               onAsk={ask.onAsk}
-              onDone={() => void markPrepDone(liveMealsPorts({ today: () => meals.today, changed: meals.reload }))}
+              onDone={() => void markPrepDone(prepPorts())}
+              steps={prepSteps.status}
+              onRetrySteps={prepSteps.retry}
+              onStart={startMealsPrep}
+              onStep={recordMealsPrep}
+              onForeground={meals.reload}
             />
           );
         } else {
@@ -462,6 +489,7 @@ export default function InfoHome(props: {
               today={meals.today}
               onPlan={planMeals}
               onOpenPrep={openMealsPrep}
+              written={prepWritten}
               onAsk={ask.onAsk}
               onOpenShopping={() => onNavigate("meals-shopping")}
               onOpenDay={openDay}

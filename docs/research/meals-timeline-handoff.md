@@ -15,14 +15,17 @@
 
 共享文件只动了 `src/info/meals/live.ts` 两行（import 和 `write` 分派）；`apply.ts`、`tools.ts`、`MealsPage.tsx`、`InfoHome.tsx` 没动。
 
+## A2 做了什么（分支 `meals-timeline-ui`）
+
+- `screen/prep-timeline.ts`：第 3 段的视图（阶段 before / running / finished、泳道条的百分比和刻度、每步的文字和能点什么、顶栏结束钟点）、`writtenMinutes`、「慢了」两档 `LATE_CHIPS`（5、10）、到下一整分钟的毫秒数。单测 `tests/info/meals/screen/prep-timeline.test.ts`，夹具 `prep-timeline-fixture.ts`。
+- `ui/components/info/meals/use-prep-steps.ts`：`usePrepSteps`（算请求、读已存、`write` 为真时当场写，失败等重试）、`useRunClock`（跑着时一个定时器按整分钟走）、`useScreenWakeLock`、`useOnForeground`。
+- `MealsTimeline.tsx` 画第 3 段；`MealsPrep.tsx` 接上步骤、计时、常亮和前台重读，打开时已在跑就滚到第 3 段；`MealsHeader` 加 `note`（标题下一行，放结束钟点）。
+- `InfoHome.tsx` 调一次 `usePrepSteps`（只有在备餐页时才写），`written` 传给 Meals 页（卡片和日卡备餐行都走 `batchCookEntry`）和手机磁贴；开始走 `startPrep`，点步骤走 `recordPrepEvent`，前台回来 `meals.reload`。
+- 文案九种语言（`meals.timeline.*`）。渲染测试 `tests/ui/components/info/meals/meals-timeline.test.tsx`（在写、失败、开始前、跑着、慢了、做完、常亮的拿和放、Meals 页分钟）。
+
+截图脚本在 scratchpad 的 `meals-timeline/`：`make-fixture.ts`（今天下午备餐、按请求键存好步骤、无进度 / 在第 2 步 / 第 2 步超时三份）、`run-shots.sh`（起私有 vite、xvfb-run 下无头 Chrome、只杀自己起的进程）、`shots/`。
+
 ## 还剩什么
-
-A2（界面）：
-
-- 备餐页和入口读已存步骤：`prepStepsRequest` 算出请求，`storedPrepSteps` 读，没有就 `writePrepStepsOnce`（chat 档）并显示「步骤在写」；拿到以后把 `timelineMinutes(steps, kitchenFor(profile))` 作为 `written` 传给 `batchCookEntry`、`prepView`，日卡的备餐行和手机磁贴同理。
-- 第 3 段：泳道总览和步骤列表画 `timelineView` 的结果，`boxes` 取档案是否装盒；开始以后每分钟重读一次。
-- 「开始备餐」按钮调 `startPrep`，点步骤或按钮发 `recordPrepEvent`；顶栏开始以后加预计结束钟点（`endsAt`）。
-- 进度写在 `info-meals.json`，整文件后写者赢，两台设备同时点会丢一边；要不要单独存另议。
 
 B（语音）：
 
@@ -30,7 +33,14 @@ B（语音）：
 - 等待段到点的提醒：比对前后两次 `timelineView` 里状态从 waiting 变 done 的步，念 `sayDue`。
 - `meals-prep` 卡片和 `patchPart`、通话期间常亮、挂断后「接回语音」。
 
+没验：真机（WKWebView 里的常亮；每点一下都重读计划、`prepView` 重解一遍，手机上的耗时）、iPad 宽度。截图只拍了 393 宽的英文界面。
+
 ## 关键决定
+
+- 步骤状态在 `InfoHome` 读一份，备餐页、Meals 页和磁贴共用；`MealsPrep` 只拿状态和回调，测试不碰存储。
+- 开始的那一下就拿常亮（Safari 要手势），开始没写成就放掉；点「做完了」或离开备餐页放掉。
+- 「开始了」只出在下一步上，「做完了」和「慢了」出在在做和在等的步上；开始以后钟点刻度只标开始、中间一个整点和结束，免得挤。
+- 做完了以后进度不删，页面按做完画（全部变淡、不能点、不计时）。
 
 - 步骤 id 在入库时按排程顺序重编号，开始以后不再变，语音和卡片都用这个编号。
 - 进度只存事件（分钟），状态和钟点读时算；运行中的 `key` 和当前步骤键不同就当没开始（`runFor`）。
