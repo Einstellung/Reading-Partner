@@ -457,7 +457,7 @@ export default {
   "ask.aboutShopping": "Zum Einkauf fragen",
   "ask.aboutToday": "Zu heute fragen",
   "ask.aboutWeekday": "Zu {weekday} fragen",
-  "ask.aboutThisWeek": "Zu dieser Woche fragen",
+  "ask.aboutPlan": "Zum Plan fragen",
 
   "errors.noProvider": "Kein KI-Anbieter eingerichtet (Einstellungen).",
   "errors.extractorFailed": "Der Artikel-Extraktor konnte nicht geladen werden. Versuche es erneut.",

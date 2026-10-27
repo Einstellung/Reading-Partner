@@ -27,6 +27,7 @@ const LAUNCH = {
   onOpenBriefing: () => {},
   onOpenSettings: () => {},
   onStartSubscribing: () => {},
+  mealsTile: { mid: "Plan a batch cook", foot: "One shop, one cook, 1 to 3 days", action: { kind: "plan" as const } },
 };
 
 function issue(bookId: string, over: Partial<IssueCard> = {}): IssueCard {
@@ -135,14 +136,14 @@ test("while the shelves are read each section is four card shapes; with nothing 
 
 test("meals and the kept articles share a row; either alone takes it whole", async () => {
   const both = await draw();
-  const row = button(both.container, "Plan and shopping list").parentElement!;
+  const row = button(both.container, "Plan a batch cook").parentElement!;
   expect(row.className).toContain("grid-cols-2");
   expect(button(both.container, "articles kept to read").textContent).toContain("7");
   cleanup();
 
   const mealsOnly = await draw({ savedCount: 0 });
   expect(mealsOnly.container.textContent).not.toContain("Saved");
-  expect(button(mealsOnly.container, "Plan and shopping list").parentElement!.className).toContain("grid-cols-1");
+  expect(button(mealsOnly.container, "Plan a batch cook").parentElement!.className).toContain("grid-cols-1");
   cleanup();
 
   const savedOnly = await draw({ meals: false });
@@ -168,4 +169,32 @@ test("the book to continue is the first library cover, with its topic and how fa
   expect(library.querySelectorAll("li")).toHaveLength(3);
   fireEvent.click(card);
   expect(opened).toEqual(["continue"]);
+});
+
+test("the meals tile says what the batch cook needs and a tap goes where the state says", async () => {
+  const tapped: string[] = [];
+  const prep = await draw({
+    launch: {
+      ...LAUNCH,
+      mealsTile: { mid: "Prep: Today, afternoon", foot: "72 min hands-on · about 95 min", action: { kind: "prep", session: "s1" } },
+      onMealsTile: () => tapped.push("tile"),
+    },
+  });
+  const tile = button(prep.container, "Prep: Today, afternoon");
+  expect(tile.textContent).toContain("72 min hands-on · about 95 min");
+  await act(async () => {
+    fireEvent.click(tile);
+  });
+  expect(tapped).toEqual(["tile"]);
+  expect(prep.opened).not.toContain("meals");
+  cleanup();
+
+  // While info-meals.json is being read the tile holds a placeholder and a tap is the plain way in.
+  const loading = await draw({ launch: { ...LAUNCH, mealsTile: null } });
+  const held = button(loading.container, "Meals");
+  expect(held.querySelector(".animate-pulse")).not.toBeNull();
+  await act(async () => {
+    fireEvent.click(held);
+  });
+  expect(loading.opened).toContain("meals");
 });

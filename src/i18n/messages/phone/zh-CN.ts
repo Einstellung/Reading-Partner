@@ -47,8 +47,6 @@ export default {
   "home.intelEmpty": "还没有情报。跟 {name} 说你关注的主题，第二天早上出第一期。",
   "home.studyLine": "研究 · 第 {n} 版",
   "home.volumeLine": "专题册",
-  "home.mealsWeek": "本周",
-  "home.mealsFoot": "计划和购物清单",
   "home.savedFoot": { other: "篇文章待读" },
   "home.continue": "继续阅读",
   "home.continuePercent": "继续阅读 · {percent}%",

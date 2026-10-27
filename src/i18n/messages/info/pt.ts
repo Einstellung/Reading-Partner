@@ -457,7 +457,7 @@ export default {
   "ask.aboutShopping": "Perguntar sobre as compras",
   "ask.aboutToday": "Perguntar sobre hoje",
   "ask.aboutWeekday": "Perguntar sobre {weekday}",
-  "ask.aboutThisWeek": "Perguntar sobre esta semana",
+  "ask.aboutPlan": "Perguntar sobre o plano",
 
   "errors.noProvider": "Nenhum provedor de IA configurado (Ajustes).",
   "errors.extractorFailed": "Não foi possível carregar o extrator de artigos. Tente novamente.",

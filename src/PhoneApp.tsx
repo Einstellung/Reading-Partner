@@ -58,6 +58,7 @@ import {
   baseScreen,
   goTo,
   INITIAL_STACK,
+  openPrep,
   push,
   resolveBack,
   screen,
@@ -95,6 +96,8 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
       return "meals-day";
     case "meals-recipe":
       return "meals-recipe";
+    case "meals-prep":
+      return "meals-prep";
     case "meals-method":
       return "meals-method";
     case "meals-onboarding":
@@ -279,7 +282,7 @@ export default function PhoneApp({
     // The old briefing's page and article land on home while its UI is off
     // (info/old-briefing.ts), a box card's jump included.
     const reached = reachableScreen(next);
-    if (reached === "meals-day" || reached === "meals-recipe") return;
+    if (reached === "meals-day" || reached === "meals-recipe" || reached === "meals-prep") return;
     const kind = reached === "vestibule" ? "home" : reached;
     setStack((s) => goTo(s, screen(kind)));
   }, []);
@@ -408,6 +411,10 @@ export default function PhoneApp({
             // lands on the day where the reader left it.
             mealsRecipe={base.kind === "meals-recipe" ? base.meal : null}
             onOpenMealsRecipe={(date, meal) => setStack((s) => push(s, { kind: "meals-recipe", date, meal }))}
+            // The batch cook is an entry over the Meals page and carries its
+            // session, so back from it is the Meals page wherever it was opened.
+            mealsPrep={base.kind === "meals-prep" ? base.session : null}
+            onOpenMealsPrep={(session) => setStack((s) => openPrep(s, session))}
             // Method & sources and a replayed onboarding are opened from more
             // than one screen, so their back is the stack's own.
             onMealsBack={goBack}

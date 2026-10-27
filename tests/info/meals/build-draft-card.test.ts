@@ -4,7 +4,7 @@
 // Run: scripts/t.sh tests/info/meals/build-draft-card.test.ts
 
 import { expect, test } from "bun:test";
-import { mealAtSession, prepMinutes } from "../../../src/info/meals/build-draft-card";
+import { mealAtSession, prepMinutes } from "../../../src/info/meals/planner/prep";
 import { addDays } from "../../../src/info/meals/plan/week";
 import type { PlanDraft } from "../../../src/info/meals/planner/draft";
 import { draftCard, twoPotDraft } from "./planner/card-fixture";

@@ -199,6 +199,9 @@ export interface PlannerRecord {
   // planner/draft.ts PlanDraft, read back through parseDraft: plan/ does not
   // import the planner.
   draft: unknown;
+  // When the reader tapped Done on the prep page (docs/671 备餐页). A prep
+  // whose day is past counts as done without it: the plan is the record.
+  preppedAt?: number;
 }
 
 export interface WeekPlan {

@@ -457,7 +457,7 @@ export default {
   "ask.aboutShopping": "買い物について質問",
   "ask.aboutToday": "今日について質問",
   "ask.aboutWeekday": "{weekday}について質問",
-  "ask.aboutThisWeek": "今週について質問",
+  "ask.aboutPlan": "計画について質問",
 
   "errors.noProvider": "AI プロバイダーが設定されていません（設定を確認してください）。",
   "errors.extractorFailed": "記事抽出機能を読み込めませんでした。もう一度お試しください。",

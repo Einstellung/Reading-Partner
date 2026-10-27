@@ -457,7 +457,7 @@ export default {
   "ask.aboutShopping": "就购物清单提问",
   "ask.aboutToday": "就今天提问",
   "ask.aboutWeekday": "就{weekday}提问",
-  "ask.aboutThisWeek": "就本周提问",
+  "ask.aboutPlan": "问这个计划",
 
   "errors.noProvider": "未配置 AI 服务商（请在设置中配置）。",
   "errors.extractorFailed": "无法加载文章提取器，请重试。",

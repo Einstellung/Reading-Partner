@@ -25,7 +25,9 @@ import { MealsRecipe } from "./meals/MealsRecipe";
 import { MealsShopping } from "./meals/MealsShopping";
 import { MealsMethod } from "./meals/MealsMethod";
 import { MealsOnboarding } from "./meals/MealsOnboarding";
-import { saveProfile } from "../../../info/meals/apply";
+import { MealsPrep } from "./meals/MealsPrep";
+import { batchCookEntry, entryTileView, type EntryAction, type EntryTileView } from "../../../info/meals/screen/batch-cook";
+import { markPrepDone, saveProfile } from "../../../info/meals/apply";
 import { planNote } from "../../../info/meals/screen/plan-note";
 import { liveMealsPorts } from "../../../info/meals/live";
 import { loadMeals } from "../../../info/meals/plan/store";
@@ -51,6 +53,7 @@ function isMealsScreen(screen: HomeScreen | null): boolean {
     screen === "meals-shopping" ||
     screen === "meals-day" ||
     screen === "meals-recipe" ||
+    screen === "meals-prep" ||
     screen === "meals-method" ||
     screen === "meals-onboarding"
   );
@@ -91,6 +94,11 @@ export interface LaunchProps {
   onOpenBriefing: () => void;
   onOpenSettings: () => void;
   onStartSubscribing: () => void;
+  // The phone home's Meals tile (info/meals/screen/batch-cook.ts): null while
+  // info-meals.json is being read, and what a tap on it does. Left out by a
+  // shell that draws no tile.
+  mealsTile?: EntryTileView | null;
+  onMealsTile?: () => void;
 }
 
 export default function InfoHome(props: {
@@ -157,6 +165,10 @@ export default function InfoHome(props: {
   // split as the day's, the phone's stack entry or this screen's own memory.
   mealsRecipe?: MealKey | null;
   onOpenMealsRecipe?: (date: string, meal: MealKey) => void;
+  // Which prep session's page is open (docs/671 备餐页), and how one is opened:
+  // the phone's stack entry, or this screen's own memory on the desktop.
+  mealsPrep?: string | null;
+  onOpenMealsPrep?: (session: string) => void;
   // Back from Method & sources and from a replayed onboarding, both of which
   // are opened from more than one screen. The phone passes its stack's pop; the
   // desktop leaves it out and this screen goes back to where it opened them.
@@ -188,6 +200,7 @@ export default function InfoHome(props: {
   const [localMealsRecipe, setLocalMealsRecipe] = useState<MealKey | null>(null);
   // Where the desktop shell opened Method & sources from, to go back to it.
   const [methodFrom, setMethodFrom] = useState<HomeScreen>("meals");
+  const [localMealsPrep, setLocalMealsPrep] = useState<string | null>(null);
   const info = useInfoHome({
     role: props.role,
     onNavigate,
@@ -201,6 +214,24 @@ export default function InfoHome(props: {
   // prop. Not while the text call is up: that is the same conversation in the
   // other medium, and two of them on one screen is two microphones' worth of
   // the same day.
+  // The batch cook's ways in (docs/671 备餐页): its page, and the planning chat
+  // over the Meals page, from the page's card, the home tile and Re-plan alike.
+  const openMealsPrep = (session: string) => {
+    setLocalMealsPrep(session);
+    if (props.onOpenMealsPrep) props.onOpenMealsPrep(session);
+    else onNavigate("meals-prep");
+  };
+  const planMeals = () => {
+    if (screen !== "meals") onNavigate("meals");
+    info.askMeals(meals.state ?? EMPTY_MEALS, meals.today, { focus: { kind: "week" }, kickoff: mealsKickoff() });
+  };
+  const runMealsAction = (action: EntryAction) => {
+    if (action.kind === "plan") planMeals();
+    else if (action.kind === "prep") openMealsPrep(action.session);
+    else onNavigate("meals");
+  };
+  const mealsTile = props.mealsEnabled ? entryTileView(batchCookEntry(meals.state, meals.today, new Date().getHours()), meals.today) : null;
+
   useRegisterVoiceContext(
     screen === "briefing" && info.snap?.briefing && !info.infoCall
       ? { dateKey: info.snap.briefing.date, briefing: info.snap.briefing }
@@ -227,6 +258,10 @@ export default function InfoHome(props: {
               onOpenBriefing: () => onNavigate("briefing"),
               onOpenSettings: props.onOpenSettings,
               onStartSubscribing: info.openOnboarding,
+              mealsTile,
+              onMealsTile: () => {
+                if (mealsTile) runMealsAction(mealsTile.action);
+              },
             })
           ) : (
             <Vestibule
@@ -404,15 +439,30 @@ export default function InfoHome(props: {
               onOpenRecipe={openRecipe}
             />
           );
+        } else if (screen === "meals-prep") {
+          shown = "prep";
+          ask = { label: t("meals.askPlan"), onAsk: () => openChat({ kind: "week" }) };
+          inner = (
+            <MealsPrep
+              state={meals.state}
+              photos={meals.photos}
+              today={meals.today}
+              session={props.mealsPrep ?? localMealsPrep}
+              onBack={back}
+              onAsk={ask.onAsk}
+              onDone={() => void markPrepDone(liveMealsPorts({ today: () => meals.today, changed: meals.reload }))}
+            />
+          );
         } else {
           shown = "home";
-          ask = { label: t("info.ask.aboutThisWeek"), onAsk: () => openChat({ kind: "week" }) };
+          ask = { label: t("info.ask.aboutPlan"), onAsk: () => openChat({ kind: "week" }) };
           inner = (
             <MealsHome
               state={meals.state}
               photos={meals.photos}
               today={meals.today}
-              onPlanWeek={() => openChat({ kind: "week" }, mealsKickoff())}
+              onPlan={planMeals}
+              onOpenPrep={openMealsPrep}
               onAsk={ask.onAsk}
               onOpenShopping={() => onNavigate("meals-shopping")}
               onOpenDay={openDay}
@@ -483,6 +533,9 @@ export default function InfoHome(props: {
           onOpenBriefing={() => onNavigate("briefing")}
           onMealsChanged={meals.reload}
           onOpenMeals={(to) => onNavigate(to)}
+          // After a plan is applied, into its batch cook; a plan that cooks
+          // nothing ahead lands on the Meals page.
+          onMealsApplied={(session) => (session ? openMealsPrep(session) : onNavigate("meals"))}
           pipCards={props.pipCards}
         />
       )}
