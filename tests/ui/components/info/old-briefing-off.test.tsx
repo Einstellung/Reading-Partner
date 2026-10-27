@@ -60,11 +60,15 @@ async function home(over: { oldBriefing?: boolean; savedCount: number | null }) 
     result = render(
       <PhoneHome
         launch={LAUNCH}
+        intel={{ items: [], totals: { issues: 0, volumes: 0 }, library: {} }}
+        onOpenIntel={() => {}}
         savedCount={over.savedCount}
         onOpenSaved={() => {}}
         onOpenBriefs={() => {}}
+        topics={[]}
         continueBook={null}
         onContinue={() => {}}
+        onOpenTopic={() => {}}
         onOpenLibrary={() => {}}
         settingsAlert={false}
         meals={true}

@@ -27,6 +27,7 @@ import CoverBand from "../shelf/CoverBand";
 import {
   BOOK_LABEL,
   BOOK_READ,
+  BOOK_READ_ROW,
   BOOK_TITLE,
   CARD_LABEL,
   CARD_META,
@@ -61,14 +62,6 @@ import {
   type FetchAbility,
   type ShelfMaterial,
 } from "./shelf-list";
-
-// The label strip's bottom line on a card that carries the Lesson mark. The
-// desk's BOOK_READ is one truncating line of text; this one holds a mark beside
-// the text, so it is a row. Spelled out rather than appended to BOOK_READ: the
-// two would set `display` twice and which one won would be Tailwind's emission
-// order (docs/pitfall/78).
-const LESSON_READ =
-  "mt-1 flex items-center gap-1.5 overflow-hidden text-[12px] leading-[14px] whitespace-nowrap text-faint-foreground";
 
 export interface PhoneBookOpen {
   bookId: string;
@@ -506,7 +499,7 @@ function TopicShelf(props: {
                       <span className={BOOK_TITLE} title={m.file.name}>
                         {m.title}
                       </span>
-                      <span className={m.format === "pdf" ? LESSON_READ : BOOK_READ}>
+                      <span className={m.format === "pdf" ? BOOK_READ_ROW : BOOK_READ}>
                         {/* The mark that says this one is taught, not read. A
                             word in the label strip rather than a ribbon on the
                             cover: the cover is artwork to all four edges

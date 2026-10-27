@@ -6,6 +6,7 @@ import { appData } from "../../../platform/app/appdata";
 import { listLibraryEntries } from "../../../platform/app/library";
 import { getViewState } from "../../../platform/app/storage";
 import { listTopics } from "../../../platform/app/topics";
+import { lastReadingPosition } from "../../../reading/reading-position";
 import { prepareStudyBook } from "../reader/study/study-live";
 import { cardBookName, type InfoShelfIo, type IssueCard, type ShelfContext, type VolumeCard } from "./info-shelf";
 
@@ -13,7 +14,8 @@ export const liveInfoShelfIo: InfoShelfIo = {
   readText: async (path) => ((await appData.exists(path)) ? await appData.readText(path) : null),
   library: listLibraryEntries,
   topics: listTopics,
-  position: getViewState,
+  // This session's own first: a book just closed may not be written yet.
+  position: async (bookId) => lastReadingPosition(bookId) ?? (await getViewState(bookId)),
   today: () => todayLocal(),
 };
 

@@ -20,6 +20,7 @@ import { endStudyLive, shelfStudyMoveCardLive } from "../companion/study-end";
 import CardMenu from "../shelf/CardMenu";
 import MoveToTopicDialog from "../shelf/MoveToTopicDialog";
 import { moveFailedLine, moveTargets } from "../shelf/move-to";
+import { NEW_BADGE, SECTION_LABEL } from "../shelf/cardStyles";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogSheetContent, DialogTitle } from "../ui/dialog";
 import { cn } from "../lib/utils";
@@ -112,7 +113,7 @@ export default function InfoShelf(props: {
           <h1 className="m-0 text-[17px] font-semibold text-foreground">{t("info.shelf.title")}</h1>
         </div>
 
-        <h2 className="mt-0 mb-3 text-[12px] font-medium tracking-[0.08em] text-faint-foreground uppercase">
+        <h2 className={SECTION_LABEL}>
           {t("info.shelf.issues")}
         </h2>
         {view && view.issues.length === 0 && (
@@ -161,7 +162,7 @@ export default function InfoShelf(props: {
                   {issue.failure && <span className="line-clamp-3 text-[12px] leading-snug text-destructive">{issue.failure}</span>}
                 </span>
                 {issue.isNew && (
-                  <span className="absolute top-3 right-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold tracking-[0.06em] text-primary-foreground uppercase">
+                  <span className={cn(NEW_BADGE, "absolute top-3 right-3 py-0.5")}>
                     {t("info.shelf.new")}
                   </span>
                 )}
@@ -182,7 +183,7 @@ export default function InfoShelf(props: {
           ))}
         </ul>
 
-        <h2 className="mt-0 mb-3 text-[12px] font-medium tracking-[0.08em] text-faint-foreground uppercase">
+        <h2 className={SECTION_LABEL}>
           {t("info.shelf.volumes")}
         </h2>
         {view && view.volumes.length === 0 && (
