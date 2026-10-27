@@ -9,10 +9,10 @@
 // arrived must not push it off the screen; capped, so a backlog nobody opens
 // does not hide what is being read.
 
-import { t } from "../../../i18n";
+import { getLocale, t } from "../../../i18n";
 import { documentPath, type LibraryEntry } from "../../../platform/app/library";
 import type { FileRef } from "../../../platform/app/topics";
-import { typographicCover } from "../../../workshop/bindery/cover-svg";
+import { typographicCover, volumeCover } from "../../../workshop/bindery/cover-svg";
 import type { InfoShelfView, IssueCard, VolumeCard } from "../info/info-shelf";
 
 export const HOME_INTEL_COUNT = 4;
@@ -103,15 +103,19 @@ export function intelFile(item: IntelItem, library: Readonly<Record<string, Libr
 
 /**
  * The cover a volume is drawn with when its book has none of its own: the
- * bindery's typographic cover from what the card knows. Not volumeCover, which
- * writes the count in Chinese whatever the locale.
+ * bindery's volume cover from what the card knows. A card with no count yet
+ * gets the plain typographic cover, because volumeCover writes a count.
  */
 export function volumeFallbackCover(card: VolumeCard): string {
-  const svg = typographicCover({
-    kicker: t("phone.home.volumeLine"),
-    date: "",
-    title: card.title,
-    footer: card.items === null ? [] : [t("info.shelf.items", { count: card.items })],
-  });
+  const svg =
+    card.items === null
+      ? typographicCover({ kicker: t("phone.home.volumeLine"), date: "", title: card.title, footer: [] })
+      : volumeCover({
+          series: t("phone.home.volumeLine"),
+          title: card.title,
+          count: card.items,
+          dateRange: "",
+          locale: getLocale(),
+        });
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

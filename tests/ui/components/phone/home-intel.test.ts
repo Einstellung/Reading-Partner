@@ -97,6 +97,6 @@ test("a volume with no cover of its own is drawn the bindery's way, its count in
   const svg = (count: number | null) => decodeURIComponent(volumeFallbackCover(volume("v1", 1, count)).split(",")[1]);
   expect(volumeFallbackCover(volume("v1", 1, 18)).startsWith("data:image/svg+xml")).toBe(true);
   expect(svg(18)).toContain("Volume v1");
-  expect(svg(18)).toContain("18 items");
-  expect(svg(null)).not.toContain("items");
+  expect(svg(18)).toContain("18 pieces");
+  expect(svg(null)).not.toContain("pieces");
 });
