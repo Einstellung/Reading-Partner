@@ -164,6 +164,9 @@ export default {
   "tool.removingFromList": "買い物リストから削除しています",
   "tool.swappingLine": "買い物リストの項目を差し替えています",
   "tool.rewritingMethod": "作り方を書き直しています",
+  "tool.startingPrep": "作り置きを始めています",
+  "tool.prepStep": "手順を記録しています",
+  "tool.prepSay": "タイムラインを確認しています",
   "tool.refreshingPhotos": "写真を探し直しています",
 
   "flavour.soy-ginger": "しょうが醤油",
@@ -456,4 +459,8 @@ export default {
   "timeline.legendHands": "手を動かす",
   "timeline.unit": "分",
   "timeline.overview": "道具ごとの流れ",
+  "timeline.resumeVoice": "音声に戻る",
+  "timeline.voiceOff": "この端末では音声が使えないため、タイムラインは音声なしで進みます。",
+  "prepCard.title": "作り置き",
+  "prepCard.allDone": "すべての手順が完了",
 } satisfies Translation<typeof en>;

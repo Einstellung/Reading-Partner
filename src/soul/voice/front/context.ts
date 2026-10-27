@@ -9,6 +9,8 @@ import type { CallLine, FrontContext, FrontListRow } from "./contract";
 
 export const FRONT_TOKEN_CAP = 4000;
 export const FRONT_PLACE_CAP = 400;
+/** What a screen laid on the call: a prep's numbered steps run past the place's cap. */
+export const FRONT_ATTACHED_CAP = 1200;
 export const FRONT_LIST_ROWS = 10;
 export const FRONT_TURNS = 10;
 /** Runs in flight at once: the back half's cap, which it enforces. */
@@ -89,10 +91,16 @@ export function listText(rows: readonly FrontListRow[]): string {
  * The system prompt: identity and duty, place, list. The first two do not
  * change during a call; the place may, turn to turn.
  */
-export function frontSystemPrompt(place: string, rows: readonly FrontListRow[], name: string = DEFAULT_COMPANION_NAME): string {
+export function frontSystemPrompt(
+  place: string,
+  rows: readonly FrontListRow[],
+  name: string = DEFAULT_COMPANION_NAME,
+  attached?: string,
+): string {
+  const where = clip(place, FRONT_PLACE_CAP);
   return [
     frontFixedPrompt(name),
-    `Where this call is held:\n${clip(place, FRONT_PLACE_CAP)}`,
+    `Where this call is held:\n${attached ? `${where}\n${clip(attached, FRONT_ATTACHED_CAP)}` : where}`,
     `The numbered list (what this call handed off):\n${listText(rows)}`,
   ].join("\n\n");
 }
@@ -139,6 +147,6 @@ export function frontMessages(lines: readonly CallLine[], budget: number): Front
 
 /** Everything one front call is sent: within FRONT_TOKEN_CAP, the fixed part first. */
 export function frontRequest(ctx: FrontContext): { system: string; messages: FrontMessage[] } {
-  const system = frontSystemPrompt(ctx.place, ctx.list, ctx.name);
+  const system = frontSystemPrompt(ctx.place, ctx.list, ctx.name, ctx.attached);
   return { system, messages: frontMessages(ctx.lines, FRONT_TOKEN_CAP - estimateTokens(system)) };
 }

@@ -175,6 +175,9 @@ export default {
   "tool.removingFromList": "Убираю строку из списка покупок",
   "tool.swappingLine": "Заменяю строку в списке покупок",
   "tool.rewritingMethod": "Переписываю способ приготовления",
+  "tool.startingPrep": "Начинаю заготовку",
+  "tool.prepStep": "Отмечаю шаг",
+  "tool.prepSay": "Смотрю расписание",
   "tool.refreshingPhotos": "Ищу фото получше",
 
   "flavour.soy-ginger": "Соя с имбирём",
@@ -472,4 +475,8 @@ export default {
   "timeline.legendHands": "Работа",
   "timeline.unit": "мин",
   "timeline.overview": "Шаги по приборам",
+  "timeline.resumeVoice": "Вернуть голос",
+  "timeline.voiceOff": "На этом устройстве нет голоса, расписание идёт без него.",
+  "prepCard.title": "Заготовка",
+  "prepCard.allDone": "Все шаги сделаны",
 } satisfies Translation<typeof en>;

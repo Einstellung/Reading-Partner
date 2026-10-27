@@ -14,6 +14,7 @@ import { createLiveVoiceCall } from "../../../info/briefer/voice-call-live";
 import { doorDate } from "../../../soul";
 import type { FrontCard } from "../../../soul/voice/front/cascade";
 import { NO_VOICE_CALL, type LiveCallHooks } from "../../../soul/voice/live/call";
+import { registerCallHost, type CallBuilder } from "../../../soul/voice/live/call-host";
 import { createDoorVoiceCall } from "../../../soul/voice/live/door-call";
 import type { SessionPhase } from "../../../soul/voice/voice-session";
 import { registerVoiceCallHost } from "../../../soul/voice/harness/trace";
@@ -118,7 +119,9 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
     return call;
   }, []);
 
-  const start = useCallback(() => {
+  // `build` is a call another screen asked for (call-host.ts requestCall): the
+  // meals prep call. Without one the call is held where the screen says.
+  const startWith = useCallback((build?: CallBuilder) => {
     if (callRef.current || startingRef.current) return;
     startingRef.current = true;
     // A new attempt starts with a clean line: the sentence a failed or lost call
@@ -128,8 +131,9 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
     void (async () => {
       try {
         // The day at the door is the day the call starts on, and stays that day.
+        const hooks = { onShow: setCard, onRunning: setRunning };
         const mode = voiceCallMode(optsRef.current.context, { date: doorDate(), inReader: optsRef.current.inReader });
-        const call = await createModeCall(mode, { onShow: setCard, onRunning: setRunning });
+        const call = build ? await build(hooks) : await createModeCall(mode, hooks);
         if (!call) {
           setError({ reason: "start-failed", message: NO_VOICE_CALL });
           return;
@@ -160,6 +164,8 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
       }
     })();
   }, [drop]);
+  const start = useCallback(() => startWith(), [startWith]);
+  useEffect(() => registerCallHost({ start: startWith }), [startWith]);
 
   const stop = useCallback(() => {
     const call = drop();

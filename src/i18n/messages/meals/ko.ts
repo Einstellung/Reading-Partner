@@ -164,6 +164,9 @@ export default {
   "tool.removingFromList": "장보기 목록에서 빼는 중",
   "tool.swappingLine": "장보기 목록 항목을 바꾸는 중",
   "tool.rewritingMethod": "만드는 법을 다시 쓰는 중",
+  "tool.startingPrep": "밀프렙을 시작하는 중",
+  "tool.prepStep": "단계를 기록하는 중",
+  "tool.prepSay": "타임라인을 확인하는 중",
   "tool.refreshingPhotos": "사진을 다시 찾는 중",
 
   "flavour.soy-ginger": "생강간장",
@@ -456,4 +459,8 @@ export default {
   "timeline.legendHands": "손 쓰는 시간",
   "timeline.unit": "분",
   "timeline.overview": "도구별 흐름",
+  "timeline.resumeVoice": "음성 다시 연결",
+  "timeline.voiceOff": "이 기기에서는 음성을 쓸 수 없어 타임라인이 음성 없이 진행됩니다.",
+  "prepCard.title": "밀프렙",
+  "prepCard.allDone": "모든 단계 완료",
 } satisfies Translation<typeof en>;

@@ -6,7 +6,7 @@
 // Rendering and event binding only. The briefing view, the open article and the
 // conversation that is up all live in use-info-home.ts.
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { savedArticleId } from "../../../reading/saved/saved-articles";
 import { reachableScreen, showsLaunchCard, type HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
@@ -35,7 +35,10 @@ import type { Profile } from "../../../info/meals/nutrition/targets";
 import { useMeals } from "./meals/use-meals";
 import { usePrepSteps } from "./meals/use-prep-steps";
 import { writtenMinutes } from "../../../info/meals/screen/prep-timeline";
-import { recordPrepEvent, startPrep } from "../../../info/meals/prep-progress";
+import { recordPrepSessionEvent, startPrepSession, type PrepSteps } from "../../../info/meals/prep-session";
+import { putMealsPrepCard } from "../../../info/briefer/meals-call";
+import { runFor } from "../../../info/meals/timeline/view";
+import { usePrepVoice } from "./meals/use-prep-voice";
 import { kitchenFor } from "../../../info/meals/timeline/schedule";
 import type { MealsFocus } from "../../../info/meals/tools";
 import type { StepEvent } from "../../../info/meals/timeline/run";
@@ -244,14 +247,34 @@ export default function InfoHome(props: {
     ? entryTileView(batchCookEntry(meals.state, meals.today, new Date().getHours(), prepWritten), meals.today)
     : null;
   const prepPorts = () => liveMealsPorts({ today: () => meals.today, changed: meals.reload });
+  // The run, its card in the meals conversation and its voice call
+  // (docs/671 时间线与语音), held here so they outlive the prep page.
+  const prepProfile = meals.state?.charter?.profile;
+  const prepReady = prepSteps.status.kind === "ready" ? prepSteps.status : null;
+  const prepTimeline: PrepSteps | null = useMemo(
+    () =>
+      prepReady
+        ? { key: prepReady.key, steps: prepReady.steps, kitchen: kitchenFor(prepProfile), boxes: prepProfile?.boxes !== false }
+        : null,
+    [prepReady, prepProfile],
+  );
+  const prepPlanner = meals.state?.plan?.planner;
+  const prepVoice = usePrepVoice({
+    steps: prepTimeline,
+    run: prepTimeline ? runFor(prepPlanner?.prepRun, prepTimeline.key) : null,
+    done: typeof prepPlanner?.preppedAt === "number",
+    ports: prepPorts,
+  });
+  const prepSession = () => ({ ports: prepPorts(), putCard: putMealsPrepCard });
   const startMealsPrep = async () => {
-    const s = prepSteps.status;
-    return s.kind === "ready" && (await startPrep(prepPorts(), s.key)) !== null;
+    if (!prepTimeline) return false;
+    // Asked for inside the tap, before anything is awaited: the call's audio wants the gesture.
+    const voice = prepVoice.request();
+    return (await startPrepSession(prepSession(), prepTimeline, () => voice)).kind === "started";
   };
   const recordMealsPrep = (event: StepEvent) => {
-    const s = prepSteps.status;
-    if (s.kind !== "ready") return;
-    void recordPrepEvent(prepPorts(), { key: s.key, steps: s.steps, kitchen: kitchenFor(meals.state?.charter?.profile) }, event).catch(() => {});
+    if (!prepTimeline) return;
+    void recordPrepSessionEvent(prepSession(), prepTimeline, event).catch(() => {});
   };
 
   useRegisterVoiceContext(
@@ -476,6 +499,8 @@ export default function InfoHome(props: {
               onRetrySteps={prepSteps.retry}
               onStart={startMealsPrep}
               onStep={recordMealsPrep}
+              voice={prepVoice.state}
+              onResumeVoice={() => void prepVoice.request()}
               onForeground={meals.reload}
             />
           );

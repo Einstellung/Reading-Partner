@@ -16,6 +16,7 @@ import {
   type PrepStepsStatus,
   type StepRowView,
 } from "../../../../info/meals/screen/prep-timeline";
+import type { PrepVoiceState } from "../../../../info/meals/prep-voice";
 import type { StepEvent } from "../../../../info/meals/timeline/run";
 import type { TimelineView } from "../../../../info/meals/timeline/view";
 import { IconCheck, IconSparkle } from "../../base/icons";
@@ -29,6 +30,10 @@ export interface MealsTimelineProps {
   onRetry: () => void;
   onStart: () => void;
   onStep: (event: StepEvent) => void;
+  // The prep's voice (use-prep-voice.ts): after a hang-up mid-prep the Start
+  // button's place offers the call back; with no voice, one line says so.
+  voice?: PrepVoiceState;
+  onResumeVoice?: () => void;
 }
 
 const CARD = "rounded-2xl border border-border-soft bg-card";
@@ -204,6 +209,14 @@ export function MealsTimeline(props: MealsTimelineProps) {
         <Button variant="cta" size="lg" className="w-full" onClick={props.onStart}>
           {t("meals.timeline.start")}
         </Button>
+      )}
+      {phase === "running" && props.voice === "idle" && (
+        <Button variant="cta" size="lg" className="w-full" onClick={props.onResumeVoice}>
+          {t("meals.timeline.resumeVoice")}
+        </Button>
+      )}
+      {phase === "running" && props.voice === "off" && (
+        <p className="m-0 text-[13px] leading-snug text-muted-foreground">{t("meals.timeline.voiceOff")}</p>
       )}
       <ol className={`${CARD} m-0 list-none p-1`}>
         {stepRows(view, phase).map((row) => (

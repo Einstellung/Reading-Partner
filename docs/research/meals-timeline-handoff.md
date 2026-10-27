@@ -25,15 +25,23 @@
 
 截图脚本在 scratchpad 的 `meals-timeline/`：`make-fixture.ts`（今天下午备餐、按请求键存好步骤、无进度 / 在第 2 步 / 第 2 步超时三份）、`run-shots.sh`（起私有 vite、xvfb-run 下无头 Chrome、只杀自己起的进程）、`shots/`。
 
+## B 做了什么（分支 `meals-prep-voice`）
+
+- 前台：`soul/voice/front/cascade.ts` 加 `say(text)`，程序的句子排进念原文那条队，地板空了（没人在说）立刻念，不等 2 s，写进通话所属的对话；`attached`、`extraTools` 每轮现取，`context.ts` 把 `attached` 放进「所在地方」，单独封顶 1200 token。
+- `soul/voice/live/call-host.ts`：设备上那一通电话的信号口。角上（`use-voice-call.ts`）登记成 host，别处用 `requestCall(builder)` 要一通指定的电话（已开着就沿用）；屏幕用 `attachToCall` 往任何开着的通话上挂地方文字和工具；`live/call.ts` 在通话非 idle 时登记 `openCall`，`sayInCall` 走前台的 `say`。
+- `info/meals/prep-voice.ts`：步骤清单（编号、一句话、设备、状态，无钟点无分钟）、`prep_step`、`prep_say`、`start_prep`、到点比对 `dueSentence` 和整分钟一个定时器的 `createDuePrompter`（每次拿当前的 run 比上一刻和此刻，事件造成的变化不念）、卡片视图。`prep-session.ts`：开始和事件都经这里，写 run、换卡片；`startPrepFromChat` 给工具用（步骤没写就当场写）。
+- `info/briefer/meals-call.ts`：三餐线程上的通话（`deliverTo: meals`、开场白不报步骤）和卡片落盘（同 id 原地 patch）。放 briefer 是因为线程 id 在 `anchors.ts`。
+- 界面：`InfoHome` 用 `use-prep-voice.ts` 挂步骤和工具、通话开着时跑提醒、拿 `prep-call` 常亮；「开始备餐」在点按里先要通话再写 run；第 3 段在跑且没通话时显示「接回语音」，设备不能语音时一行说明。`wake-lock.ts` 加 `heldScreenWakeLock`，备餐页（`prep-run`）和通话共用一个 sentinel。卡片 `MealsPrepCard.tsx` 登记在 `InfoCards.tsx`。
+- `tools.ts` 只动三行：import、`MealsToolDeps.startPrep?`、目录里加 `buildStartPrepTool`；只有用户所在的三餐对话（`use-info-call.ts`）传 `startPrep`，后台 run 拿到的工具答「这里不能开始」。
+- 测试：`tests/soul/voice/front-say.test.ts`、`live/call-host.test.ts`、`tests/info/meals/prep-voice.test.ts`、`tests/ui/components/info/meals/meals-prep-voice.test.tsx`、`tests/platform/app/wake-lock-shared.test.ts`；`tool-contract.test.ts` 名单加 `start_prep`。截图脚本在 scratchpad 的 `meals-voice/`（`run-shots.sh`，无头 Chrome 跑在 xvfb-run 下；通话开着那张是在页面里调 `openCall` 假装开着）。
+
 ## 还剩什么
 
-B（语音）：
-
-- 三餐对话工具 `start_prep`，前台工具 `prep_step`（转 `recordPrepEvent`）、`prep_say`（`sayNext`/`sayNow`/`sayLeft`，走 `read_out`）。
-- 等待段到点的提醒：比对前后两次 `timelineView` 里状态从 waiting 变 done 的步，念 `sayDue`。
-- `meals-prep` 卡片和 `patchPart`、通话期间常亮、挂断后「接回语音」。
-
-没验：真机（WKWebView 里的常亮；每点一下都重读计划、`prepView` 重解一遍，手机上的耗时）、iPad 宽度。截图只拍了 393 宽的英文界面。
+- 真机：出声、收音、前台模型会不会按说明调 `prep_step` / `prep_say`、不自己报钟点；WKWebView 里的常亮；提醒在 iPad 上的时机。
+- 沿用门口那通电话时，句子仍写进门口的对话，不搬到三餐线程。
+- 点「做完了」不挂断通话，只撤下步骤和工具、放掉通话那把常亮。
+- 三餐对话开着时，卡片的更新只落盘，界面上那张要重开对话才变。
+- 离开 info 屏（比如去读书）时步骤、工具和提醒随 `InfoHome` 卸下，通话还在。
 
 ## 关键决定
 

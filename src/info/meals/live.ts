@@ -31,6 +31,7 @@ import { buildMealsCatalogTools } from "./tools";
 import type { Applied } from "./apply";
 import { hostRegion } from "./region";
 import type { AgentTool } from "../../legion/durable/contract";
+import type { PrepStartOutcome } from "./prep-voice";
 
 export interface LiveMealsOptions {
   // The conversation the cards belong to.
@@ -46,6 +47,8 @@ export interface LiveMealsOptions {
   // The screen reloads: a deviation writes without a card, so nothing else
   // would tell it.
   changed(): void;
+  // start_prep: only the meals conversation the reader is in has one (tools.ts MealsToolDeps).
+  startPrep?(): Promise<PrepStartOutcome>;
 }
 
 let recipeWriter: RecipeWriter | null = null;
@@ -127,6 +130,7 @@ export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
     onMealsCard: opts.onMealsCard,
     ...(opts.currentDraft ? { currentDraft: opts.currentDraft } : {}),
     ...(opts.applyDraft ? { applyDraft: opts.applyDraft } : {}),
+    ...(opts.startPrep ? { startPrep: opts.startPrep } : {}),
     // A profile change said in any conversation reaches the meals page's note.
     onPlanCheck: (check: PlanCheck | null) => planNote.show(check),
   };

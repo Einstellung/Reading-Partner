@@ -59,6 +59,9 @@ import { applyDraft, checkNote, type Applied } from "../../../info/meals/apply";
 import { planNote } from "../../../info/meals/screen/plan-note";
 import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../info/meals/cards";
 import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
+import { startPrepFromChat } from "../../../info/meals/prep-session";
+import { putMealsPrepCard } from "../../../info/briefer/meals-call";
+import { requestPrepVoice } from "./meals/use-prep-voice";
 import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
@@ -662,6 +665,16 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           },
           today: () => todayLocal(),
           changed: () => onMealsChanged?.(),
+          // start_prep: the run and its card, then the call (docs/671 时间线与语音).
+          startPrep: () =>
+            startPrepFromChat(
+              {
+                ports: liveMealsPorts({ today: () => todayLocal(), changed: () => onMealsChanged?.() }),
+                putCard: putMealsPrepCard,
+                today: () => todayLocal(),
+              },
+              requestPrepVoice,
+            ),
         }),
       mealsDraft: currentDraft,
       topic: { onCard: (payload) => raiseCard("topic", payload) },

@@ -53,6 +53,8 @@ export interface FrontContext {
   name?: string;
   /** Where the call is held: today's lab headlines, or a book and its chapter. */
   place: string;
+  /** What a screen laid on the call (a prep's steps), shown with the place under its own cap. */
+  attached?: string;
   list: FrontListRow[];
   /** The call's own lines, oldest first. */
   lines: CallLine[];

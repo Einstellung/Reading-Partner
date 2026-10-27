@@ -120,3 +120,31 @@ export function createScreenWakeLock(target: WakeLockTarget | null): ScreenWakeL
     },
   };
 }
+
+// One lock for everyone who keeps the screen on for the same stretch (the prep
+// run on its page and the prep's voice call, docs/info/671): each holder says
+// whether it wants it, the screen stays on while any does, and one sentinel is
+// held, so a holder letting go cannot drop the other's. Made when the first
+// holder asks and dropped when the last lets go, so the next stretch reads the
+// platform afresh.
+const holders = new Set<string>();
+let shared: ScreenWakeLock | null = null;
+
+export function heldScreenWakeLock(
+  holder: string,
+  target: () => WakeLockTarget | null = browserWakeLockTarget,
+): ScreenWakeLock {
+  return {
+    set(on: boolean): void {
+      if (on) {
+        holders.add(holder);
+        shared ??= createScreenWakeLock(target());
+        shared.set(true);
+        return;
+      }
+      if (!holders.delete(holder) || holders.size > 0) return;
+      shared?.set(false);
+      shared = null;
+    },
+  };
+}
