@@ -259,9 +259,8 @@ export default function InfoHome(props: {
               onOpenSettings: props.onOpenSettings,
               onStartSubscribing: info.openOnboarding,
               mealsTile,
-              onMealsTile: () => {
-                if (mealsTile) runMealsAction(mealsTile.action);
-              },
+              // Tapped before info-meals.json is read: the Meals page, which holds until it is.
+              onMealsTile: () => runMealsAction(mealsTile?.action ?? { kind: "meals" }),
             })
           ) : (
             <Vestibule

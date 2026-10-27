@@ -84,7 +84,7 @@ export function planPrep(state: MealsState, today: string): PrepSlot | null {
     activeMin,
     totalMin,
     pots: dishes.map((d) => (zh ? d.name : d.nameEn)),
-    done: rec.preppedAt !== undefined || date < today,
+    done: typeof rec.preppedAt === "number" || date < today,
   };
 }
 
@@ -244,7 +244,7 @@ export function entryTileView(entry: BatchCookEntry | null, today: string): Entr
             foot: t("meals.entry.nextWhen", { day: dayWord(entry.next.date, today), meal: mealLabel(entry.next.key) }),
             action: { kind: "meals" },
           }
-        : { mid: t("meals.entry.nothingNext"), foot: t("meals.entry.planNext"), action: { kind: "meals" } };
+        : { mid: t("meals.entry.nothingNext"), foot: t("meals.entry.planNext"), action: PLAN };
     case "planNext":
       return { mid: t("meals.entry.planNext"), foot: t("meals.entry.usedUpTitle"), action: PLAN };
   }
