@@ -22,6 +22,7 @@
 import { getLocale, t } from "../../../i18n";
 import { foodById } from "../nutrition/foods";
 import type { TemplateItem } from "../nutrition/solve";
+import { NO_RAIL, stepRails } from "../timeline/numbers";
 import type { StepStatus } from "../timeline/run";
 import { RICE_POT } from "../timeline/steps";
 import type { TimelineStepView, TimelineView } from "../timeline/view";
@@ -248,7 +249,7 @@ interface Commit {
   chain: Step[];
 }
 
-const OTHER = "";
+const OTHER = NO_RAIL;
 
 export function nodeSize(activeMin: number): number {
   return Math.min(NODE_MAX, NODE_MIN + activeMin * 2.5);
@@ -291,34 +292,7 @@ export function prepGraph(view: TimelineView, phase: PrepPhase, pots: readonly P
   };
 
   // Which rail each step is drawn on.
-  const railOf = new Map<string, string>();
-  const findRail = (s: Step, seen: Set<string>): string | null => {
-    if (s.pot) return s.pot;
-    if (seen.has(s.id)) return null;
-    seen.add(s.id);
-    if (s.program) {
-      const preds = s.after
-        .flatMap((a) => (byId.has(a) ? [byId.get(a)!] : []))
-        .filter((p) => !p.program)
-        .sort((a, b) => b.end - a.end || order.get(b.id)! - order.get(a.id)!);
-      for (const p of preds) {
-        const r = findRail(p, seen);
-        if (r) return r;
-      }
-      return null;
-    }
-    for (const c of (children.get(s.id) ?? []).filter((c) => !c.program)) {
-      const r = findRail(c, seen);
-      if (r) return r;
-    }
-    for (const a of s.after) {
-      const p = byId.get(a);
-      const r = p ? findRail(p, seen) : null;
-      if (r) return r;
-    }
-    return null;
-  };
-  for (const s of steps) railOf.set(s.id, findRail(s, new Set()) ?? OTHER);
+  const railOf = stepRails(steps);
   const rail = (s: Step) => railOf.get(s.id)!;
 
   // The rails, by the first time the hands are on each.
@@ -401,29 +375,10 @@ export function prepGraph(view: TimelineView, phase: PrepPhase, pots: readonly P
     return { lines, marks };
   };
 
-  // Commits, and the waiting-only steps hung under them.
-  const rootOf = (s: Step): Step | null => {
-    let cur: Step | undefined = s;
-    for (let guard = 0; cur && cur.activeMin === 0 && guard < steps.length; guard++) {
-      const prev: string | undefined = cur.after.find((a) => byId.has(a) && rail(byId.get(a)!) === rail(cur!)) ?? cur.after.find((a) => byId.has(a));
-      cur = prev ? byId.get(prev) : undefined;
-    }
-    return cur && cur.activeMin > 0 ? cur : null;
-  };
-  const rootById = new Map<string, Step>();
-  for (const s of steps) {
-    if (s.activeMin > 0) continue;
-    const r = rootOf(s);
-    if (r) rootById.set(s.id, r);
-  }
-  const commits: Commit[] = steps
-    .filter((s) => s.activeMin > 0 || !rootById.has(s.id))
-    .map((s, i) => ({ s, n: i + 1, rail: rail(s), chain: [] }));
+  // Commits (the numbered steps, timeline/numbers.ts), and the waiting-only steps hung under them.
+  const commits: Commit[] = steps.flatMap((s) => (s.n === null ? [] : [{ s, n: s.n, rail: rail(s), chain: [] }]));
   const commitOf = new Map(commits.map((c) => [c.s.id, c]));
-  for (const s of steps) {
-    const r = rootById.get(s.id);
-    if (r) commitOf.get(r.id)!.chain.push(s);
-  }
+  for (const s of steps) if (s.under) commitOf.get(s.under)!.chain.push(s);
 
   // The step that finishes each pot.
   const potDoneBy = new Map<string, string>();
@@ -431,7 +386,7 @@ export function prepGraph(view: TimelineView, phase: PrepPhase, pots: readonly P
     if (r.pot === null) continue;
     const last = [...own(r.key)].sort((a, b) => b.end - a.end || order.get(b.id)! - order.get(a.id)!)[0];
     if (!last) continue;
-    const c = commitOf.get(last.id) ?? commitOf.get(rootById.get(last.id)?.id ?? "");
+    const c = commitOf.get(last.id) ?? commitOf.get(last.under ?? "");
     if (c) potDoneBy.set(c.s.id, r.key);
   }
 

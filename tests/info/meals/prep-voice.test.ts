@@ -21,8 +21,11 @@ import {
   prepInput,
   prepStepList,
   prepVoiceState,
+  stepByNumber,
   type PrepVoiceTimeline,
 } from "../../../src/info/meals/prep-voice";
+import { prepGraph } from "../../../src/info/meals/screen/prep-graph";
+import * as P from "./screen/prep-graph-fixture";
 import type { StepEvent } from "../../../src/info/meals/timeline/run";
 import { sayDue, sayLeft, sayNext, sayNow, timelineView } from "../../../src/info/meals/timeline/view";
 import type { PersistedPart } from "../../../src/platform/app/threads";
@@ -118,6 +121,60 @@ test("prep_step: more takes the minutes said, else 5; numbers name the steps, th
     { step: "2", event: "more", minutes: 3 },
     { step: "pack", event: "started" },
   ]);
+});
+
+// The real 17-step prep (two pressure-cooker pots and the rice): the voice goes by
+// the numbers the prep page shows, and a waiting-only step by its step's number.
+const POTS: Omit<PrepVoiceTimeline, "run"> = { key: P.POTS_KEY, steps: P.POTS_STEPS, kitchen: P.POTS_KITCHEN, boxes: true };
+const potsView = (minute: number) => timelineView(prepInput({ ...POTS, run: P.onPlan(minute) }, P.potsAt(minute)));
+
+test("the voice numbers the steps as the page does: hands-on steps in start order, waits under their step", () => {
+  setLocale("zh-CN");
+  const v = potsView(30);
+  const n = (id: string) => v.steps.find((s) => s.id === id)!;
+  expect([n("8").n, n("17").n, n("pack").n]).toEqual([7, 15, 16]);
+  expect([n("7").n, n("7").under, n("15").n, n("15").under]).toEqual([null, "3", null, "14"]);
+  // The page's commits carry the same numbers.
+  const graph = prepGraph(v, "running", P.POTS_NAMES);
+  const shown = graph.rows.flatMap((r) => (r.kind === "commit" ? [[r.id, r.n]] : []));
+  expect(shown).toEqual(v.steps.flatMap((s) => (s.n === null ? [] : [[s.id, s.n]])));
+
+  const lines = prepStepList(v).split("\n");
+  expect(lines.filter((l) => /^\d+\. /.test(l))).toHaveLength(16);
+  const three = lines.findIndex((l) => l.startsWith("3. 盖好压力锅并设高压烹煮十二分钟"));
+  expect(lines[three + 1]).toBe("   after 3: 让压力锅自然泄压至浮阀完全落下。 | 电压力锅 | waiting");
+  expect(lines).toContain("7. 开盖检查鸡胸肉最厚处中心温度达到七十四摄氏度，确保熟透。 | 电压力锅 | not started");
+  const thirteen = lines.findIndex((l) => l.startsWith("13. 盖好压力锅并设高压烹煮四十分钟"));
+  expect(lines[thirteen + 1]).toStartWith("   after 13: 让压力锅自然泄压");
+  expect(lines[thirteen + 2]).toStartWith("14. 开盖用低温煎炒档收汁");
+  expect(lines).toContain("15. 关闭加热并将挤出的青柠汁拌入牛肉。 | 电压力锅 | not started");
+  expect(lines.join("\n")).not.toMatch(/\d{1,2}:\d{2}|分钟后|\bmin\b/);
+});
+
+test("prep_step on a number acts on the first of that step and its waits not done yet", async () => {
+  for (const [minute, number, id] of [
+    [8, 3, "3"], // step 3's pot is still cooking: its own wait
+    [30, 3, "7"], // cooked, letting the pressure out: the wait hung under it
+    [30, 7, "8"],
+    [110, 13, "15"],
+    [110, 15, "17"],
+    [110, 16, "pack"],
+    [110, 1, "1"], // all done: the step itself, which the run reports as already done
+  ] as const) {
+    const events: StepEvent[] = [];
+    const tool = buildPrepStepTool({
+      timeline: () => ({ ...POTS, run: P.onPlan(minute) }),
+      now: () => P.potsAt(minute),
+      say: () => true,
+      record: async (e) => {
+        events.push(e);
+        return { run: P.onPlan(minute), applied: true };
+      },
+    });
+    await tool.execute({ step: number, event: "done" });
+    expect([minute, number, events[0]?.step]).toEqual([minute, number, id]);
+  }
+  expect(stepByNumber(potsView(30), 17)).toBeNull();
 });
 
 test("prep_say speaks the program's sentence through the call and asks no model", async () => {

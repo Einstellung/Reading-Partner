@@ -10,6 +10,7 @@
 import { formatDateTime, t } from "../../../i18n";
 import type { PrepRun } from "../plan/types";
 import { planRun, runMinute, statusesAt, type StepStatus } from "./run";
+import { stepNumbers } from "./numbers";
 import type { Kitchen } from "./schedule";
 import { COUNTER, PACK_STEP_ID, withPackStep, type LaneDevice, type PrepStep } from "./steps";
 
@@ -27,8 +28,14 @@ export interface TimelineInput {
 
 export interface TimelineStepView {
   id: string;
-  /** The number the step is called by: its place in the plan before the start. */
-  n: number;
+  /**
+   * The number the step is called by on the page, in the voice and on the chat
+   * card (numbers.ts): hands-on steps in start order. Null for a waiting-only
+   * step, which goes by the number of the step it hangs under.
+   */
+  n: number | null;
+  /** The step a waiting-only step hangs under; null for a numbered one. */
+  under: string | null;
   text: string;
   device: LaneDevice;
   deviceLabel: string;
@@ -95,9 +102,13 @@ export function timelineView(input: TimelineInput): TimelineView {
   const plan = planRun(steps, input.kitchen, run, minute);
   const status = statusesAt(steps, run, plan, minute);
   const clock = (m: number) => (run ? run.startedAt + m * 60_000 : null);
-  const own = steps.length - 1;
-  const numberOf = (id: string) => (id === PACK_STEP_ID ? own + 1 : Number(id) || 0);
   const byId = new Map(steps.map((s) => [s.id, s]));
+  const numbers = stepNumbers(
+    plan.order.map((id) => {
+      const s = byId.get(id)!;
+      return { id, pot: s.pot, after: s.after, activeMin: s.active, end: plan.placements[id]!.end, program: id === PACK_STEP_ID };
+    }),
+  );
 
   const list: TimelineStepView[] = plan.order.map((id) => {
     const s = byId.get(id)!;
@@ -105,7 +116,7 @@ export function timelineView(input: TimelineInput): TimelineView {
     const program = id === PACK_STEP_ID;
     return {
       id,
-      n: numberOf(id),
+      ...numbers.get(id)!,
       text: program ? t(input.boxes ? "meals.timeline.packBoxes" : "meals.timeline.packPots") : s.text,
       device: s.device,
       deviceLabel: deviceLabel(s.device),
