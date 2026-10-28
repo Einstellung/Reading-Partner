@@ -1,0 +1,146 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+body { margin: 0; background: #fff; }
+#flowHost { position: absolute; left: 20px; top: 20px; width: 400px; }
+#colHost { position: absolute; left: 20px; top: 560px; width: 1300px; height: 300px; }
+</style>
+<script>/*RP*/</script>
+</head><body>
+<div id="flowHost"></div>
+<div id="colHost"></div>
+<script>
+const ZH = "人工智能的历史可以追溯到二十世纪中叶，当时的研究者相信机器很快就能像人一样思考。然而，事情远比他们想象的复杂：每一次乐观的预测之后，都跟着一段漫长的寒冬。";
+const EN1 = "The first paragraph is long enough to wrap onto several lines in a column of this width, so the range starts in the middle of it.";
+const EN2 = "The second paragraph sits wholly inside the range. It also wraps onto several lines, and its own element box is what the range reports alongside its text.";
+const EN3 = "The third paragraph is where the range ends, somewhere in its middle, after a few words.";
+const PUNCT = "It was a well-known fact—indeed everyone knew it (or almost everyone) at http://example.com/a/b.";
+const DIALOG = ["“你去哪里？”", "“回家。”", "他点了点头，没有再说话。"];
+
+function mount(hostId, css, html) {
+  const host = document.getElementById(hostId);
+  const shadow = host.attachShadow({ mode: "open" });
+  shadow.innerHTML = `<style>${css}</style><div class="root">${html}</div>`;
+  const overlay = document.createElement("div");
+  const doc = { spine: 0, idref: "probe", entry: "probe.xhtml", host, shadow, root: shadow.querySelector(".root"), overlay };
+  const marks = RP.createFlowMarks({
+    owner: document, authorName: "", docAt: () => doc, docOf: () => doc, isShown: () => true,
+    pagination: {}, spineOf: () => null, onSave() {}, onSelect() {}, onPopup() {},
+  });
+  return { ...doc, marks };
+}
+const bodyHtml = `<p id="zh" lang="zh">${ZH}</p><p id="p1">${EN1}</p><p id="p2">${EN2}</p><p id="p3">${EN3}</p><p id="pu">${PUNCT}</p>` +
+  DIALOG.map((t, i) => `<p id="d${i}" lang="zh">${t}</p>`).join("");
+const baseCss = `.root { font: 18px/1.6 "Noto Serif CJK SC", serif; } p { margin: 0 0 0.8em; text-indent: 2em; }`;
+const flow = mount("flowHost", baseCss, bodyHtml);
+const cols = mount("colHost", baseCss + ` .root { height: 300px; column-width: 400px; column-gap: 40px; column-fill: auto; overflow: hidden; }`, bodyHtml);
+
+const textOf = (m, id) => m.root.querySelector("#" + id).firstChild;
+function charRect(node, i) {
+  const r = document.createRange(); r.setStart(node, i); r.setEnd(node, i + 1);
+  const rects = Array.from(r.getClientRects());
+  for (let k = rects.length - 1; k >= 0; k--) if (rects[k].width > 0) return rects[k];
+  return null;
+}
+const pointIn = (node, i, frac) => { const c = charRect(node, i); return [c.left + frac * c.width, c.top + c.height / 2]; };
+
+// A hold at one point, a drag to another, the lift: what the reader is left with.
+function select(m, from, to) {
+  m.marks.clearSelection();
+  const at = m.marks.caretAt(from[0], from[1]);
+  if (!at) return null;
+  m.marks.beginDrag(at);
+  if (to) m.marks.extendDrag(to[0], to[1]);
+  m.marks.commitDrag();
+  const blue = Array.from(m.overlay.querySelectorAll(".rp-select > div")).map((d) => ({ w: parseFloat(d.style.width), h: parseFloat(d.style.height) }));
+  return { sel: m.marks.selection(), blue };
+}
+
+// How many lines a span of text sits on, measured one text node at a time.
+function linesOf(m, a, aOff, b, bOff) {
+  const r = document.createRange(); r.setStart(textOf(m, a), aOff); r.setEnd(textOf(m, b), bOff);
+  const tops = new Set(); let lineH = Infinity;
+  const w = document.createTreeWalker(m.root, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    if (!r.intersectsNode(n)) continue;
+    const s = document.createRange();
+    s.setStart(n, n === r.startContainer ? r.startOffset : 0);
+    s.setEnd(n, n === r.endContainer ? r.endOffset : n.data.length);
+    for (const x of s.getClientRects()) if (x.width >= 0.5 && x.height >= 0.5) { tops.add(Math.round(x.left / 400) + ":" + Math.round(x.top)); lineH = Math.min(lineH, x.height); }
+  }
+  return { lines: tops.size, lineH };
+}
+
+const checks = [];
+const check = (name, ok, detail) => checks.push({ name, ok, detail });
+
+// 675: a selection that wholly holds a paragraph paints one band a line.
+function blockCase(m, name, a, aOff, b, bOff) {
+  const nodeA = textOf(m, a), nodeB = textOf(m, b);
+  const got = select(m, pointIn(nodeA, aOff, 0.25), pointIn(nodeB, bOff - 1, 0.25));
+  const { lines, lineH } = linesOf(m, a, aOff, b, bOff);
+  const tallBlue = got.blue.filter((x) => x.h > 1.8 * lineH).length;
+  const tallRects = got.sel.rects.filter((x) => x.height > 1.8 * lineH).length;
+  check(`675 ${name}: one blue band a line, none taller than a line`, got.blue.length === lines && tallBlue === 0 && tallRects === 0,
+    { lines, bands: got.blue.length, tallBlue, tallRects, lineH: Math.round(lineH) });
+}
+
+// 676: a hold on either half of a character takes that character.
+function holdCase(m, name) {
+  const node = textOf(m, "zh");
+  const wrong = { left: 0, right: 0 }; const examples = [];
+  for (let i = 0; i < node.data.length; i++) {
+    const c = charRect(node, i);
+    if (!c || c.width < 1) continue;
+    for (const frac of [0.25, 0.75]) {
+      const got = select(m, pointIn(node, i, frac));
+      const text = got && got.sel ? got.sel.text : "";
+      if (text !== node.data[i]) { wrong[frac < 0.5 ? "left" : "right"]++; if (examples.length < 3) examples.push({ i, under: node.data[i], frac, held: text }); }
+    }
+  }
+  check(`676 ${name}: a hold takes the character under the finger`, wrong.left === 0 && wrong.right === 0, { wrong, examples });
+}
+
+// 676: a drag between two characters takes both and what lies between, whichever halves.
+function dragCase(m, name) {
+  const node = textOf(m, "zh"); const bad = [];
+  for (const [from, ff, to, tf] of [[5, 0.25, 12, 0.25], [5, 0.25, 12, 0.75], [5, 0.75, 12, 0.25], [5, 0.75, 12, 0.75], [12, 0.25, 5, 0.25], [12, 0.75, 5, 0.75]]) {
+    const want = node.data.slice(Math.min(from, to), Math.max(from, to) + 1);
+    const got = select(m, pointIn(node, from, ff), pointIn(node, to, tf));
+    const text = got && got.sel ? got.sel.text : "";
+    if (text !== want) bad.push({ drag: `${from}@${ff}->${to}@${tf}`, want, got: text });
+  }
+  check(`676 ${name}: a drag takes exactly the characters it ran over`, bad.length === 0, bad);
+}
+
+// 676 on the sheets: a pen stroke holds the character it came down on, either way it goes.
+function penCase(m, name) {
+  const node = textOf(m, "zh"); const bad = [];
+  for (const [from, ff, to, tf, want] of [[5, 0.75, 12, 0.75, [5, 13]], [12, 0.75, 5, 0.25, [5, 13]], [12, 0.25, 5, 0.25, [5, 13]], [5, 0.25, 12, 0.25, [5, 12]]]) {
+    const [sx, sy] = pointIn(node, from, ff); const [ex, ey] = pointIn(node, to, tf);
+    const start = RP.charSpanUnder(RP.caretAtPoint(m.shadow, m.root, sx, sy), sx, sy);
+    const r = RP.strokeRange(document, start, RP.caretAtPoint(m.shadow, m.root, ex, ey));
+    const text = r ? r.toString() : "";
+    if (text !== node.data.slice(want[0], want[1])) bad.push({ stroke: `${from}@${ff}->${to}@${tf}`, want: node.data.slice(want[0], want[1]), got: text });
+  }
+  check(`676 ${name}: a pen stroke starts on the character under the pen`, bad.length === 0, bad);
+}
+
+setTimeout(() => {
+  const result = {};
+  try {
+    blockCase(flow, "column: p1 to p3 over all of p2", "p1", 40, "p3", 30);
+    blockCase(flow, "column: d0 to d2 over all of d1", "d0", 1, "d2", 3);
+    blockCase(cols, "multicol: p1 to p3 over all of p2", "p1", 40, "p3", 30);
+    holdCase(flow, "column"); holdCase(cols, "multicol");
+    dragCase(flow, "column"); dragCase(cols, "multicol");
+    if (RP.charSpanUnder) { penCase(flow, "column"); penCase(cols, "multicol"); }
+    const words = {};
+    for (const w of ["indeed", "fact", "example"]) { const b = RP.wordBoundsAt(PUNCT, PUNCT.indexOf(w) + 1); words[w] = PUNCT.slice(b.start, b.end); }
+    check("dashes and slashes break words", words.indeed === "indeed" && words.fact === "fact" && words.example === "example.com", words);
+  } catch (e) { result.error = String(e && e.stack || e); }
+  result.checks = checks;
+  window.__result = JSON.stringify(result, null, 1);
+}, 600);
+</script>
+</body></html>
