@@ -8,7 +8,15 @@ import { createFakeAppData } from "../../../support/guarded-appdata";
 import type { MealsPorts } from "../../../../src/info/meals/apply";
 import type { MealsState, WeekPlan } from "../../../../src/info/meals/plan/types";
 import { recordPrepEvent, startPrep } from "../../../../src/info/meals/prep-progress";
-import { isPrepRequest, prepStepsRequest, writePrepSteps, type PrepStepsEntry, type PrepStepsRequest } from "../../../../src/info/meals/recipe/prep-steps";
+import {
+  isPrepRequest,
+  PREP_STEPS_PROMPT_VERSION,
+  prepStepsRequest,
+  prepStepsSystemPrompt,
+  writePrepSteps,
+  type PrepStepsEntry,
+  type PrepStepsRequest,
+} from "../../../../src/info/meals/recipe/prep-steps";
 import { loadPrepSteps, loadRecipe, savePrepSteps, storedRecipeKeys } from "../../../../src/info/meals/recipe/recipe-store";
 import { createRecipeWriter, prepStepsToWrite } from "../../../../src/info/meals/recipe/recipe-sweep";
 import { planPrep } from "../../../../src/info/meals/screen/batch-cook";
@@ -39,6 +47,14 @@ test("the request names the session's pots and keys on what changes the steps", 
   expect(request().key).toBe(r.key);
   expect(prepStepsRequest(plannerState(), { ...OPTS, language: "zh-CN" })!.key).not.toBe(r.key);
   expect(prepStepsRequest(plannerState({ profile: { people: 2 } }), OPTS)!.key).not.toBe(r.key);
+});
+
+test("the prompt moves a later pot's pre-work off a busy device", () => {
+  expect(PREP_STEPS_PROMPT_VERSION).toBe(2);
+  const prompt = prepStepsSystemPrompt({ language: "en", burners: 2 });
+  expect(prompt).toContain("While a device is busy with an earlier pot, a later pot's hands-on work that does not need that device");
+  expect(prompt).toContain("so the pot goes into the device as soon as it is free");
+  expect(prompt).toContain("do not add it where it does not");
 });
 
 test("one call writes the steps, numbered in the planned order", async () => {

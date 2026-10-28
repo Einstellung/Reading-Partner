@@ -29,7 +29,7 @@ import { kitchenFor, schedule } from "../timeline/schedule";
 import { MAX_PREP_STEPS, readPrepSteps, renumber, RICE_POT, type PrepStep } from "../timeline/steps";
 
 // Raised when the prompt changes what the steps may say; every stored session's steps are written again once.
-export const PREP_STEPS_PROMPT_VERSION = 1;
+export const PREP_STEPS_PROMPT_VERSION = 2;
 
 export interface PrepStepsRow {
   food: string;
@@ -185,6 +185,7 @@ export function prepStepsSystemPrompt(request: Pick<PrepStepsRequest, "language"
     "Rules:",
     '- Split where the hands come free: "seal the pressure cooker and cook on high 25 minutes" is one step, active 2 and wait 25 plus the minutes it takes to come up to pressure. Write a step that is only waiting when the food sits after the device is done (the pressure dropping on its own).',
     `- A step on the stove or the steamer takes one burner; the reader has ${request.burners}. Every other device does one thing at a time. Use only the devices listed.`,
+    "- While a device is busy with an earlier pot, a later pot's hands-on work that does not need that device (browning or searing the meat, frying the aromatics, mixing the sauce) goes on the stove or the counter in the meantime, so the pot goes into the device as soon as it is free. Judge whether that work improves the dish and is worth the extra pan to wash; do not add it where it does not.",
     "- Every pot, and the rice when there is one, gets its steps from the raw ingredients to cooked. Do not repeat the grams: the list is on the page.",
     "- The listed seasoning (a dry blend, a jar of sauce) is the flavour, used as it comes. Use only the listed ingredients plus salt, pepper, cooking oil and water.",
     "- Say when something has to be cooked through to be safe to eat (chicken, pork, beans, eggs).",
