@@ -114,6 +114,9 @@
 - [213-fit-width-in-paged-mode-turns-the-swipe-into-a-pan](./embedpdf/213-fit-width-in-paged-mode-turns-the-swipe-into-a-pan.md) — 翻页模式下点 "Fit page width" 之后就翻不动页：`zoomReset` 写死 fit-width，竖屏下它比 fit-page 大，`refreshZoomedIn` 判定放大、横滑归平移；重置要问布局自己锁的那个 fit（`resetZoom`），翻页还得重新居中并复位 `zoomedIn`
 - [376-a-cjk-font-that-is-not-embedded-renders-nothing](./embedpdf/376-a-cjk-font-that-is-not-embedded-renders-nothing.md) — 没嵌字体的中文 PDF 汉字全部不画，ASCII 照出、不报错；引擎传的是 `fontFallback: null`，而 pdfium.wasm 不带 CJK 字体，字体清单要宿主自己备
 - [659-devtools-network-keeps-every-page-image](./embedpdf/659-devtools-network-keeps-every-page-image.md) — Playwright 的页面会话开着 Network 域，DevTools 替页面留着每个 `blob:` 页图的响应体（封顶约 200MB），量出来的"渲染进程越读越大"是它；量内存改用裸 CDP、不开 Network 域
+- [677-word-boundary-does-not-split-cjk](./embedpdf/677-word-boundary-does-not-split-cjk.md) — `expandToWordBoundary` 只在空格和生成换行处断词，按住一个汉字选中整行；`wordAround` 多收这页文本，用 `reading/words/unspaced.ts`（和 EPUB 共用）按单字，文本在按下时按页预读
+- [678-cjk-loose-glyph-box-is-taller-than-the-line](./embedpdf/678-cjk-loose-glyph-box-is-taller-than-the-line.md) — CJK 字体的 loose 字框约两倍行距，插件拼的行矩形盖住两行：高亮叠成块、下划线落到下一行；标点和「一」的 tight 框又薄得按不中。行框和命中都改成横向 loose、竖向本行墨迹带（`lineRects`/`glyphUnder`），笔路靠工具的 `selectionHandler` 用同一套
+- [679-selection-plugin-marquee-is-on-by-default](./embedpdf/679-selection-plugin-marquee-is-on-by-default.md) — selection 插件不传配置就开框选，拖出蓝框、松手选中框内所有标注并弹编辑器；注册时 `SELECTION_CONFIG` 关掉
 
 ## 触摸与手势
 
