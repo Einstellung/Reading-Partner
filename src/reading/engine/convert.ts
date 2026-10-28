@@ -80,6 +80,13 @@ export const MARKUP_TOOL_OVERRIDES = [
   { id: "underline", defaults: { opacity: MARKUP_OPACITY } },
 ];
 
+// The same overrides with the handler that turns a text selection into the
+// mark (markup-select.ts): line boxes instead of the plugin's loose glyph
+// boxes, which in a CJK face are two lines tall (docs/pitfall/embedpdf/678).
+export function markupToolOverrides<H>(selectionHandler: H) {
+  return MARKUP_TOOL_OVERRIDES.map((tool) => ({ ...tool, selectionHandler }));
+}
+
 // EmbedPDF renders a markup from `strokeColor` and treats `color` as a
 // deprecated alias — an object carrying only `color` is drawn in the renderer's
 // fallback yellow, whatever the reader picked. Every write of a markup colour

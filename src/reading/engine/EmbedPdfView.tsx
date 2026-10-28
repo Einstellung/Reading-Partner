@@ -32,8 +32,9 @@ import { SelectionPluginPackage, SelectionLayer } from "@embedpdf/plugin-selecti
 import { HistoryPluginPackage } from "@embedpdf/plugin-history/react";
 import { AnnotationPluginPackage, AnnotationLayer } from "@embedpdf/plugin-annotation/react";
 
-import { MARKUP_TOOL_OVERRIDES } from "./convert";
-import { SELECT_AFTER_CREATE } from "./annotation-selection";
+import { markupToolOverrides } from "./convert";
+import { SELECT_AFTER_CREATE, SELECTION_CONFIG } from "./annotation-selection";
+import { markupSelectionHandler, type MarkupSelectionState } from "./markup-select";
 import { PAGE_FRAME } from "./page-frame";
 import { PAGE_WASH_GROUP_STYLE, PAGE_WASH_STYLE } from "./page-wash";
 import { attachTouchRouter } from "./gesture/attach-touch";
@@ -296,6 +297,9 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
   // Page sizes (unscaled PDF points) so the overlay can scale page-space rects
   // to the current page box. Filled once the document opens.
   const pageSizesRef = useRef<{ width: number; height: number }[]>([]);
+  // The selection plugin's state, for the markup tools' selection handler
+  // (markup-select.ts). Reached once the registry is up.
+  const selectionStateRef = useRef<(documentId: string) => MarkupSelectionState | null>(() => null);
 
   // Initial reading layout (paged vs vertical), decided by the shell and carried
   // in the restored view state. Captured once at mount to seed the scroll/zoom
@@ -359,15 +363,17 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
         defaultZoomLevel: initialLayoutRef.current === "paged" ? ZoomMode.FitPage : ZoomMode.FitWidth,
       }),
       createPluginRegistration(InteractionManagerPluginPackage),
-      createPluginRegistration(SelectionPluginPackage),
+      // No marquee: nothing selects by box (annotation-selection.ts).
+      createPluginRegistration(SelectionPluginPackage, SELECTION_CONFIG),
       createPluginRegistration(HistoryPluginPackage),
       createPluginRegistration(AnnotationPluginPackage, {
         annotationAuthor: props.authorName ?? "Reading-Partner",
         // Finishing a stroke leaves nothing selected (annotation-selection.ts).
         selectAfterCreate: SELECT_AFTER_CREATE,
         // A markup is drawn at the same opacity whether it was just made or
-        // just re-imported (convert.ts owns the number).
-        tools: MARKUP_TOOL_OVERRIDES,
+        // just re-imported (convert.ts owns the number), and on line boxes
+        // whether a finger or a pen selected it (markup-select.ts).
+        tools: markupToolOverrides(markupSelectionHandler((id) => selectionStateRef.current(id))),
       }),
     ],
     // The buffer identifies the document; other props are read live via propsRef.
@@ -379,6 +385,16 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
     // The EmbedPDF provider only mounts (and fires onInitialized) below the
     // `!engine` guard, so engine is non-null here.
     if (!engine) return;
+    const selection = registry.getPlugin("selection") as {
+      provides?: () => { getState: (documentId: string) => MarkupSelectionState };
+    } | null;
+    selectionStateRef.current = (documentId) => {
+      try {
+        return selection?.provides?.().getState(documentId) ?? null;
+      } catch {
+        return null;
+      }
+    };
     try {
       await wireEngine(registry, propsRef, engine, setQuoteHlRef, setFingerSelRef, pageSizesRef, pagedRef);
     } catch (e) {
