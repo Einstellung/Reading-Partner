@@ -1,7 +1,7 @@
 // The prep page's timeline on a real DOM (docs/671 备餐页 3, 时间线与语音): the
-// steps being written, failed and ready; before the start, running with a
-// current step, a step running late, and the prep done; the taps and the screen
-// lock. Run: scripts/t.sh tests/ui/components/info/meals/meals-timeline.test.tsx
+// steps being written, failed and ready; the graph before the start, running
+// with a current step and the 「现在」 card in the top bar, a step running late,
+// and the prep done; the taps and the screen lock. Run: scripts/t.sh tests/ui/components/info/meals/meals-timeline.test.tsx
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { getLocale, setLocale, type Locale } from "../../../../../src/i18n";
@@ -70,12 +70,10 @@ function page(state: MealsState, steps: PrepStepsStatus, now = T0, start = true)
     />,
   );
   const heads = () => [...r.container.querySelectorAll("h2")].map((h) => h.textContent);
-  const row = (id: string) => r.container.querySelectorAll("ol li")[viewOrder(state, now).indexOf(id)] as HTMLElement;
-  return { ...r, calls, heads, row };
+  const row = (id: string) => r.container.querySelector(`li[data-step="${id}"]`) as HTMLElement;
+  const card = () => r.container.querySelector("[data-now-card]");
+  return { ...r, calls, heads, row, card };
 }
-
-const viewOrder = (state: MealsState, now: number) =>
-  timelineView({ steps: CHILI_STEPS, kitchen: { burners: 2 }, boxes: true, run: state.plan?.planner?.prepRun ?? null, now }).steps.map((s) => s.id);
 
 const settle = () => act(async () => {});
 
@@ -94,13 +92,16 @@ test("steps that could not be written: the recipe page's line and Try again", as
   expect(calls).toEqual(["retry"]);
 });
 
-test("ready, before the start: the timeline's minutes in the top line, lanes, minutes per step, and Start asks for the screen lock", async () => {
-  const { container, getByRole, calls, row } = page(withRun(null), READY);
+test("ready, before the start: the timeline's minutes in the top line, the graph with minutes per step, and Start asks for the screen lock", async () => {
+  const { container, getByRole, calls, row, card } = page(withRun(null), READY);
   expect(container.textContent).toContain("43 min");
   expect(container.textContent).toContain("65 min");
-  expect(container.querySelector('figure[aria-label="Steps by device"]')?.textContent).toContain("Counter");
-  expect(row("1").textContent).toContain("Counter · 10 min hands-on");
+  expect(container.querySelector('section[aria-label="Steps by pot"]')?.textContent).toContain("Pot runs on its own");
+  expect(row("1").textContent).toContain("min 0 · Counter · 10 min hands-on");
   expect(row("3").textContent).toContain("5 min hands-on · wait 30 min");
+  expect(row("3").textContent).toContain("Background: Stove 30 min, until min 55");
+  expect(container.querySelector("[data-gap]")?.textContent).toContain("Hands free");
+  expect(card()).toBeNull();
   expect(container.textContent).not.toContain("Ends ");
   expect(container.querySelector('[aria-current="step"]')).toBeNull();
   await act(async () => fireEvent.click(getByRole("button", { name: "Start prep" })));
@@ -116,16 +117,18 @@ test("a start that could not be written gives the screen lock back", async () =>
   expect([lock.requested, lock.released]).toEqual([1, 1]);
 });
 
-test("running: clock times, the current step marked with its taps, the end in the top bar, the screen kept on until leaving", async () => {
+test("running: clock times, the current step marked with its taps, the end and the 「现在」 card in the top bar, the screen kept on until leaving", async () => {
   const state = withRun(runOnStep2());
   const now = at(15);
   const v = timelineView({ steps: CHILI_STEPS, kitchen: { burners: 2 }, boxes: true, run: runOnStep2(), now });
-  const { container, getByRole, queryByRole, calls, row, unmount } = page(state, READY, now);
+  const { container, getByRole, queryByRole, calls, row, card, unmount } = page(state, READY, now);
   await settle();
   const current = container.querySelector('[aria-current="step"]')!;
   expect(current.textContent).toContain("Brown the chicken");
   expect(current.textContent).toContain(`${clockText(T0 + 9 * 60_000)} – ${clockText(T0 + 19 * 60_000)}`);
-  expect(current.textContent).toContain("Now");
+  expect(card()?.textContent).toContain(`min 15 · ${clockText(T0 + 15 * 60_000)}`);
+  expect(card()?.textContent).toContain("Brown the chicken");
+  expect(card()?.textContent).toContain("4 min left");
   expect(row("1").getAttribute("data-state")).toBe("done");
   expect(container.textContent).toContain(`Ends ${clockText(v.endsAt!)}`);
   expect(container.textContent).toContain(`Started at ${clockText(T0)}`);
@@ -158,10 +161,11 @@ test("a step running late: it keeps going past its estimate, the steps after it 
 });
 
 test("prep done: every step reads done, nothing to tap, no end time, and the screen is not kept on", async () => {
-  const { container, queryByRole } = page(withRun(runOnStep2(), 5), READY, at(15));
+  const { container, queryByRole, card } = page(withRun(runOnStep2(), 5), READY, at(15));
   await settle();
-  const rows = [...container.querySelectorAll("ol li")];
+  const rows = [...container.querySelectorAll("li[data-step]")];
   expect(rows.length).toBe(5);
+  expect(card()).toBeNull();
   expect(rows.every((li) => li.getAttribute("data-state") === "done")).toBe(true);
   for (const name of ["Done", "Started", "+5 min", "Start prep", "Done cooking"]) expect(queryByRole("button", { name })).toBeNull();
   expect(container.textContent).not.toContain("Ends ");

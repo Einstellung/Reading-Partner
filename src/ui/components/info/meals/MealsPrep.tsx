@@ -3,9 +3,10 @@
 // packed, where everything goes, and what the evenings and breakfasts need.
 // No checkboxes: the hands doing this are busy. Done at the bottom.
 //
-// Section 3 is the timeline (MealsTimeline.tsx); the voice is not here yet.
+// Section 3 is the timeline (MealsTimeline.tsx); while it runs, its 「现在」 card
+// rides in the top bar.
 // Rendering and event binding only: every line comes from
-// info/meals/screen/prep-view.ts and prep-timeline.ts, the steps, the clock and
+// info/meals/screen/prep-view.ts, prep-timeline.ts and prep-graph.ts, the steps, the clock and
 // the screen lock from use-prep-steps.ts.
 
 import { useEffect, useMemo, useRef } from "react";
@@ -21,6 +22,7 @@ import {
   writtenMinutes,
   type PrepStepsStatus,
 } from "../../../../info/meals/screen/prep-timeline";
+import { potNames, prepGraph } from "../../../../info/meals/screen/prep-graph";
 import { prepView, type PrepPotView } from "../../../../info/meals/screen/prep-view";
 import type { StepEvent } from "../../../../info/meals/timeline/run";
 import { kitchenFor } from "../../../../info/meals/timeline/schedule";
@@ -29,7 +31,7 @@ import { dishPicture, dishThumbnails, ingredientPicture } from "../../../../info
 import { Button } from "../../ui/button";
 import { MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
-import { MealsTimeline } from "./MealsTimeline";
+import { MealsTimeline, PrepNowCard } from "./MealsTimeline";
 import { useOnForeground, useRunClock, useScreenWakeLock } from "./use-prep-steps";
 import type { PrepVoiceState } from "../../../../info/meals/prep-voice";
 
@@ -118,6 +120,8 @@ export function MealsPrep(props: MealsPrepProps) {
     [ready, view, burners, boxes, run, now],
   );
   const phase = prepPhase(timeline, done);
+  const pots = useMemo(() => (view ? potNames(view.pots, view.rice) : []), [view]);
+  const graph = useMemo(() => (timeline ? prepGraph(timeline, phase, pots) : null), [timeline, phase, pots]);
   const lock = useScreenWakeLock(wantsWakeLock(phase));
   useOnForeground(() => {
     refresh();
@@ -130,7 +134,9 @@ export function MealsPrep(props: MealsPrepProps) {
   useEffect(() => {
     if (settled.current || !timeline) return;
     settled.current = true;
-    if (phase === "running") timelineRef.current?.scrollIntoView?.({ block: "start" });
+    if (phase !== "running") return;
+    const current = timelineRef.current?.querySelector('[aria-current="step"]');
+    (current ?? timelineRef.current)?.scrollIntoView?.({ block: current ? "center" : "start" });
   }, [timeline, phase]);
 
   const start = () => {
@@ -152,7 +158,9 @@ export function MealsPrep(props: MealsPrepProps) {
       askLabel={t("meals.askPlan")}
       onAsk={props.onAsk}
       onBack={props.onBack}
-    />
+    >
+      {graph?.now && <PrepNowCard card={graph.now} />}
+    </MealsHeader>
   );
   if (state === null) return <MealsColumn>{header}<div className="h-24" /></MealsColumn>;
   if (!view) {
@@ -236,7 +244,7 @@ export function MealsPrep(props: MealsPrepProps) {
         )}
         <MealsTimeline
           status={steps}
-          view={timeline}
+          graph={graph}
           phase={phase}
           onRetry={props.onRetrySteps ?? (() => {})}
           onStart={start}
