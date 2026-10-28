@@ -329,7 +329,7 @@ export function mealsGuidance(
       for (const key of day.planned ?? MEAL_KEYS) out.push(`    ${key}: ${mealLine(day[key])}`);
     }
     out.push(
-      "Refer to a meal by its day number and which meal it is. A new plan replaces the days it covers.",
+      "Refer to a meal by its day number and which meal it is. A new plan replaces everything from today on.",
     );
   } else if (state.plan) {
     out.push(`Their last plan ended on ${lastDate(state.plan)}. Nothing is planned from today on.`);
@@ -359,7 +359,7 @@ export function mealsGuidance(
     "WHEN A MEAL GOES DIFFERENTLY",
     "They will say one sentence ('中午没带饭，食堂吃的'). Call record_meals_deviation. Never re-plan over one",
     "meal. When they want the rest of their days planned again, draft a new plan from today with",
-    "propose_meal_plan; it replaces the days it covers. Boredom and 'too much hassle' are not deviations:",
+    "propose_meal_plan; it replaces everything from today on. Boredom and 'too much hassle' are not deviations:",
     "remember them for the next plan.",
     "",
     "THE SHOPPING LIST",
@@ -878,7 +878,7 @@ export function buildRecordDeviationTool(deps: MealsToolDeps & { ports: MealsPor
     description:
       "Call this the moment they say a meal went differently from the plan ('we ordered in', " +
       "'didn't take lunch'). It writes that meal down and re-solves the plan. It answers with the " +
-      "meals left without food; a new plan from today (propose_meal_plan) replaces the days it covers. " +
+      "meals left without food; a new plan (propose_meal_plan) replaces everything from today on. " +
       "Do not call it for boredom or 'too much hassle' — that is the next plan's business.",
     parameters: Type.Object({
       day: Type.String({

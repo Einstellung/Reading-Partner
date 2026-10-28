@@ -213,8 +213,8 @@ export async function saveProfile(
 /**
  * The draft card's 「就这样」, or apply_meal_plan: solve the draft against the
  * profile as it is now, write the plan and the shopping list derived from it
- * in one write (docs/671 对话). The draft's days replace the plan's days they
- * cover; the old plan's days before them stay when they run straight in.
+ * in one write (docs/671 对话). The new plan replaces the old one from today
+ * on; the old plan's days before today stay (planner/to-week.ts weekFromDraft).
  */
 export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): Promise<Applied> {
   if (card.phase === "applied") return NOTHING;
@@ -233,7 +233,7 @@ export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): P
     library: lib,
   });
   if (!result.plan) return NOTHING;
-  const plan = weekFromDraft({ result, lib, start: card.startDate, now: ports.now(), previous: state.plan, picks: card.picks });
+  const plan = weekFromDraft({ result, lib, start: card.startDate, now: ports.now(), today: ports.today(), previous: state.plan, picks: card.picks });
   const shopping = reconcileShoppingList(state.shopping, plannerShoppingList(result.plan, result.draft, plan, profile.people));
   try {
     await ports.savePlan(plan, shopping);

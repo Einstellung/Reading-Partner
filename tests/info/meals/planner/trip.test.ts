@@ -31,7 +31,7 @@ function solved(profile = PROFILE) {
     library: lib,
   });
   if (!result.plan) throw new Error(`fixture draft fails: ${JSON.stringify(result.problems)}`);
-  const plan = weekFromDraft({ result, lib, start: START, now: 1, previous: null });
+  const plan = weekFromDraft({ result, lib, start: START, now: 1, today: START, previous: null });
   return { result, lib, plan, solvedPlan: result.plan };
 }
 

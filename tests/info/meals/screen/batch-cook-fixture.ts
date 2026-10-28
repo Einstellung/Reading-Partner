@@ -43,7 +43,7 @@ export function eveningBefore(): PlanDraft {
 export function storedPlan(draft: PlanDraft = onDayOne(), profile: Profile = PROFILE): WeekPlan {
   const filled = fillDraft(draft, { profile, targets: targetsFor(profile), startWeekday: START_WEEKDAY, people: profile.people, library: LIB });
   if (filled.result.problems.length || !filled.result.plan) throw new Error(filled.unfilled.join("\n"));
-  return weekFromDraft({ result: filled.result, lib: LIB, start: START, now: 1, previous: null });
+  return weekFromDraft({ result: filled.result, lib: LIB, start: START, now: 1, today: START, previous: null });
 }
 
 /** A reader with the planner profile and a stored plan; `boxes: false` for one who does not box. */

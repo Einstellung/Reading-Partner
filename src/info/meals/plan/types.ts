@@ -241,8 +241,8 @@ export interface WeekPlan {
   // Local date of day one. days[i] is startDate + i.
   startDate: string;
   // In date order: seven on a week planned before docs/671; on a planner plan,
-  // its 1 to 3 days after the old plan's days that ran straight into them, and
-  // before them the prep day when its dinner is the plan's.
+  // the old plan's days before the day it was applied, then its prep day when
+  // its dinner is the plan's, then its 1 to 3 days.
   days: DayPlan[];
   // What is cooked once and eaten over several meals. Absent on a week with none.
   pots?: Pot[];
