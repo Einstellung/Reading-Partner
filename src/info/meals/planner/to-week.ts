@@ -11,10 +11,11 @@ import { getLocale } from "../../../i18n";
 import type { Dish, IngredientRole } from "../dishes/types";
 import type { TemplateRole } from "../nutrition/solve";
 import type { Profile, Targets } from "../nutrition/targets";
-import { MEAL_KEYS, type DayPlan, type Meal, type MealKey, type PlannerRecord, type SolvedItem, type WeekPlan } from "../plan/types";
+import { compareRefs, potShareG, refKey, type PotPortion } from "../plan/pots";
+import { MEAL_KEYS, type DayPlan, type Meal, type MealKey, type MealRef, type PlannerRecord, type SolvedItem, type WeekPlan } from "../plan/types";
 import { addDays, isoWeekday, weekId } from "../plan/week";
 import { checkDraft, type DraftResult } from "./checks";
-import { isBatchMain, parseDraft, type DraftMain, type PlanDraft } from "./draft";
+import { isBatchMain, parseDraft, type DraftMain, type MealAt, type PlanDraft } from "./draft";
 import { planLibrary, type PlanLibrary } from "./library";
 import { shownName } from "./packs";
 import { planDayTargets, prepDayTargets, type PlanLine, type SolvedPlan } from "./solve";
@@ -188,3 +189,54 @@ export function resolvePlannerWeek(
   return { ...plan, days };
 }
 
+
+/**
+ * Every batch meal's share of its pot, by refKey (docs/671 做法页): the prep
+ * session cooks the pot, so no meal cooks it and each one takes its box out
+ * (one eaten the day of the session takes its share from the pot). The pot is
+ * the batch dish, named in the UI language, its protein at the solved grams
+ * for everyone eating — the numbers the prep steps are asked with
+ * (recipe/prep-steps.ts). Empty when the plan has no draft or it no longer
+ * solves. The meal's own grams are already its share: `batch` says so.
+ */
+export function batchPortions(plan: WeekPlan, profile: Profile, targets: Targets): Map<string, PotPortion> {
+  const out = new Map<string, PotPortion>();
+  const rec = plan.planner;
+  const solve = rec ? solvePlannerRecord(plan, profile, targets) : null;
+  if (!rec || !solve) return out;
+  const people = profile.people ?? 1;
+  const refOf = (m: MealAt): MealRef => ({ date: addDays(rec.start, m.day - 1), meal: m.slot });
+  for (const b of solve.solved.batches) {
+    const dish = solve.lib.dish(b.dish);
+    const session = solve.draft.sessions.find((s) => s.id === b.session);
+    const protein = b.lines.filter((l) => l.role === "protein").sort((x, y) => y.grams - x.grams)[0];
+    if (!dish || !session || !protein) continue;
+    const cookDate = addDays(rec.start, session.day - 1);
+    const storage = (ref: MealRef) => (ref.date === cookDate ? ("fresh" as const) : ("fridge" as const));
+    const rawG = Math.round(protein.grams * people);
+    const refs = b.meals.map(refOf).sort(compareRefs);
+    const pot = {
+      id: b.id,
+      foodId: protein.food,
+      rawG,
+      cook: { date: cookDate, meal: "dinner" as const },
+      name: zh() ? dish.name : dish.nameEn,
+      method: zh() ? dish.summary : dish.summaryEn,
+    };
+    const boxes = refs.map((ref) => ({ ref, storage: storage(ref) }));
+    refs.forEach((ref, i) => {
+      out.set(refKey(ref), {
+        pot,
+        ref,
+        index: i + 1,
+        count: refs.length,
+        shareG: potShareG(rawG, refs.length),
+        storage: storage(ref),
+        cooks: false,
+        boxes,
+        batch: b.id,
+      });
+    });
+  }
+  return out;
+}

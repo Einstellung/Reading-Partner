@@ -108,6 +108,10 @@ export interface PotPortion {
   // The shares after the cook meal's, in week order, with where each waits:
   // the boxes the packing step fills.
   boxes: { ref: MealRef; storage: PotStorage }[];
+  // The planner batch this share is of (planner/to-week.ts batchPortions):
+  // cooked at the prep session, and the meal's grams are already its share.
+  // Absent on a share of the week's pots.
+  batch?: string;
 }
 
 /**

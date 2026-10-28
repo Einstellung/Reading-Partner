@@ -31,6 +31,7 @@ import {
   type WeekPlan,
 } from "../plan/types";
 import { addDays, isoWeekday, planExhausted } from "../plan/week";
+import { batchPortions } from "../planner/to-week";
 
 /** The mode as a plain word. None of them apologetic. */
 export function modeWord(mode: MealMode): string {
@@ -255,7 +256,7 @@ function ingredientRows(meal: Meal, key: MealKey, dayT: DayTargets | null, porti
     category: r.food.category,
     grams: r.grams,
     units: r.food.unit ? `${Math.round(r.grams / r.food.unit.grams)} ${r.food.unit.label}` : null,
-    potLabel: portion && r.role === "protein" && r.foodId === portion.pot.foodId ? potLabel(portion) : null,
+    potLabel: portion && !portion.batch && r.role === "protein" && r.foodId === portion.pot.foodId ? potLabel(portion) : null,
     kcal: r.kcal,
     protein: r.protein,
   }));
@@ -288,18 +289,35 @@ export function mealView(meal: Meal, key: MealKey, dayT: DayTargets | null, port
   };
 }
 
-/** One day as the screen draws it. `plan` is the week it belongs to, which its pots are read from. */
+/**
+ * Every meal's share of a pot, by refKey: the week's pots, and a planner
+ * plan's batches, which the prep session cooks (planner/to-week.ts
+ * batchPortions). The batches need the profile and targets to solve.
+ */
+export function mealPortions(plan: WeekPlan | null, profile: Profile | null, targets: Targets | null): Map<string, PotPortion> {
+  if (!plan) return new Map();
+  const out = potPortions(plan);
+  if (!plan.planner || !profile || !targets) return out;
+  for (const [key, portion] of batchPortions(plan, profile, targets)) if (!out.has(key)) out.set(key, portion);
+  return out;
+}
+
+/**
+ * One day as the screen draws it. `plan` is the week it belongs to, which its
+ * pots are read from; `portions` is mealPortions of it, passed in by a caller
+ * drawing several days so the draft is solved once.
+ */
 export function dayView(
   day: DayPlan,
   today: string,
   targets: Targets | null,
   profile: Profile | null,
   plan: WeekPlan | null = null,
+  portions: Map<string, PotPortion> = mealPortions(plan, profile, targets),
 ): DayView {
   const dayT = targets && profile ? dayTargetsOn(targets, profile, day.date) : null;
   // The prep day draws only the meals the plan covers on it (its dinner).
   const order: readonly MealKey[] = (dayT?.order ?? MEAL_KEYS).filter((k) => !day.planned || day.planned.includes(k));
-  const portions = plan ? potPortions(plan) : new Map<string, PotPortion>();
   const meals = order.map((k) => mealView(day[k], k, dayT, portions.get(refKey({ date: day.date, meal: k })) ?? null));
   const training = dayT?.kind === "training";
   return {
@@ -369,7 +387,8 @@ export function mealsView(state: MealsState, today: string, region: Region): Mea
   const profile = state.charter?.profile ?? null;
   const targets = targetsOf(state.charter, region);
   const plan = state.plan;
-  const week = plan ? plan.days.map((d) => dayView(d, today, targets, profile, plan)) : [];
+  const portions = mealPortions(plan, profile, targets);
+  const week = plan ? plan.days.map((d) => dayView(d, today, targets, profile, plan, portions)) : [];
   const upcoming = week.filter((d) => d.date >= today);
   return {
     profile,
