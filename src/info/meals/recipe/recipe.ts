@@ -177,6 +177,12 @@ function potLines(pot: RecipePot): string[] {
       `Write the steps for cooking the whole ${pot.rawG} g, then for putting this meal together with its fresh parts. Stop before packing the rest: the app adds that step.`,
     ];
   }
+  if (pot.storage === "fresh") {
+    return [
+      `This meal eats from a pot cooked earlier today: ${pot.name} (${pot.food}), cooked like this: ${pot.method}.`,
+      `The ${pot.food} is already cooked; the list gives this meal's share by its raw weight. Do not cook it again: take this meal's share from the pot, heat it through if it has cooled, and make the fresh parts (the staple, the vegetables).`,
+    ];
+  }
   const where =
     pot.storage === "freezer"
       ? "It was moved from the freezer to the fridge last night and has thawed."
