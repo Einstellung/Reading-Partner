@@ -1,6 +1,6 @@
 // The prep page's timeline section, the pure half (screen/prep-timeline.ts):
-// the phase and the screen lock, the late chips, the minute timer, the
-// overview's geometry and scale, and the step rows before and after the start.
+// the phase and the screen lock, the late chips, the minute timer, a step's
+// minutes and taps. The graph is prep-graph.test.ts.
 // Run: scripts/t.sh tests/info/meals/screen/prep-timeline.test.ts
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -10,12 +10,10 @@ import {
   endsText,
   LATE_CHIPS,
   lateEvent,
+  minutesText,
   msToNextMinute,
-  overviewView,
   prepPhase,
   stepActions,
-  stepRows,
-  tickMinutes,
   wantsWakeLock,
   writtenMinutes,
 } from "../../../../src/info/meals/screen/prep-timeline";
@@ -71,69 +69,22 @@ test("written minutes are the timeline's once the steps are ready, and nothing b
   for (const kind of ["none", "reading", "writing", "failed"] as const) expect(writtenMinutes({ kind }, null)).toBeNull();
 });
 
-test("the scale is round minutes ending on the total, fewer when they are clock times", () => {
-  expect(tickMinutes(65, false)).toEqual([0, 15, 30, 45, 65]);
-  expect(tickMinutes(65, true)).toEqual([0, 30, 65]);
-  expect(tickMinutes(20, false)).toEqual([0, 5, 10, 15, 20]);
-  expect(tickMinutes(62, false)).toEqual([0, 15, 30, 45, 62]);
-  // A round tick too close to the end gives way to it.
-  expect(tickMinutes(42, false)).toEqual([0, 10, 20, 30, 42]);
-  expect(tickMinutes(77, true)).toEqual([0, 30, 77]);
-  expect(tickMinutes(200, true)).toEqual([0, 120, 200]);
-  expect(tickMinutes(20, true)).toEqual([0, 10, 20]);
-  expect(tickMinutes(4, true)).toEqual([0, 4]);
+test("before the start a step says its minutes, hands-on and waiting, and nothing can be tapped", () => {
+  const v = view(null);
+  expect(minutesText(v.steps[0]!)).toBe("10 min hands-on");
+  expect(minutesText(v.steps.find((s) => s.id === "3")!)).toBe("5 min hands-on · wait 30 min");
+  expect(v.steps.every((s) => stepActions(s, v, "before").length === 0)).toBe(true);
+  expect(endsText(v, "before")).toBeNull();
 });
 
-test("before the start: bars as percent of the plan, numbers on the wide ones, minutes on the scale, no now line", () => {
-  const o = overviewView(view(null), "before");
-  expect(o.lanes.map((l) => l.label)).toEqual(["Counter", "Stove"]);
-  for (const lane of o.lanes) for (const b of lane.bars) expect(b.left + b.width).toBeLessThanOrEqual(100.0001);
-  const simmer = o.lanes[1]!.bars.filter((b) => b.n === 3);
-  expect(simmer.map((b) => b.kind)).toEqual(["active", "wait"]);
-  expect(simmer[0]!.showN).toBe(true);
-  expect(o.ticks.map((t) => t.label)).toEqual(["0", "15", "30", "45", "65"]);
-  expect(o.ticks.map((t) => t.align)).toEqual(["start", "center", "center", "center", "end"]);
-  expect(o.now).toBeNull();
-});
-
-test("while running: clock times on the scale, the now line at the run's minute, the hands' step outlined", () => {
+test("while running the step under way can be finished or stretched, the next one started; once over, nothing", () => {
   const v = view(runOnStep2(), at(15));
-  const o = overviewView(v, "running");
-  expect(o.ticks[0]!.label).toBe(clockText(T0));
-  expect(o.now).toBeCloseTo((15 / v.totalMin) * 100, 5);
-  const current = o.lanes.flatMap((l) => l.bars).filter((b) => b.current);
-  expect(current.map((b) => b.n)).toEqual([2]);
-  expect(o.lanes[0]!.bars.find((b) => b.n === 1)!.state).toBe("done");
-});
-
-test("once over, every bar and row reads done and nothing can be tapped", () => {
-  const v = view(runOnStep2(), at(15));
-  expect(overviewView(v, "finished").lanes.flatMap((l) => l.bars).every((b) => b.state === "done" && !b.current)).toBe(true);
-  expect(overviewView(v, "finished").now).toBeNull();
-  const rows = stepRows(v, "finished");
-  expect(rows.every((r) => r.state === "done" && r.actions.length === 0 && !r.current)).toBe(true);
-  expect(endsText(v, "finished")).toBeNull();
-});
-
-test("before the start each row says its minutes, hands-on and waiting", () => {
-  const rows = stepRows(view(null), "before");
-  expect(rows.map((r) => r.n)).toEqual([1, 2, 3, 4, 5]);
-  expect(rows[0]!.when).toBe("10 min hands-on");
-  expect(rows[2]!.when).toBe("5 min hands-on · wait 30 min");
-  expect(rows.every((r) => r.actions.length === 0 && r.label === null)).toBe(true);
-  expect(endsText(view(null), "before")).toBeNull();
-});
-
-test("while running each row has its clock times, the current step Now, and its taps", () => {
-  const v = view(runOnStep2(), at(15));
-  const rows = stepRows(v, "running");
-  const two = rows.find((r) => r.id === "2")!;
-  expect(two.when).toBe(`${clockText(T0 + 9 * 60_000)} – ${clockText(T0 + 19 * 60_000)}`);
-  expect([two.current, two.label, two.actions]).toEqual([true, "Now", ["done", "late"]]);
-  expect(rows.find((r) => r.id === "1")!.actions).toEqual([]);
-  const next = rows.find((r) => r.id === v.next)!;
-  expect(next.actions).toEqual(["started"]);
+  expect(stepActions(v.steps.find((s) => s.id === "2")!, v, "running")).toEqual(["done", "late"]);
+  expect(stepActions(v.steps.find((s) => s.id === "1")!, v, "running")).toEqual([]);
+  expect(stepActions(v.steps.find((s) => s.id === v.next)!, v, "running")).toEqual(["started"]);
   expect(endsText(v, "running")).toBe(`Ends ${clockText(v.endsAt!)}`);
+  expect(v.steps.every((s) => stepActions(s, v, "finished").length === 0)).toBe(true);
+  expect(endsText(v, "finished")).toBeNull();
 });
 
 test("a waiting step can be ended early or given longer; a step not next waits for its turn", () => {

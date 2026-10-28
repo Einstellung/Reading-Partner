@@ -167,7 +167,6 @@ test("before the start there are minutes and no clock times", () => {
   const last = v.steps[v.steps.length - 1]!;
   expect([last.id, last.n, last.program]).toEqual([PACK_STEP_ID, 4, true]);
   expect(last.text.length).toBeGreaterThan(0);
-  expect(v.lanes[0]!.device).toBe("counter");
   expect(sayLeft(v)).toContain("55");
   expect(sayNext(v)).toContain("step 1 text");
 });
