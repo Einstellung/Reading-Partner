@@ -18,7 +18,7 @@ import { msToNextMinute } from "./screen/prep-timeline";
 import { MORE_DEFAULT_MIN, type StepEvent, type StepEventKind, type StepStatus } from "./timeline/run";
 import type { Kitchen } from "./timeline/schedule";
 import type { PrepStep } from "./timeline/steps";
-import { sayDue, sayLeft, sayNext, sayNow, timelineView, type TimelineInput, type TimelineView } from "./timeline/view";
+import { sayDue, sayLeft, sayNext, sayNow, timelineView, type TimelineInput, type TimelineStepView, type TimelineView } from "./timeline/view";
 
 /** A run under way over its stored steps: everything the voice reads the timeline from. */
 export interface PrepVoiceTimeline {
@@ -52,15 +52,31 @@ const STATUS_WORDS: Record<StepStatus, string> = {
   todo: "not started",
 };
 
-/** The steps by number: one sentence, the device, the state. No clock times, no minutes. */
+const stepLine = (s: TimelineStepView) => `${s.text} | ${s.deviceLabel} | ${STATUS_WORDS[s.status]}`;
+
+/** A numbered step and the waiting-only steps hung under it, in order. */
+const withWaits = (view: TimelineView, step: TimelineStepView) => [step, ...view.steps.filter((w) => w.under === step.id)];
+
+/**
+ * The steps by the numbers the page shows: one sentence, the device, the
+ * state, the waiting-only steps under the step they follow as "after N:".
+ * No clock times, no minutes.
+ */
 export function prepStepList(view: TimelineView): string {
-  return view.steps.map((s) => `${s.n}. ${s.text} | ${s.deviceLabel} | ${STATUS_WORDS[s.status]}`).join("\n");
+  return view.steps
+    .flatMap((s) => {
+      if (s.n === null) return [];
+      const [, ...waits] = withWaits(view, s);
+      return [`${s.n}. ${stepLine(s)}`, ...waits.map((w) => `   after ${s.n}: ${stepLine(w)}`)];
+    })
+    .join("\n");
 }
 
 /** What the front is told about the prep while it runs (docs/671: the place section is the step list). */
 export function prepCallPlace(view: TimelineView): string {
   return [
-    "They are cooking the batch prep now, with the prep page on screen. The steps, by number (step | device | state):",
+    "They are cooking the batch prep now, with the prep page on screen. The steps, by the numbers the page shows (step | device | state); " +
+      "an 'after N:' line is a wait with no number of its own, called by N:",
     prepStepList(view),
     "When they say a step is finished, started, or taking longer, call prep_step with its number; " +
       "give minutes only when they said a number. Then answer with a word or two.",
@@ -85,11 +101,18 @@ const EVENTS: readonly StepEventKind[] = ["done", "started", "more"];
 const SAYS = ["next", "now", "left"] as const;
 export type PrepSayWhat = (typeof SAYS)[number];
 
-/** The step a number names in the view, or null. */
+/**
+ * The step a number names in the view, or null. A number covers its step and
+ * the waits hung under it; the event goes to the first of them not done yet
+ * (step 3's hands are done and the pot is letting its pressure out: "3 is done"
+ * ends the wait), or to the numbered step itself when all are done.
+ */
 export function stepByNumber(view: TimelineView, raw: unknown): string | null {
   const n = typeof raw === "number" ? raw : Number(String(raw ?? "").trim());
   if (!Number.isInteger(n)) return null;
-  return view.steps.find((s) => s.n === n)?.id ?? null;
+  const step = view.steps.find((s) => s.n === n);
+  if (!step) return null;
+  return (withWaits(view, step).find((s) => s.status !== "done") ?? step).id;
 }
 
 /** The program's sentence for a question about the schedule. */
@@ -107,9 +130,10 @@ export function buildPrepStepTool(deps: PrepToolDeps): AgentTool {
     description:
       "Record what the cook said about one step of the prep under way: done ('the onions are chopped'), " +
       "started ('I'm starting the eggs'), or more ('I'm behind, still chopping'). The program moves the rest of " +
-      "the timeline. Use the step's number from the list.",
+      "the timeline. Use the step's number from the list. A wait listed as 'after N:' has no number of its own " +
+      "and goes by N: an event on N is recorded on the first of step N and its waits that is not done yet.",
     parameters: Type.Object({
-      step: Type.Number({ description: "The step's number in the list." }),
+      step: Type.Number({ description: "The step's number in the list (for an 'after N:' wait, N)." }),
       event: Type.String({ description: "done, started or more." }),
       minutes: Type.Optional(Type.Number({ description: "For more: how many more minutes, only if they said a number." })),
     }),

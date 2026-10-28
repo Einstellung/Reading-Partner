@@ -73,6 +73,17 @@
        A fill wider than a few pixels is either --primary or a neutral. */
     --accent-line: #52664e;
 
+    /* The prep timeline's pot rails (meals/MealsTimeline.tsx): one colour per
+       pot, drawn only as lines, dots and short labels, the way --accent-line
+       is. Muted earth tones a step apart in hue so three or four pots side by
+       side stay told apart on the ground and on the paper tint; the third is
+       the green itself. */
+    --rail-1: #a8701f;
+    --rail-2: #a3473a;
+    --rail-3: var(--accent-line);
+    --rail-4: #3f6a8a;
+    --rail-5: #7a5378;
+
     /* The neutral second rank: a chip, a selected row, a selected tool, the
        active sidebar row, a "secondary" button. One step deeper than --muted so
        it reads as chosen against the panel it sits on. */

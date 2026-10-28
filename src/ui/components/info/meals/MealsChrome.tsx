@@ -59,6 +59,7 @@ export function MealsHeader({
   askLabel,
   onAsk,
   onBack,
+  children,
 }: {
   title: string;
   // Beside the title when the title is not already a weekday ("Today Monday").
@@ -69,10 +70,12 @@ export function MealsHeader({
   askLabel?: string;
   onAsk?: () => void;
   onBack?: () => void;
+  // A full-width line under the bar that stays with it (the prep's 「现在」 card while it runs).
+  children?: React.ReactNode;
 }) {
   const t = useT();
-  return (
-    <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 pb-1.5 pt-3 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:pb-2 sm:pt-5">
+  const bar = (
+    <>
       {onBack && (
         <button
           type="button"
@@ -100,6 +103,15 @@ export function MealsHeader({
           <IconSparkle size={14} /> <span className="whitespace-nowrap">{askLabel}</span>
         </Button>
       )}
+    </>
+  );
+  const box = "sticky top-0 z-10 -mx-4 mb-4 border-b border-border-subtle bg-background/85 px-4 pb-1.5 pt-3 backdrop-blur sm:-mx-6 sm:mb-6 sm:px-6 sm:pb-2 sm:pt-5";
+  const row = "flex items-center gap-2 sm:gap-3";
+  if (!children) return <div className={cn(box, row)}>{bar}</div>;
+  return (
+    <div className={box}>
+      <div className={row}>{bar}</div>
+      {children}
     </div>
   );
 }

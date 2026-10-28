@@ -1,5 +1,5 @@
 // What the prep page's timeline section and the prep voice read (docs/671
-// 时间线与语音): the lanes, the merged step list with each step's status, and
+// 时间线与语音): the step list in the order the steps start, each step's status, and
 // once started the clock times, all from the stored steps and the run. The
 // spoken sentences (next, now, left, a timer running out) are built here from
 // the same view and go to TTS as they are, never through the model.
@@ -10,6 +10,7 @@
 import { formatDateTime, t } from "../../../i18n";
 import type { PrepRun } from "../plan/types";
 import { planRun, runMinute, statusesAt, type StepStatus } from "./run";
+import { stepNumbers } from "./numbers";
 import type { Kitchen } from "./schedule";
 import { COUNTER, PACK_STEP_ID, withPackStep, type LaneDevice, type PrepStep } from "./steps";
 
@@ -27,41 +28,32 @@ export interface TimelineInput {
 
 export interface TimelineStepView {
   id: string;
-  /** The number the step is called by: its place in the plan before the start. */
-  n: number;
+  /**
+   * The number the step is called by on the page, in the voice and on the chat
+   * card (numbers.ts): hands-on steps in start order. Null for a waiting-only
+   * step, which goes by the number of the step it hangs under.
+   */
+  n: number | null;
+  /** The step a waiting-only step hangs under; null for a numbered one. */
+  under: string | null;
   text: string;
   device: LaneDevice;
   deviceLabel: string;
   pot: string | null;
+  /** The steps it waits for. */
+  after: string[];
   activeMin: number;
   waitMin: number;
   status: StepStatus;
-  /** Minutes from the start. */
+  /** Minutes from the start; the hands are on it from `start` to `handsEnd`, it waits from there to `end`. */
   start: number;
+  handsEnd: number;
   end: number;
   /** Clock times (ms), only once started. */
   startAt: number | null;
   endAt: number | null;
   /** The program's last step, not the model's. */
   program: boolean;
-}
-
-export interface TimelineSegmentView {
-  step: string;
-  n: number;
-  kind: "active" | "wait";
-  status: StepStatus;
-  start: number;
-  end: number;
-  startAt: number | null;
-  endAt: number | null;
-}
-
-export interface TimelineLaneView {
-  id: string;
-  device: LaneDevice;
-  label: string;
-  segments: TimelineSegmentView[];
 }
 
 export interface TimelineView {
@@ -76,7 +68,6 @@ export interface TimelineView {
   handsLeftMin: number;
   /** Clock time (ms) of the end, once started. */
   endsAt: number | null;
-  lanes: TimelineLaneView[];
   /** The merged list, in the order the steps are done. */
   steps: TimelineStepView[];
   /** The step the hands are on, or should be on now; null while the hands wait. */
@@ -111,9 +102,13 @@ export function timelineView(input: TimelineInput): TimelineView {
   const plan = planRun(steps, input.kitchen, run, minute);
   const status = statusesAt(steps, run, plan, minute);
   const clock = (m: number) => (run ? run.startedAt + m * 60_000 : null);
-  const own = steps.length - 1;
-  const numberOf = (id: string) => (id === PACK_STEP_ID ? own + 1 : Number(id) || 0);
   const byId = new Map(steps.map((s) => [s.id, s]));
+  const numbers = stepNumbers(
+    plan.order.map((id) => {
+      const s = byId.get(id)!;
+      return { id, pot: s.pot, after: s.after, activeMin: s.active, end: plan.placements[id]!.end, program: id === PACK_STEP_ID };
+    }),
+  );
 
   const list: TimelineStepView[] = plan.order.map((id) => {
     const s = byId.get(id)!;
@@ -121,36 +116,23 @@ export function timelineView(input: TimelineInput): TimelineView {
     const program = id === PACK_STEP_ID;
     return {
       id,
-      n: numberOf(id),
+      ...numbers.get(id)!,
       text: program ? t(input.boxes ? "meals.timeline.packBoxes" : "meals.timeline.packPots") : s.text,
       device: s.device,
       deviceLabel: deviceLabel(s.device),
       pot: s.pot,
+      after: s.after,
       activeMin: s.active,
       waitMin: s.wait,
       status: status[id]!,
       start: p.start,
+      handsEnd: p.handsEnd,
       end: p.end,
       startAt: clock(p.start),
       endAt: clock(p.end),
       program,
     };
   });
-
-  const perDevice = new Map<LaneDevice, number>();
-  for (const lane of plan.lanes) perDevice.set(lane.device, (perDevice.get(lane.device) ?? 0) + 1);
-  const lanes: TimelineLaneView[] = plan.lanes.map((lane) => ({
-    id: lane.id,
-    device: lane.device,
-    label: (perDevice.get(lane.device) ?? 1) > 1 ? `${deviceLabel(lane.device)} ${lane.slot}` : deviceLabel(lane.device),
-    segments: lane.segments.map((seg) => ({
-      ...seg,
-      n: numberOf(seg.step),
-      status: status[seg.step]!,
-      startAt: clock(seg.start),
-      endAt: clock(seg.end),
-    })),
-  }));
 
   const doing = list.filter((s) => s.status === "doing" && s.activeMin > 0);
   const todo = list.filter((s) => s.status === "todo");
@@ -164,7 +146,6 @@ export function timelineView(input: TimelineInput): TimelineView {
     leftMin: Math.max(0, plan.totalMin - minute),
     handsLeftMin,
     endsAt: clock(plan.totalMin),
-    lanes,
     steps: list,
     current: doing[0]?.id ?? null,
     next: (todo.find((s) => s.activeMin > 0) ?? todo[0])?.id ?? null,
