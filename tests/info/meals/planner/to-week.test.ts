@@ -1,6 +1,6 @@
 // A solved draft written as the stored plan (src/info/meals/planner/to-week.ts):
-// the made meals at their solved grams, the old plan's days kept when they run
-// straight into the new ones, and the draft solved again for a changed profile.
+// the made meals at their solved grams, the old plan's days before today kept,
+// and the draft solved again for a changed profile.
 // Run: scripts/t.sh tests/info/meals/planner/to-week.test.ts
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -19,8 +19,8 @@ beforeEach(() => {
 });
 afterEach(() => setLocale(before));
 
-const planAt = (start: string, previous: WeekPlan | null = null, now = 9) =>
-  weekFromDraft({ result: checked(), lib: LIB, start, now, previous });
+const planAt = (start: string, previous: WeekPlan | null = null, now = 9, today = start) =>
+  weekFromDraft({ result: checked(), lib: LIB, start, now, today, previous });
 
 test("a first plan is its draft's days, every meal made at its solved grams, the draft kept beside it", () => {
   const plan = planAt(START);
@@ -49,20 +49,19 @@ test("meals are named in the reader's language, a pot meal by its way", () => {
   expect(planAt(START).days[0]!.lunch.name).toBe("Kung pao chicken");
 });
 
-test("the old plan's days before the new one stay when they run straight into it", () => {
+test("applied on the day the new plan starts, the old plan's days before it stay and the rest are replaced", () => {
   const old = planAt(addDays(START, -2), null, 1);
   const plan = planAt(START, old);
   expect(plan.id).toBe(old.id);
   expect(plan.startDate).toBe(addDays(START, -2));
   expect(plan.days.map((d) => d.date)).toEqual([0, 1, 2, 3, 4].map((i) => addDays(START, i - 2)));
-  // The kept days are the old plan's; the old plan's day on the new start is replaced.
   expect(plan.days.slice(0, 2)).toEqual(old.days.slice(0, 2));
   expect(plan.days[2]).toEqual(planAt(START).days[0]);
   expect(plan.revision).toBe(old.revision + 1);
   expect(plan.planner?.start).toBe(START);
 });
 
-test("an old plan with a gap before the new one is replaced whole", () => {
+test("an old plan that ended before yesterday is replaced whole", () => {
   const old = planAt(addDays(START, -5), null, 1);
   const plan = planAt(START, old);
   expect(plan.id).toBe(`week-${START}`);
@@ -71,7 +70,7 @@ test("an old plan with a gap before the new one is replaced whole", () => {
 });
 
 test("a solved draft is required", () => {
-  expect(() => weekFromDraft({ result: { ...checked(), plan: null }, lib: LIB, start: START, now: 0, previous: null })).toThrow();
+  expect(() => weekFromDraft({ result: { ...checked(), plan: null }, lib: LIB, start: START, now: 0, today: START, previous: null })).toThrow();
 });
 
 test("a changed profile solves the draft again and keeps the meals that went differently", () => {

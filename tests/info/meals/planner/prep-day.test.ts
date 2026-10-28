@@ -87,7 +87,7 @@ test("cooked the afternoon before, that dinner is on the card after the session,
 
 test("the stored plan starts on the prep day with only its dinner planned", () => {
   const result = afternoonBefore();
-  const plan = weekFromDraft({ result, lib: LIB, start: START, now: 1, previous: null });
+  const plan = weekFromDraft({ result, lib: LIB, start: START, now: 1, today: PREP, previous: null });
   expect(plan.startDate).toBe(PREP);
   expect(plan.days.map((d) => d.date)).toEqual([PREP, START, addDays(START, 1), addDays(START, 2)]);
   const prep = plan.days[0]!;
@@ -100,22 +100,21 @@ test("the stored plan starts on the prep day with only its dinner planned", () =
   expect(view.meals.map((m) => m.key)).toEqual(["dinner"]);
 });
 
-test("an old plan's day on the prep day keeps its own breakfast and lunch, the dinner replaced", () => {
-  const old = weekFromDraft({ result: checked(), lib: LIB, start: addDays(START, -3), now: 1, previous: null });
+test("an old plan's day on the prep day, today, gives way to the prep day: only its dinner", () => {
+  const old = weekFromDraft({ result: checked(), lib: LIB, start: addDays(START, -3), now: 1, today: addDays(START, -3), previous: null });
   const result = afternoonBefore();
-  const plan = weekFromDraft({ result, lib: LIB, start: START, now: 2, previous: old });
+  const plan = weekFromDraft({ result, lib: LIB, start: START, now: 2, today: PREP, previous: old });
   expect(plan.startDate).toBe(old.startDate);
+  expect(plan.days.map((d) => d.date)).toEqual([-3, -2, -1, 0, 1, 2].map((i) => addDays(START, i)));
+  expect(plan.days.slice(0, 2)).toEqual(old.days.slice(0, 2));
   const prep = plan.days.find((d) => d.date === PREP)!;
-  const was = old.days.find((d) => d.date === PREP)!;
-  expect(prep.breakfast).toEqual(was.breakfast);
-  expect(prep.lunch).toEqual(was.lunch);
-  expect(prep.dinner).not.toEqual(was.dinner);
-  expect(prep.planned).toBeUndefined();
+  expect(prep.planned).toEqual(["dinner"]);
+  expect([prep.breakfast.mode, prep.lunch.mode, prep.snack.mode]).toEqual(["skip", "skip", "skip"]);
 });
 
 test("everything the pots need is bought by the prep day", () => {
   const result = afternoonBefore();
-  const plan = weekFromDraft({ result, lib: LIB, start: START, now: 1, previous: null });
+  const plan = weekFromDraft({ result, lib: LIB, start: START, now: 1, today: PREP, previous: null });
   const items = plannerShoppingList(result.plan!, result.draft, plan);
   expect(items.length).toBeGreaterThan(0);
   const chicken = items.find((i) => i.foodId === "chicken_thigh" || i.foodId === "chicken_breast");

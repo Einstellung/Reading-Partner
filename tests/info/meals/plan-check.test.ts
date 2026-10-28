@@ -73,7 +73,7 @@ function cardFor(draft: PlanDraft) {
 }
 
 function storedPlan(draft: PlanDraft): WeekPlan {
-  return weekFromDraft({ result: checked(draft), lib: LIB, start: START, now: 1, previous: null });
+  return weekFromDraft({ result: checked(draft), lib: LIB, start: START, now: 1, today: START, previous: null });
 }
 
 // --- Apply ---------------------------------------------------------------------
@@ -88,7 +88,7 @@ test("Apply hands back the calcium problem and writes the plan as it would witho
   expect(out.check?.problems.map((p) => [p.rule, p.day])).toEqual([["calcium", 1]]);
   expect(h.plans).toHaveLength(1);
   // The same plan the draft gives on its own: nothing re-planned, nothing dropped.
-  const expected = weekFromDraft({ result: checked(soyDay1()), lib: LIB, start: START, now: 100, previous: null });
+  const expected = weekFromDraft({ result: checked(soyDay1()), lib: LIB, start: START, now: 100, today: START, previous: null });
   expect(h.plans[0]!.plan).toEqual(expected);
 });
 

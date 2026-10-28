@@ -30,7 +30,7 @@ function planList(): ShoppingItem[] {
     library: lib,
   });
   if (!result.plan) throw new Error("fixture draft fails");
-  const plan = weekFromDraft({ result, lib, start: START, now: 1, previous: null });
+  const plan = weekFromDraft({ result, lib, start: START, now: 1, today: START, previous: null });
   return plannerShoppingList(result.plan, result.draft, plan);
 }
 

@@ -9,7 +9,8 @@ import type { PhotoQuery } from "../../../src/info/meals/photos/photo-run";
 import type { DishPhotoEntry, MealsState, ShoppingState, WeekPlan } from "../../../src/info/meals/plan/types";
 import { addDays } from "../../../src/info/meals/plan/week";
 import { shopping } from "./fixtures/week";
-import { draftCard } from "./planner/card-fixture";
+import { weekFromDraft } from "../../../src/info/meals/planner/to-week";
+import { checked, draftCard, LIB } from "./planner/card-fixture";
 import { PROFILE, START } from "./planner/fixture";
 
 interface Harness {
@@ -69,6 +70,20 @@ test("confirming writes the plan and the list derived from it in one write, and 
   expect(out.note).toContain(`${toBuy} things`);
   // The row left for the model draws nothing: it names the draft it confirmed.
   expect(out.shown).toMatchObject({ kind: "meals-applied", draft: "42", toBuy });
+});
+
+test("confirmed the day before it starts, the plan drops the old plan's today and keeps its past", async () => {
+  const today = addDays(START, -1);
+  const from = addDays(START, -3);
+  const old = weekFromDraft({ result: checked(), lib: LIB, start: from, now: 1, today: from, previous: null });
+  const h = harness({ plan: old });
+  h.ports.today = () => today;
+  const out = await applyDraft(draftCard(), h.ports);
+  await out.pending;
+  const { plan } = h.saved[0]!;
+  expect(plan.days.map((d) => d.date)).toEqual([-3, -2, 0, 1, 2].map((i) => addDays(START, i)));
+  expect(plan.days.slice(0, 2)).toEqual(old.days.slice(0, 2));
+  expect(h.reloads).toBe(1);
 });
 
 test("a card already applied, a reader without targets, or a failed write changes nothing", async () => {

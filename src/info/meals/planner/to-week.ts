@@ -4,8 +4,9 @@
 // rides along (`planner`), so a profile change solves it again through the same
 // core instead of the old weekly solver, and the prep page can read its pots.
 //
-// A new plan replaces the days it covers; the days of the old plan before its
-// first day stay when they run straight into it (docs/671 形态).
+// A new plan replaces the old plan from today on (or from its own first day,
+// when that is earlier); the old plan's days before that stay as the record,
+// when the old plan ran up to them (docs/671 形态).
 
 import { getLocale } from "../../../i18n";
 import type { Dish, IngredientRole } from "../dishes/types";
@@ -82,7 +83,7 @@ export function dayPlansFromSolved(plan: SolvedPlan, draft: PlanDraft, lib: Plan
   return [prep, ...days];
 }
 
-/** A stored day with a fresh one's planned meals put in: the prep day's dinner over the old plan's day. */
+/** A stored day with a fresh one's planned meals put in; with `onlyMade`, only over the meals still made. */
 function overlay(old: DayPlan, next: DayPlan, onlyMade: boolean): DayPlan {
   const keys = next.planned ?? MEAL_KEYS;
   const pick = (k: MealKey) => (keys.includes(k) && (!onlyMade || old[k].mode === "make") ? next[k] : old[k]);
@@ -96,25 +97,29 @@ export interface WeekFromDraft {
   start: string;
   now: number;
   previous: WeekPlan | null;
+  /** The host's local date: the old plan's days from here on are replaced. */
+  today: string;
   /** The model's picks the draft was filled from, kept for a redraft. */
   picks?: PlanDraft;
 }
 
 /**
- * The plan to store: the draft's days, after the old plan's days that run
- * straight into them. A prep-day dinner goes in over the old plan's dinner
- * that day, or on a day of its own.
+ * The plan to store: the draft's days (the prep day first when it eats its
+ * dinner), after the old plan's days before today. Nothing of the old plan
+ * from today on stays, so a day the new plan covers only in part (the prep
+ * day) shows just what the new plan gives it. The old plan's past days stay
+ * only when it ran up to yesterday or into the new plan; an older plan is
+ * replaced whole.
  */
 export function weekFromDraft(input: WeekFromDraft): WeekPlan {
-  const { result, previous, start } = input;
+  const { result, previous, start, today } = input;
   if (!result.plan) throw new Error("weekFromDraft needs a solved draft.");
   const fresh = dayPlansFromSolved(result.plan, result.draft, input.lib, start);
-  const joins = !!previous?.days.some((d) => d.date === addDays(start, -1));
-  const kept = joins && previous ? previous.days.filter((d) => d.date < start) : [];
-  const prep = fresh[0]?.planned ? fresh[0] : null;
-  const old = prep ? kept.find((d) => d.date === prep.date) : undefined;
-  const days =
-    prep && old ? [...kept.filter((d) => d.date < prep.date), overlay(old, prep, false), ...fresh.slice(1)] : [...kept, ...fresh];
+  const first = fresh[0]?.date ?? start;
+  const cut = today < first ? today : first;
+  const ran = !!previous?.days.some((d) => d.date >= addDays(cut, -1));
+  const kept = ran && previous ? previous.days.filter((d) => d.date < cut) : [];
+  const days = [...kept, ...fresh];
   const startDate = days[0]?.date ?? start;
   return {
     id: kept.length && previous ? previous.id : weekId(startDate),
