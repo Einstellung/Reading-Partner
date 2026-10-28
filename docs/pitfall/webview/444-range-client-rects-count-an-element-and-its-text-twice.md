@@ -11,3 +11,5 @@
 ## 解法
 
 `mark-draw.ts` 的 `drawQuote` 和 `drawStroke` 先过 `mark-geometry.ts` 的 `lineBands`：同一行（竖向重叠至少较矮那个的一半）上重叠或相接的 rect 并成一条，每处只画一次。行间盒子因行高紧而略有重叠的，仍算两行；同一行上真有空隙的，仍是两段。命中测试用的 rect 不用改，重复的 rect 不影响「按没按到」。
+
+后续（坑 675）：块级元素的整块盒会把整段并成一块，量 range 改走 `mark-draw.ts` 的 `textRectsOf`，只量文本节点，元素盒不再进来，这里的重复也就没了。`lineBands` 仍留着，合并同一行上分属几个文本节点的盒。

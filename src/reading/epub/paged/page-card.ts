@@ -18,6 +18,7 @@ import { parseCfiStart, parseEpubRangeCfi, resolvePoint, resolvePointRange, reso
 import { PAGE_FRAME } from "../../engine/page-frame";
 import { BODY_WIDTH, PAGE_HEIGHT, PAGE_WIDTH, columnOf } from "../page-geometry";
 import { mountDocument, type MountedDocument, type PageResources } from "../page-mount";
+import { textRectsOf } from "../mark-draw";
 import type { SpineDocument } from "../file/parse";
 
 export interface PagePoint2 {
@@ -44,7 +45,7 @@ export interface PageCard {
   fromViewport(p: PagePoint2): PagePoint2;
   /** A live Range for a range CFI in this card's tree, or null. */
   rangeOf(cfi: string): Range | null;
-  /** Page-space rects of a live Range, clipped to nothing: the caller clips. */
+  /** Page-space rects of the text a live Range covers, clipped to nothing: the caller clips. */
   rectsOf(range: Range): DOMRect[];
   /**
    * Bring the column a Range starts in onto the sheet. For a range the table
@@ -154,7 +155,7 @@ export function createPageCard(owner: Document, resources: PageResources): PageC
 
     rectsOf(range) {
       const box = el.getBoundingClientRect();
-      return Array.from(range.getClientRects()).map(
+      return textRectsOf(range).map(
         (r) => new DOMRect((r.left - box.left) / scale, (r.top - box.top) / scale, r.width / scale, r.height / scale),
       );
     },

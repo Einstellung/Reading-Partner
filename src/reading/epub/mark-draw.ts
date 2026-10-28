@@ -70,6 +70,54 @@ export function rangeForMark(source: MarkRangeSource, ann: Annotation): Range | 
   return rangeOfSpan(source, spine, span);
 }
 
+// Node.TEXT_NODE and NodeFilter.SHOW_TEXT, which are not globals outside a browser.
+const TEXT_NODE = 3;
+const SHOW_TEXT = 0x4;
+
+/**
+ * The boxes of the text a range covers, in viewport coordinates. Not the
+ * range's own client rects: those also hold the border box of every element
+ * the range wholly contains, so a paragraph inside a selection comes back as
+ * one block as tall as the paragraph and as wide as the column, and every
+ * line of it merges into that block (docs/pitfall/675, 444). Each text node
+ * the range touches is measured on its own, cut to the range at both ends.
+ * `measure` is the engine's Range.getClientRects, replaceable in tests.
+ */
+export function textRectsOf(
+  range: Range,
+  measure: (piece: Range) => ArrayLike<DOMRect> = (piece) => piece.getClientRects(),
+): DOMRect[] {
+  const first = range.startContainer;
+  const owner = first.ownerDocument;
+  if (!owner) return [];
+  const out: DOMRect[] = [];
+  const piece = owner.createRange();
+  const add = (node: Text): void => {
+    const start = node === range.startContainer ? range.startOffset : 0;
+    const end = node === range.endContainer ? range.endOffset : node.data.length;
+    if (end <= start) return;
+    piece.setStart(node, start);
+    piece.setEnd(node, end);
+    for (const r of Array.from(measure(piece))) out.push(r);
+  };
+  const root = range.commonAncestorContainer;
+  if (root.nodeType === TEXT_NODE) {
+    add(root as Text);
+    return out;
+  }
+  const walker = owner.createTreeWalker(root, SHOW_TEXT);
+  walker.currentNode = first;
+  let node: Node | null = first.nodeType === TEXT_NODE ? first : walker.nextNode();
+  while (node) {
+    // The text from here on starts past the range's end.
+    if (range.comparePoint(node, 0) > 0) break;
+    if (range.intersectsNode(node)) add(node as Text);
+    walker.currentNode = node;
+    node = walker.nextNode();
+  }
+  return out;
+}
+
 /** The mark's colour, or the default when it carries none this view can paint. */
 export function colorOf(ann: Annotation): string {
   const color = ann.color;
@@ -112,8 +160,8 @@ export function createMarkPainter(owner: Document): MarkPainter {
 
     rectDiv,
 
-    // Both translucent paints go through lineBands: the rects a range gives
-    // cover a word in an element of its own twice (docs/pitfall/444).
+    // Both translucent paints go through lineBands: one line set in several
+    // text nodes (a word in an <em>) comes as several boxes, painted once.
     drawStroke(into, kind, rects, color) {
       for (const r of lineBands(rects)) {
         const box = kind === "underline" ? underlineBand(r) : r;

@@ -162,6 +162,7 @@
 - [439-a-remounted-view-saves-the-opening-marks-back](./touch/439-a-remounted-view-saves-the-opening-marks-back.md) — 切换滚动/翻页的新视图拿开书时的标注，存回去删掉中途划的线。传当前标注
 - [488-the-back-band-eats-the-turn-tap](./touch/488-the-back-band-eats-the-turn-tap.md) — 翻页模式为挡左缘右滑在捕获阶段整条掐掉返回带内的触摸，按压状态机也收不到，点左边 24px 不翻页。带内挡路由不挡状态机，走出 slop 即放手
 - [489-press-slop-and-turn-slop-leave-a-gap](./touch/489-press-slop-and-turn-slop-leave-a-gap.md) — 按压 slop 8px、翻页路由 slop 10px 且要过 22% 才翻，漂 8px 以上的点击两边都不认。翻页模式页面上的按压放宽到 30px，路由真翻了页（`turnToPage` 换页）才作废
+- [676-a-finger-on-a-characters-right-half-lands-before-the-next](./touch/676-a-finger-on-a-characters-right-half-lands-before-the-next.md) — caret 二分和原生 `caretRangeFromPoint` 都给最近字间边界，按在中文字右半边落到它之后，`wordOf` 取到下一个字：长按差一字、拖选终点多一字（77 字右半边错 73 个）。手指路径过 `caret.ts` 的 `charUnder`，笔起笔用 `charSpanUnder` + `strokeRange`
 
 ## 网络与 CSP
 
@@ -377,6 +378,7 @@
 - [444-range-client-rects-count-an-element-and-its-text-twice](./webview/444-range-client-rects-count-an-element-and-its-text-twice.md) — `Range.getClientRects()` 对完整包住的元素（引文里的 `<em>`）既给元素盒又给文字盒，半透明的引文底和高亮在那个词上叠两层（实测取色 (174,163,194) 对 (205,196,205)）；`drawQuote` / `drawStroke` 先过 `lineBands`，同一行上重叠或相接的并成一条
 - [644-a-quote-landing-leaves-the-page-count-on-the-top-edge-page](./webview/644-a-quote-landing-leaves-the-page-count-on-the-top-edge-page.md) — 手机滚动视图点页码引文跳转后底部计数不变：当前页读顶边下的位置，引文落点在顶边下方一截，顶边上还是前一页。`highlightQuote` 落定后像 `settle` 那样设 `pinned`（引文起点 CFI + 引文所在页）
 - [670-a-table-row-splits-across-columns-whatever-break-inside-says](./webview/670-a-table-row-splits-across-columns-whatever-break-inside-says.md) — EPUB 长表格翻页时最后一行被切成两半（行首编号格掉到下一页），`tr/td/th` 上写 `break-inside` 三种写法在 WebKit 列碎片化里都无效；只能分页时自己把整行推到下一列，未做
+- [675-range-client-rects-give-a-wholly-contained-block-its-whole-box](./webview/675-range-client-rects-give-a-wholly-contained-block-its-whole-box.md) — 选区完整包住一个段落时，`Range.getClientRects()` 连那个 `<p>` 的整块盒一起给，`lineBands` 把每行都并进去，高亮画成实心方块、下划线只剩一条（WebKitGTK 实测 7 行画出 4 条，一块 400x112）。量 range 一律走 `mark-draw.ts` 的 `textRectsOf`，只量相交的文本节点；坑 444 的重复随之消失
 
 ## 浮层与 shadcn 原语
 

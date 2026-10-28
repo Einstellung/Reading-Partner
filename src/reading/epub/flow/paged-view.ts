@@ -23,7 +23,7 @@ import { openExternal } from "../../../platform/app/external-link";
 import { attachTouchRouter } from "../../engine/gesture/attach-touch";
 import type { PagedGestureCtx } from "../../engine/gesture/context";
 import { acquireEpub, ensurePagination, releaseEpub } from "../book-cache";
-import { caretAtPoint } from "../caret";
+import { caretAtPoint, charUnder } from "../caret";
 import { epubCfi, parseCfiStart, pointSteps, resolvePointRange } from "../file/cfi";
 import type { FlowReaderView, FlowTool } from "./flow-contract";
 import { FLOW_PAPERS, flowPaperSwatch, type FlowDisplay } from "./flow-display";
@@ -354,7 +354,7 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
       const box = scroller.getBoundingClientRect();
       for (const p of strokeProbePoints({ x: clientX, y: clientY }, box, display.padX)) {
         const caret = caretAtPoint(doc.shadow, doc.root, p.x, p.y);
-        if (caret) return caret;
+        if (caret) return charUnder(caret, p.x, p.y);
       }
       return null;
     },

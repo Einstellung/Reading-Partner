@@ -235,6 +235,79 @@ export function nearestOffset(
 }
 
 /**
+ * The caret before the character under a point. Both the engine's answer and
+ * the search above give the boundary nearest the point, so a finger on the
+ * right half of a character lands after it, and the hold or the end of a drag
+ * takes the character after the one under it (docs/pitfall/676). When the point
+ * is on the character before the caret, the caret steps back over it.
+ */
+export function charUnder(caret: CaretPoint, clientX: number, clientY: number): CaretPoint {
+  const { node, offset } = caret;
+  if (offset === 0) return caret;
+  const owner = node.ownerDocument;
+  if (!owner) return caret;
+  const width = offset >= 2 && isLowSurrogate(node.data.charCodeAt(offset - 1)) ? 2 : 1;
+  return onGlyph(charBox(owner, node, offset - width, offset), clientX, clientY) ? { node, offset: offset - width } : caret;
+}
+
+/** The two carets around the character under a point; both the caret when the point is on none. */
+export interface CharSpan {
+  start: CaretPoint;
+  end: CaretPoint;
+}
+
+/** The character under a point, from the caret the search found there. */
+export function charSpanUnder(caret: CaretPoint, clientX: number, clientY: number): CharSpan {
+  const before = charUnder(caret, clientX, clientY);
+  if (before !== caret) return { start: before, end: caret };
+  const { node, offset } = caret;
+  const owner = node.ownerDocument;
+  if (!owner || offset >= node.data.length) return { start: caret, end: caret };
+  const width = offset + 1 < node.data.length && isLowSurrogate(node.data.charCodeAt(offset + 1)) ? 2 : 1;
+  return onGlyph(charBox(owner, node, offset, offset + width), clientX, clientY)
+    ? { start: caret, end: { node, offset: offset + width } }
+    : { start: caret, end: caret };
+}
+
+function charBox(owner: Document, node: Text, start: number, end: number): Box | null {
+  const range = owner.createRange();
+  range.setStart(node, start);
+  range.setEnd(node, end);
+  return glyphBox(Array.from(range.getClientRects()));
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
+}
+
+/**
+ * Whether a point is on a character's glyph box: inside it across, and at its
+ * height give or take half the box, the leading between lines.
+ */
+export function onGlyph(box: Box | null, clientX: number, clientY: number): boolean {
+  if (!box || box.right - box.left <= 0) return false;
+  const slack = Math.max(LINE_SLACK, (box.bottom - box.top) / 2);
+  return clientX >= box.left && clientX < box.right && clientY >= box.top - slack && clientY <= box.bottom + slack;
+}
+
+/**
+ * A pen stroke from the character it began on to a caret: that character is
+ * in the range whichever way the pen went, and the far end is the boundary
+ * nearest the pen, so a stroke that ends past the middle of a glyph takes it.
+ */
+export function strokeRange(owner: Document, from: CharSpan, end: CaretPoint): Range | null {
+  const probe = owner.createRange();
+  try {
+    probe.setStart(from.start.node, from.start.offset);
+    probe.collapse(true);
+    if (probe.comparePoint(end.node, end.offset) < 0) return rangeBetween(owner, end, from.end);
+  } catch {
+    return null;
+  }
+  return rangeBetween(owner, from.start, end);
+}
+
+/**
  * A Range between two carets in the same tree, in document order whichever way
  * the pen went. Null when the two are the same place.
  */

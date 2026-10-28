@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { glyphBox, lineOf, nearestOffset, type Box } from "../../../src/reading/epub/caret";
+import { glyphBox, lineOf, nearestOffset, onGlyph, strokeRange, type Box } from "../../../src/reading/epub/caret";
 
 // A text node laid out as ten characters a line, ten pixels a character,
 // twenty pixels a line. `columns[k]` is how many lines column k holds; column k
@@ -86,5 +86,51 @@ describe("the caret in a text node", () => {
     };
     expect(lineOf(lines, { left: 200, right: 200, top: 56, bottom: 56 })).toBe(2);
     expect(nearestOffset(length, caret, lines, 200, 56)).toBe(66);
+  });
+});
+
+// docs/pitfall/676: the boundary nearest a finger on a character's right half
+// is after it, so the caret steps back when the point is on the character.
+describe("the character under a point", () => {
+  const glyph: Box = { left: 100, right: 118, top: 40, bottom: 64 };
+
+  test("either half of a character is on it", () => {
+    expect(onGlyph(glyph, 104, 52)).toBe(true);
+    expect(onGlyph(glyph, 114, 52)).toBe(true);
+  });
+
+  test("the next character's left edge is not on this one", () => {
+    expect(onGlyph(glyph, 118, 52)).toBe(false);
+    expect(onGlyph(glyph, 99, 52)).toBe(false);
+  });
+
+  test("the leading between lines counts as the line; the next line does not", () => {
+    expect(onGlyph(glyph, 110, 70)).toBe(true);
+    expect(onGlyph(glyph, 110, 90)).toBe(false);
+    expect(onGlyph(glyph, 110, 10)).toBe(false);
+  });
+
+  test("a box with no width or no box is no character", () => {
+    expect(onGlyph({ left: 100, right: 100, top: 40, bottom: 64 }, 100, 50)).toBe(false);
+    expect(onGlyph(null, 100, 50)).toBe(false);
+  });
+});
+
+describe("a pen stroke from the character it came down on", () => {
+  const owner = new DOMParser().parseFromString("<p>人工智能的历史可以追溯</p>", "text/html");
+  const node = owner.querySelector("p")!.firstChild as Text;
+  const at = (offset: number) => ({ node, offset });
+  const onChar = (i: number) => ({ start: at(i), end: at(i + 1) });
+
+  test("forward: from that character to the boundary the pen reached", () => {
+    expect(strokeRange(owner, onChar(5), at(9))?.toString()).toBe("历史可以");
+  });
+
+  test("backward: that character is still in the stroke", () => {
+    expect(strokeRange(owner, onChar(8), at(5))?.toString()).toBe("历史可以");
+  });
+
+  test("a start on no character is a boundary both ways", () => {
+    expect(strokeRange(owner, { start: at(5), end: at(5) }, at(3))?.toString()).toBe("能的");
   });
 });

@@ -37,7 +37,7 @@ import {
   newEpubInk,
   type MarkKind,
 } from "../annotation";
-import { caretAtPoint, rangeBetween, type CaretPoint } from "../caret";
+import { caretAtPoint, charSpanUnder, charUnder, rangeBetween, strokeRange, type CaretPoint, type CharSpan } from "../caret";
 import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "../mark-draw";
 import type { PageCard } from "./page-card";
 import { mousePress, mouseSelectBegins } from "./mouse-select";
@@ -116,7 +116,8 @@ type Drag =
       card: PageCard;
       stroke: "highlight" | "underline";
       color: string;
-      start: CaretPoint;
+      /** The character the pen came down on. */
+      start: CharSpan;
       range: Range | null;
     }
   | {
@@ -425,10 +426,13 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
       return true;
     }
     if (toolId !== "highlight" && toolId !== "underline") return false;
-    const start = caretAtPoint(card.shadow, card.mounted.root, e.clientX, e.clientY);
+    const caret = caretAtPoint(card.shadow, card.mounted.root, e.clientX, e.clientY);
     // Off the words: the page keeps the pointer, so a stroke started in the
     // margin scrolls instead of marking nothing.
-    if (!start) return false;
+    if (!caret) return false;
+    // The character the pen came down on, not the boundary nearest it
+    // (docs/pitfall/676): it is in the stroke whichever way the pen goes.
+    const start = charSpanUnder(caret, e.clientX, e.clientY);
     drag = { kind: "text", pointerId: e.pointerId, card, stroke: toolId, color: toolColor, start, range: null };
     return true;
   }
@@ -471,7 +475,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     if (!root) return;
     const end = caretAtPoint(drag.card.shadow, root, e.clientX, e.clientY);
     if (!end) return;
-    drag.range = rangeBetween(owner, drag.start, end);
+    drag.range = strokeRange(owner, drag.start, end);
     paintDraft();
   }
 
@@ -538,9 +542,12 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     return rects.length > 0 ? { rects, text: sel.range.toString() } : null;
   }
 
+  // The caret before the character under the finger: a hold or a drag's end
+  // on a character's right half takes that character (docs/pitfall/676).
   function caretOn(card: PageCard, clientX: number, clientY: number): CaretPoint | null {
     const root = card.mounted?.root;
-    return root ? caretAtPoint(card.shadow, root, clientX, clientY) : null;
+    const caret = root ? caretAtPoint(card.shadow, root, clientX, clientY) : null;
+    return caret && charUnder(caret, clientX, clientY);
   }
 
   function wordsAt(clientX: number, clientY: number): boolean {

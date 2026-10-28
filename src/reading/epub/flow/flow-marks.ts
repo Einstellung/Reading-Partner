@@ -20,11 +20,11 @@
 
 import type { Annotation } from "../../../platform/app/reader-contract";
 import { epubPositionOf, markKind } from "../annotation";
-import { caretAtPoint, rangeBetween, type CaretPoint } from "../caret";
+import { caretAtPoint, charUnder, rangeBetween, type CaretPoint } from "../caret";
 import { parseCfiStart, parseEpubRangeCfi, resolveRange } from "../file/cfi";
 import type { FlowMarkPopup, FlowMarkSpec, FlowRect, FlowSelection, FlowTool } from "./flow-contract";
 import { movedEnd, spanTo, wordOf, type HeldWord } from "../word";
-import { colorOf, createMarkPainter, rangeForMark, type MarkRangeSource, type SpineText } from "../mark-draw";
+import { colorOf, createMarkPainter, rangeForMark, textRectsOf, type MarkRangeSource, type SpineText } from "../mark-draw";
 import { popupRect, rectsHit, unionRect, type PageRect } from "../mark-geometry";
 import { textMarkOf } from "../mark-write";
 import type { Pagination } from "../paginate";
@@ -59,7 +59,8 @@ export interface FlowMarkHost {
   /**
    * Where a drag's end is in a document, for a view whose margins are not the
    * book's: the paged view (docs/79) looks for the nearest words on the screen
-   * shown. The caret under the point when absent.
+   * shown. The caret under the point when absent. Like that one, it is the
+   * caret before the character under the point (caret.ts charUnder).
    */
   strokeCaret?(doc: FlowDoc, clientX: number, clientY: number): CaretPoint | null;
 }
@@ -139,7 +140,7 @@ export function flowRangeSource(doc: FlowDoc, spineOf: (index: number) => SpineT
 export function rectsIn(doc: FlowDoc, range: Range): PageRect[] {
   const box = doc.host.getBoundingClientRect();
   const out: PageRect[] = [];
-  for (const r of Array.from(range.getClientRects())) {
+  for (const r of textRectsOf(range)) {
     if (r.width < 0.5 || r.height < 0.5) continue;
     out.push({ left: r.left - box.left, top: r.top - box.top, width: r.width, height: r.height });
   }
@@ -226,7 +227,7 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
   function selection(): FlowSelection | null {
     if (!sel?.range || dragging) return null;
     const rects: FlowRect[] = [];
-    for (const r of Array.from(sel.range.getClientRects())) {
+    for (const r of textRectsOf(sel.range)) {
       if (r.width < 0.5 || r.height < 0.5) continue;
       rects.push({ left: r.left, top: r.top, width: r.width, height: r.height });
     }
@@ -234,10 +235,13 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     return { rects, text: sel.range.toString() };
   }
 
+  // The caret before the character under the finger, not the nearest
+  // boundary: the end of a drag on a character's right half takes that
+  // character and not the next (docs/pitfall/676).
   function caretIn(doc: FlowDoc, clientX: number, clientY: number): CaretPoint | null {
-    return host.strokeCaret
-      ? host.strokeCaret(doc, clientX, clientY)
-      : caretAtPoint(doc.shadow, doc.root, clientX, clientY);
+    if (host.strokeCaret) return host.strokeCaret(doc, clientX, clientY);
+    const caret = caretAtPoint(doc.shadow, doc.root, clientX, clientY);
+    return caret && charUnder(caret, clientX, clientY);
   }
 
   function moveSelectionEnd(end: "start" | "end", clientX: number, clientY: number): void {
@@ -343,7 +347,7 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     const doc = host.docAt(clientX, clientY);
     if (!doc) return null;
     const caret = caretAtPoint(doc.shadow, doc.root, clientX, clientY);
-    return caret ? { doc, caret } : null;
+    return caret ? { doc, caret: charUnder(caret, clientX, clientY) } : null;
   }
 
   // The word under the finger is selected first, so a hold shows what it began

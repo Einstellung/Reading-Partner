@@ -50,7 +50,7 @@ import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { createSpineTexts, textMarkOf, type TextMarkContext } from "../../../src/reading/epub/mark-write";
 import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { blockIndexAt, locateQuote } from "../../../src/reading/epub/reader-logic";
-import { createMarkPainter, rangeOfSpan } from "../../../src/reading/epub/mark-draw";
+import { createMarkPainter, rangeOfSpan, textRectsOf } from "../../../src/reading/epub/mark-draw";
 import { extractDocumentText, runAt } from "../../../src/reading/epub/file/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
 import { buildEpub, prose } from "./fixture";
@@ -604,5 +604,53 @@ describe("a cited quote on a view's clone", () => {
     expect(band.style.opacity).toBe("0.24");
     // #4a3a9e, as the DOM serialises it.
     expect(band.style.background).toBe("rgb(74, 58, 158)");
+  });
+});
+
+// docs/pitfall/675: a range's own client rects hold the border box of every
+// element it wholly contains, a whole paragraph for a selection across it.
+describe("the boxes of a range are its text's", () => {
+  const owner = new DOMParser().parseFromString(
+    '<div><p id="a">alpha beta</p><p id="b"><em>gamma</em> delta</p><p id="c">omega</p></div>',
+    "text/html",
+  );
+  const text = (id: string) => owner.getElementById(id)!.firstChild!;
+  function measured(range: Range): string[] {
+    const pieces: string[] = [];
+    textRectsOf(range, (piece) => {
+      expect(piece.startContainer.nodeType).toBe(3);
+      pieces.push(`${(piece.startContainer as Text).data}:${piece.startOffset}-${piece.endOffset}`);
+      return [];
+    });
+    return pieces;
+  }
+
+  test("a range across paragraphs measures each text node, cut at both ends, and no element", () => {
+    const range = owner.createRange();
+    range.setStart(text("a"), 6);
+    range.setEnd(text("c"), 2);
+    expect(measured(range)).toEqual(["alpha beta:6-10", "gamma:0-5", " delta:0-6", "omega:0-2"]);
+  });
+
+  test("a range inside one text node is that piece", () => {
+    const range = owner.createRange();
+    range.setStart(text("a"), 1);
+    range.setEnd(text("a"), 4);
+    expect(measured(range)).toEqual(["alpha beta:1-4"]);
+  });
+
+  test("a range that starts and ends on element boundaries takes the text between", () => {
+    const range = owner.createRange();
+    range.setStart(owner.getElementById("b")!, 0);
+    range.setEnd(owner.getElementById("c")!, 0);
+    expect(measured(range)).toEqual(["gamma:0-5", " delta:0-6"]);
+  });
+
+  test("the measured boxes are what comes back", () => {
+    const range = owner.createRange();
+    range.setStart(text("a"), 0);
+    range.setEnd(text("c"), 2);
+    const box = { left: 1, top: 2, width: 3, height: 4 } as DOMRect;
+    expect(textRectsOf(range, () => [box])).toEqual([box, box, box, box]);
   });
 });
