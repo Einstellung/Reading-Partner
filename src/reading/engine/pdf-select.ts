@@ -24,10 +24,12 @@ import {
   glyphNear,
   glyphUnder,
   moveSpanEnd,
+  pageCharCount,
   spanRects,
   spanSlices,
   spanToWord,
   wordAround,
+  type GlyphPos,
   type GlyphSpan,
 } from "./finger-select";
 
@@ -115,12 +117,50 @@ export function createPdfSelect(host: PdfSelectHost): PdfSelect {
     return best ? pointOn(best.page, best.box, clientX, clientY) : null;
   }
 
-  function wordNear(clientX: number, clientY: number): GlyphSpan | null {
+  // Each page's text, read the first time a finger reaches the page: which
+  // characters are written without spaces is in the text, not the geometry
+  // (wordAround). Until it arrives the engine's spaces are the boundaries, and
+  // a hold still growing when it does is redone from the glyphs it was on.
+  const pageText = new Map<number, string | null>();
+  let heldAt: GlyphPos | null = null;
+  let targetAt: GlyphPos | null = null;
+
+  function textOf(page: number): string | undefined {
+    const known = pageText.get(page);
+    if (known !== undefined) return known ?? undefined;
+    const geo = host.geometry(page);
+    if (!geo) return undefined;
+    pageText.set(page, null);
+    void host.text([{ pageIndex: page, charIndex: 0, charCount: pageCharCount(geo) }]).then(
+      (parts) => {
+        pageText.set(page, parts[0] ?? "");
+        regrow();
+      },
+      () => pageText.delete(page),
+    );
+    return undefined;
+  }
+
+  function wordOn(at: GlyphPos): GlyphSpan | null {
+    const geo = host.geometry(at.page);
+    return geo ? wordAround(geo, at, textOf(at.page)) : null;
+  }
+
+  function regrow(): void {
+    if (!heldAt || !selecting) return;
+    const word = wordOn(heldAt);
+    if (!word) return;
+    held = word;
+    const target = targetAt ? wordOn(targetAt) : null;
+    span = target ? spanToWord(held, target) : held;
+    paint();
+  }
+
+  function glyphNearPoint(clientX: number, clientY: number): GlyphPos | null {
     const at = pageAt(clientX, clientY) ?? pageNear(clientX, clientY);
     const geo = at ? host.geometry(at.page) : undefined;
     if (!at || !geo) return null;
-    const g = glyphNear(geo, at.page, at.x, at.y);
-    return g ? wordAround(geo, g) : null;
+    return glyphNear(geo, at.page, at.x, at.y);
   }
 
   // Where the selection is on screen: its line boxes on every page still in
@@ -182,6 +222,8 @@ export function createPdfSelect(host: PdfSelectHost): PdfSelect {
     if (!span && !held) return;
     held = null;
     span = null;
+    heldAt = null;
+    targetAt = null;
     selecting = false;
     text = null;
     words = "";
@@ -230,16 +272,22 @@ export function createPdfSelect(host: PdfSelectHost): PdfSelect {
     wordsAt(clientX, clientY) {
       const at = pageAt(clientX, clientY);
       const geo = at ? host.geometry(at.page) : undefined;
-      return !!at && !!geo && glyphUnder(geo, at.page, at.x, at.y) !== null;
+      if (!at || !geo || glyphUnder(geo, at.page, at.x, at.y) === null) return false;
+      // The hold is timed from here: read the page's text while it is.
+      textOf(at.page);
+      return true;
     },
     begin(clientX, clientY) {
       const at = pageAt(clientX, clientY);
       const geo = at ? host.geometry(at.page) : undefined;
       const g = at && geo ? glyphUnder(geo, at.page, at.x, at.y) : null;
       if (!g || !geo) return false;
-      held = wordAround(geo, g);
-      span = held;
+      // Growing before the text lands redoes the word from these glyphs.
       selecting = true;
+      heldAt = g;
+      targetAt = null;
+      held = wordAround(geo, g, textOf(g.page));
+      span = held;
       text = null;
       paint();
       host.onSelection(null);
@@ -247,8 +295,10 @@ export function createPdfSelect(host: PdfSelectHost): PdfSelect {
     },
     extend(clientX, clientY) {
       if (!held || !selecting) return;
-      const target = wordNear(clientX, clientY);
-      if (!target) return;
+      const g = glyphNearPoint(clientX, clientY);
+      const target = g ? wordOn(g) : null;
+      if (!g || !target) return;
+      targetAt = g;
       span = spanToWord(held, target);
       paint();
     },
@@ -262,7 +312,8 @@ export function createPdfSelect(host: PdfSelectHost): PdfSelect {
     clear,
     moveEnd(end, clientX, clientY) {
       if (!span || selecting) return;
-      const target = wordNear(clientX, clientY);
+      const g = glyphNearPoint(clientX, clientY);
+      const target = g ? wordOn(g) : null;
       if (!target) return;
       span = moveSpanEnd(span, end, target);
       paint();
