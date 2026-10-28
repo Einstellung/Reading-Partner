@@ -4,7 +4,7 @@
 
 import { rangeBetween, type CaretPoint } from "./caret";
 
-const WORD_BREAK = /\s/;
+const WORD_BREAK = /[\s\u2013-\u2015/]/; // a space, or a dash or slash joining two words
 // CJK and other scripts written without spaces: one character is the unit, or a
 // hold would take the whole paragraph.
 const UNSPACED = /[\u2E80-\u2FFF\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;

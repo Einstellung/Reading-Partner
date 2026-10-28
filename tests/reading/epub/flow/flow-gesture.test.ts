@@ -228,6 +228,25 @@ describe("the word under a caret", () => {
   test("nothing but whitespace: empty at the offset", () => {
     expect(wordBoundsAt("   ", 1)).toEqual({ start: 1, end: 1 });
   });
+  test("an en or em dash between two words: each is a word", () => {
+    const text = "a fact\u2014indeed a well\u2013known one";
+    const word = (at: number) => {
+      const w = wordBoundsAt(text, at);
+      return text.slice(w.start, w.end);
+    };
+    expect(word(text.indexOf("indeed") + 2)).toBe("indeed");
+    expect(word(text.indexOf("fact") + 1)).toBe("fact");
+    expect(word(text.indexOf("known"))).toBe("known");
+    expect(wordBoundsAt("x\u2015y", 2)).toEqual({ start: 2, end: 3 });
+  });
+  test("a hyphen stays inside its word", () => {
+    expect(wordBoundsAt("well-known", 2)).toEqual({ start: 0, end: 10 });
+  });
+  test("a slash breaks a path into its steps", () => {
+    const url = "http://example.com/a/b";
+    expect(wordBoundsAt(url, url.indexOf("example") + 1)).toEqual({ start: 7, end: 18 });
+    expect(wordBoundsAt(url, url.length - 1)).toEqual({ start: 21, end: 22 });
+  });
 });
 
 describe("the height a document is guessed at", () => {
