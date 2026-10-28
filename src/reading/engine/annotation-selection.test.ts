@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { SELECT_AFTER_CREATE, popupEffect, selectionChanged } from "./annotation-selection";
+import { SELECT_AFTER_CREATE, SELECTION_CONFIG, popupEffect, selectionChanged } from "./annotation-selection";
 
 // Every finished stroke used to pop the annotation editor over the page: the
 // plugin selects what it creates by default, and the host opens the editor on a
@@ -49,4 +49,8 @@ test("a tool change may neither open the editor nor close it", () => {
 test("outside a tool change, a selection opens the editor and a deselection closes it", () => {
   expect(popupEffect("a", false)).toBe("open");
   expect(popupEffect(null, false)).toBe("close");
+});
+
+test("the selection plugin is registered without its marquee", () => {
+  expect(SELECTION_CONFIG.marquee.enabled).toBe(false);
 });

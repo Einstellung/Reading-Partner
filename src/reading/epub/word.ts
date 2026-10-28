@@ -2,12 +2,12 @@
 // Shared by every EPUB surface a finger selects on: the phone's column
 // (flow/flow-marks.ts) and the iPad's sheets (paged/mark-layer.ts).
 
+import { UNSPACED } from "../words/unspaced";
 import { rangeBetween, type CaretPoint } from "./caret";
 
 const WORD_BREAK = /[\s\u2013-\u2015/]/; // a space, or a dash or slash joining two words
 // CJK and other scripts written without spaces: one character is the unit, or a
-// hold would take the whole paragraph.
-const UNSPACED = /[\u2E80-\u2FFF\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;
+// hold would take the whole paragraph. UNSPACED is shared with the PDF hold.
 
 /**
  * The word around an offset in a text node, as the span a hold begins with:

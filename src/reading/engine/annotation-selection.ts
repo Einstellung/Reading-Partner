@@ -29,6 +29,12 @@
 // untouched, which `selectionChanged` below already reads as nothing to say.
 export const SELECT_AFTER_CREATE = false;
 
+// The selection plugin's registration. Its marquee is on by default in pointer
+// mode: a drag off the words draws a box, and the annotation plugin selects
+// every mark the box touches and the host opens the editor over them. Nothing
+// in the reader uses a box selection, so it is off (docs/pitfall/embedpdf/679).
+export const SELECTION_CONFIG = { marquee: { enabled: false } };
+
 // Whether an emission carries a selection that actually moved.
 //
 // The identity of the plugin's own id array is what tells the two cases apart: a

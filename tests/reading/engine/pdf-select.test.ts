@@ -60,6 +60,52 @@ test("a hold on a word selects it; the shell hears of it only once the finger li
   expect(last(said)?.text).toBe("beta gamma");
 });
 
+// One CJK line on page 0, and the page's text as the engine would read it.
+function cjkSetup(text: () => Promise<string[]>) {
+  const asked: { pageIndex: number; charIndex: number; charCount: number }[][] = [];
+  const painted: (Map<number, Rect[]> | null)[] = [];
+  const el = { getAttribute: () => "0", getBoundingClientRect: () => box(0) };
+  const sel = createPdfSelect({
+    viewport: () => ({ querySelectorAll: () => [el] }) as unknown as HTMLElement,
+    geometry: (page) => (page === 0 ? line(ZH) : undefined),
+    pageSize: () => ({ width: 200, height: 200 }),
+    paint: (rects) => void painted.push(rects),
+    text: (slices) => {
+      asked.push(slices);
+      return text();
+    },
+    create: () => {},
+    authorName: () => "Reader",
+    onSelection: () => {},
+  });
+  return { sel, asked, painted };
+}
+const ZH = "人工智能的历史可以";
+
+test("a hold on a CJK line selects one character once the page's text is in, and a drag grows by characters", async () => {
+  const { sel, asked, painted } = cjkSetup(async () => [ZH]);
+  // 能 is glyph 3: x 30..40 in page space, 60..80 on screen.
+  expect(sel.wordsAt(70, 10)).toBe(true);
+  expect(asked).toEqual([[{ pageIndex: 0, charIndex: 0, charCount: ZH.length }]]);
+  await Promise.resolve();
+  expect(sel.begin(70, 10)).toBe(true);
+  expect(last(painted)?.get(0)).toEqual([{ origin: { x: 30, y: 0 }, size: { width: 10, height: 10 } }]);
+  sel.extend(110, 10); // onto 史, glyph 5
+  expect(last(painted)?.get(0)).toEqual([{ origin: { x: 30, y: 0 }, size: { width: 30, height: 10 } }]);
+});
+
+test("a hold that begins before the page's text is in is redone from the glyph it was on", async () => {
+  let answer: (parts: string[]) => void = () => {};
+  const { sel, painted } = cjkSetup(() => new Promise((resolve) => (answer = resolve)));
+  expect(sel.begin(70, 10)).toBe(true);
+  // No spaces to stop at yet: the whole line.
+  expect(last(painted)?.get(0)?.[0].size.width).toBe(90);
+  answer([ZH]);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(last(painted)?.get(0)).toEqual([{ origin: { x: 30, y: 0 }, size: { width: 10, height: 10 } }]);
+});
+
 test("Ask saves one mark per page, the first carrying the conversation", async () => {
   const { sel, created, said } = setup();
   sel.begin(150, 10);

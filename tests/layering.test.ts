@@ -332,6 +332,10 @@ const LAYER: Record<string, Layer> = {
   // pagination, and reach for neither of each other.
   "reading/epub/flow": "domain",
   "reading/figures": "domain",
+  // Which characters are written without spaces, so a hold selects one of them:
+  // the one rule the EPUB and PDF word finders share. A leaf that imports
+  // nothing, so both reading/epub and reading/engine can reach it.
+  "reading/words": "domain",
   // Turning a pasted URL into a document on the shelf (docs/67). A domain of its
   // own rather than a corner of reading/epub: the building of the file is
   // workshop/bindery's, and this is the fetching, the extraction and the filing
