@@ -62,6 +62,9 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
   const byRun = new Map<string, Task>();
   const listeners = new Map<string, Set<(note: CallNote) => void>>();
   let watching: (() => void) | null = null;
+  // A task whose replacement is being started: a landing in that window waits
+  // for the outcome, so a task the reader changed their mind about is not told.
+  const pending = new Map<Task, (() => void) | null>();
 
   function tell(note: CallNote): void {
     for (const fn of [...(listeners.get(note.callId) ?? [])]) {
@@ -75,6 +78,7 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
 
   function settleDone(task: Task, text: string, boxItemId?: string): void {
     if (task.state !== "running") return;
+    if (pending.has(task)) return void pending.set(task, () => settleDone(task, text, boxItemId));
     task.state = "done";
     task.text = text;
     task.cover = coverOf(text);
@@ -84,6 +88,7 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
 
   function settleFailed(task: Task, reason: string, boxItemId?: string): void {
     if (task.state !== "running") return;
+    if (pending.has(task)) return void pending.set(task, () => settleFailed(task, reason, boxItemId));
     task.state = "failed";
     task.reason = reason;
     if (boxItemId) task.boxItemId = boxItemId;
@@ -119,6 +124,14 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
 
   function find(callId: string, n: number): Task | undefined {
     return calls.get(callId)?.find((t) => t.n === n);
+  }
+
+  // The replacement did not start: whatever landed meanwhile is settled now.
+  function release(task: Task | undefined): void {
+    if (!task) return;
+    const late = pending.get(task);
+    pending.delete(task);
+    late?.();
   }
 
   async function cancelTask(task: Task): Promise<void> {
@@ -159,15 +172,28 @@ export function createCallBackend(deps: CallBackendDeps): CallBackend {
         brief += `\n\n---\nThis follows on from an earlier task on the same call:\n\n${earlier.brief}`;
         if (earlier.text) brief += `\n\nWhat came back then:\n\n${earlier.text}`;
       }
-      const path = await deps.writeBrief(brief);
-      const result = await deps.delegate({
-        kind,
-        delegator: { kind: "soul" },
-        brief: path,
-        deliverTo: JSON.stringify(input.deliverTo),
-      });
-      if (!result.ok) return { ok: false, reason: result.reason };
-      if (replacing) await cancelTask(replacing);
+      if (replacing) pending.set(replacing, null);
+      let result: Delegated;
+      try {
+        const path = await deps.writeBrief(brief);
+        result = await deps.delegate({
+          kind,
+          delegator: { kind: "soul" },
+          brief: path,
+          deliverTo: JSON.stringify(input.deliverTo),
+        });
+      } catch (e) {
+        release(replacing);
+        throw e;
+      }
+      if (!result.ok) {
+        release(replacing);
+        return { ok: false, reason: result.reason };
+      }
+      if (replacing) {
+        pending.delete(replacing);
+        await cancelTask(replacing);
+      }
 
       const entry: Task = {
         callId: input.callId,
