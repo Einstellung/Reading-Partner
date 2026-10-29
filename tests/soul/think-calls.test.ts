@@ -25,7 +25,7 @@ beforeAll(() => {
 });
 afterAll(() => undeclare());
 
-function harness(kinds: readonly string[] = [THINK_KIND, "research-literature"]) {
+function harness(kinds: readonly string[] = [THINK_KIND, "research-literature"], refuse: () => boolean = () => false) {
   const delegated: DelegateInput[] = [];
   const cancelled: string[] = [];
   const briefs = new Map<string, string>();
@@ -38,6 +38,7 @@ function harness(kinds: readonly string[] = [THINK_KIND, "research-literature"])
   let next = 0;
   const backend = createCallBackend({
     delegate: async (input): Promise<Delegated> => {
+      if (refuse()) return { ok: false, reason: "too deep" };
       delegated.push(input);
       const run = { id: `r-${++next}`, kind: input.kind, state: "running" } as unknown as Run;
       runs.push(run);
@@ -230,6 +231,63 @@ test("a cancelled task is never told, even if a landing arrives", async () => {
   await h.backend.cancel("c1", 1);
   h.land({ status: "done", runId: "r-1", kind: THINK_KIND, text: "A.", cover: "A.", boxItemId: "b-1" });
   expect(notes).toEqual([]);
+});
+
+test("a replaced task that comes back late is never told, never readable, and stays cancelled", async () => {
+  const h = harness();
+  const notes: CallNote[] = [];
+  h.backend.subscribe("c1", (note) => notes.push(note));
+  await dispatch(h, "Why did the yen fall?");
+  await dispatch(h, "Not the yen, the euro.", undefined, 1);
+  h.land({ status: "done", runId: "r-1", kind: THINK_KIND, text: "Rates.", cover: "Rates.", boxItemId: "b-1" });
+  h.land({ status: "failed", runId: "r-1", kind: THINK_KIND, reason: "x", boxItemId: "b-1" });
+  expect(notes).toEqual([]);
+  expect(await h.backend.text("c1", 1)).toBeNull();
+  expect(h.backend.tasks("c1")[0]).toMatchObject({ state: "cancelled", told: false });
+  expect(h.backend.tasks("c1")[0]!.cover).toBeUndefined();
+});
+
+test("a cancelled task of a kind answered with a turn is not told when its run ends anyway", async () => {
+  const h = harness();
+  const notes: CallNote[] = [];
+  h.backend.subscribe("c1", (note) => notes.push(note));
+  await h.backend.dispatch({ callId: "c1", task: "Find the 1971 paper.", kind: "research-literature", deliverTo: PLACE });
+  await h.backend.cancel("c1", 1);
+  await h.finish("r-1", { state: "done", output: "legion/outputs/r-1.md" });
+  expect(notes).toEqual([]);
+  expect(await h.backend.text("c1", 1)).toBeNull();
+  expect(h.backend.tasks("c1")[0]!.state).toBe("cancelled");
+});
+
+test("a task that comes back while its replacement is being started is not told", async () => {
+  const h = harness();
+  const notes: CallNote[] = [];
+  h.backend.subscribe("c1", (note) => notes.push(note));
+  await dispatch(h, "Why did the yen fall?");
+  const replacing = dispatch(h, "Not the yen, the euro.", undefined, 1);
+  // The old run lands after the reader changed their mind, before the new run is out.
+  h.land({ status: "done", runId: "r-1", kind: THINK_KIND, text: "Rates.", cover: "Rates.", boxItemId: "b-1" });
+  expect(await replacing).toMatchObject({ ok: true, n: 2, replaced: 1 });
+  expect(notes).toEqual([]);
+  expect(await h.backend.text("c1", 1)).toBeNull();
+  expect(h.backend.tasks("c1")[0]!.state).toBe("cancelled");
+  expect(h.backend.tasks("c1")[0]!.cover).toBeUndefined();
+});
+
+test("a task that comes back while a refused replacement was being started is told once the refusal is in", async () => {
+  let refuse = false;
+  const h = harness(undefined, () => refuse);
+  const notes: CallNote[] = [];
+  h.backend.subscribe("c1", (note) => notes.push(note));
+  await dispatch(h, "Why did the yen fall?");
+  refuse = true;
+  const replacing = dispatch(h, "Not the yen, the euro.", undefined, 1);
+  h.land({ status: "done", runId: "r-1", kind: THINK_KIND, text: "Rates.", cover: "Rates.", boxItemId: "b-1" });
+  expect(notes).toEqual([]);
+  expect((await replacing).ok).toBe(false);
+  expect(notes).toEqual([{ callId: "c1", n: 1, task: "Why did the yen fall?", status: "done", cover: "Rates." }]);
+  expect(h.cancelled).toEqual([]);
+  expect(await h.backend.text("c1", 1)).toBe("Rates.");
 });
 
 test("a kind answered with a turn settles when its run ends, its output read off the run without the runner's note", async () => {
