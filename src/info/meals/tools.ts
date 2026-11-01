@@ -74,7 +74,7 @@ import { fillDraft } from "./planner/fill";
 import { readerPortions } from "./planner/portions";
 import { FRIDGE_DAYS_AFTER_COOK } from "./dishes/methods";
 import { MAX_DRAFT_ROUNDS, MAX_PLAN_DAYS, parseDraft, PREP_DAY } from "./planner/draft";
-import { planLibrary } from "./planner/library";
+import { kitchenOf, planLibrary } from "./planner/library";
 import { cardMealLabel, changesWords, draftContext, heldWords, redraft, revisionPicks, type MealLabel } from "./planner/redraft";
 import { libraryListing } from "./planner/listing";
 import { planDayTargets, prepDayTargets } from "./planner/solve";
@@ -181,6 +181,12 @@ const GOAL_WORDS: Record<Goal, string> = {
 };
 
 /** The standing habits a plan is drafted around, and which of them nobody has asked yet. */
+/** The kitchen as the planner reads it: what they named, and the equipment ids it counts as. */
+export function kitchenLine(profile: Pick<Profile, "kitchen">): string {
+  const said = profile.kitchen.join(", ") || "nothing named";
+  return `${said} (the planner counts: ${[...kitchenOf(profile)].join(", ")}; a stove with a pot and a pan and a microwave are assumed, any other appliance only when named)`;
+}
+
 export function habitsLine(profile: Profile): string {
   const slots = profile.cookSlots?.length
     ? profile.cookSlots.map((s) => `${WEEKDAY_SHORT[s.weekday] ?? s.weekday} ${PART_WORDS[s.part]}`).join(", ")
@@ -323,7 +329,7 @@ export function mealsGuidance(
     const days = profile.trainingDays.map((d) => WEEKDAY_SHORT[d]).join(", ");
     out.push(
       `Goal: ${GOAL_WORDS[profile.goal]}. ${days ? `Trains ${days} (${profile.trainTime}).` : "Does not train."}`,
-      `${profile.people} eating. Shops: ${profile.shops.join(", ") || "none named"}. Kitchen beyond the default: ${profile.kitchen.join(", ") || "nothing said"}.`,
+      `${profile.people} eating. Shops: ${profile.shops.join(", ") || "none named"}. Kitchen: ${kitchenLine(profile)}.`,
       `Never use: ${profile.dislikes.map(dislikeWords).join("; ") || "nothing named"}.`,
       habitsLine(profile),
     );
@@ -777,7 +783,14 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
         }),
       ),
       shops: Type.Optional(Type.Array(Type.String())),
-      kitchen: Type.Optional(Type.Array(Type.String())),
+      kitchen: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Every appliance they have, in their words ('电饭煲', 'rice cooker', 'Instant Pot', 'steamer basket'). " +
+            "Only a stove and a microwave are assumed; a rice cooker, pressure cooker, steamer, oven, air fryer, " +
+            "slow cooker, kettle or soy-milk maker counts only when it is on this list.",
+        }),
+      ),
       unavailable: Type.Optional(
         Type.Array(Type.String(), {
           description:

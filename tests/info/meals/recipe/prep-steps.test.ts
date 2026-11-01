@@ -50,7 +50,7 @@ test("the request names the session's pots and keys on what changes the steps", 
 });
 
 test("the prompt moves a later pot's pre-work off a busy device", () => {
-  expect(PREP_STEPS_PROMPT_VERSION).toBe(2);
+  expect(PREP_STEPS_PROMPT_VERSION).toBe(3);
   const prompt = prepStepsSystemPrompt({ language: "en", burners: 2 });
   expect(prompt).toContain("While a device is busy with an earlier pot, a later pot's hands-on work that does not need that device");
   expect(prompt).toContain("so the pot goes into the device as soon as it is free");

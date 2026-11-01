@@ -5,7 +5,8 @@
 // with the day it spoils once opened; a leftover no meal uses goes back to the
 // model as a draft problem (checks.ts). Pantry and long-keeping foods, food
 // bought frozen, and raw meat and fish (what no meal uses is frozen raw,
-// storage.ts) are not checked. Raw meat and fish wait in the fridge until
+// storage.ts) are not checked. Only salt, pepper, sugar and the cooking oil
+// are taken to be at home; a spice, a sauce or a bag of rice is bought whole. Raw meat and fish wait in the fridge until
 // their cooking day when they keep that long and are frozen the day they are
 // bought when they do not. Grams stay inside the program: what the user reads
 // is packs, pieces and "about" weights.
@@ -55,7 +56,7 @@ const wholeCount = (grams: number, unit: number) => Math.max(1, Math.ceil(grams 
 
 /** A food whose leftover pack is held to being finished: fresh produce, tofu, fresh noodles bought in packs. */
 export function leftoverChecked(food: Food): boolean {
-  return LEFTOVER_CHECKED.has(food.keeps) && !!food.pack && !onHand(food) && !isRawFlesh(food) && !isBoughtFrozen(food) && !food.boughtDry;
+  return LEFTOVER_CHECKED.has(food.keeps) && !!food.pack && !keptInCupboard(food) && !isRawFlesh(food) && !isBoughtFrozen(food);
 }
 
 /** The list is bought by day 1: a food's keeping days count from it. */
@@ -85,19 +86,21 @@ export function isBoughtFrozen(food: Food): boolean {
 }
 
 /**
- * A seasoning, oil or spread: kept on hand, never bought for one plan. Fresh
- * produce is not (a lemon is bought), nor is a food with a retail pack (nuts,
- * sliced cheese).
+ * A seasoning, oil or spread, or a food bought dry (rice): once bought it is
+ * kept from plan to plan in the cupboard, or the fridge once opened. Fresh
+ * produce is not (a lemon is bought), nor are nuts and cheese sold for one
+ * plan (almonds, sliced cheese).
  */
-function onHand(food: Food): boolean {
+export function keptInCupboard(food: Food): boolean {
   if (food.boughtDry) return true;
-  if (food.category === "produce" || food.pack) return false;
+  if (food.category === "produce") return false;
   const keeps = food.keeps === "pantry" || food.keeps === "w2plus";
   return keeps && (food.roles.includes("sauce") || food.roles.includes("fat")) && !food.roles.includes("protein");
 }
 
+/** What to buy of a food for these grams; salt, pepper and sugar are at home already. */
 export function buyFor(food: Food, grams: number): PackBuy {
-  if (onHand(food)) return { by: "onHand" };
+  if (food.assumedHome) return { by: "onHand" };
   if (food.pack) return { by: "pack", count: wholeCount(grams, food.pack.grams), packG: food.pack.grams, kind: food.pack.kind, ...(food.pack.labelG ? { labelG: food.pack.labelG } : {}) };
   if (food.unit) return { by: "unit", count: Math.max(1, Math.round(grams / food.unit.grams)) };
   if (food.piece) return { by: "piece", count: wholeCount(grams, food.piece.grams), pieceG: food.piece.grams };
@@ -114,7 +117,20 @@ function dayNeeded(draft: PlanDraft, day: number, slot: PlanSlot): number {
   return session?.day ?? day;
 }
 
+/**
+ * The cooking oil a plan takes to be at home: the oil on its cooking-fat lines
+ * (the household's when the profile names one, else each dish's own) and the
+ * fat the solver adds. A dressing or sesame oil is bought.
+ */
+function homeOils(plan: SolvedPlan): Set<string> {
+  const out = new Set<string>();
+  const meals = [...plan.days.flatMap((d) => [d.meals.breakfast, d.meals.lunch, d.meals.dinner]), ...(plan.prepDinner ? [plan.prepDinner] : [])];
+  for (const m of meals) for (const l of m.lines) if (l.role === "oil" && (l.cookingOil || l.source === "oil")) out.add(l.food);
+  return out;
+}
+
 export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLine[] {
+  const atHome = homeOils(plan);
   const need = new Map<string, { grams: number; firstDay: number; lastDay: number }>();
   const add = (food: string, grams: number, day: number) => {
     const had = need.get(food);
@@ -138,7 +154,7 @@ export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLi
   for (const [id, n] of need) {
     const food = foodById(id);
     if (!food) continue;
-    const buy = buyFor(food, n.grams);
+    const buy: PackBuy = atHome.has(id) ? { by: "onHand" } : buyFor(food, n.grams);
     const raw = isRawFlesh(food);
     const freeze = raw && n.lastDay > rawKeepsUntil(food, shop);
     const frozen = isBoughtFrozen(food);

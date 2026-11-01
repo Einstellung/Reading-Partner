@@ -8,6 +8,7 @@ import { ADDED_FOODS } from "./added-foods";
 import {
   ADDED_SUGAR_G,
   AROMATIC,
+  ASSUMED_HOME,
   BOUGHT_DRY,
   CALCIUM_SOURCE,
   DEEP_COLOR,
@@ -137,7 +138,9 @@ export interface Food {
   calciumSourceG?: number;
   /** The usual retail pack of a perishable food and the days it keeps once opened. */
   pack?: { grams: number; kind: PackKind; openDays: number; labelG?: number };
-  /** Planned cooked or soaked but bought dry and kept on hand (rice, quinoa); `zh` is the dry food's name (糙米 for 糙米饭). */
+  /** In every kitchen already (salt, black pepper, sugar): never bought for a plan (food-columns.ts ASSUMED_HOME). */
+  assumedHome?: true;
+  /** Planned cooked or soaked but bought dry and kept in the cupboard (rice, quinoa); `zh` is the dry food's name (糙米 for 糙米饭). */
   boughtDry?: { zh: string };
   /** The swap group it belongs to (swap-groups.ts). */
   swapGroup?: string;
@@ -178,6 +181,7 @@ function withColumns(f: Food): Food {
   if (calcium) out.calciumSourceG = calcium;
   const pack = RETAIL_PACK[f.id];
   if (pack) out.pack = { ...pack };
+  if (ASSUMED_HOME.has(f.id)) out.assumedHome = true;
   const dry = BOUGHT_DRY[f.id];
   if (dry) out.boughtDry = { zh: dry };
   const group = SWAP_GROUP_OF.get(f.id);

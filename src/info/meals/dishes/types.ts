@@ -82,21 +82,27 @@ export const EQUIPMENT: readonly Equipment[] = [
 ];
 
 /**
- * The kitchen every seed dish fits (docs/671 目标用户): a frying pan and a pot
- * (the pot with a rack is the steamer) on the stove, an electric pressure
- * cooker, a rice cooker, a soy milk maker, a microwave and a kettle. Oven,
- * slow cooker, air fryer and toaster are left out; a dish that needs one is
- * only picked when the user says in conversation that they have it.
+ * The kitchen every home has (docs/671 目标用户): a stove with a pot and a
+ * frying pan, and a microwave. Boiling water needs no kettle (the pot does
+ * it) and a steamer rack is not in every home, so neither is assumed. Any
+ * other appliance counts only when the profile names it (planner/library.ts
+ * kitchenOf).
  */
-export const DEFAULT_KITCHEN: readonly Equipment[] = [
-  "stove",
-  "steamer",
-  "pressure_cooker",
-  "rice_cooker",
-  "soy_milk_maker",
-  "microwave",
-  "kettle",
-];
+export const DEFAULT_KITCHEN: readonly Equipment[] = ["stove", "microwave"];
+
+/**
+ * Another way to cook the same dish with other equipment: a pot of rice in
+ * the pressure cooker or on the stove instead of the rice cooker. The planner
+ * cooks a dish the first way the reader's kitchen fits, its own fields first
+ * (planner/library.ts fitKitchen).
+ */
+export interface DishRoute {
+  equipment: Equipment[];
+  activeMin: number;
+  totalMin: number;
+  summary: string;
+  summaryEn: string;
+}
 
 export interface DishIngredient {
   /** Food table id. */
@@ -161,6 +167,8 @@ export interface Dish {
    */
   staples: string[];
   ingredients: DishIngredient[];
+  /** Other equipment that makes the same dish, tried in order when the kitchen lacks `equipment`. */
+  routes?: DishRoute[];
   /** A batch main's 2 to 3 ways to eat it; no other dish has any. */
   ways?: DishWay[];
   origin: "seed" | "user";

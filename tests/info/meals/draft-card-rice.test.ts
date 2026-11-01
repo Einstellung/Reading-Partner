@@ -42,7 +42,7 @@ test("the rice cooked at the prep session is listed after the pots", () => {
 test("the rice line is worded in the reader's language", () => {
   const c = card(goodDraft());
   setLocale("en");
-  expect(prepRow(c)!.rice).toBe("Brown rice, one rice-cooker batch");
+  expect(prepRow(c)!.rice).toBe("Brown rice, one batch");
 });
 
 test("a plan with no rice batch, or one cooked at a meal rather than the session, lists no rice at it", () => {

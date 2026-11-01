@@ -25,12 +25,13 @@ import type { MealsState } from "../plan/types";
 import { kitchenOf } from "../planner/library";
 import { checkPlannerRecord } from "../planner/to-week";
 import { planPrep } from "../screen/batch-cook";
-import { promptAmount } from "./recipe";
+import { donenessLine, ownsThermometer, PRESSURE_WATER_LINE, promptAmount, SALT_LINE } from "./recipe";
 import { kitchenFor, schedule } from "../timeline/schedule";
 import { MAX_PREP_STEPS, readPrepSteps, renumber, RICE_POT, type PrepStep } from "../timeline/steps";
 
 // Raised when the prompt changes what the steps may say; every stored session's steps are written again once.
-export const PREP_STEPS_PROMPT_VERSION = 2;
+// 3: doneness by sight and touch, the pressure cooker's water as a measure, no "to taste", the rice on the kitchen's own route.
+export const PREP_STEPS_PROMPT_VERSION = 3;
 
 export interface PrepStepsRow {
   food: string;
@@ -56,6 +57,9 @@ export interface PrepStepsPot {
 
 export interface PrepStepsRice {
   name: string;
+  /** How this kitchen cooks it (the library's summary for the route that fits) and on what. */
+  method: string;
+  equipment: Equipment[];
   food: string;
   foodName: string;
   grams: number;
@@ -74,6 +78,8 @@ export interface PrepStepsRequest {
   /** The reader's kitchen: the default one plus what the profile names. */
   devices: Equipment[];
   burners: number;
+  /** The kitchen they described names a food thermometer. */
+  thermometer: boolean;
   language: Locale;
 }
 
@@ -99,8 +105,9 @@ export function prepStepsKey(r: Omit<PrepStepsRequest, "key" | "kind" | "session
       r.language,
       [...r.devices].sort(),
       r.burners,
+      r.thermometer,
       r.pots.map((p) => [p.id, p.dish, p.portions, p.rows.map((x) => `${x.food}:${x.grams}`).sort()]),
-      r.rice ? [r.rice.food, r.rice.grams, r.rice.portions] : null,
+      r.rice ? [r.rice.food, r.rice.grams, r.rice.portions, r.rice.equipment] : null,
     ]),
   );
 }
@@ -150,13 +157,22 @@ export function prepStepsRequest(state: MealsState, opts: { today: string; regio
   const riceDish = r ? check.lib.dish(r.staple) : undefined;
   const rice: PrepStepsRice | null =
     r && r.cookedAt.slot === "prep" && r.cookedAt.day === session.day
-      ? { name: riceDish ? (zh ? riceDish.name : riceDish.nameEn) : r.staple, food: r.food, foodName: foodName(r.food), grams: Math.round(r.grams), portions: r.portions }
+      ? {
+          name: riceDish ? (zh ? riceDish.name : riceDish.nameEn) : r.staple,
+          method: riceDish ? (zh ? riceDish.summary : riceDish.summaryEn) : "",
+          equipment: riceDish ? [...riceDish.equipment] : ["stove"],
+          food: r.food,
+          foodName: foodName(r.food),
+          grams: Math.round(r.grams),
+          portions: r.portions,
+        }
       : null;
   const body = {
     pots,
     rice,
     devices: [...kitchenOf(charter.profile)].sort(),
     burners: kitchenFor(charter.profile).burners,
+    thermometer: ownsThermometer(charter.profile.kitchen),
     language: opts.language,
   };
   return { kind: "prep", key: prepStepsKey(body), session: session.id, name: pots.map((p) => p.name).join(" + "), ...body };
@@ -167,7 +183,7 @@ function languageName(language: Locale): string {
 }
 
 /** The system prompt. */
-export function prepStepsSystemPrompt(request: Pick<PrepStepsRequest, "language" | "burners">): string {
+export function prepStepsSystemPrompt(request: Pick<PrepStepsRequest, "language" | "burners"> & { thermometer?: boolean }): string {
   const language = languageName(request.language);
   return [
     `Write every step in ${language}.`,
@@ -180,7 +196,7 @@ export function prepStepsSystemPrompt(request: Pick<PrepStepsRequest, "language"
     '- "device": where it runs: one of the kitchen ids listed, or "counter" for work with no device (cutting, rinsing, mixing).',
     `- "pot": the id of the pot it belongs to, "${RICE_POT}" for the rice, or null for a step that serves several pots.`,
     '- "active": minutes the reader\'s hands are on it.',
-    '- "wait": minutes the device then runs or the food sits on its own (simmering, pressure cooking, the rice cooker), 0 if none.',
+    '- "wait": minutes the device then runs or the food sits on its own (simmering, pressure cooking, rice cooking), 0 if none.',
     '- "after": ids of the steps that must be finished before this one can start; [] if none.',
     "",
     "Rules:",
@@ -189,7 +205,9 @@ export function prepStepsSystemPrompt(request: Pick<PrepStepsRequest, "language"
     "- While a device is busy with an earlier pot, a later pot's hands-on work that does not need that device (browning or searing the meat, frying the aromatics, mixing the sauce) goes on the stove or the counter in the meantime, so the pot goes into the device as soon as it is free. Judge whether that work improves the dish and is worth the extra pan to wash; do not add it where it does not.",
     "- Every pot, and the rice when there is one, gets its steps from the raw ingredients to cooked. Do not repeat the grams: the list is on the page.",
     "- The listed seasoning (a dry blend, a jar of sauce) is the flavour, used as it comes. Use only the listed ingredients plus salt, pepper, cooking oil and water.",
-    "- Say when something has to be cooked through to be safe to eat (chicken, pork, beans, eggs).",
+    donenessLine(request.thermometer === true),
+    PRESSURE_WATER_LINE,
+    SALT_LINE,
     "- No clock times, no order of the day, no cooling, packing, boxes or storage: the app adds the last step that packs and puts everything away.",
     `- At most 8 steps a pot and ${MAX_PREP_STEPS} in all.`,
     "",
@@ -214,7 +232,11 @@ export function prepStepsUserText(request: PrepStepsRequest): string {
   }
   if (request.rice) {
     const r = request.rice;
-    lines.push(`Pot "${RICE_POT}": ${r.name}, ${r.grams} g of ${r.foodName}, ${r.portions} portions, in the rice cooker.`, "");
+    lines.push(
+      `Pot "${RICE_POT}": ${r.name}, ${r.grams} g of ${r.foodName}, ${r.portions} portions.${r.method ? ` How: ${r.method}` : ""}`,
+      `Equipment: ${r.equipment.join(", ")}.`,
+      "",
+    );
   }
   lines.push(`Kitchen (device ids): ${request.devices.join(", ")}. Burners on the stove: ${request.burners}.`);
   return lines.join("\n");

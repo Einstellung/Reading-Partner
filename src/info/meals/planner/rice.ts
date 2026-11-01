@@ -1,4 +1,4 @@
-// The plan's rice (docs/671 一锅): every rice-cooker staple in a plan is the
+// The plan's rice (docs/671 一锅): every rice staple in a plan is the
 // same rice, cooked as one batch at the prep session and kept like a pot.
 // Staple variety comes from the staples that are not rice.
 
@@ -14,9 +14,12 @@ export function stapleOf(draft: PlanDraft, lib: PlanLibrary, day: number, slot: 
   return lib.dish(batch?.dish ?? "")?.ways?.[main.way - 1]?.staple ?? null;
 }
 
-/** True for a staple cooked in the rice cooker (white, brown, multigrain, millet rice). */
+/**
+ * True for a rice staple (white, brown, multigrain, millet rice): a dish the
+ * library cooks in the rice cooker first, whichever way this kitchen cooks it.
+ */
 export function isRiceStaple(lib: PlanLibrary, ref: string | null): ref is string {
-  return !!ref && !!lib.dish(ref)?.equipment.includes("rice_cooker");
+  return !!ref && !!lib.stored(ref)?.equipment.includes("rice_cooker");
 }
 
 /** The lunches and dinners whose staple is a rice, in time order, the prep day's dinner first. */

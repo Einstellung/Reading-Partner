@@ -103,7 +103,10 @@ export const PEOPLE_OPTIONS: readonly { value: number; label: string }[] = [
   { value: 4, label: "4 人以上" },
 ];
 export const SHOP_OPTIONS: readonly string[] = ["超市", "网上", "菜市场", "便利店"];
-export const KITCHEN_OPTIONS: readonly string[] = ["一口锅", "微波炉", "电压力锅", "烤箱", "空气炸锅"];
+// Every appliance past the default stove and microwave (planner/library.ts
+// equipmentNamed reads these words) counts only when it is picked here or
+// named in the conversation.
+export const KITCHEN_OPTIONS: readonly string[] = ["一口锅", "微波炉", "电饭煲", "电压力锅", "蒸锅", "豆浆机", "烤箱", "空气炸锅"];
 export const NO_DISLIKES = "无";
 // Each dislike and the food tag the program checks it by.
 export const AVOID_OPTIONS: readonly { label: string; tag: FoodTag | null }[] = [

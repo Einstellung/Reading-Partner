@@ -115,7 +115,7 @@ describe("the fixture plan, boxed", () => {
   });
 });
 
-describe("the plan's rice: one rice-cooker batch at the prep session", () => {
+describe("the plan's rice: one batch at the prep session", () => {
   /** The solved grams of the plan's rice at these meals. */
   const riceGrams = (plan: NonNullable<ReturnType<typeof run>["plan"]>, meals: { day: number; slot: "lunch" | "dinner" }[], staple = "brown_rice") =>
     meals.reduce((sum, m) => sum + plan.days[m.day - 1].meals[m.slot].lines.filter((l) => l.source === "staple" && l.dish === staple).reduce((a, l) => a + l.grams, 0), 0);
@@ -255,7 +255,7 @@ describe("text", () => {
     expect(tx.containers[0]).toEqual({ name: "食盒", detail: "约 750 ml、带盖、能进微波炉，玻璃的最好 · 锅里共 2 份，备餐那顿吃 1 份，其余 1 份装盒", count: "1 个" });
     expect(tx.containers[1]).toEqual({ name: "装饭的有盖容器", detail: "装糙米饭，给：第 2 天晚餐", count: "1 个" });
     expect(tx.containers[2]?.count).toBe("5 个");
-    expect(tx.rice).toEqual({ name: "糙米饭 · 电饭锅一锅 2 份", detail: "第 1 天备餐时用电饭锅一次煮好，分给：第 1 天晚餐、第 2 天晚餐" });
+    expect(tx.rice).toEqual({ name: "糙米饭 · 一锅 2 份", detail: "第 1 天备餐时一次煮好，分给：第 1 天晚餐、第 2 天晚餐" });
     expect(tx.boxes[0]).toEqual({
       meal: "第 2 天午餐",
       what: "盒里只有：鸡腿丁红芸豆炖菜（chili） 1 份",

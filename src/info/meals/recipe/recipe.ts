@@ -72,8 +72,35 @@ function languageName(language: Locale): string {
 }
 
 // Raised when the prompt changes what the steps may use. 2: the listed
-// seasoning is the flavour, nothing fresh or bottled beyond the list.
-export const RECIPE_PROMPT_VERSION = 2;
+// seasoning is the flavour, nothing fresh or bottled beyond the list. 3:
+// doneness by sight and touch, the pressure cooker's water in cups and ml,
+// no "to taste".
+export const RECIPE_PROMPT_VERSION = 3;
+
+/** Whether the reader's kitchen, as they described it, has a food thermometer. */
+export function ownsThermometer(kitchen: readonly string[] | undefined): boolean {
+  return (kitchen ?? []).some((k) => /thermometer|温度计/i.test(k));
+}
+
+/**
+ * How the steps say food is done, shared with the prep session's steps
+ * (prep-steps.ts). Readers have no thermometer unless their kitchen names one.
+ */
+export function donenessLine(thermometer: boolean): string {
+  const by =
+    "- Say when something has to be cooked through to be safe to eat (chicken, pork, beans, eggs, green beans), and say how to tell by sight and touch: chicken and pork are done when the juices run clear and no pink is left in the thickest part, fish when it turns opaque and flakes easily with a fork, beans and green beans when they are tender all the way through, eggs when the white and the yolk are set.";
+  return thermometer
+    ? `${by} The reader has a food thermometer, so you may add the safe internal temperature after the sign.`
+    : `${by} Never give an internal temperature and never ask for a thermometer: the reader has none.`;
+}
+
+/** The water a pressure cooker gets, shared with the prep session's steps. */
+export const PRESSURE_WATER_LINE =
+  "- When something goes in the pressure cooker, say how much water or liquid goes in as a measure: 1 cup (250 ml) unless the dish needs more (a braise covered in liquid, dried beans), then the amount it needs. Say it once, in the step that adds it. Never write \"the minimum the manual asks for\" and never send the reader to the manual.";
+
+/** Salt as a measure, shared with the prep session's steps. */
+export const SALT_LINE =
+  "- Never write \"to taste\" (\"salt to taste\", \"season to taste\"). Salt on the list goes in at its listed amount; salt that is not on the list is either left out because the blend is already salted, or given as a measure (a pinch, 1/4 teaspoon).";
 
 /**
  * The stored recipe's key: the dish, every food at its solved grams, the
@@ -143,7 +170,7 @@ const EFFORT_LINE: Record<Effort, string> = {
 };
 
 /** The system prompt. */
-export function recipeSystemPrompt(request: Pick<RecipeRequest, "effort" | "language">): string {
+export function recipeSystemPrompt(request: Pick<RecipeRequest, "effort" | "language"> & { kitchen?: readonly string[] }): string {
   const language = languageName(request.language);
   return [
     `Write the steps in ${language}.`,
@@ -153,11 +180,13 @@ export function recipeSystemPrompt(request: Pick<RecipeRequest, "effort" | "lang
     "Steps:",
     "- 3 to 6 steps, in the order the reader does them, each one or two short sentences. Say the heat and the minutes. Use waiting time (while the oven heats, cut the vegetables).",
     "- The listed seasoning (a dry blend, a jar of sauce) is the dish's flavour. It goes on or in as it comes from the jar or packet: rubbed on, sprinkled over or stirred in. Never mix a sauce from several bottles.",
-    "- Use only the listed ingredients, plus salt, pepper, cooking oil and water. No fresh ginger, garlic, scallion, chilli or herbs and no sauce or condiment that is not on the list. Most blends are already salted: add salt only to taste at the end.",
+    "- Use only the listed ingredients, plus salt, pepper, cooking oil and water. No fresh ginger, garlic, scallion, chilli or herbs and no sauce or condiment that is not on the list. Most blends are already salted.",
+    SALT_LINE,
     "- When the plan's method line has the meat rubbed or marinated the night before, make that the first step: say plainly that it is done the evening before and that the meat waits covered in the fridge overnight. The steps after it are the day itself. Otherwise the seasoning goes on just before cooking.",
     "- Do not repeat the grams from the ingredient list: the list is printed right above the steps. A small measure that is not on the list (2 spoons of water) is fine.",
     "- Write to the reader's kitchen as they described it and keep to its limits. If the steamer rack holds one bun, steam one and heat the rest another way. Frozen steamed buns go straight onto the rack, no thawing. If the dish wants a tool they do not have, use one they do.",
-    "- Say when something has to be cooked through to be safe to eat (green beans, chicken, pork, eggs).",
+    donenessLine(ownsThermometer(request.kitchen)),
+    PRESSURE_WATER_LINE,
     `- ${EFFORT_LINE[request.effort]}`,
     "- Some meals cook a pot of meat that several meals eat from, or eat one box of such a pot. The message says which and what to write. The app adds the step that packs the pot into boxes and says where each box is kept: never write packing, storage times or which day a box is for.",
     "",

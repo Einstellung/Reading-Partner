@@ -25,7 +25,7 @@
 // cuts as cubes, slices or dice.
 
 import type { MethodId } from "./methods";
-import type { Cuisine, Dish, DishIngredient, DishRole, DishWay, Equipment, IngredientRole } from "./types";
+import type { Cuisine, Dish, DishIngredient, DishRole, DishRoute, DishWay, Equipment, IngredientRole } from "./types";
 
 const CREATED_AT = "2026-10-25T00:00:00.000Z";
 
@@ -64,6 +64,8 @@ interface Spec {
   staples?: string[];
   /** Batch mains only: 2 to 3 ways to eat the pot. */
   ways?: DishWay[];
+  /** Other equipment that makes the same dish, in the order the planner tries them. */
+  routes?: DishRoute[];
 }
 
 const dish = (s: Spec): Dish => ({
@@ -82,12 +84,22 @@ const dish = (s: Spec): Dish => ({
   staples: s.staples ?? [],
   ingredients: s.i,
   ...(s.ways ? { ways: s.ways } : {}),
+  ...(s.routes ? { routes: s.routes } : {}),
   origin: "seed",
   createdAt: CREATED_AT,
 });
 
 /** A staple is cooked ahead, so it is a batch dish with no ways. */
 const batchStaple = (s: Spec): Dish => ({ ...dish({ ...s, role: "staple" }), prep: "batch" });
+
+/** Another way to cook a dish: its equipment, [hands-on, total] minutes and how, in Chinese and English. */
+const route = (equipment: Equipment[], t: Minutes, summary: string, summaryEn: string): DishRoute => ({
+  equipment,
+  activeMin: t[0],
+  totalMin: t[1],
+  summary,
+  summaryEn,
+});
 
 const way = (name: string, nameEn: string, staple: string | null, addOns: DishIngredient[], activeMin = 3): DishWay => ({
   name,
@@ -113,22 +125,42 @@ const BABY_POTATOES = "steamed_baby_potatoes";
 const CORN = "steamed_waxy_corn";
 
 const STAPLES: Dish[] = [
-  batchStaple({ id: RICE, zh: "米饭", en: "Steamed white rice", sum: "白米淘洗后加水，用电饭锅煮熟", sumEn: "White rice rinsed and cooked with water in a rice cooker.", c: "chinese", m: "grain", eq: ["rice_cooker"], t: [3, 40], i: [st("rice_cooked", 110)] }),
-  batchStaple({ id: BROWN, zh: "糙米饭", en: "Brown rice", sum: "糙米淘洗后加水，用电饭锅煮熟", sumEn: "Brown rice rinsed and cooked with water in a rice cooker.", c: "chinese", m: "grain", eq: ["rice_cooker"], t: [3, 60], i: [st("brown_rice_cooked", 163)] }),
-  batchStaple({ id: GRAINS, zh: "五谷杂粮饭", en: "Multigrain rice", sum: "杂粮米淘洗后加水，用电饭锅煮熟", sumEn: "Mixed grains rinsed and cooked with water in a rice cooker.", c: "chinese", m: "grain", eq: ["rice_cooker"], t: [3, 50], i: [st("multigrain_rice_raw", 57)] }),
-  batchStaple({ id: MILLET, zh: "小米饭", en: "Millet rice", sum: "小米淘洗后加水，用电饭锅煮熟", sumEn: "Millet rinsed and cooked with water in a rice cooker.", c: "chinese", m: "grain", eq: ["rice_cooker"], t: [3, 35], i: [st("millet_raw", 55)] }),
+  batchStaple({ id: RICE, zh: "米饭", en: "Steamed white rice", sum: "白米淘洗后加水，用电饭锅煮熟", sumEn: "White rice rinsed and cooked with water in a rice cooker.", c: "chinese", m: "grain", eq: ["rice_cooker"], t: [3, 40], i: [st("rice_cooked", 110)],
+    routes: [
+      route(["pressure_cooker"], [3, 30], "白米淘洗后加等量水，压力锅高压 4 分钟，自然泄压 10 分钟", "White rice rinsed, with an equal volume of water, 4 minutes at high pressure, then 10 minutes natural release."),
+      route(["stove"], [5, 30], "白米淘洗后加水煮开，盖盖小火煮 15 分钟，关火焖 10 分钟", "White rice rinsed and brought to a boil, covered on low 15 minutes, then 10 minutes covered off the heat."),
+    ] }),
+  batchStaple({ id: BROWN, zh: "糙米饭", en: "Brown rice", sum: "糙米淘洗后加水，用电饭锅煮熟", sumEn: "Brown rice rinsed and cooked with water in a rice cooker.", c: "chinese", m: "grain", eq: ["rice_cooker"], t: [3, 60], i: [st("brown_rice_cooked", 163)],
+    routes: [
+      route(["pressure_cooker"], [3, 45], "糙米淘洗后加水，压力锅高压 22 分钟，自然泄压 10 分钟", "Brown rice rinsed, with water, 22 minutes at high pressure, then 10 minutes natural release."),
+      route(["stove"], [5, 60], "糙米淘洗后加水煮开，盖盖小火煮 40 分钟，关火焖 10 分钟", "Brown rice rinsed and brought to a boil, covered on low 40 minutes, then 10 minutes covered off the heat."),
+    ] }),
+  batchStaple({ id: GRAINS, zh: "五谷杂粮饭", en: "Multigrain rice", sum: "杂粮米淘洗后加水，用电饭锅煮熟", sumEn: "Mixed grains rinsed and cooked with water in a rice cooker.", c: "chinese", m: "grain", eq: ["rice_cooker"], t: [3, 50], i: [st("multigrain_rice_raw", 57)],
+    routes: [
+      route(["pressure_cooker"], [3, 45], "杂粮米淘洗后加水，压力锅高压 20 分钟，自然泄压 10 分钟", "Mixed grains rinsed, with water, 20 minutes at high pressure, then 10 minutes natural release."),
+      route(["stove"], [5, 55], "杂粮米淘洗后加水煮开，盖盖小火煮 35 分钟，关火焖 10 分钟", "Mixed grains rinsed and brought to a boil, covered on low 35 minutes, then 10 minutes covered off the heat."),
+    ] }),
+  batchStaple({ id: MILLET, zh: "小米饭", en: "Millet rice", sum: "小米淘洗后加水，用电饭锅煮熟", sumEn: "Millet rinsed and cooked with water in a rice cooker.", c: "chinese", m: "grain", eq: ["rice_cooker"], t: [3, 35], i: [st("millet_raw", 55)],
+    routes: [
+      route(["pressure_cooker"], [3, 30], "小米淘洗后加水，压力锅高压 10 分钟，自然泄压 10 分钟", "Millet rinsed, with water, 10 minutes at high pressure, then 10 minutes natural release."),
+      route(["stove"], [5, 30], "小米淘洗后加水煮开，盖盖小火煮 20 分钟，关火焖 5 分钟", "Millet rinsed and brought to a boil, covered on low 20 minutes, then 5 minutes covered off the heat."),
+    ] }),
   batchStaple({ id: QUINOA, zh: "藜麦饭", en: "Cooked quinoa", sum: "藜麦冲洗后加水煮 15 分钟，吸干水分", sumEn: "Quinoa rinsed and simmered in water for 15 minutes until the water is absorbed.", c: "mediterranean", m: "grain", t: [5, 20], i: [st("quinoa_cooked", 167)] }),
   batchStaple({ id: PASTA, zh: "水煮意面", en: "Boiled pasta", sum: "意面下入沸盐水煮 10 分钟，捞出沥干", sumEn: "Pasta boiled in salted water for 10 minutes and drained.", c: "italian", m: "grain", t: [5, 15], i: [st("pasta_dry", 54)] }),
   batchStaple({ id: WW_PASTA, zh: "水煮全麦意面", en: "Boiled whole-wheat pasta", sum: "全麦意面下入沸盐水煮 10 分钟，捞出沥干", sumEn: "Whole-wheat pasta boiled in salted water for 10 minutes and drained.", c: "italian", m: "grain", t: [5, 15], i: [st("whole_wheat_pasta_dry", 57)] }),
   batchStaple({ id: SOBA, zh: "水煮荞麦面", en: "Boiled soba noodles", sum: "荞麦面下入沸水煮熟，过凉水沥干", sumEn: "Soba boiled until tender, rinsed cold and drained.", c: "japanese", m: "grain", t: [5, 10], i: [st("soba_fresh", 135)] }),
-  batchStaple({ id: VERMICELLI, zh: "泡发米粉", en: "Rice vermicelli", sum: "干米粉用开水泡软，沥干", sumEn: "Dried rice vermicelli soaked in boiling water until soft, then drained.", c: "southeast_asian", m: "grain", eq: ["kettle"], t: [5, 12], i: [st("rice_noodles_dry", 57)] }),
-  batchStaple({ id: SWEET_POTATO, zh: "蒸红薯", en: "Steamed sweet potato", sum: "红薯洗净连皮上锅蒸 25 分钟", sumEn: "Sweet potato washed and steamed with the skin on for 25 minutes.", c: "chinese", m: "steam", eq: ["steamer"], t: [3, 30], i: [st("sweet_potato", 174)] }),
-  batchStaple({ id: MICROWAVE_POTATO, zh: "微波土豆", en: "Microwaved potato", sum: "土豆洗净扎孔，微波 8 分钟至软，或压力锅蒸 15 分钟", sumEn: "Potato washed and pricked, microwaved about 8 minutes until soft, or steamed 15 minutes in the pressure cooker.", c: "american", m: "steam", eq: ["microwave", "pressure_cooker"], t: [3, 12], i: [st("potato", 270)] }),
+  batchStaple({ id: VERMICELLI, zh: "泡发米粉", en: "Rice vermicelli", sum: "干米粉用开水泡软，沥干", sumEn: "Dried rice vermicelli soaked in boiling water until soft, then drained.", c: "southeast_asian", m: "grain", eq: ["kettle"], t: [5, 12], i: [st("rice_noodles_dry", 57)],
+    routes: [route(["stove"], [5, 15], "锅里烧开水后关火，放干米粉泡软，沥干", "Water boiled in a pot and taken off the heat, the dried vermicelli soaked in it until soft, then drained.")] }),
+  batchStaple({ id: SWEET_POTATO, zh: "蒸红薯", en: "Steamed sweet potato", sum: "红薯洗净连皮上锅蒸 25 分钟", sumEn: "Sweet potato washed and steamed with the skin on for 25 minutes.", c: "chinese", m: "steam", eq: ["steamer"], t: [3, 30], i: [st("sweet_potato", 174)],
+    routes: [route(["microwave"], [3, 12], "红薯洗净扎几个孔，微波 8 分钟至软", "Sweet potato washed and pricked, microwaved about 8 minutes until soft.")] }),
+  batchStaple({ id: MICROWAVE_POTATO, zh: "微波土豆", en: "Microwaved potato", sum: "土豆洗净扎孔，微波 8 分钟至软", sumEn: "Potato washed and pricked, microwaved about 8 minutes until soft.", c: "american", m: "steam", eq: ["microwave"], t: [3, 12], i: [st("potato", 270)] }),
   batchStaple({
     id: BABY_POTATOES, zh: "蒸小土豆", en: "Steamed baby potatoes", sum: "小土豆上锅蒸 20 分钟，拌橄榄油、烟熏红椒粉和盐", sumEn: "Baby potatoes steamed 20 minutes, tossed with olive oil, smoked paprika and salt.", c: "american", m: "steam", eq: ["steamer"], t: [5, 25],
     i: [st("baby_potato", 340), oi("olive_oil", 3), se("smoked_paprika", 1), se("salt", 0.3)],
+    routes: [route(["stove"], [5, 25], "小土豆冷水下锅煮开再煮 15 分钟，沥干，拌橄榄油、红椒粉和盐", "Baby potatoes brought to a boil from cold and simmered 15 minutes, drained, tossed with olive oil, smoked paprika and salt.")],
   }),
-  batchStaple({ id: CORN, zh: "蒸糯玉米", en: "Steamed waxy corn", sum: "糯玉米带叶上锅蒸 20 分钟", sumEn: "Waxy corn cobs steamed for 20 minutes.", c: "chinese", m: "steam", eq: ["steamer"], t: [3, 25], i: [st("waxy_corn_cob", 121)] }),
+  batchStaple({ id: CORN, zh: "蒸糯玉米", en: "Steamed waxy corn", sum: "糯玉米带叶上锅蒸 20 分钟", sumEn: "Waxy corn cobs steamed for 20 minutes.", c: "chinese", m: "steam", eq: ["steamer"], t: [3, 25], i: [st("waxy_corn_cob", 121)],
+    routes: [route(["stove"], [3, 20], "糯玉米放进开水锅里煮 15 分钟", "Waxy corn cobs boiled in a pot of water for 15 minutes.")] }),
 ];
 
 const SIDES: Dish[] = [
@@ -147,7 +179,8 @@ const SIDES: Dish[] = [
   // (docs/671 多样性).
   dish({ id: "microwave_spinach_sesame", zh: "微波菠菜拌芝麻", en: "Microwaved spinach with sesame", sum: "冷冻菠菜微波加热 4 分钟，挤干水，拌酱油、香油和芝麻", sumEn: "Frozen spinach microwaved 4 minutes and squeezed dry, mixed with soy sauce, sesame oil and sesame seeds.", role: "side", c: "japanese", m: "microwave", eq: ["microwave"], t: [4, 8], i: [ve("frozen_spinach", 150), oi("sesame_seeds", 4), oi("sesame_oil", 1), se("reduced_salt_soy_sauce", 2)] }),
   dish({ id: "quick_garlic_spinach", zh: "蒜蓉快炒菠菜", en: "Quick stir-fried spinach with garlic paste", sum: "菠菜大火快炒 2 分钟，加蒜蓉酱和盐调味", sumEn: "Spinach stir-fried hot for 2 minutes with garlic paste and salt.", role: "side", c: "chinese", m: "stir_fry", t: [4, 6], i: [ve("spinach", 160), se("garlic_paste", 2), co("canola_oil", 3), se("salt", 0.3)] }),
-  dish({ id: "steamed_carrot_coins", zh: "清蒸胡萝卜片", en: "Steamed carrot coins", sum: "胡萝卜切厚片上锅蒸 10 分钟，拌橄榄油、少许盐和黑胡椒", sumEn: "Carrot cut into thick coins and steamed 10 minutes, tossed with olive oil, a pinch of salt and black pepper.", role: "side", c: "american", m: "steam", eq: ["steamer"], t: [3, 13], i: [ve("carrot", 150), oi("olive_oil", 3), se("salt", 0.1), se("ground_black_pepper", 0.3)] }),
+  dish({ id: "steamed_carrot_coins", zh: "清蒸胡萝卜片", en: "Steamed carrot coins", sum: "胡萝卜切厚片上锅蒸 10 分钟，拌橄榄油、少许盐和黑胡椒", sumEn: "Carrot cut into thick coins and steamed 10 minutes, tossed with olive oil, a pinch of salt and black pepper.", role: "side", c: "american", m: "steam", eq: ["steamer"], t: [3, 13], i: [ve("carrot", 150), oi("olive_oil", 3), se("salt", 0.1), se("ground_black_pepper", 0.3)],
+    routes: [route(["microwave"], [3, 8], "胡萝卜切厚片加一勺水，盖上微波 5 分钟，拌橄榄油、盐和黑胡椒", "Carrot coins with a spoon of water, covered and microwaved 5 minutes, tossed with olive oil, salt and black pepper.")] }),
   dish({ id: "soy_green_beans_microwave", zh: "酱油四季豆", en: "Microwaved green beans with soy sauce", sum: "冷冻四季豆微波加热 4 分钟，拌酱油和香油", sumEn: "Frozen green beans microwaved 4 minutes, tossed with soy sauce and sesame oil.", role: "side", c: "chinese", m: "microwave", eq: ["microwave"], t: [3, 7], i: [ve("frozen_green_beans", 150), se("reduced_salt_soy_sauce", 3), oi("sesame_oil", 1.5)] }),
   dish({ id: "tomato_cucumber_salad", zh: "番茄黄瓜沙拉", en: "Tomato and cucumber salad", sum: "番茄和黄瓜切块，拌橄榄油、米醋和盐，不用开火", sumEn: "Tomato and cucumber cut up and tossed with olive oil, rice vinegar and salt; no cooking.", role: "side", c: "mediterranean", m: "salad", eq: [], t: [4, 4], i: [ve("tomato", 100), ve("cucumber", 50), oi("olive_oil", 3), se("rice_vinegar", 6), se("salt", 0.3)] }),
   dish({ id: "purple_cabbage_vinegar", zh: "醋拌紫甘蓝丝", en: "Shredded purple cabbage with vinegar", sum: "紫甘蓝和胡萝卜切丝，拌米醋、橄榄油和盐，不用开火", sumEn: "Purple cabbage and carrot shredded and tossed with rice vinegar, olive oil and salt; no cooking.", role: "side", c: "american", m: "salad", eq: [], t: [5, 5], i: [ve("red_cabbage", 130), ve("carrot", 25), oi("olive_oil", 3), se("rice_vinegar", 8), se("salt", 0.3)] }),
