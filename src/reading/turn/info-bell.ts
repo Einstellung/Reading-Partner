@@ -29,10 +29,12 @@ import {
   type TurnDelivery,
   type TurnDeliveryOutcome,
 } from "../../soul";
-import { registerThinkDesk } from "../../soul/think";
+import { registerThinkDesk, type ThinkDeskLaid } from "../../soul/think";
 import type { AgentTool } from "../../legion/durable/contract";
 import { briefingThreadId } from "../../info/briefer/anchors";
 import { layBriefingTurn, layMealsTurn } from "../../info/briefer/deliver";
+import { buildLiveMealsReadTools } from "../../info/meals/read-live";
+import { MEALS_READ_PROMPT } from "../../info/meals/read-tools";
 import {
   infoAddress,
   infoAssemblies,
@@ -180,6 +182,11 @@ async function briefingThinkDesk(origin: BoxOrigin): Promise<AgentTool[]> {
   return turn?.tools ?? [];
 }
 
+/** A think run delivered to the meals conversation reads the meals data, and nothing else. */
+async function mealsThinkDesk(): Promise<ThinkDeskLaid> {
+  return { tools: buildLiveMealsReadTools(), prompt: MEALS_READ_PROMPT };
+}
+
 /** Say that a run delegated from a briefing or the meals conversation is answered there. The undo is for tests. */
 export function registerInfoDelivery(): () => void {
   const briefing = registerTurnDelivery("briefing", (input) => deliverInfoBell(input));
@@ -187,11 +194,13 @@ export function registerInfoDelivery(): () => void {
   const briefingReply = registerReplyAppend("briefing", (input) => appendInfoReply(input));
   const mealsReply = registerReplyAppend("meals", (input) => appendInfoReply(input));
   const thinkDesk = registerThinkDesk("briefing", briefingThinkDesk);
+  const mealsThink = registerThinkDesk("meals", mealsThinkDesk);
   return () => {
     briefing();
     meals();
     briefingReply();
     mealsReply();
     thinkDesk();
+    mealsThink();
   };
 }

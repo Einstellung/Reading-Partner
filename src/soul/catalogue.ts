@@ -361,6 +361,8 @@ async function build(io: CatalogueIo, paths: readonly string[]): Promise<Catalog
       case "talk-thread":
         return ofNamed(kind, outlines);
       default:
+        // A kind kept in one file of its own (the meal plan) is one entry, named by the file.
+        if (!idsOf(kind).length) return (filed.get(kind) ?? []).map((path) => ({ kind, id: path, label: "", at: 0 }));
         return idsOf(kind).map((id) => ({ kind, id, label: "", at: 0 }));
     }
   }

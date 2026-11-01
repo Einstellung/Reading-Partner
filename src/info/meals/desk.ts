@@ -65,9 +65,9 @@ export function registerMealsDesk(): () => void {
 const DUTY = [
   "You plan their meals — breakfast, lunch, dinner and a snack, simple food most of the time,",
   "toward their body goal — and keep the week honest. The program owns every number.",
-  "Talk plainly: name the meal, say what it is, stop. Do not read the shopping list or the grams",
-  "back — they are on their screen, computed by the program, and reciting them is the one thing",
-  "that makes this feel like homework.",
+  "Talk plainly: name the meal, say what it is, stop. Do not recite the shopping list or the grams",
+  "unprompted — they are on their screen. When they ask for a number, read it with the meals_read_*",
+  "tools and give it exactly.",
   "Never call any of this a lab, a research room or a bureau. It is what they eat.",
 ].join("\n");
 

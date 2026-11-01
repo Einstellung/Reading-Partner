@@ -1,0 +1,1398 @@
+{
+ "version": 2,
+ "charter": {
+  "profile": {
+   "consent": "manual",
+   "goal": "gain",
+   "sex": "m",
+   "age": 31,
+   "heightCm": 170,
+   "weightKg": 64,
+   "trainingDays": [
+    1,
+    2,
+    4,
+    5,
+    6
+   ],
+   "trainTime": "morning",
+   "work": "sit",
+   "people": 1,
+   "shops": [
+    "supermarket"
+   ],
+   "kitchen": [
+    "一口锅",
+    "微波炉",
+    "电压力锅",
+    "豆浆机",
+    "带蒸架的小锅"
+   ],
+   "dislikes": [
+    "avocado",
+    "oats",
+    "broccoli",
+    "frozen_broccoli"
+   ],
+   "effort": "simple",
+   "boxes": true,
+   "minutesPerMeal": 20
+  },
+  "text": "Batch cooking, quick and simple.",
+  "updatedAt": 1793000000000
+ },
+ "plan": {
+  "id": "week-2026-10-31",
+  "startDate": "2026-10-31",
+  "days": [
+   {
+    "date": "2026-10-31",
+    "breakfast": {
+     "mode": "make",
+     "name": "蒸红薯水煮蛋豆浆",
+     "searchName": "steamed sweet potato, boiled egg and soy milk",
+     "method": "红薯和鸡蛋放进同一个蒸锅蒸 15 分钟，配一杯豆浆",
+     "minutes": 3,
+     "items": [
+      {
+       "foodId": "soy_milk_unsweetened",
+       "role": "protein",
+       "grams": 500
+      },
+      {
+       "foodId": "egg",
+       "role": "protein",
+       "grams": 100
+      },
+      {
+       "foodId": "sweet_potato",
+       "role": "staple",
+       "grams": 150
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "soy_milk_unsweetened",
+       "role": "protein",
+       "grams": 500
+      },
+      {
+       "foodId": "egg",
+       "role": "protein",
+       "grams": 100
+      },
+      {
+       "foodId": "sweet_potato",
+       "role": "staple",
+       "grams": 150
+      }
+     ]
+    },
+    "lunch": {
+     "mode": "make",
+     "name": "番茄手撕鸡盖糙米饭配彩椒玉米",
+     "searchName": "salsa chicken over brown rice with red pepper and corn",
+     "method": "鸡胸肉、番茄碎、洋葱、青椒加墨西哥香料，压力锅压 12 分钟后撕散",
+     "minutes": 3,
+     "items": [
+      {
+       "foodId": "chicken_breast",
+       "role": "protein",
+       "grams": 167
+      },
+      {
+       "foodId": "crushed_tomatoes",
+       "role": "fixed",
+       "grams": 186
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "green_pepper",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "taco_seasoning",
+       "role": "fixed",
+       "grams": 3
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 9
+      },
+      {
+       "foodId": "red_bell_pepper",
+       "role": "fixed",
+       "grams": 100
+      },
+      {
+       "foodId": "frozen_corn",
+       "role": "fixed",
+       "grams": 60
+      },
+      {
+       "foodId": "bok_choy",
+       "role": "fixed",
+       "grams": 248
+      },
+      {
+       "foodId": "garlic_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "canola_oil",
+       "role": "fat",
+       "grams": 3
+      },
+      {
+       "foodId": "salt",
+       "role": "fixed",
+       "grams": 0
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 10
+      },
+      {
+       "foodId": "brown_rice_cooked",
+       "role": "staple",
+       "grams": 423
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "chicken_breast",
+       "role": "protein",
+       "grams": 167
+      },
+      {
+       "foodId": "crushed_tomatoes",
+       "role": "fixed",
+       "grams": 186
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "green_pepper",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "taco_seasoning",
+       "role": "fixed",
+       "grams": 3
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 9
+      },
+      {
+       "foodId": "red_bell_pepper",
+       "role": "fixed",
+       "grams": 100
+      },
+      {
+       "foodId": "frozen_corn",
+       "role": "fixed",
+       "grams": 60
+      },
+      {
+       "foodId": "bok_choy",
+       "role": "fixed",
+       "grams": 248
+      },
+      {
+       "foodId": "garlic_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "canola_oil",
+       "role": "fat",
+       "grams": 3
+      },
+      {
+       "foodId": "salt",
+       "role": "fixed",
+       "grams": 0
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 10
+      },
+      {
+       "foodId": "brown_rice_cooked",
+       "role": "staple",
+       "grams": 423
+      }
+     ]
+    },
+    "dinner": {
+     "mode": "make",
+     "name": "干香料牛肉盖糙米饭配上海青",
+     "searchName": "dry-spice beef over brown rice with bok choy",
+     "method": "牛腱块加咖喱粉、肉桂、洋葱和少许高汤，压力锅压 40 分钟，开盖收干",
+     "minutes": 3,
+     "items": [
+      {
+       "foodId": "beef_shank_raw",
+       "role": "protein",
+       "grams": 168
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 96
+      },
+      {
+       "foodId": "stock_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "curry_powder",
+       "role": "fixed",
+       "grams": 4
+      },
+      {
+       "foodId": "ground_cinnamon",
+       "role": "fixed",
+       "grams": 0
+      },
+      {
+       "foodId": "ground_cumin",
+       "role": "fixed",
+       "grams": 1
+      },
+      {
+       "foodId": "garlic_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "ginger_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "reduced_salt_soy_sauce",
+       "role": "fixed",
+       "grams": 5
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 10
+      },
+      {
+       "foodId": "bok_choy",
+       "role": "fixed",
+       "grams": 252
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 10
+      },
+      {
+       "foodId": "brown_rice_cooked",
+       "role": "staple",
+       "grams": 372
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "beef_shank_raw",
+       "role": "protein",
+       "grams": 168
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 96
+      },
+      {
+       "foodId": "stock_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "curry_powder",
+       "role": "fixed",
+       "grams": 4
+      },
+      {
+       "foodId": "ground_cinnamon",
+       "role": "fixed",
+       "grams": 0
+      },
+      {
+       "foodId": "ground_cumin",
+       "role": "fixed",
+       "grams": 1
+      },
+      {
+       "foodId": "garlic_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "ginger_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "reduced_salt_soy_sauce",
+       "role": "fixed",
+       "grams": 5
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 10
+      },
+      {
+       "foodId": "bok_choy",
+       "role": "fixed",
+       "grams": 252
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 10
+      },
+      {
+       "foodId": "brown_rice_cooked",
+       "role": "staple",
+       "grams": 372
+      }
+     ]
+    },
+    "snack": {
+     "mode": "make",
+     "name": "苹果、香蕉",
+     "searchName": "苹果 香蕉",
+     "method": "",
+     "minutes": 0,
+     "items": [
+      {
+       "foodId": "apple",
+       "role": "fixed",
+       "grams": 182
+      },
+      {
+       "foodId": "banana",
+       "role": "fixed",
+       "grams": 118
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "apple",
+       "role": "fixed",
+       "grams": 182
+      },
+      {
+       "foodId": "banana",
+       "role": "fixed",
+       "grams": 118
+      }
+     ]
+    }
+   },
+   {
+    "date": "2026-11-01",
+    "breakfast": {
+     "mode": "make",
+     "name": "酸奶蓝莓吐司水煮蛋",
+     "searchName": "yogurt with blueberries, toast and a boiled egg",
+     "method": "鸡蛋煮 8 分钟，吐司在平底锅煎热，酸奶拌蓝莓",
+     "minutes": 4,
+     "items": [
+      {
+       "foodId": "plain_yogurt",
+       "role": "protein",
+       "grams": 150
+      },
+      {
+       "foodId": "egg",
+       "role": "protein",
+       "grams": 100
+      },
+      {
+       "foodId": "wholegrain_toast",
+       "role": "staple",
+       "grams": 70
+      },
+      {
+       "foodId": "frozen_blueberries",
+       "role": "fixed",
+       "grams": 60
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "plain_yogurt",
+       "role": "protein",
+       "grams": 150
+      },
+      {
+       "foodId": "egg",
+       "role": "protein",
+       "grams": 100
+      },
+      {
+       "foodId": "wholegrain_toast",
+       "role": "staple",
+       "grams": 70
+      },
+      {
+       "foodId": "frozen_blueberries",
+       "role": "fixed",
+       "grams": 60
+      }
+     ]
+    },
+    "lunch": {
+     "mode": "make",
+     "name": "干香料牛肉配蒸红薯和胡萝卜",
+     "searchName": "dry-spice beef on sweet potato with carrot",
+     "method": "牛腱块加咖喱粉、肉桂、洋葱和少许高汤，压力锅压 40 分钟，开盖收干",
+     "minutes": 3,
+     "items": [
+      {
+       "foodId": "beef_shank_raw",
+       "role": "protein",
+       "grams": 168
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 96
+      },
+      {
+       "foodId": "stock_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "curry_powder",
+       "role": "fixed",
+       "grams": 4
+      },
+      {
+       "foodId": "ground_cinnamon",
+       "role": "fixed",
+       "grams": 0
+      },
+      {
+       "foodId": "ground_cumin",
+       "role": "fixed",
+       "grams": 1
+      },
+      {
+       "foodId": "garlic_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "ginger_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "reduced_salt_soy_sauce",
+       "role": "fixed",
+       "grams": 5
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 10
+      },
+      {
+       "foodId": "carrot",
+       "role": "fixed",
+       "grams": 150
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 5
+      },
+      {
+       "foodId": "sweet_potato",
+       "role": "staple",
+       "grams": 426
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "beef_shank_raw",
+       "role": "protein",
+       "grams": 168
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 96
+      },
+      {
+       "foodId": "stock_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "curry_powder",
+       "role": "fixed",
+       "grams": 4
+      },
+      {
+       "foodId": "ground_cinnamon",
+       "role": "fixed",
+       "grams": 0
+      },
+      {
+       "foodId": "ground_cumin",
+       "role": "fixed",
+       "grams": 1
+      },
+      {
+       "foodId": "garlic_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "ginger_paste",
+       "role": "fixed",
+       "grams": 2
+      },
+      {
+       "foodId": "reduced_salt_soy_sauce",
+       "role": "fixed",
+       "grams": 5
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 10
+      },
+      {
+       "foodId": "carrot",
+       "role": "fixed",
+       "grams": 150
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 5
+      },
+      {
+       "foodId": "sweet_potato",
+       "role": "staple",
+       "grams": 426
+      }
+     ]
+    },
+    "dinner": {
+     "mode": "make",
+     "name": "番茄手撕鸡卷玉米饼配紫甘蓝",
+     "searchName": "salsa chicken in corn tortillas with red cabbage",
+     "method": "鸡胸肉、番茄碎、洋葱、青椒加墨西哥香料，压力锅压 12 分钟后撕散",
+     "minutes": 3,
+     "items": [
+      {
+       "foodId": "chicken_breast",
+       "role": "protein",
+       "grams": 167
+      },
+      {
+       "foodId": "crushed_tomatoes",
+       "role": "fixed",
+       "grams": 186
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "green_pepper",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "taco_seasoning",
+       "role": "fixed",
+       "grams": 3
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 9
+      },
+      {
+       "foodId": "red_cabbage",
+       "role": "fixed",
+       "grams": 100
+      },
+      {
+       "foodId": "tomato",
+       "role": "fixed",
+       "grams": 70
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 8
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 5
+      },
+      {
+       "foodId": "corn_tortilla",
+       "role": "staple",
+       "grams": 185
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "chicken_breast",
+       "role": "protein",
+       "grams": 167
+      },
+      {
+       "foodId": "crushed_tomatoes",
+       "role": "fixed",
+       "grams": 186
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "green_pepper",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "taco_seasoning",
+       "role": "fixed",
+       "grams": 3
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 9
+      },
+      {
+       "foodId": "red_cabbage",
+       "role": "fixed",
+       "grams": 100
+      },
+      {
+       "foodId": "tomato",
+       "role": "fixed",
+       "grams": 70
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 8
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 5
+      },
+      {
+       "foodId": "corn_tortilla",
+       "role": "staple",
+       "grams": 185
+      }
+     ]
+    },
+    "snack": {
+     "mode": "make",
+     "name": "橙子、低脂牛奶、每日坚果",
+     "searchName": "橙子 低脂牛奶 每日坚果",
+     "method": "",
+     "minutes": 0,
+     "items": [
+      {
+       "foodId": "orange",
+       "role": "fixed",
+       "grams": 131
+      },
+      {
+       "foodId": "low_fat_milk",
+       "role": "protein",
+       "grams": 250
+      },
+      {
+       "foodId": "mixed_nuts",
+       "role": "fixed",
+       "grams": 25
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "orange",
+       "role": "fixed",
+       "grams": 131
+      },
+      {
+       "foodId": "low_fat_milk",
+       "role": "protein",
+       "grams": 250
+      },
+      {
+       "foodId": "mixed_nuts",
+       "role": "fixed",
+       "grams": 25
+      }
+     ]
+    }
+   },
+   {
+    "date": "2026-11-02",
+    "breakfast": {
+     "mode": "make",
+     "name": "牛奶全麦吐司水煮蛋",
+     "searchName": "milk, whole-wheat toast and a boiled egg",
+     "method": "鸡蛋煮 8 分钟，两片吐司在平底锅煎热，牛奶倒杯即可",
+     "minutes": 4,
+     "items": [
+      {
+       "foodId": "low_fat_milk",
+       "role": "protein",
+       "grams": 500
+      },
+      {
+       "foodId": "egg",
+       "role": "protein",
+       "grams": 100
+      },
+      {
+       "foodId": "whole_wheat_toast",
+       "role": "staple",
+       "grams": 70
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "low_fat_milk",
+       "role": "protein",
+       "grams": 500
+      },
+      {
+       "foodId": "egg",
+       "role": "protein",
+       "grams": 100
+      },
+      {
+       "foodId": "whole_wheat_toast",
+       "role": "staple",
+       "grams": 70
+      }
+     ]
+    },
+    "lunch": {
+     "mode": "make",
+     "name": "番茄手撕鸡配土豆和生菜番茄",
+     "searchName": "salsa chicken on a microwaved potato with lettuce and tomato",
+     "method": "鸡胸肉、番茄碎、洋葱、青椒加墨西哥香料，压力锅压 12 分钟后撕散",
+     "minutes": 3,
+     "items": [
+      {
+       "foodId": "chicken_breast",
+       "role": "protein",
+       "grams": 167
+      },
+      {
+       "foodId": "crushed_tomatoes",
+       "role": "fixed",
+       "grams": 186
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "green_pepper",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "taco_seasoning",
+       "role": "fixed",
+       "grams": 3
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 9
+      },
+      {
+       "foodId": "romaine",
+       "role": "fixed",
+       "grams": 250
+      },
+      {
+       "foodId": "tomato",
+       "role": "fixed",
+       "grams": 80
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 5
+      },
+      {
+       "foodId": "potato",
+       "role": "staple",
+       "grams": 650
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "chicken_breast",
+       "role": "protein",
+       "grams": 167
+      },
+      {
+       "foodId": "crushed_tomatoes",
+       "role": "fixed",
+       "grams": 186
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "green_pepper",
+       "role": "fixed",
+       "grams": 57
+      },
+      {
+       "foodId": "taco_seasoning",
+       "role": "fixed",
+       "grams": 3
+      },
+      {
+       "foodId": "lime",
+       "role": "fixed",
+       "grams": 9
+      },
+      {
+       "foodId": "romaine",
+       "role": "fixed",
+       "grams": 250
+      },
+      {
+       "foodId": "tomato",
+       "role": "fixed",
+       "grams": 80
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 5
+      },
+      {
+       "foodId": "potato",
+       "role": "staple",
+       "grams": 650
+      }
+     ]
+    },
+    "dinner": {
+     "mode": "make",
+     "name": "番茄炖鳕鱼",
+     "searchName": "tomato-braised cod",
+     "method": "番茄、洋葱和西葫芦煮成酱，铺上鳕鱼加盖煮 10 分钟",
+     "minutes": 10,
+     "items": [
+      {
+       "foodId": "cod",
+       "role": "protein",
+       "grams": 191
+      },
+      {
+       "foodId": "tomato",
+       "role": "fixed",
+       "grams": 205
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 55
+      },
+      {
+       "foodId": "zucchini",
+       "role": "fixed",
+       "grams": 68
+      },
+      {
+       "foodId": "dried_oregano",
+       "role": "fixed",
+       "grams": 1
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 6
+      },
+      {
+       "foodId": "salt",
+       "role": "fixed",
+       "grams": 0
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 5
+      },
+      {
+       "foodId": "brown_rice_cooked",
+       "role": "staple",
+       "grams": 423
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "cod",
+       "role": "protein",
+       "grams": 191
+      },
+      {
+       "foodId": "tomato",
+       "role": "fixed",
+       "grams": 205
+      },
+      {
+       "foodId": "onion",
+       "role": "fixed",
+       "grams": 55
+      },
+      {
+       "foodId": "zucchini",
+       "role": "fixed",
+       "grams": 68
+      },
+      {
+       "foodId": "dried_oregano",
+       "role": "fixed",
+       "grams": 1
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 6
+      },
+      {
+       "foodId": "salt",
+       "role": "fixed",
+       "grams": 0
+      },
+      {
+       "foodId": "olive_oil",
+       "role": "fat",
+       "grams": 5
+      },
+      {
+       "foodId": "brown_rice_cooked",
+       "role": "staple",
+       "grams": 423
+      }
+     ]
+    },
+    "snack": {
+     "mode": "make",
+     "name": "梨、猕猴桃、低脂牛奶、每日坚果",
+     "searchName": "梨 猕猴桃 低脂牛奶 每日坚果",
+     "method": "",
+     "minutes": 0,
+     "items": [
+      {
+       "foodId": "pear",
+       "role": "fixed",
+       "grams": 178
+      },
+      {
+       "foodId": "kiwi",
+       "role": "fixed",
+       "grams": 138
+      },
+      {
+       "foodId": "low_fat_milk",
+       "role": "protein",
+       "grams": 250
+      },
+      {
+       "foodId": "mixed_nuts",
+       "role": "fixed",
+       "grams": 25
+      }
+     ],
+     "solved": [
+      {
+       "foodId": "pear",
+       "role": "fixed",
+       "grams": 178
+      },
+      {
+       "foodId": "kiwi",
+       "role": "fixed",
+       "grams": 138
+      },
+      {
+       "foodId": "low_fat_milk",
+       "role": "protein",
+       "grams": 250
+      },
+      {
+       "foodId": "mixed_nuts",
+       "role": "fixed",
+       "grams": 25
+      }
+     ]
+    }
+   }
+  ],
+  "createdAt": 1793000000000,
+  "revision": 17,
+  "planner": {
+   "start": "2026-10-31",
+   "draft": {
+    "days": [
+     {
+      "breakfast": "sweet_potato_egg_soy_milk",
+      "lunch": {
+       "main": {
+        "batch": "chicken",
+        "way": 2
+       },
+       "sides": [
+        "garlic_bok_choy"
+       ]
+      },
+      "dinner": {
+       "main": {
+        "batch": "beef",
+        "way": 2
+       },
+       "sides": []
+      },
+      "fruit": [
+       "apple",
+       "banana"
+      ]
+     },
+     {
+      "breakfast": "yogurt_blueberry_toast_egg",
+      "lunch": {
+       "main": {
+        "batch": "beef",
+        "way": 3
+       },
+       "sides": []
+      },
+      "dinner": {
+       "main": {
+        "batch": "chicken",
+        "way": 1
+       },
+       "sides": []
+      },
+      "fruit": [
+       "orange"
+      ]
+     },
+     {
+      "breakfast": "milk_toast_boiled_egg",
+      "lunch": {
+       "main": {
+        "batch": "chicken",
+        "way": 3
+       },
+       "sides": []
+      },
+      "dinner": {
+       "main": {
+        "dish": "tomato_braised_cod",
+        "staple": "brown_rice"
+       },
+       "sides": []
+      },
+      "fruit": [
+       "pear",
+       "kiwi"
+      ]
+     }
+    ],
+    "batches": [
+     {
+      "id": "chicken",
+      "dish": "salsa_shredded_chicken",
+      "session": "prep",
+      "meals": [
+       {
+        "day": 1,
+        "slot": "lunch"
+       },
+       {
+        "day": 2,
+        "slot": "dinner"
+       },
+       {
+        "day": 3,
+        "slot": "lunch"
+       }
+      ]
+     },
+     {
+      "id": "beef",
+      "dish": "dry_spice_braised_beef",
+      "session": "prep",
+      "meals": [
+       {
+        "day": 1,
+        "slot": "dinner"
+       },
+       {
+        "day": 2,
+        "slot": "lunch"
+       }
+      ]
+     }
+    ],
+    "sessions": [
+     {
+      "id": "prep",
+      "day": 1,
+      "part": "morning"
+     }
+    ]
+   },
+   "picks": {
+    "days": [
+     {
+      "breakfast": "",
+      "lunch": {
+       "main": {
+        "batch": "chicken",
+        "way": 2
+       },
+       "sides": []
+      },
+      "dinner": {
+       "main": {
+        "batch": "beef",
+        "way": 2
+       },
+       "sides": []
+      },
+      "fruit": []
+     },
+     {
+      "breakfast": "",
+      "lunch": {
+       "main": {
+        "batch": "beef",
+        "way": 3
+       },
+       "sides": []
+      },
+      "dinner": {
+       "main": {
+        "batch": "chicken",
+        "way": 1
+       },
+       "sides": []
+      },
+      "fruit": []
+     },
+     {
+      "breakfast": "",
+      "lunch": {
+       "main": {
+        "batch": "chicken",
+        "way": 3
+       },
+       "sides": []
+      },
+      "dinner": {
+       "main": {
+        "dish": "tomato_braised_cod"
+       },
+       "sides": []
+      },
+      "fruit": []
+     }
+    ],
+    "batches": [
+     {
+      "id": "chicken",
+      "dish": "salsa_shredded_chicken",
+      "session": "prep",
+      "meals": [
+       {
+        "day": 1,
+        "slot": "lunch"
+       },
+       {
+        "day": 2,
+        "slot": "dinner"
+       },
+       {
+        "day": 3,
+        "slot": "lunch"
+       }
+      ]
+     },
+     {
+      "id": "beef",
+      "dish": "dry_spice_braised_beef",
+      "session": "prep",
+      "meals": [
+       {
+        "day": 1,
+        "slot": "dinner"
+       },
+       {
+        "day": 2,
+        "slot": "lunch"
+       }
+      ]
+     }
+    ],
+    "sessions": [
+     {
+      "id": "prep",
+      "day": 1,
+      "part": "morning"
+     }
+    ]
+   }
+  }
+ },
+ "shopping": {
+  "items": [
+   {
+    "name": "橙子",
+    "en": "orange",
+    "qty": "1 个（约 130 g）",
+    "category": "produce",
+    "keeps": "w1",
+    "foodId": "orange",
+    "grams": 131,
+    "freezeOnArrival": false,
+    "neededBy": "2026-11-01",
+    "pack": {}
+   },
+   {
+    "name": "牛腱子",
+    "en": "beef",
+    "qty": "1 盒（约 600 g）",
+    "category": "protein",
+    "keeps": "d1-2",
+    "foodId": "beef_shank_raw",
+    "grams": 335,
+    "freezeOnArrival": false,
+    "neededBy": "2026-10-31",
+    "pack": {}
+   },
+   {
+    "name": "鸡胸肉",
+    "en": "chicken breast",
+    "qty": "1 盒（约 500 g）",
+    "category": "protein",
+    "keeps": "d1-2",
+    "foodId": "chicken_breast",
+    "grams": 500,
+    "freezeOnArrival": false,
+    "neededBy": "2026-10-31",
+    "pack": {}
+   },
+   {
+    "name": "鸡蛋",
+    "en": "egg",
+    "qty": "6 个",
+    "category": "protein",
+    "keeps": "w2plus",
+    "foodId": "egg",
+    "grams": 300,
+    "freezeOnArrival": false,
+    "neededBy": "2026-10-31",
+    "pack": {}
+   },
+   {
+    "name": "无糖豆浆",
+    "en": "soya milk",
+    "qty": "1 盒（约 1000 g）",
+    "category": "dairy",
+    "keeps": "w1",
+    "foodId": "soy_milk_unsweetened",
+    "grams": 500,
+    "freezeOnArrival": false,
+    "neededBy": "2026-10-31",
+    "pack": {}
+   },
+   {
+    "name": "鳕鱼",
+    "en": "cod",
+    "qty": "1 袋（约 450 g）",
+    "category": "frozen",
+    "keeps": "w2plus",
+    "foodId": "cod",
+    "grams": 191,
+    "freezeOnArrival": false,
+    "neededBy": "2026-11-02",
+    "pack": {
+     "frozen": true
+    }
+   },
+   {
+    "name": "糙米",
+    "en": "brown rice",
+    "qty": "家里常备",
+    "category": "grains",
+    "keeps": "d1-2",
+    "foodId": "brown_rice_cooked",
+    "grams": 1218,
+    "freezeOnArrival": false,
+    "neededBy": "2026-10-31",
+    "pack": {
+     "onHand": true
+    }
+   }
+  ],
+  "reader": [],
+  "dropped": {
+   "produce\u0000橙子": true,
+   "dairy\u0000无糖豆浆": true
+  },
+  "replaced": {},
+  "checked": {},
+  "doneOn": null
+ },
+ "deviations": []
+}

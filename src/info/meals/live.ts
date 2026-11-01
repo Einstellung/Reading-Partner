@@ -14,7 +14,7 @@ import { mealsPhotoSearcher } from "./photos/photo-sweep";
 import { loadMealsPhotos } from "./photos/photo-store";
 import { isPrepRequest } from "./recipe/prep-steps";
 import { recipeLanguageNow, writePrepStepsOnce, writeRecipeOnce } from "./recipe/recipe-live";
-import { storedRecipeKeys } from "./recipe/recipe-store";
+import { loadRecipeFile, storedRecipeKeys } from "./recipe/recipe-store";
 import { createRecipeWriter, watchMealsForRecipes, type RecipeWriter } from "./recipe/recipe-sweep";
 import {
   loadMeals,
@@ -127,6 +127,8 @@ export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
     today: opts.today,
     now: () => Date.now(),
     region: () => hostRegion(),
+    recipes: () => loadRecipeFile(),
+    recipeLanguage: () => recipeLanguageNow(),
     onMealsCard: opts.onMealsCard,
     ...(opts.currentDraft ? { currentDraft: opts.currentDraft } : {}),
     ...(opts.applyDraft ? { applyDraft: opts.applyDraft } : {}),

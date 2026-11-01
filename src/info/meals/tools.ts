@@ -75,6 +75,9 @@ import { cardMealLabel, changesWords, draftContext, heldWords, redraft, revision
 import { libraryListing } from "./planner/listing";
 import { planDayTargets, prepDayTargets } from "./planner/solve";
 import { buildStartPrepTool, type PrepStartOutcome } from "./prep-voice";
+import { buildMealsReadTools } from "./read-tools";
+import type { MealsRecipes } from "./recipe/recipe-store";
+import type { Locale } from "../../i18n/locale";
 
 /** What the reader has in front of them when they open the conversation. */
 export type MealsFocus =
@@ -106,6 +109,9 @@ export interface MealsToolDeps {
   onPlanCheck?(check: PlanCheck | null): void;
   // Start the prep timeline and its voice call (start_prep). Absent where nobody is there to cook.
   startPrep?(): Promise<PrepStartOutcome>;
+  // The stored recipes and the language they are written in, for the read tools (read-tools.ts).
+  recipes?(): Promise<MealsRecipes | null>;
+  recipeLanguage?(): Promise<Locale>;
 }
 
 // --- the instruction ---------------------------------------------------------
@@ -187,6 +193,17 @@ export function foodListing(dislikes: readonly string[]): string[] {
     (f) => `${f.id} ${f.zh}${f.tags.length ? ` [${f.tags.join(",")}]` : ""}`,
   );
 }
+
+const READING_THE_DATA = [
+  "READING THE SAVED DATA",
+  "Everything saved is readable, as JSON, with the read tools: the plan with every food at its grams and",
+  "each meal's pot (meals_read_plan), the prep session with each pot's raw weights, the storage and the",
+  "steps (meals_read_prep), the shopping list with the needed grams apart from the pack bought",
+  "(meals_read_shopping), the recipes (meals_read_recipes), their profile and targets (meals_read_charter)",
+  "and the food table (meals_read_foods). When they ask how much, what, when or which, read it there and",
+  "answer exactly; add up across meals or pots yourself from what the tools return. Never guess a number,",
+  "answer from memory or say you cannot see it.",
+];
 
 const HOW_TO_PLAN = [
   "HOW TO PLAN",
@@ -330,6 +347,7 @@ export function mealsGuidance(
     }
     out.push(
       "Refer to a meal by its day number and which meal it is. A new plan replaces everything from today on.",
+      "This list is names only; the grams, pots and nutrition are in meals_read_plan.",
     );
   } else if (state.plan) {
     out.push(`Their last plan ended on ${lastDate(state.plan)}. Nothing is planned from today on.`);
@@ -344,7 +362,7 @@ export function mealsGuidance(
     for (const d of state.deviations.slice(-3)) out.push(`- ${d.date} ${d.meal}: ${d.said}`);
   }
 
-  out.push("", ...HOW_TO_PLAN);
+  out.push("", ...READING_THE_DATA, "", ...HOW_TO_PLAN);
   if (opts.draft?.phase === "proposed") out.push("", ...draftOnCard(opts.draft));
   if (profile) {
     const lib = planLibrary(profile);
@@ -366,7 +384,8 @@ export function mealsGuidance(
     "Derived by the program from the solved grams, one trip a plan. Before it is done, add,",
     "remove and swap lines as they ask. Once it is done, the list is what is in the fridge:",
     "something new is the next plan's business, unless they say they are passing a shop today, and",
-    "then add_shopping_items with today set. Never read the list back to them.",
+    "then add_shopping_items with today set. Do not read the list back unprompted; when they ask about",
+    "it, read it with meals_read_shopping.",
   );
   return out.filter((l, i, all) => l !== "" || all[i - 1] !== "").join("\n");
 }
@@ -1293,5 +1312,6 @@ export function buildMealsCatalogTools(deps: MealsToolDeps & { ports: MealsPorts
     buildWriteMethodTool(deps),
     buildRefreshMealsPhotosTool(deps),
     buildStartPrepTool(deps),
+    ...buildMealsReadTools(deps),
   ];
 }
