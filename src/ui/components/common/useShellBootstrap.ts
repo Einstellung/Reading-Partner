@@ -43,6 +43,7 @@ import {
 } from "../../../ai";
 import { registerInfoDesk } from "../../../info/briefer/desk";
 import { registerMealsDesk } from "../../../info/meals/desk";
+import "../../../info/meals/plan/merge";
 import { registerSecretaryRole } from "../../../info/briefer/role";
 import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
 import { registerReadingDistillSources } from "../../../reading/distill/source";

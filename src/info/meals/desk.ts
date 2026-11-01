@@ -41,6 +41,10 @@ export interface MealsDeskRef {
   // focus rides on the desk rather than forking the thread (docs/73).
   focus?: MealsFocus;
   tools?: MealsTools;
+  // The state as it is on disk now, read when the desk opens. Without it, or
+  // when it will not read, the desk uses `state`, which a plan confirmed
+  // earlier in this conversation has already replaced.
+  fresh?: () => Promise<MealsState>;
   // The draft card waiting in this conversation, read when the desk opens.
   // The conversation replays words, not cards (turn-rows.ts
   // replayableHistory), so this is how a revision sees what it revises.
@@ -74,8 +78,10 @@ const DUTY = [
 async function openMeals(ref: MealsDeskRef, env: DeskEnv): Promise<DeskItem | null> {
   const tools = ref.tools ? await ref.tools() : [];
   if (env.signal?.aborted) return null;
+  const state = (ref.fresh ? await ref.fresh().catch(() => null) : null) ?? ref.state;
+  if (env.signal?.aborted) return null;
   const draft = ref.draft?.() ?? null;
-  const prompt = `${DUTY}\n\n${mealsGuidance(ref.state, ref.today, { focus: ref.focus, region: hostRegion(), draft })}`;
+  const prompt = `${DUTY}\n\n${mealsGuidance(state, ref.today, { focus: ref.focus, region: hostRegion(), draft })}`;
   return {
     kind: INFO_MEALS_KIND,
     label: "Meals",

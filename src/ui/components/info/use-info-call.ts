@@ -59,6 +59,7 @@ import { applyDraft, checkNote, type Applied } from "../../../info/meals/apply";
 import { planNote } from "../../../info/meals/screen/plan-note";
 import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../info/meals/cards";
 import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
+import { loadMeals } from "../../../info/meals/plan/store";
 import { startPrepFromChat } from "../../../info/meals/prep-session";
 import { putMealsPrepCard } from "../../../info/briefer/meals-call";
 import { requestPrepVoice } from "./meals/use-prep-voice";
@@ -677,6 +678,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
             ),
         }),
       mealsDraft: currentDraft,
+      mealsState: () => loadMeals(),
       topic: { onCard: (payload) => raiseCard("topic", payload) },
     });
     if (prepared.kind === "failed") return prepared;

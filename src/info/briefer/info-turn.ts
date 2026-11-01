@@ -9,7 +9,7 @@ import { bindItemRef, bindItemTools, openDesk, type DeskItem } from "../../desk"
 import type { AgentTool } from "../../legion/durable/contract";
 import type { Settings } from "../../platform/app/settings";
 import { assembleTurn, type AssembleInput, type AssembledTurn } from "../../soul";
-import { INFO_MEALS_KIND, type MealsDraft, type MealsTools } from "../meals/desk";
+import { INFO_MEALS_KIND, type MealsDeskRef, type MealsDraft, type MealsTools } from "../meals/desk";
 import { MEALS_THREAD_ID, type InfoCallAnchor } from "./anchors";
 import { INFO_BRIEFING_KIND } from "./desk";
 import { SECRETARY_ROLE_ID } from "./role";
@@ -30,6 +30,9 @@ export interface InfoTurnInput {
   mealsTools?: MealsTools;
   // The meals draft card on screen, which the meals desk shows the model.
   mealsDraft?: MealsDraft;
+  // The meals file as it is now, read when the desk opens: a plan confirmed
+  // earlier in the conversation is the one the next turn is told about.
+  mealsState?: MealsDeskRef["fresh"];
   // Where a proposal for this conversation's topic is drawn (memory/filing).
   topic?: AssembleInput["topic"];
 }
@@ -52,10 +55,15 @@ export function infoOrigin(anchor: InfoCallAnchor, dateKey: string): BoxOrigin {
 }
 
 export async function assembleInfoTurn(input: InfoTurnInput): Promise<InfoTurn> {
-  const { anchor, mealsTools, mealsDraft } = input;
+  const { anchor, mealsTools, mealsDraft, mealsState } = input;
   let refs = bindItemTools(anchor.desk, INFO_BRIEFING_KIND, input.companionTools);
   if (mealsTools) refs = bindItemTools(refs, INFO_MEALS_KIND, mealsTools);
-  if (mealsDraft) refs = bindItemRef(refs, INFO_MEALS_KIND, { draft: mealsDraft });
+  if (mealsDraft || mealsState) {
+    refs = bindItemRef(refs, INFO_MEALS_KIND, {
+      ...(mealsDraft ? { draft: mealsDraft } : {}),
+      ...(mealsState ? { fresh: mealsState } : {}),
+    });
+  }
   const desk = await openDesk(refs, {
     settings: input.settings,
     thread: { key: input.key, id: anchor.threadId },

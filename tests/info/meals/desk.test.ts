@@ -28,3 +28,21 @@ test("the draft card bound to the meals ref is in the prompt; without one it is 
     unregister();
   }
 });
+
+test("the state is read again when the desk opens: a plan confirmed earlier in the conversation is the one the model sees", async () => {
+  const unregister = registerMealsDesk();
+  try {
+    const prompt = async (r: ReturnType<typeof mealsAnchor>["desk"]) =>
+      (await openDesk(r, env)).items[0]!.prompt({ dropped: [] } as never);
+    const opened = mealsAnchor(state(), MON).desk;
+    const now = state({ plan: null });
+    const fresh = await prompt(bindItemRef(opened, INFO_MEALS_KIND, { fresh: async () => now }));
+    expect(fresh).toBe(await prompt(mealsAnchor(now, MON).desk));
+    expect(fresh).not.toBe(await prompt(opened));
+    // A read that fails leaves the state the anchor was made with.
+    const failed = bindItemRef(opened, INFO_MEALS_KIND, { fresh: () => Promise.reject(new Error("unreadable")) });
+    expect(await prompt(failed)).toBe(await prompt(opened));
+  } finally {
+    unregister();
+  }
+});
