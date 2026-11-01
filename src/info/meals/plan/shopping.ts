@@ -175,7 +175,10 @@ export function missed(
 }
 
 /**
- * The week's lines re-derived, the reader's half untouched.
+ * The same plan's lines re-derived, the reader's half untouched: a profile
+ * change re-solving the saved plan, a deviation, a redraft around a new
+ * dislike. Never for a newly confirmed plan, which starts a trip of its own
+ * (freshShoppingList).
  *
  * An adjustment re-derives from the plan, and a list that came back unticked
  * would have the reader walk the shop again — so the ticks are not in the
@@ -187,6 +190,18 @@ export function reconcileShoppingList(
   derived: readonly ShoppingItem[],
 ): ShoppingState {
   return { ...state, items: [...derived] };
+}
+
+/**
+ * The trip for a newly confirmed plan (docs/671 采购单): its derived lines and
+ * none of the old trip's drops, swaps, ticks or done date, which were made
+ * against another plan's list. The lines the reader added come along only
+ * while the old trip was still a list: once it was done they were bought or
+ * given up on with it.
+ */
+export function freshShoppingList(previous: ShoppingState, derived: readonly ShoppingItem[]): ShoppingState {
+  const reader = previous.doneOn ? [] : previous.reader.map(({ afterDone: _after, ...line }) => line);
+  return { items: [...derived], reader, dropped: {}, replaced: {}, checked: {}, doneOn: null };
 }
 
 /** Tick or untick one line. */

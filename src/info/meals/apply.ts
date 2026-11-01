@@ -12,7 +12,14 @@ import type { PhotoCache } from "./photos/dish-photos";
 import type { Profile, Region, Targets } from "./nutrition/targets";
 import { dishesToDraw } from "./photos/dish-drawing";
 import { photoQueriesForPlan, type PhotoQuery } from "./photos/photo-run";
-import { currentList, deriveShoppingList, isChecked, isOnHand, reconcileShoppingList } from "./plan/shopping";
+import {
+  currentList,
+  deriveShoppingList,
+  freshShoppingList,
+  isChecked,
+  isOnHand,
+  reconcileShoppingList,
+} from "./plan/shopping";
 import { solvePlan, targetsOf } from "./plan/solve-week";
 import type {
   Deviation,
@@ -98,8 +105,9 @@ const NOTHING: Applied = { ok: false, note: "" };
 
 /**
  * The week re-solved against a charter and the trip re-derived from it, the
- * reader's ticks and lines kept. The plan comes back unsolved when the charter
- * has no targets.
+ * reader's ticks and lines kept: it is the same plan, so it is the same trip
+ * (plan/shopping.ts reconcileShoppingList). The plan comes back unsolved when
+ * the charter has no targets.
  */
 export function resolvedWeek(
   plan: WeekPlan,
@@ -215,6 +223,8 @@ export async function saveProfile(
  * profile as it is now, write the plan and the shopping list derived from it
  * in one write (docs/671 对话). The new plan replaces the old one from today
  * on; the old plan's days before today stay (planner/to-week.ts weekFromDraft).
+ * The shopping list starts a new trip (plan/shopping.ts freshShoppingList),
+ * and the prep's progress starts over with the new planner record.
  */
 export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): Promise<Applied> {
   if (card.phase === "applied") return NOTHING;
@@ -234,7 +244,8 @@ export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): P
   });
   if (!result.plan) return NOTHING;
   const plan = weekFromDraft({ result, lib, start: card.startDate, now: ports.now(), today: ports.today(), previous: state.plan, picks: card.picks });
-  const shopping = reconcileShoppingList(state.shopping, plannerShoppingList(result.plan, result.draft, plan, profile.people));
+  // A new plan is a new trip: nothing the reader did to the old list carries over.
+  const shopping = freshShoppingList(state.shopping, plannerShoppingList(result.plan, result.draft, plan, profile.people));
   try {
     await ports.savePlan(plan, shopping);
   } catch {
