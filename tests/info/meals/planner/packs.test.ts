@@ -4,7 +4,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { getLocale, setLocale } from "../../../../src/i18n";
 import { planLibrary } from "../../../../src/info/meals/planner/library";
+import { foodById } from "../../../../src/info/meals/nutrition/foods";
 import {
+  buyFor,
   buyText,
   leftoverMatters,
   packLineText,
@@ -56,7 +58,7 @@ describe("buy text", () => {
   test("every pack kind has words in both languages", () => {
     for (const locale of ["zh-CN", "en"] as const) {
       setLocale(locale);
-      for (const kind of ["box", "bag", "block", "carton", "head", "bunch", "loaf", "can"] as const) {
+      for (const kind of ["box", "bag", "block", "carton", "head", "bunch", "loaf", "can", "bottle", "jar"] as const) {
         const text = buyText(line({ food: "x", buy: { by: "pack", count: 2, packG: 300, kind } }));
         expect(text, `${locale} ${kind}`).not.toContain("meals.pack");
         expect(text, `${locale} ${kind}`).toContain("600");
@@ -91,8 +93,8 @@ describe("a list line", () => {
 
   test("a food planned cooked but bought dry goes by its dry name", () => {
     setLocale("zh-CN");
-    expect(packLineText(line({ food: "brown_rice_cooked", buy: { by: "onHand" } }))).toBe("糙米 家里常备");
-    expect(packLineText(line({ food: "quinoa_cooked", buy: { by: "onHand" } }))).toBe("藜麦 家里常备");
+    expect(packLineText(line({ food: "brown_rice_cooked", buy: buyFor(foodById("brown_rice_cooked")!, 600) }))).toBe("糙米 1 袋（约 1000 g）");
+    expect(packLineText(line({ food: "quinoa_cooked", buy: buyFor(foodById("quinoa_cooked")!, 600) }))).toBe("藜麦 1 袋（约 500 g）");
     expect(packLineText(line({ food: "multigrain_rice_raw", buy: { by: "weight" }, grams: 115 }))).toBe("五谷杂粮米（约 120 g）");
   });
 
@@ -118,8 +120,8 @@ describe("the list of a solved plan", () => {
     expect(find("chicken_thigh").firstDay).toBe(1);
   });
 
-  test("seasonings are on hand and loose produce is bought by the piece", () => {
-    expect(find("ground_cumin").buy).toEqual({ by: "onHand" });
+  test("a spice is bought as one jar, salt is at home, and loose produce is bought by the piece", () => {
+    expect(find("ground_cumin").buy).toEqual({ by: "pack", count: 1, packG: 40, kind: "jar" });
     expect(find("apple").buy.by).toBe("piece");
   });
 

@@ -11,7 +11,7 @@
 //   the prep session's own meal is not boxed. A user who does not box gets one
 //   lidded large container per pot with something left in it. Every box and
 //   container is eaten by the pot's last meal.
-// - The plan's rice (rice.ts) is one rice-cooker batch cooked at the prep
+// - The plan's rice (rice.ts) is one batch cooked at the prep
 //   session for every rice meal after it, kept like a pot: a pot meal's rice
 //   goes into its box, the rest into one lidded container. Rice meals before
 //   the session cook their own at the meal. With no prep session the batch is
@@ -31,7 +31,7 @@ import { foodById, type Food } from "../nutrition/foods";
 import type { Profile } from "../nutrition/targets";
 import { draftMeal, isBatchMain, MAIN_SLOTS, PREP_DAY, type MainSlot, type MealAt, type PlanDraft, type PlanSlot } from "./draft";
 import type { PlanLibrary } from "./library";
-import { boughtName, isRawFlesh, LEFTOVER_IGNORE, rawKeepsUntil, shopDay, shownName, type PackLine } from "./packs";
+import { boughtName, isRawFlesh, keptInCupboard, LEFTOVER_IGNORE, rawKeepsUntil, shopDay, shownName, type PackLine } from "./packs";
 import { planRice, riceMeals, stapleOf } from "./rice";
 import type { PlanLine, SolvedPlan } from "./solve";
 
@@ -107,7 +107,7 @@ export interface NightBefore {
   items: NightItem[];
 }
 
-/** The plan's one rice-cooker batch: every rice meal from its cooking time on. */
+/** The plan's one batch of rice: every rice meal from its cooking time on. */
 export interface RiceBatch {
   /** The rice staple dish id. */
   staple: string;
@@ -326,7 +326,7 @@ export function planStorage(input: StorageInput): StoragePlan {
     const food = foodById(line.food);
     if (!food) continue;
     const at = uses.get(line.food) ?? [];
-    if (line.buy.by === "onHand" && food.category !== "produce") {
+    if ((line.buy.by === "onHand" || keptInCupboard(food)) && food.category !== "produce") {
       (CHILL_AFTER_OPENING.has(food.id) ? jars : pantry).push(food.id);
     } else if (isRawFlesh(food)) {
       const keeps = rawKeepsUntil(food, shop);

@@ -259,8 +259,13 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
   }
 
   if (!CUISINES.includes(dish.cuisine)) add({ rule: "cuisine", message: `cuisine ${dish.cuisine} is unknown` });
-  for (const e of dish.equipment) {
+  for (const e of [...dish.equipment, ...(dish.routes ?? []).flatMap((r) => r.equipment)]) {
     if (!EQUIPMENT.includes(e)) add({ rule: "equipment", message: `equipment ${e} is unknown` });
+  }
+  for (const r of dish.routes ?? []) {
+    if (!r.summary.trim() || !r.summaryEn.trim() || [...r.summary].length > SUMMARY_MAX_CHARS) {
+      add({ rule: "summary", message: `the route on ${r.equipment.join(", ")} needs a summary in Chinese (at most ${SUMMARY_MAX_CHARS} characters) and in English` });
+    }
   }
   if (dish.staples.length && !(dish.role === "main" && dish.prep === "fresh")) {
     add({

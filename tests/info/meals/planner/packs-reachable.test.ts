@@ -113,7 +113,12 @@ test("frozen vegetables and fish, tins and oats come in the usual packs", () => 
   // Nuts and sliced cheese are bought, not a cupboard seasoning.
   expect(pack("almonds").by).toBe("pack");
   expect(pack("cheese_slice").by).toBe("pack");
-  // Oils and sauces still are on hand.
-  expect(pack("olive_oil").by).toBe("onHand");
-  expect(pack("light_soy_sauce").by).toBe("onHand");
+  // Only salt, pepper and sugar are at home; an oil, a sauce or a spice is bought whole.
+  expect(pack("salt").by).toBe("onHand");
+  expect(pack("ground_black_pepper").by).toBe("onHand");
+  expect(pack("white_sugar").by).toBe("onHand");
+  expect(pack("olive_oil")).toMatchObject({ by: "pack", count: 1, kind: "bottle" });
+  expect(pack("light_soy_sauce")).toMatchObject({ by: "pack", count: 1, kind: "bottle" });
+  expect(buyFor(foodById("taco_seasoning")!, 20)).toMatchObject({ by: "pack", count: 1, kind: "bag" });
+  expect(buyFor(foodById("ground_cinnamon")!, 5)).toMatchObject({ by: "pack", count: 1, kind: "jar" });
 });

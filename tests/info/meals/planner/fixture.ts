@@ -19,7 +19,7 @@ export const PROFILE: Profile = {
   effort: "simple",
   people: 1,
   shops: [],
-  kitchen: [],
+  kitchen: ["一口锅", "微波炉", "电压力锅", "豆浆机", "带蒸架的小锅"],
   dislikes: [],
 };
 

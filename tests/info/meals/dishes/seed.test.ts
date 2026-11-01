@@ -6,6 +6,7 @@ import { checkDish, isMincedMeat } from "../../../../src/info/meals/dishes/check
 import { SEED_DISHES } from "../../../../src/info/meals/dishes/seed";
 import { DEFAULT_KITCHEN, type Dish, type DishRole } from "../../../../src/info/meals/dishes/types";
 import { foodById } from "../../../../src/info/meals/nutrition/foods";
+import { fitKitchen } from "../../../../src/info/meals/planner/library";
 
 const byRole = (role: DishRole): Dish[] => SEED_DISHES.filter((d) => d.role === role);
 const mains = byRole("main");
@@ -160,7 +161,7 @@ describe("seed dishes", () => {
       expect(d?.role, id).toBe("side");
       expect(d.prep, id).toBe("fresh");
       expect(d.activeMin, id).toBeLessThanOrEqual(5);
-      expect(d.equipment.every((e) => DEFAULT_KITCHEN.includes(e)), id).toBe(true);
+      expect(fitKitchen(d, new Set(DEFAULT_KITCHEN)).equipment.every((e) => DEFAULT_KITCHEN.includes(e)), id).toBe(true);
       const r = checkDish(d);
       expect(r.ok, id).toBe(true);
       if (!r.ok) continue;
@@ -359,14 +360,28 @@ describe("seed dishes", () => {
     expect(checkDish(d).ok).toBe(true);
   });
 
-  test("every dish fits the default kitchen: its equipment and every way's staple preparation", () => {
-    const outside = SEED_DISHES.flatMap((d) => d.equipment.filter((e) => !DEFAULT_KITCHEN.includes(e)).map((e) => `${d.id}: ${e}`));
-    expect(outside).toEqual([]);
+  test("every staple a way or a fresh main names can be made with only a stove and a microwave", () => {
+    const home = new Set(DEFAULT_KITCHEN);
     const staples = new Map(byRole("staple").map((d) => [d.id, d]));
     for (const d of SEED_DISHES) {
       for (const id of [...d.staples, ...(d.ways ?? []).map((w) => w.staple ?? "")]) {
-        for (const e of staples.get(id)?.equipment ?? []) expect(DEFAULT_KITCHEN.includes(e), `${d.id} -> ${id}: ${e}`).toBe(true);
+        const s = staples.get(id);
+        if (!s) continue;
+        expect(fitKitchen(s, home).equipment.every((e) => home.has(e)), `${d.id} -> ${id}`).toBe(true);
       }
+    }
+  });
+
+  test("every rice and grain staple has a pressure-cooker and a stove route, with its own minutes", () => {
+    for (const id of ["white_rice", "brown_rice", "multigrain_rice", "millet_rice"]) {
+      const d = SEED_DISHES.find((x) => x.id === id)!;
+      expect(d.equipment, id).toEqual(["rice_cooker"]);
+      expect(d.routes?.map((r) => r.equipment), id).toEqual([["pressure_cooker"], ["stove"]]);
+      for (const r of d.routes ?? []) {
+        expect(r.totalMin, id).toBeGreaterThanOrEqual(25);
+        expect(r.summaryEn, id).not.toMatch(/rice cooker/i);
+      }
+      expect(checkDish(d).ok, id).toBe(true);
     }
   });
 
@@ -386,7 +401,7 @@ describe("seed dishes", () => {
   });
 
   test("soy milk maker breakfasts: dry beans on the line, load the night before, count as legumes", () => {
-    expect(DEFAULT_KITCHEN).toContain("soy_milk_maker");
+    expect(DEFAULT_KITCHEN).not.toContain("soy_milk_maker");
     const soy = byRole("breakfast").filter((d) => d.equipment.includes("soy_milk_maker"));
     expect(soy.length).toBeGreaterThanOrEqual(4);
     const sources = new Set<string>();

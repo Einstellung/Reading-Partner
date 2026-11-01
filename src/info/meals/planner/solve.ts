@@ -153,7 +153,15 @@ export function scaledMain(lines: readonly DishIngredient[], k: number): DishIng
 }
 
 const tag = (lines: readonly DishIngredient[], source: LineSource, dish?: string, k = 1): PlanLine[] =>
-  lines.map((l) => ({ food: l.food, grams: r1(l.grams * k), role: l.role, ...(l.ground ? { ground: true } : {}), source, ...(dish ? { dish } : {}) }));
+  lines.map((l) => ({
+    food: l.food,
+    grams: r1(l.grams * k),
+    role: l.role,
+    ...(l.ground ? { ground: true } : {}),
+    ...(l.cookingOil ? { cookingOil: true } : {}),
+    source,
+    ...(dish ? { dish } : {}),
+  }));
 
 /** The largest scale of a reference serving before a protein line passes its food's maximum. */
 export function maxMainScale(dish: Dish): number {

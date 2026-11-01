@@ -37,7 +37,7 @@ export interface PrepStep {
   pot: string | null;
   /** Minutes the reader's hands are on it. */
   active: number;
-  /** Minutes the device then runs or the food sits without the reader (simmering, the rice cooker). */
+  /** Minutes the device then runs or the food sits without the reader (simmering, the rice cooking). */
   wait: number;
   /** Steps that must be finished before this one starts. */
   after: string[];

@@ -142,7 +142,8 @@ function shopRows(draft: PlanDraft, lib: PlanLibrary, solved: SolvedPlan, shoppi
     const food = foodById(id);
     if (!food) continue;
     const bought = shopping.find((l) => l.food === id);
-    const line: PackLine = { food: id, grams: n.grams, buy: buyFor(food, n.grams), firstDay: 1, lastDay: 1, freeze: false, frozen: !!bought?.frozen, leftover: null };
+    const buy = bought?.buy.by === "onHand" ? bought.buy : buyFor(food, n.grams);
+    const line: PackLine = { food: id, grams: n.grams, buy, firstDay: 1, lastDay: 1, freeze: false, frozen: !!bought?.frozen, leftover: null };
     const item = packItem(line, start);
     if (!item) continue;
     const group = shopGroup(food, n.role);

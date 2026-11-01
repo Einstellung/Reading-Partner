@@ -28,7 +28,8 @@ export function packQty(line: PackLine): string {
   if (b.by === "weight") return t("meals.pack.aboutWeight", { grams: about(line.grams) });
   const text = buyText(line);
   const one = b.by === "pack" ? b.packG : b.by === "piece" ? b.pieceG : 0;
-  if (!one || b.by === "unit" || b.by === "onHand") return text;
+  // A bag of rice is counted in cooked grams: what it holds dry is on the label, so no "needed" weight.
+  if (!one || b.by === "unit" || b.by === "onHand" || foodById(line.food)?.boughtDry) return text;
   const spare = b.count * one - line.grams;
   if (spare < Math.max(LEFTOVER_IGNORE.share * one, LEFTOVER_IGNORE.grams)) return text;
   return t("meals.pack.needOf", { grams: about(line.grams), buy: text });

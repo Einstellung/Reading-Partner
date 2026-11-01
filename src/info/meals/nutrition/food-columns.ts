@@ -239,7 +239,7 @@ export const CALCIUM_SOURCE: Readonly<Record<string, number>> = {
 };
 
 /** How a pack is sold, for the shopping list's words (盒、袋、块、盒装奶、颗、把、条、罐). */
-export type PackKind = "box" | "bag" | "block" | "carton" | "head" | "bunch" | "loaf" | "can";
+export type PackKind = "box" | "bag" | "block" | "carton" | "head" | "bunch" | "loaf" | "can" | "bottle" | "jar";
 
 /**
  * The usual retail pack and how many days it keeps once opened or cut
@@ -349,7 +349,94 @@ export const RETAIL_PACK: Readonly<Record<string, { grams: number; kind: PackKin
   mixed_nuts: { grams: 175, kind: "box", openDays: 90 },
   cheese_slice: { grams: 200, kind: "box", openDays: 14 },
   low_fat_cheese_slice: { grams: 200, kind: "box", openDays: 14 },
+  // The cupboard: grains bought dry, oils, spreads, seeds, sauces, pastes and
+  // spices. Nothing but ASSUMED_HOME is taken to be in a kitchen already, so a
+  // plan that uses one buys the smallest usual bottle, jar or packet. Rice and
+  // quinoa are planned cooked: `grams` is what the bag cooks to, `labelG` the
+  // dry weight on the bag. Their opened days are not checked.
+  rice_cooked: { grams: 2800, labelG: 1000, kind: "bag", openDays: 180 },
+  brown_rice_cooked: { grams: 3000, labelG: 1000, kind: "bag", openDays: 180 },
+  quinoa_cooked: { grams: 1500, labelG: 500, kind: "bag", openDays: 180 },
+  wood_ear: { grams: 400, labelG: 50, kind: "bag", openDays: 180 },
+  olive_oil: { grams: 460, kind: "bottle", openDays: 180 },
+  canola_oil: { grams: 900, kind: "bottle", openDays: 180 },
+  peanut_oil: { grams: 900, kind: "bottle", openDays: 180 },
+  sesame_oil: { grams: 180, kind: "bottle", openDays: 180 },
+  butter: { grams: 200, kind: "block", openDays: 30 },
+  mozzarella: { grams: 200, kind: "bag", openDays: 5 },
+  peanut_butter: { grams: 340, kind: "jar", openDays: 90 },
+  sesame_paste: { grams: 200, kind: "jar", openDays: 90 },
+  cashews: { grams: 200, kind: "bag", openDays: 90 },
+  pistachios: { grams: 200, kind: "bag", openDays: 90 },
+  chia_seeds: { grams: 200, kind: "bag", openDays: 90 },
+  flaxseed: { grams: 200, kind: "bag", openDays: 90 },
+  pumpkin_seeds: { grams: 200, kind: "bag", openDays: 90 },
+  sesame_seeds: { grams: 100, kind: "bag", openDays: 90 },
+  light_soy_sauce: { grams: 500, kind: "bottle", openDays: 180 },
+  reduced_salt_soy_sauce: { grams: 500, kind: "bottle", openDays: 180 },
+  rice_vinegar: { grams: 500, kind: "bottle", openDays: 180 },
+  black_vinegar: { grams: 500, kind: "bottle", openDays: 180 },
+  oyster_sauce: { grams: 500, kind: "bottle", openDays: 90 },
+  fish_sauce: { grams: 300, kind: "bottle", openDays: 180 },
+  mirin: { grams: 300, kind: "bottle", openDays: 90 },
+  teriyaki_sauce: { grams: 250, kind: "bottle", openDays: 30 },
+  ketchup: { grams: 340, kind: "bottle", openDays: 180 },
+  bbq_sauce: { grams: 500, kind: "bottle", openDays: 120 },
+  sweet_chili_sauce: { grams: 300, kind: "bottle", openDays: 90 },
+  sriracha: { grams: 260, kind: "bottle", openDays: 180 },
+  japanese_dressing: { grams: 250, kind: "bottle", openDays: 60 },
+  mayonnaise: { grams: 400, kind: "jar", openDays: 60 },
+  honey: { grams: 340, kind: "jar", openDays: 365 },
+  doubanjiang: { grams: 300, kind: "jar", openDays: 90 },
+  chili_sauce: { grams: 200, kind: "jar", openDays: 90 },
+  garlic_chili_sauce: { grams: 200, kind: "jar", openDays: 90 },
+  hoisin_sauce: { grams: 250, kind: "jar", openDays: 90 },
+  gochujang: { grams: 250, kind: "jar", openDays: 90 },
+  chili_crisp: { grams: 280, kind: "jar", openDays: 90 },
+  satay_sauce: { grams: 200, kind: "jar", openDays: 60 },
+  mapo_sauce: { grams: 100, kind: "bag", openDays: 3 },
+  miso: { grams: 400, kind: "box", openDays: 90 },
+  tomato_pasta_sauce: { grams: 680, kind: "jar", openDays: 5 },
+  red_curry_paste: { grams: 110, kind: "jar", openDays: 30 },
+  tikka_masala_paste: { grams: 280, kind: "jar", openDays: 30 },
+  harissa: { grams: 200, kind: "jar", openDays: 30 },
+  garlic_paste: { grams: 90, kind: "jar", openDays: 30 },
+  ginger_paste: { grams: 90, kind: "jar", openDays: 30 },
+  stock_paste: { grams: 230, kind: "jar", openDays: 90 },
+  curry_roux: { grams: 200, kind: "box", openDays: 90 },
+  curry_powder: { grams: 50, kind: "jar", openDays: 365 },
+  ground_cumin: { grams: 40, kind: "jar", openDays: 365 },
+  garlic_powder: { grams: 60, kind: "jar", openDays: 365 },
+  five_spice_powder: { grams: 30, kind: "bag", openDays: 365 },
+  ground_cinnamon: { grams: 40, kind: "jar", openDays: 365 },
+  ground_ginger: { grams: 40, kind: "jar", openDays: 365 },
+  smoked_paprika: { grams: 50, kind: "jar", openDays: 365 },
+  chili_powder_blend: { grams: 60, kind: "jar", openDays: 365 },
+  poultry_seasoning: { grams: 30, kind: "jar", openDays: 365 },
+  dried_oregano: { grams: 15, kind: "jar", openDays: 365 },
+  dried_dill: { grams: 15, kind: "jar", openDays: 365 },
+  italian_seasoning: { grams: 20, kind: "jar", openDays: 365 },
+  zaatar: { grams: 50, kind: "jar", openDays: 365 },
+  sichuan_pepper_powder: { grams: 30, kind: "bag", openDays: 365 },
+  cajun_seasoning: { grams: 60, kind: "jar", openDays: 365 },
+  lemon_pepper_seasoning: { grams: 60, kind: "jar", openDays: 365 },
+  garlic_herb_seasoning: { grams: 60, kind: "jar", openDays: 365 },
+  bbq_seasoning: { grams: 60, kind: "jar", openDays: 365 },
+  fajita_seasoning: { grams: 30, kind: "bag", openDays: 365 },
+  taco_seasoning: { grams: 30, kind: "bag", openDays: 365 },
+  light_coconut_milk: { grams: 400, kind: "can", openDays: 3 },
+  low_sodium_stock: { grams: 1000, kind: "carton", openDays: 4 },
+  breadcrumbs: { grams: 200, kind: "bag", openDays: 90 },
+  cornstarch: { grams: 400, kind: "bag", openDays: 365 },
 };
+
+/**
+ * The only foods a plan takes to be in every kitchen already (docs/671
+ * 整包与开封): salt, black pepper and sugar. Water is not a food row, and the
+ * cooking oil is the household's or the dish's own (planner/packs.ts). The
+ * list says they are on hand; everything else is bought.
+ */
+export const ASSUMED_HOME: ReadonlySet<string> = new Set(["salt", "ground_black_pepper", "white_sugar"]);
 
 /**
  * Shelf-life classes that differ from the generated table's. The table reads
@@ -394,8 +481,7 @@ export const PIECE_OPEN_DAYS = 3;
 /**
  * Foods planned at their cooked or soaked weight but bought dry and kept in
  * the pantry (rice, quinoa, dried wood ear), each with the dry food's name.
- * The list says they are on hand, by that name, rather than packing the
- * cooked weight.
+ * The list buys them by that name, a whole bag (RETAIL_PACK).
  */
 export const BOUGHT_DRY: Readonly<Record<string, string>> = { rice_cooked: "大米", brown_rice_cooked: "糙米", quinoa_cooked: "藜麦", wood_ear: "干木耳" };
 

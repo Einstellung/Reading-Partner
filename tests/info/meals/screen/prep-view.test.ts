@@ -46,7 +46,10 @@ test("section 2: have ready, grouped, in packs and pieces, never grams to weigh,
   const chicken = rows.find((r) => r.key === "chicken_thigh")!;
   expect(chicken.dishes).toBe("for Chicken and kidney bean chili");
   expect(chicken.qty).toMatch(/pack/);
-  expect(v.shop.find((g) => g.group === "seasoning")!.rows.every((r) => r.qty === "on hand")).toBe(true);
+  // Salt and pepper are at home; any other seasoning is a whole bottle, jar or packet.
+  for (const r of v.shop.find((g) => g.group === "seasoning")!.rows) {
+    expect(r.qty, r.key).toMatch(["salt", "ground_black_pepper", "white_sugar"].includes(r.key) ? /^on hand$/ : /(^|· )\d+ (bottle|jar|bag|pack|can|box)/);
+  }
   // The batch rice is had ready with the pots.
   expect(rows.some((r) => r.key === "brown_rice_cooked")).toBe(true);
   expect(rows.every((r) => !/^\d+ g$/.test(r.qty))).toBe(true);
