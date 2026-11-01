@@ -222,6 +222,7 @@ export default {
   // what the sentence under it says.
   "unit.kcal": "kcal",
   "unit.g": "g",
+  "pinch": "a pinch",
   "unit.min": "min",
   "abbr.protein": "P",
   "abbr.fat": "F",

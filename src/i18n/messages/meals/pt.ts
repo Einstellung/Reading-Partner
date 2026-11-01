@@ -201,6 +201,7 @@ export default {
 
   "unit.kcal": "kcal",
   "unit.g": "g",
+  "pinch": "uma pitada",
   "unit.min": "min",
   "abbr.protein": "P",
   "abbr.fat": "G",

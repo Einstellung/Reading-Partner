@@ -195,6 +195,7 @@ export default {
 
   "unit.kcal": "kcal",
   "unit.g": "g",
+  "pinch": "少々",
   "unit.min": "分",
   "abbr.protein": "P",
   "abbr.fat": "F",

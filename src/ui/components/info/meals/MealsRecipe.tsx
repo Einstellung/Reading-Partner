@@ -66,7 +66,7 @@ function RecipeHead({ view, photos }: { view: MealView; photos: PhotoCache }) {
                     </span>
                   </span>
                 </td>
-                <td className="w-[64px] py-1.5 text-right">{r.grams}</td>
+                <td className="w-[64px] py-1.5 text-right">{r.amount}</td>
               </tr>
             );
           })}

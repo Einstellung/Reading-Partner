@@ -195,6 +195,7 @@ export default {
 
   "unit.kcal": "kcal",
   "unit.g": "g",
+  "pinch": "약간",
   "unit.min": "분",
   "abbr.protein": "단",
   "abbr.fat": "지",

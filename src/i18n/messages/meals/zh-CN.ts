@@ -193,6 +193,7 @@ export default {
 
   "unit.kcal": "千卡",
   "unit.g": "克",
+  "pinch": "少许",
   "unit.min": "分钟",
   "abbr.protein": "蛋白",
   "abbr.fat": "脂肪",

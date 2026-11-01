@@ -157,7 +157,7 @@ function MealCard({ view, photos, onOpen }: { view: MealView; photos: PhotoCache
                           </span>
                         </span>
                       </td>
-                      <td className="w-[44px] py-1.5 text-right">{r.grams}</td>
+                      <td className="w-[44px] py-1.5 text-right">{r.amount}</td>
                       <td className="w-[44px] py-1.5 text-right text-muted-foreground">{Math.round(r.kcal)}</td>
                       <td className="w-[56px] py-1.5 text-right text-muted-foreground">{proteinCell(r.protein)}</td>
                     </tr>

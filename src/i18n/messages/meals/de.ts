@@ -202,6 +202,7 @@ export default {
 
   "unit.kcal": "kcal",
   "unit.g": "g",
+  "pinch": "eine Prise",
   "unit.min": "Min.",
   "abbr.protein": "P",
   "abbr.fat": "F",

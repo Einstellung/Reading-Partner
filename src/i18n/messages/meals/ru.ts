@@ -206,6 +206,7 @@ export default {
 
   "unit.kcal": "ккал",
   "unit.g": "г",
+  "pinch": "щепотка",
   "unit.min": "мин",
   "abbr.protein": "Б",
   "abbr.fat": "Ж",

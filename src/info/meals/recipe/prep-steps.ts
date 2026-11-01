@@ -25,6 +25,7 @@ import type { MealsState } from "../plan/types";
 import { kitchenOf } from "../planner/library";
 import { checkPlannerRecord } from "../planner/to-week";
 import { planPrep } from "../screen/batch-cook";
+import { promptAmount } from "./recipe";
 import { kitchenFor, schedule } from "../timeline/schedule";
 import { MAX_PREP_STEPS, readPrepSteps, renumber, RICE_POT, type PrepStep } from "../timeline/steps";
 
@@ -207,7 +208,7 @@ export function prepStepsUserText(request: PrepStepsRequest): string {
       `Pot "${p.id}": ${p.name}. How: ${p.method}`,
       `Equipment: ${p.equipment.join(", ") || "stove"}. The library's minutes for it: ${p.activeMin} hands-on, ${p.totalMin} in all. It makes ${p.portions} portions.`,
       "Ingredients for the whole pot:",
-      ...p.rows.map((r, i) => `${i + 1}. ${r.name} ${r.grams} g`),
+      ...p.rows.map((r, i) => `${i + 1}. ${r.name} ${promptAmount(r.grams)}`),
       "",
     );
   }

@@ -193,6 +193,11 @@ function potLines(pot: RecipePot): string[] {
   ];
 }
 
+/** A line's amount in a prompt: its grams, or "a pinch" for a spice the meal uses under a gram of. */
+export function promptAmount(grams: number): string {
+  return grams >= 1 ? `${grams} g` : "a pinch";
+}
+
 /** The user message: the meal, numbered, then the pot it cooks or eats from. */
 export function recipeUserText(request: RecipeRequest): string {
   const lines = [
@@ -203,7 +208,7 @@ export function recipeUserText(request: RecipeRequest): string {
     ...(request.minutes !== null ? [`Hands-on minutes: ${request.minutes}`] : []),
     ...(request.method ? [`The plan's one-line method: ${request.method}`] : []),
     "Ingredients for this one meal:",
-    ...request.rows.map((r, i) => `${i + 1}. ${r.name} ${r.grams} g${r.units ? ` (${r.units})` : ""}`),
+    ...request.rows.map((r, i) => `${i + 1}. ${r.name} ${promptAmount(r.grams)}${r.units ? ` (${r.units})` : ""}`),
     "Kitchen:",
     ...(request.kitchen.length > 0 ? request.kitchen.map((k) => `- ${k}`) : ["- (not described: assume a stove, one pot, one pan and a microwave)"]),
     ...(request.pot ? ["", ...potLines(request.pot)] : []),
