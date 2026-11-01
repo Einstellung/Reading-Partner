@@ -104,6 +104,26 @@ export interface DishRoute {
   summaryEn: string;
 }
 
+/**
+ * How a fresh part of a meal that eats a prepped box is made on the eating
+ * day (docs/671 吃的那天): a side, a staple cooked at the meal, a way's
+ * add-on. One per equipment, tried in order like routes; at least one fits
+ * the default kitchen (check.ts). The steps are short clauses joined into one
+ * sentence on the page; "{oil}" stands for the household's cooking oil.
+ */
+export interface DishFinish {
+  /** The equipment the steps use; empty for no cooking. */
+  equipment: Equipment[];
+  /** Minutes on the heat, or at the counter for something not cooked. */
+  minutes: number;
+  /** The action as the day card's line names it: "炒上海青". */
+  act: string;
+  actEn: string;
+  /** 1 to 3 short clauses, no grams. */
+  steps: string[];
+  stepsEn: string[];
+}
+
 export interface DishIngredient {
   /** Food table id. */
   food: string;
@@ -171,6 +191,8 @@ export interface Dish {
   routes?: DishRoute[];
   /** A batch main's 2 to 3 ways to eat it; no other dish has any. */
   ways?: DishWay[];
+  /** A side's or staple's steps on the day a box is eaten with it (DishFinish). */
+  finish?: DishFinish[];
   origin: "seed" | "user";
   /** ISO timestamp. */
   createdAt: string;

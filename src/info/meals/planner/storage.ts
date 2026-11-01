@@ -169,7 +169,7 @@ function afterSession(s: PlanDraft["sessions"][number], meal: MealAt): boolean {
 }
 
 /** The pot meal eaten at the prep session's own meal: the session day's first lunch or dinner after it. */
-function prepMeal(draft: PlanDraft, batchId: string): MealAt | null {
+export function prepMeal(draft: PlanDraft, batchId: string): MealAt | null {
   const s = sessionOf(draft, batchId);
   if (!s) return null;
   const slot = MAIN_SLOTS.find((m) => SLOT_AT[m] > (PART_AT[s.part] ?? 9));

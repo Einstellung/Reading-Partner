@@ -12,6 +12,7 @@ import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings"
 import { readObject } from "../../../platform/std/json";
 import type { ParseTally } from "../../../platform/app/structured-output";
 import { hashText } from "../../../platform/sync/merge/text";
+import { eatsBox } from "../finish/finishing";
 import { foodById } from "../nutrition/foods";
 import type { Effort, Profile } from "../nutrition/targets";
 import type { PotPortion, PotStorage } from "../plan/pots";
@@ -144,9 +145,18 @@ export function hasRecipe(view: Pick<MealView, "mode" | "rows">): boolean {
   return view.mode === "make" && view.rows.length > 0;
 }
 
-/** The request for one made meal, or null for a meal the page has nothing to write for. */
+/**
+ * Whether the model writes a meal's steps: a made meal with ingredients that
+ * does not eat from a prepped box. A box meal's steps are the program's
+ * (finish/finishing.ts), so no call is made for it.
+ */
+export function modelWritesRecipe(view: Pick<MealView, "mode" | "rows" | "pot">): boolean {
+  return hasRecipe(view) && !eatsBox(view);
+}
+
+/** The request for one made meal, or null for a meal whose steps the model does not write. */
 export function recipeRequest(view: MealView, profile: Profile, language: Locale): RecipeRequest | null {
-  if (!hasRecipe(view)) return null;
+  if (!modelWritesRecipe(view)) return null;
   const rows = view.rows.map((r) => ({ foodId: r.foodId, name: r.name, grams: r.grams, units: r.units }));
   const pot = recipePot(view.pot);
   return {
