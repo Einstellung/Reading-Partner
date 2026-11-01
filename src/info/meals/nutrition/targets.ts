@@ -63,6 +63,19 @@ export interface Profile {
   burners?: number;
   /** Food ids they cannot buy or do not want, beside dislikes (docs/671 替换组). */
   unavailable?: string[];
+  /**
+   * The oil the household fries and sautés with (dishes/house-oil.ts). Dish
+   * lines marked as cooking fat take it; absent means each dish's own oil.
+   */
+  cookingOil?: CookingOil;
+}
+
+/** The plain cooking oils in the food table a household can name as theirs. */
+export const COOKING_OILS = ["peanut_oil", "canola_oil", "olive_oil"] as const;
+export type CookingOil = (typeof COOKING_OILS)[number];
+
+export function isCookingOil(id: unknown): id is CookingOil {
+  return (COOKING_OILS as readonly unknown[]).includes(id);
 }
 
 /** A part of the day a prep session can sit in: morning is before lunch, afternoon before dinner, evening after it. */

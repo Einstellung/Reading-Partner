@@ -4,9 +4,12 @@
 // way with one on the plate (an add-on, its staple) cannot be eaten, and the
 // pot keeps its other ways. A dish with a food they cannot buy takes a member
 // of the food's swap group (dishes/swap.ts), and cannot be planned when no
-// member fits.
+// member fits. A line of cooking fat takes the household's oil first
+// (dishes/house-oil.ts), so every dish read through here, and everything
+// solved, bought and cooked from it, uses that oil.
 
 import { SEED_DISHES } from "../dishes/seed";
+import { houseOil, withHouseOil } from "../dishes/house-oil";
 import { swapUnavailable, type FoodSwap } from "../dishes/swap";
 import { DEFAULT_KITCHEN, EQUIPMENT, type Dish, type DishWay, type Equipment } from "../dishes/types";
 import { foodAllowed, foodById } from "../nutrition/foods";
@@ -27,11 +30,13 @@ export interface PlanLibrary {
   swaps(id: string): FoodSwap[];
   /** A food they dislike or cannot get. */
   foodBlocked(foodId: string): boolean;
+  /** The household's cooking oil when it is in use, the fat a solve adds and every cooking-fat line takes. */
+  houseOil?: string;
   /** Their equipment: the default kitchen plus whatever the profile records. */
   kitchen: ReadonlySet<Equipment>;
 }
 
-type LibraryProfile = Pick<Profile, "dislikes" | "kitchen" | "unavailable">;
+type LibraryProfile = Pick<Profile, "dislikes" | "kitchen" | "unavailable" | "cookingOil">;
 
 /** The default kitchen and every equipment id the profile names (docs/671 目标用户). */
 export function kitchenOf(profile: Pick<Profile, "kitchen">): Set<Equipment> {
@@ -56,6 +61,7 @@ export function planLibrary(profile: LibraryProfile, dishes: readonly Dish[] = S
   const foodBlocked = (id: string) => unavailable.has(id) || disliked(id);
   const stapleDishIds = new Set(dishes.filter((d) => d.role === "staple").map((d) => d.id));
   const resolved = new Map<string, Resolved>();
+  const oil = houseOil(profile);
 
   const wayBlock = (w: DishWay): DishBlock | null => {
     const hated = [...w.addOns.map((l) => l.food), ...(w.staple ? [w.staple] : [])].find(disliked);
@@ -66,9 +72,10 @@ export function planLibrary(profile: LibraryProfile, dishes: readonly Dish[] = S
   const resolve = (id: string): Resolved => {
     const hit = resolved.get(id);
     if (hit) return hit;
-    const stored = byId.get(id);
+    const raw = byId.get(id);
     let out: Resolved = { block: null, swaps: [], ways: [] };
-    if (stored) {
+    if (raw) {
+      const stored = withHouseOil(raw, oil);
       const ways = (stored.ways ?? []).map(wayBlock);
       const hated = [...stored.ingredients.map((l) => l.food), ...stored.staples].find(disliked);
       if (hated) out = { block: { food: hated, reason: "dislike" }, swaps: [], ways };
@@ -92,6 +99,7 @@ export function planLibrary(profile: LibraryProfile, dishes: readonly Dish[] = S
     wayBlocked: (id, way) => resolve(id).ways[way - 1] ?? null,
     swaps: (id) => resolve(id).swaps,
     foodBlocked,
+    ...(oil ? { houseOil: oil } : {}),
     kitchen: kitchenOf(profile),
   };
 }

@@ -5,6 +5,7 @@
 // ingredients and the food table.
 
 import { foodById, type Food, type FoodRole } from "../nutrition/foods";
+import { COOKING_OILS, isCookingOil } from "../nutrition/targets";
 import { BREAKFAST_METHODS, methodById } from "./methods";
 import { referenceServing, wayServing, type Serving } from "./serving";
 import {
@@ -22,6 +23,7 @@ export type CheckRule =
   | "unknown_food"
   | "minced_meat"
   | "ground"
+  | "cooking_oil"
   | "line"
   | "method"
   | "batch_method"
@@ -179,6 +181,14 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
           food: line.food,
           ...tag,
           message: `${at}${line.food}: only a protein line of a whole meat or poultry cut can be ground fresh`,
+        });
+      }
+      if (line.cookingOil && (line.role !== "oil" || !isCookingOil(line.food))) {
+        add({
+          rule: "cooking_oil",
+          food: line.food,
+          ...tag,
+          message: `${at}${line.food}: only an oil line of ${COOKING_OILS.join(", ")} can be the household's cooking oil`,
         });
       }
       if (!allowed.includes(line.role)) {

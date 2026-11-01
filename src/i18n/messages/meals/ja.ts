@@ -227,6 +227,7 @@ export default {
   "field.dislikes": "苦手な食材",
   "field.shops": "買い物先",
   "field.kitchen": "キッチン",
+  "field.cookingOil": "調理油",
   "field.notes": "メモ",
   "listJoin": "、",
   "applied.week": "今週の献立を保存 · 買うもの {count} 品",

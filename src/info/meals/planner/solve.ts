@@ -479,7 +479,7 @@ export function solveDraft(
         const share = target.meals.lunch.kcal / Math.max(1, target.meals.lunch.kcal + target.meals.dinner.kcal);
         const parts = MAIN_SLOTS.map((slot) => {
           const m = mains[i][slot];
-          const oil: PlanLine[] = bump > 0 ? [{ food: FAT_BUMP_FOOD, grams: bump, role: "oil", source: "oil" }] : [];
+          const oil: PlanLine[] = bump > 0 ? [{ food: lib.houseOil ?? FAT_BUMP_FOOD, grams: bump, role: "oil", source: "oil" }] : [];
           const base = fitLines(fit, [...m.lines, ...tag(m.addOns, "addOn", m.dish.id), ...f.sides[slot], ...oil], day, slot);
           return { slot, staple: m.staple, base, want: (slot === "lunch" ? share : 1 - share) * left - totals(base).kcal };
         });

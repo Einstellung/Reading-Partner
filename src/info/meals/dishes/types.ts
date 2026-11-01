@@ -111,6 +111,13 @@ export interface DishIngredient {
    * mince is never allowed (check.ts, minced_meat).
    */
   ground?: boolean;
+  /**
+   * An oil line that is only the fat the pan is greased with (frying,
+   * sautéing, browning before a braise): it takes the household's cooking
+   * oil (house-oil.ts). Absent where the oil is the taste: dressings, a
+   * drizzle at the end, sesame oil.
+   */
+  cookingOil?: boolean;
 }
 
 /**

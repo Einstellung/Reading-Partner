@@ -225,6 +225,7 @@ export default {
   "field.dislikes": "忌口",
   "field.shops": "购物地点",
   "field.kitchen": "厨房",
+  "field.cookingOil": "食用油",
   "field.notes": "备注",
   "listJoin": "、",
   "applied.week": "已存好这一周 · 采购单 {count} 样",

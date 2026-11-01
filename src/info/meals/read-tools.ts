@@ -166,7 +166,8 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
       description:
         "Their meals profile as JSON: the profile as saved (goal, body data, training days, people, shops, " +
         "kitchen, effort, boxes, burners, cook slots), what they said about their meals in their own words, " +
-        "each dislike with the food ids it keeps out, the foods they cannot get, and the program's daily " +
+        "each dislike with the food ids it keeps out, the foods they cannot get, the oil they cook with " +
+        "(whether the planner uses it), and the program's daily " +
         "targets for a training and a rest day.",
       parameters: Type.Object({}),
       execute: async () => json(readCharter(await deps.state(), deps.region())),

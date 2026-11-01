@@ -536,6 +536,7 @@ const PROFILE_FIELDS = [
   "dislikes",
   "shops",
   "kitchen",
+  "cookingOil",
   "notes",
 ] as const;
 

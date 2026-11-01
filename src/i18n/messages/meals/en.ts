@@ -259,6 +259,7 @@ export default {
   "field.dislikes": "Dislikes",
   "field.shops": "Shops",
   "field.kitchen": "Kitchen",
+  "field.cookingOil": "Cooking oil",
   "field.notes": "Notes",
 
   // Between the meals a receipt or the applied line names

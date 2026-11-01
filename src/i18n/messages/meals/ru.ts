@@ -238,6 +238,7 @@ export default {
   "field.dislikes": "Не ест",
   "field.shops": "Магазины",
   "field.kitchen": "Кухня",
+  "field.cookingOil": "Масло для готовки",
   "field.notes": "Заметки",
   "listJoin": ", ",
   "applied.week": "Неделя сохранена · купить: {count}",

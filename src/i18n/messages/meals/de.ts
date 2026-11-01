@@ -234,6 +234,7 @@ export default {
   "field.dislikes": "Abneigungen",
   "field.shops": "Geschäfte",
   "field.kitchen": "Küche",
+  "field.cookingOil": "Speiseöl",
   "field.notes": "Notizen",
   "listJoin": ", ",
   "applied.week": "Woche gespeichert · {count} zu kaufen",

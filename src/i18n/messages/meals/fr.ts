@@ -233,6 +233,7 @@ export default {
   "field.dislikes": "Aliments évités",
   "field.shops": "Magasins",
   "field.kitchen": "Cuisine",
+  "field.cookingOil": "Huile de cuisson",
   "field.notes": "Notes",
   "listJoin": ", ",
   "applied.week": "Semaine enregistrée · {count} à acheter",

@@ -31,7 +31,10 @@ import { boxName, profileFieldsLine } from "./screen/view";
 import { dislikeKnown, dislikeTag, FOOD_TAGS, FOODS, foodAllowed, foodById, findFood, foodsNamed } from "./nutrition/foods";
 import {
   COOK_PARTS,
+  COOKING_OILS,
   EFFORTS,
+  isCookingOil,
+  type CookingOil,
   type Goal,
   type Profile,
   type Region,
@@ -65,6 +68,7 @@ import {
 } from "./plan/types";
 import { WEEK_DAYS, addDays, dayOn, isoWeekday, lastDate, planExhausted } from "./plan/week";
 import { buildDraftCard } from "./build-draft-card";
+import { houseOil, oilRefused } from "./dishes/house-oil";
 import { SEED_DISHES } from "./dishes/seed";
 import { fillDraft } from "./planner/fill";
 import { readerPortions } from "./planner/portions";
@@ -184,7 +188,17 @@ export function habitsLine(profile: Profile): string {
   const boxes = profile.boxes === undefined ? "not asked yet" : profile.boxes ? "yes" : "no";
   const burners = profile.burners ? String(profile.burners) : "not said";
   const gone = profile.unavailable?.length ? profile.unavailable.join(", ") : "nothing named";
-  return `Can cook a prep session: ${slots}. Packs meals into boxes: ${boxes}. Burners: ${burners}. Cannot get: ${gone}.`;
+  return `Can cook a prep session: ${slots}. Packs meals into boxes: ${boxes}. Burners: ${burners}. Cannot get: ${gone}. ${oilLine(profile)}`;
+}
+
+/** The cooking oil as the model reads it: what is saved and whether the planner uses it. */
+function oilLine(profile: Profile): string {
+  const oil = profile.cookingOil;
+  if (!oil) return "Cooking oil: not said (each dish uses its own oil).";
+  const name = `${foodById(oil)?.zh ?? oil} (${oil})`;
+  return houseOil(profile)
+    ? `Cooking oil: ${name}; every dish that fries or sautes cooks with it.`
+    : `Cooking oil: ${name}, not used: their dislikes or what they cannot get keep it out.`;
 }
 
 /** The food table by id and name, for dislikes and foods they cannot get. */
@@ -329,7 +343,8 @@ export function mealsGuidance(
     }
     out.push(
       "When they state a change — a new weight ('称了 71'), another goal, other training days, a " +
-        "new dislike, when they can cook, whether they box meals — call update_meals_profile with just " +
+        "new dislike, when they can cook, whether they box meals, the oil they cook with ('我家用花生油') — " +
+        "call update_meals_profile with just " +
         "that. It writes at once; its result says what the program changed on the draft card and in the " +
         "saved plan, and what it could not. Say only that, in a line or two.",
     );
@@ -634,6 +649,18 @@ export function readUnavailable(sent: readonly string[]): { ids: string[]; unkno
   return { ids, unknown };
 }
 
+/**
+ * A cooking oil as sent, by id or name ('花生油', 'peanut oil'): the oil, "none"
+ * to go back to each dish's own oil, or null when it names none of COOKING_OILS.
+ */
+export function readCookingOil(raw: unknown): CookingOil | "none" | null {
+  const w = String(raw ?? "").trim();
+  if (!w) return null;
+  if (/^(none|default)$/i.test(w)) return "none";
+  const f = foodById(w) ?? findFood(w);
+  return f && isCookingOil(f.id) ? f.id : null;
+}
+
 /** "西兰花 (西兰花, 冷冻西兰花)": a dislike and the foods it keeps out. */
 function dislikeWords(word: string): string {
   if (dislikeTag(word)) return `${word} (every food tagged ${dislikeTag(word)})`;
@@ -684,6 +711,16 @@ export function patchProfile(profile: Profile, args: Record<string, unknown>): P
       return weekday >= 1 && weekday <= 7 && part ? [{ weekday, part }] : [];
     });
     set("cookSlots", slots);
+  }
+  // After dislikes: an oil they now refuse (peanut oil and a peanut dislike) is never set, and one held is dropped.
+  const oil = args.cookingOil === undefined ? null : readCookingOil(args.cookingOil);
+  if (oil === "none") {
+    delete next.cookingOil;
+    touched = true;
+  } else if (oil && !oilRefused(oil, next.dislikes)) set("cookingOil", oil);
+  if (next.cookingOil && oilRefused(next.cookingOil, next.dislikes)) {
+    delete next.cookingOil;
+    touched = true;
   }
   return touched ? next : null;
 }
@@ -760,6 +797,15 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       ),
       boxes: Type.Optional(Type.Boolean({ description: "They pack meals into boxes." })),
       burners: Type.Optional(Type.Number({ description: "Burners on their stove." })),
+      cookingOil: Type.Optional(
+        Type.String({
+          description:
+            `The oil the household fries and sautes with, one of: ${COOKING_OILS.join(", ")} (or its name, '花生油'); ` +
+            "'none' goes back to each dish's own oil. Dishes that only grease the pan take it; dressings, " +
+            "drizzles and sesame oil stay as the dish has them. Refused when their dislikes keep the oil or " +
+            "what it is pressed from out (peanut oil and a peanut or nut dislike).",
+        }),
+      ),
       notes: Type.Optional(Type.String({ description: "Their meals in their own words, one paragraph." })),
     }),
     execute: async (args) => {
@@ -778,11 +824,13 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
         ...(Array.isArray(raw.dislikes) ? readDislikes(held.dislikes, asStrings(raw.dislikes)).unknown : []),
         ...(Array.isArray(raw.unavailable) ? readUnavailable(asStrings(raw.unavailable)).unknown : []),
       ];
+      const oilWords = cookingOilWords(raw.cookingOil, held, profile);
       const notRecorded = unknown.length
         ? ` ${unknown.map((w) => `"${w}"`).join(", ")} not recorded: the food table has no food or tag by that name, so the program could not keep it out of a plan. Ask them which food they mean, and send it by a name or id from FOODS.`
         : "";
       if (!profile && notes === undefined) {
-        return { receipt: null, text: `None of those fields was usable, so nothing changed.${notRecorded}` };
+        const refused = oilWords.refused ? ` ${oilWords.refused}` : "";
+        return { receipt: null, text: `None of those fields was usable, so nothing changed.${notRecorded}${refused}` };
       }
       // The card as it stood before the change: the redraft below starts from it.
       const card = deps.currentDraft?.() ?? null;
@@ -798,6 +846,12 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       const added = (profile?.dislikes ?? []).filter((d) => !held.dislikes.includes(d));
       if (added.length) out.push(`New dislikes, kept out of every plan: ${added.map(dislikeWords).join("; ")}.`);
       if (notRecorded) out.push(notRecorded.trim());
+      if (oilWords.refused) out.push(oilWords.refused);
+      if (oilWords.changed) {
+        out.push(oilWords.changed);
+        if (card?.phase === "proposed") out.push("The draft card above is unchanged; when it is applied the plan is solved with the oil as it now stands.");
+        if (state.plan) out.push("The saved plan's dishes cook with the oil as it now stands.");
+      }
       const foods = Array.isArray(raw.dislikes) || Array.isArray(raw.unavailable);
       const onCard = card?.phase === "proposed" && profile && targets ? redraftCard(deps, card, held, profile, targets) : null;
       if (onCard?.words) out.push(onCard.words);
@@ -831,6 +885,36 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       };
     },
   };
+}
+
+/**
+ * What a sent cooking oil did: `refused` when it was not kept (no such oil, or
+ * their dislikes keep it out), `changed` when the saved oil is now another.
+ */
+export function cookingOilWords(sent: unknown, held: Profile, next: Profile | null): { refused?: string; changed?: string } {
+  const out: { refused?: string; changed?: string } = {};
+  const name = (oil: CookingOil) => `${foodById(oil)?.zh ?? oil} (${oil})`;
+  if (sent !== undefined) {
+    const oil = readCookingOil(sent);
+    const dislikes = (next ?? held).dislikes;
+    if (oil === null) {
+      out.refused = `"${String(sent)}" not recorded as their cooking oil: the program knows ${COOKING_OILS.join(", ")}. Ask them which of these they cook with.`;
+    } else if (oil !== "none" && oilRefused(oil, dislikes)) {
+      out.refused = `${name(oil)} not set as their cooking oil: their dislikes (${dislikes.join(", ")}) keep it or what it is pressed from out. Tell them so plainly and ask which other oil they cook with.`;
+    }
+  }
+  const before = held.cookingOil;
+  const after = (next ?? held).cookingOil;
+  if (before !== after) {
+    if (after) {
+      out.changed = `Cooking oil now ${name(after)}: every dish that fries or sautes in a plain oil uses it; dressings, drizzles and sesame oil stay as each dish has them.`;
+    } else if (before) {
+      out.changed = oilRefused(before, (next ?? held).dislikes)
+        ? `Cooking oil ${name(before)} cleared: their dislikes now keep it out. Each dish cooks with its own oil again.`
+        : `Cooking oil ${name(before)} cleared. Each dish cooks with its own oil again.`;
+    }
+  }
+  return out;
 }
 
 /** The profile fields the daily targets are computed from. */
