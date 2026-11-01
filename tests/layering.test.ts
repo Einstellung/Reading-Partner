@@ -128,6 +128,11 @@ const LAYER: Record<string, Layer> = {
   // claims and the describers domains register (registry.ts), like workers.
   "legion/status": "capability",
   "legion/subagent": "capability",
+  // run_code (docs/soul/686): a JavaScript program over a turn's read tools in a
+  // QuickJS VM, on a Web Worker of its own. Reads the tool contract in
+  // legion/durable and nothing of a domain; the soul's assembly and the
+  // sub-agent runner mount it over their final tool lists.
+  "legion/codemode": "capability",
   // The turn runtime on pi-durable (docs/soul/87): the device's Harness, our
   // extension, the tool adapter, turns and recovery. Imports platform/app, ai,
   // budget and legion capabilities only; what a place needs (desk resolvers,

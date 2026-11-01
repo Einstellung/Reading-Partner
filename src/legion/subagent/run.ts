@@ -15,6 +15,7 @@
 
 import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../durable/contract";
 import { StoppedError } from "../stop";
+import { withCodemode } from "../codemode";
 import { composeBrief, subagentSystemPrompt, EMPTY_ANSWER, type BriefFacts } from "./brief";
 import type { SubagentQuota } from "./quota";
 import {
@@ -209,8 +210,13 @@ export async function runSubagent(
       // The whole message list: one user turn. Nothing of the caller's
       // conversation is replayed, and nothing of this run's rounds can leak back.
       task,
-      tools: instrument(definition.tools, tally, (tool) =>
-        onProgress?.({ phase: "tool", label, round: rounds, roundsAllowed: reserved, tool }),
+      // run_code over the instrumented reads (docs/soul/686): what a program
+      // looks up is counted and reported like a direct call, and a program that
+      // looked nothing up is no evidence.
+      tools: withCodemode(
+        instrument(definition.tools, tally, (tool) =>
+          onProgress?.({ phase: "tool", label, round: rounds, roundsAllowed: reserved, tool }),
+        ),
       ),
       maxRounds: reserved,
       purpose: definition.purpose ?? "chat",

@@ -37,6 +37,7 @@ export default {
   "delegate.handingOver": "Übergibt dies an eine Arbeitskraft",
   "delegate.sentOffWork": "{kind}-Auftrag verschickt",
   "backgroundStatus.checking": "Hintergrundarbeit wird geprüft",
+  "runCode.running": "Rechnet es mit Code aus",
 
   "places.goingTo": "Geht zu {place}",
   "places.goingSomewhere": "Bewegt sich innerhalb der App",

@@ -37,6 +37,7 @@ export default {
   "delegate.handingOver": "ワーカーに任せています",
   "delegate.sentOffWork": "{kind} の作業を送り出しました",
   "backgroundStatus.checking": "バックグラウンドの作業を確認中",
+  "runCode.running": "コードで計算しています",
 
   "places.goingTo": "{place} へ移動しています",
   "places.goingSomewhere": "アプリ内を移動しています",

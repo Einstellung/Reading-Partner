@@ -269,7 +269,11 @@ test("the short intro leads the prompt, then the item's prompt byte for byte; th
     .split("\n")
     .slice(1)
     .map((l) => l.slice(2, l.indexOf(":")));
-  const soulTools = turn.tools.map((t) => t.name).filter((n) => n !== "book_tool" && n !== ABOUT_APP_TOOL);
+  // run_code is the turn's means of computing over its reads (docs/soul/686),
+  // nothing the reader asks for, and about_app is built before it.
+  const soulTools = turn.tools
+    .map((t) => t.name)
+    .filter((n) => n !== "book_tool" && n !== ABOUT_APP_TOOL && n !== "run_code");
   expect(listed).toEqual(soulTools);
 });
 

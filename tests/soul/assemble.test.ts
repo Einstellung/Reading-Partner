@@ -22,6 +22,7 @@ import {
 } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 import { afterIntro } from "../support/intro";
+import { codemodeReach } from "../../src/legion/codemode";
 import { BOX_COVER_CAP } from "../../src/soul";
 import { createBoxStore, type BoxStore } from "../../src/box";
 import { mapDisk } from "../support/map-disk";
@@ -201,7 +202,8 @@ test("the items' prompts come out in desk order, and an empty one leaves no gap"
   expect(afterIntro(turn!)).toBe("FIRST\n\nLAST");
 });
 
-// What is always there, then what this desk happens to hold.
+// What is always there, then what this desk happens to hold, then run_code over
+// the reads among them (docs/soul/686).
 test("the tools are the soul's and then each item's", async () => {
   createBookThread("book-1", "thread-1");
   appendMessage("book-1", "thread-1", { role: "user", text: "why is this fast?", ts: 1000 });
@@ -223,7 +225,26 @@ test("the tools are the soul's and then each item's", async () => {
     "about_app",
     "read_pages",
     "list_saved_articles",
+    "run_code",
   ]);
+});
+
+// run_code is built over the final list: a program can call a read any desk
+// item brought, and never a write, whoever brought it.
+test("run_code on a soul turn reaches every read on the desk and no write", async () => {
+  createBookThread("book-1", "thread-1");
+  appendMessage("book-1", "thread-1", { role: "user", text: "how many?", ts: 1000 });
+  const read = { name: "read_pages", description: "", parameters: {}, effect: "read", execute: async () => "" };
+  const laid = await desk([item("a", { tools: [read as never] })]);
+  const turn = await assembleTurn({ desk: laid, topic: CARD_SURFACE });
+  const all = turn!.tools;
+  const runCode = all.find((t) => t.name === "run_code")!;
+  expect(runCode.effect).toBe("read");
+  const reach = codemodeReach(all).map((t) => t.name);
+  expect(reach).toContain("read_pages");
+  expect(reach).toContain("search_conversations");
+  for (const write of all.filter((t) => t.effect === "write")) expect(reach).not.toContain(write.name);
+  expect(reach).not.toContain("run_code");
 });
 
 // The check is over the whole final list and not the role against the desk:
@@ -308,6 +329,7 @@ test("an item is told every tool name on the desk, the soul's included", async (
     "about_app",
     "read_pages",
     "list_saved_articles",
+    "run_code",
   ]);
 });
 
