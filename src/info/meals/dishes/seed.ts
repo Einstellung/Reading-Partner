@@ -25,7 +25,7 @@
 // cuts as cubes, slices or dice.
 
 import type { MethodId } from "./methods";
-import type { Cuisine, Dish, DishIngredient, DishRole, DishRoute, DishWay, Equipment, IngredientRole } from "./types";
+import type { Cuisine, Dish, DishFinish, DishIngredient, DishRole, DishRoute, DishWay, Equipment, IngredientRole } from "./types";
 
 const CREATED_AT = "2026-10-25T00:00:00.000Z";
 
@@ -1017,4 +1017,130 @@ const SOUTHEAST_ASIAN: Dish[] = [
 
 const MAINS: Dish[] = [...AMERICAN, ...MEDITERRANEAN, ...ITALIAN, ...CHINESE, ...MEXICAN, ...JAPANESE, ...SOUTHEAST_ASIAN];
 
-export const SEED_DISHES: readonly Dish[] = [...MAINS, ...SIDES, ...STAPLES, ...BREAKFASTS];
+/** One way to make a fresh part on the eating day: its equipment, minutes, the card's action and the steps, Chinese then English. */
+export const fin = (equipment: Equipment[], minutes: number, act: string, actEn: string, steps: string[], stepsEn: string[]): DishFinish => ({
+  equipment,
+  minutes,
+  act,
+  actEn,
+  steps,
+  stepsEn,
+});
+
+// The steps of each side and staple on the day a box is eaten with it
+// (docs/671 吃的那天): the first one the kitchen fits is used.
+const WATER_MW = "加一勺水，盖上微波高火";
+const FINISH: Readonly<Record<string, DishFinish[]>> = {
+  // Sides.
+  steamed_broccoli_lemon: [
+    fin(["steamer"], 5, "蒸西兰花", "steam the broccoli", ["冷冻西兰花直接上锅大火蒸 5 分钟", "淋柠檬汁和橄榄油，撒一点盐"], ["steam the frozen broccoli over high heat for 5 minutes, no thawing", "dress with lemon juice, olive oil and a pinch of salt"]),
+    fin(["microwave"], 4, "微波西兰花", "microwave the broccoli", [`冷冻西兰花${WATER_MW} 4 分钟`, "沥干，淋柠檬汁和橄榄油，撒一点盐"], ["microwave the frozen broccoli with a spoon of water, covered, on high for 4 minutes", "drain and dress with lemon juice, olive oil and a pinch of salt"]),
+  ],
+  garlic_bok_choy: [
+    fin(["stove"], 4, "炒上海青", "stir-fry the bok choy", ["上海青洗净切段", "锅里放{oil}，大火炒 3 到 4 分钟", "加蒜蓉酱和一点盐炒匀"], ["wash the bok choy and cut it into pieces", "stir-fry in {oil} over high heat for 3 to 4 minutes", "stir in the garlic paste and a pinch of salt"]),
+  ],
+  oyster_broccoli: [
+    fin(["stove"], 3, "焯西兰花", "blanch the broccoli", ["锅里水烧开，冷冻西兰花下锅焯 2 到 3 分钟", "捞出沥干，淋蚝油和香油"], ["blanch the frozen broccoli in boiling water for 2 to 3 minutes", "drain and dress with the oyster sauce and sesame oil"]),
+    fin(["microwave"], 4, "微波西兰花", "microwave the broccoli", [`冷冻西兰花${WATER_MW} 4 分钟`, "沥干，淋蚝油和香油"], ["microwave the frozen broccoli with a spoon of water, covered, on high for 4 minutes", "drain and dress with the oyster sauce and sesame oil"]),
+  ],
+  goma_ae_spinach: [
+    fin(["microwave"], 3, "微波菠菜", "microwave the spinach", ["冷冻菠菜盖上微波高火 3 分钟", "挤干水，拌芝麻酱和生抽"], ["microwave the frozen spinach, covered, on high for 3 minutes", "squeeze it dry and mix with the sesame paste and soy sauce"]),
+    fin(["stove"], 2, "焯菠菜", "blanch the spinach", ["锅里水烧开，冷冻菠菜下锅煮 2 分钟", "捞出挤干水，拌芝麻酱和生抽"], ["cook the frozen spinach in boiling water for 2 minutes", "drain, squeeze it dry and mix with the sesame paste and soy sauce"]),
+  ],
+  greek_cucumber_tomato_salad: [
+    fin([], 5, "拌沙拉", "toss the salad", ["黄瓜、番茄切块，红洋葱切细丝", "撒牛至，淋橄榄油和柠檬汁拌匀"], ["cut the cucumber and tomato into chunks and the red onion into thin slices", "sprinkle with oregano and toss with olive oil and lemon juice"]),
+  ],
+  steamed_pumpkin_soy: [
+    fin(["steamer"], 10, "蒸南瓜", "steam the pumpkin", ["南瓜切块，上锅大火蒸 10 分钟到筷子能扎透", "拌酱油和香油"], ["cut the pumpkin into chunks and steam over high heat for 10 minutes, until a chopstick goes through", "toss with the soy sauce and sesame oil"]),
+    fin(["microwave"], 6, "微波南瓜", "microwave the pumpkin", [`南瓜切块，${WATER_MW} 6 分钟到筷子能扎透`, "拌酱油和香油"], ["cut the pumpkin into chunks and microwave with a spoon of water, covered, on high for 6 minutes, until a chopstick goes through", "toss with the soy sauce and sesame oil"]),
+  ],
+  fresh_salsa_salad: [
+    fin([], 5, "切番茄碎", "make the salsa", ["番茄、红洋葱、黄瓜切小丁", "挤青柠汁，加一点盐拌匀"], ["dice the tomato, red onion and cucumber", "squeeze over the lime and mix in a pinch of salt"]),
+  ],
+  sauteed_zucchini_lemon: [
+    fin(["stove"], 5, "炒西葫芦", "sauté the zucchini", ["西葫芦切片", "锅里放{oil}，中火炒 4 到 5 分钟到软", "撒意式香草，挤柠檬汁，加一点盐"], ["slice the zucchini", "sauté in {oil} over medium heat for 4 to 5 minutes until soft", "finish with the Italian herbs, a squeeze of lemon and a pinch of salt"]),
+  ],
+  lemon_green_beans_almond: [
+    fin(["microwave"], 4, "微波四季豆", "microwave the green beans", [`冷冻四季豆${WATER_MW} 4 分钟，咬一根全软才算熟`, "拌柠檬汁和一点盐，撒杏仁"], ["microwave the frozen green beans with a spoon of water, covered, on high for 4 minutes; they are done when one bites soft all through", "toss with lemon juice and a pinch of salt and scatter the almonds"]),
+    fin(["stove"], 5, "煮四季豆", "boil the green beans", ["锅里水烧开，冷冻四季豆煮 5 分钟到全软", "沥干，拌柠檬汁和一点盐，撒杏仁"], ["boil the frozen green beans for 5 minutes until soft all through", "drain, toss with lemon juice and a pinch of salt and scatter the almonds"]),
+  ],
+  microwave_spinach_sesame: [
+    fin(["microwave"], 4, "微波菠菜", "microwave the spinach", ["冷冻菠菜盖上微波高火 4 分钟", "挤干水，拌酱油和香油，撒芝麻"], ["microwave the frozen spinach, covered, on high for 4 minutes", "squeeze it dry, mix with the soy sauce and sesame oil and scatter the sesame seeds"]),
+    fin(["stove"], 2, "焯菠菜", "blanch the spinach", ["锅里水烧开，冷冻菠菜下锅煮 2 分钟", "捞出挤干水，拌酱油和香油，撒芝麻"], ["cook the frozen spinach in boiling water for 2 minutes", "drain, squeeze it dry, mix with the soy sauce and sesame oil and scatter the sesame seeds"]),
+  ],
+  quick_garlic_spinach: [
+    fin(["stove"], 2, "炒菠菜", "stir-fry the spinach", ["菠菜洗净切段", "锅里放{oil}，大火炒 2 分钟到变软", "加蒜蓉酱和一点盐炒匀"], ["wash the spinach and cut it into lengths", "stir-fry in {oil} over high heat for 2 minutes until wilted", "stir in the garlic paste and a pinch of salt"]),
+  ],
+  steamed_carrot_coins: [
+    fin(["steamer"], 10, "蒸胡萝卜", "steam the carrot", ["胡萝卜切厚片，上锅蒸 10 分钟到筷子能扎透", "拌橄榄油、一点盐和黑胡椒"], ["cut the carrot into thick coins and steam for 10 minutes, until a chopstick goes through", "toss with olive oil, a pinch of salt and black pepper"]),
+    fin(["microwave"], 5, "微波胡萝卜", "microwave the carrot", [`胡萝卜切厚片，${WATER_MW} 5 分钟`, "拌橄榄油、一点盐和黑胡椒"], ["cut the carrot into thick coins and microwave with a spoon of water, covered, on high for 5 minutes", "toss with olive oil, a pinch of salt and black pepper"]),
+  ],
+  soy_green_beans_microwave: [
+    fin(["microwave"], 4, "微波四季豆", "microwave the green beans", [`冷冻四季豆${WATER_MW} 4 分钟，咬一根全软才算熟`, "拌酱油和香油"], ["microwave the frozen green beans with a spoon of water, covered, on high for 4 minutes; they are done when one bites soft all through", "toss with the soy sauce and sesame oil"]),
+    fin(["stove"], 5, "煮四季豆", "boil the green beans", ["锅里水烧开，冷冻四季豆煮 5 分钟到全软", "沥干，拌酱油和香油"], ["boil the frozen green beans for 5 minutes until soft all through", "drain and toss with the soy sauce and sesame oil"]),
+  ],
+  tomato_cucumber_salad: [
+    fin([], 4, "拌番茄黄瓜", "toss the tomato and cucumber", ["番茄和黄瓜切块", "拌橄榄油、米醋和一点盐"], ["cut the tomato and cucumber into chunks", "toss with olive oil, rice vinegar and a pinch of salt"]),
+  ],
+  purple_cabbage_vinegar: [
+    fin([], 5, "拌紫甘蓝", "toss the cabbage", ["紫甘蓝和胡萝卜切细丝", "拌米醋、橄榄油和一点盐"], ["shred the purple cabbage and carrot", "toss with rice vinegar, olive oil and a pinch of salt"]),
+  ],
+  romaine_cherry_tomato_salad: [
+    fin([], 4, "拌生菜沙拉", "toss the salad", ["生菜撕块，小番茄对半切", "拌橄榄油、柠檬汁和一点盐"], ["tear the lettuce and halve the cherry tomatoes", "toss with olive oil, lemon juice and a pinch of salt"]),
+  ],
+
+  // Staples cooked at the meal (the plan's rice is cooked at the prep session; a rice is cooked at the meal only outside it).
+  [RICE]: riceFinish("白米", "white rice", 40, [4, 30], 25),
+  [BROWN]: riceFinish("糙米", "brown rice", 60, [22, 45], 50),
+  [GRAINS]: riceFinish("杂粮米", "mixed grains", 50, [20, 45], 45),
+  [MILLET]: riceFinish("小米", "millet", 35, [10, 30], 25),
+  [QUINOA]: [
+    fin(["stove"], 15, "煮藜麦", "cook the quinoa", ["藜麦冲洗，加两倍的水煮开", "盖上盖子小火煮 15 分钟到水吸干"], ["rinse the quinoa and bring it to a boil in twice its volume of water", "cover and simmer on low for 15 minutes until the water is absorbed"]),
+  ],
+  [PASTA]: pastaFinish("意面", "pasta"),
+  [WW_PASTA]: pastaFinish("全麦意面", "whole-wheat pasta"),
+  [SOBA]: [
+    fin(["stove"], 6, "煮荞麦面", "boil the soba", ["一锅水烧开，荞麦面下锅煮到软", "捞出过凉水，沥干"], ["bring a pot of water to a boil and cook the soba until tender", "rinse under cold water and drain"]),
+  ],
+  [VERMICELLI]: [
+    fin(["kettle"], 10, "泡米粉", "soak the vermicelli", ["烧一壶开水浇在米粉上，泡 10 分钟到软", "沥干"], ["pour boiling water from the kettle over the vermicelli and soak for 10 minutes until soft", "drain"]),
+    fin(["stove"], 10, "泡米粉", "soak the vermicelli", ["锅里水烧开后关火，放米粉泡 10 分钟到软", "沥干"], ["bring a pot of water to a boil, take it off the heat and soak the vermicelli for 10 minutes until soft", "drain"]),
+  ],
+  [SWEET_POTATO]: [
+    fin(["steamer"], 25, "蒸红薯", "steam the sweet potato", ["红薯洗净，连皮上锅蒸 25 分钟到筷子能扎透"], ["wash the sweet potato and steam it in its skin for 25 minutes, until a chopstick goes through"]),
+    fin(["microwave"], 8, "微波红薯", "microwave the sweet potato", ["红薯洗净，用叉子扎几个孔", "微波高火 8 分钟，中途翻一面，到筷子能扎透"], ["wash the sweet potato and prick it a few times with a fork", "microwave on high for 8 minutes, turning it halfway, until a chopstick goes through"]),
+  ],
+  [MICROWAVE_POTATO]: [
+    fin(["microwave"], 8, "微波土豆", "microwave the potato", ["土豆洗净，用叉子扎几个孔", "微波高火 8 分钟，中途翻一面，到筷子能扎透"], ["wash the potato and prick it a few times with a fork", "microwave on high for 8 minutes, turning it halfway, until a chopstick goes through"]),
+  ],
+  [BABY_POTATOES]: [
+    fin(["steamer"], 20, "蒸小土豆", "steam the baby potatoes", ["小土豆洗净，上锅蒸 20 分钟到筷子能扎透", "拌橄榄油、烟熏红椒粉和一点盐"], ["wash the baby potatoes and steam them for 20 minutes, until a chopstick goes through", "toss with olive oil, smoked paprika and a pinch of salt"]),
+    fin(["stove"], 20, "煮小土豆", "boil the baby potatoes", ["小土豆冷水下锅，煮开后再煮 15 分钟到筷子能扎透", "沥干，拌橄榄油、烟熏红椒粉和一点盐"], ["put the baby potatoes in cold water, bring to a boil and simmer 15 minutes, until a chopstick goes through", "drain and toss with olive oil, smoked paprika and a pinch of salt"]),
+  ],
+  [CORN]: [
+    fin(["steamer"], 20, "蒸玉米", "steam the corn", ["糯玉米上锅蒸 20 分钟"], ["steam the corn cobs for 20 minutes"]),
+    fin(["stove"], 15, "煮玉米", "boil the corn", ["糯玉米放进开水锅里煮 15 分钟"], ["boil the corn cobs for 15 minutes"]),
+  ],
+};
+
+/** A rice cooked at the meal: rice cooker, pressure cooker, stove ([pressure minutes, total], stove simmer minutes). */
+function riceFinish(zh: string, en: string, cooker: number, pressure: [number, number], stove: number): DishFinish[] {
+  return [
+    fin(["rice_cooker"], cooker, `煮${zh}`, `cook the ${en}`, [`${zh}淘洗后加水，电饭锅按煮饭键`, "跳到保温后再焖 10 分钟"], [`rinse the ${en}, add water and start the rice cooker`, "leave it 10 minutes after it switches to warm"]),
+    fin(["pressure_cooker"], pressure[1], `煮${zh}`, `cook the ${en}`, [`${zh}淘洗后加水，压力锅高压 ${pressure[0]} 分钟`, "自然泄压 10 分钟"], [`rinse the ${en}, add water and cook at high pressure for ${pressure[0]} minutes`, "let the pressure drop on its own for 10 minutes"]),
+    fin(["stove"], stove + 10, `煮${zh}`, `cook the ${en}`, [`${zh}淘洗后加水煮开`, `盖上盖子小火煮 ${stove} 分钟，关火焖 10 分钟`], [`rinse the ${en}, add water and bring to a boil`, `cover and simmer on low for ${stove} minutes, then leave covered off the heat for 10 minutes`]),
+  ];
+}
+
+function pastaFinish(zh: string, en: string): DishFinish[] {
+  return [
+    fin(["stove"], 10, `煮${zh}`, `boil the ${en}`, ["一锅水烧开，加一点盐", `${zh}下锅煮 10 分钟，捞出沥干`], ["bring a pot of water to a boil with a pinch of salt", `cook the ${en} for 10 minutes and drain`]),
+  ];
+}
+
+const withFinish = (d: Dish): Dish => {
+  const finish = FINISH[d.id];
+  return finish ? { ...d, finish } : d;
+};
+
+export const SEED_DISHES: readonly Dish[] = [...MAINS, ...SIDES.map(withFinish), ...STAPLES.map(withFinish), ...BREAKFASTS];

@@ -12,13 +12,15 @@ import { getLocale } from "../../../i18n";
 import type { Dish, IngredientRole } from "../dishes/types";
 import type { TemplateRole } from "../nutrition/solve";
 import type { Profile, Targets } from "../nutrition/targets";
-import { compareRefs, potShareG, refKey, type PotPortion } from "../plan/pots";
+import { compareRefs, potShareG, refKey, type PotEat, type PotPortion } from "../plan/pots";
 import { MEAL_KEYS, type DayPlan, type Meal, type MealKey, type MealRef, type PlannerRecord, type SolvedItem, type WeekPlan } from "../plan/types";
 import { addDays, isoWeekday, weekId } from "../plan/week";
 import { checkDraft, type DraftResult } from "./checks";
-import { isBatchMain, parseDraft, type DraftMain, type MealAt, type PlanDraft } from "./draft";
+import { draftMeal, isBatchMain, parseDraft, type DraftMain, type MealAt, type PlanDraft } from "./draft";
 import { planLibrary, type PlanLibrary } from "./library";
 import { shownName } from "./packs";
+import { stapleOf } from "./rice";
+import { prepMeal } from "./storage";
 import { planDayTargets, prepDayTargets, type PlanLine, type SolvedPlan } from "./solve";
 import { foodById } from "../nutrition/foods";
 
@@ -220,10 +222,28 @@ export function resolvePlannerWeek(
 export function batchPortions(plan: WeekPlan, profile: Profile, targets: Targets): Map<string, PotPortion> {
   const out = new Map<string, PotPortion>();
   const rec = plan.planner;
-  const solve = rec ? solvePlannerRecord(plan, profile, targets) : null;
+  const check = rec ? checkPlannerRecord(plan, profile, targets) : null;
+  const solve = plannerSolveOf(check);
   if (!rec || !solve) return out;
   const people = profile.people ?? 1;
+  const rice = check?.result.storage?.rice ?? null;
+  const boxed = profile.boxes !== false;
   const refOf = (m: MealAt): MealRef => ({ date: addDays(rec.start, m.day - 1), meal: m.slot });
+  const sameAt = (a: MealAt | null | undefined, b: MealAt) => !!a && a.day === b.day && a.slot === b.slot;
+  const eatOf = (dish: string, batch: string, m: MealAt): PotEat => {
+    const meal = draftMeal(solve.draft, m.day, m.slot);
+    const staple = stapleOf(solve.draft, solve.lib, m.day, m.slot);
+    const kept = !!rice && staple === rice.staple && rice.meals.some((r) => sameAt(r, m)) && !sameAt(rice.eatenNow, m);
+    return {
+      dish,
+      way: meal && isBatchMain(meal.main) ? meal.main.way : 1,
+      sides: [...(meal?.sides ?? [])],
+      staple,
+      rice: kept ? (boxed ? "box" : "container") : null,
+      hot: sameAt(prepMeal(solve.draft, batch), m),
+      boxed,
+    };
+  };
   for (const b of solve.solved.batches) {
     const dish = solve.lib.dish(b.dish);
     const session = solve.draft.sessions.find((s) => s.id === b.session);
@@ -233,6 +253,11 @@ export function batchPortions(plan: WeekPlan, profile: Profile, targets: Targets
     const storage = (ref: MealRef) => (ref.date === cookDate ? ("fresh" as const) : ("fridge" as const));
     const rawG = Math.round(protein.grams * people);
     const refs = b.meals.map(refOf).sort(compareRefs);
+    const eats = new Map(b.meals.map((m) => [refKey(refOf(m)), eatOf(b.dish, b.id, m)]));
+    const eatAt = (key: string): { eat?: PotEat } => {
+      const eat = eats.get(key);
+      return eat ? { eat } : {};
+    };
     const pot = {
       id: b.id,
       foodId: protein.food,
@@ -253,6 +278,7 @@ export function batchPortions(plan: WeekPlan, profile: Profile, targets: Targets
         cooks: false,
         boxes,
         batch: b.id,
+        ...eatAt(refKey(ref)),
       });
     });
   }

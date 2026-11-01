@@ -112,6 +112,27 @@ export interface PotPortion {
   // cooked at the prep session, and the meal's grams are already its share.
   // Absent on a share of the week's pots.
   batch?: string;
+  // How a planner batch meal is eaten (planner/to-week.ts batchPortions):
+  // what is made fresh with the box. Absent on a share of the week's pots.
+  eat?: PotEat;
+}
+
+/** What a planner batch meal eats with its share (docs/671 吃的那天). */
+export interface PotEat {
+  // The batch dish and the way it is eaten (1-based).
+  dish: string;
+  way: number;
+  // The side dish ids, made fresh at the meal.
+  sides: string[];
+  // The way's staple: a food or staple dish id; null when the pot is eaten as it is.
+  staple: string | null;
+  // The plan's batch rice when this meal eats it kept: in the meal's box, or
+  // from the one rice container. Null when the staple is not kept rice.
+  rice: "box" | "container" | null;
+  // Eaten at the prep session's own meal, straight from the pot.
+  hot: boolean;
+  // The reader packs boxes; false: one large container per pot.
+  boxed: boolean;
 }
 
 /**

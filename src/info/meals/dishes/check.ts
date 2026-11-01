@@ -4,16 +4,18 @@
 // add-ons) and every way must pass. Every number is computed here from the
 // ingredients and the food table.
 
-import { foodById, type Food, type FoodRole } from "../nutrition/foods";
+import { foodById, FOODS, type Food, type FoodRole } from "../nutrition/foods";
 import { COOKING_OILS, isCookingOil } from "../nutrition/targets";
 import { BREAKFAST_METHODS, methodById } from "./methods";
 import { referenceServing, wayServing, type Serving } from "./serving";
 import {
   ADD_ON_ROLES,
   CUISINES,
+  DEFAULT_KITCHEN,
   EQUIPMENT,
   INGREDIENT_ROLES,
   type Dish,
+  type DishFinish,
   type DishIngredient,
   type DishRole,
   type IngredientRole,
@@ -47,7 +49,8 @@ export type CheckRule =
   | "vegetables"
   | "real_veg"
   | "deep_veg"
-  | "protein_grams";
+  | "protein_grams"
+  | "finish";
 
 export interface CheckFailure {
   rule: CheckRule;
@@ -145,6 +148,63 @@ export function isFishOrSeafood(food: Food): boolean {
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Eating-day steps (DishFinish): 1 to 3 clauses each, at most this many characters in Chinese and in English. */
+export const FINISH_STEPS = { min: 1, max: 3, zhChars: 40, enChars: 160 } as const;
+/** What a step may use besides the dish's own foods: assumed at home (docs/671 目标用户). */
+const FINISH_HOME: readonly string[] = ["salt", "ground_black_pepper", "water", ...COOKING_OILS];
+// No thermometer, no manual, no weights.
+const FINISH_BANNED = /温度计|说明书|thermometer|manual|\d+\s*(?:克|毫升|g\b|ml\b)/i;
+
+/** A food's Chinese names, as a step may write them. */
+function zhNames(food: Food): string[] {
+  return [food.zh, food.zh.replace(/（[^）]*）$/, ""), ...food.aliases].filter((n) => n.length >= 2);
+}
+
+/**
+ * The eating-day steps of a side or staple, or of a food a way puts on the
+ * plate: at least one way, one of them fitting the default kitchen; each with
+ * 1 to 3 short clauses in both languages, positive minutes and an action for
+ * the card. The Chinese text names no food but `foods` and what is assumed at
+ * home (salt, pepper, cooking oil, water); "{oil}" is the only placeholder.
+ */
+export function checkFinish(finish: readonly DishFinish[] | undefined, foods: readonly string[]): CheckFailure[] {
+  const out: CheckFailure[] = [];
+  const add = (message: string, food?: string) => out.push({ rule: "finish", message, ...(food ? { food } : {}) });
+  if (!finish || finish.length === 0) {
+    add("eating-day steps: none");
+    return out;
+  }
+  if (!finish.some((f) => f.equipment.every((e) => DEFAULT_KITCHEN.includes(e)))) add("eating-day steps: none fits a stove and a microwave");
+  const allowed = new Set([...foods, ...FINISH_HOME]);
+  const allowedNames = [...allowed].flatMap((id) => {
+    const f = foodById(id);
+    return f ? zhNames(f) : [];
+  });
+  finish.forEach((f, i) => {
+    const at = `eating-day steps ${i + 1}`;
+    if (!(Number.isFinite(f.minutes) && f.minutes > 0)) add(`${at}: minutes must be a positive number`);
+    if (!f.act.trim() || !f.actEn.trim()) add(`${at}: the action is empty`);
+    for (const e of f.equipment) if (!EQUIPMENT.includes(e)) add(`${at}: unknown equipment ${e}`);
+    const n = f.steps.length;
+    if (n < FINISH_STEPS.min || n > FINISH_STEPS.max) add(`${at}: ${n} steps, ${FINISH_STEPS.min} to ${FINISH_STEPS.max} allowed`);
+    if (f.stepsEn.length !== n) add(`${at}: ${n} Chinese steps but ${f.stepsEn.length} English`);
+    for (const s of f.steps) if (!s.trim() || [...s].length > FINISH_STEPS.zhChars) add(`${at}: step "${s}" is empty or over ${FINISH_STEPS.zhChars} characters`);
+    for (const s of f.stepsEn) if (!s.trim() || s.length > FINISH_STEPS.enChars) add(`${at}: step "${s}" is empty or over ${FINISH_STEPS.enChars} characters`);
+    const text = [f.act, ...f.steps].join(" ");
+    const textEn = [f.actEn, ...f.stepsEn].join(" ");
+    for (const t of [text, textEn]) {
+      if (FINISH_BANNED.test(t)) add(`${at}: no thermometer, manual or weights in the steps`);
+      for (const p of t.match(/\{[^}]*\}/g) ?? []) if (p !== "{oil}") add(`${at}: unknown placeholder ${p}`);
+    }
+    for (const food of FOODS) {
+      if (allowed.has(food.id)) continue;
+      const named = zhNames(food).find((name) => text.includes(name) && !allowedNames.some((a) => a.includes(name)));
+      if (named) add(`${at}: names ${food.id} (${named}), which the dish does not carry`, food.id);
+    }
+  });
+  return out;
+}
 
 export interface CheckOptions {
   /** Staple dish ids a dish may name in `staples` or on a way besides staple foods. */
@@ -323,6 +383,11 @@ export function checkDish(dish: Dish, opts: CheckOptions = {}): DishCheck {
       actual: dish.activeMin,
       limit: activeLimit,
     });
+  }
+
+  if (dish.finish !== undefined) {
+    if (dish.role !== "side" && dish.role !== "staple") add({ rule: "finish", message: "only a side or a staple has eating-day steps" });
+    for (const f of checkFinish(dish.finish, dish.ingredients.map((l) => l.food))) add(f);
   }
 
   const serving = referenceServing(dish);
