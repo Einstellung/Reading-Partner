@@ -201,6 +201,7 @@ export default {
 
   "unit.kcal": "kcal",
   "unit.g": "g",
+  "pinch": "une pincée",
   "unit.min": "min",
   "abbr.protein": "P",
   "abbr.fat": "L",
@@ -249,6 +250,7 @@ export default {
   "pack.piece": { one: "{count} pièce", other: "{count} pièces" },
   "pack.about": "{qty} (environ {grams} g)",
   "pack.aboutWeight": "environ {grams} g",
+  "pack.needOf": "environ {grams} g nécessaires · {buy}",
   "pack.onHand": "déjà à la maison",
   "pack.freeze": "à congeler en portions le jour de l'achat",
   "pack.keepFrozen": "acheter surgelé et garder au congélateur",

@@ -117,10 +117,19 @@ export interface MealNumbers {
 export function mealNumbers(meal: Meal, key: MealKey, day: DayTargets): MealNumbers | null {
   if (meal.mode !== "make" || !meal.solved?.length) return null;
   const rows: SolvedRow[] = [];
+  // A plan stored before planner/to-week.ts merged them can hold one food twice: one row at the sum.
+  const at = new Map<string, number>();
   for (const s of meal.solved) {
     const food = foodById(s.foodId);
     if (!food) continue;
-    rows.push({ foodId: s.foodId, food, role: s.role, grams: s.grams, ...rowNutrition(food, s.grams) });
+    const key = `${s.foodId}\u0000${s.role}`;
+    const i = at.get(key);
+    const grams = (i === undefined ? 0 : rows[i]!.grams) + s.grams;
+    const row = { foodId: s.foodId, food, role: s.role, grams, ...rowNutrition(food, grams) };
+    if (i === undefined) {
+      at.set(key, rows.length);
+      rows.push(row);
+    } else rows[i] = row;
   }
   const totals = sumNutrition(rows);
   const produceG = rows.filter((r) => isProduce(r.food)).reduce((s, r) => s + r.grams, 0);

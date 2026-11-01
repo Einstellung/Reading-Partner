@@ -64,7 +64,7 @@ test("seasonings are on hand, eggs are counted, raw meat that waits past its day
   expect(onHand.length).toBeGreaterThan(0);
   for (const i of onHand) expect(i.qty).toBe("家里常备");
   expect(byFood(items, "egg")?.qty).toMatch(/^\d+ 个$/);
-  expect(byFood(items, "chicken_thigh")?.qty).toMatch(/^\d+ 盒（约 \d+ g）$/);
+  expect(byFood(items, "chicken_thigh")?.qty).toMatch(/^(需约 \d+ g · )?\d+ 盒（约 \d+ g）$/);
   for (const line of packList(result.plan!, result.draft)) {
     const item = byFood(items, line.food)!;
     expect(item.freezeOnArrival).toBe(line.freeze);
@@ -114,6 +114,21 @@ test("packItem carries the day it is first needed and the frozen tag", () => {
   expect(item.neededBy).toBe("2026-11-04");
   expect(item.qty).toBe("约 300 g");
   expect(item.pack).toEqual({ frozen: true });
+});
+
+test("a pack the plan uses only part of says what is used first, the pack after it", () => {
+  const line = (food: string, grams: number, buy: Parameters<typeof packItem>[0]["buy"]) =>
+    packItem({ food, grams, buy, firstDay: 1, lastDay: 1, freeze: false, frozen: false, leftover: null }, START)!.qty;
+  // The user's beef shank: a 600 g pack, of which the pot takes 335 g.
+  expect(line("beef_shank_raw", 335, { by: "pack", count: 1, packG: 600, kind: "box" })).toBe("需约 340 g · 1 盒（约 600 g）");
+  // The whole pack goes in: the pack alone.
+  expect(line("chicken_breast", 500, { by: "pack", count: 1, packG: 500, kind: "box" })).toBe("1 盒（约 500 g）");
+  // Rounding noise of a few pieces is not worth a second number.
+  expect(line("onion", 418, { by: "piece", count: 4, pieceG: 110 })).toBe("4 个（约 440 g）");
+  expect(line("red_cabbage", 100, { by: "piece", count: 1, pieceG: 700 })).toBe("需约 100 g · 1 个（约 700 g）");
+  expect(line("egg", 300, { by: "unit", count: 6 })).toBe("6 个");
+  setLocale("en");
+  expect(line("beef_shank_raw", 335, { by: "pack", count: 1, packG: 600, kind: "box" })).toBe("about 340 g needed · 1 pack (about 600 g)");
 });
 
 test("a profile change re-solves a planner plan and re-derives its pack list, ticks kept", () => {

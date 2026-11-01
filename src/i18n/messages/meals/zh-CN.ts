@@ -193,6 +193,7 @@ export default {
 
   "unit.kcal": "千卡",
   "unit.g": "克",
+  "pinch": "少许",
   "unit.min": "分钟",
   "abbr.protein": "蛋白",
   "abbr.fat": "脂肪",
@@ -241,6 +242,7 @@ export default {
   "pack.piece": { other: "{count} 个" },
   "pack.about": "{qty}（约 {grams} g）",
   "pack.aboutWeight": "约 {grams} g",
+  "pack.needOf": "需约 {grams} g · {buy}",
   "pack.onHand": "家里常备",
   "pack.freeze": "买回当天分装冷冻",
   "pack.keepFrozen": "买回直接冷冻",

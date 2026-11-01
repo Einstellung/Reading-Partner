@@ -173,6 +173,8 @@ export interface IngredientRow {
   role: TemplateRole;
   category: IngredientCategory;
   grams: number;
+  // What the grams column shows: the grams, or "少许" for a spice under a gram.
+  amount: string;
   // "2 个" for a food counted in units, else null.
   units: string | null;
   // "卤牛腱一锅的 1/4", standing in for the name on a meal's share of a pot.
@@ -255,6 +257,7 @@ function ingredientRows(meal: Meal, key: MealKey, dayT: DayTargets | null, porti
     role: r.role,
     category: r.food.category,
     grams: r.grams,
+    amount: r.grams >= 1 ? String(r.grams) : t("meals.pinch"),
     units: r.food.unit ? `${Math.round(r.grams / r.food.unit.grams)} ${r.food.unit.label}` : null,
     potLabel: portion && !portion.batch && r.role === "protein" && r.foodId === portion.pot.foodId ? potLabel(portion) : null,
     kcal: r.kcal,

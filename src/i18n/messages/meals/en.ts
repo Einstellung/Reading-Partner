@@ -222,6 +222,7 @@ export default {
   // what the sentence under it says.
   "unit.kcal": "kcal",
   "unit.g": "g",
+  "pinch": "a pinch",
   "unit.min": "min",
   "abbr.protein": "P",
   "abbr.fat": "F",
@@ -279,6 +280,7 @@ export default {
   "pack.piece": { one: "{count} piece", other: "{count} pieces" },
   "pack.about": "{qty} (about {grams} g)",
   "pack.aboutWeight": "about {grams} g",
+  "pack.needOf": "about {grams} g needed · {buy}",
   "pack.onHand": "on hand",
   "pack.freeze": "freeze in portions the day you buy it",
   "pack.keepFrozen": "buy frozen and keep it frozen",

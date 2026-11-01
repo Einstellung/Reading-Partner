@@ -28,8 +28,21 @@ function role(r: IngredientRole): TemplateRole {
   return r === "protein" || r === "staple" ? r : r === "oil" ? "fat" : "fixed";
 }
 
-function items(lines: readonly PlanLine[]): SolvedItem[] {
-  return lines.map((l) => ({ foodId: l.food, role: role(l.role), grams: Math.round(l.grams) }));
+/**
+ * A meal's stored lines, one per food and role: a dish and its way or side can
+ * each bring the same food (lime in the chicken and on the tortillas, oil in
+ * the sauce and on the plate), and the meal lists it once at the sum.
+ */
+export function items(lines: readonly PlanLine[]): SolvedItem[] {
+  const out = new Map<string, { foodId: string; role: TemplateRole; grams: number }>();
+  for (const l of lines) {
+    const r = role(l.role);
+    const key = `${l.food}\u0000${r}`;
+    const had = out.get(key);
+    if (had) had.grams += l.grams;
+    else out.set(key, { foodId: l.food, role: r, grams: l.grams });
+  }
+  return [...out.values()].map((i) => ({ ...i, grams: Math.round(i.grams) }));
 }
 
 function made(name: string, searchName: string, method: string, minutes: number, lines: readonly PlanLine[]): Meal {

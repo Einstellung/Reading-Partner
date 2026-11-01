@@ -195,6 +195,7 @@ export default {
 
   "unit.kcal": "kcal",
   "unit.g": "g",
+  "pinch": "약간",
   "unit.min": "분",
   "abbr.protein": "단",
   "abbr.fat": "지",
@@ -243,6 +244,7 @@ export default {
   "pack.piece": { other: "{count}개" },
   "pack.about": "{qty} (약 {grams} g)",
   "pack.aboutWeight": "약 {grams} g",
+  "pack.needOf": "약 {grams} g 필요 · {buy}",
   "pack.onHand": "집에 있는 것",
   "pack.freeze": "산 날 소분해서 냉동",
   "pack.keepFrozen": "냉동으로 사서 바로 냉동",
