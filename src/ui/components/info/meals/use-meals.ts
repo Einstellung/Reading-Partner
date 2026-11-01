@@ -18,7 +18,7 @@ import { loadMealsPhotos, withDrawingSources } from "../../../../info/meals/phot
 import { weekArtIds, withDishArt } from "../../../../info/meals/photos/dish-art";
 import { dishArtStore } from "../../../../info/meals/photos/dish-art-store";
 import { registerPullRoute } from "../../../../platform/sync/pull-routes";
-import { loadMeals, saveShopping } from "../../../../info/meals/plan/store";
+import { loadMeals, saveShoppingTick } from "../../../../info/meals/plan/store";
 import type { MealsState } from "../../../../info/meals/plan/types";
 
 export interface MealsController {
@@ -113,8 +113,9 @@ export function useMeals(enabled: boolean): MealsController {
       const shopping = setShoppingChecked(prev.shopping, key, checked);
       // Fired and forgotten: a failed write leaves the tick on screen and the
       // list on disk as it was, which is the same list the next re-derive
-      // reconciles against.
-      void saveShopping(shopping).catch(() => {});
+      // reconciles against. The tick goes onto the trip on disk, never this
+      // screen's copy of it, which a plan confirmed since may have replaced.
+      void saveShoppingTick(key, checked).catch(() => {});
       return { ...prev, shopping };
     });
   }, []);

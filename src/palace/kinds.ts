@@ -1221,10 +1221,10 @@ export const PALACE = [
     id: "fixed",
     refs: [],
     sync: "data",
-    merge: "opaque",
+    merge: "lattice",
     deleteWith: "never",
     retention: NEVER,
-    note: "the week's dinners, the list derived from them and the nights that went differently (docs/73): one record, merged whole, because a per-field merge would assemble a week that never existed on either device",
+    note: "the week's dinners, the list derived from them and the nights that went differently (docs/73): one record, merged whole, because a per-field merge would assemble a week that never existed on either device; the copy whose plan was confirmed later wins (info/meals/plan/merge.ts), two copies of one plan keep one and park the other",
   },
   {
     kind: "info-link-records",

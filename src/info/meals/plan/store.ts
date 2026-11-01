@@ -37,6 +37,9 @@ import {
   type ShoppingState,
   type WeekPlan,
 } from "./types";
+import { setShoppingChecked } from "./shopping";
+// The sync join for this file (merge.ts): the copy with the later-confirmed plan wins.
+import "./merge";
 
 export const MEALS_FILE = "info-meals.json";
 
@@ -261,6 +264,20 @@ export async function saveShopping(
   io: MealsIo = mealsIo,
 ): Promise<MealsState> {
   return mutate(io, (s) => ({ ...s, shopping }));
+}
+
+/**
+ * Tick or untick one line on the trip as it is on disk, not the screen's copy
+ * of it: a plan confirmed in conversation may have replaced the trip since the
+ * screen last read it, and writing the screen's trip back would put the old
+ * plan's list under the new plan.
+ */
+export async function saveShoppingTick(
+  key: string,
+  checked: boolean,
+  io: MealsIo = mealsIo,
+): Promise<MealsState> {
+  return mutate(io, (s) => ({ ...s, shopping: setShoppingChecked(s.shopping, key, checked) }));
 }
 
 /**
