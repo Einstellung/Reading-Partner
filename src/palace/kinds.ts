@@ -1215,6 +1215,8 @@ export const PALACE = [
   },
   {
     kind: "info-meals",
+    about:
+      "The reader's meal plan with every food's grams, its prep session, the shopping list and their meals profile. Read it with the meals_read_* tools: they are in the meals conversation and in the tasking worker's hands.",
     domain: "info",
     match: fixed("info-meals.json"),
     samples: ["info-meals.json"],

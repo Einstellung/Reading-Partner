@@ -78,6 +78,11 @@ async function readRecipes(io: RecipeIo): Promise<MealsRecipes> {
   return state ?? { recipes: {} };
 }
 
+/** Every stored recipe and prep session's steps, for the read tools (read-tools.ts). */
+export function loadRecipeFile(io: RecipeIo = recipeIo): Promise<MealsRecipes> {
+  return readRecipes(io);
+}
+
 /** The stored recipe for a key, or null when there is none yet. */
 export async function loadRecipe(key: string, io: RecipeIo = recipeIo): Promise<RecipeEntry | null> {
   return (await readRecipes(io)).recipes[key] ?? null;
