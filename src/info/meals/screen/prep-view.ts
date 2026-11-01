@@ -51,7 +51,7 @@ export interface PrepShopRow {
   category: IngredientCategory;
   /** The pots it goes into. */
   dishes: string;
-  /** Packs, pieces or 「on hand」: never grams to weigh (docs/671 给用户看的量). */
+  /** Packs, pieces or 「on hand」, led by the about-weight used when the pots take only part of them (planner/trip.ts packQty). */
   qty: string;
   note: string;
 }

@@ -250,6 +250,7 @@ export default {
   "pack.piece": { one: "{count} Stück", other: "{count} Stück" },
   "pack.about": "{qty} (etwa {grams} g)",
   "pack.aboutWeight": "etwa {grams} g",
+  "pack.needOf": "etwa {grams} g benötigt · {buy}",
   "pack.onHand": "vorrätig",
   "pack.freeze": "am Einkaufstag portionsweise einfrieren",
   "pack.keepFrozen": "tiefgekühlt kaufen und gefroren lassen",

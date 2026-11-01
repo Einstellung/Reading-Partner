@@ -254,6 +254,7 @@ export default {
   "pack.piece": { one: "{count} штука", few: "{count} штуки", many: "{count} штук", other: "{count} штуки" },
   "pack.about": "{qty} (около {grams} г)",
   "pack.aboutWeight": "около {grams} г",
+  "pack.needOf": "нужно около {grams} г · {buy}",
   "pack.onHand": "есть дома",
   "pack.freeze": "в день покупки разложить по порциям и заморозить",
   "pack.keepFrozen": "купить замороженным и держать в морозилке",

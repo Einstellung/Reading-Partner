@@ -38,7 +38,7 @@ test("a lemon is bought by the piece, not kept on hand", () => {
   const lemon = planList().find((i) => i.foodId === "lemon");
   expect(lemon).toBeDefined();
   expect(lemon!.pack?.onHand).toBeUndefined();
-  expect(lemon!.qty).toMatch(/^\d+ 个（约 \d+ g）$/);
+  expect(lemon!.qty).toMatch(/^(需约 \d+ g · )?\d+ 个（约 \d+ g）$/);
 });
 
 test("on-hand lines are not counted in what is left to buy", () => {

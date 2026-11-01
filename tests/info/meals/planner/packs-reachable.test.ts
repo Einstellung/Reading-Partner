@@ -77,7 +77,7 @@ test("the list line of every reachable food is a pack, a piece, a count or on ha
     expect(item.qty, id).not.toBe("");
     // A pack or a piece line says its weight: 「1 袋（约 450 g）」, 「3 个（约 360 g）」.
     // A count of eggs or slices, and a cupboard line, do not.
-    if (line.buy.by === "pack" || line.buy.by === "piece") expect(item.qty, id).toMatch(/^\d+ \S+（约 \d+ g）$/);
+    if (line.buy.by === "pack" || line.buy.by === "piece") expect(item.qty, id).toMatch(/^(需约 \d+ g · )?\d+ \S+（约 \d+ g）$/);
   }
 });
 
@@ -85,10 +85,10 @@ test("a tin reads with the weight on its label", () => {
   const line = (id: string, grams: number): PackLine => ({
     food: id, grams, buy: buyFor(foodById(id)!, grams), firstDay: 1, lastDay: 1, freeze: false, frozen: false, leftover: null,
   });
-  expect(packItem(line("crushed_tomatoes", 210), START)!.qty).toBe("1 罐（约 400 g）");
-  expect(packItem(line("canned_kidney_beans", 130), START)!.qty).toBe("1 罐（约 400 g）");
-  expect(packItem(line("frozen_broccoli", 480), START)!.qty).toBe("2 袋（约 900 g）");
-  expect(packItem(line("cod", 140), START)!.qty).toBe("1 袋（约 450 g）");
+  expect(packItem(line("crushed_tomatoes", 400), START)!.qty).toBe("1 罐（约 400 g）");
+  expect(packItem(line("canned_kidney_beans", 130), START)!.qty).toEndWith(" · 1 罐（约 400 g）");
+  expect(packItem(line("frozen_broccoli", 880), START)!.qty).toBe("2 袋（约 900 g）");
+  expect(packItem(line("cod", 440), START)!.qty).toBe("1 袋（约 450 g）");
 });
 
 test("fresh produce is bought, never kept on hand; only foods bought dry are", () => {

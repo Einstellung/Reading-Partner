@@ -11,10 +11,28 @@ import { foodById } from "../nutrition/foods";
 import { CATEGORY_ORDER, KEEPS_ORDER, type PackNote, type ShoppingItem, type WeekPlan } from "../plan/types";
 import { addDays } from "../plan/week";
 import type { PlanDraft } from "./draft";
-import { boughtName, buyText, leftoverMatters, packList, type PackLine } from "./packs";
+import { boughtName, buyText, LEFTOVER_IGNORE, leftoverMatters, packList, type PackLine } from "./packs";
 import type { SolvedPlan } from "./solve";
 
 const about = (g: number) => Math.max(10, Math.round(g / 10) * 10);
+
+/**
+ * How much to buy. A food with no pack, piece or unit is bought by an "about"
+ * weight: 「约 300 g」. When the packs or pieces hold clearly more than the plan
+ * uses (past rounding noise, LEFTOVER_IGNORE), the amount used comes first and
+ * the pack after it: 「需约 340 g · 1 盒（约 600 g）」, so the whole pack is not
+ * read as what goes in the pot.
+ */
+export function packQty(line: PackLine): string {
+  const b = line.buy;
+  if (b.by === "weight") return t("meals.pack.aboutWeight", { grams: about(line.grams) });
+  const text = buyText(line);
+  const one = b.by === "pack" ? b.packG : b.by === "piece" ? b.pieceG : 0;
+  if (!one || b.by === "unit" || b.by === "onHand") return text;
+  const spare = b.count * one - line.grams;
+  if (spare < Math.max(LEFTOVER_IGNORE.share * one, LEFTOVER_IGNORE.grams)) return text;
+  return t("meals.pack.needOf", { grams: about(line.grams), buy: text });
+}
 
 /** One whole-pack line as a stored list line, day 1 on `start` (a line first needed at a prep-day session is needed the day before). */
 export function packItem(line: PackLine, start: string): ShoppingItem | null {
@@ -23,8 +41,7 @@ export function packItem(line: PackLine, start: string): ShoppingItem | null {
   const item: ShoppingItem = {
     name: boughtName(food),
     en: food.en,
-    // A food with no pack, piece or unit is bought by an "about" weight: 「约 300 g」.
-    qty: line.buy.by === "weight" ? t("meals.pack.aboutWeight", { grams: about(line.grams) }) : buyText(line),
+    qty: packQty(line),
     category: food.category,
     keeps: food.keeps,
     foodId: food.id,

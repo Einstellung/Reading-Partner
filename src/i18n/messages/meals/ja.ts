@@ -243,6 +243,7 @@ export default {
   "pack.piece": { other: "{count} 個" },
   "pack.about": "{qty}（約 {grams} g）",
   "pack.aboutWeight": "約 {grams} g",
+  "pack.needOf": "約 {grams} g 使用 · {buy}",
   "pack.onHand": "家にある分",
   "pack.freeze": "買った日に小分けして冷凍",
   "pack.keepFrozen": "冷凍品を買ってそのまま冷凍",
