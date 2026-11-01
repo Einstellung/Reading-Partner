@@ -8,7 +8,8 @@ import { getLocale, setLocale, type Locale } from "../../../../src/i18n";
 import { computeTargets } from "../../../../src/info/meals/nutrition/targets";
 import { MEAL_KEYS, type WeekPlan } from "../../../../src/info/meals/plan/types";
 import { addDays } from "../../../../src/info/meals/plan/week";
-import { resolvePlannerWeek, weekFromDraft } from "../../../../src/info/meals/planner/to-week";
+import type { PlanLine } from "../../../../src/info/meals/planner/solve";
+import { items, resolvePlannerWeek, weekFromDraft } from "../../../../src/info/meals/planner/to-week";
 import { checked, LIB } from "./card-fixture";
 import { goodDraft, PROFILE, START } from "./fixture";
 
@@ -94,4 +95,27 @@ test("a plan without a draft, or a draft that no longer solves, comes back as it
   const noPork = { ...PROFILE, dislikes: ["pork"] };
   expect(goodDraft().days[2]!.lunch.main).toEqual({ dish: "green_pepper_pork_strips", staple: "steamed_sweet_potato" });
   expect(resolvePlannerWeek(plan, noPork, computeTargets(noPork, "other"))).toBe(plan);
+});
+
+test("a food a dish and its way or side both bring is one line at the sum", () => {
+  // The user's 2026-11-01 dinner: lime in the shredded chicken and on the tortillas;
+  // the 2026-11-02 dinner: oil in the cod's sauce and the oil the plate adds.
+  const lines: PlanLine[] = [
+    { food: "chicken_breast", grams: 167.2, role: "protein", source: "main", dish: "salsa_shredded_chicken" },
+    { food: "lime", grams: 9.3, role: "seasoning", source: "main", dish: "salsa_shredded_chicken" },
+    { food: "lime", grams: 8.4, role: "topping", source: "main", dish: "salsa_shredded_chicken" },
+    { food: "olive_oil", grams: 6, role: "oil", source: "main", dish: "tomato_braised_cod" },
+    { food: "olive_oil", grams: 5, role: "oil", source: "oil" },
+  ];
+  expect(items(lines)).toEqual([
+    { foodId: "chicken_breast", role: "protein", grams: 167 },
+    { foodId: "lime", role: "fixed", grams: 18 },
+    { foodId: "olive_oil", role: "fat", grams: 11 },
+  ]);
+  for (const day of planAt(START).days) {
+    for (const key of MEAL_KEYS) {
+      const ids = (day[key].solved ?? []).map((i) => `${i.foodId}/${i.role}`);
+      expect(new Set(ids).size, `${day.date} ${key}`).toBe(ids.length);
+    }
+  }
 });
