@@ -9,11 +9,17 @@
 //
 // None of the bureau's vocabulary appears here. It is what they eat.
 
-import { useT } from "../../../../i18n";
+import { useLocale, useT } from "../../../../i18n";
+import {
+  thawNotInNotes,
+  type DayFinishing,
+  type FinishSource,
+} from "../../../../info/meals/finish/finish-view";
 import type { Meal, MealsState, ShoppingItem } from "../../../../info/meals/plan/types";
 import { footNote } from "../../../../info/meals/screen/method-screen";
 import { dayTotalsLine, mealNumbersLine, weekRowNumbers } from "../../../../info/meals/screen/screen-lines";
 import { hostRegion } from "../../../../info/meals/region";
+import { finishView } from "./finish-source";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import {
   linesInOrder,
@@ -47,6 +53,7 @@ import {
   MealsHeader,
   PhotoCredit,
   TargetsCard,
+  TonightLines,
 } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
 import { MealsPlanNote } from "./MealsPlanNote";
@@ -74,6 +81,8 @@ export interface MealsHomeProps {
   onOpenDay: (date: string) => void;
   onOpenMethod: () => void;
   onReplayOnboarding: () => void;
+  // The eating-day finishing steps; tests pass their own.
+  finish?: FinishSource;
 }
 
 // The meal a day's picture comes from: the latest made main meal.
@@ -120,6 +129,8 @@ function DayPicture({
 /** Today's or tomorrow's card: the picture, then the three meals in order. */
 function DayCard({
   view,
+  finishing,
+  tonight,
   photos,
   big,
   prep,
@@ -127,6 +138,10 @@ function DayCard({
   onOpenPrep,
 }: {
   view: DayView;
+  // What is left to do for each meal eaten from a prepped box.
+  finishing: DayFinishing;
+  // Tonight's notes, on today's card only.
+  tonight: readonly string[];
   photos: PhotoCache;
   big: boolean;
   // The plan's batch cook when it is on this day: the card carries its row.
@@ -142,6 +157,7 @@ function DayCard({
       onClick={onOpen}
       className="block w-full p-5 text-left can-hover:hover:bg-secondary-faint coarse:min-h-[44px]"
     >
+      {tonight.length > 0 && <TonightLines notes={tonight} className="mb-2.5" />}
       <div className="flex items-center gap-2">
         <span
           className={
@@ -162,7 +178,7 @@ function DayCard({
       {dayTotalsLine(view) && (
         <div className="mt-1 text-[13px] tabular-nums text-faint-foreground">{dayTotalsLine(view)}</div>
       )}
-      {view.thaw.map((line) => (
+      {thawNotInNotes(view.thaw, tonight).map((line) => (
         <p key={line} className="m-0 mt-1.5 text-[13px] leading-snug text-foreground">
           {line}
         </p>
@@ -174,6 +190,7 @@ function DayCard({
       <ul className="m-0 mt-3 flex list-none flex-col p-0">
         {view.meals.map((m) => {
           const numbers = mealNumbersLine(m);
+          const left = finishing.get(m.key);
           return (
             <li key={m.key} className="border-t border-border-subtle py-2 first:border-t-0">
               <div className="flex items-start gap-3">
@@ -184,6 +201,9 @@ function DayCard({
                   {mealName(m) || m.word}
                 </span>
               </div>
+              {left && (
+                <div className="mt-0.5 pl-[74px] text-[13px] leading-snug text-muted-foreground">{left.line}</div>
+              )}
               <div className="mt-0.5 flex items-center gap-2 pl-[74px] text-[12px] tabular-nums text-faint-foreground">
                 <span className="min-w-0 flex-1">{numbers ?? m.word}</span>
                 {m.cells && <Cells cells={m.cells} />}
@@ -343,9 +363,13 @@ function WeekRow({
 
 export function MealsHome(props: MealsHomeProps) {
   const t = useT();
+  const language = useLocale();
   const { state, today, photos } = props;
+  const finish = props.finish ?? finishView;
   const plan = state?.plan ?? null;
   const view = state ? mealsView(state, today, hostRegion()) : null;
+  const finishingOf = (day: DayView): DayFinishing => (state ? finish.day(state, day, language) : new Map());
+  const tonightOf = (day: DayView) => (state ? finish.tonight(state, day.day.date, today, language) : []);
   const head = view?.headline ?? [];
   const later = view?.later ?? [];
   const shopping = state?.shopping ?? EMPTY_SHOPPING;
@@ -408,6 +432,8 @@ export function MealsHome(props: MealsHomeProps) {
             {head[0] && (
               <DayCard
                 view={head[0]}
+                finishing={finishingOf(head[0])}
+                tonight={tonightOf(head[0])}
                 photos={photos}
                 big
                 prep={prepOn(head[0].day.date)}
@@ -418,6 +444,8 @@ export function MealsHome(props: MealsHomeProps) {
             {head[1] && (
               <DayCard
                 view={head[1]}
+                finishing={finishingOf(head[1])}
+                tonight={tonightOf(head[1])}
                 photos={photos}
                 big={false}
                 prep={prepOn(head[1].day.date)}

@@ -57,6 +57,7 @@ export default {
   "recipe.failed": "조리법을 쓰지 못했어요.",
   "recipe.retry": "다시 시도",
   "recipe.listSep": ", ",
+  "finish.need": "꺼내 둘 것",
   "recipe.pack": "남은 것은 국물째 {count}개 통에 한 끼씩 나눠 담고 통에 날짜와 끼니를 적으세요: {where}.",
   "recipe.packFridge": "{boxes}은(는) 냉장",
   "recipe.packFreezer": "{boxes}은(는) 오늘 바로 냉동",

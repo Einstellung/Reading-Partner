@@ -61,6 +61,7 @@ export default {
   "recipe.failed": "Die Schritte konnten nicht geschrieben werden.",
   "recipe.retry": "Erneut versuchen",
   "recipe.listSep": ", ",
+  "finish.need": "Bereitlegen",
   "recipe.pack": "Den Rest mit der Soße auf {count} Boxen verteilen, eine pro Mahlzeit, und Tag und Mahlzeit draufschreiben: {where}.",
   "recipe.packFridge": "{boxes} in den Kühlschrank",
   "recipe.packFreezer": "{boxes} heute noch einfrieren",

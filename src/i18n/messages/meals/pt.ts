@@ -60,6 +60,7 @@ export default {
   "recipe.failed": "Não foi possível escrever os passos.",
   "recipe.retry": "Tentar de novo",
   "recipe.listSep": ", ",
+  "finish.need": "Deixe à mão",
   "recipe.pack": "Divida o resto com o molho em {count} caixas, uma por refeição, e escreva o dia e a refeição em cada uma: {where}.",
   "recipe.packFridge": "{boxes} na geladeira",
   "recipe.packFreezer": "{boxes} no congelador hoje",

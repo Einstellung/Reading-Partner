@@ -6,7 +6,10 @@
 
 import { useState } from "react";
 
-import { useT } from "../../../../i18n";
+import { useLocale, useT } from "../../../../i18n";
+import { opensMealPage, type FinishSource } from "../../../../info/meals/finish/finish-view";
+import { finishView } from "./finish-source";
+import type { Finishing } from "../../../../info/meals/finish/types";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import { markDishPhotoBroken } from "../../../../info/meals/photos/photo-store";
 import { hostRegion } from "../../../../info/meals/region";
@@ -31,6 +34,7 @@ import {
   MealsColumn,
   MealsHeader,
   PhotoCredit,
+  TonightLines,
 } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
 import type { DayView } from "../../../../info/meals/screen/view";
@@ -44,14 +48,25 @@ export interface MealsDayProps {
   onAsk: () => void;
   onOpenMethod: () => void;
   onOpenRecipe: (meal: MealKey) => void;
+  // The eating-day finishing steps; tests pass their own.
+  finish?: FinishSource;
 }
 
-function MealCard({ view, photos, onOpen }: { view: MealView; photos: PhotoCache; onOpen: () => void }) {
+function MealCard({
+  view,
+  finishing,
+  photos,
+  onOpen,
+}: {
+  view: MealView;
+  finishing: Finishing | null;
+  photos: PhotoCache;
+  onOpen: () => void;
+}) {
   const t = useT();
   const [photoFailed, setPhotoFailed] = useState(false);
   const made = view.mode === "make";
-  // Only a made meal with its grams has a recipe to open.
-  const opens = made && view.rows.length > 0;
+  const opens = opensMealPage(view, finishing);
   const dish = { searchName: view.searchName };
   const picture = made ? dishPicture(dish, photos) : null;
   const caption = made ? dishPictureCaption(dish, photos) : null;
@@ -117,6 +132,9 @@ function MealCard({ view, photos, onOpen }: { view: MealView; photos: PhotoCache
           <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
             {mealName(view)}
           </div>
+          {finishing && (
+            <p className="m-0 mt-1 text-[14px] leading-snug text-muted-foreground">{finishing.line}</p>
+          )}
           {view.totals && (
             <p className="m-0 mt-1.5 text-[13px] tabular-nums text-muted-foreground">
               {macroLine(view.totals)}
@@ -220,8 +238,12 @@ function DaySummary({ view, onOpenMethod }: { view: DayView; onOpenMethod: () =>
 
 export function MealsDay(props: MealsDayProps) {
   const t = useT();
+  const language = useLocale();
   const { state, photos, today, date } = props;
+  const finish = props.finish ?? finishView;
   const view = state ? dayViewOn(state, date, today, hostRegion()) : null;
+  const finishing = state && view ? finish.day(state, view, language) : null;
+  const tonight = state ? finish.tonight(state, date, today, language) : [];
   const word = view?.word ?? "";
   const askLabel = date === today ? t("meals.askToday") : t("meals.askWeekday", { weekday: weekdayName(date) });
 
@@ -238,9 +260,16 @@ export function MealsDay(props: MealsDayProps) {
         <div className="h-24" />
       ) : (
         <div className="flex flex-col gap-4">
+          {tonight.length > 0 && <TonightLines notes={tonight} />}
           {view.targets && <DaySummary view={view} onOpenMethod={props.onOpenMethod} />}
           {view.meals.map((m) => (
-            <MealCard key={m.key} view={m} photos={photos} onOpen={() => props.onOpenRecipe(m.key)} />
+            <MealCard
+              key={m.key}
+              view={m}
+              finishing={finishing?.get(m.key) ?? null}
+              photos={photos}
+              onOpen={() => props.onOpenRecipe(m.key)}
+            />
           ))}
         </div>
       )}
