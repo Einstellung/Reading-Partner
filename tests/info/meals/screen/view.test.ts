@@ -231,3 +231,17 @@ test("a spice the meal uses under a gram of reads as a pinch, never 0", () => {
   expect(promptAmount(0)).toBe("a pinch");
   expect(promptAmount(12)).toBe("12 g");
 });
+
+test("a stored meal that holds one food twice shows it once at the sum", () => {
+  const s = state();
+  const day = s.plan!.days.find((d) => d.lunch.mode === "make" && d.lunch.solved?.length)!;
+  const lunch = day.lunch;
+  const twice = [...lunch.solved!, { foodId: "lime", role: "fixed" as const, grams: 9 }, { foodId: "lime", role: "fixed" as const, grams: 8 }];
+  const plan = { ...s.plan!, days: s.plan!.days.map((d) => (d === day ? { ...d, lunch: { ...lunch, items: twice, solved: twice } } : d)) };
+  const before = dayViewOn(s, day.date, MON, "other")!.meals.find((m) => m.key === "lunch")!;
+  const view = dayViewOn({ ...s, plan }, day.date, MON, "other")!.meals.find((m) => m.key === "lunch")!;
+  const limes = view.rows.filter((r) => r.foodId === "lime");
+  expect(limes.map((r) => r.grams)).toEqual([17]);
+  expect(new Set(view.rows.map((r) => r.foodId)).size).toBe(view.rows.length);
+  expect(view.totals!.kcal).toBeCloseTo(before.totals!.kcal + limes[0]!.kcal, 5);
+});
