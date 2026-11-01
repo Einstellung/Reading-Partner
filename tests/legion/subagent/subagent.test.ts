@@ -371,7 +371,8 @@ test("mounted as a tool, it says the parent gets a brief and is safe to replay",
   expect(tool.name).toBe("research_literature");
   expect(tool.description).toContain("You will not see what it did");
   expect(tool.replay).toBe("safe");
-  expect(tool.childTools?.map((t) => t.name)).toEqual(definition().tools.map((t) => t.name));
+  // The child's own tools, and run_code over its reads (docs/soul/686).
+  expect(tool.childTools?.map((t) => t.name)).toEqual([...definition().tools.map((t) => t.name), "run_code"]);
 });
 
 // The definition's name is what the turn records the run under (`rp.thread`).

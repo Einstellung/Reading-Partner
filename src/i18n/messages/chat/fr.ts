@@ -37,6 +37,7 @@ export default {
   "delegate.handingOver": "Confié à un agent",
   "delegate.sentOffWork": "Travail {kind} envoyé",
   "backgroundStatus.checking": "Vérification du travail en arrière-plan",
+  "runCode.running": "Calcul par un programme",
 
   "places.goingTo": "Direction {place}",
   "places.goingSomewhere": "Déplacement dans l’app",

@@ -109,7 +109,8 @@ test("a think run gets the reads of the desk it is delivered to, the talk model,
   const outcome = await run("legion/briefs/b-1.md", ctx).done;
   expect(outcome).toMatchObject({ output: "legion/outputs/r-1.md" });
   expect(outputs.get("r-1")).toBe("Rates did it. The gap widened.");
-  expect(seen!.tools.map((t) => t.name)).toEqual(["read_page"]);
+  // The desk's reads, and run_code over them (docs/soul/686).
+  expect(seen!.tools.map((t) => t.name)).toEqual(["read_page", "run_code"]);
   expect(seen!.model).toEqual(model);
   expect(seen!.systemPrompt).toBe(THINK_PROMPT);
   expect(seen!.task).toBe("Why did the yen fall?");
@@ -139,7 +140,7 @@ test("a desk that lays material adds its prompt after the think prompt, and stil
     delegate: async () => ({ ok: false as const, reason: "no" }),
   } satisfies WorkerContext;
   await run("b", ctx).done;
-  expect(seen!.tools.map((t) => t.name)).toEqual(["read_pages"]);
+  expect(seen!.tools.map((t) => t.name)).toEqual(["read_pages", "run_code"]);
   expect(seen!.systemPrompt).toBe(`${THINK_PROMPT}\n\nThe reader has a brief open beside this conversation.`);
 });
 

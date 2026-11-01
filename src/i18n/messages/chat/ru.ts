@@ -37,6 +37,7 @@ export default {
   "delegate.handingOver": "Передаёт задачу работнику",
   "delegate.sentOffWork": "Задача «{kind}» отправлена",
   "backgroundStatus.checking": "Проверяю фоновую работу",
+  "runCode.running": "Считает программой",
 
   "places.goingTo": "Переходит в {place}",
   "places.goingSomewhere": "Перемещается по приложению",

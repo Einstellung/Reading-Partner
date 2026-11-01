@@ -185,6 +185,7 @@ test("the retell prompt and its own tools, with no book open", async () => {
     "read_talk_outline",
     "record_chapter_decision",
     "remove_talk_segment",
+    "run_code",
     "search_conversations",
     "search_topic",
     "set_talk_spine",

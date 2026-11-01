@@ -41,6 +41,7 @@ import { buildMealsCatalogTools } from "../../../info/meals/tools";
 import { topicSearchDoorTools } from "../../../info/topic-search/live";
 import { buildBackgroundStatusTool } from "../../../legion/status/tool";
 import { buildWebSearchTool } from "../../../websearch/tool";
+import { buildCodemodeTool } from "../../../legion/codemode";
 import type { AgentTool } from "../../../legion/durable/contract";
 
 const inert = (value: unknown): never => value as never;
@@ -86,6 +87,8 @@ export function appToolCatalog(): AgentTool[] {
     ...topicSearchDoorTools(inert({ threadId: "" })),
     // The door's look at background work (legion/status).
     buildBackgroundStatusTool(inert({})),
+    // run_code, which every soul turn and sub-agent mounts over its reads (docs/soul/686).
+    buildCodemodeTool([]),
     ...buildCompanionTools(
       inert({
         fetchFn: noFetch,

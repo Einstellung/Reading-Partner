@@ -37,6 +37,7 @@ export default {
   "delegate.handingOver": "正在把这件事交出去",
   "delegate.sentOffWork": "已交出{kind}工作",
   "backgroundStatus.checking": "正在查看后台工作进度",
+  "runCode.running": "正在用代码算",
 
   "places.goingTo": "正在前往{place}",
   "places.goingSomewhere": "正在应用内移动",

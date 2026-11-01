@@ -12,6 +12,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { runTaskChild } from "../durable/child";
 import type { DurableTool } from "../durable/tools";
 import { StoppedError } from "../stop";
+import { withCodemode } from "../codemode";
 import { subagentSystemPrompt } from "./brief";
 import { childSpec, subagentModel, turnOutcome } from "./child";
 import type { SubagentQuota } from "./quota";
@@ -63,7 +64,8 @@ export function subagentTool(definition: SubagentDefinition, deps: SubagentToolD
         description: definition.taskDescription ?? DEFAULT_TASK_DESCRIPTION,
       }),
     }),
-    childTools: definition.tools,
+    // The child's own reads with run_code over them (docs/soul/686).
+    childTools: withCodemode(definition.tools),
     execute: async () => {
       throw new Error(`${definition.name} runs on the durable runtime only`);
     },
@@ -83,7 +85,7 @@ export function subagentTool(definition: SubagentDefinition, deps: SubagentToolD
             {
               name: definition.name,
               systemPrompt: subagentSystemPrompt(definition, tokenCap),
-              tools: definition.tools,
+              tools: withCodemode(definition.tools),
               maxRounds: reserved,
               purpose: definition.purpose ?? "chat",
               task,

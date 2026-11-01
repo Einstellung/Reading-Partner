@@ -185,6 +185,7 @@ test("the companion tools are the secretary's, and come ahead of the soul's own"
     "observation_read",
     "observation_update",
     "about_app",
+    "run_code",
   ]);
 });
 

@@ -17,6 +17,7 @@ import type { ProviderId } from "../ai/auth/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
 import { modelIdFor, type ModelTier } from "../ai/model-tier";
 import type { AgentTool } from "../legion/durable/contract";
+import { withCodemode } from "../legion/codemode";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
 import { buildAboutAppTool, introBlock } from "./intro";
 import type { BoxOrigin, BoxStore } from "../box";
@@ -128,7 +129,9 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   const name = companionNameOf(env.settings);
   const intro = introBlock(name);
   const aboutApp = buildAboutAppTool({ name, places: listPlaces(), tools: [...soul.tools, ...surfaceTools] });
-  const tools = [...soul.tools, aboutApp, ...surfaceTools, ...items.flatMap((i) => i.tools)];
+  // run_code last, built over the final list so a program can call every read
+  // this desk holds, whoever brought it (docs/soul/686).
+  const tools = withCodemode([...soul.tools, aboutApp, ...surfaceTools, ...items.flatMap((i) => i.tools)]);
   const toolNames = tools.map((t) => t.name);
   // Two tools answering to one name is the mistake openDesk refuses between two
   // items, and the assembly can make it in more ways than that: the soul's own

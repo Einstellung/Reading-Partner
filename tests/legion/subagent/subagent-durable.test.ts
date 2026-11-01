@@ -186,7 +186,7 @@ test("the sub-agent runs as a child of the reading turn and only its brief cross
   const kids = await children(t.runtime);
   expect(kids).toHaveLength(1);
   const configured = await t.runtime.harness.snapshot(AgentDoc, kids[0]!, ctx);
-  expect([...((configured?.tools as string[] | undefined) ?? [])].sort()).toEqual(["find_paper", "search_papers", "walk_citations"]);
+  expect([...((configured?.tools as string[] | undefined) ?? [])].sort()).toEqual(["find_paper", "run_code", "search_papers", "walk_citations"]);
   expect((await t.runtime.harness.inspect(ctx)).tasks).toHaveLength(0);
   await t.runtime.close(ctx);
 });
