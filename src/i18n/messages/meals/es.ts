@@ -60,6 +60,7 @@ export default {
   "recipe.failed": "No se pudieron escribir los pasos.",
   "recipe.retry": "Reintentar",
   "recipe.listSep": ", ",
+  "finish.need": "Ten a mano",
   "recipe.pack": "Reparte el resto con su salsa en {count} cajas, una por comida, y anota en cada una el día y la comida: {where}.",
   "recipe.packFridge": "{boxes} a la nevera",
   "recipe.packFreezer": "{boxes} al congelador hoy",

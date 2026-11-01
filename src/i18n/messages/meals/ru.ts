@@ -60,6 +60,7 @@ export default {
   "recipe.failed": "Не удалось написать шаги.",
   "recipe.retry": "Повторить",
   "recipe.listSep": ", ",
+  "finish.need": "Достать",
   "recipe.pack": "Остальное разложите вместе с соусом по {count} контейнерам, по одному на приём пищи, и подпишите день и приём пищи: {where}.",
   "recipe.packFridge": "{boxes} — в холодильник",
   "recipe.packFreezer": "{boxes} — сегодня же в морозилку",

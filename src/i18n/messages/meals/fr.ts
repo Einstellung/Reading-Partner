@@ -60,6 +60,7 @@ export default {
   "recipe.failed": "Les étapes n'ont pas pu être écrites.",
   "recipe.retry": "Réessayer",
   "recipe.listSep": ", ",
+  "finish.need": "À sortir",
   "recipe.pack": "Répartissez le reste avec sa sauce dans {count} boîtes, une par repas, en notant le jour et le repas sur chacune : {where}.",
   "recipe.packFridge": "{boxes} au réfrigérateur",
   "recipe.packFreezer": "{boxes} au congélateur dès aujourd'hui",

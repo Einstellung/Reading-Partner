@@ -202,6 +202,19 @@ export function CardLink({ children, onClick }: { children: React.ReactNode; onC
 }
 
 /** The small uppercase label a card's corners carry. */
+/** Tonight's notes for tomorrow (docs/671), one quiet line each: no card, nothing to dismiss. */
+export function TonightLines({ notes, className }: { notes: readonly string[]; className?: string }) {
+  return (
+    <div className={cn("flex flex-col gap-0.5", className)}>
+      {notes.map((note) => (
+        <p key={note} className="m-0 text-[13px] leading-snug text-muted-foreground">
+          {note}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export function CardLabel({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return (
     <span

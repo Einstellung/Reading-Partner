@@ -1,14 +1,17 @@
 // One made meal's recipe (docs/73 做法页), pushed over its day: the dish, its
 // ingredients at their solved grams, and the steps, which end with packing the
-// pot on the meal a pot is cooked at.
+// pot on the meal a pot is cooked at. A meal eaten from a prepped box shows its
+// finishing steps instead (docs/671), with no call.
 //
 // Rendering and event binding only. The request, the parse and the packing
 // step are in info/meals/recipe; the call and the stored copy in use-recipe.
 
-import { useT } from "../../../../i18n";
+import { useLocale, useT } from "../../../../i18n";
+import { finishView, opensMealPage, type FinishSource } from "../../../../info/meals/finish/finish-view";
+import type { Finishing } from "../../../../info/meals/finish/types";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import type { MealKey, MealsState } from "../../../../info/meals/plan/types";
-import { hasRecipe, packStep, recipeRequest, type RecipeEntry } from "../../../../info/meals/recipe/recipe";
+import { packStep, recipeRequest, type RecipeEntry } from "../../../../info/meals/recipe/recipe";
 import { hostRegion } from "../../../../info/meals/region";
 import { dayViewOn, ingredientPicture, weekdayName, type MealView } from "../../../../info/meals/screen/view";
 import { IconSparkle } from "../../base/icons";
@@ -25,6 +28,8 @@ export interface MealsRecipeProps {
   date: string;
   meal: MealKey;
   onBack: () => void;
+  // The eating-day finishing steps; tests pass their own.
+  finish?: FinishSource;
 }
 
 const CARD = "rounded-2xl border border-border-soft bg-card p-5";
@@ -132,6 +137,34 @@ function RecipeSteps({ view, recipe, fresh }: { view: MealView; recipe: RecipeEn
   );
 }
 
+/** A meal that eats from a prepped box: what to have out, then the few steps left (docs/671). */
+function FinishingSteps({ finishing }: { finishing: Finishing }) {
+  const t = useT();
+  return (
+    <section className={CARD}>
+      <p className="m-0 text-[15px] leading-[1.65] text-foreground">
+        <span className="mr-2">
+          <CardLabel>{t("meals.finish.need")}</CardLabel>
+        </span>
+        {finishing.need.join(t("meals.recipe.listSep"))}
+      </p>
+      <ol className="m-0 mt-2 list-none border-t border-border-subtle p-0">
+        {finishing.steps.map((step, i) => (
+          <li
+            key={i}
+            className="flex gap-3 border-t border-border-subtle py-2.5 text-[15px] leading-[1.65] text-foreground first:border-t-0"
+          >
+            <span className="mt-px size-6 flex-none rounded-full border border-accent-line text-center text-[12px] leading-[22px] tabular-nums text-accent-line">
+              {i + 1}
+            </span>
+            <span className="min-w-0">{step}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function RecipeBody({ view, request }: { view: MealView; request: ReturnType<typeof recipeRequest> }) {
   const t = useT();
   const { status, retry } = useRecipe(request);
@@ -154,20 +187,24 @@ function RecipeBody({ view, request }: { view: MealView; request: ReturnType<typ
 
 export function MealsRecipe(props: MealsRecipeProps) {
   const language = useRecipeLanguage();
+  const uiLanguage = useLocale();
   const { state, photos, today, date, meal } = props;
+  const finish = props.finish ?? finishView;
   const day = state ? dayViewOn(state, date, today, hostRegion()) : null;
   const view = day?.meals.find((m) => m.key === meal) ?? null;
   const profile = state?.charter?.profile ?? null;
-  const request = view && profile && language ? recipeRequest(view, profile, language) : null;
+  // A meal eaten from a prepped box shows its finishing steps and asks the model for nothing.
+  const finishing = state && day && view ? (finish.day(state, day, uiLanguage).get(meal) ?? null) : null;
+  const request = !finishing && view && profile && language ? recipeRequest(view, profile, language) : null;
 
   return (
     <MealsColumn>
       <MealsHeader title={view?.label ?? ""} weekday={weekdayName(date)} onBack={props.onBack} />
-      {view && profile && hasRecipe(view) ? (
+      {view && profile && opensMealPage(view, finishing) ? (
         <div className="flex flex-col gap-4">
           <RecipeHead view={view} photos={photos} />
           <div className="flex flex-col gap-4">
-            <RecipeBody view={view} request={request} />
+            {finishing ? <FinishingSteps finishing={finishing} /> : <RecipeBody view={view} request={request} />}
           </div>
         </div>
       ) : (
