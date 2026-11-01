@@ -36,6 +36,8 @@ const pr = line("protein");
 const ve = line("veg");
 const st = line("staple");
 const oi = line("oil");
+// An oil line that only greases the pan: it takes the household's oil (house-oil.ts).
+const co = (food: string, grams: number): DishIngredient => ({ food, grams, role: "oil", cookingOil: true });
 const se = line("seasoning");
 const fr = line("fruit");
 const tp = line("topping");
@@ -131,20 +133,20 @@ const STAPLES: Dish[] = [
 
 const SIDES: Dish[] = [
   dish({ id: "steamed_broccoli_lemon", zh: "柠檬清蒸西兰花", en: "Steamed broccoli with lemon", sum: "冷冻西兰花上锅蒸 5 分钟，淋柠檬汁和橄榄油", sumEn: "Frozen broccoli steamed 5 minutes, dressed with lemon and olive oil.", role: "side", c: "mediterranean", m: "steam", eq: ["steamer"], t: [3, 8], i: [ve("frozen_broccoli", 150), se("lemon", 6), oi("olive_oil", 3), se("salt", 0.3)] }),
-  dish({ id: "garlic_bok_choy", zh: "蒜蓉炒上海青", en: "Stir-fried bok choy with garlic paste", sum: "上海青大火快炒，加蒜蓉酱和盐调味", sumEn: "Bok choy stir-fried hot with garlic paste and salt.", role: "side", c: "chinese", m: "stir_fry", t: [5, 7], i: [ve("bok_choy", 160), se("garlic_paste", 2), oi("canola_oil", 3), se("salt", 0.3)] }),
+  dish({ id: "garlic_bok_choy", zh: "蒜蓉炒上海青", en: "Stir-fried bok choy with garlic paste", sum: "上海青大火快炒，加蒜蓉酱和盐调味", sumEn: "Bok choy stir-fried hot with garlic paste and salt.", role: "side", c: "chinese", m: "stir_fry", t: [5, 7], i: [ve("bok_choy", 160), se("garlic_paste", 2), co("canola_oil", 3), se("salt", 0.3)] }),
   dish({ id: "oyster_broccoli", zh: "蚝油西兰花", en: "Blanched broccoli with oyster sauce", sum: "冷冻西兰花焯水沥干，淋蚝油和香油", sumEn: "Frozen broccoli blanched and drained, dressed with oyster sauce and sesame oil.", role: "side", c: "chinese", m: "greens", t: [5, 8], i: [ve("frozen_broccoli", 150), se("oyster_sauce", 2), oi("sesame_oil", 1.5)] }),
   dish({ id: "goma_ae_spinach", zh: "芝麻酱拌菠菜", en: "Spinach with sesame dressing", sum: "冷冻菠菜解冻挤干，拌芝麻酱和酱油", sumEn: "Frozen spinach thawed and squeezed dry, mixed with sesame paste and soy sauce.", role: "side", c: "japanese", m: "greens", t: [5, 8], i: [ve("frozen_spinach", 150), oi("sesame_paste", 6), se("light_soy_sauce", 1.5)] }),
   dish({ id: "greek_cucumber_tomato_salad", zh: "希腊风黄瓜番茄沙拉", en: "Greek-style cucumber and tomato salad", sum: "黄瓜、番茄、红洋葱切块，撒牛至，淋橄榄油和柠檬汁", sumEn: "Cucumber, tomato and red onion cut up, sprinkled with oregano and dressed with oil and lemon.", role: "side", c: "mediterranean", m: "salad", eq: [], t: [6, 6], i: [ve("cucumber", 75), ve("tomato", 65), ve("red_onion", 10), oi("olive_oil", 3), se("dried_oregano", 0.5), se("lemon", 5)] }),
   dish({ id: "steamed_pumpkin_soy", zh: "酱油蒸南瓜块", en: "Steamed pumpkin with soy sauce", sum: "南瓜切块上锅蒸 10 分钟，拌酱油和香油", sumEn: "Pumpkin cubes steamed 10 minutes, tossed with soy sauce and sesame oil.", role: "side", c: "chinese", m: "steam", eq: ["steamer"], t: [3, 13], i: [ve("pumpkin", 160), se("reduced_salt_soy_sauce", 2), oi("sesame_oil", 1.5)] }),
   dish({ id: "fresh_salsa_salad", zh: "青柠番茄碎（salsa）", en: "Fresh tomato salsa with lime", sum: "番茄、洋葱、黄瓜切小丁，拌青柠汁和盐", sumEn: "Tomato, onion and cucumber diced and mixed with lime juice and salt.", role: "side", c: "mexican", m: "salad", eq: [], t: [6, 6], i: [ve("tomato", 110), ve("red_onion", 20), ve("cucumber", 30), se("lime", 8), se("salt", 0.3)] }),
-  dish({ id: "sauteed_zucchini_lemon", zh: "柠檬炒西葫芦", en: "Sauteed zucchini with lemon", sum: "西葫芦切片用橄榄油炒软，加柠檬汁和意式香草", sumEn: "Zucchini slices sauteed soft in olive oil, finished with lemon and Italian herbs.", role: "side", c: "italian", m: "stir_fry", t: [6, 8], i: [ve("zucchini", 150), oi("olive_oil", 4), se("italian_seasoning", 1), se("lemon", 4), se("salt", 0.3)] }),
+  dish({ id: "sauteed_zucchini_lemon", zh: "柠檬炒西葫芦", en: "Sauteed zucchini with lemon", sum: "西葫芦切片用油炒软，加柠檬汁和意式香草", sumEn: "Zucchini slices sauteed soft in a little oil, finished with lemon and Italian herbs.", role: "side", c: "italian", m: "stir_fry", t: [6, 8], i: [ve("zucchini", 150), co("olive_oil", 4), se("italian_seasoning", 1), se("lemon", 4), se("salt", 0.3)] }),
   dish({ id: "lemon_green_beans_almond", zh: "杏仁柠檬四季豆", en: "Microwaved green beans with almonds", sum: "冷冻四季豆微波加热 3 分钟，拌柠檬汁和盐，撒杏仁", sumEn: "Frozen green beans microwaved 3 minutes, tossed with lemon and salt, topped with almonds.", role: "side", c: "american", m: "microwave", eq: ["microwave"], t: [4, 7], i: [ve("frozen_green_beans", 150), tp("almonds", 6), se("lemon", 5), se("salt", 0.3)] }),
 
   // Quick sides (hands-on 5 minutes or less, default kitchen, low sodium): the
   // planner adds one to any meal that is short of deep-coloured vegetables
   // (docs/671 多样性).
   dish({ id: "microwave_spinach_sesame", zh: "微波菠菜拌芝麻", en: "Microwaved spinach with sesame", sum: "冷冻菠菜微波加热 4 分钟，挤干水，拌酱油、香油和芝麻", sumEn: "Frozen spinach microwaved 4 minutes and squeezed dry, mixed with soy sauce, sesame oil and sesame seeds.", role: "side", c: "japanese", m: "microwave", eq: ["microwave"], t: [4, 8], i: [ve("frozen_spinach", 150), oi("sesame_seeds", 4), oi("sesame_oil", 1), se("reduced_salt_soy_sauce", 2)] }),
-  dish({ id: "quick_garlic_spinach", zh: "蒜蓉快炒菠菜", en: "Quick stir-fried spinach with garlic paste", sum: "菠菜大火快炒 2 分钟，加蒜蓉酱和盐调味", sumEn: "Spinach stir-fried hot for 2 minutes with garlic paste and salt.", role: "side", c: "chinese", m: "stir_fry", t: [4, 6], i: [ve("spinach", 160), se("garlic_paste", 2), oi("canola_oil", 3), se("salt", 0.3)] }),
+  dish({ id: "quick_garlic_spinach", zh: "蒜蓉快炒菠菜", en: "Quick stir-fried spinach with garlic paste", sum: "菠菜大火快炒 2 分钟，加蒜蓉酱和盐调味", sumEn: "Spinach stir-fried hot for 2 minutes with garlic paste and salt.", role: "side", c: "chinese", m: "stir_fry", t: [4, 6], i: [ve("spinach", 160), se("garlic_paste", 2), co("canola_oil", 3), se("salt", 0.3)] }),
   dish({ id: "steamed_carrot_coins", zh: "清蒸胡萝卜片", en: "Steamed carrot coins", sum: "胡萝卜切厚片上锅蒸 10 分钟，拌橄榄油、少许盐和黑胡椒", sumEn: "Carrot cut into thick coins and steamed 10 minutes, tossed with olive oil, a pinch of salt and black pepper.", role: "side", c: "american", m: "steam", eq: ["steamer"], t: [3, 13], i: [ve("carrot", 150), oi("olive_oil", 3), se("salt", 0.1), se("ground_black_pepper", 0.3)] }),
   dish({ id: "soy_green_beans_microwave", zh: "酱油四季豆", en: "Microwaved green beans with soy sauce", sum: "冷冻四季豆微波加热 4 分钟，拌酱油和香油", sumEn: "Frozen green beans microwaved 4 minutes, tossed with soy sauce and sesame oil.", role: "side", c: "chinese", m: "microwave", eq: ["microwave"], t: [3, 7], i: [ve("frozen_green_beans", 150), se("reduced_salt_soy_sauce", 3), oi("sesame_oil", 1.5)] }),
   dish({ id: "tomato_cucumber_salad", zh: "番茄黄瓜沙拉", en: "Tomato and cucumber salad", sum: "番茄和黄瓜切块，拌橄榄油、米醋和盐，不用开火", sumEn: "Tomato and cucumber cut up and tossed with olive oil, rice vinegar and salt; no cooking.", role: "side", c: "mediterranean", m: "salad", eq: [], t: [4, 4], i: [ve("tomato", 100), ve("cucumber", 50), oi("olive_oil", 3), se("rice_vinegar", 6), se("salt", 0.3)] }),
@@ -284,7 +286,7 @@ const AMERICAN: Dish[] = [
   }),
   dish({
     id: "paprika_braised_chicken_thighs", zh: "红椒粉焖鸡腿肉", en: "Paprika braised chicken thighs", sum: "鸡腿肉、胡萝卜、洋葱抹红椒粉，平底锅加盖焖 30 分钟", sumEn: "Chicken thighs, carrot and onion rubbed with paprika and braised under a lid in one pan for 30 minutes.", c: "american", m: "braise", eq: ["stove"], t: [10, 40],
-    i: [pr("chicken_thigh", 125), ve("carrot", 70), ve("onion", 50), se("smoked_paprika", 2), se("poultry_seasoning", 1.5), se("garlic_powder", 1), se("salt", 0.4), oi("olive_oil", 3), se("stock_paste", 1.25)],
+    i: [pr("chicken_thigh", 125), ve("carrot", 70), ve("onion", 50), se("smoked_paprika", 2), se("poultry_seasoning", 1.5), se("garlic_powder", 1), se("salt", 0.4), co("olive_oil", 3), se("stock_paste", 1.25)],
     ways: [
       way("红椒焖鸡腿配小土豆和生菜", "Paprika chicken with baby potatoes and lettuce", BABY_POTATOES, [ve("romaine", 80), ve("cucumber", 50)]),
       way("红椒焖鸡腿夹口袋饼配番茄黄瓜", "Paprika chicken in pita with tomato and cucumber", "whole_wheat_pita", [ve("tomato", 80), ve("cucumber", 50)]),
@@ -345,19 +347,19 @@ const AMERICAN: Dish[] = [
   dish({
     id: "salmon_broccoli_skillet", zh: "香煎三文鱼配西兰花", en: "Pan-seared salmon with broccoli", sum: "三文鱼皮朝下煎熟，冷冻西兰花同锅煎软，挤上柠檬汁", sumEn: "Salmon seared skin-side down, frozen broccoli cooked in the same pan, finished with lemon.", c: "american", m: "pan_fry", t: [12, 15],
     staples: [BABY_POTATOES, QUINOA, BROWN],
-    i: [pr("salmon", 120), ve("frozen_broccoli", 185), oi("olive_oil", 3), se("lemon", 8), se("lemon_pepper_seasoning", 1), se("salt", 0.2)],
+    i: [pr("salmon", 120), ve("frozen_broccoli", 185), co("olive_oil", 3), se("lemon", 8), se("lemon_pepper_seasoning", 1), se("salt", 0.2)],
   }),
   dish({
     id: "cajun_shrimp_zucchini", zh: "卡津香料炒虾仁西葫芦", en: "Cajun shrimp with zucchini", sum: "虾仁用卡津香料拌匀，和西葫芦、彩椒大火快炒", sumEn: "Shrimp tossed in Cajun spice and stir-fried quickly with zucchini and pepper.", c: "american", m: "stir_fry", t: [12, 15],
     staples: [BROWN, GRAINS, PASTA],
-    i: [pr("white_shrimp", 115), ve("zucchini", 80), ve("red_bell_pepper", 110), se("cajun_seasoning", 1.5), oi("olive_oil", 4)],
+    i: [pr("white_shrimp", 115), ve("zucchini", 80), ve("red_bell_pepper", 110), se("cajun_seasoning", 1.5), co("olive_oil", 4)],
   }),
 ];
 
 const MEDITERRANEAN: Dish[] = [
   dish({
     id: "lemon_herb_braised_chicken", zh: "柠檬香草焖鸡胸", en: "Lemon-herb braised chicken breast", sum: "鸡胸肉和西葫芦、红洋葱加柠檬汁、牛至和少许高汤，加盖焖 15 分钟", sumEn: "Chicken breast with zucchini and red onion, lemon, oregano and a little stock, braised under a lid 15 minutes.", c: "mediterranean", m: "braise", eq: ["stove"], t: [10, 30],
-    i: [pr("chicken_breast", 108), ve("zucchini", 80), ve("red_onion", 40), se("lemon", 10), se("dried_oregano", 1), se("salt", 0.4), oi("olive_oil", 4), se("stock_paste", 1.25)],
+    i: [pr("chicken_breast", 108), ve("zucchini", 80), ve("red_onion", 40), se("lemon", 10), se("dried_oregano", 1), se("salt", 0.4), co("olive_oil", 4), se("stock_paste", 1.25)],
     ways: [
       way("柠檬焖鸡胸配藜麦和菠菜番茄", "Lemon chicken over quinoa with spinach and tomato", QUINOA, [ve("frozen_spinach", 90), ve("tomato", 80)]),
       way("柠檬焖鸡胸夹口袋饼配生菜番茄", "Lemon chicken in pita with lettuce and tomato", "whole_wheat_pita", [ve("romaine", 80), ve("tomato", 80)]),
@@ -399,7 +401,7 @@ const MEDITERRANEAN: Dish[] = [
   dish({
     id: "tomato_braised_cod", zh: "番茄炖鳕鱼", en: "Tomato-braised cod", sum: "番茄、洋葱和西葫芦煮成酱，铺上鳕鱼加盖煮 10 分钟", sumEn: "Tomato, onion and zucchini cooked into a sauce, cod laid on top and cooked under a lid 10 minutes.", c: "mediterranean", m: "stew", eq: ["stove"], t: [10, 25],
     staples: [PASTA, BROWN, "whole_wheat_pita"],
-    i: [pr("cod", 140), ve("tomato", 150), ve("onion", 40), ve("zucchini", 50), se("dried_oregano", 1), oi("olive_oil", 4), se("salt", 0.3)],
+    i: [pr("cod", 140), ve("tomato", 150), ve("onion", 40), ve("zucchini", 50), se("dried_oregano", 1), co("olive_oil", 4), se("salt", 0.3)],
   }),
   dish({
     id: "lentil_tomato_stew", zh: "番茄扁豆炖菜", en: "Lentil and tomato stew", sum: "扁豆、番茄、胡萝卜、芹菜加高汤和孜然煮 30 分钟，挤柠檬汁", sumEn: "Lentils, tomato, carrot and celery simmered 30 minutes in stock with cumin, finished with lemon.", c: "mediterranean", m: "stew", t: [12, 45],
@@ -412,7 +414,7 @@ const MEDITERRANEAN: Dish[] = [
   }),
   dish({
     id: "harissa_braised_chicken", zh: "辣椒酱焖鸡腿（harissa）", en: "Harissa braised chicken thighs", sum: "鸡腿肉、彩椒、西葫芦和红洋葱拌北非辣椒酱，压力锅压 10 分钟", sumEn: "Chicken thighs, pepper, zucchini and red onion tossed in harissa, pressure-cooked 10 minutes.", c: "mediterranean", m: "pressure_cook", eq: ["pressure_cooker"], t: [10, 30],
-    i: [pr("chicken_thigh", 125), ve("red_bell_pepper", 60), ve("zucchini", 50), ve("red_onion", 40), se("harissa", 8), se("ground_cumin", 1), oi("olive_oil", 2), se("salt", 0.3), se("stock_paste", 1.5)],
+    i: [pr("chicken_thigh", 125), ve("red_bell_pepper", 60), ve("zucchini", 50), ve("red_onion", 40), se("harissa", 8), se("ground_cumin", 1), co("olive_oil", 2), se("salt", 0.3), se("stock_paste", 1.5)],
     ways: [
       way("哈里萨焖鸡腿配藜麦和四季豆", "Harissa chicken over quinoa with green beans", QUINOA, [ve("frozen_green_beans", 100)]),
       way("哈里萨焖鸡腿夹口袋饼配生菜", "Harissa chicken in pita with lettuce", "whole_wheat_pita", [ve("romaine", 80), ve("tomato", 80)]),
@@ -430,7 +432,7 @@ const MEDITERRANEAN: Dish[] = [
   }),
   dish({
     id: "lubia_beef_green_beans", zh: "番茄四季豆炖牛肉（lubia）", en: "Lebanese beef and green bean stew (lubia)", sum: "牛腱块、四季豆、番茄碎加肉桂和孜然，压力锅炖 35 分钟", sumEn: "Beef shank cubes, green beans and crushed tomato with cinnamon and cumin, pressure-cooked 35 minutes.", c: "mediterranean", m: "pressure_cook", eq: ["pressure_cooker"], t: [12, 60],
-    i: [pr("beef_shank_raw", 105), ve("green_beans", 120), ve("crushed_tomatoes", 130), ve("onion", 40), se("ground_cinnamon", 0.5), se("ground_cumin", 1), se("garlic_paste", 2), oi("olive_oil", 3), se("salt", 0.3)],
+    i: [pr("beef_shank_raw", 105), ve("green_beans", 120), ve("crushed_tomatoes", 130), ve("onion", 40), se("ground_cinnamon", 0.5), se("ground_cumin", 1), se("garlic_paste", 2), co("olive_oil", 3), se("salt", 0.3)],
     ways: [
       way("四季豆炖牛肉盖米饭配黄瓜", "Lubia over rice with cucumber", RICE, [ve("cucumber", 70)]),
       way("四季豆炖牛肉配藜麦和小番茄", "Lubia over quinoa with cherry tomatoes", QUINOA, [ve("cherry_tomato", 70)]),
@@ -440,7 +442,7 @@ const MEDITERRANEAN: Dish[] = [
   dish({
     id: "shakshuka", zh: "鸡肉番茄红椒焖蛋（shakshuka）", en: "Shakshuka with chicken", sum: "番茄、彩椒、洋葱炒软煮成酱，拌入鸡肉丝，打入鸡蛋盖盖焖熟", sumEn: "Tomato, pepper and onion cooked into a sauce, shredded chicken stirred in, eggs set in it under a lid.", c: "mediterranean", m: "pan_fry", t: [12, 20],
     staples: ["whole_wheat_pita", "whole_wheat_toast"],
-    i: [pr("egg", 100), pr("ready_chicken_breast", 85), ve("tomato", 170), ve("red_bell_pepper", 70), ve("onion", 30), se("smoked_paprika", 1.5), oi("olive_oil", 2)],
+    i: [pr("egg", 100), pr("ready_chicken_breast", 85), ve("tomato", 170), ve("red_bell_pepper", 70), ve("onion", 30), se("smoked_paprika", 1.5), co("olive_oil", 2)],
   }),
   dish({
     id: "mediterranean_chicken_salad", zh: "地中海鸡肉沙拉", en: "Mediterranean chicken salad", sum: "即食鸡胸肉拌黄瓜、番茄和红洋葱，淋橄榄油、柠檬汁，撒牛至", sumEn: "Ready-cooked chicken tossed with cucumber, tomato and red onion, dressed with oil and lemon, sprinkled with oregano.", c: "mediterranean", m: "assemble", eq: [], t: [10, 10],
@@ -460,12 +462,12 @@ const MEDITERRANEAN: Dish[] = [
   dish({
     id: "tomato_shrimp_skillet", zh: "番茄菠菜烩虾", en: "Tomato and spinach shrimp skillet", sum: "番茄煮成酱，下虾煮熟，拌入菠菜，撒牛至", sumEn: "Tomato cooked into a sauce, shrimp poached in it, spinach wilted in, sprinkled with oregano.", c: "mediterranean", m: "stir_fry", t: [12, 18],
     staples: [PASTA, QUINOA, BROWN],
-    i: [pr("white_shrimp", 110), ve("tomato", 150), ve("spinach", 80), se("dried_oregano", 1), oi("olive_oil", 3)],
+    i: [pr("white_shrimp", 110), ve("tomato", 150), ve("spinach", 80), se("dried_oregano", 1), co("olive_oil", 3)],
   }),
   dish({
     id: "lemon_seared_cod", zh: "柠檬香煎鳕鱼", en: "Lemon pan-seared cod with broccoli", sum: "鳕鱼煎至两面金黄，冷冻西兰花和豌豆同锅煎软，挤柠檬汁", sumEn: "Cod pan-seared golden on both sides, frozen broccoli and peas softened in the same pan, finished with lemon.", c: "mediterranean", m: "pan_fry", t: [12, 15],
     staples: [BABY_POTATOES, QUINOA, WW_PASTA],
-    i: [pr("cod", 140), ve("frozen_broccoli", 175), ve("frozen_peas", 30), oi("olive_oil", 4), se("lemon", 10), se("salt", 0.4)],
+    i: [pr("cod", 140), ve("frozen_broccoli", 175), ve("frozen_peas", 30), co("olive_oil", 4), se("lemon", 10), se("salt", 0.4)],
   }),
 ];
 
@@ -481,7 +483,7 @@ const ITALIAN: Dish[] = [
   }),
   dish({
     id: "chicken_cacciatore", zh: "意式番茄蘑菇炖鸡（cacciatore）", en: "Chicken cacciatore", sum: "鸡胸肉块、蘑菇、彩椒加番茄和牛至焖煮 30 分钟", sumEn: "Chicken cubes, mushroom and pepper braised 30 minutes in tomato with oregano.", c: "italian", m: "braise", t: [15, 45],
-    i: [pr("chicken_breast", 108), ve("crushed_tomatoes", 130), ve("red_bell_pepper", 50), ve("button_mushroom", 50), ve("onion", 30), se("dried_oregano", 1), se("italian_seasoning", 1.5), oi("olive_oil", 3), se("salt", 0.2)],
+    i: [pr("chicken_breast", 108), ve("crushed_tomatoes", 130), ve("red_bell_pepper", 50), ve("button_mushroom", 50), ve("onion", 30), se("dried_oregano", 1), se("italian_seasoning", 1.5), co("olive_oil", 3), se("salt", 0.2)],
     ways: [
       way("蘑菇炖鸡拌全麦意面配生菜", "Cacciatore with whole-wheat pasta and lettuce", WW_PASTA, [ve("romaine", 80)]),
       way("蘑菇炖鸡配吐司和菠菜", "Cacciatore on toast with spinach", "white_toast", [ve("frozen_spinach", 100)]),
@@ -499,7 +501,7 @@ const ITALIAN: Dish[] = [
   }),
   dish({
     id: "chicken_mushroom_ragu", zh: "意式鸡腿丁蘑菇番茄酱（ragu）", en: "Chicken thigh and mushroom ragu", sum: "鸡腿肉丁和蘑菇炒香，加番茄碎小火炖 30 分钟", sumEn: "Diced chicken thigh and mushroom sauteed, then simmered 30 minutes in crushed tomato.", c: "italian", m: "stew", t: [15, 45],
-    i: [pr("chicken_thigh", 135), ve("button_mushroom", 100), ve("crushed_tomatoes", 130), ve("onion", 30), se("italian_seasoning", 1.5), oi("olive_oil", 2), se("salt", 0.2)],
+    i: [pr("chicken_thigh", 135), ve("button_mushroom", 100), ve("crushed_tomatoes", 130), ve("onion", 30), se("italian_seasoning", 1.5), co("olive_oil", 2), se("salt", 0.2)],
     ways: [
       way("鸡丁蘑菇酱拌全麦意面配菠菜", "Chicken ragu with whole-wheat pasta and spinach", WW_PASTA, [ve("frozen_spinach", 105)]),
       way("鸡丁蘑菇酱配藜麦和彩椒", "Chicken ragu over quinoa with red pepper", QUINOA, [ve("red_bell_pepper", 100)]),
@@ -517,7 +519,7 @@ const ITALIAN: Dish[] = [
   }),
   dish({
     id: "chicken_pizzaiola", zh: "意式番茄焖鸡胸（pizzaiola）", en: "Chicken pizzaiola", sum: "鸡胸肉在番茄、洋葱、彩椒酱里加牛至，加盖焖 15 分钟", sumEn: "Chicken breast braised 15 minutes under a lid in tomato, onion and pepper sauce with oregano.", c: "italian", m: "braise", eq: ["stove"], t: [12, 30],
-    i: [pr("chicken_breast", 105), ve("crushed_tomatoes", 130), ve("onion", 30), ve("red_bell_pepper", 40), se("dried_oregano", 1.5), oi("olive_oil", 3), se("salt", 0.2)],
+    i: [pr("chicken_breast", 105), ve("crushed_tomatoes", 130), ve("onion", 30), ve("red_bell_pepper", 40), se("dried_oregano", 1.5), co("olive_oil", 3), se("salt", 0.2)],
     ways: [
       way("番茄焖鸡胸拌意面配生菜", "Pizzaiola with pasta and lettuce", PASTA, [ve("romaine", 150)]),
       way("番茄焖鸡胸配全麦吐司和菠菜", "Pizzaiola on whole-wheat toast with spinach", "whole_wheat_toast", [ve("frozen_spinach", 120)]),
@@ -526,7 +528,7 @@ const ITALIAN: Dish[] = [
   }),
   dish({
     id: "herb_braised_pork_tenderloin", zh: "香草焖猪里脊", en: "Herb-braised pork tenderloin", sum: "猪里脊和彩椒、西葫芦拌意式香草，加少许高汤加盖焖 20 分钟", sumEn: "Pork tenderloin with pepper and zucchini, Italian herbs and a little stock, braised under a lid 20 minutes.", c: "italian", m: "braise", eq: ["stove"], t: [10, 30],
-    i: [pr("pork_tenderloin", 120), ve("red_bell_pepper", 60), ve("zucchini", 60), ve("red_onion", 30), se("italian_seasoning", 1.5), se("dried_oregano", 0.5), oi("olive_oil", 3), se("salt", 0.3), se("lemon", 8), se("stock_paste", 1.25)],
+    i: [pr("pork_tenderloin", 120), ve("red_bell_pepper", 60), ve("zucchini", 60), ve("red_onion", 30), se("italian_seasoning", 1.5), se("dried_oregano", 0.5), co("olive_oil", 3), se("salt", 0.3), se("lemon", 8), se("stock_paste", 1.25)],
     ways: [
       way("香草猪里脊配小土豆和四季豆", "Herb pork with baby potatoes and green beans", BABY_POTATOES, [ve("frozen_green_beans", 130)]),
       way("香草猪里脊拌全麦意面配小番茄", "Herb pork with whole-wheat pasta and cherry tomatoes", WW_PASTA, [ve("cherry_tomato", 70), ve("romaine", 80)]),
@@ -554,12 +556,12 @@ const ITALIAN: Dish[] = [
   dish({
     id: "shrimp_tomato_mushroom", zh: "番茄蘑菇炒虾仁", en: "Shrimp with cherry tomatoes and mushrooms", sum: "虾仁和小番茄、蘑菇快炒到番茄出汁，撒意式香草", sumEn: "Shrimp, cherry tomato and mushroom stir-fried until the tomato breaks down, sprinkled with Italian herbs.", c: "italian", m: "stir_fry", t: [12, 18],
     staples: [PASTA, WW_PASTA],
-    i: [pr("white_shrimp", 115), ve("cherry_tomato", 110), ve("button_mushroom", 60), se("italian_seasoning", 1), oi("olive_oil", 4), se("garlic_paste", 2), se("salt", 0.2)],
+    i: [pr("white_shrimp", 115), ve("cherry_tomato", 110), ve("button_mushroom", 60), se("italian_seasoning", 1), co("olive_oil", 4), se("garlic_paste", 2), se("salt", 0.2)],
   }),
   dish({
     id: "lemon_mushroom_chicken", zh: "柠檬蘑菇煎鸡胸", en: "Lemon chicken with mushrooms and spinach", sum: "鸡胸肉煎熟，蘑菇和菠菜同锅炒软，加柠檬汁和少许高汤收汁", sumEn: "Chicken breast pan-fried, mushroom and spinach wilted in the pan, finished with lemon and a splash of stock.", c: "italian", m: "pan_fry", t: [12, 18],
     staples: [PASTA, BABY_POTATOES, MICROWAVE_POTATO],
-    i: [pr("chicken_breast", 108), ve("button_mushroom", 70), ve("spinach", 130), se("lemon", 12), oi("olive_oil", 4), se("salt", 0.4), se("stock_paste", 0.75)],
+    i: [pr("chicken_breast", 108), ve("button_mushroom", 70), ve("spinach", 130), se("lemon", 12), co("olive_oil", 4), se("salt", 0.4), se("stock_paste", 0.75)],
   }),
   dish({
     id: "italian_tomato_chicken_plate", zh: "意式番茄鸡肉拼盘", en: "Italian tomato chicken plate", sum: "即食鸡胸肉配番茄片和红洋葱，淋橄榄油和柠檬汁，撒意式香草", sumEn: "Ready-cooked chicken with sliced tomato and red onion, dressed with oil and lemon, sprinkled with Italian herbs.", c: "italian", m: "assemble", eq: [], t: [8, 8],
@@ -569,19 +571,19 @@ const ITALIAN: Dish[] = [
   dish({
     id: "tuna_tomato_spaghetti_sauce", zh: "金枪鱼番茄意面酱", en: "Tuna and tomato sauce", sum: "彩椒和番茄煮成酱，拌入水浸金枪鱼，浇在意面上", sumEn: "Red pepper and tomato cooked into a sauce, canned tuna stirred in, served over pasta.", c: "italian", m: "stir_fry", t: [10, 15],
     staples: [PASTA, WW_PASTA],
-    i: [pr("canned_tuna_water", 100), ve("tomato", 150), ve("red_bell_pepper", 80), se("italian_seasoning", 1), oi("olive_oil", 3), se("dried_oregano", 0.5), se("garlic_paste", 2)],
+    i: [pr("canned_tuna_water", 100), ve("tomato", 150), ve("red_bell_pepper", 80), se("italian_seasoning", 1), co("olive_oil", 3), se("dried_oregano", 0.5), se("garlic_paste", 2)],
   }),
   dish({
     id: "pork_pepper_medallions", zh: "彩椒煎猪里脊", en: "Pork medallions with peppers and zucchini", sum: "猪里脊切厚片煎熟，彩椒和西葫芦同锅煎软，挤柠檬汁", sumEn: "Thick pork tenderloin slices pan-fried, pepper and zucchini softened in the same pan, finished with lemon.", c: "italian", m: "pan_fry", t: [12, 18],
     staples: [BABY_POTATOES, QUINOA, WW_PASTA],
-    i: [pr("pork_tenderloin", 118), ve("red_bell_pepper", 115), ve("zucchini", 60), oi("olive_oil", 4), se("italian_seasoning", 1), se("salt", 0.3), se("lemon", 6)],
+    i: [pr("pork_tenderloin", 118), ve("red_bell_pepper", 115), ve("zucchini", 60), co("olive_oil", 4), se("italian_seasoning", 1), se("salt", 0.3), se("lemon", 6)],
   }),
 ];
 
 const CHINESE: Dish[] = [
   dish({
     id: "tomato_braised_beef_shank", zh: "番茄炖牛腱", en: "Tomato braised beef shank", sum: "牛腱切块和番茄、胡萝卜、洋葱一起压力锅炖 35 分钟", sumEn: "Beef shank cubes with tomato, carrot and onion, pressure-cooked 35 minutes.", c: "chinese", m: "pressure_cook", eq: ["pressure_cooker"], t: [15, 60],
-    i: [pr("beef_shank_raw", 105), ve("tomato", 220), ve("carrot", 50), ve("onion", 40), se("garlic_paste", 3), se("ginger_paste", 3), se("reduced_salt_soy_sauce", 5), oi("canola_oil", 3)],
+    i: [pr("beef_shank_raw", 105), ve("tomato", 220), ve("carrot", 50), ve("onion", 40), se("garlic_paste", 3), se("ginger_paste", 3), se("reduced_salt_soy_sauce", 5), co("canola_oil", 3)],
     ways: [
       way("番茄炖牛腱盖米饭配上海青", "Tomato beef over rice with bok choy", RICE, [ve("bok_choy", 100)]),
       way("番茄炖牛腱拌面配西兰花", "Tomato beef with noodles and broccoli", "fresh_noodles", [ve("frozen_broccoli", 100)]),
@@ -590,7 +592,7 @@ const CHINESE: Dish[] = [
   }),
   dish({
     id: "shiitake_braised_chicken", zh: "香菇黄焖鸡", en: "Shiitake braised chicken thighs", sum: "鸡腿肉块和香菇、青椒加蚝油、酱油焖 25 分钟", sumEn: "Chicken thigh cubes with shiitake and green pepper, braised 25 minutes in oyster and soy sauce.", c: "chinese", m: "stew", t: [15, 40],
-    i: [pr("chicken_thigh", 120), ve("shiitake", 80), ve("red_bell_pepper", 70), se("oyster_sauce", 5), se("reduced_salt_soy_sauce", 3), se("ginger_paste", 3), oi("canola_oil", 3)],
+    i: [pr("chicken_thigh", 120), ve("shiitake", 80), ve("red_bell_pepper", 70), se("oyster_sauce", 5), se("reduced_salt_soy_sauce", 3), se("ginger_paste", 3), co("canola_oil", 3)],
     ways: [
       way("香菇黄焖鸡盖糙米饭配上海青", "Shiitake chicken over brown rice with bok choy", BROWN, [ve("bok_choy", 140)]),
       way("香菇黄焖鸡配糯玉米和四季豆", "Shiitake chicken with waxy corn and green beans", CORN, [ve("frozen_green_beans", 100)]),
@@ -689,22 +691,22 @@ const CHINESE: Dish[] = [
   dish({
     id: "tomato_tofu_egg_scramble", zh: "番茄豆腐滑蛋", en: "Tomato tofu and soft scrambled egg", sum: "番茄块炒出汁，下切块北豆腐焖 3 分钟，淋入蛋液炒至刚凝固", sumEn: "Tomato wedges cooked down, firm tofu simmered 3 minutes in the juice, then beaten egg stirred in until just set.", c: "chinese", m: "stir_fry", t: [10, 15],
     staples: [RICE, BROWN, GRAINS],
-    i: [pr("egg", 100), pr("firm_tofu", 140), ve("tomato", 200), se("reduced_salt_soy_sauce", 3), se("ketchup", 5), se("salt", 0.4), oi("canola_oil", 5)],
+    i: [pr("egg", 100), pr("firm_tofu", 140), ve("tomato", 200), se("reduced_salt_soy_sauce", 3), se("ketchup", 5), se("salt", 0.4), co("canola_oil", 5)],
   }),
   dish({
     id: "tomato_shrimp_egg_stirfry", zh: "番茄虾仁炒蛋", en: "Tomato, shrimp and scrambled eggs", sum: "鸡蛋炒到刚凝固盛出，番茄炒出汁，下虾仁和鸡蛋拌匀", sumEn: "Eggs scrambled until just set and set aside, tomato cooked down, shrimp and eggs folded back in.", c: "chinese", m: "stir_fry", t: [12, 15],
     staples: [RICE, BROWN, GRAINS],
-    i: [pr("egg", 52), pr("white_shrimp", 82), ve("tomato", 185), se("reduced_salt_soy_sauce", 3), oi("canola_oil", 5)],
+    i: [pr("egg", 52), pr("white_shrimp", 82), ve("tomato", 185), se("reduced_salt_soy_sauce", 3), co("canola_oil", 5)],
   }),
   dish({
     id: "kung_pao_chicken", zh: "宫保鸡丁", en: "Kung pao chicken", sum: "鸡丁与彩椒、胡萝卜、芹菜大火快炒，加醋、酱油和少许糖，撒花生", sumEn: "Chicken cubes stir-fried hot with pepper, carrot and celery, seasoned with vinegar, soy and a little sugar, topped with peanuts.", c: "chinese", m: "stir_fry", t: [15, 20],
     staples: [RICE, BROWN, MILLET],
-    i: [pr("chicken_breast", 105), tp("peanuts", 8), ve("red_bell_pepper", 80), ve("carrot", 70), ve("celery", 50), se("reduced_salt_soy_sauce", 4), se("black_vinegar", 4), se("white_sugar", 3), se("chili_sauce", 3), oi("canola_oil", 4)],
+    i: [pr("chicken_breast", 105), tp("peanuts", 8), ve("red_bell_pepper", 80), ve("carrot", 70), ve("celery", 50), se("reduced_salt_soy_sauce", 4), se("black_vinegar", 4), se("white_sugar", 3), se("chili_sauce", 3), co("canola_oil", 4)],
   }),
   dish({
     id: "green_pepper_pork_strips", zh: "青椒肉丝", en: "Pork strips with peppers", sum: "猪腿肉切丝滑炒变色，加青椒、彩椒丝用蚝油和酱油炒熟", sumEn: "Pork strips stir-fried until pale, then cooked with pepper strips in oyster and soy sauce.", c: "chinese", m: "stir_fry", t: [12, 15],
     staples: [RICE, GRAINS, SWEET_POTATO],
-    i: [pr("lean_pork_leg", 115), ve("green_pepper", 50), ve("red_bell_pepper", 120), se("reduced_salt_soy_sauce", 3), se("oyster_sauce", 3), se("garlic_paste", 3), oi("canola_oil", 5)],
+    i: [pr("lean_pork_leg", 115), ve("green_pepper", 50), ve("red_bell_pepper", 120), se("reduced_salt_soy_sauce", 3), se("oyster_sauce", 3), se("garlic_paste", 3), co("canola_oil", 5)],
   }),
   dish({
     id: "steamed_cod_shiitake", zh: "清蒸鳕鱼香菇", en: "Steamed cod with shiitake and bok choy", sum: "鳕鱼与香菇铺盘淋酱油，上锅蒸 10 分钟，配焯上海青", sumEn: "Cod and shiitake on a plate with soy sauce, steamed 10 minutes, served with blanched bok choy.", c: "chinese", m: "steam", eq: ["steamer"], t: [10, 20],
@@ -728,7 +730,7 @@ const CHINESE: Dish[] = [
   dish({
     id: "homestyle_tofu_pork_slices", zh: "家常豆腐炒肉片", en: "Home-style tofu with pork slices", sum: "猪大排切片滑炒，下煎黄的北豆腐块，加青椒、胡萝卜、木耳和豆瓣酱炒熟", sumEn: "Pork loin slices stir-fried until pale, then pan-browned firm tofu, green pepper, carrot and wood ear with chili bean sauce.", c: "chinese", m: "stir_fry", t: [14, 15],
     staples: [RICE, BROWN, GRAINS],
-    i: [pr("firm_tofu", 170), pr("pork_loin", 45), ve("green_pepper", 100), ve("carrot", 45), ve("wood_ear", 25), se("doubanjiang", 3), se("reduced_salt_soy_sauce", 4), se("garlic_paste", 2), oi("canola_oil", 4)],
+    i: [pr("firm_tofu", 170), pr("pork_loin", 45), ve("green_pepper", 100), ve("carrot", 45), ve("wood_ear", 25), se("doubanjiang", 3), se("reduced_salt_soy_sauce", 4), se("garlic_paste", 2), co("canola_oil", 4)],
   }),
 ];
 
@@ -789,12 +791,12 @@ const MEXICAN: Dish[] = [
   dish({
     id: "shrimp_fajita_skillet", zh: "墨西哥彩椒炒虾仁（fajita）", en: "Shrimp fajita skillet", sum: "虾仁与彩椒、青椒、洋葱用烤肉香料大火快炒，挤青柠", sumEn: "Shrimp stir-fried hot with peppers and onion in fajita spice, finished with lime.", c: "mexican", m: "stir_fry", t: [12, 18],
     staples: ["corn_tortilla", "whole_wheat_tortilla", BROWN],
-    i: [pr("white_shrimp", 115), ve("red_bell_pepper", 140), ve("green_pepper", 30), ve("onion", 40), se("fajita_seasoning", 2.5), se("lime", 8), oi("canola_oil", 4)],
+    i: [pr("white_shrimp", 115), ve("red_bell_pepper", 140), ve("green_pepper", 30), ve("onion", 40), se("fajita_seasoning", 2.5), se("lime", 8), co("canola_oil", 4)],
   }),
   dish({
     id: "fish_tacos_cabbage", zh: "墨西哥鱼肉玉米饼卷", en: "Fish tacos with red cabbage", sum: "罗非鱼片抹香料煎熟撕块，配紫甘蓝丝和番茄卷进玉米饼", sumEn: "Tilapia rubbed with spice and pan-fried, flaked and rolled in a tortilla with red cabbage and tomato.", c: "mexican", m: "pan_fry", t: [12, 15],
     staples: ["corn_tortilla", BROWN],
-    i: [pr("frozen_tilapia_fillet", 135), ve("red_cabbage", 110), ve("tomato", 80), se("lime", 10), se("taco_seasoning", 1.5), oi("canola_oil", 3)],
+    i: [pr("frozen_tilapia_fillet", 135), ve("red_cabbage", 110), ve("tomato", 80), se("lime", 10), se("taco_seasoning", 1.5), co("canola_oil", 3)],
   }),
   dish({
     id: "chicken_burrito_bowl", zh: "鸡肉玉米饭碗", en: "Chicken and corn burrito bowl", sum: "即食鸡胸肉、毛豆、玉米粒、番茄、生菜摆在饭上，挤青柠汁", sumEn: "Ready-cooked chicken, edamame, corn, tomato and lettuce over rice, finished with lime.", c: "mexican", m: "assemble", eq: [], t: [8, 8],
@@ -870,7 +872,7 @@ const JAPANESE: Dish[] = [
   dish({
     id: "miso_salmon_spinach", zh: "味噌煎三文鱼配菠菜", en: "Miso salmon with spinach", sum: "三文鱼抹味噌和味醂腌 10 分钟后煎熟，菠菜同锅炒软", sumEn: "Salmon marinated 10 minutes in miso and mirin, pan-fried, with spinach wilted in the same pan.", c: "japanese", m: "pan_fry", t: [12, 18],
     staples: [RICE, BROWN, SOBA],
-    i: [pr("salmon", 120), se("miso", 8), se("mirin", 3), ve("spinach", 180), oi("canola_oil", 2)],
+    i: [pr("salmon", 120), se("miso", 8), se("mirin", 3), ve("spinach", 180), co("canola_oil", 2)],
   }),
   dish({
     id: "mackerel_cucumber_rice_bowl", zh: "茄汁鲭鱼黄瓜饭碗", en: "Tomato mackerel and cucumber rice bowl", sum: "罐头茄汁鲭鱼和黄瓜片、紫甘蓝丝摆在饭上，淋醋撒芝麻，不用开火", sumEn: "Canned mackerel in tomato sauce over rice with cucumber and red cabbage, rice vinegar and sesame; no cooking.", c: "japanese", m: "assemble", eq: [], t: [6, 6],
@@ -885,7 +887,7 @@ const JAPANESE: Dish[] = [
   dish({
     id: "teriyaki_tofu_chicken_dice", zh: "照烧豆腐鸡丁", en: "Teriyaki tofu and chicken dice", sum: "鸡腿丁与北豆腐块煎上色，加彩椒、胡萝卜和照烧汁收汁，撒芝麻", sumEn: "Chicken thigh dice and firm tofu browned, then red pepper, carrot and teriyaki sauce reduced to a glaze, sprinkled with sesame.", c: "japanese", m: "pan_fry", t: [12, 15],
     staples: [RICE, BROWN, SOBA],
-    i: [pr("firm_tofu", 170), pr("chicken_thigh", 45), ve("red_bell_pepper", 125), ve("carrot", 50), se("teriyaki_sauce", 12), tp("sesame_seeds", 2), oi("canola_oil", 3)],
+    i: [pr("firm_tofu", 170), pr("chicken_thigh", 45), ve("red_bell_pepper", 125), ve("carrot", 50), se("teriyaki_sauce", 12), tp("sesame_seeds", 2), co("canola_oil", 3)],
   }),
   dish({
     id: "miso_tofu_chicken_pot", zh: "日式豆腐味噌鸡肉锅", en: "Japanese miso tofu and chicken pot", sum: "鸡腿肉块与白萝卜、胡萝卜、香菇煮 15 分钟，下北豆腐，化入味噌", sumEn: "Chicken thigh cubes simmered 15 minutes with daikon, carrot and shiitake, then firm tofu, with miso stirred in.", c: "japanese", m: "simmer", t: [10, 30],
@@ -956,12 +958,12 @@ const SOUTHEAST_ASIAN: Dish[] = [
   dish({
     id: "thai_spicy_chicken_stirfry", zh: "泰式辣炒鸡腿丁", en: "Thai spicy diced chicken stir-fry", sum: "鸡腿肉丁与四季豆、彩椒、毛豆大火快炒，加蚝油、鱼露和是拉差辣酱", sumEn: "Diced chicken thigh stir-fried hot with green beans, pepper and edamame, seasoned with oyster sauce, fish sauce and sriracha.", c: "southeast_asian", m: "stir_fry", t: [12, 15],
     staples: [RICE, BROWN, GRAINS],
-    i: [pr("chicken_thigh", 120), ve("green_beans", 130), ve("red_bell_pepper", 60), ve("frozen_edamame", 40), se("oyster_sauce", 4), se("fish_sauce", 1.5), se("sriracha", 3), oi("canola_oil", 3)],
+    i: [pr("chicken_thigh", 120), ve("green_beans", 130), ve("red_bell_pepper", 60), ve("frozen_edamame", 40), se("oyster_sauce", 4), se("fish_sauce", 1.5), se("sriracha", 3), co("canola_oil", 3)],
   }),
   dish({
     id: "shrimp_rice_noodle_stirfry", zh: "虾仁毛豆炒米粉", en: "Shrimp and edamame rice noodle stir-fry", sum: "虾仁和毛豆、胡萝卜、上海青快炒，拌入泡软的米粉和甜辣酱，撒花生", sumEn: "Shrimp, edamame, carrot and bok choy stir-fried quickly, tossed with soaked rice noodles and sweet chili sauce, topped with peanuts.", c: "southeast_asian", m: "stir_fry", t: [14, 18],
     staples: [VERMICELLI],
-    i: [pr("white_shrimp", 100), ve("frozen_edamame", 50), ve("carrot", 80), ve("bok_choy", 70), se("sweet_chili_sauce", 8), se("fish_sauce", 1.5), se("lime", 10), tp("peanuts", 5), oi("canola_oil", 4)],
+    i: [pr("white_shrimp", 100), ve("frozen_edamame", 50), ve("carrot", 80), ve("bok_choy", 70), se("sweet_chili_sauce", 8), se("fish_sauce", 1.5), se("lime", 10), tp("peanuts", 5), co("canola_oil", 4)],
   }),
   dish({
     id: "lime_steamed_basa", zh: "青柠蒸龙利鱼", en: "Lime-steamed basa with napa cabbage", sum: "龙利鱼和大白菜、上海青、蘑菇铺盘，淋青柠汁、鱼露和甜辣酱，蒸 10 分钟", sumEn: "Basa fillet on napa cabbage, bok choy and mushroom with lime, fish sauce and sweet chili sauce, steamed 10 minutes.", c: "southeast_asian", m: "steam", eq: ["steamer"], t: [10, 20],
@@ -976,7 +978,7 @@ const SOUTHEAST_ASIAN: Dish[] = [
   dish({
     id: "thai_sweet_chili_tofu_chicken", zh: "泰式甜辣豆腐鸡丁", en: "Thai sweet chili tofu and chicken", sum: "鸡腿丁与北豆腐块煎上色，加四季豆、彩椒，拌甜辣酱和鱼露", sumEn: "Chicken thigh dice and firm tofu browned, tossed with green beans and pepper in sweet chili and fish sauce.", c: "southeast_asian", m: "stir_fry", t: [13, 15],
     staples: [RICE, BROWN, VERMICELLI],
-    i: [pr("firm_tofu", 170), pr("chicken_thigh", 46), ve("green_beans", 110), ve("red_bell_pepper", 60), se("sweet_chili_sauce", 12), se("fish_sauce", 1.5), oi("canola_oil", 3)],
+    i: [pr("firm_tofu", 170), pr("chicken_thigh", 46), ve("green_beans", 110), ve("red_bell_pepper", 60), se("sweet_chili_sauce", 12), se("fish_sauce", 1.5), co("canola_oil", 3)],
   }),
 ];
 

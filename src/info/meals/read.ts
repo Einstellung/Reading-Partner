@@ -4,6 +4,7 @@
 // table's nutrition, the planner's solve the prep page draws — and nothing is
 // worded: names stay names, ids stay ids, grams stay numbers.
 
+import { houseOil } from "./dishes/house-oil";
 import type { Locale } from "../../i18n/locale";
 import { FOODS, dislikeTag, foodById, foodsNamed, type Food } from "./nutrition/foods";
 import { rowNutrition, type Nutrition } from "./nutrition/solve";
@@ -516,13 +517,15 @@ export interface CharterRead {
   dislikes: { word: string; tag: string | null; foods: string[] }[];
   /** Foods they cannot get, by id and name. */
   unavailable: { foodId: string; name: string }[];
+  /** The oil they cook with; `inUse` is false when their dislikes or what they cannot get keep it out. Null when not said. */
+  cookingOil: { foodId: string; name: string; inUse: boolean } | null;
   /** The program's daily targets; null without body data. */
   targets: { training: Nutrition; rest: Nutrition } | null;
 }
 
 export function readCharter(state: MealsState, region: Region): CharterRead {
   const charter = state.charter;
-  if (!charter) return { found: false, profile: null, text: "", updatedAt: null, dislikes: [], unavailable: [], targets: null };
+  if (!charter) return { found: false, profile: null, text: "", updatedAt: null, dislikes: [], unavailable: [], cookingOil: null, targets: null };
   const profile = charter.profile;
   const targets = targetsOf(charter, region);
   const macros = (t: Nutrition): Nutrition => ({ kcal: t.kcal, protein: t.protein, fat: t.fat, carbs: t.carbs });
@@ -533,6 +536,9 @@ export function readCharter(state: MealsState, region: Region): CharterRead {
     updatedAt: charter.updatedAt,
     dislikes: profile.dislikes.map((word) => ({ word, tag: dislikeTag(word), foods: foodsNamed(word).map((f) => f.id) })),
     unavailable: (profile.unavailable ?? []).map((id) => ({ foodId: id, name: foodById(id)?.zh ?? id })),
+    cookingOil: profile.cookingOil
+      ? { foodId: profile.cookingOil, name: foodById(profile.cookingOil)?.zh ?? profile.cookingOil, inUse: houseOil(profile) !== null }
+      : null,
     targets: targets ? { training: macros(targets.training), rest: macros(targets.rest) } : null,
   };
 }

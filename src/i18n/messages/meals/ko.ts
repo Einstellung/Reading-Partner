@@ -227,6 +227,7 @@ export default {
   "field.dislikes": "싫어하는 음식",
   "field.shops": "장보는 곳",
   "field.kitchen": "주방",
+  "field.cookingOil": "식용유",
   "field.notes": "메모",
   "listJoin": ", ",
   "applied.week": "이번 주 식단 저장 · 살 것 {count}개",

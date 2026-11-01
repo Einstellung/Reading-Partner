@@ -233,6 +233,7 @@ export default {
   "field.dislikes": "No le gusta",
   "field.shops": "Tiendas",
   "field.kitchen": "Cocina",
+  "field.cookingOil": "Aceite de cocina",
   "field.notes": "Notas",
   "listJoin": ", ",
   "applied.week": "Semana guardada · {count} por comprar",

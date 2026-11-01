@@ -17,6 +17,7 @@ import {
   COOK_PARTS,
   DEFAULT_EFFORT,
   EFFORTS,
+  isCookingOil,
   minuteCap,
   type CookPart,
   type CookSlot,
@@ -101,13 +102,14 @@ export function validateProfile(raw: unknown): Profile | null {
     isStrings(raw.kitchen) &&
     isStrings(raw.dislikes);
   if (!ok) return null;
-  const { minutesPerMeal: _replaced, cookSlots, boxes, burners, unavailable, ...rest } = raw;
+  const { minutesPerMeal: _replaced, cookSlots, boxes, burners, unavailable, cookingOil, ...rest } = raw;
   const effort = EFFORTS.includes(raw.effort as Effort) ? (raw.effort as Effort) : DEFAULT_EFFORT;
   const profile: Profile = { ...(rest as unknown as Profile), effort };
   if (Array.isArray(cookSlots)) profile.cookSlots = cookSlots.filter(isCookSlot);
   if (typeof boxes === "boolean") profile.boxes = boxes;
   if (isNum(burners)) profile.burners = burners;
   if (isStrings(unavailable)) profile.unavailable = unavailable;
+  if (isCookingOil(cookingOil)) profile.cookingOil = cookingOil;
   return profile;
 }
 
