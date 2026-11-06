@@ -8,9 +8,9 @@
 
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { startTurn, textOf } from "../../../src/legion/durable/turn";
+import { startTurn } from "../../../src/legion/durable/turn";
 import { openTestRuntime, readerTurn } from "./support/runtime";
-import { viewState } from "./support/view-state";
+import { whenStoredText } from "./support/stored-text";
 
 export const CRASH_ANSWER = "潮汐是月球和太阳引力共同作用的结果，".repeat(40);
 
@@ -39,14 +39,6 @@ const t = await openTestRuntime({
 });
 const turn = await startTurn(t.runtime, readerTurn(t, "Explain the tides.", 1000), ctx);
 if (mode === "mid-text") {
-  let fired = false;
-  (await viewState(turn.conversation, ctx)).subscribe((value) => {
-    const live = value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined;
-    const partial = textOf(live?.generation?.message);
-    if (!fired && partial.length >= 200) {
-      fired = true;
-      arm(String(partial.length));
-    }
-  });
+  whenStoredText(t.runtime.harness, turn.conversation.id, 200, (partial) => arm(String(partial.length)));
 }
 await forever();

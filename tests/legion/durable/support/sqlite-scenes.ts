@@ -20,6 +20,7 @@ import {
 import { SqliteStorage, type SqliteDatabase } from "@earendil-works/pi-durable/storage/sqlite";
 import { lines, livePartial, openSpike, SPIKE_MODEL, type SpikeTools } from "./spike";
 import { viewState } from "./view-state";
+import { whenStoredText } from "./stored-text";
 
 const ctx = BACKGROUND_CONTEXT;
 const agent = { model: SPIKE_MODEL };
@@ -457,7 +458,7 @@ async function busyClose(host: SceneHost, dir: string, honour: boolean) {
 
 const CRASH_ANSWER = "潮汐是月球和太阳引力共同作用的结果，".repeat(80);
 
-/** First half of the crash scene: stream slowly and call `armed` once 200 characters are committed. */
+/** First half of the crash scene: stream slowly and call `armed` once 200 characters are stored. */
 export async function crashStart(host: SceneHost, path: string, armed: (partial: string) => void) {
   const faux = fauxProvider({ tokensPerSecond: 70, tokenSize: { min: 1, max: 2 } });
   faux.setResponses([fauxAssistantMessage(fauxText(CRASH_ANSWER))]);
@@ -468,14 +469,7 @@ export async function crashStart(host: SceneHost, path: string, armed: (partial:
     settings: { progress: { partialIntervalMs: 100, outputIntervalMs: 100, persistWithinMs: 0 } },
   });
   const root = await harness.root(ctx, { agent });
-  let fired = false;
-  (await viewState(root, ctx)).subscribe((value) => {
-    const partial = livePartial(value.docs) ?? "";
-    if (!fired && partial.length >= 200) {
-      fired = true;
-      armed(partial);
-    }
-  });
+  whenStoredText(harness, root.id, 200, armed);
   await root.submit({ type: "input", content: "Explain the tides.", requestId: "crash-1" }, ctx);
 }
 

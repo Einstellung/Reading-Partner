@@ -59,9 +59,9 @@ export { StoppedError } from "../stop";
 // Only a failure the provider answered with can be judged, and pi's classifier
 // judges it. Two things have to be settled before asking it:
 //
-//   - A context overflow is deterministic, but pi's retryable table matches
-//     "500" as a plain substring, so "prompt is too long: 205000 tokens" reads
-//     as a retryable 500. pi's own guidance is to take overflow out first.
+//   - A context overflow is deterministic, and pi's own guidance is to take it
+//     out first (pi-ai 1.1.0's retryable table matched "500" inside
+//     "prompt is too long: 205000 tokens"; 1.5.0 no longer does).
 //   - `terminal` is our own mark for a failure that never touched the network.
 //
 // Anything else with no AssistantMessage is retried, exactly as before. That is

@@ -1,19 +1,19 @@
 // Child process of info-kill.test.ts: start a turn in an info or meals
 // conversation on the device runtime over the app's thread store, and print
-// ARMED once 200 characters of the answer are on the live view, for the parent
+// ARMED once 200 characters of the answer are stored, for the parent
 // to SIGKILL it.
 // Usage: bun info-kill-child.ts <root> <info|meals>
 
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { TURN_SECTION } from "../../../src/legion/durable/device";
 import { storeThreadFiles } from "../../../src/legion/durable/thread-files";
-import { startTurn, textOf } from "../../../src/legion/durable/turn";
+import { startTurn } from "../../../src/legion/durable/turn";
 import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { infoPlace, infoThreadKey, mealsPlace } from "../../../src/info/briefer/info-durable";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fileThreadStore, slowFauxModels } from "../../reading/turn/support/file-threads";
 import { INFO_ANSWER, INFO_LINE, KILL_ORIGINS } from "./support/info-file";
-import { viewState } from "../../legion/durable/support/view-state";
+import { whenStoredText } from "../../legion/durable/support/stored-text";
 
 const root = process.argv[2]!;
 const origin = KILL_ORIGINS[process.argv[3] as "info" | "meals"];
@@ -40,12 +40,5 @@ const turn = await startTurn(
   },
   ctx,
 );
-let fired = false;
-(await viewState(turn.conversation, ctx)).subscribe((value) => {
-  const live = value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined;
-  if (!fired && textOf(live?.generation?.message).length >= 200) {
-    fired = true;
-    process.stdout.write("ARMED\n");
-  }
-});
+whenStoredText(durable.runtime.harness, turn.conversation.id, 200, () => process.stdout.write("ARMED\n"));
 await new Promise<never>(() => {});

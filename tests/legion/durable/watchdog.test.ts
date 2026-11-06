@@ -135,11 +135,8 @@ test("the provider's own verdict decides for provider failures", () => {
 
 test("a context overflow is taken out before pi's classifier can misread it", () => {
   const overflow = "prompt is too long: 205000 tokens > 200000 maximum";
-  // Left to pi alone this reads as retryable, because its pattern table matches
-  // "500" as a substring of the token count. Hence the order in the classifier.
-  expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage: overflow }))).toBe(
-    true,
-  );
+  // pi-ai 1.1.0 alone read this as retryable ("500" inside the token count);
+  // the classifier takes overflow out before pi is asked, whatever pi says.
   expect(isRetryableAiFailure(providerFailure(overflow))).toBe(false);
 });
 
