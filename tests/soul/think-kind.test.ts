@@ -4,7 +4,7 @@
 // (src/reading/turn/info-bell.ts).
 // Run: scripts/t.sh tests/soul/think-kind.test.ts
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { tierForKind } from "../../src/ai/model-tier";
 import { createBoxStore } from "../../src/box";

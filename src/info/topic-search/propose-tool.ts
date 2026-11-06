@@ -9,7 +9,7 @@
 // finds the message the reader opened with, and reads the desktop's heartbeat
 // for when the first result can be expected.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { DeviceClaim } from "../../legion/claim";
 import { messageAnchor, type Statement } from "../../memory";

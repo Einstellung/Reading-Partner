@@ -5,7 +5,7 @@
 // model the tool still exists but returns the caption and a note that it can't
 // see the picture, so the model doesn't promise the user something it can't do.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool, ToolResult } from "../../legion/durable/contract";
 import { findFigureById } from "./lookup";
 import type { Figure } from "./types";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../../src/legion/durable/contract";
 import type { CallNote, CallTask } from "../../../src/soul/think/contract";
 import type { CallBack } from "../../../src/soul/voice/front/backend";

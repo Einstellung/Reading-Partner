@@ -18,7 +18,7 @@
 // model proposes an existing one by id rather than minting a near-duplicate of a
 // topic that is already there.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { listTopics, type Topic } from "../../platform/app/topics";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { TopicProposalCardData } from "./card";

@@ -15,7 +15,7 @@
 //
 // The search itself is injected, so this file is testable with no network.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import {
   formatPaperSearch,

@@ -2,7 +2,7 @@
 // tools take a candidate number and nothing else a model could invent: every
 // URL, title and body is the program's, read by the session (session.ts).
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { SubagentDefinition, SubagentModel } from "../../legion/subagent/types";
 import { MAX_DOCUMENTS, MAX_ROUNDS, MAX_TOOL_CALLS, type LinkSession } from "./session";

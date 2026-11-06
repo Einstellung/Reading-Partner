@@ -24,7 +24,7 @@
 // Lowercase underscored names, because pi-ai rewrites tool names that match Claude
 // Code's canonical set on the OAuth channel (docs/24).
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import {
   formatResolved,

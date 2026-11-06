@@ -4,7 +4,7 @@
 // run, a retry of it and the nightly run from 01:00, all on the desktop
 // collector. The texts say only what the call did, never when it will finish.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { asString } from "../../platform/std/json";
 import { t } from "../../i18n";

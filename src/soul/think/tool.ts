@@ -3,7 +3,7 @@
 // routed through the call's ledger so the run is numbered on the call's list.
 // Where the answer goes is the call's place, filled here and never by the model.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { BoxOrigin } from "../../box";
 import type { AgentTool } from "../../legion/durable/contract";
 import { DELEGATE_DESCRIPTION, DELEGATE_TOOL, TASK_PARAMETER_DESCRIPTION, kindParameterDescription } from "../delegate";

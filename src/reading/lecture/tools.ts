@@ -17,7 +17,7 @@
 // and every desk's read_chapter is called through that registration (pitfall
 // 524); a call with the set that does not fit this book is told which one does.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { BOOK_PAGE_LABEL, formatPages } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";

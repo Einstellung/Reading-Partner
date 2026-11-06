@@ -4,7 +4,8 @@
 // JSONL file under the root (so a killed child and its parent share it), and
 // a history reader over that file.
 
-import { Type, type Message } from "@earendil-works/pi-ai";
+import { type Message } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
 import { fauxProvider, type FauxResponseStep } from "@earendil-works/pi-ai/providers/faux";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";

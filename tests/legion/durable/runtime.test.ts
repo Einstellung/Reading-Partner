@@ -13,6 +13,7 @@ import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/legion/durable/contr
 import { recoverBeforeResume } from "../../../src/legion/durable/recover";
 import { startTurn, steerTurn, stopTurn, textOf } from "../../../src/legion/durable/turn";
 import { deferred, ORIGIN, openTestRuntime, readerTurn } from "./support/runtime";
+import { viewState } from "./support/view-state";
 
 const root = () => mkdtempSync(join(tmpdir(), "durable-runtime-"));
 const tool = (name: string, args: Record<string, string>) =>
@@ -80,7 +81,7 @@ test("stop keeps the half sentence and the receipt, and hands back the steer nev
     responses: [tool("note", { text: "tides" }), fauxAssistantMessage(fauxText(LONG))],
   });
   const turn = await startTurn(t.runtime, readerTurn(t, "Note it and explain", 1000), ctx);
-  const view = await turn.conversation.viewState(ctx);
+  const view = await viewState(turn.conversation, ctx);
   const streaming = deferred();
   view.subscribe((value) => {
     const live = value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined;
@@ -163,7 +164,7 @@ test("conversations run side by side in one Harness", async () => {
     ),
   );
   for (const [i, turn] of turns.entries()) {
-    (await turn.conversation.viewState(ctx)).subscribe((value) => {
+    (await viewState(turn.conversation, ctx)).subscribe((value) => {
       const live = value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined;
       if (textOf(live?.generation?.message).length > 0) streaming.add(String(i));
       else streaming.delete(String(i));

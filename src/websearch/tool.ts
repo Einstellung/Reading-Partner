@@ -7,7 +7,7 @@
 // Mounted only where the provider has a search channel (channel.ts). The call
 // is a read: no gate, and safe to run again after a crash.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../legion/durable/contract";
 import { providerCallSetup } from "../ai/call-setup";
 import { modelIdFor } from "../ai/model-tier";

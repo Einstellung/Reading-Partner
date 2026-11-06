@@ -15,6 +15,7 @@ import { doorPlace, doorThreadKey } from "../../src/soul/door-durable";
 import { testHost } from "../legion/durable/support/runtime";
 import { fileThreadStore, slowFauxModels } from "../reading/turn/support/file-threads";
 import { DOOR, DOOR_ANSWER, DOOR_LINE } from "./support/door-file";
+import { viewState } from "../legion/durable/support/view-state";
 
 const root = process.argv[2]!;
 const durable = await openReadingDurable({
@@ -40,7 +41,7 @@ const turn = await startTurn(
   ctx,
 );
 let fired = false;
-(await turn.conversation.viewState(ctx)).subscribe((value) => {
+(await viewState(turn.conversation, ctx)).subscribe((value) => {
   const live = value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined;
   if (!fired && textOf(live?.generation?.message).length >= 200) {
     fired = true;

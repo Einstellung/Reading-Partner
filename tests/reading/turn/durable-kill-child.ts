@@ -9,6 +9,7 @@ import { bookThreadKey, bookThreadOrigin, storeBookThreads } from "../../../src/
 import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fileThreadStore, KILL_ANSWER, KILL_BOOK, KILL_LINE, slowFauxModels } from "./support/file-threads";
+import { viewState } from "../../legion/durable/support/view-state";
 
 const root = process.argv[2]!;
 const store = fileThreadStore(root);
@@ -35,7 +36,7 @@ const turn = await startTurn(
   ctx,
 );
 let fired = false;
-(await turn.conversation.viewState(ctx)).subscribe((value) => {
+(await viewState(turn.conversation, ctx)).subscribe((value) => {
   const live = value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined;
   if (!fired && textOf(live?.generation?.message).length >= 200) {
     fired = true;

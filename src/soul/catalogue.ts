@@ -16,7 +16,7 @@
 // cache, a sync ledger and a failure marker are invisible here without this file
 // naming them.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../legion/durable/contract";
 import { appConversationIo, type ConversationIo } from "../conversations";
 import { PALACE, resolvePalace } from "../palace";

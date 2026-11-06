@@ -11,7 +11,7 @@
 // the prompt and may re-wrap it. Everything the removal touches is injected, so
 // what each answer says is pinned by a test with no library and no pipeline.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { t } from "../../i18n";
 import { citationKey } from "../prep/anchors";

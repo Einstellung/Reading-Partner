@@ -3,7 +3,7 @@
 // optional onWrite hook lets the distiller count what changed and the app
 // refresh the observations panel.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { ObservationAdapter } from "./adapter";
 import { anchorSiblings, buildAnchorIndex, mentionedIds, resolveReferences } from "./links";

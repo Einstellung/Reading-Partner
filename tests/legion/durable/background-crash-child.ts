@@ -4,7 +4,7 @@
 //   in-tool   armed inside the run's tool
 //   mid-text  a slow answer, armed once 200 characters are committed
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { runBackgroundTurnOn } from "../../../src/legion/durable/background";
 import { openTestRuntime } from "./support/runtime";

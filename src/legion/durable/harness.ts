@@ -237,7 +237,8 @@ export async function openDurable(options: DurableOptions): Promise<DurableRunti
     retry: { enabled: false },
     compaction: { enabled: false },
     toolExecution: "sequential",
-    progress: { partialIntervalMs: 100, outputIntervalMs: 100 },
+    // Stored with each partial commit, as before pi-durable 1.5: the half sentence a killed process leaves is what recovery lands.
+    progress: { partialIntervalMs: 100, outputIntervalMs: 100, persistWithinMs: 0 },
     ...(options.stream ? { stream: options.stream } : {}),
   };
 

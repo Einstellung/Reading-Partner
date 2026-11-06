@@ -12,7 +12,8 @@
 // keeps the cache prefix where it was. Each read is in the model's tool list
 // already with its schema; inside the VM `ALL_TOOLS` lists their signatures.
 
-import { Type, validateToolArguments, type Tool } from "@earendil-works/pi-ai";
+import { validateToolArguments, type Tool } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { renderToolSignature } from "@earendil-works/pi-codemode/declarations";
 import type { CodemodeJsonSchema, CodemodeResult, CodemodeTool } from "@earendil-works/pi-codemode/portable";
 import { t } from "../../i18n";

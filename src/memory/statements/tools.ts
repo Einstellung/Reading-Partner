@@ -12,7 +12,7 @@
 // The measured reason is in memory/observations/tools.ts: 76 of 298 model-written
 // message anchors on one real store resolved against no message at all.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { messageAnchor, type AnchoredMessage } from "../observations/anchors";
 import { anchorSpan } from "./dates";

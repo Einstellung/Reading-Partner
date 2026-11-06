@@ -3,7 +3,7 @@
 // docs/research/pi-durable-spike.md.
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { createModels } from "@earendil-works/pi-ai/models";
 import type { FauxProviderHandle } from "@earendil-works/pi-ai/providers/faux";
 import {
@@ -30,13 +30,13 @@ export function spikeExtension(tools: SpikeTools) {
     description: "Look up a passage in the open book.",
     parameters: Type.Object({ query: Type.String() }),
     replay: "safe",
-    execute: async (args) => ({ content: [{ type: "text", text: await tools.lookup(args.query) }] }),
+    execute: async (args) => ({ output: [{ type: "text", text: await tools.lookup(args.query) }] }),
   });
   const note = defineTool({
     name: "note",
     description: "Write a note into the reader's notebook.",
     parameters: Type.Object({ text: Type.String() }),
-    execute: async (args) => ({ content: [{ type: "text", text: await tools.note(args.text) }] }),
+    execute: async (args) => ({ output: [{ type: "text", text: await tools.note(args.text) }] }),
   });
   return defineExtension({ name: "spike", tools: [lookup, note] });
 }

@@ -3,7 +3,7 @@
 // "I don't care about this any more" are both already their decision, and the
 // receipt says where it went.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { Statement } from "../../memory";
 import { asStrings, asString } from "../../platform/std/json";

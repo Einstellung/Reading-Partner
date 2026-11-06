@@ -6,7 +6,7 @@
 // confirm_topic_search does for the drafting card. What the card writes is in
 // study-lines.ts.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { asString } from "../../platform/std/json";
 import { t } from "../../i18n";

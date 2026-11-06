@@ -16,7 +16,7 @@
 // the card says exactly what landed. What must be discussed first is the change
 // itself, and that is the prompt's job, not a gate here.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { t } from "../../i18n";
 import type { AgentTool } from "../../legion/durable/contract";
 import { moveSegment, putSegment, removeSegment, setSpine, type SegmentEdit } from "./edit";

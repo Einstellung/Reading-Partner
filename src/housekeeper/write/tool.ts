@@ -4,7 +4,7 @@
 // descriptions are fixed texts for the same reason run_code's is: the durable
 // runtime registers tools once per process from the catalog.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { CodemodeResult } from "@earendil-works/pi-codemode/portable";
 import { t } from "../../i18n";
 import {

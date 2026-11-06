@@ -3,7 +3,7 @@
 // it settles. The killed-process half is in background-crash.test.ts.
 
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";

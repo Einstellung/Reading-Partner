@@ -4,7 +4,8 @@
 // pages) skip the loop and get their full text inline in one call. Pure parts
 // (prompts, tool building, thin-note body) are exported for tests.
 
-import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
+import { type ThinkingLevel } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../../legion/durable/contract";
 import { runBackgroundTurn } from "../../../legion/durable/background";
 import { noteOf } from "../model-output";

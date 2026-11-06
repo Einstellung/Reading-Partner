@@ -3,7 +3,7 @@
 // (current book's full text, topic materials, annotations) and hand it in, so
 // this module stays headless and unit-testable. Full-text helpers are 1-based.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../legion/durable/contract";
 import { clipToTokens } from "../legion/subagent/brief";
 import { estimateTextTokens } from "../budget";

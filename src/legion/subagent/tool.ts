@@ -8,7 +8,7 @@
 // counted from the child's entries, so a call replayed after a restart finds
 // the same child and reports every round of it (`replay: "safe"`).
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { runTaskChild } from "../durable/child";
 import type { DurableTool } from "../durable/tools";
 import { StoppedError } from "../stop";

@@ -11,6 +11,7 @@ import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fileThreadStore, slowFauxModels } from "./support/file-threads";
 import { KILL_CASES, KILL_REPLY } from "./support/one-thread-file";
+import { viewState } from "../../legion/durable/support/view-state";
 
 const root = process.argv[2]!;
 const c = KILL_CASES[process.argv[3] as keyof typeof KILL_CASES];
@@ -37,7 +38,7 @@ const turn = await startTurn(
   ctx,
 );
 let fired = false;
-(await turn.conversation.viewState(ctx)).subscribe((value) => {
+(await viewState(turn.conversation, ctx)).subscribe((value) => {
   const live = value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined;
   if (!fired && textOf(live?.generation?.message).length >= 200) {
     fired = true;

@@ -9,7 +9,7 @@
 // the same bell every other run comes home by. So this file knows nothing about
 // fetching any more: it starts the run and words the sentence the model reads.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../../legion/durable/contract";
 import { looksLikeHttpUrl } from "../../sources";
 import { hostOf } from "../../../platform/std/url";

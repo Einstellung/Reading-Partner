@@ -6,7 +6,8 @@
 // (scripts/durable-probe/main.ts), a bun:sqlite stand-in under test.
 
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { Type, type TranscriptContext } from "@earendil-works/pi-ai";
+import { type TranscriptContext } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import {
   defineExtension,
@@ -18,6 +19,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { SqliteStorage, type SqliteDatabase } from "@earendil-works/pi-durable/storage/sqlite";
 import { lines, livePartial, openSpike, SPIKE_MODEL, type SpikeTools } from "./spike";
+import { viewState } from "./view-state";
 
 const ctx = BACKGROUND_CONTEXT;
 const agent = { model: SPIKE_MODEL };
@@ -90,10 +92,10 @@ function lastToolText(context: TranscriptContext): string | undefined {
 /** Wrap `storage.commit` to time every commit. */
 function timeCommits(storage: Storage, samples: number[]) {
   const commit = storage.commit.bind(storage);
-  storage.commit = async (writes, context) => {
+  storage.commit = async (batches, receive, context) => {
     const start = now();
     try {
-      return await commit(writes, context);
+      return await commit(batches, receive, context);
     } finally {
       samples.push(now() - start);
     }
@@ -115,13 +117,13 @@ export interface LatencyOptions {
  * between two pi.live updates, and the database growth per reply.
  */
 export async function latencyScene(host: SceneHost, path: string, options: LatencyOptions) {
-  const settings = { progress: { partialIntervalMs: 100, outputIntervalMs: 100 } };
+  const settings = { progress: { partialIntervalMs: 100, outputIntervalMs: 100, persistWithinMs: 0 } };
   const streamOnce = async (harness: Harness, conversationId: ConversationId) => {
     const conversation = (await harness.conversation(conversationId, ctx))!;
     let last = "";
     let lastAt = 0;
     const gaps: number[] = [];
-    const view = await conversation.viewState(ctx);
+    const view = await viewState(conversation, ctx);
     view.subscribe((value) => {
       const text = livePartial(value.docs) ?? "";
       if (text === last || text === "") return;
@@ -201,7 +203,7 @@ const subagent = defineExtension({
         }, context);
         const request = { type: "input", content: args.task, requestId: `subagent:${api.taskId}` } as const;
         const settled = await (await (await api.conversation(child, context))!.submit(request, context)).wait(context);
-        return { content: [{ type: "text", text: `child ${settled.status}` }] };
+        return { output: [{ type: "text", text: `child ${settled.status}` }] };
       },
     }),
   ],
@@ -243,7 +245,7 @@ export async function concurrencyScene(host: SceneHost, path: string, count = 12
     faux,
     tools,
     extensions: [subagent],
-    settings: { progress: { partialIntervalMs: 100, outputIntervalMs: 100 } },
+    settings: { progress: { partialIntervalMs: 100, outputIntervalMs: 100, persistWithinMs: 0 } },
   });
   const start = now();
   const jobs = Array.from({ length: count }, async (_, i) => {
@@ -258,7 +260,7 @@ export async function concurrencyScene(host: SceneHost, path: string, count = 12
       waits.push((await conversation.submit({ type: "input", content: `${tag}-steer only page one`, whenBusy: "steer" }, ctx)).wait(ctx));
     }
     const settled = await Promise.all(waits);
-    const kinds = lines((await conversation.viewState(ctx)).value.entries)
+    const kinds = lines((await viewState(conversation, ctx)).value.entries)
       .filter((l) => l.kind !== "pi.system")
       .map((l) => l.kind);
     return { tag, mode, status: settled.map((s) => s.status), kinds };
@@ -298,10 +300,10 @@ export async function collaborationScene(host: SceneHost, path: string) {
           const request = { type: "input", content: args.question, requestId: `ask:${api.taskId}` } as const;
           const settled = await (await peer!.submit(request, context)).wait(context);
           // The tool API reads only its own conversation; the peer's answer entry is read through the harness.
-          const view = await (await harnessRef!.conversation(peerId!, context))!.viewState(context);
+          const view = await viewState((await harnessRef!.conversation(peerId!, context))!, context);
           const answers = lines(view.value.entries.filter((e) => settled.status === "done" && e.id === settled.answer));
           const answer = answers[0]?.text ?? "";
-          return { content: [{ type: "text", text: answer }] };
+          return { output: [{ type: "text", text: answer }] };
         },
       }),
     ],
@@ -325,8 +327,8 @@ export async function collaborationScene(host: SceneHost, path: string) {
   const start = now();
   const settled = await (await a.submit({ type: "input", content: "[ask] what does B think?" }, ctx)).wait(ctx);
   const ms = round(now() - start);
-  const aLines = lines((await a.viewState(ctx)).value.entries).filter((l) => l.kind !== "pi.system");
-  const bLines = lines((await b.viewState(ctx)).value.entries).filter((l) => l.kind !== "pi.system");
+  const aLines = lines((await viewState(a, ctx)).value.entries).filter((l) => l.kind !== "pi.system");
+  const bLines = lines((await viewState(b, ctx)).value.entries).filter((l) => l.kind !== "pi.system");
   await harness.close(ctx);
   return { ms, status: settled.status, a: aLines, b: bLines };
 }
@@ -355,7 +357,7 @@ export async function rotationScene(host: SceneHost, dir: string) {
   await (await conv.submit({ type: "input", content: "Q1" }, ctx)).wait(ctx);
   await (await conv.submit({ type: "input", content: "Q2" }, ctx)).wait(ctx);
   // What the thread file holds once both turns have landed.
-  const thread = lines((await conv.viewState(ctx)).value.entries).filter(
+  const thread = lines((await viewState(conv, ctx)).value.entries).filter(
     (l) => l.kind === "pi.user" || l.kind === "pi.assistant",
   );
   await first.waitForIdle(ctx);
@@ -423,7 +425,7 @@ async function busyClose(host: SceneHost, dir: string, honour: boolean) {
         execute: async (_args, _api, context) => {
           started();
           await (honour ? awaitWithContext(gate, context) : gate);
-          return { content: [{ type: "text", text: "job done" }] };
+          return { output: [{ type: "text", text: "job done" }] };
         },
       }),
     ],
@@ -463,11 +465,11 @@ export async function crashStart(host: SceneHost, path: string, armed: (partial:
     storage: await SqliteStorage.open(await host.open(path)),
     faux,
     tools: quiet,
-    settings: { progress: { partialIntervalMs: 100, outputIntervalMs: 100 } },
+    settings: { progress: { partialIntervalMs: 100, outputIntervalMs: 100, persistWithinMs: 0 } },
   });
   const root = await harness.root(ctx, { agent });
   let fired = false;
-  (await root.viewState(ctx)).subscribe((value) => {
+  (await viewState(root, ctx)).subscribe((value) => {
     const partial = livePartial(value.docs) ?? "";
     if (!fired && partial.length >= 200) {
       fired = true;
@@ -490,12 +492,12 @@ export async function crashResume(host: SceneHost, path: string) {
   const db = await host.open(path);
   const harness = await openSpike({ storage: await SqliteStorage.open(db), faux, tools: quiet });
   const root = await harness.root(ctx, { agent });
-  const partialAtReopen = livePartial((await root.viewState(ctx)).value.docs) ?? "";
+  const partialAtReopen = livePartial((await viewState(root, ctx)).value.docs) ?? "";
   const pending = (await harness.inspect(ctx)).submissions.length;
   harness.resume();
   const again = await root.submit({ type: "input", content: "Explain the tides.", requestId: "crash-1" }, ctx);
   const settled = await again.wait(ctx);
-  const entries = (await root.viewState(ctx)).value.entries.filter((e) => e.kind !== "pi.system");
+  const entries = (await viewState(root, ctx)).value.entries.filter((e) => e.kind !== "pi.system");
   const transcript = lines(entries);
   const stopReasons = entries.map((e) => (e.model?.[0] as { stopReason?: string } | undefined)?.stopReason ?? null);
   await harness.close(ctx);

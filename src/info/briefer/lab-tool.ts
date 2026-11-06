@@ -11,7 +11,7 @@
 // user turn afterwards tells the model what was filed. Nothing here touches the
 // labs file.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { asStrings } from "../../platform/std/json";
 import { activeLabs } from "../labs/labs";

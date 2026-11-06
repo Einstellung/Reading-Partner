@@ -13,6 +13,7 @@ import { infoPlace, infoThreadKey, mealsPlace } from "../../../src/info/briefer/
 import { testHost } from "../../legion/durable/support/runtime";
 import { fileThreadStore, slowFauxModels } from "../../reading/turn/support/file-threads";
 import { INFO_ANSWER, INFO_LINE, KILL_ORIGINS } from "./support/info-file";
+import { viewState } from "../../legion/durable/support/view-state";
 
 const root = process.argv[2]!;
 const origin = KILL_ORIGINS[process.argv[3] as "info" | "meals"];
@@ -40,7 +41,7 @@ const turn = await startTurn(
   ctx,
 );
 let fired = false;
-(await turn.conversation.viewState(ctx)).subscribe((value) => {
+(await viewState(turn.conversation, ctx)).subscribe((value) => {
   const live = value.docs["pi.live"] as { generation?: { message?: unknown } } | undefined;
   if (!fired && textOf(live?.generation?.message).length >= 200) {
     fired = true;
