@@ -9,6 +9,7 @@ export {
   CODEMODE_OUTPUT_CHARS,
   CODEMODE_TOOL,
   reportResult,
+  sandboxTool,
   withCodemode,
   type CodemodeDeps,
 } from "./tool";

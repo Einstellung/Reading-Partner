@@ -95,6 +95,12 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "legion/runs/":
     "a run is read from its file whenever somebody asks how it is getting on, and nothing " +
     "holds one between passes (docs/55)",
+  "housekeeper-versions/":
+    "a version is read from its file when undo_edit runs and nothing holds one, and each is " +
+    "written once and never changed (docs/platform/687)",
+  "housekeeper-pending/":
+    "a pending write is read from its file when its card is drawn or pressed, and nothing " +
+    "holds one between (docs/platform/687)",
   "box/":
     "an item is read from its file whenever the box is drawn and nothing holds one between " +
     "draws, so the list redraws on the sync tick; the store's subscribe is for writes made " +

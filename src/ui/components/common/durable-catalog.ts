@@ -42,6 +42,7 @@ import { topicSearchDoorTools } from "../../../info/topic-search/live";
 import { buildBackgroundStatusTool } from "../../../legion/status/tool";
 import { buildWebSearchTool } from "../../../websearch/tool";
 import { buildCodemodeTool } from "../../../legion/codemode";
+import { buildEditTools } from "../../../housekeeper/write";
 import type { AgentTool } from "../../../legion/durable/contract";
 
 const inert = (value: unknown): never => value as never;
@@ -89,6 +90,8 @@ export function appToolCatalog(): AgentTool[] {
     buildBackgroundStatusTool(inert({})),
     // run_code, which every soul turn and sub-agent mounts over its reads (docs/soul/686).
     buildCodemodeTool([]),
+    // edit_data and undo_edit, mounted beside it (docs/platform/687).
+    ...buildEditTools([], { initiator: {} }),
     ...buildCompanionTools(
       inert({
         fetchFn: noFetch,

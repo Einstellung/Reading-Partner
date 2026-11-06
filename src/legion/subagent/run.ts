@@ -16,6 +16,7 @@
 import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../durable/contract";
 import { StoppedError } from "../stop";
 import { withCodemode } from "../codemode";
+import { withEditData, type EditSurface } from "../../housekeeper/write";
 import { composeBrief, subagentSystemPrompt, EMPTY_ANSWER, type BriefFacts } from "./brief";
 import type { SubagentQuota } from "./quota";
 import {
@@ -47,6 +48,8 @@ export interface SubagentRequest {
   task: string;
   signal?: AbortSignal;
   onProgress?(progress: SubagentProgress): void;
+  // Who is asking for edit_data's writes: the run an agent worker answers.
+  edit?: EditSurface;
 }
 
 // Whether a run must have had a tool succeed before its words count as a brief.
@@ -213,10 +216,16 @@ export async function runSubagent(
       // run_code over the instrumented reads (docs/soul/686): what a program
       // looks up is counted and reported like a direct call, and a program that
       // looked nothing up is no evidence.
-      tools: withCodemode(
-        instrument(definition.tools, tally, (tool) =>
-          onProgress?.({ phase: "tool", label, round: rounds, roundsAllowed: reserved, tool }),
+      // edit_data and undo_edit after it (docs/platform/687). A worker has no
+      // card of its own: a change that waits for the reader is kept under its
+      // run, for the conversation it is delivered to.
+      tools: withEditData(
+        withCodemode(
+          instrument(definition.tools, tally, (tool) =>
+            onProgress?.({ phase: "tool", label, round: rounds, roundsAllowed: reserved, tool }),
+          ),
         ),
+        request.edit ?? { initiator: {} },
       ),
       maxRounds: reserved,
       purpose: definition.purpose ?? "chat",
