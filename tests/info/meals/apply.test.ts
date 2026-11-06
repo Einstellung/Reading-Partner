@@ -47,7 +47,6 @@ function harness(over: Partial<MealsState> = {}, fail = false): Harness {
     saveShopping: async (list) => {
       h.saved.shopping = list;
     },
-    saveMealMethod: async () => {},
     saveDeviation: async (deviation, plan, list) => {
       if (fail) throw new Error("no");
       h.deviations.push(deviation);

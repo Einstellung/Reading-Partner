@@ -24,7 +24,6 @@ import {
 import { solvePlan, targetsOf } from "./plan/solve-week";
 import type {
   Deviation,
-  MealKey,
   MealRef,
   MealsCharter,
   MealsState,
@@ -49,7 +48,6 @@ export interface MealsPorts {
   // The trip alone: a line the reader added, dropped or swapped by saying so.
   saveShopping(shopping: ShoppingState): Promise<unknown>;
   // One made meal's method line, rewritten.
-  saveMealMethod(date: string, meal: MealKey, method: string): Promise<unknown>;
   saveDeviation(deviation: Deviation, plan: WeekPlan, shopping: ShoppingState): Promise<unknown>;
   // The photographs found so far, by cache key.
   photos?(): Promise<PhotoCache>;

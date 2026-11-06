@@ -7,7 +7,8 @@
 // beside them, so a second registration replaced the first without a word. The
 // last test here is the guard against that shape coming back. Run: bun test.
 
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test, afterAll } from "bun:test";
+import { registeredWritables, registerWritable } from "../../src/housekeeper/write";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -307,3 +308,10 @@ for (const [shell, load] of [
     }
   });
 }
+
+// Mounting the shell boots the domains (bootDomains), which registers the meals
+// kinds edit_data writes. The registry is one map for the whole run; leaving
+// them there would put edit_data on every turn the later files assemble.
+afterAll(() => {
+  for (const entry of registeredWritables()) registerWritable(entry)();
+});

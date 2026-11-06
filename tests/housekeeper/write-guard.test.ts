@@ -9,9 +9,23 @@ import { PALACE, type PalaceRow } from "../../src/palace";
 import { genericMarker } from "../../src/housekeeper";
 import { registeredWritables, registerWritable, writeGuardProblems } from "../../src/housekeeper/write";
 import { NOTES_KIND, NOTES_ROW, memIo, notesEntry } from "./write-fixture";
+import type { MealsPorts } from "../../src/info/meals/apply";
+import { registerMealsWritables } from "../../src/info/meals/writable";
+
+// The domains register their entries on the way up (useShellBootstrap's
+// bootDomains); this registers the same ones, inside the test and undone after,
+// as retention-guard.test.ts does with garbage markers. Only the kinds are read.
+function withDomainWritables<T>(body: () => T): T {
+  const undo = [registerMealsWritables({ readText: async () => null, ports: {} as MealsPorts, dishIo: {} as never })];
+  try {
+    return body();
+  } finally {
+    for (const u of undo) u();
+  }
+}
 
 test("every palace row marked ai.write has a registered entry, and every entry a marked row", () => {
-  expect(writeGuardProblems(PALACE, registeredWritables())).toEqual([]);
+  withDomainWritables(() => expect(writeGuardProblems(PALACE, registeredWritables())).toEqual([]));
 });
 
 test("the guard fails on either half alone, and on a remote-only row", () => {
@@ -35,9 +49,11 @@ test("the guard fails on either half alone, and on a remote-only row", () => {
 test("a registered entry for a kind the palace does not mark fails the real table", () => {
   const undo = registerWritable(notesEntry(memIo()));
   try {
-    expect(writeGuardProblems(PALACE, registeredWritables())).toEqual([
-      "test-notes: an entry is registered but the palace has no such kind",
-    ]);
+    withDomainWritables(() =>
+      expect(writeGuardProblems(PALACE, registeredWritables())).toEqual([
+        "test-notes: an entry is registered but the palace has no such kind",
+      ]),
+    );
   } finally {
     undo();
   }

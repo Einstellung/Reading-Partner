@@ -7,14 +7,12 @@ import { expect, test } from "bun:test";
 import { validateToolCall } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../../src/legion/durable/contract";
 import {
-  MAX_METHOD_CHARS,
   buildAddShoppingItemsTool,
   buildProposeMealPlanTool,
   buildRecordDeviationTool,
   buildRemoveShoppingItemTool,
   buildReplaceShoppingItemTool,
   buildUpdateProfileTool,
-  buildWriteMethodTool,
   markShoppingTripDone,
   mealsGuidance,
   patchProfile,
@@ -26,7 +24,6 @@ import { currentList, deriveShoppingList } from "../../../src/info/meals/plan/sh
 import { solvePlan, targetsOf } from "../../../src/info/meals/plan/solve-week";
 import {
   EMPTY_MEALS,
-  type MealKey,
   type MealsCharter,
   type MealsState,
   type ShoppingState,
@@ -50,14 +47,12 @@ function deps(current: MealsState): MealsToolDeps & { cards: MealsCard[] } {
 
 interface Ports extends MealsPorts {
   written: ShoppingState[];
-  methods: { date: string; meal: MealKey; method: string }[];
   charters: { charter: MealsCharter; week: { plan: WeekPlan; shopping: ShoppingState } | null }[];
 }
 
 function ports(current: MealsState): Ports {
   const p: Ports = {
     written: [],
-    methods: [],
     charters: [],
     current: async () => current,
     saveCharter: async (charter, week) => {
@@ -67,9 +62,6 @@ function ports(current: MealsState): Ports {
     saveShopping: async (list: ShoppingState) => {
       p.written.push(list);
       current.shopping = list;
-    },
-    saveMealMethod: async (date, meal, method) => {
-      p.methods.push({ date, meal, method });
     },
     saveDeviation: async () => {},
     region: () => "other",
@@ -132,7 +124,7 @@ test("a draft card waiting on screen is shown as the picks a revision starts fro
 test("the focus says what the reader has open", () => {
   const day = mealsGuidance(state(), MON, { focus: { kind: "day", date: MON } });
   expect(day).toContain("They are looking at 2026-09-21.");
-  expect(day).toContain("write_meals_method");
+  expect(day).toContain("edit_data");
   expect(mealsGuidance(state(), MON, { focus: { kind: "day", date: "2026-10-09" } })).toContain(
     "which the plan does not cover",
   );
@@ -212,29 +204,6 @@ test("a profile patch takes only usable fields", () => {
   expect(patchProfile(base, { weightKg: 0 })).toBeNull();
 });
 
-// --- the method -----------------------------------------------------------------
-
-test("the method tool rewrites one made meal's line, and refuses what it cannot", async () => {
-  const current = state();
-  const p = ports(current);
-  const d = { ...deps(current), ports: p };
-  const tool = buildWriteMethodTool(d);
-
-  const ok = await tool.execute({ day: "2", meal: "lunch", method: " 金枪鱼拌黄瓜，夹进饼里。 " });
-  expect(said(ok)).toContain("金枪鱼口袋饼");
-  expect(p.methods).toEqual([{ date: "2026-09-22", meal: "lunch", method: "金枪鱼拌黄瓜，夹进饼里。" }]);
-
-  // Wednesday's dinner is delivery, not a made meal.
-  expect(said(await tool.execute({ day: "3", meal: "dinner", method: "x" }))).toContain("not a made meal");
-  expect(said(await tool.execute({ day: "9", meal: "lunch", method: "x" }))).toContain("not a made meal");
-  expect(said(await tool.execute({ day: "1", meal: "brunch", method: "x" }))).toContain("not a made meal");
-  expect(said(await tool.execute({ day: "1", meal: "lunch", method: "  " }))).toContain("one line");
-  expect(said(await tool.execute({ day: "1", meal: "lunch", method: "x".repeat(MAX_METHOD_CHARS + 1) }))).toContain(
-    `at most ${MAX_METHOD_CHARS} characters`,
-  );
-  expect(p.methods).toHaveLength(1);
-});
-
 // --- the shopping list ------------------------------------------------------------
 
 test("before the trip is done, a line the reader asked for is added", async () => {
@@ -309,9 +278,4 @@ test("the other tools validate the calls that leave a conditional field out", ()
   expect(
     validated(buildReplaceShoppingItemTool(d), { from: "上海青", to: "菠菜", en: "spinach" }).qty,
   ).toBeUndefined();
-  expect(validated(buildWriteMethodTool(d), { day: "1", meal: "lunch", method: "Toss." })).toEqual({
-    day: "1",
-    meal: "lunch",
-    method: "Toss.",
-  });
 });

@@ -56,7 +56,6 @@ function harness(over: Partial<MealsState> = {}): Harness {
       h.plans.push({ plan, shopping: list });
     },
     saveShopping: async () => {},
-    saveMealMethod: async () => {},
     saveDeviation: async () => {},
     region: () => "other",
     now: () => 100,

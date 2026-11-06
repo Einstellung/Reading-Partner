@@ -21,7 +21,6 @@ import {
   loadMeals,
   saveCharter,
   saveDeviation,
-  saveMealMethod,
   savePhotosAsked,
   savePlan,
   saveShopping,
@@ -102,7 +101,6 @@ export function liveMealsPorts(opts: Pick<LiveMealsOptions, "today" | "changed">
     savePlan: (plan, shopping) => thenWriteRecipes(savePlan(plan, shopping)),
     saveDeviation: (deviation, plan, shopping) => thenWriteRecipes(saveDeviation(deviation, plan, shopping)),
     saveShopping: (shopping) => saveShopping(shopping),
-    saveMealMethod: (date, meal, method) => thenWriteRecipes(saveMealMethod(date, meal, method)),
     region: () => hostRegion(),
     photos: () => loadMealsPhotos(),
     ...(hasWebviewFetch()

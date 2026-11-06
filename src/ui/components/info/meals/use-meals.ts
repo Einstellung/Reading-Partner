@@ -18,6 +18,7 @@ import { loadMealsPhotos, withDrawingSources } from "../../../../info/meals/phot
 import { weekArtIds, withDishArt } from "../../../../info/meals/photos/dish-art";
 import { dishArtStore } from "../../../../info/meals/photos/dish-art-store";
 import { registerPullRoute } from "../../../../platform/sync/pull-routes";
+import { watchMealsEdits } from "../../../../info/meals/writable";
 import { loadMeals, saveShoppingTick } from "../../../../info/meals/plan/store";
 import type { MealsState } from "../../../../info/meals/plan/types";
 
@@ -101,8 +102,11 @@ export function useMeals(enabled: boolean): MealsController {
     if (!enabled) return;
     const offDrawn = onDishDrawn(reload);
     const offPull = registerPullRoute({ ...MEALS_PICTURES_PULL_ROUTE, onPulled: reload });
+    // A change edit_data landed from a conversation or a worker (docs/platform/687).
+    const offEdits = watchMealsEdits(reload);
     return () => {
       offDrawn();
+      offEdits();
       offPull();
     };
   }, [enabled, reload]);

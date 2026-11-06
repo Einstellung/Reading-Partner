@@ -21,7 +21,6 @@ function harness(current: MealsState, fail = false) {
       saved.push(plan);
     },
     saveShopping: async () => {},
-    saveMealMethod: async () => {},
     saveDeviation: async () => {},
     region: () => "other",
     now: () => 700,

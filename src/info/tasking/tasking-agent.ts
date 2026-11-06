@@ -83,14 +83,14 @@ export const TASKING_SYSTEM_PROMPT = [
  */
 export function buildTaskingAgent(
   deps: TaskingToolDeps = {},
-  // The meals data, read-only (info/meals/read-tools.ts): a question handed over from the meals conversation lands here.
+  // The meals data's reads (info/meals/read-tools.ts); edit_data, which runSubagent mounts, changes it. A question or a change handed over from the meals conversation lands here.
   mealsTools: () => AgentTool[] = buildLiveMealsReadTools,
 ): SubagentDefinition {
   return {
     name: "tasking",
     description:
       "Look into a question the briefing did not answer, out of the bureau's own cables and " +
-      "the research rooms' pictures; or a question about the user's meals, out of their saved meal plan.",
+      "the research rooms' pictures; or a question about the user's meals, or a change to them, out of their saved meal plan and draft.",
     taskDescription:
       "The user's question restated for someone who cannot see this conversation and has " +
       "not read today's briefing: what to find out, which article or figure it came off " +

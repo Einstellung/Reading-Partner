@@ -66,7 +66,6 @@ function harness(profile: Profile = PROFILE): Harness {
       current = { ...current, plan, shopping: list };
     },
     saveShopping: async () => {},
-    saveMealMethod: async () => {},
     saveDeviation: async () => {},
     region: () => "other",
     drafts: memoryDrafts(),

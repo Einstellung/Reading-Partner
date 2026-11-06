@@ -33,7 +33,6 @@ function ports(current: MealsState, saved: Written[]): MealsPorts {
       saved.push({ plan, shopping });
     },
     saveShopping: async () => {},
-    saveMealMethod: async () => {},
     saveDeviation: async () => {},
     region: () => "other",
     now: () => 1_000,
