@@ -13,7 +13,7 @@ import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
-import { mealsKickoff } from "../../../info/briefer/anchors";
+import { livePosition, mealsKickoff } from "../../../info/briefer/anchors";
 import { EMPTY_MEALS, type MealKey } from "../../../info/meals/plan/types";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
@@ -575,6 +575,7 @@ export default function InfoHome(props: {
       {info.infoCall && info.view && (
         <InfoCall
           anchor={info.infoCall}
+          position={livePosition(info.infoCall, meals.state)}
           dateKey={info.snap?.briefing?.date ?? todayLocal()}
           view={info.view}
           collecting={info.collecting}
