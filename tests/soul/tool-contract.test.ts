@@ -225,7 +225,6 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
       "add_shopping_items",
       "remove_shopping_item",
       "replace_shopping_item",
-      "write_meals_method",
       "refresh_meals_photos",
       "start_prep",
       "meals_read_plan",

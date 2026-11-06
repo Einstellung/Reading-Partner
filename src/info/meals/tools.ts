@@ -163,7 +163,7 @@ function focusLines(state: MealsState, focus: MealsFocus): string[] {
     if (!day) return [`They are looking at ${focus.date}, which the plan does not cover.`];
     return [
       `They are looking at ${focus.date}. Its method lines are on their screen; do not read them back. ` +
-        "Call write_meals_method only if they want one made another way.",
+        "When they want one made another way, change its dish with edit_data.",
     ];
   }
   return ["They are looking at the plan."];
@@ -223,6 +223,17 @@ const READING_THE_DATA = [
   "much, what, when or which, read it there and",
   "answer exactly; add up across meals or pots yourself from what the tools return. Never guess a number,",
   "answer from memory or say you cannot see it.",
+];
+
+const CHANGING_THE_DATA = [
+  "CHANGING THE SAVED DATA",
+  "The saved plan (info-meals), the draft on the card (info-meals-draft) and their own dishes",
+  "(info-meals-dishes) are changed with edit_data. Print SHAPE and the part of `data` you mean to change",
+  "before you return anything. Change inputs only: a pot's rawG for what they already have ('我有 600 克鸡胸'),",
+  "a pot's dish, a meal's main or way. The program solves the grams, the shopping list and the prep again.",
+  "A dish they want cooked another way is a dish of their own: copy it from `data.seed` in info-meals-dishes",
+  "under a new id with what differs changed, then put that id in the pot. Make these changes here; do not",
+  "delegate a change to the meals data.",
 ];
 
 const HOW_TO_PLAN = [
@@ -383,7 +394,7 @@ export function mealsGuidance(
     for (const d of state.deviations.slice(-3)) out.push(`- ${d.date} ${d.meal}: ${d.said}`);
   }
 
-  out.push("", ...READING_THE_DATA, "", ...HOW_TO_PLAN);
+  out.push("", ...READING_THE_DATA, "", ...CHANGING_THE_DATA, "", ...HOW_TO_PLAN);
   if (opts.draft?.phase === "proposed") out.push("", ...draftOnCard(opts.draft));
   if (profile) {
     const lib = planLibrary(profile);
@@ -1240,60 +1251,6 @@ export function buildReplaceShoppingItemTool(
 }
 
 
-// --- how a meal is made ------------------------------------------------------
-
-/** The longest a method line may be. It is a line, not a recipe. */
-export const MAX_METHOD_CHARS = 160;
-
-/**
- * Rewrite one made meal's method line, because the reader wants it made
- * another way ("没有微波炉"). The line normally comes with the plan; this is
- * the one place it changes afterwards, and it writes straight through.
- */
-export function buildWriteMethodTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
-  return {
-    name: "write_meals_method",
-    label: () => t("meals.tool.rewritingMethod"),
-    effect: "write",
-    description:
-      "Rewrite the one-line method of one made meal, when they want it done another way ('no " +
-      "microwave', 'I only have one pan'). Same foods, same minutes or fewer, no amounts and no " +
-      "nutrition numbers. It replaces whatever was there.",
-    parameters: Type.Object({
-      day: Type.String({ description: "'today', 'tomorrow', or the day number 1 to 7 from your instructions." }),
-      meal: Type.String({ description: `${MEAL_KEYS.join(", ")}.` }),
-      method: Type.String({ description: "One line, in their language." }),
-    }),
-    execute: async (args) => {
-      const state = await deps.state();
-      const plan = state.plan;
-      const date = plan ? resolveDeviationDate(String(args.day ?? ""), plan.startDate, deps.today()) : null;
-      const key = toMealKey(args.meal);
-      const meal = date && key ? dayOn(plan, date)?.[key] : null;
-      if (!date || !key || !meal || meal.mode !== "make") {
-        return { receipt: null, text: "That is not a made meal of the week they have. Nothing was written." };
-      }
-      const method = String(args.method ?? "").trim();
-      if (!method || method.length > MAX_METHOD_CHARS) {
-        return {
-          receipt: null,
-          text: `The method is one line of at most ${MAX_METHOD_CHARS} characters. Nothing was written.`,
-        };
-      }
-      try {
-        await deps.ports.saveMealMethod(date, key, method);
-      } catch {
-        return { receipt: null, text: "The method could not be written. Nothing changed." };
-      }
-      deps.ports.changed();
-      return {
-        text: `The method for ${meal.name ?? key} is rewritten and on their screen. Do not read it back.`,
-        receipt: { label: t("meals.receipt.rewroteMethod"), summary: boxName({ date, meal: key }) },
-      };
-    },
-  };
-}
-
 /**
  * Picture this week again (docs/73 图片): draw its dishes anew where the
  * provider can, search the rest again.
@@ -1413,7 +1370,6 @@ export function buildMealsCatalogTools(deps: MealsToolDeps & { ports: MealsPorts
     buildAddShoppingItemsTool(deps),
     buildRemoveShoppingItemTool(deps),
     buildReplaceShoppingItemTool(deps),
-    buildWriteMethodTool(deps),
     buildRefreshMealsPhotosTool(deps),
     buildStartPrepTool(deps),
     ...buildMealsReadTools({ ...deps, ...(deps.drafts ? { draft: deps.drafts.load } : {}) }),

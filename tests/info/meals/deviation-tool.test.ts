@@ -23,7 +23,6 @@ function tool(current: MealsState) {
     saveCharter: async () => {},
     savePlan: async () => {},
     saveShopping: async () => {},
-    saveMealMethod: async () => {},
     saveDeviation: async (deviation, plan, list) => {
       written.push({ deviation, plan, shopping: list });
     },

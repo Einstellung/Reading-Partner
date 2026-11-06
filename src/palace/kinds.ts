@@ -1249,7 +1249,7 @@ export const PALACE = [
   {
     kind: "info-meals",
     about:
-      "The reader's meal plan with every food's grams, its prep session, the shopping list and their meals profile. Read it with the meals_read_* tools: they are in the meals conversation and in the tasking worker's hands.",
+      "The reader's meal plan with every food's grams, its prep session, the shopping list and their meals profile. Read it with the meals_read_* tools and change the plan with edit_data: both are in the meals conversation and in the tasking worker's hands.",
     domain: "info",
     match: fixed("info-meals.json"),
     samples: ["info-meals.json"],
@@ -1259,12 +1259,13 @@ export const PALACE = [
     merge: "lattice",
     deleteWith: "never",
     retention: NEVER,
+    ai: { write: true },
     note: "the week's dinners, the list derived from them and the nights that went differently (docs/73): one record, merged whole, because a per-field merge would assemble a week that never existed on either device; the copy whose plan was confirmed later wins (info/meals/plan/merge.ts), two copies of one plan keep one and park the other",
   },
   {
     kind: "info-meals-draft",
     about:
-      "The meal plan drafted in the meals conversation and not saved yet: each day's meals, the pots and the prep session, and whether it was applied. Read it with meals_read_draft.",
+      "The meal plan drafted in the meals conversation and not saved yet: each day's meals, the pots and the prep session, and whether it was applied. Read it with meals_read_draft; change it with edit_data.",
     domain: "info",
     match: fixed("info-meals-draft.json"),
     samples: ["info-meals-draft.json"],
@@ -1274,6 +1275,7 @@ export const PALACE = [
     merge: "lattice",
     deleteWith: "never",
     retention: NEVER,
+    ai: { write: true },
     note: "the one unsaved draft (docs/platform/687 三餐), written by propose_meal_plan and marked applied by 「就这样」 or apply_meal_plan; the draft card in the conversation is drawn from it and patched when it changes. One record, merged whole: the copy written later wins (info/meals/draft-file.ts)",
   },
   {
@@ -1363,7 +1365,7 @@ export const PALACE = [
   },
   {
     kind: "info-meals-dishes",
-    about: "The reader's own dishes, planned beside the meal planner's seed library.",
+    about: "The reader's own dishes, planned beside the meal planner's seed library. Add or change one with edit_data.",
     domain: "info",
     match: fixed("info-meals-dishes.json"),
     samples: ["info-meals-dishes.json"],
@@ -1374,6 +1376,7 @@ export const PALACE = [
     shape: { kind: "map", container: "dishes", idField: null },
     deleteWith: "never",
     retention: NEVER,
+    ai: { write: true },
     note: "dishes the seed library does not have (docs/platform/687, docs/671 菜库), each past the same intake check as a seed dish and keyed by its id, which is never a seed dish's; records-merged per id, so a dish added on one device and another changed on the other both survive a crossing sync",
   },
   {

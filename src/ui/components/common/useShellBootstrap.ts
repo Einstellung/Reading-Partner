@@ -59,6 +59,7 @@ import { registerSourceSiteAdapters } from "../../../info/sources/plugins/all";
 import { registerXLinkReader } from "../../../info/x/live";
 import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-worker";
 import { startMealsUserDishes } from "../../../info/meals/dishes/user-dishes";
+import { registerMealsWritables } from "../../../info/meals/writable";
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photos/photo-sweep";
 import { startMealsRecipeHousekeeping } from "../../../info/meals/live";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
@@ -263,6 +264,8 @@ export function bootDomains(): void {
   // The reader's own dishes, which the planner reads beside the seed library
   // (docs/platform/687): held in memory, so read now and again on each pull.
   startMealsUserDishes();
+  // The draft, the saved plan and those dishes, as edit_data changes them (docs/platform/687 三餐).
+  registerMealsWritables();
   registerBookDelivery();
   registerDoorDelivery();
   // The same pair on the info side: a question the briefing did not answer, and

@@ -1,0 +1,162 @@
+{
+ "draftId": "1793922019382",
+ "threadId": "meals",
+ "version": 1,
+ "startDate": "2026-11-06",
+ "draft": {
+  "days": [
+   {
+    "breakfast": "sweet_potato_egg_soy_milk",
+    "lunch": {
+     "main": {
+      "batch": "chicken",
+      "way": 2
+     },
+     "sides": []
+    },
+    "dinner": {
+     "main": {
+      "batch": "beef",
+      "way": 3
+     },
+     "sides": []
+    },
+    "fruit": [
+     "apple",
+     "banana"
+    ]
+   },
+   {
+    "breakfast": "yogurt_blueberry_toast_egg",
+    "lunch": {
+     "main": {
+      "batch": "chicken",
+      "way": 3
+     },
+     "sides": []
+    },
+    "dinner": {
+     "main": {
+      "dish": "tomato_braised_cod",
+      "staple": "brown_rice"
+     },
+     "sides": []
+    },
+    "fruit": [
+     "orange"
+    ]
+   }
+  ],
+  "batches": [
+   {
+    "id": "chicken",
+    "dish": "salsa_shredded_chicken",
+    "session": "prep",
+    "meals": [
+     {
+      "day": 1,
+      "slot": "lunch"
+     },
+     {
+      "day": 2,
+      "slot": "lunch"
+     }
+    ]
+   },
+   {
+    "id": "beef",
+    "dish": "tomato_braised_beef_shank",
+    "session": "prep",
+    "meals": [
+     {
+      "day": 1,
+      "slot": "dinner"
+     }
+    ]
+   }
+  ],
+  "sessions": [
+   {
+    "id": "prep",
+    "day": 1,
+    "part": "morning"
+   }
+  ]
+ },
+ "picks": {
+  "days": [
+   {
+    "breakfast": "",
+    "lunch": {
+     "main": {
+      "batch": "chicken",
+      "way": 2
+     },
+     "sides": []
+    },
+    "dinner": {
+     "main": {
+      "batch": "beef",
+      "way": 1
+     },
+     "sides": []
+    },
+    "fruit": []
+   },
+   {
+    "breakfast": "",
+    "lunch": {
+     "main": {
+      "batch": "chicken",
+      "way": 3
+     },
+     "sides": []
+    },
+    "dinner": {
+     "main": {
+      "dish": "tomato_braised_cod"
+     },
+     "sides": []
+    },
+    "fruit": []
+   }
+  ],
+  "batches": [
+   {
+    "id": "chicken",
+    "dish": "salsa_shredded_chicken",
+    "session": "prep",
+    "meals": [
+     {
+      "day": 1,
+      "slot": "lunch"
+     },
+     {
+      "day": 2,
+      "slot": "lunch"
+     }
+    ]
+   },
+   {
+    "id": "beef",
+    "dish": "tomato_braised_beef_shank",
+    "session": "prep",
+    "meals": [
+     {
+      "day": 1,
+      "slot": "dinner"
+     }
+    ]
+   }
+  ],
+  "sessions": [
+   {
+    "id": "prep",
+    "day": 1,
+    "part": "morning"
+   }
+  ]
+ },
+ "updatedAt": 1793922019383,
+ "phase": "proposed"
+}

@@ -24,7 +24,8 @@
 // on disk before the promise resolves; a fake that assigns before its first
 // await would let a read-back that never waits for the flush pass. Run: bun test.
 
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test, afterAll } from "bun:test";
+import { registeredWritables, registerWritable } from "../../../../src/housekeeper/write";
 import * as atomicFs from "../../../../src/platform/app/atomic-fs";
 import type { GuardedRead } from "../../../../src/platform/app/atomic-fs";
 import {
@@ -309,3 +310,10 @@ async function waitFor(done: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
 }
+
+// Mounting the shell boots the domains (bootDomains), which registers the meals
+// kinds edit_data writes. The registry is one map for the whole run; leaving
+// them there would put edit_data on every turn the later files assemble.
+afterAll(() => {
+  for (const entry of registeredWritables()) registerWritable(entry)();
+});

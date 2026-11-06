@@ -187,7 +187,6 @@ export default {
   "tool.addingToList": "Adding to the shopping list",
   "tool.removingFromList": "Taking a line off the shopping list",
   "tool.swappingLine": "Swapping a line on the shopping list",
-  "tool.rewritingMethod": "Rewriting how it's made",
   "tool.startingPrep": "Starting the prep",
   "tool.prepStep": "Noting the step",
   "tool.prepSay": "Checking the timeline",
@@ -244,7 +243,6 @@ export default {
   "receipt.addedToList": "Added to the shopping list",
   "receipt.removedFromList": "Took a line off the list",
   "receipt.swappedLine": "Swapped a line on the list",
-  "receipt.rewroteMethod": "Rewrote how it's made",
 
   // The profile fields a receipt names when the reader changed them
   "field.weightKg": "Weight",

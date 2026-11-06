@@ -23,7 +23,6 @@ function ports(initial: MealsState) {
     },
     savePlan: async () => {},
     saveShopping: async () => {},
-    saveMealMethod: async () => {},
     saveDeviation: async () => {},
     region: () => "other",
     now: () => 5,
