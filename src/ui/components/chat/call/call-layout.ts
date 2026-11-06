@@ -24,3 +24,19 @@ export type CallNavigation = "swap" | "hang-up";
 export function navigateAway(pipCards: boolean): CallNavigation {
   return pipCards ? "swap" : "hang-up";
 }
+
+// Whether the call is tapped out of the way, and for which ask. Asking again —
+// a new anchor, even on the same thread — brings the chat back to the main
+// screen; a swap set for an earlier ask does not carry over to the new one.
+export interface CallSwap<K> {
+  key: K;
+  swapped: boolean;
+}
+
+export function swappedFor<K>(swap: CallSwap<K>, key: K): boolean {
+  return swap.swapped && swap.key === key;
+}
+
+// Where the chat pip sits over an info screen: below the screen's sticky top
+// bar, whose right end holds the screen's own Ask button.
+export const INFO_CHAT_PIP_CORNER = "absolute right-3 top-20 z-50";

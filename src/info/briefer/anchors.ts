@@ -240,9 +240,27 @@ export function mealsAnchor(
     desk: [
       { kind: INFO_MEALS_KIND, ref: { state, today, ...(opts?.focus ? { focus: opts.focus } : {}) } },
     ],
-    position: { title: t("info.anchor.mealsTitle"), line: mealsLine(state) },
+    position: mealsPosition(state),
     ...(opts?.kickoff ? { kickoff: opts.kickoff } : {}),
   };
+}
+
+function mealsPosition(state: MealsState): InfoCallAnchor["position"] {
+  return { title: t("info.anchor.mealsTitle"), line: mealsLine(state) };
+}
+
+/**
+ * The corner position card as it stands now. It follows what the conversation
+ * is about (docs/03), and an anchor is built once, when Ask is pressed; the
+ * meals conversation changes the plan it is about, so its card is drawn from
+ * the meals as last read rather than from the anchor's copy.
+ */
+export function livePosition(
+  anchor: InfoCallAnchor,
+  meals: MealsState | null,
+): InfoCallAnchor["position"] {
+  if (anchor.threadId === MEALS_THREAD_ID && meals) return mealsPosition(meals);
+  return anchor.position;
 }
 
 function mealsLine(state: MealsState): string | null {

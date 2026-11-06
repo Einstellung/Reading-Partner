@@ -21,7 +21,7 @@
 
 import CallView from "../chat/call/CallView";
 import ChatPipCard from "../chat/call/ChatPipCard";
-import { callLayout } from "../chat/call/call-layout";
+import { callLayout, INFO_CHAT_PIP_CORNER } from "../chat/call/call-layout";
 import ReadingPipCard from "../chat/call/ReadingPipCard";
 import { useInfoCall } from "./use-info-call";
 import type { ComposerVoice } from "../chat/composer-voice";
@@ -42,9 +42,12 @@ export function InfoCall({
   onMealsChanged,
   onOpenMeals,
   onMealsApplied,
+  position,
   pipCards = true,
 }: {
   anchor: InfoCallAnchor;
+  // The corner position card as it stands now (anchors.ts: livePosition).
+  position: InfoCallAnchor["position"];
   dateKey: string;
   // The briefing this chat talks about, and what can be done to it. On a
   // collector it is the running pipeline; on a reader it is the published files
@@ -89,12 +92,11 @@ export function InfoCall({
   // Whether the reader has tapped the call out of the way. With no corner cards
   // there is no way to set it and no layout to set it to (call-layout.ts).
   const layout = callLayout(pipCards, call.swapped);
-  const { position } = anchor;
   const lastMessage = chatGlance(call.messages);
 
   if (layout === "chat-pip") {
     return (
-      <div className="absolute right-3 top-3 z-50">
+      <div className={INFO_CHAT_PIP_CORNER}>
         <ChatPipCard lastMessage={lastMessage} onClick={() => call.setSwapped(false)} onHangUp={onHangUp} />
       </div>
     );

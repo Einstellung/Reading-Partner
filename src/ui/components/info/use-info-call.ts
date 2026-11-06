@@ -76,7 +76,7 @@ import { readingDurable } from "../../../reading/turn/durable-runtime";
 import type { CallRow } from "../../../reading/turn/call-state";
 import { createPlaceSession, registerOpenSession, withPlaceTurnRows, type PlaceAssembled, type PlaceSession } from "../../../reading/turn/place-session";
 import { forgetScroll } from "../common/scroll-memory";
-import { navigateAway } from "../chat/call/call-layout";
+import { navigateAway, swappedFor, type CallSwap } from "../chat/call/call-layout";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import {
   cardRow,
@@ -164,7 +164,13 @@ export function leaveForAppliedPlan(
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged, onOpenMeals, onMealsApplied } =
     opts;
-  const [swapped, setSwapped] = useState(false);
+  // Keyed by the anchor: pressing Ask again hands over a new anchor, which
+  // brings the chat back even when the thread is the same one (call-layout.ts).
+  const anchorRef = useRef(anchor);
+  anchorRef.current = anchor;
+  const [swap, setSwap] = useState<CallSwap<InfoCallAnchor>>({ key: anchor, swapped: false });
+  const swapped = swappedFor(swap, anchor);
+  const setSwapped = useCallback((next: boolean) => setSwap({ key: anchorRef.current, swapped: next }), []);
   // A conversation anchored to a date lives in that day's file; a standing one
   // (meals's) names its own, so its thread outlives any day (anchors.ts).
   const bookId = anchor.bookKey ?? infoBookId(dateKey);
@@ -326,7 +332,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   useEffect(() => {
     let live = true;
     let unwatch: (() => void) | undefined;
-    setSwapped(false);
     const origin = infoThreadOrigin(anchor, dateKey);
     const key = infoThreadKey(origin);
     (async () => {
