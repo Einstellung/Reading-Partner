@@ -4,7 +4,7 @@
 // The door chat finds the card and marks it (ui/components/companion/use-door-chat.ts);
 // this file only decides what to tell the model.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { asString } from "../../platform/std/json";
 import { t } from "../../i18n";

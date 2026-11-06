@@ -41,6 +41,7 @@ export const ThreadDoc = defineDoc<ThreadState>({
   scope: "conversation",
   history: "latest",
   fork: "current",
+  checkpointWhen: () => false,
   initial: () => ({ origin: null }),
 });
 
@@ -63,6 +64,7 @@ export const DeskDoc = defineDoc<DeskState>({
   scope: "conversation",
   history: "latest",
   fork: "current",
+  checkpointWhen: () => false,
   initial: () => ({ sections: {}, purpose: "chat", maxRounds: 8, excludeTs: null }),
 });
 
@@ -74,6 +76,7 @@ export const PartialDoc = defineDoc<PartialState>({
   scope: "conversation",
   history: "latest",
   fork: "initial",
+  checkpointWhen: () => false,
   initial: () => ({ submission: null, text: "" }),
 });
 
@@ -85,6 +88,7 @@ export const RecoveryDoc = defineDoc<RecoveryState>({
   scope: "conversation",
   history: "latest",
   fork: "initial",
+  checkpointWhen: () => false,
   initial: () => ({ submissions: {} }),
 });
 
@@ -94,6 +98,7 @@ export const ConversationsDoc = defineDoc<ConversationsState>({
   kind: "rp.conversations",
   version: 1,
   scope: "session",
+  checkpointWhen: () => false,
   initial: () => ({ threads: {} }),
 });
 

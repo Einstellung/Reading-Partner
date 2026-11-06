@@ -177,6 +177,27 @@ pub async fn durable_sqlite_run(
     })
 }
 
+/// `durable_sqlite_run` that answers the rows the statement changed, as
+/// SQLite's `changes()` counts them, read on the same connection under the
+/// same lock.
+#[tauri::command]
+pub async fn durable_sqlite_run_counted(
+    state: State<'_, DurableSqliteState>,
+    handle: u32,
+    sql: String,
+    params: Vec<Json>,
+) -> Result<u64, String> {
+    let params = bindings(&params)?;
+    with_connection(&state, handle, |conn| {
+        let mut statement = conn.prepare_cached(&sql)?;
+        let mut rows = statement.query(params_from_iter(params))?;
+        while rows.next()?.is_some() {}
+        drop(rows);
+        drop(statement);
+        Ok(conn.changes())
+    })
+}
+
 #[tauri::command]
 pub async fn durable_sqlite_get(
     state: State<'_, DurableSqliteState>,

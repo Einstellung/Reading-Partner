@@ -53,6 +53,8 @@ function executor(call: HostCall, handle: number, gate: <T>(op: () => Promise<T>
     exec: (sql) => gate(async () => void (await call("durable_sqlite_exec", { handle, sql }))),
     run: (sql, ...values) =>
       gate(async () => void (await call("durable_sqlite_run", { handle, sql, params: params(values) }))),
+    runCounted: (sql, ...values) =>
+      gate(async () => Number(await call("durable_sqlite_run_counted", { handle, sql, params: params(values) }))),
     get: <T extends object>(sql: string, ...values: SqliteValue[]) =>
       gate(async () => {
         const row = await call("durable_sqlite_get", { handle, sql, params: params(values) });

@@ -9,7 +9,7 @@
 // decides it. Everything the read touches is injected, so what each answer says
 // is pinned by a test with no library.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { formatPages, MAX_PAGES } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";

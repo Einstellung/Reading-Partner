@@ -12,7 +12,8 @@
 import { contextBudget, estimateContextTokens, estimateTextTokens, fitsBudget } from "./estimate";
 import type { BudgetPurpose } from "./estimate";
 import { planReductions, type Rung } from "./ladder";
-import type { Api, Context, Message, Model, TSchema } from "@earendil-works/pi-ai";
+import type { Api, Context, Message, Model } from "@earendil-works/pi-ai";
+import type { TSchema } from "typebox";
 
 // A tool as the budget sees it: only the three fields that go on the wire and
 // therefore cost tokens. Structural on purpose, so budget does not import ai/.

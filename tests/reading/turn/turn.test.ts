@@ -755,12 +755,14 @@ test("the book-level thread carries no marked passage", async () => {
 // A 200k window, against the 1M one the other tests use.
 const small: Settings = { ...settings, defaultModelId: "claude-opus-4-5" };
 
-// The narrowest window in the whole catalog (128k). Reachable since the picker
-// stopped hiding models under a floor, so the ladder has to hold there too.
+// A 128k text-only model, the narrowest window mainstream providers list
+// (pi-ai 1.5 dropped gpt-5.3-codex-spark, OpenAI's 128k one). Reachable since
+// the picker stopped hiding models under a floor, so the ladder has to hold
+// there too.
 const tiny: Settings = {
   ...settings,
-  defaultProviderId: "openai",
-  defaultModelId: "gpt-5.3-codex-spark",
+  defaultProviderId: "groq",
+  defaultModelId: "llama-3.3-70b-versatile",
 };
 
 // A Chinese survey, the shape that actually overflows: pi prices it at chars/3.5

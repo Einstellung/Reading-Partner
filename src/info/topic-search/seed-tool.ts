@@ -5,7 +5,7 @@
 // words, and propose_topic_search takes the confirmed ones (seeds.ts). Reads
 // only: nothing is written until the drafting card is applied.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { asString } from "../../platform/std/json";
 import { t } from "../../i18n";

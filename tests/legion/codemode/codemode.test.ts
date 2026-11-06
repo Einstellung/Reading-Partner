@@ -2,7 +2,7 @@
 // QuickJS VM whose only capability is calling those reads.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../../src/legion/durable/contract";
 import {
   buildCodemodeTool,

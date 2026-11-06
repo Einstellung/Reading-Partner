@@ -9,7 +9,7 @@
 // one chapter, replacing that chapter's previous decision, and the reader sees
 // exactly what landed in the card it raises.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { t } from "../../i18n";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { RetellDecisionCardData } from "./cards";

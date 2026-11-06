@@ -7,7 +7,7 @@
 // lines are in what about_app hands back (intro.ts, docs/companion/90), which
 // is what the soul reads out when the reader asks what is here.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../legion/durable/contract";
 import { listPlaces, type Place } from "../desk";
 import { t } from "../i18n";

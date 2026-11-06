@@ -38,6 +38,7 @@ import { onProviderBytes } from "../../ai/provider-bytes";
 import type { ReadingTurnMessage } from "../desk-history";
 import { bookThreadKey, bookThreadOrigin, type BookOrigin, type BookTelemetry } from "./durable-book";
 import { projectView, runStart, type TurnView, type ViewSource } from "./durable-view";
+import { followActiveView } from "../../legion/durable/follow-view";
 import type { ReadingDurable } from "./durable-runtime";
 import { turnsStarting } from "./detached-turns";
 
@@ -108,7 +109,6 @@ async function followTurn(
   const queuedTs = new Map<number, number>();
   let steerTs: Awaited<ReturnType<typeof steerTimestamps>> = new Map();
   let steerEntries = 0;
-  const view = await conversation.viewState(context);
   const follow = async (value: ViewSource) => {
     following.pulse?.(
       value.docs["pi.live"] as Live | undefined,
@@ -130,12 +130,7 @@ async function followTurn(
       projectView(value, { startedAt: following.startedAt, steerTs, queuedTs, describe: following.describe }),
     );
   };
-  const unsubscribe = view.subscribe((value) => follow(value));
-  if (view.value) await follow(view.value);
-  return () => {
-    unsubscribe();
-    view.dispose();
-  };
+  return followActiveView(conversation, follow, context);
 }
 
 interface TurnWatch {

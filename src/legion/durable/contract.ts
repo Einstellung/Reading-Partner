@@ -4,7 +4,7 @@
 // knows how, so a module that only mounts a tool (a domain's tool file, the
 // soul's catalogue) imports a file with no runtime in it.
 
-import type { TSchema } from "@earendil-works/pi-ai";
+import type { TSchema } from "typebox";
 import type { ResponseHead, StreamOutcome } from "../../ai/providers";
 import type { Receipt } from "../../ai/turn-view/tool-status";
 

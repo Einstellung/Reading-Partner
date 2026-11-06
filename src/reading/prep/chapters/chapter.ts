@@ -13,7 +13,8 @@
 // Pure parts (prompts, tool building, emphasis-signal formatting) are exported
 // for tests; the AI call is wired in live.ts.
 
-import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
+import { type ThinkingLevel } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../../legion/durable/contract";
 import { runBackgroundTurn } from "../../../legion/durable/background";
 import { noteOf } from "../model-output";

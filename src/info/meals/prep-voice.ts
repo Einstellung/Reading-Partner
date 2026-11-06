@@ -7,7 +7,7 @@
 // sentence about the schedule is built here from timeline/view.ts and goes to
 // the call's `say`, which speaks it as it is. The model only hands in events.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 
 import { t } from "../../i18n";
 import type { AgentTool } from "../../legion/durable/contract";

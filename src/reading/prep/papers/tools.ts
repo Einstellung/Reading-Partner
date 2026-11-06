@@ -3,7 +3,7 @@
 // whole note. Complements the M6 reading tools, which stay wired for the
 // survey/topic side.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../../legion/durable/contract";
 import { formatPages } from "../../../fulltext/format";
 import { getFulltext } from "../../../fulltext/store";

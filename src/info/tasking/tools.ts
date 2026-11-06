@@ -8,7 +8,7 @@
 //
 // Every store is injected, so the whole set tests over in-memory records.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { buildReadPageTool } from "../sources/read-page-tool";
 import { listCableDates, loadCableDay } from "../cable/store";

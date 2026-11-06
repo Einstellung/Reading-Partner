@@ -12,7 +12,7 @@
 // hidden browser window per article, one at a time, tens of seconds each. Any
 // caller has to expect a slow call and tell the user before it starts.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { FetchFn } from "../../workshop/extract/http";
 import type { ExtractReadable } from "../../workshop/extract/readable-select";

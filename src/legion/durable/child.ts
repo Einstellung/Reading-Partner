@@ -42,6 +42,7 @@ export const SubagentDoc = defineDoc<SubagentState>({
   scope: "conversation",
   history: "latest",
   fork: "initial",
+  checkpointWhen: () => false,
   initial: () => ({ name: "", maxRounds: 0, purpose: "chat" }),
 });
 

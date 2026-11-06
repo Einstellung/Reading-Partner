@@ -3,7 +3,7 @@
 // undone. What a call answers is never fed back to the model: the front's turn
 // ends with its sentence (136 "级联前台的一次回复"), so the answer is for the log.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../../legion/durable/contract";
 
 export const FRONT_TOOL_NAMES = ["delegate", "cancel", "read_out", "show"] as const;

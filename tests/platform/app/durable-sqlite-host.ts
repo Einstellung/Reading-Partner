@@ -53,6 +53,8 @@ export function bunSqliteHost(root: string): HostCall {
     durable_sqlite_exec: ({ handle, sql }) => void db(handle as number).run(sql as string),
     durable_sqlite_run: ({ handle, sql, params }) =>
       void db(handle as number).query(sql as string).run(...(params as WireValue[]).map(bind)),
+    durable_sqlite_run_counted: ({ handle, sql, params }) =>
+      Number(db(handle as number).query(sql as string).run(...(params as WireValue[]).map(bind)).changes),
     durable_sqlite_get: ({ handle, sql, params }) =>
       tagRow(db(handle as number).query(sql as string).get(...(params as WireValue[]).map(bind)) as never),
     durable_sqlite_all: ({ handle, sql, params }) =>

@@ -10,7 +10,7 @@
 // a run record is a set of references (legion/run/types.ts). The file is
 // machine-local, like the `local` runs it belongs to.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../legion/durable/contract";
 import { appRunner } from "../legion/runner/runner";
 import { delegableWorkerKinds } from "../legion/runner/worker";

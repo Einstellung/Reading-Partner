@@ -12,7 +12,7 @@
 // it is a type: src/desk does the same, for the same reason. Nothing here calls
 // a model.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../legion/durable/contract";
 import { t } from "../i18n";
 import type { ConversationIo } from "./io";

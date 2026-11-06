@@ -8,7 +8,7 @@
 // and on its own wherever meals questions are answered out of sight: the voice
 // call's think run at the meals place and the tasking worker.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { getLocale } from "../../i18n";
 import type { Locale } from "../../i18n/locale";
 import type { AgentTool } from "../../legion/durable/contract";

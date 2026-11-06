@@ -4,7 +4,7 @@
 // tool lifts a pause only where the conversation runs; the text says so when
 // there is none here.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { t } from "../../i18n";
 import type { XHaltRecord } from "./halt";

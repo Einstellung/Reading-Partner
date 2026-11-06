@@ -21,7 +21,7 @@
 // The pipeline work and the store read come in as injected ports, so these tools
 // run in bun tests with no network, no AI and no AppData.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { FULLTEXT_VERSION, type Fulltext } from "../../fulltext/types";
 import { clipLineTight } from "../../platform/std/text";

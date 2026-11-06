@@ -7,7 +7,7 @@
 import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import type { ConversationId, JsonObject, ToolExecutionApi, ToolRegistration } from "@earendil-works/pi-durable";
+import type { ConversationId, JsonObject, ToolExecutionApi, ToolExecutionResult, ToolRegistration } from "@earendil-works/pi-durable";
 import type { AgentTool } from "./contract";
 import { normalizeToolResult } from "./tool-result";
 import { ThreadDoc, type ThreadOrigin } from "./extension";
@@ -86,9 +86,9 @@ export async function executeTool(tool: AgentTool, args: unknown, context: Conte
   return toolContent(tool, await awaitWithContext(tool.execute(args as Record<string, unknown>), context));
 }
 
-function toolContent(tool: AgentTool, raw: Awaited<ReturnType<AgentTool["execute"]>>) {
+function toolContent(tool: AgentTool, raw: Awaited<ReturnType<AgentTool["execute"]>>): ToolExecutionResult {
   const { text, images, receipt } = normalizeToolResult(tool, raw);
-  const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-  for (const image of images) content.push({ type: "image", data: image.data, mimeType: image.mimeType });
-  return receipt === undefined ? { content } : { content, details: receipt as unknown as JsonObject };
+  const output: (TextContent | ImageContent)[] = [{ type: "text", text }];
+  for (const image of images) output.push({ type: "image", data: image.data, mimeType: image.mimeType });
+  return receipt === undefined ? { output } : { output, details: receipt as unknown as JsonObject };
 }

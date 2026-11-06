@@ -6,7 +6,8 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { Type, withoutInitialSystemMessage } from "@earendil-works/pi-ai";
+import { withoutInitialSystemMessage } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../../src/legion/durable/contract";
 import { StoppedError } from "../../../src/legion/durable/watchdog";
 import { runSubagent } from "../../../src/legion/subagent/run";

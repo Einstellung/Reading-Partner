@@ -13,7 +13,7 @@
 // that is not registered or a tool that is not mounted cannot be claimed, and
 // one that is added shows up without anyone editing this.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { Place } from "../desk";
 import type { AgentTool } from "../legion/durable/contract";
 import { t } from "../i18n";

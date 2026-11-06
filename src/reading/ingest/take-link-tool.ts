@@ -7,7 +7,7 @@
 // numbers and the topic list reach it as an app note on that message
 // (linkTurnNote), which leaves the tool's own definition the same every turn.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { BoxOrigin } from "../../box";
 import { getLocale, t } from "../../i18n";

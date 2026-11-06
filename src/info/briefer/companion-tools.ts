@@ -9,7 +9,7 @@
 // open_site_sign_in joins them where the host has a webview to open one with. It
 // takes a site identifier and never a URL — the reason is at buildSignInTool.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { RequestOutcome } from "./reader";
 import { buildSourceTools, type SourceToolDeps } from "../sources/source-tools";

@@ -3,7 +3,7 @@
 // it got, from the run records and the kinds' describers (registry.ts). The
 // text is describe.ts's; this file is the tool around it.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../durable/contract";
 import { t } from "../../i18n";
 import { backgroundStatusText, type StatusInput, type StatusWhich } from "./describe";

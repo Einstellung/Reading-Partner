@@ -2,7 +2,7 @@
 // /quickjs/quickjs.wasm, programs run in the worker Vite emitted, and the page
 // left running while a program spins. Leaves its checks in window.__result.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { buildCodemodeTool } from "../../src/legion/codemode";
 import type { AgentTool } from "../../src/legion/durable/contract";
 

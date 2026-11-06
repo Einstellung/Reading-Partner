@@ -21,6 +21,7 @@ import type { Context } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { ModelThinkingLevel, ThinkingLevel } from "@earendil-works/pi-ai";
 import { defineExtension, type Conversation, type EntryRecord, type ToolRegistration } from "@earendil-works/pi-durable";
+import { followActiveView } from "./follow-view";
 import { resolveModel } from "../../ai/model-call";
 import { providerFailureName } from "../../ai/provider-failure";
 import type { BudgetPurpose } from "../../budget";
@@ -131,7 +132,6 @@ async function follow(
   context: Context,
 ): Promise<() => void> {
   if (!request.onRound && !request.onProgress) return () => {};
-  const view = await conversation.viewState(context);
   let chars = 0;
   const seen = (value: { entries: readonly EntryRecord[]; docs: Record<string, unknown> }) => {
     const done = assistants(value.entries);
@@ -143,12 +143,7 @@ async function follow(
       request.onProgress?.(chars);
     }
   };
-  const unsubscribe = view.subscribe((value) => seen(value));
-  if (view.value) seen(view.value);
-  return () => {
-    unsubscribe();
-    view.dispose();
-  };
+  return followActiveView(conversation, seen, context);
 }
 
 /** One background run on `host`'s runtime, to its end. A cancelled run rejects with StoppedError. */

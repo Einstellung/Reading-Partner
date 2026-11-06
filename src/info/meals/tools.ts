@@ -12,7 +12,7 @@
 // session. It supplies no dates, no grams, no minutes and no shopping list:
 // the program checks the draft, solves and derives them (docs/671 事实不经模型).
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { getLocale, t } from "../../i18n";
 import type { AgentTool } from "../../legion/durable/contract";
 import { asStrings } from "../../platform/std/json";

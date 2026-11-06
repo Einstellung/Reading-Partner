@@ -15,7 +15,7 @@
 // Everything it reaches is injected, so what the model is told in each of the
 // five cases is pinned by a test with no library, no topic and no provider.
 
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
 import { t } from "../../i18n";
 import type { TranslationHome } from "./replace";

@@ -1,0 +1,2 @@
+{"role":"user","ts":1000,"text":"Explain the tides."}
+{"role":"assistant","ts":1793951660356,"text":"The tides follow the moon.","tools":[{"callId":"tool:1793951660337:i7929j813va","name":"lookup","args":{"query":"tides"},"isError":false}]}

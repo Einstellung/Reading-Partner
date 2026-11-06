@@ -3,7 +3,7 @@
 // are the housekeeper's, the files are in memory.
 
 import { describe, expect, test } from "bun:test";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { AgentTool, ToolResult } from "../../src/legion/durable/contract";
 import {
   buildEditTools,
