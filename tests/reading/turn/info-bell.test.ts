@@ -137,7 +137,7 @@ function openChat(durable: ReadingDurable, assembled: Map<string, AssembledInfoT
 test("a briefing bell with nobody looking runs headless over the day's thread, lands once, and is not asked again after a restart", async () => {
   const first = await rig(["The run found the filing."]);
   const outcome = await deliverInfoBell(bell("b1"), first.deps);
-  expect(outcome).toEqual({ status: "answered", reply: "The run found the filing.", watching: false });
+  expect(outcome).toEqual({ status: "answered", reply: "The run found the filing.", watching: false, address: expect.any(Object) });
   expect(first.opened).toEqual([`info-${DATE}/${briefingThreadId(DATE)}`]);
   // Laid over the thread as its file holds it, the bell last and never written.
   expect(first.laid).toEqual([{ origin: BRIEFING, messages: ["Here is today's briefing.", LINE.text, expect.stringContaining("A run finished.")] }]);
@@ -153,7 +153,7 @@ test("a briefing bell with nobody looking runs headless over the day's thread, l
   const again = await rig([], 400, first.root);
   again.file.messages.splice(0, again.file.messages.length, ...first.file.messages);
   const second = await deliverInfoBell(bell("b1"), again.deps);
-  expect(second).toEqual({ status: "answered", reply: "The run found the filing.", watching: false });
+  expect(second).toEqual({ status: "answered", reply: "The run found the filing.", watching: false, address: expect.any(Object) });
   expect(again.faux.state.callCount).toBe(0);
   expect(again.laid).toEqual([]);
   await again.durable.runtime.close(ctx);
@@ -162,7 +162,7 @@ test("a briefing bell with nobody looking runs headless over the day's thread, l
 test("a meals bell lands in the standing meals conversation", async () => {
   const { durable, file, deps, laid, opened } = await rig(["Tuesday's shopping is set."]);
   const outcome = await deliverInfoBell(bell("m1", { place: "meals" }), deps);
-  expect(outcome).toEqual({ status: "answered", reply: "Tuesday's shopping is set.", watching: false });
+  expect(outcome).toEqual({ status: "answered", reply: "Tuesday's shopping is set.", watching: false, address: expect.any(Object) });
   expect(opened).toEqual(["info-meals/meals"]);
   expect(laid.map((l) => l.origin)).toEqual([MEALS]);
   expect(file.messages.filter((m) => m.origin?.runId === "run-m1").map((m) => m.text)).toEqual(["Tuesday's shopping is set."]);
@@ -177,7 +177,7 @@ test("a bell for a briefing conversation busy with the reader's turn waits until
   let waited = 0;
   const outcome = await deliverInfoBell(bell("b2", undefined, () => (waited += 1)), deps);
   expect(waited).toBeGreaterThan(0);
-  expect(outcome).toEqual({ status: "answered", reply: "And the run is done.", watching: false });
+  expect(outcome).toEqual({ status: "answered", reply: "And the run is done.", watching: false, address: expect.any(Object) });
   expect(faux.state.callCount).toBe(2);
   expect(file.messages.map((m) => [m.role, m.text.slice(0, 20)])).toEqual([
     ["ai", "Here is today's brie"],

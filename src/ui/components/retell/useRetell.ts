@@ -151,6 +151,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
         },
         onDecisionCard: (payload) => raiseCardRef.current("retell", payload),
         onArrangeCard: (payload) => raiseCardRef.current("talk", payload),
+        raiseConfirmCard: (payload) => raiseCardRef.current("housekeeper", payload),
       });
     },
     [retellId, key, threadId, t],

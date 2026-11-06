@@ -130,7 +130,7 @@ function openChat(durable: ReadingDurable, assembled: Map<string, AssembledDoorT
 test("a bell with nobody at the door runs headless, lands once stamped with its run, and is not started twice", async () => {
   const { durable, faux, file, cards, deps } = await rig(["The run found three essays."]);
   const first = await deliverDoorBell(bell("b1"), deps);
-  expect(first).toEqual({ status: "answered", reply: "The run found three essays.", watching: false });
+  expect(first).toEqual({ status: "answered", reply: "The run found three essays.", watching: false, address: expect.any(Object) });
   const landed = file.messages.filter((m) => m.role === "ai" && m.text === "The run found three essays.");
   expect(landed).toHaveLength(1);
   expect(landed[0]!.origin?.runId).toBe("run-b1");
@@ -138,7 +138,7 @@ test("a bell with nobody at the door runs headless, lands once stamped with its 
   expect(cards).toEqual([]);
   // The same bell again (a restart before the ack): found by its id, not asked again.
   const again = await deliverDoorBell(bell("b1"), deps);
-  expect(again).toEqual({ status: "answered", reply: "The run found three essays.", watching: false });
+  expect(again).toEqual({ status: "answered", reply: "The run found three essays.", watching: false, address: expect.any(Object) });
   expect(faux.state.callCount).toBe(1);
   await durable.runtime.close(ctx);
 });
@@ -151,7 +151,7 @@ test("a bell for a door conversation busy with the reader's turn waits until it 
   let waited = 0;
   const outcome = await deliverDoorBell(bell("b2", () => (waited += 1)), deps);
   expect(waited).toBeGreaterThan(0);
-  expect(outcome).toEqual({ status: "answered", reply: "And the run is done.", watching: false });
+  expect(outcome).toEqual({ status: "answered", reply: "And the run is done.", watching: false, address: expect.any(Object) });
   expect(faux.state.callCount).toBe(2);
   // The reader's answer landed before the bell's turn started.
   expect(file.messages.map((m) => [m.role, m.text.slice(0, 20)])).toEqual([

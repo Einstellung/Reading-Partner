@@ -35,6 +35,8 @@ export interface InfoTurnInput {
   mealsState?: MealsDeskRef["fresh"];
   // Where a proposal for this conversation's topic is drawn (memory/filing).
   topic?: AssembleInput["topic"];
+  // Where an edit_data change that waits for the reader puts its card (docs/platform/687).
+  raiseConfirmCard?: AssembleInput["raiseConfirmCard"];
 }
 
 export interface InfoTurn {
@@ -77,6 +79,7 @@ export async function assembleInfoTurn(input: InfoTurnInput): Promise<InfoTurn> 
     role: SECRETARY_ROLE_ID,
     origin: infoOrigin(anchor, input.dateKey),
     ...(input.topic ? { topic: input.topic } : {}),
+    ...(input.raiseConfirmCard ? { raiseConfirmCard: input.raiseConfirmCard } : {}),
   });
   return { items: desk.items, turn };
 }

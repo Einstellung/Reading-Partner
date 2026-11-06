@@ -89,7 +89,7 @@ test("a free thread answers the bell with its own turn: the reply lands stamped,
     if (rows) shown.push(rows);
   });
   const outcome = await deliverBookBell(input, deps);
-  expect(outcome).toEqual({ status: "answered", reply: "Four papers came back.", watching: false });
+  expect(outcome).toEqual({ status: "answered", reply: "Four papers came back.", watching: false, address: expect.any(Object) });
   expect(file.messages.map((m) => [m.role, m.text, m.origin])).toEqual([
     ["user", "Find me the literature.", undefined],
     ["ai", "Four papers came back.", { runId: "r-1" }],
@@ -132,7 +132,7 @@ test("after a restart the bell's earlier turn is found, and it is not answered t
   const again = await setup([], first.dir);
   again.file.messages.push(...first.file.messages.slice(1));
   const outcome = await deliverBookBell(input, again.deps);
-  expect(outcome).toEqual({ status: "answered", reply: "Answered once.", watching: false });
+  expect(outcome).toEqual({ status: "answered", reply: "Answered once.", watching: false, address: expect.any(Object) });
   expect(again.provider.state.callCount).toBe(0);
   expect(again.file.messages.filter((m) => m.role === "ai").length).toBe(1);
   await close(again.durable);

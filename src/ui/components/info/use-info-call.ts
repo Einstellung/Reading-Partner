@@ -20,6 +20,8 @@
 // its turn: it runs on and lands, with a box card if nobody has the
 // conversation open by then, and the call opened again follows it.
 
+import { HOUSEKEEPER_CONFIRM_KIND } from "../../../housekeeper/write";
+import { listenToThread, withArrivedRow } from "../companion/door-arrivals";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyTopicProposal, type TopicProposalCardData } from "../../../memory";
 import type { DeskItem } from "../../../desk";
@@ -304,6 +306,19 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   }, [showMealsCard]);
 
   useEffect(() => watchMealsDraft(() => void syncMealsDraftCard()), [syncMealsDraftCard]);
+
+  // A confirmation card a delegated run left lands after its reply, written by
+  // the bell (soul/run-confirm-cards.ts) whoever is looking (docs/platform/687).
+  // This view's own cards come through here too and are already on screen.
+  useEffect(
+    () =>
+      listenToThread(bookId, anchor.threadId, (message) => {
+        if (!message.parts?.some((p) => p.type === "card" && p.card.kind === HOUSEKEEPER_CONFIRM_KIND)) return;
+        const row = rehydrateMessage(message);
+        setMessages((prev) => withArrivedRow(prev, row));
+      }),
+    [bookId, anchor.threadId, setMessages],
+  );
 
   // Load (or start) the anchor's thread whenever it changes, and join a turn
   // in flight on it. In onboarding, kick the AI's opening turn once the empty
@@ -693,6 +708,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       mealsDraft: currentDraft,
       mealsState: () => loadMeals(),
       topic: { onCard: (payload) => raiseCard("topic", payload) },
+      raiseConfirmCard: (payload) => raiseCard("housekeeper", payload),
     });
     if (prepared.kind === "failed") return prepared;
     if (prepared.kind === "refused") return { kind: "refused", message: prepared.text };

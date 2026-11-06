@@ -37,6 +37,7 @@ import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } f
 import { appRuns, type RunStore } from "../legion/run";
 import { withoutBriefNote } from "../legion/subagent";
 import { appData } from "../platform/app/appdata";
+import { appendRunConfirmCards, type ThreadAddress } from "./run-confirm-cards";
 import { plainBlocks } from "../platform/std/markdown-plain";
 import type { Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
@@ -70,6 +71,8 @@ export interface AnswerBellDeps {
   signal?: AbortSignal;
   /** A turn that could not be taken. The bell stays queued either way. */
   onTrouble?: (bell: Bell, reason: string) => void;
+  /** Append the confirmation cards a delivered run left (run-confirm-cards.ts). The live one unless injected. */
+  confirmCards?: (runId: string, address: ThreadAddress) => Promise<unknown>;
 }
 
 /** Reads one of the app's files. Injected so a test can stub it. */
@@ -268,6 +271,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
   const now = deps.now ?? Date.now;
 
   const box = deps.box ?? appBox();
+  const confirmCards = deps.confirmCards ?? ((runId: string, address: ThreadAddress) => appendRunConfirmCards(runId, address));
 
   let answered = 0;
   for (const bell of queued) {
@@ -361,6 +365,12 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
         if (outcome.status === "failed") {
           deps.onTrouble?.(bell, outcome.reason);
           return false;
+        }
+        // What the run changed that waits for the reader goes after the reply, as cards to confirm.
+        if (runId !== undefined && outcome.address) {
+          await confirmCards(runId, outcome.address).catch((e) =>
+            console.warn(`run ${runId} was delivered but its confirmation cards would not append`, e),
+          );
         }
         if (!outcome.watching && bell.type !== "wake") {
           await box

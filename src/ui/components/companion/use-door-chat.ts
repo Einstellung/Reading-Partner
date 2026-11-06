@@ -271,6 +271,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           signal,
           tools,
           topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
+          raiseConfirmCard: (payload) => raiseCardRef.current("housekeeper", payload),
           // How a topic search is drafted, and the ones the reader has (docs/info/88); asking how background
           // work is going; when to search the web.
           prompt: `${await loadTopicSearchGuidance()}\n\n${BACKGROUND_STATUS_RULE}\n\n${doorToolsPrompt(tools)}`,

@@ -25,7 +25,7 @@ import {
   type TalkOutline,
 } from "../../../reading/talk";
 import type { PlaceAssembled } from "../../../reading/turn/place-session";
-import { rehydrateMessage } from "../chat/chatParts";
+import { rehydrateMessage, type CardPayload } from "../chat/chatParts";
 import type { ThreadMessage } from "../chat/types";
 import { usePlaceChat } from "../chat/use-place-chat";
 import { awaitingReply, coachThreadId, openCoachThread } from "./coach-thread";
@@ -71,7 +71,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
     topicNameRef.current = topicName;
   }, [topicName]);
 
-  const raiseCardRef = useRef<(prefix: string, payload: TalkArrangementCardData) => void>(() => {});
+  const raiseCardRef = useRef<(prefix: string, payload: CardPayload) => void>(() => {});
 
   // One turn, assembled from the outline as it stands and the whole thread, so
   // the second pass is read with the first one and what was said about it.
@@ -104,6 +104,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
           },
         },
         onCard: (payload: TalkArrangementCardData) => raiseCardRef.current("talk", payload),
+        raiseConfirmCard: (payload) => raiseCardRef.current("housekeeper", payload),
       });
     },
     [outlineId, t],
