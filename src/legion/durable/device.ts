@@ -18,7 +18,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { ConversationId } from "@earendil-works/pi-durable";
 import { createAppModels } from "../../ai/durable-models";
-import { recordModelCall, type ModelCallReport } from "../../ai/model-usage";
+import { recordModelCall, type ModelCallReport, type ModelCaller } from "../../ai/model-usage";
 import {
   recordCacheTurn,
   resolveRetention,
@@ -44,6 +44,8 @@ export const TURN_SECTION = "turn";
 /** Who a conversation's requests are logged under. */
 export interface PlaceTelemetry {
   surface: AiSurface;
+  /** What the model-call log names the spend, where the surface is too coarse (the meals conversation shares "info"). */
+  caller?: ModelCaller;
   /** The conversation's id in the logs: the thread. */
   thread: string;
   bookId?: string;
@@ -112,7 +114,7 @@ export function catalogDescribe(catalog: readonly AgentTool[]): Describe {
 /** One provider response, for the model-call log. */
 export function usageReport(message: AssistantMessage, telemetry: PlaceTelemetry): ModelCallReport {
   return {
-    caller: telemetry.surface,
+    caller: telemetry.caller ?? telemetry.surface,
     ...(telemetry.bookId !== undefined ? { bookId: telemetry.bookId } : {}),
     provider: message.provider,
     model: message.model,

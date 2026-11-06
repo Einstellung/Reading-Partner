@@ -25,7 +25,15 @@ export type ModelCaller =
   // The nightly distillation pass (src/memory/dream).
   | "distill"
   // The unattended pipelines: plans, overviews, outlines, news triage.
-  | "prep";
+  | "prep"
+  // The standing meals conversation's turns (src/info/briefer/info-durable.ts).
+  | "meals-chat"
+  // A recipe written for a dish, by the sweep or the recipe page.
+  | "meals-recipe"
+  // The steps of a batch-cook session.
+  | "meals-prep-steps"
+  // A dish picture (gpt-image); logged with zero tokens, told apart by its model id.
+  | "meals-dish-art";
 
 // What the call was about, when the caller has a name for it. A reading call
 // has a book, an info call has a topic, a one-off has neither.

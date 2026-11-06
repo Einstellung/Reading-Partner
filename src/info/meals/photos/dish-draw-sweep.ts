@@ -15,7 +15,7 @@
 // before the next one, longer each time it fails again. Meanwhile the dishes
 // show their ingredient strip.
 
-import { generateImage, imageGenerationReady, type GeneratedImage } from "../../../ai/image-generation";
+import { generateImage, imageGenerationReady, type GenerateImageDeps, type GeneratedImage } from "../../../ai/image-generation";
 import { registerPullRoute, type PullMatcher } from "../../../platform/sync/pull-routes";
 import type { PhotoCache } from "./dish-photos";
 import { claimEntry, DRAWINGS_DIR, dishesToDraw } from "./dish-drawing";
@@ -142,6 +142,11 @@ export function onDishDrawn(listener: () => void): () => void {
   };
 }
 
+/** One dish picture, logged as the meals dish art. */
+export function drawDishPicture(prompt: string, deps?: GenerateImageDeps): Promise<GeneratedImage> {
+  return generateImage(prompt, { caller: "meals-dish-art" }, deps);
+}
+
 let live: DishDrawer | null = null;
 
 /** This device's drawer. One, so that "one round at a time" means anything. */
@@ -150,7 +155,7 @@ export function mealsDishDrawer(): DishDrawer {
     canDraw: () => imageGenerationReady(),
     state: () => loadMeals(),
     photos: () => loadMealsPhotos(),
-    draw: (prompt) => generateImage(prompt, { caller: "info" }),
+    draw: (prompt) => drawDishPicture(prompt),
     saveFile: (bytes, mediaType) => saveDrawingFile(bytes, mediaType),
     save: (entries) => savePhotoEntries(entries),
     release: (keys, since) => releaseDrawingClaims(keys, since),
