@@ -30,6 +30,8 @@ palace 行上的 `retention` 字段（`src/palace/kinds.ts`），取代原来只
 
 `src/housekeeper/`，capability 层，只 import platform 和 palace。
 
+housekeeper 管宫里的东西：本文是何时扔，AI 怎么改数据（副本、护栏、上一版）见 [687](./687-housekeeper：AI 写入与护栏.md)，放在子目录 `src/housekeeper/write/`，本节的依赖说的是根目录。
+
 每晚一次：挂在 legion/schedule 的本地夜间任务上（`registerNightlyJob`，每台设备都跑，不选举，锚点记在本机的 `legion/schedule/fired.json`）。触发它的是外壳后台服务里的 `startScheduleClock`（`useBackgroundServices`）：启动时、每五分钟、回到前台时各问一次钟。原先这个 tick 挂在 info 的 `checkDailyRound` 上，而 info pipeline 只在收集机上构建，阅读机（手机、平板）从没跑过夜间任务。
 
 执行按行的同步通道分：
