@@ -188,3 +188,7 @@ test("a second store's mutation does not queue behind the first store's unfinish
 	release();
 	await stuck;
 });
+
+test("openai defaults to gpt-6.1-terra", () => {
+	expect(defaultModelFor("openai")).toBe("gpt-6.1-terra");
+});

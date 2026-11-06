@@ -326,8 +326,13 @@ export function isSelectableModel(id: ProviderId, modelId: string | null): boole
 // notes plus a conversation. So nothing is hidden from the picker, but nobody
 // lands on a 128k model without having asked for it. Null only when the provider
 // lists no models at all, which callers must handle rather than assume away.
+// A provider's default when it is not simply the largest context window.
+const PREFERRED_MODEL: Partial<Record<ProviderId, string>> = { openai: "gpt-6.1-terra" };
+
 export function defaultModelFor(id: ProviderId): string | null {
 	const models = providers[id].getModels();
+	const preferred = PREFERRED_MODEL[id];
+	if (preferred && models.some((m) => m.id === preferred)) return preferred;
 	let best: Model<Api> | null = null;
 	for (const m of models) {
 		if (!best || m.contextWindow > best.contextWindow) best = m;
