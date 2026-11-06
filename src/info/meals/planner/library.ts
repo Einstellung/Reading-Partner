@@ -1,5 +1,5 @@
 // The dish library as one user sees it (docs/671 菜库, 替换组): the seed
-// dishes and their own, each dish made with foods they can get. A dish with a
+// dishes and their own (dishes/user-dishes.ts), each dish made with foods they can get. A dish with a
 // food they dislike in the pan or among its staples cannot be planned; a pot's
 // way with one on the plate (an add-on, its staple) cannot be eaten, and the
 // pot keeps its other ways. A dish with a food they cannot buy takes a member
@@ -8,7 +8,7 @@
 // (dishes/house-oil.ts), so every dish read through here, and everything
 // solved, bought and cooked from it, uses that oil.
 
-import { SEED_DISHES } from "../dishes/seed";
+import { libraryDishes } from "../dishes/user-dishes";
 import { houseOil, withHouseOil } from "../dishes/house-oil";
 import { swapUnavailable, type FoodSwap } from "../dishes/swap";
 import { DEFAULT_KITCHEN, EQUIPMENT, type Dish, type DishWay, type Equipment } from "../dishes/types";
@@ -18,6 +18,8 @@ import type { Profile } from "../nutrition/targets";
 export type DishBlock = { food: string; reason: "dislike" | "unavailable" };
 
 export interface PlanLibrary {
+  /** Every dish the library was built from, as stored: the seed dishes, then the reader's own. */
+  all(): readonly Dish[];
   /** The dish as this user gets it, swaps applied; undefined for an unknown id or a blocked dish. */
   dish(id: string): Dish | undefined;
   /** The dish as stored, whether or not it can be planned. */
@@ -93,7 +95,7 @@ interface Resolved {
   ways: (DishBlock | null)[];
 }
 
-export function planLibrary(profile: LibraryProfile, dishes: readonly Dish[] = SEED_DISHES): PlanLibrary {
+export function planLibrary(profile: LibraryProfile, dishes: readonly Dish[] = libraryDishes()): PlanLibrary {
   const byId = new Map(dishes.map((d) => [d.id, d]));
   const unavailable = new Set(profile.unavailable ?? []);
   const disliked = (id: string) => {
@@ -136,6 +138,7 @@ export function planLibrary(profile: LibraryProfile, dishes: readonly Dish[] = S
   };
 
   return {
+    all: () => dishes,
     dish: (id) => resolve(id).dish,
     stored: (id) => byId.get(id),
     blocked: (id) => resolve(id).block,

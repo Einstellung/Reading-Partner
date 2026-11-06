@@ -243,6 +243,7 @@
 - [380-a-local-run-ignores-requires](./storage/380-a-local-run-ignores-requires.md) — `tier: "local"` 的 run 由派发它的那台机器当场执行，`requires` 只在同步 run 的选举里起作用，管不着谁能派；手机应用周计划后自己跑了要隐藏 webview 的 `meals-photos`，电脑上一张图都没搜。能干这活的机器读同步过来的文件自己发起，干不了的连 port 都不挂、worker 再拒一次
 - [396-the-fork-create-id-race-swapped-sides](./storage/396-the-fork-create-id-race-swapped-sides.md) — pi 一致性套件里 fork/create 抢同一个 destination id 的两条用例，0.87 换了赢家：先调的 create 反而被拒。预订是 repo 的内存集合，赢家由两条路径各自 await 了几次文件系统调用决定，与文件系统实现无关；文件系统背书的 repo 两个方向只能过一个，`NOT_FOR_A_FILESYSTEM` 里排除的名字跟着翻面
 - [484-a-slow-first-read-overwrites-a-newer-write](./storage/484-a-slow-first-read-overwrites-a-newer-write.md) — `createFiredStore` 的 `read()` 先查缓存再 await 读盘，冷启动两拍同时读，慢的那次在 `record()` 之后落地，把旧副本赋回缓存，下一次写盘丢掉夜间任务的锚点。缓存读盘的 promise，写盘排成一条链
+- [691-a-boot-read-that-rejects-fails-an-unrelated-test](./storage/691-a-boot-read-that-rejects-fails-an-unrelated-test.md) — `bootDomains` 里 `void` 掉的读盘在测试环境必抛（没有 Tauri 文件系统），未处理的 rejection 记到正在跑的那条测试头上，红的是 `store-errors.test.ts` 这种无关测试。启动时不等的读一律接 `.catch(console.warn)`
 
 ## 提取（壳侧 pdf.js）
 

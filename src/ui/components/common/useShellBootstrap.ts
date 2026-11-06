@@ -57,6 +57,7 @@ import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerSourceSiteAdapters } from "../../../info/sources/plugins/all";
 import { registerXLinkReader } from "../../../info/x/live";
 import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-worker";
+import { startMealsUserDishes } from "../../../info/meals/dishes/user-dishes";
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photos/photo-sweep";
 import { startMealsRecipeHousekeeping } from "../../../info/meals/live";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
@@ -258,6 +259,9 @@ export function bootDomains(): void {
   // one that has no webview: the run is `local`, so the only device that may
   // start one is the device that can do it (photo-sweep.ts, pitfall 380).
   registerMealsPhotosWorker();
+  // The reader's own dishes, which the planner reads beside the seed library
+  // (docs/platform/687): held in memory, so read now and again on each pull.
+  startMealsUserDishes();
   registerBookDelivery();
   registerDoorDelivery();
   // The same pair on the info side: a question the briefing did not answer, and

@@ -10,7 +10,6 @@
 // each main's sodium at one meal, and the fresh packs no side or breakfast
 // uses, which the mains picked have to use up between them.
 
-import { SEED_DISHES } from "../dishes/seed";
 import type { Dish } from "../dishes/types";
 import { foodById } from "../nutrition/foods";
 import type { PlanLibrary } from "./library";
@@ -45,7 +44,7 @@ function head(d: Dish): string {
 }
 
 /** The lines of the LIBRARY section, for this user's library and kitchen; sodium and packs when `portions` is given. */
-export function libraryListing(lib: PlanLibrary, dishes: readonly Dish[] = SEED_DISHES, portions?: ReaderPortions): string[] {
+export function libraryListing(lib: PlanLibrary, dishes: readonly Dish[] = lib.all(), portions?: ReaderPortions): string[] {
   const usable = dishes
     .map((d) => lib.dish(d.id))
     .filter((d): d is Dish => !!d && d.equipment.every((e) => lib.kitchen.has(e)));
