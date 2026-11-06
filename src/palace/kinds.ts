@@ -1229,6 +1229,21 @@ export const PALACE = [
     note: "the week's dinners, the list derived from them and the nights that went differently (docs/73): one record, merged whole, because a per-field merge would assemble a week that never existed on either device; the copy whose plan was confirmed later wins (info/meals/plan/merge.ts), two copies of one plan keep one and park the other",
   },
   {
+    kind: "info-meals-draft",
+    about:
+      "The meal plan drafted in the meals conversation and not saved yet: each day's meals, the pots and the prep session, and whether it was applied. Read it with meals_read_draft.",
+    domain: "info",
+    match: fixed("info-meals-draft.json"),
+    samples: ["info-meals-draft.json"],
+    id: "fixed",
+    refs: [],
+    sync: "data",
+    merge: "lattice",
+    deleteWith: "never",
+    retention: NEVER,
+    note: "the one unsaved draft (docs/platform/687 三餐), written by propose_meal_plan and marked applied by 「就这样」 or apply_meal_plan; the draft card in the conversation is drawn from it and patched when it changes. One record, merged whole: the copy written later wins (info/meals/draft-file.ts)",
+  },
+  {
     kind: "info-link-records",
     about: "A link taken in (an X post, a page), what it is, and the documents it led to.",
     domain: "info",

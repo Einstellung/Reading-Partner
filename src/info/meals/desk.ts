@@ -14,7 +14,7 @@ import {
   type DeskItemKind,
 } from "../../desk";
 import type { AgentTool } from "../../legion/durable/contract";
-import type { MealsDraftCardData } from "./cards";
+import type { DraftOnFile } from "./draft-file";
 import { mealsGuidance, type MealsFocus } from "./tools";
 import { hostRegion } from "./region";
 import type { MealsState } from "./plan/types";
@@ -45,14 +45,14 @@ export interface MealsDeskRef {
   // when it will not read, the desk uses `state`, which a plan confirmed
   // earlier in this conversation has already replaced.
   fresh?: () => Promise<MealsState>;
-  // The draft card waiting in this conversation, read when the desk opens.
-  // The conversation replays words, not cards (turn-rows.ts
+  // The draft waiting in this conversation (the draft file), read when the
+  // desk opens. The conversation replays words, not cards (turn-rows.ts
   // replayableHistory), so this is how a revision sees what it revises.
   draft?: MealsDraft;
 }
 
-/** The draft card the surface is showing, still waiting for 「就这样」, or null. */
-export type MealsDraft = () => MealsDraftCardData | null;
+/** The draft the surface is showing, still waiting for 「就这样」, or null. */
+export type MealsDraft = () => Promise<DraftOnFile | null>;
 
 const mealsKind: DeskItemKind<MealsDeskRef> = {
   kind: INFO_MEALS_KIND,
@@ -80,7 +80,8 @@ async function openMeals(ref: MealsDeskRef, env: DeskEnv): Promise<DeskItem | nu
   if (env.signal?.aborted) return null;
   const state = (ref.fresh ? await ref.fresh().catch(() => null) : null) ?? ref.state;
   if (env.signal?.aborted) return null;
-  const draft = ref.draft?.() ?? null;
+  const draft = ref.draft ? await ref.draft().catch(() => null) : null;
+  if (env.signal?.aborted) return null;
   const prompt = `${DUTY}\n\n${mealsGuidance(state, ref.today, { focus: ref.focus, region: hostRegion(), draft })}`;
   return {
     kind: INFO_MEALS_KIND,

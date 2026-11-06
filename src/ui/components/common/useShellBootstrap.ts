@@ -44,6 +44,7 @@ import {
 import { registerInfoDesk } from "../../../info/briefer/desk";
 import { registerMealsDesk } from "../../../info/meals/desk";
 import "../../../info/meals/plan/merge";
+import "../../../info/meals/draft-store";
 import { registerSecretaryRole } from "../../../info/briefer/role";
 import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
 import { registerReadingDistillSources } from "../../../reading/distill/source";

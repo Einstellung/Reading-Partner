@@ -234,8 +234,9 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
       "meals_read_recipes",
       "meals_read_charter",
       "meals_read_foods",
+      "meals_read_draft",
     ],
-    safe: ["meals_read_plan", "meals_read_prep", "meals_read_shopping", "meals_read_recipes", "meals_read_charter", "meals_read_foods"],
+    safe: ["meals_read_plan", "meals_read_prep", "meals_read_shopping", "meals_read_recipes", "meals_read_charter", "meals_read_foods", "meals_read_draft"],
   },
   {
     where: "info/topic-search",

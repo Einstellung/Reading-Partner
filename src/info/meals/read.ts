@@ -25,6 +25,11 @@ import { addDays, isoWeekday } from "./plan/week";
 import { parseDraft, type MealAt, type PlanDraft } from "./planner/draft";
 import type { StoragePlan } from "./planner/storage";
 import { checkPlannerRecord } from "./planner/to-week";
+import type { MealsDraftCardData } from "./cards";
+import { draftCardOf, type MealsDraftFile } from "./draft-file";
+import { checkDraft } from "./planner/checks";
+import { planLibrary } from "./planner/library";
+import { draftContext } from "./planner/redraft";
 import { recipeRequest } from "./recipe/recipe";
 import type { MealsRecipes } from "./recipe/recipe-store";
 import { prepStepsRequest } from "./recipe/prep-steps";
@@ -614,4 +619,51 @@ export function readFoods(state: MealsState, opts: { ids?: readonly string[]; qu
     const f = foodById(id);
     return f ? [foodRead(f)] : [];
   });
+}
+
+// --- the unsaved draft -----------------------------------------------------------
+
+export interface DraftRead {
+  /** False when no draft was ever written on this device or synced to it. */
+  found: boolean;
+  draftId?: string;
+  /** The conversation its card is in. */
+  threadId?: string;
+  version?: number;
+  /** "proposed" waits for 「就这样」; "applied" is already the saved plan (meals_read_plan). */
+  phase?: MealsDraftFile["phase"];
+  /** Local date of day 1. */
+  startDate?: string;
+  updatedAt?: number;
+  /** The draft by id, as stored: each day's breakfast, lunch, dinner, fruit, the pots (`batches`) and the prep `sessions`. */
+  draft?: PlanDraft;
+  /** The picks it was filled from: the mains, pots and session, and the breakfasts and staples they asked for. */
+  picks?: PlanDraft;
+  /** What the card shows, by name: the pots, each day with its date, the prep session and its minutes. Null without targets. */
+  card?: Pick<MealsDraftCardData, "pots" | "prepDay" | "days" | "session"> | null;
+}
+
+/** The unsaved draft (draft-file.ts) with the card's names, dates and minutes. */
+export function readDraft(file: MealsDraftFile | null, state: MealsState, region: Region): DraftRead {
+  if (!file) return { found: false };
+  const targets = targetsOf(state.charter, region);
+  let card: DraftRead["card"] = null;
+  if (state.charter && targets) {
+    const profile = state.charter.profile;
+    const lib = planLibrary(profile);
+    const drawn = draftCardOf(file, checkDraft(file.draft, draftContext(profile, targets, file.startDate, file.draft.days.length, lib)), lib);
+    card = { pots: drawn.pots, ...(drawn.prepDay ? { prepDay: drawn.prepDay } : {}), days: drawn.days, session: drawn.session };
+  }
+  return {
+    found: true,
+    draftId: file.draftId,
+    threadId: file.threadId,
+    version: file.version,
+    phase: file.phase,
+    startDate: file.startDate,
+    updatedAt: file.updatedAt,
+    draft: file.draft,
+    ...(file.picks ? { picks: file.picks } : {}),
+    card,
+  };
 }

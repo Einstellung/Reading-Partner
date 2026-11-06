@@ -20,6 +20,7 @@ import { READER_PULL_ROUTE } from "../../../src/info/briefer/reader";
 import { MEALS_DISHES_PULL_ROUTE } from "../../../src/info/meals/dishes/user-dishes";
 import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/info/meals/photos/photo-sweep";
 import { MEALS_PICTURES_PULL_ROUTE } from "../../../src/info/meals/photos/dish-draw-sweep";
+import { MEALS_DRAFT_PULL_ROUTE } from "../../../src/info/meals/draft-store";
 import { SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
 import {
   BOOK_CACHE_PULL_ROUTE,
@@ -47,6 +48,7 @@ const ROUTES: PullMatcher[] = [
   MEALS_PHOTOS_PULL_ROUTE,
   MEALS_PICTURES_PULL_ROUTE,
   MEALS_DISHES_PULL_ROUTE,
+  MEALS_DRAFT_PULL_ROUTE,
 ];
 
 // Synced files that no route needs, and why. Each is read when the screen or the
