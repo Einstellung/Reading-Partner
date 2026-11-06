@@ -22,6 +22,12 @@ export interface ConfirmState {
   reason?: string;
 }
 
+/** The question line (and the buttons under it) belong to the card while it
+ * waits on the reader; once settled the card keeps only what changed and the result. */
+export function showsQuestion(phase: ConfirmPhase): boolean {
+  return phase === "checking" || phase === "open" || phase === "working";
+}
+
 /** What the card says once the reader confirmed. */
 export function stateAfterConfirm(outcome: WriteOutcome | { status: "gone" }): ConfirmState {
   switch (outcome.status) {

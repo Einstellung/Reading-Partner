@@ -52,6 +52,7 @@ export default {
   "housekeeperConfirm.stale": "その間にデータが変わったため、何も書き込んでいません",
   "housekeeperConfirm.gone": "もう待っていません",
   "housekeeperConfirm.failed": "書き込めませんでした：{reason}",
+  "housekeeperConfirm.working": "変更しています…",
 
   "places.goingTo": "{place} へ移動しています",
   "places.goingSomewhere": "アプリ内を移動しています",

@@ -52,6 +52,7 @@ export default {
   "housekeeperConfirm.stale": "数据刚变了，什么都没写",
   "housekeeperConfirm.gone": "已不再等待",
   "housekeeperConfirm.failed": "没能写入：{reason}",
+  "housekeeperConfirm.working": "正在改…",
 
   "places.goingTo": "正在前往{place}",
   "places.goingSomewhere": "正在应用内移动",
