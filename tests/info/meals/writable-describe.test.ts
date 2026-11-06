@@ -67,7 +67,7 @@ describe("the plan entry's describe lines", () => {
     });
     const lines = entry.describe(was, now);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^Pot chicken: .+, raw weight 600 g$/);
+    expect(lines[0]).toMatch(/^Pot: .+, raw weight 600 g$/);
   });
 
   test("a changed lunch carries its date, not a day number", () => {
@@ -86,7 +86,7 @@ describe("the plan entry's describe lines", () => {
     const now = withDraft(was, (d) => {
       d.sessions[0].day = 2;
     });
-    expect(entry.describe(was, now)).toEqual(["Prep session prep: November 1, morning"]);
+    expect(entry.describe(was, now)).toEqual(["Prep session: November 1, morning"]);
     expect(start).toBe("2026-10-31");
   });
 

@@ -175,15 +175,15 @@ function draftLines(before: PlanDraft, after: PlanDraft, starts: { before: strin
     const was = before.batches.find((x) => x.id === b.id);
     if (was && was.dish === b.dish && was.rawG === b.rawG) continue;
     const dish = dishOf(b.dish)?.name ?? b.dish;
-    out.push(b.rawG !== undefined ? t("meals.edit.potRaw", { id: b.id, dish, g: b.rawG }) : t("meals.edit.pot", { id: b.id, dish }));
+    out.push(b.rawG !== undefined ? t("meals.edit.potRaw", { dish, g: b.rawG }) : t("meals.edit.pot", { dish }));
   }
   for (const s of after.sessions) {
     const was = before.sessions.find((x) => x.id === s.id);
     if (was && was.day === s.day && was.part === s.part) continue;
-    out.push(t("meals.edit.session", { id: s.id, date: dayDate(start, s.day), part: t(PART_WORD[s.part]) }));
+    out.push(t("meals.edit.session", { date: dayDate(start, s.day), part: t(PART_WORD[s.part]) }));
   }
   for (const s of before.sessions) {
-    if (!after.sessions.some((x) => x.id === s.id)) out.push(t("meals.edit.sessionGone", { id: s.id }));
+    if (!after.sessions.some((x) => x.id === s.id)) out.push(t("meals.edit.sessionGone"));
   }
   if (!before.prepDinner !== !after.prepDinner) {
     out.push(t(after.prepDinner ? "meals.edit.prepDinnerOn" : "meals.edit.prepDinnerOff", { date: dayDate(start, PREP_DAY) }));
