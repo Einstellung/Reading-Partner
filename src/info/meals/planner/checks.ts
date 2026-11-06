@@ -37,7 +37,7 @@ import {
 import { planLibrary, type DishBlock, type PlanLibrary } from "./library";
 import { planRice, riceMeals } from "./rice";
 import { leftoverMatters, packList, shownName, type PackLine } from "./packs";
-import { DAY_PROTEIN_FLOOR, DAY_SODIUM_MG, solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
+import { DAY_PROTEIN_FLOOR, DAY_SODIUM_MG, potRawRange, solveDraft, type PlanLine, type SolvedDay, type SolvedPlan } from "./solve";
 import { planStorage, type StoragePlan } from "./storage";
 
 export { DAY_PROTEIN_FLOOR, DAY_SODIUM_MG };
@@ -352,6 +352,28 @@ function structureProblems(draft: PlanDraft, lib: PlanLibrary, ctx: DraftContext
     }
     if (b.meals.length < POT_MEALS.min || b.meals.length > POT_MEALS.max) {
       out.push({ rule: "pot_meals", message: `Pot ${b.id} (${dish.name}) feeds ${b.meals.length} meals; a pot feeds ${POT_MEALS.min} to ${POT_MEALS.max}, the cooking meal counted.`, batch: b.id });
+    } else if (b.rawG !== undefined) {
+      // The raw protein they have: from the reference serving to the dish's largest portion at every meal.
+      const people = ctx.people ?? 1;
+      const range = potRawRange(dish, b.meals.length, people);
+      const who = `${b.meals.length} meals for ${people} ${people === 1 ? "person" : "people"}`;
+      if (!(b.rawG > 0)) {
+        out.push({ rule: "pot", message: `Pot ${b.id} (${dish.name}): rawG must be the pot's raw protein in grams for everyone eating, or left out for the program to pick.`, batch: b.id });
+      } else if (b.rawG > range.max) {
+        out.push({
+          rule: "pot",
+          message: `Pot ${b.id} (${dish.name}): ${g(b.rawG)} g of raw protein is more than ${who} can eat of it; at most ${range.max} g. Give the pot another meal, or use the rest elsewhere.`,
+          batch: b.id,
+          over: b.rawG - range.max,
+        });
+      } else if (b.rawG < range.min) {
+        out.push({
+          rule: "pot",
+          message: `Pot ${b.id} (${dish.name}): ${g(b.rawG)} g of raw protein is under one reference serving at each of its ${who}; at least ${range.min} g. Feed fewer meals from the pot, or add to it.`,
+          batch: b.id,
+          over: range.min - b.rawG,
+        });
+      }
     }
     for (const m of b.meals) {
       if (m.day === PREP_DAY && (m.slot !== "dinner" || !draft.prepDinner)) {

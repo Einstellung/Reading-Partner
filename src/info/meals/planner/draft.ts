@@ -65,6 +65,13 @@ export interface DraftBatch {
   dish: string;
   session: string;
   meals: MealAt[];
+  /**
+   * The pot's raw protein, grams, for everyone eating: what they already have
+   * ("我有 600 克鸡胸"). Absent, the solver picks it from the protein target
+   * (solve.ts); present, the pot's protein lines add up to it, its meals share
+   * it evenly, and the checks hold it to the dish's portions (rule `pot`).
+   */
+  rawG?: number;
 }
 
 export interface DraftSession {
@@ -119,6 +126,7 @@ export function draftMeals(draft: PlanDraft): { day: number; slot: MainSlot; mea
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const int = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : Number.NaN);
+const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : Number.NaN);
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
@@ -163,6 +171,7 @@ export function parseDraft(raw: unknown): PlanDraft {
         dish: str(batch.dish),
         session: str(batch.session),
         meals: list(batch.meals).map((m) => ({ day: int(obj(m).day), slot: str(obj(m).slot) as MainSlot })),
+        ...(batch.rawG !== undefined && batch.rawG !== null ? { rawG: num(batch.rawG) } : {}),
       };
     }),
     sessions: list(r.sessions).map((s) => {
