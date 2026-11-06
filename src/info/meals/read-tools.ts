@@ -9,7 +9,7 @@
 // call's think run at the meals place and the tasking worker.
 
 import { Type } from "typebox";
-import { getLocale } from "../../i18n";
+import { getLocale, t } from "../../i18n";
 import type { Locale } from "../../i18n/locale";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { Region } from "./nutrition/targets";
@@ -79,7 +79,7 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
   return [
     {
       name: "meals_read_plan",
-      label: () => "Reading the meal plan",
+      label: () => t("meals.tool.readPlan"),
       effect: "read",
       replay: "safe",
       description:
@@ -99,7 +99,7 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
     },
     {
       name: "meals_read_prep",
-      label: () => "Reading the prep session",
+      label: () => t("meals.tool.readPrep"),
       effect: "read",
       replay: "safe",
       description:
@@ -119,7 +119,7 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
     },
     {
       name: "meals_read_shopping",
-      label: () => "Reading the shopping list",
+      label: () => t("meals.tool.readShopping"),
       effect: "read",
       replay: "safe",
       description:
@@ -133,7 +133,7 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
     },
     {
       name: "meals_read_recipes",
-      label: () => "Reading the recipes",
+      label: () => t("meals.tool.readRecipes"),
       effect: "read",
       replay: "safe",
       description:
@@ -165,7 +165,7 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
     },
     {
       name: "meals_read_charter",
-      label: () => "Reading their meals profile",
+      label: () => t("meals.tool.readCharter"),
       effect: "read",
       replay: "safe",
       description:
@@ -179,7 +179,7 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
     },
     {
       name: "meals_read_foods",
-      label: () => "Reading the food table",
+      label: () => t("meals.tool.readFoods"),
       effect: "read",
       replay: "safe",
       description:
@@ -200,7 +200,7 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
     },
     {
       name: "meals_read_draft",
-      label: () => "Reading the draft plan",
+      label: () => t("meals.tool.readDraft"),
       effect: "read",
       replay: "safe",
       description:

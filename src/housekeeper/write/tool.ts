@@ -153,7 +153,7 @@ export function buildEditTools(tools: readonly AgentTool[], surface: EditSurface
 
   const editData: AgentTool = {
     name: EDIT_DATA_TOOL,
-    label: () => t("chat.editData.running"),
+    label: () => t("chat.editData.label"),
     effect: "write",
     description: EDIT_DATA_DESCRIPTION,
     parameters: Type.Object({
@@ -189,7 +189,7 @@ export function buildEditTools(tools: readonly AgentTool[], surface: EditSurface
 
   const undoEdit: AgentTool = {
     name: UNDO_EDIT_TOOL,
-    label: () => t("chat.undoEdit.running"),
+    label: () => t("chat.undoEdit.label"),
     effect: "write",
     description: UNDO_EDIT_DESCRIPTION,
     parameters: Type.Object({
