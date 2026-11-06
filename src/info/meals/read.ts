@@ -404,7 +404,7 @@ export interface ShoppingLineRead {
   neededBy: string | null;
   /** "plan" for a line derived from the plan, "reader" for one they asked for. */
   source: "plan" | "reader";
-  /** Kept at home rather than bought (a seasoning, an oil, dry rice). */
+  /** Kept at home rather than bought (a seasoning, an oil, dry rice), or enough of it at home already (shopping.have). */
   onHand: boolean;
   /** Bought frozen and kept frozen. */
   boughtFrozen: boolean;

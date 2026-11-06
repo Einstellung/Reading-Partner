@@ -197,6 +197,8 @@ export default {
   "edit.dishAdded": "Plato {name} ({id}) añadido",
   "edit.dishChanged": "Plato {name} ({id}) cambiado",
   "edit.dishRemoved": "Plato {name} ({id}) eliminado",
+  "edit.have": "{food} en casa: {g} g, se compra menos",
+  "edit.haveGone": "{food} en casa ya no se cuenta",
 
   "flavour.soy-ginger": "Soja y jengibre",
   "flavour.garlic": "Ajo",
@@ -277,6 +279,7 @@ export default {
   "pack.aboutWeight": "unos {grams} g",
   "pack.needOf": "unos {grams} g necesarios · {buy}",
   "pack.onHand": "en la despensa",
+  "pack.have": "{grams} g en casa",
   "pack.freeze": "congélalo en porciones el día de la compra",
   "pack.keepFrozen": "comprar congelado y mantener congelado",
   "pack.leftover": "quedan unos {grams} g al abrirlo, usar antes del {weekday}",

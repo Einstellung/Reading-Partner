@@ -11,7 +11,7 @@ import { foodById } from "../nutrition/foods";
 import { CATEGORY_ORDER, KEEPS_ORDER, type PackNote, type ShoppingItem, type WeekPlan } from "../plan/types";
 import { addDays } from "../plan/week";
 import type { PlanDraft } from "./draft";
-import { boughtName, buyText, LEFTOVER_IGNORE, leftoverMatters, packList, type PackLine } from "./packs";
+import { boughtName, buyText, lessHave, LEFTOVER_IGNORE, leftoverMatters, packList, type PackLine } from "./packs";
 import type { SolvedPlan } from "./solve";
 
 const about = (g: number) => Math.max(10, Math.round(g / 10) * 10);
@@ -25,16 +25,17 @@ const about = (g: number) => Math.max(10, Math.round(g / 10) * 10);
  */
 export function packQty(line: PackLine): string {
   const b = line.buy;
-  if (b.by === "weight") return t("meals.pack.aboutWeight", { grams: about(line.grams) });
+  if (b.by === "weight") return t("meals.pack.aboutWeight", { grams: about(line.grams - (line.have ?? 0)) });
   const text = buyText(line);
   const one = b.by === "pack" ? b.packG : b.by === "piece" ? b.pieceG : 0;
   // A bag of rice is counted in cooked grams: what it holds dry is on the label, so no "needed" weight.
   if (!one || b.by === "unit" || b.by === "onHand" || foodById(line.food)?.boughtDry) return text;
   // A spice or seasoning, or anything under 10 g, is just its jar or packet: "about 10 g needed" would overstate it.
-  if (line.grams < 10 || foodById(line.food)?.roles.includes("sauce")) return text;
-  const spare = b.count * one - line.grams;
+  const grams = line.grams - (line.have ?? 0);
+  if (grams < 10 || foodById(line.food)?.roles.includes("sauce")) return text;
+  const spare = b.count * one - grams;
   if (spare < Math.max(LEFTOVER_IGNORE.share * one, LEFTOVER_IGNORE.grams)) return text;
-  return t("meals.pack.needOf", { grams: about(line.grams), buy: text });
+  return t("meals.pack.needOf", { grams: about(grams), buy: text });
 }
 
 /** One whole-pack line as a stored list line, day 1 on `start` (a line first needed at a prep-day session is needed the day before). */
@@ -55,6 +56,7 @@ export function packItem(line: PackLine, start: string): ShoppingItem | null {
   const pack: PackNote = {};
   if (line.frozen) pack.frozen = true;
   if (line.buy.by === "onHand") pack.onHand = true;
+  if (line.have) pack.have = Math.round(line.have);
   if (line.leftover && leftoverMatters(line)) {
     pack.leftover = { grams: about(line.leftover.grams), useBy: addDays(start, line.leftover.spoilsDay - 1) };
   }
@@ -89,12 +91,20 @@ function madeOnly(solved: SolvedPlan, plan: WeekPlan, start: string): SolvedPlan
 
 /**
  * The list lines of a planner plan: whole packs for every meal it still makes,
- * times the people eating, in aisle order and the shortest shelf life first.
+ * times the people eating, less what the reader has at home (`have`, grams by
+ * food id), in aisle order and the shortest shelf life first.
  */
-export function plannerShoppingList(solved: SolvedPlan, draft: PlanDraft, plan: WeekPlan, people = 1): ShoppingItem[] {
+export function plannerShoppingList(
+  solved: SolvedPlan,
+  draft: PlanDraft,
+  plan: WeekPlan,
+  people = 1,
+  have: Readonly<Record<string, number>> = {},
+): ShoppingItem[] {
   const start = plan.planner?.start ?? plan.startDate;
   const times = Math.max(1, Math.round(people));
-  const items = packList(madeOnly(solved, plan, start), draft, times).flatMap((l) => packItem(l, start) ?? []);
+  const lines = packList(madeOnly(solved, plan, start), draft, times).map((l) => lessHave(l, have[l.food]));
+  const items = lines.flatMap((l) => packItem(l, start) ?? []);
   return items.sort(
     (a, b) =>
       CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) ||

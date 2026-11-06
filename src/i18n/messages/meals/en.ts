@@ -214,6 +214,8 @@ export default {
   "edit.dishAdded": "Added dish {name} ({id})",
   "edit.dishChanged": "Changed dish {name} ({id})",
   "edit.dishRemoved": "Removed dish {name} ({id})",
+  "edit.have": "{food} at home: {g} g, bought less",
+  "edit.haveGone": "{food} at home no longer counted",
 
   // plan/types.ts FLAVOURS, as displayed (the ids and their English names in
   // FLAVOURS steer the model; this is only what the reader sees)
@@ -307,6 +309,7 @@ export default {
   "pack.aboutWeight": "about {grams} g",
   "pack.needOf": "about {grams} g needed · {buy}",
   "pack.onHand": "on hand",
+  "pack.have": "{grams} g at home",
   "pack.freeze": "freeze in portions the day you buy it",
   "pack.keepFrozen": "buy frozen and keep it frozen",
   "pack.leftover": "about {grams} g left once opened, use by {weekday}",

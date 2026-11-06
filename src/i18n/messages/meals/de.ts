@@ -198,6 +198,8 @@ export default {
   "edit.dishAdded": "Gericht {name} ({id}) hinzugefügt",
   "edit.dishChanged": "Gericht {name} ({id}) geändert",
   "edit.dishRemoved": "Gericht {name} ({id}) entfernt",
+  "edit.have": "{food} zu Hause: {g} g, weniger kaufen",
+  "edit.haveGone": "{food} zu Hause wird nicht mehr gezählt",
 
   "flavour.soy-ginger": "Soja-Ingwer",
   "flavour.garlic": "Knoblauch",
@@ -278,6 +280,7 @@ export default {
   "pack.aboutWeight": "etwa {grams} g",
   "pack.needOf": "etwa {grams} g benötigt · {buy}",
   "pack.onHand": "vorrätig",
+  "pack.have": "{grams} g zu Hause",
   "pack.freeze": "am Einkaufstag portionsweise einfrieren",
   "pack.keepFrozen": "tiefgekühlt kaufen und gefroren lassen",
   "pack.leftover": "nach dem Öffnen bleiben etwa {grams} g, bis {weekday} aufbrauchen",

@@ -130,7 +130,7 @@ export function resolvedWeek(
     const next = resolvePlannerWeek(plan, charter.profile, targets, again);
     return {
       plan: next,
-      shopping: reconcileShoppingList(shopping, plannerShoppingList(again.solved, again.draft, next, people)),
+      shopping: reconcileShoppingList(shopping, plannerShoppingList(again.solved, again.draft, next, people, shopping.have)),
       ...check,
     };
   }
@@ -174,7 +174,7 @@ function redraftedWeek(
   return {
     week: {
       plan: next,
-      shopping: reconcileShoppingList(shopping, plannerShoppingList(solved, r.result.draft, next, profile.people)),
+      shopping: reconcileShoppingList(shopping, plannerShoppingList(solved, r.result.draft, next, profile.people, shopping.have)),
       check: { start: rec.start, problems: r.result.problems },
     },
     redraft: { kind: "redrafted", start: rec.start, changes: r.changes },

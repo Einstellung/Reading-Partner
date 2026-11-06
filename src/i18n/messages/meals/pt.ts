@@ -197,6 +197,8 @@ export default {
   "edit.dishAdded": "Prato {name} ({id}) adicionado",
   "edit.dishChanged": "Prato {name} ({id}) alterado",
   "edit.dishRemoved": "Prato {name} ({id}) removido",
+  "edit.have": "{food} em casa: {g} g, compra-se menos",
+  "edit.haveGone": "{food} em casa deixa de contar",
 
   "flavour.soy-ginger": "Molho de soja e gengibre",
   "flavour.garlic": "Alho",
@@ -277,6 +279,7 @@ export default {
   "pack.aboutWeight": "cerca de {grams} g",
   "pack.needOf": "cerca de {grams} g necessários · {buy}",
   "pack.onHand": "já em casa",
+  "pack.have": "{grams} g em casa",
   "pack.freeze": "congele em porções no dia da compra",
   "pack.keepFrozen": "comprar congelado e manter congelado",
   "pack.leftover": "sobram cerca de {grams} g depois de aberto, usar até {weekday}",

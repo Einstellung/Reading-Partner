@@ -34,6 +34,10 @@ import {
   registerMealsWritables,
   type MealsWriteDeps,
 } from "../../../src/info/meals/writable";
+import { foodById } from "../../../src/info/meals/nutrition/foods";
+import { currentList, isOnHand } from "../../../src/info/meals/plan/shopping";
+import { buyFor, lessHave, type PackLine } from "../../../src/info/meals/planner/packs";
+import { packQty } from "../../../src/info/meals/planner/trip";
 import { testQuickJsWasm } from "../../support/quickjs";
 import meals1031 from "./fixtures/replay-1031-meals.json";
 import draft1106 from "./fixtures/replay-1106-draft.json";
@@ -174,6 +178,79 @@ return data;`,
     expect(out.text).toContain("solved");
     expect(out.text).toContain("computed by the app; change plan.planner.draft (a pot's rawG");
     expect(s.files.get(MEALS_FILE)).toBe(before);
+  });
+});
+
+describe("10-31: what the reader has at home comes off the list", () => {
+  const line = (state: MealsState, food: string) => state.shopping.items.find((i) => i.foodId === food);
+  const toBuy = (state: MealsState, food: string) => {
+    const l = line(state, food);
+    return l && !isOnHand(l) ? l : undefined;
+  };
+
+  test("the chicken pot cooks the 600 g at home: nothing of it to buy, the beef as it was", async () => {
+    const s = setup("2026-10-31", { [MEALS_FILE]: meals1031 });
+    const before = await s.state();
+    const beefBefore = line(before, "beef_shank_raw");
+    expect(toBuy(before, "chicken_breast")).toBeDefined();
+    const out = await s.edit(
+      "info-meals",
+      `data.plan.planner.draft.batches.find((b) => b.id === "chicken").rawG = 600;
+data.shopping.have.chicken_breast = 600;
+return data;`,
+      "家里有 600 克鸡胸，鸡肉锅就做这些",
+    );
+    expect(out.text).toContain("Written");
+    expect(out.text).toContain("鸡胸肉 at home: 600 g, bought less");
+    expect(s.cards).toEqual([]);
+    const after = await s.state();
+    expect(after.shopping.have).toEqual({ chicken_breast: 600 });
+    expect(potGrams(after, "chicken")).toBe(600);
+    const chicken = line(after, "chicken_breast")!;
+    expect(isOnHand(chicken)).toBe(true);
+    expect(chicken.pack?.have).toBe(600);
+    expect(chicken.qty).toBe("600 g at home");
+    expect(toBuy(after, "chicken_breast")).toBeUndefined();
+    expect(currentList(after.shopping).filter((i) => !isOnHand(i)).some((i) => i.foodId === "chicken_breast")).toBe(false);
+    // The fixture's lines were written in Chinese; the quantity is read in the test's English.
+    expect({ ...line(after, "beef_shank_raw")!, qty: "" }).toEqual({ ...beefBefore!, qty: "" });
+    expect(line(after, "beef_shank_raw")!.pack?.have).toBeUndefined();
+  });
+
+  test("300 g at home: the 300 g gap is bought in whole packs", async () => {
+    const s = setup("2026-10-31", { [MEALS_FILE]: meals1031 });
+    await s.edit(
+      "info-meals",
+      `data.plan.planner.draft.batches.find((b) => b.id === "chicken").rawG = 600;
+return data;`,
+      "鸡肉锅做 600 克",
+    );
+    const full = line(await s.state(), "chicken_breast")!;
+    const out = await s.edit("info-meals", `data.shopping.have.chicken_breast = 300;\nreturn data;`, "家里有 300 克鸡胸");
+    expect(out.text).toContain("Written");
+    const after = await s.state();
+    const chicken = toBuy(after, "chicken_breast")!;
+    expect(chicken.grams).toBe(full.grams);
+    expect(chicken.pack?.have).toBe(300);
+    // The line as bought for the whole need, then less the 300 g: its packs are the gap's.
+    const food = foodById("chicken_breast")!;
+    const need: PackLine = { food: food.id, grams: full.grams!, buy: buyFor(food, full.grams!), firstDay: 1, lastDay: 1, freeze: false, frozen: false, leftover: null };
+    const less = lessHave(need, 300);
+    expect(less.buy).toEqual(buyFor(food, full.grams! - 300));
+    expect(chicken.qty).toBe(packQty(less));
+    expect(full.qty).toBe("about 600 g needed · 2 packs (about 1000 g)");
+    expect(chicken.qty).toBe("about 300 g needed · 1 pack (about 500 g)");
+  });
+
+  test("a new plan confirmed starts its trip with nothing at home", async () => {
+    const s = setup("2026-11-06", { [MEALS_FILE]: meals1031, [MEALS_DRAFT_FILE]: draft1106 });
+    await s.edit("info-meals", `data.shopping.have.chicken_breast = 600;\nreturn data;`, "家里有 600 克鸡胸");
+    expect((await s.state()).shopping.have).toEqual({ chicken_breast: 600 });
+    const file = parseDraftFile(JSON.parse(s.files.get(MEALS_DRAFT_FILE)!))!;
+    expect((await applyDraftFile(file.draftId, s.ports))?.ok).toBe(true);
+    const after = await s.state();
+    expect(after.shopping.have).toEqual({});
+    expect(after.shopping.items.some((i) => i.pack?.have !== undefined)).toBe(false);
   });
 });
 

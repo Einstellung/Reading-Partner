@@ -24,6 +24,7 @@ import { MEALS_DISHES_FILE, deleteUserDish, libraryDishes, parseUserDishFile, sa
 import { SEED_DISHES } from "./dishes/seed";
 import type { Dish } from "./dishes/types";
 import { liveMealsPorts } from "./live";
+import { foodById } from "./nutrition/foods";
 import { freshShoppingList, reconcileShoppingList } from "./plan/shopping";
 import { targetsOf } from "./plan/solve-week";
 import { MEALS_FILE, parseMealsFile } from "./plan/store";
@@ -34,6 +35,7 @@ import { isBatchMain, parseDraft, PREP_DAY, type DraftMain, type PlanDraft } fro
 import { planLibrary } from "./planner/library";
 import { draftContext, editedPicks } from "./planner/redraft";
 import { checkPlannerRecord, plannerSolveOf, resolvePlannerWeek, weekFromDraft } from "./planner/to-week";
+import { boughtName } from "./planner/packs";
 import { plannerShoppingList } from "./planner/trip";
 
 export const MEALS_PLAN_KIND = "info-meals";
@@ -72,8 +74,9 @@ interface DraftBatch {
   session: string;            // a sessions[].id
   meals: { day: number; slot: "lunch" | "dinner" }[];
   // Input. The total raw weight, in grams, of this pot's protein ingredients for everyone
-  // eating: what the reader already has ("I have 600 g of chicken breast" is rawG 600).
-  // Its meals share it evenly. Leave it out and the program picks it from the protein target.
+  // eating: how much the pot cooks ("cook the 600 g of chicken breast I have" is rawG 600;
+  // what is at home is info-meals shopping.have). Its meals share it evenly. Leave it out
+  // and the program picks it from the protein target.
   rawG?: number;
 }`;
 
@@ -283,6 +286,22 @@ ${PLAN_DRAFT_SHAPE}`,
 
 // --- the saved plan -------------------------------------------------------------
 
+/** "家里有鸡胸 600 克，少买" for each food whose grams at home the change sets, one line for each it clears. */
+function haveLines(before: Record<string, number>, after: Record<string, number>): string[] {
+  const name = (id: string) => {
+    const food = foodById(id);
+    return food ? boughtName(food) : id;
+  };
+  const out: string[] = [];
+  for (const [id, g] of Object.entries(after)) {
+    if (before[id] !== g) out.push(t("meals.edit.have", { food: name(id), g: Math.round(g) }));
+  }
+  for (const id of Object.keys(before)) {
+    if (!(id in after)) out.push(t("meals.edit.haveGone", { food: name(id) }));
+  }
+  return out;
+}
+
 function draftOfPlan(plan: WeekPlan | null): PlanDraft | null {
   return plan?.planner ? parseDraft(plan.planner.draft) : null;
 }
@@ -334,7 +353,12 @@ interface Meals {
     };
   } | null;
   shopping: {
-    items: unknown[];         // computed from the solved grams: change plan.planner.draft
+    items: unknown[];         // computed from the solved grams and have: change plan.planner.draft or have
+    // Input. What the reader already has at home, grams by food id (an items[].foodId), weighed
+    // as the list weighs it: "I have 600 g of chicken breast" is { chicken_breast: 600 }. The
+    // list buys only what is missing. Not how much a pot cooks: that is the pot's rawG.
+    // Delete a key when it is used up or bought. A new plan starts without it.
+    have: Record<string, number>;
     reader: unknown[]; dropped: unknown[]; replaced: unknown[]; checked: unknown[]; doneOn?: string; // locked
   };
   deviations: unknown[];      // locked
@@ -355,7 +379,7 @@ ${PLAN_DRAFT_SHAPE}`,
     computed: [
       ...["solved", "items", "name", "method", "minutes"].map((f) => ({ path: `plan.days.*.*.${f}`, input: PLAN_DRAFT_INPUT })),
       { path: "plan.planner.picks", input: "plan.planner.draft" },
-      { path: "shopping.items", input: PLAN_DRAFT_INPUT },
+      { path: "shopping.items", input: `${PLAN_DRAFT_INPUT}, or shopping.have for what is at home` },
     ],
     locked: [
       "charter",
@@ -399,6 +423,9 @@ ${PLAN_DRAFT_SHAPE}`,
       const beforeDraft = parseDraft(was.planner.draft);
       const picks = editedPicks(beforeDraft, draft, was.planner.picks ? parseDraft(was.planner.picks) : undefined);
       const today = ports.today();
+      // What is at home belongs to this trip: a new plan's trip keeps only what this change says.
+      const have = after.shopping.have;
+      const haveChanged = !same(before.shopping.have, have);
       let plan: WeekPlan;
       let shopping: MealsState["shopping"];
       let result: DraftResult;
@@ -407,7 +434,8 @@ ${PLAN_DRAFT_SHAPE}`,
         result = checkDraft(draft, draftContext(profile, targets, was.planner.start, draft.days.length, lib));
         if (!result.plan) return { ok: false, reason: "the draft no longer solves" };
         plan = weekFromDraft({ result, lib, start: was.planner.start, now: ctx.now, today, previous: was, picks });
-        shopping = freshShoppingList(before.shopping, plannerShoppingList(result.plan, result.draft, plan, people));
+        const kept = haveChanged ? have : {};
+        shopping = freshShoppingList(before.shopping, plannerShoppingList(result.plan, result.draft, plan, people, kept), kept);
       } else {
         const record: WeekPlan = { ...was, planner: { ...was.planner, draft, picks } };
         const check = checkPlannerRecord(record, profile, targets);
@@ -421,14 +449,22 @@ ${PLAN_DRAFT_SHAPE}`,
           return withNotes(kept, after.plan?.days.find((x) => x.date === d.date));
         });
         plan = { ...solved, days, revision: was.revision + 1 };
-        shopping = reconcileShoppingList(before.shopping, plannerShoppingList(again.solved, again.draft, plan, people));
+        shopping = reconcileShoppingList({ ...before.shopping, have }, plannerShoppingList(again.solved, again.draft, plan, people, have));
       }
       await ports.savePlan(plan, shopping);
       ports.changed();
       void ports.drawDishes?.().catch(() => {});
       const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
       void startPhotoSearch(plan, cache, ports, before.photosAskedAt ?? 0).catch(() => {});
-      return { ok: true, notes: ["The plan, its prep and the shopping list follow the new grams.", ...solvedNotes(result, was.planner.start)] };
+      const offList = Object.keys(shopping.have).filter((id) => !shopping.items.some((i) => i.foodId === id));
+      return {
+        ok: true,
+        notes: [
+          "The plan, its prep and the shopping list follow the new grams.",
+          ...offList.map((id) => `Nothing on the shopping list is ${id}: what is at home of it takes nothing off.`),
+          ...solvedNotes(result, was.planner.start),
+        ],
+      };
     },
     // The plan and the list as they were, not solved again: a solve under today's
     // profile would not give back the grams that were written. A replaced plan
@@ -457,7 +493,7 @@ ${PLAN_DRAFT_SHAPE}`,
           lines.push(note === undefined ? t("meals.edit.noteGone", { date: shown(day.date), slot }) : t("meals.edit.note", { date: shown(day.date), slot, note }));
         }
       }
-      return lines;
+      return [...lines, ...haveLines(before.shopping.have, after.shopping.have)];
     },
   };
 }

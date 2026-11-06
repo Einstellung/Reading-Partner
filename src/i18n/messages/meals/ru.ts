@@ -202,6 +202,8 @@ export default {
   "edit.dishAdded": "Блюдо {name} ({id}) добавлено",
   "edit.dishChanged": "Блюдо {name} ({id}) изменено",
   "edit.dishRemoved": "Блюдо {name} ({id}) удалено",
+  "edit.have": "{food} дома: {g} г, купить меньше",
+  "edit.haveGone": "{food} дома больше не учитывается",
 
   "flavour.soy-ginger": "Соя с имбирём",
   "flavour.garlic": "Чесночный",
@@ -282,6 +284,7 @@ export default {
   "pack.aboutWeight": "около {grams} г",
   "pack.needOf": "нужно около {grams} г · {buy}",
   "pack.onHand": "есть дома",
+  "pack.have": "{grams} г дома",
   "pack.freeze": "в день покупки разложить по порциям и заморозить",
   "pack.keepFrozen": "купить замороженным и держать в морозилке",
   "pack.leftover": "после вскрытия останется около {grams} г, использовать до: {weekday}",
