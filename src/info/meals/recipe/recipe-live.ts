@@ -40,20 +40,22 @@ function once<T>(key: string, start: () => Promise<T>): Promise<T> {
   return call;
 }
 
-function callOn(tier: RecipeTier, system: string, user: string): Promise<string> {
+type MealsCaller = "meals-recipe" | "meals-prep-steps";
+
+function callOn(tier: RecipeTier, caller: MealsCaller, system: string, user: string): Promise<string> {
   return callModel(
     tier,
     "plan",
     system,
     user,
     { signal: new AbortController().signal, onProgress: () => {} },
-    { spend: { caller: "info" } },
+    { spend: { caller } },
   );
 }
 
 async function writeRecipe(request: RecipeRequest, tier: RecipeTier): Promise<RecipeEntry> {
   const model = await resolveModel(tier);
-  const text = await callOn(tier, recipeSystemPrompt(request), recipeUserText(request));
+  const text = await callOn(tier, "meals-recipe", recipeSystemPrompt(request), recipeUserText(request));
   const tally = newTally();
   const parsed = parseRecipe(text, tally);
   reportParse({ site: "meals-recipe", model, text, tally, error: parsed.ok ? undefined : parsed.error });
@@ -94,7 +96,7 @@ export function writePrepStepsOnce(request: PrepStepsRequest, tier: RecipeTier =
   return once(request.key, async () => {
     const model = await resolveModel(tier);
     return writePrepSteps(request, {
-      call: (system, user) => callOn(tier, system, user),
+      call: (system, user) => callOn(tier, "meals-prep-steps", system, user),
       save: (key, entry) => savePrepSteps(key, entry),
       now: () => Date.now(),
       report: (text, tally, error) => reportParse({ site: "meals-recipe", model, text, tally, error }),

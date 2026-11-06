@@ -165,7 +165,10 @@ function conversationPlace<O extends InfoOrigin | MealsOrigin>(
         .map((m): DeskMessage => ({ role: m.role, text: m.text }));
       return toPiMessages(said);
     },
-    telemetry: (origin) => ({ surface: "info", thread: infoAddress(asOrigin(origin)).threadId }),
+    telemetry: (origin) => {
+      const o = asOrigin(origin);
+      return { surface: "info", ...(o.place === "meals" ? { caller: "meals-chat" as const } : {}), thread: infoAddress(o).threadId };
+    },
   });
 }
 
