@@ -12,7 +12,7 @@ import {
   pendingWaits,
   type HousekeeperConfirmCard,
 } from "../../../../src/housekeeper/write";
-import { stateAfterConfirm } from "../../../../src/ui/components/chat/housekeeper-confirm";
+import { showsQuestion, stateAfterConfirm, type ConfirmPhase } from "../../../../src/ui/components/chat/housekeeper-confirm";
 import { testQuickJsWasm } from "../../../support/quickjs";
 import { NOTES_KIND, NOTES_PATH, memIo, notesDeps, notesEntry, readNotes, seedNotes } from "../../../housekeeper/write-fixture";
 
@@ -69,4 +69,11 @@ test("a failure carries its reason, and any other outcome is a failure named by 
     phase: "failed",
     reason: "rejected",
   });
+});
+
+test("the question line shows only while the card waits on the reader", () => {
+  const shown: ConfirmPhase[] = ["checking", "open", "working"];
+  const hidden: ConfirmPhase[] = ["applied", "declined", "stale", "gone", "failed"];
+  for (const p of shown) expect(showsQuestion(p)).toBe(true);
+  for (const p of hidden) expect(showsQuestion(p)).toBe(false);
 });

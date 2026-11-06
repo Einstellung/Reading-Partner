@@ -52,6 +52,7 @@ export default {
   "housekeeperConfirm.stale": "Os dados mudaram nesse meio tempo; nada foi escrito",
   "housekeeperConfirm.gone": "Não está mais aguardando",
   "housekeeperConfirm.failed": "Não foi possível escrever: {reason}",
+  "housekeeperConfirm.working": "Aplicando a alteração…",
 
   "places.goingTo": "Indo para {place}",
   "places.goingSomewhere": "Movendo-se dentro do app",

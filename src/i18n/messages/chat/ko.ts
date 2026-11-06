@@ -52,6 +52,7 @@ export default {
   "housekeeperConfirm.stale": "그사이 데이터가 바뀌어 아무것도 쓰지 않았습니다",
   "housekeeperConfirm.gone": "더 이상 기다리지 않습니다",
   "housekeeperConfirm.failed": "쓰지 못했습니다: {reason}",
+  "housekeeperConfirm.working": "바꾸는 중…",
 
   "places.goingTo": "{place}(으)로 이동하는 중",
   "places.goingSomewhere": "앱 안에서 이동하는 중",

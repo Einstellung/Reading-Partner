@@ -52,6 +52,7 @@ export default {
   "housekeeperConfirm.stale": "Данные успели измениться, ничего не записано",
   "housekeeperConfirm.gone": "Больше не ждёт",
   "housekeeperConfirm.failed": "Не удалось записать: {reason}",
+  "housekeeperConfirm.working": "Вношу изменение…",
 
   "places.goingTo": "Переходит в {place}",
   "places.goingSomewhere": "Перемещается по приложению",
