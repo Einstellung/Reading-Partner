@@ -64,6 +64,7 @@ function oldState(doneOn: string | null): MealsState {
       replaced: { [swapped!]: { name: "别的", en: "something else", category: bought[1]!.category, keeps: bought[1]!.keeps, qty: "1" } },
       checked: { [ticked!]: true },
       doneOn,
+      have: { chicken_breast: 300 },
     },
     deviations: [],
   };
@@ -82,9 +83,9 @@ test("a plan confirmed over a done trip: the list is the new plan's alone, nothi
   const old = oldState("2026-10-24");
   const { plan, shopping } = await confirm(old);
   // The same card confirmed on a disk with no plan and no trip at all.
-  const clean = await confirm({ ...old, plan: null, shopping: { items: [], reader: [], dropped: {}, replaced: {}, checked: {}, doneOn: null } });
+  const clean = await confirm({ ...old, plan: null, shopping: { items: [], reader: [], dropped: {}, replaced: {}, checked: {}, doneOn: null, have: {} } });
 
-  expect(shopping).toEqual({ items: clean.shopping.items, reader: [], dropped: {}, replaced: {}, checked: {}, doneOn: null });
+  expect(shopping).toEqual({ items: clean.shopping.items, reader: [], dropped: {}, replaced: {}, checked: {}, doneOn: null, have: {} });
   // Every derived line shows, as derived, unticked: the old drops no longer hide any.
   expect(currentList(shopping)).toEqual(shopping.items);
   // From today on the plan is the new one's days; the old prep's progress is gone with its planner record.

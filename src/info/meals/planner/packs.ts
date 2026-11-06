@@ -39,6 +39,8 @@ export interface PackLine {
   frozen: boolean;
   /** For perishables only: what is bought but no meal uses, and the day an opened pack of it spoils. */
   leftover: { grams: number; spoilsDay: number } | null;
+  /** What the reader has at home of it, taken off before buying (lessHave). */
+  have?: number;
 }
 
 /** A leftover under this share of one pack or piece, or under the grams, is noise from rounding, not a problem. */
@@ -170,6 +172,22 @@ export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLi
   return out.sort((a, b) => a.firstDay - b.firstDay || a.food.localeCompare(b.food));
 }
 
+/**
+ * A line less what the reader has at home (ShoppingState.have): the rest is
+ * bought in whole packs, and a line it covers is bought not at all and shown
+ * with the cupboard checks. Under a gram left is the arithmetic of sharing a
+ * pot out, not something to buy. A line already taken to be at home stays.
+ */
+export function lessHave(line: PackLine, have: number | undefined): PackLine {
+  const food = foodById(line.food);
+  if (!food || !have || have <= 0 || line.buy.by === "onHand") return line;
+  const rest = line.grams - have;
+  if (rest < 1) return { ...line, buy: { by: "onHand" }, have, freeze: false, leftover: null };
+  const buy = buyFor(food, rest);
+  const leftover = line.leftover && buy.by === "pack" ? { ...line.leftover, grams: Math.max(0, buy.count * buy.packG - rest) } : null;
+  return { ...line, buy, have, leftover };
+}
+
 /** A leftover worth sending back: at least a fifth of a pack and at least 50 g. */
 export function leftoverMatters(line: PackLine): boolean {
   if (!line.leftover || line.buy.by !== "pack") return false;
@@ -188,9 +206,10 @@ export function boughtName(food: Food): string {
 
 const about = (g: number) => Math.max(10, Math.round(g / 10) * 10);
 
-/** How much to buy, in the reader's language: "1 盒（约 500 g）", "2 个（约 250 g）", "家里常备". */
+/** How much to buy, in the reader's language: "1 盒（约 500 g）", "2 个（约 250 g）", "家里常备", "家里有 600 g". */
 export function buyText(line: PackLine): string {
   const b = line.buy;
+  if (b.by === "onHand" && line.have) return t("meals.pack.have", { grams: Math.round(line.have) });
   if (b.by === "pack") return t("meals.pack.about", { qty: t(`meals.pack.${b.kind}`, { count: b.count }), grams: b.count * (b.labelG ?? b.packG) });
   if (b.by === "piece") return t("meals.pack.about", { qty: t("meals.pack.piece", { count: b.count }), grams: about(b.count * b.pieceG) });
   if (b.by === "unit") return t("meals.pack.piece", { count: b.count });

@@ -191,6 +191,8 @@ export default {
   "edit.dishAdded": "요리 {name}({id}) 추가",
   "edit.dishChanged": "요리 {name}({id}) 변경",
   "edit.dishRemoved": "요리 {name}({id}) 삭제",
+  "edit.have": "집에 있는 {food} {g} g, 그만큼 덜 사기",
+  "edit.haveGone": "집에 있는 {food} 기록 삭제",
 
   "flavour.soy-ginger": "생강간장",
   "flavour.garlic": "마늘",
@@ -271,6 +273,7 @@ export default {
   "pack.aboutWeight": "약 {grams} g",
   "pack.needOf": "약 {grams} g 필요 · {buy}",
   "pack.onHand": "집에 있는 것",
+  "pack.have": "집에 {grams} g",
   "pack.freeze": "산 날 소분해서 냉동",
   "pack.keepFrozen": "냉동으로 사서 바로 냉동",
   "pack.leftover": "개봉 후 약 {grams} g 남음, {weekday}까지 다 쓰기",

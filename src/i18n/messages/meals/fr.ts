@@ -197,6 +197,8 @@ export default {
   "edit.dishAdded": "Plat {name} ({id}) ajouté",
   "edit.dishChanged": "Plat {name} ({id}) modifié",
   "edit.dishRemoved": "Plat {name} ({id}) supprimé",
+  "edit.have": "{food} à la maison : {g} g, à acheter en moins",
+  "edit.haveGone": "{food} à la maison n'est plus compté",
 
   "flavour.soy-ginger": "Soja et gingembre",
   "flavour.garlic": "Ail",
@@ -277,6 +279,7 @@ export default {
   "pack.aboutWeight": "environ {grams} g",
   "pack.needOf": "environ {grams} g nécessaires · {buy}",
   "pack.onHand": "déjà à la maison",
+  "pack.have": "{grams} g à la maison",
   "pack.freeze": "à congeler en portions le jour de l'achat",
   "pack.keepFrozen": "acheter surgelé et garder au congélateur",
   "pack.leftover": "il reste environ {grams} g une fois ouvert, à finir avant {weekday}",

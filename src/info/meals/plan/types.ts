@@ -384,8 +384,12 @@ export interface ShoppingItem {
 export interface PackNote {
   // Bought frozen and kept frozen.
   frozen?: true;
-  // A seasoning, oil or dry staple kept at home rather than bought.
+  // A seasoning, oil or dry staple kept at home rather than bought, or a food
+  // the reader has enough of at home already (`have`).
   onHand?: true;
+  // The grams the reader said they have at home, taken off what is bought
+  // (ShoppingState.have).
+  have?: number;
   // What a perishable pack leaves that no meal uses, and the day an opened
   // pack of it spoils. Only a leftover worth saying (packs.ts leftoverMatters).
   leftover?: { grams: number; useBy: string };
@@ -414,6 +418,10 @@ export interface ShoppingState {
   checked: Record<string, true>;
   // The local date the trip was called done, or null while it is still a list.
   doneOn: string | null;
+  // What the reader said they have at home already, grams by food id, weighed
+  // the way the list weighs the food. Taken off the derived lines before they
+  // are rounded to packs; a new trip starts without it, like the ticks.
+  have: Record<string, number>;
 }
 
 /** What a derived line was swapped for. Everything the line draws itself with. */
@@ -432,6 +440,7 @@ export const EMPTY_SHOPPING: ShoppingState = {
   replaced: {},
   checked: {},
   doneOn: null,
+  have: {},
 };
 
 // What the reader told onboarding (docs/73 开场), and what they have said about

@@ -189,6 +189,8 @@ export default {
   "edit.dishAdded": "新增菜 {name}（{id}）",
   "edit.dishChanged": "修改菜 {name}（{id}）",
   "edit.dishRemoved": "删除菜 {name}（{id}）",
+  "edit.have": "家里有{food} {g} 克，少买",
+  "edit.haveGone": "不再记家里有{food}",
 
   "flavour.soy-ginger": "姜葱酱油",
   "flavour.garlic": "蒜香",
@@ -269,6 +271,7 @@ export default {
   "pack.aboutWeight": "约 {grams} g",
   "pack.needOf": "需约 {grams} g · {buy}",
   "pack.onHand": "家里常备",
+  "pack.have": "家里有 {grams} g",
   "pack.freeze": "买回当天分装冷冻",
   "pack.keepFrozen": "买回直接冷冻",
   "pack.leftover": "开封后剩约 {grams} g，{weekday}前用完",

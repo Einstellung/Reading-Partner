@@ -191,6 +191,8 @@ export default {
   "edit.dishAdded": "料理 {name}（{id}）を追加",
   "edit.dishChanged": "料理 {name}（{id}）を変更",
   "edit.dishRemoved": "料理 {name}（{id}）を削除",
+  "edit.have": "家に{food} {g} g、その分買う量を減らす",
+  "edit.haveGone": "家にある{food}を記録から外す",
 
   "flavour.soy-ginger": "しょうが醤油",
   "flavour.garlic": "ガーリック",
@@ -271,6 +273,7 @@ export default {
   "pack.aboutWeight": "約 {grams} g",
   "pack.needOf": "約 {grams} g 使用 · {buy}",
   "pack.onHand": "家にある分",
+  "pack.have": "家に {grams} g",
   "pack.freeze": "買った日に小分けして冷凍",
   "pack.keepFrozen": "冷凍品を買ってそのまま冷凍",
   "pack.leftover": "開封後に約 {grams} g 残る、{weekday}までに使い切る",

@@ -490,12 +490,13 @@ export function shoppingNote(item: ShoppingItem): string {
 
 /** A whole-pack line's note: what to do once it is home, else how long it keeps, then any leftover. */
 function packNote(item: ShoppingItem, pack: PackNote): string {
-  // An on-hand line is kept the way it is bought (dry rice, not cooked rice).
+  // A cupboard line is kept the way it is bought (dry rice, not cooked rice);
+  // a food the reader has at home keeps as that food does.
   const head = pack.frozen
     ? t("meals.pack.keepFrozen")
     : item.freezeOnArrival
       ? t("meals.pack.freeze")
-      : keepsLabel(pack.onHand ? "pantry" : item.keeps);
+      : keepsLabel(pack.onHand && pack.have === undefined ? "pantry" : item.keeps);
   if (!pack.leftover) return head;
   return `${head} · ${t("meals.pack.leftover", { grams: pack.leftover.grams, weekday: weekdayName(pack.leftover.useBy) })}`;
 }

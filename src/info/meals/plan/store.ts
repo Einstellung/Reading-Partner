@@ -188,6 +188,9 @@ function validateShopping(raw: unknown): ShoppingState {
     replaced: isObject(raw.replaced) ? (raw.replaced as ShoppingState["replaced"]) : {},
     checked: isObject(raw.checked) ? (raw.checked as Record<string, true>) : {},
     doneOn: typeof raw.doneOn === "string" ? raw.doneOn : null,
+    have: isObject(raw.have)
+      ? Object.fromEntries(Object.entries(raw.have).filter((e): e is [string, number] => typeof e[1] === "number" && Number.isFinite(e[1]) && e[1] > 0))
+      : {},
   };
 }
 

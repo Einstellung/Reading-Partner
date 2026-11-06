@@ -194,14 +194,19 @@ export function reconcileShoppingList(
 
 /**
  * The trip for a newly confirmed plan (docs/671 采购单): its derived lines and
- * none of the old trip's drops, swaps, ticks or done date, which were made
- * against another plan's list. The lines the reader added come along only
- * while the old trip was still a list: once it was done they were bought or
- * given up on with it.
+ * none of the old trip's drops, swaps, ticks, done date or food at home, which
+ * were said against another plan's list. The lines the reader added come along
+ * only while the old trip was still a list: once it was done they were bought
+ * or given up on with it. `have` is what the reader says in the same change
+ * that starts the trip, already taken off `derived`.
  */
-export function freshShoppingList(previous: ShoppingState, derived: readonly ShoppingItem[]): ShoppingState {
+export function freshShoppingList(
+  previous: ShoppingState,
+  derived: readonly ShoppingItem[],
+  have: Record<string, number> = {},
+): ShoppingState {
   const reader = previous.doneOn ? [] : previous.reader.map(({ afterDone: _after, ...line }) => line);
-  return { items: [...derived], reader, dropped: {}, replaced: {}, checked: {}, doneOn: null };
+  return { items: [...derived], reader, dropped: {}, replaced: {}, checked: {}, doneOn: null, have: { ...have } };
 }
 
 /** Tick or untick one line. */
