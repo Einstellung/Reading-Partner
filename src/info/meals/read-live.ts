@@ -6,6 +6,7 @@
 import { localDate } from "../../platform/std/day";
 import type { AgentTool } from "../../legion/durable/contract";
 import { loadMeals } from "./plan/store";
+import { loadMealsDraft } from "./draft-store";
 import { buildMealsReadTools, type MealsReadDeps } from "./read-tools";
 import { loadRecipeFile } from "./recipe/recipe-store";
 import { recipeLanguageNow } from "./recipe/recipe-live";
@@ -19,6 +20,7 @@ export function liveMealsReadDeps(today: () => string = () => localDate(Date.now
     region: () => hostRegion(),
     recipes: () => loadRecipeFile(),
     recipeLanguage: () => recipeLanguageNow(),
+    draft: () => loadMealsDraft(),
   };
 }
 

@@ -14,7 +14,8 @@ import type { Locale } from "../../i18n/locale";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { Region } from "./nutrition/targets";
 import { MEAL_KEYS, type MealKey, type MealsState } from "./plan/types";
-import { readCharter, readFoods, readPlan, readPrep, readRecipes, readShopping } from "./read";
+import { readCharter, readDraft, readFoods, readPlan, readPrep, readRecipes, readShopping } from "./read";
+import type { MealsDraftFile } from "./draft-file";
 import type { MealsRecipes } from "./recipe/recipe-store";
 
 export interface MealsReadDeps {
@@ -27,6 +28,8 @@ export interface MealsReadDeps {
   recipes?(): Promise<MealsRecipes | null>;
   // The language recipes are written in (recipe-live.ts recipeLanguageNow). The UI's when absent.
   recipeLanguage?(): Promise<Locale>;
+  // The unsaved draft (draft-file.ts). Absent where there is none to read: it reads as not found.
+  draft?(): Promise<MealsDraftFile | null>;
 }
 
 /** The names of the read tools, for the guidance and the desks that mount them. */
@@ -37,6 +40,7 @@ export const MEALS_READ_TOOLS = [
   "meals_read_recipes",
   "meals_read_charter",
   "meals_read_foods",
+  "meals_read_draft",
 ] as const;
 
 /** What a run holding only these tools is told about them (the think run, the tasking worker). */
@@ -44,7 +48,8 @@ export const MEALS_READ_PROMPT = [
   "The reader's meals are readable with the meals_read_* tools, which answer JSON: the saved plan with",
   "every food at its grams (meals_read_plan), the batch-cooking session and each pot's raw weights",
   "(meals_read_prep), the shopping list (meals_read_shopping), the recipes (meals_read_recipes), their",
-  "profile and targets (meals_read_charter) and the food table (meals_read_foods). Any question about what",
+  "profile and targets (meals_read_charter), the food table (meals_read_foods) and the plan drafted in the",
+  "meals conversation and not saved yet (meals_read_draft). Any question about what",
   "they eat, how much of something the plan takes or what to buy is answered from them: read, add up if",
   "needed, and give the program's numbers. Never estimate one.",
 ].join("\n");
@@ -192,6 +197,21 @@ export function buildMealsReadTools(deps: MealsReadDeps): AgentTool[] {
         const query = typeof args.query === "string" ? args.query : undefined;
         return json(readFoods(await deps.state(), { ids, query, all: args.all === true }));
       },
+    },
+    {
+      name: "meals_read_draft",
+      label: () => "Reading the draft plan",
+      effect: "read",
+      replay: "safe",
+      description:
+        "The plan drafted in the meals conversation as JSON, the one on the draft card: phase 'proposed' while it " +
+        "waits for them to confirm it, 'applied' once it is the saved plan; its version, the date of day 1, the " +
+        "draft by id (each day's breakfast, lunch and dinner main and sides, fruit, the pots as batches and the " +
+        "prep sessions), the picks it was filled from, and the card by name (pots, each day with its date, the " +
+        "prep session and its minutes). It has no grams; those are solved when it is saved. found is false when " +
+        "there is no draft.",
+      parameters: Type.Object({}),
+      execute: async () => json(readDraft(deps.draft ? await deps.draft() : null, await deps.state(), deps.region())),
     },
   ];
 }

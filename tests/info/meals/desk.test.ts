@@ -21,8 +21,8 @@ test("the draft card bound to the meals ref is in the prompt; without one it is 
     const refs = mealsAnchor(state(), MON).desk;
     const prompt = async (r: typeof refs) => (await openDesk(r, env)).items[0]!.prompt({ dropped: [] } as never);
     const card = draftCard();
-    expect(await prompt(bindItemRef(refs, INFO_MEALS_KIND, { draft: () => card }))).toContain("THE DRAFT ON THE CARD (version 1");
-    expect(await prompt(bindItemRef(refs, INFO_MEALS_KIND, { draft: () => null }))).not.toContain("THE DRAFT ON THE CARD (");
+    expect(await prompt(bindItemRef(refs, INFO_MEALS_KIND, { draft: async () => card }))).toContain("THE DRAFT ON THE CARD (version 1");
+    expect(await prompt(bindItemRef(refs, INFO_MEALS_KIND, { draft: async () => null }))).not.toContain("THE DRAFT ON THE CARD (");
     expect(await prompt(refs)).not.toContain("THE DRAFT ON THE CARD (");
   } finally {
     unregister();

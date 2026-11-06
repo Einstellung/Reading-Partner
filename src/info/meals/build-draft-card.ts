@@ -69,8 +69,8 @@ export interface DraftCardInput {
   lib: PlanLibrary;
   startDate: string;
   threadId: string;
-  /** The proposed draft card this one revises, or null for a first draft. */
-  previous: MealsDraftCardData | null;
+  /** The proposed draft this one revises (a card, or the file's version before), or null for a first draft. */
+  previous: Pick<MealsDraftCardData, "draftId" | "version" | "draft"> | null;
   /** The id a first draft is given. */
   newId: string;
   /** The model's picks the draft was filled from, kept on the card for a revision. */

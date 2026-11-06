@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { getLocale, setLocale, type Locale } from "../../../src/i18n";
-import { applyDraft, type MealsPorts, type PlanCheck } from "../../../src/info/meals/apply";
+import { applyDraftFile, type MealsPorts, type PlanCheck } from "../../../src/info/meals/apply";
 import type { MealsCard, MealsDraftCardData } from "../../../src/info/meals/cards";
 import { SEED_DISHES } from "../../../src/info/meals/dishes/seed";
 import { foodAllowed, foodById, type Food } from "../../../src/info/meals/nutrition/foods";
@@ -27,6 +27,7 @@ import {
 import type { ToolResult } from "../../../src/legion/durable/contract";
 import { shopping } from "./fixtures/week";
 import { goodDraft, PROFILE, START } from "./planner/fixture";
+import { memoryDrafts } from "./planner/card-fixture";
 
 let before: Locale;
 beforeEach(() => {
@@ -68,6 +69,7 @@ function harness(profile: Profile = PROFILE): Harness {
     saveMealMethod: async () => {},
     saveDeviation: async () => {},
     region: () => "other",
+    drafts: memoryDrafts(),
     now: () => 100,
     today: () => START,
     changed: () => {},
@@ -86,7 +88,7 @@ function deps(h: Harness): MealsToolDeps & { ports: MealsPorts } {
       h.cards.push(card);
       if (card.kind === "meals-draft") h.card = card;
     },
-    currentDraft: () => (h.card?.phase === "proposed" ? h.card : null),
+    drafts: h.ports.drafts!,
     onPlanCheck: (check) => h.checks.push(check),
     ports: h.ports,
   };
@@ -234,7 +236,7 @@ describe("a draft drafted after the dislike", () => {
     cardHasNoBroccoli(h.card!);
     // The pot meal the model put on way 3 eats another way, and the model is told.
     expect(res.text).toContain("Day 2 lunch eats pot chili as way");
-    const out = await applyDraft(h.card!, h.ports);
+    const out = (await applyDraftFile(h.card!.draftId, h.ports))!;
     await out.pending;
     expect(out.ok).toBe(true);
     planHasNoBroccoli(h.now().plan!, h.now().shopping);
@@ -296,7 +298,7 @@ describe("the draft card when the dislike arrives", () => {
 
 async function savedPlan(h: Harness, draft: PlanDraft): Promise<WeekPlan> {
   await propose(h, draft);
-  const out = await applyDraft(h.card!, h.ports);
+  const out = (await applyDraftFile(h.card!.draftId, h.ports))!;
   await out.pending;
   h.card = null;
   return h.now().plan!;

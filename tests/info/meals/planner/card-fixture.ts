@@ -3,6 +3,7 @@
 
 import { buildDraftCard } from "../../../../src/info/meals/build-draft-card";
 import type { MealsDraftCardData } from "../../../../src/info/meals/cards";
+import type { MealsDraftFile, MealsDraftPorts } from "../../../../src/info/meals/draft-file";
 import { checkDraft, type DraftResult } from "../../../../src/info/meals/planner/checks";
 import type { PlanDraft } from "../../../../src/info/meals/planner/draft";
 import { planLibrary } from "../../../../src/info/meals/planner/library";
@@ -25,6 +26,20 @@ export function draftCard(draft: PlanDraft = goodDraft(), previous: MealsDraftCa
   const result = checked(draft);
   if (result.problems.length || !result.plan) throw new Error(result.problems.map((p) => p.message).join("\n"));
   return buildDraftCard({ result, lib: LIB, startDate: START, threadId: "meals", previous, newId });
+}
+
+/** The draft file in memory: what the tools and the apply read and write. */
+export function memoryDrafts(file: MealsDraftFile | null = null): MealsDraftPorts & { file: MealsDraftFile | null; saves: number } {
+  const box = {
+    file,
+    saves: 0,
+    load: async () => box.file,
+    save: async (next: MealsDraftFile) => {
+      box.file = next;
+      box.saves += 1;
+    },
+  };
+  return box;
 }
 
 /**

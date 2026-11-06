@@ -1,6 +1,6 @@
 // The meals desk's tools and the standing instruction that goes with them
 // (docs/671 对话, docs/73), modelled on info/briefer/lab-tool.ts: the planning
-// tool raises a draft card and writes nothing; 「就这样」 on the card, or
+// tool writes the unsaved draft (draft-file.ts) and raises its card; 「就这样」 on the card, or
 // apply_meal_plan when the reader confirms in words, performs the write, and a
 // row afterwards tells the model what landed.
 //
@@ -26,7 +26,8 @@ import {
   type MealsPorts,
   type PlanCheck,
 } from "./apply";
-import type { MealsCard, MealsDraftCardData } from "./cards";
+import type { MealsCard } from "./cards";
+import { currentDraft, draftCardOf, nextDraftFile, type DraftOnFile, type MealsDraftFile, type MealsDraftPorts } from "./draft-file";
 import { boxName, profileFieldsLine } from "./screen/view";
 import { dislikeKnown, dislikeTag, FOOD_TAGS, FOODS, foodAllowed, foodById, findFood, foodsNamed } from "./nutrition/foods";
 import {
@@ -67,7 +68,6 @@ import {
   type WeekPlan,
 } from "./plan/types";
 import { WEEK_DAYS, addDays, dayOn, isoWeekday, lastDate, planExhausted } from "./plan/week";
-import { buildDraftCard } from "./build-draft-card";
 import { houseOil, oilRefused } from "./dishes/house-oil";
 import { SEED_DISHES } from "./dishes/seed";
 import { fillDraft } from "./planner/fill";
@@ -101,11 +101,11 @@ export interface MealsToolDeps {
   // Which BMI cut points and fat range apply (region.ts).
   region(): Region;
   // Surface the card, or replace the draft card it revises. The host owns
-  // Apply; the planning tool never writes.
+  // Apply; the planning tool writes only the draft file.
   onMealsCard(card: MealsCard): void;
-  // The draft card still waiting in this conversation, which the next draft
-  // revises in place. Absent where no card is drawn.
-  currentDraft?(): MealsDraftCardData | null;
+  // The draft file (draft-file.ts): the draft still waiting in this
+  // conversation, which the next draft revises in place, is read from it.
+  drafts?: MealsDraftPorts;
   // Apply that card, as its button does. Null when there is none.
   applyDraft?(): Promise<Applied | null>;
   // What the draft rules found in the week a profile change re-solved, null
@@ -220,7 +220,8 @@ const READING_THE_DATA = [
   "each meal's pot (meals_read_plan), the prep session with each pot's raw weights, the storage and the",
   "steps (meals_read_prep), the shopping list with the needed grams apart from the pack bought",
   "(meals_read_shopping), the recipes (meals_read_recipes), their profile and targets (meals_read_charter)",
-  "and the food table (meals_read_foods). When they ask how much, what, when or which, read it there and",
+  "and the food table (meals_read_foods); the draft not saved yet is in meals_read_draft. When they ask how",
+  "much, what, when or which, read it there and",
   "answer exactly; add up across meals or pots yourself from what the tools return. Never guess a number,",
   "answer from memory or say you cannot see it.",
 ];
@@ -297,7 +298,7 @@ const HOW_TO_PLAN = [
  * breakfasts and staples they asked for (the picks the card was filled from);
  * the rest is the program's and is filled again.
  */
-export function draftOnCard(card: MealsDraftCardData): string[] {
+export function draftOnCard(card: DraftOnFile): string[] {
   return [
     `THE DRAFT ON THE CARD (version ${card.version}, not confirmed yet)`,
     "Your picks as the card shows them, with what they asked for. A change keeps everything they did not ask to change.",
@@ -313,7 +314,7 @@ export function draftOnCard(card: MealsDraftCardData): string[] {
 export function mealsGuidance(
   state: MealsState,
   today: string,
-  opts: { focus?: MealsFocus; region?: Region; draft?: MealsDraftCardData | null } = {},
+  opts: { focus?: MealsFocus; region?: Region; draft?: DraftOnFile | null } = {},
 ): string {
   const out: string[] = ["MEALS", `Today is ${today}.`, ""];
   const charter = state.charter;
@@ -556,15 +557,16 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
         refused += 1;
         return { receipt: null, text: refusal(filled.unfilled, refused) };
       }
-      const card = buildDraftCard({
-        result,
-        lib,
+      const file = nextDraftFile(await waitingDraft(deps), {
+        draft: result.draft,
+        picks: draft,
         startDate: start,
         threadId: deps.threadId,
-        previous: deps.currentDraft?.() ?? null,
         newId: String(deps.now()),
-        picks: draft,
+        now: deps.now(),
       });
+      await deps.drafts?.save(file);
+      const card = draftCardOf(file, result, lib);
       deps.onMealsCard(card);
       const when = offset === 0 ? "today" : offset === 1 ? "tomorrow" : `in ${offset} days`;
       const said = [...filled.changed, ...result.notes];
@@ -582,6 +584,11 @@ export function buildProposeMealPlanTool(deps: MealsToolDeps): AgentTool {
       };
     },
   };
+}
+
+/** The draft waiting in this conversation, read from the draft file. */
+async function waitingDraft(deps: MealsToolDeps): Promise<MealsDraftFile | null> {
+  return currentDraft(deps.drafts ? await deps.drafts.load() : null, deps.threadId);
 }
 
 /** The reader's confirmation in words: the same write as the card's 「就这样」. */
@@ -846,7 +853,7 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
         return { receipt: null, text: `None of those fields was usable, so nothing changed.${notRecorded}${refused}` };
       }
       // The card as it stood before the change: the redraft below starts from it.
-      const card = deps.currentDraft?.() ?? null;
+      const card = await waitingDraft(deps);
       const { ok, targets, check, redraft: planRedraft } = await saveProfile(profile ?? held, deps.ports, notes);
       if (!ok) return { receipt: null, text: "The change could not be written. Nothing changed." };
       deps.onPlanCheck?.(check ?? null);
@@ -866,7 +873,7 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
         if (state.plan) out.push("The saved plan's dishes cook with the oil as it now stands.");
       }
       const foods = Array.isArray(raw.dislikes) || Array.isArray(raw.unavailable);
-      const onCard = card?.phase === "proposed" && profile && targets ? redraftCard(deps, card, held, profile, targets) : null;
+      const onCard = card?.phase === "proposed" && profile && targets ? await redraftCard(deps, card, held, profile, targets) : null;
       if (onCard?.words) out.push(onCard.words);
       else if (card?.phase === "proposed" && foods) out.push("The draft card above has none of it and stands as it is.");
       if (planRedraft?.kind === "redrafted") {
@@ -945,13 +952,13 @@ const dateLabel =
  * version, or left as it is with the meals that still have it. Null when
  * nothing on it is refused.
  */
-function redraftCard(
+async function redraftCard(
   deps: MealsToolDeps,
-  card: MealsDraftCardData,
+  card: MealsDraftFile,
   before: Profile,
   profile: Profile,
   targets: Targets,
-): { words: string; card?: MealsDraftCardData } | null {
+): Promise<{ words: string; card?: DraftOnFile } | null> {
   const lib = planLibrary(profile);
   const r = redraft(card.draft, card.picks, draftContext(profile, targets, card.startDate, card.draft.days.length, lib), planLibrary(before));
   if (r.kind === "kept") return null;
@@ -963,15 +970,16 @@ function redraftCard(
         " The card is unchanged. Tell them which meals; to change them, take THE DRAFT ON THE CARD, pick other mains for those meals and call propose_meal_plan with the whole draft.",
     };
   }
-  const next = buildDraftCard({
-    result: r.result,
-    lib,
+  const file = nextDraftFile(card, {
+    draft: r.result.draft,
+    picks: r.picks,
     startDate: card.startDate,
     threadId: card.threadId,
-    previous: card,
     newId: card.draftId,
-    picks: r.picks,
+    now: deps.now(),
   });
+  await deps.drafts?.save(file);
+  const next = draftCardOf(file, r.result, lib);
   deps.onMealsCard(next);
   return {
     words: `The draft card above now shows version ${next.version}, changed by the program: ${changesWords(r.changes, cardMealLabel)}. Do not list the other meals.`,
@@ -1409,6 +1417,6 @@ export function buildMealsCatalogTools(deps: MealsToolDeps & { ports: MealsPorts
     buildWriteMethodTool(deps),
     buildRefreshMealsPhotosTool(deps),
     buildStartPrepTool(deps),
-    ...buildMealsReadTools(deps),
+    ...buildMealsReadTools({ ...deps, ...(deps.drafts ? { draft: deps.drafts.load } : {}) }),
   ];
 }

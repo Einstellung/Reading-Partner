@@ -7,7 +7,8 @@
 
 import type { MealsPorts, PlanCheck } from "./apply";
 import { planNote } from "./screen/plan-note";
-import type { MealsCard, MealsDraftCardData } from "./cards";
+import type { MealsCard } from "./cards";
+import { liveDraftPorts } from "./draft-store";
 import { ingredientImageUrl } from "./photos/images";
 import { mealsCanDraw, mealsDishDrawer } from "./photos/dish-draw-sweep";
 import { mealsPhotoSearcher } from "./photos/photo-sweep";
@@ -38,8 +39,7 @@ export interface LiveMealsOptions {
   threadId: string;
   // Where a drafted card goes: raised, or the draft card it revises replaced in place.
   onMealsCard(card: MealsCard): void;
-  // The draft card waiting in this conversation, and its Apply (tools.ts MealsToolDeps).
-  currentDraft?(): MealsDraftCardData | null;
+  // The Apply of the draft waiting in this conversation (tools.ts MealsToolDeps).
   applyDraft?(): Promise<Applied | null>;
   // The host's local date, so the tools and the screen agree on which night it
   // is without either of them asking the model.
@@ -115,6 +115,7 @@ export function liveMealsPorts(opts: Pick<LiveMealsOptions, "today" | "changed">
     now: () => Date.now(),
     today: opts.today,
     changed: opts.changed,
+    drafts: liveDraftPorts(),
   };
 }
 
@@ -130,7 +131,7 @@ export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
     recipes: () => loadRecipeFile(),
     recipeLanguage: () => recipeLanguageNow(),
     onMealsCard: opts.onMealsCard,
-    ...(opts.currentDraft ? { currentDraft: opts.currentDraft } : {}),
+    drafts: ports.drafts,
     ...(opts.applyDraft ? { applyDraft: opts.applyDraft } : {}),
     ...(opts.startPrep ? { startPrep: opts.startPrep } : {}),
     // A profile change said in any conversation reaches the meals page's note.

@@ -55,7 +55,10 @@ import {
   applyLabProposal,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
-import { applyDraft, checkNote, type Applied } from "../../../info/meals/apply";
+import { applyDraftFile, checkNote, type Applied } from "../../../info/meals/apply";
+import { currentDraft as waitingDraft, draftCardFromFile, type MealsDraftFile } from "../../../info/meals/draft-file";
+import { loadMealsDraft, watchMealsDraft } from "../../../info/meals/draft-store";
+import { hostRegion } from "../../../info/meals/region";
 import { planNote } from "../../../info/meals/screen/plan-note";
 import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../info/meals/cards";
 import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
@@ -81,7 +84,6 @@ import {
   rehydrateMessage,
   toPersistedCardPart,
   upsertCardRow,
-  latestCardOf,
   type CardAction,
   type CardPayload,
 } from "../chat/chatParts";
@@ -289,6 +291,20 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, raiseCard, setMessages],
   );
 
+  // The draft card patched to the draft file as it is now: a new version
+  // written by another run on this device or pulled from another device, or
+  // the draft applied there (docs/platform/687).
+  const syncMealsDraftCard = useCallback(async () => {
+    const file = await loadMealsDraft().catch(() => null);
+    if (!file) return;
+    const found = findCardPart(messagesRef.current, draftCardId(file.draftId));
+    if (!found || found.payload.kind !== "meals-draft") return;
+    const next = draftCardFromFile(file, found.payload, await loadMeals(), hostRegion());
+    if (next) showMealsCard(next);
+  }, [showMealsCard]);
+
+  useEffect(() => watchMealsDraft(() => void syncMealsDraftCard()), [syncMealsDraftCard]);
+
   // Load (or start) the anchor's thread whenever it changes, and join a turn
   // in flight on it. In onboarding, kick the AI's opening turn once the empty
   // thread loads.
@@ -308,6 +324,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       let thread = getThread(bookId, anchor.threadId);
       if (!thread) thread = createThread(bookId, "info", anchor.threadId);
       setMessages(thread.messages.map(rehydrateMessage));
+      void syncMealsDraftCard();
       const session = createPlaceSession({
         durable: readingDurable,
         key,
@@ -535,11 +552,11 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       const found = findCardPart(messagesRef.current, cardId);
       if (!found || found.payload.kind !== "meals-draft") return null;
       const card = found.payload;
-      const result = await applyDraft(
-        card,
+      const result = await applyDraftFile(
+        card.draftId,
         liveMealsPorts({ today: () => todayLocal(), changed: () => onMealsChanged?.() }),
       );
-      if (!result.ok) return result;
+      if (!result?.ok) return result;
       // What the draft rules still find goes on the meals page as a note the
       // reader can wipe away; the plan is written either way.
       planNote.show(result.check ?? null);
@@ -559,11 +576,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, noteCardTurn, onMealsChanged, onMealsApplied, pipCards, onHangUp],
   );
 
-  // The draft card still waiting for its 「就这样」, which a new draft revises.
-  const currentDraft = (): MealsDraftCardData | null => {
-    const hit = latestCardOf(messagesRef.current, "meals-draft");
-    return hit && hit.payload.phase === "proposed" ? hit.payload : null;
-  };
+  // The draft still waiting for its 「就这样」 in this conversation, from the draft file.
+  const currentDraft = async (): Promise<MealsDraftFile | null> => waitingDraft(await loadMealsDraft(), anchor.threadId);
 
   // The card action dispatcher wired into the message list. Stable across
   // streaming deltas, so the memoized rows never churn. It owns orchestration:
@@ -659,9 +673,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         buildLiveMealsTools({
           threadId: anchor.threadId,
           onMealsCard: showMealsCard,
-          currentDraft,
           applyDraft: async () => {
-            const hit = currentDraft();
+            const hit = await currentDraft();
             return hit ? handleApplyMealsDraft(draftCardId(hit.draftId), true) : null;
           },
           today: () => todayLocal(),

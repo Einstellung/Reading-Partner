@@ -10,6 +10,7 @@ import { getLocale, setLocale, type Locale } from "../../../src/i18n";
 import type { AgentTool, ToolResult } from "../../../src/legion/durable/contract";
 import type { Applied } from "../../../src/info/meals/apply";
 import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../src/info/meals/cards";
+import { appliedDraftFile } from "../../../src/info/meals/draft-file";
 import { MAX_DRAFT_ROUNDS, type PlanDraft } from "../../../src/info/meals/planner/draft";
 import { buildApplyMealPlanTool, buildProposeMealPlanTool, type MealsToolDeps } from "../../../src/info/meals/tools";
 import type { MealsState } from "../../../src/info/meals/plan/types";
@@ -17,6 +18,7 @@ import { cardRow, latestCardOf, upsertCardRow } from "../../../src/ui/components
 import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 import { shopping } from "./fixtures/week";
 import { goodDraft, PROFILE, START } from "./planner/fixture";
+import { memoryDrafts } from "./planner/card-fixture";
 
 let before: Locale;
 beforeEach(() => {
@@ -31,11 +33,12 @@ interface Thread {
   deps: MealsToolDeps;
   messages: ThreadMessage[];
   raised: MealsCard[];
+  drafts: ReturnType<typeof memoryDrafts>;
 }
 
 function thread(over: Partial<MealsToolDeps> = {}): Thread {
   const state: MealsState = { charter: { profile: PROFILE, text: "", updatedAt: 1 }, plan: null, shopping: shopping(), deviations: [] };
-  const th: Thread = { messages: [], raised: [], deps: null as unknown as MealsToolDeps };
+  const th: Thread = { messages: [], raised: [], drafts: memoryDrafts(), deps: null as unknown as MealsToolDeps };
   let clock = 1000;
   th.deps = {
     threadId: "meals",
@@ -49,10 +52,7 @@ function thread(over: Partial<MealsToolDeps> = {}): Thread {
       const id = draftCardId(card.draftId);
       th.messages = latestCardOf(th.messages, "meals-draft")?.cardId === id ? upsertCardRow(th.messages, id, card) : [...th.messages, cardRow(id, card)];
     },
-    currentDraft: () => {
-      const hit = latestCardOf(th.messages, "meals-draft");
-      return hit && hit.payload.phase === "proposed" ? hit.payload : null;
-    },
+    drafts: th.drafts,
     ...over,
   };
   return th;
@@ -158,12 +158,41 @@ test("a revision in the same conversation replaces the card in place as its next
   expect(latestCardOf(th.messages, "meals-draft")?.payload.version).toBe(2);
 });
 
+test("a draft is written to the draft file, and the card is drawn from it", async () => {
+  const th = thread();
+  await call(buildProposeMealPlanTool(th.deps), args());
+  const file = th.drafts.file!;
+  const card = th.raised[0] as MealsDraftCardData;
+  expect(file).toMatchObject({ draftId: card.draftId, threadId: "meals", version: 1, startDate: START, phase: "proposed" });
+  expect(file.draft).toEqual(card.draft);
+  expect(file.picks).toEqual(card.picks);
+  expect(file.previous).toBeUndefined();
+  const revised = goodDraft();
+  revised.days[2]!.dinner = { main: { dish: "lemon_seared_cod", staple: "whole_wheat_pasta" }, sides: [] };
+  await call(buildProposeMealPlanTool(th.deps), args(revised));
+  const next = th.drafts.file!;
+  expect(next).toMatchObject({ draftId: file.draftId, version: 2, phase: "proposed" });
+  expect(next.previous).toEqual(file.draft);
+  expect(next.updatedAt).toBeGreaterThan(file.updatedAt);
+  expect(th.drafts.saves).toBe(2);
+});
+
+test("a draft waiting in another conversation is not revised from this one", async () => {
+  const other = thread();
+  await call(buildProposeMealPlanTool(other.deps), args());
+  const th = thread({ threadId: "elsewhere", drafts: other.drafts });
+  await call(buildProposeMealPlanTool(th.deps), args());
+  expect((th.raised[0] as MealsDraftCardData).version).toBe(1);
+  expect(other.drafts.file).toMatchObject({ threadId: "elsewhere", version: 1 });
+});
+
 test("a draft applied already is not revised: the next one is a new card", async () => {
   const th = thread();
   await call(buildProposeMealPlanTool(th.deps), args());
   const id = latestCardOf(th.messages, "meals-draft")!.cardId;
   const card = latestCardOf(th.messages, "meals-draft")!.payload;
   th.messages = upsertCardRow(th.messages, id, { ...card, phase: "applied" });
+  th.drafts.file = appliedDraftFile(th.drafts.file!, 0);
   await call(buildProposeMealPlanTool(th.deps), args());
   const next = th.raised[1] as MealsDraftCardData;
   expect(next.version).toBe(1);

@@ -7,7 +7,8 @@
 // deviation write straight through: they are the reader's own answers and
 // sentences, with nothing to approve.
 
-import type { MealsAppliedCardData, MealsDraftCardData } from "./cards";
+import type { MealsAppliedCardData } from "./cards";
+import { appliedDraftFile, type DraftOnFile, type MealsDraftPorts } from "./draft-file";
 import type { PhotoCache } from "./photos/dish-photos";
 import type { Profile, Region, Targets } from "./nutrition/targets";
 import { dishesToDraw } from "./photos/dish-drawing";
@@ -71,6 +72,8 @@ export interface MealsPorts {
   today(): string;
   // The host reloads the screen.
   changed(): void;
+  // The unsaved draft's file (draft-file.ts), which an Apply reads and marks applied.
+  drafts?: MealsDraftPorts;
 }
 
 /**
@@ -226,7 +229,7 @@ export async function saveProfile(
  * The shopping list starts a new trip (plan/shopping.ts freshShoppingList),
  * and the prep's progress starts over with the new planner record.
  */
-export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): Promise<Applied> {
+export async function applyDraft(card: DraftOnFile, ports: MealsPorts): Promise<Applied> {
   if (card.phase === "applied") return NOTHING;
   const state = await ports.current();
   const charter = state.charter;
@@ -271,6 +274,19 @@ export async function applyDraft(card: MealsDraftCardData, ports: MealsPorts): P
     pending,
     session: result.draft.sessions[0]?.id ?? null,
   };
+}
+
+/**
+ * The draft card's 「就这样」 or apply_meal_plan, from the draft file: the draft
+ * waiting under `draftId` applied (applyDraft), then the file marked applied,
+ * so the next draft is a new one. Null when the file holds no such draft waiting.
+ */
+export async function applyDraftFile(draftId: string, ports: MealsPorts): Promise<Applied | null> {
+  const file = ports.drafts ? await ports.drafts.load() : null;
+  if (!file || file.draftId !== draftId || file.phase !== "proposed") return null;
+  const applied = await applyDraft(file, ports);
+  if (applied.ok) await ports.drafts?.save(appliedDraftFile(file, ports.now()));
+  return applied;
 }
 
 /**
@@ -411,9 +427,9 @@ function stillToBuy(shopping: ShoppingState): { toBuy: number; freeze: number } 
  * row with the assistant's role that draws nothing: the draft card above has
  * collapsed to say it (cards.ts MealsAppliedCardData).
  */
-export function draftNote(card: MealsDraftCardData, shopping: ShoppingState): string {
+export function draftNote(card: DraftOnFile, shopping: ShoppingState): string {
   const { toBuy, freeze } = stillToBuy(shopping);
-  const days = card.days.length;
+  const days = card.draft.days.length;
   return (
     `[The reader confirmed the draft: the ${days}-day plan is saved and its grams solved.` +
     ` The shopping list is on their screen — ${toBuy} things` +
@@ -423,7 +439,7 @@ export function draftNote(card: MealsDraftCardData, shopping: ShoppingState): st
 }
 
 /** The row the draft's Apply leaves (cards.ts MealsAppliedCardData): it draws nothing. */
-export function draftApplied(card: MealsDraftCardData, shopping: ShoppingState): MealsAppliedCardData {
+export function draftApplied(card: DraftOnFile, shopping: ShoppingState): MealsAppliedCardData {
   return { kind: "meals-applied", adjustment: false, changed: [], ...stillToBuy(shopping), draft: card.draftId };
 }
 
