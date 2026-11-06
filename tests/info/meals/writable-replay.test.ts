@@ -257,3 +257,19 @@ describe("the tasking worker", () => {
     }
   });
 });
+
+describe("what the reader and the model are told", () => {
+  test("a refused change names its days by date as well as number", async () => {
+    const s = setup("2026-10-31", { [MEALS_FILE]: meals1031 });
+    const out = await s.edit(
+      "info-meals",
+      `const d = data.plan.planner.draft;
+d.days = d.days.slice(0, 2);
+return data;`,
+      "only two days",
+    );
+    expect(out.text).toContain("Nothing was written.");
+    expect(out.text).toMatch(/\d{4}-\d{2}-\d{2} \(Day \d\)/);
+    expect(out.text).not.toMatch(/(^|[^)] )Day \d/m);
+  });
+});

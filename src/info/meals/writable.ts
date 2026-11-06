@@ -15,6 +15,7 @@ import {
   type Problem,
   type WritableEntry,
 } from "../../housekeeper/write";
+import { formatDateTime, t } from "../../i18n";
 import { isObject } from "../../platform/std/json";
 import { localDate } from "../../platform/std/day";
 import { startPhotoSearch, type MealsPorts } from "./apply";
@@ -27,9 +28,9 @@ import { freshShoppingList, reconcileShoppingList } from "./plan/shopping";
 import { targetsOf } from "./plan/solve-week";
 import { MEALS_FILE, parseMealsFile } from "./plan/store";
 import { MEALS_VERSION, type DayPlan, type MealKey, type MealsState, type WeekPlan } from "./plan/types";
-import { daysBetween } from "./plan/week";
+import { addDays, daysBetween } from "./plan/week";
 import { checkDraft, type DraftProblem, type DraftResult } from "./planner/checks";
-import { isBatchMain, mealName, parseDraft, PREP_DAY, type DraftMain, type PlanDraft } from "./planner/draft";
+import { isBatchMain, parseDraft, PREP_DAY, type DraftMain, type PlanDraft } from "./planner/draft";
 import { planLibrary } from "./planner/library";
 import { draftContext, editedPicks } from "./planner/redraft";
 import { checkPlannerRecord, plannerSolveOf, resolvePlannerWeek, weekFromDraft } from "./planner/to-week";
@@ -88,19 +89,32 @@ function draftProblemPath(p: DraftProblem, draft: PlanDraft, prefix: string): st
   return prefix;
 }
 
+/**
+ * The planner's sentences name a day by its number ("Day 2 lunch"). The model
+ * reading them back through edit_data gets the date beside it, "2026-11-07
+ * (Day 2)", so it need not count from the start date; propose_meal_plan's own
+ * texts are not run through this. Day 0 is the prep day, the one before Day 1.
+ */
+export function datedDays(text: string, start: string): string {
+  return text.replace(/\b([Dd]ay) (\d+)\b( \(the prep day\))?/g, (_whole, word: string, n: string, prep?: string) => {
+    const date = addDays(start, Number(n) - 1);
+    return prep ? `${date} (${word} ${n}, the prep day)` : `${date} (${word} ${n})`;
+  });
+}
+
 /** A check that did not solve: the structure rules it broke, which stop the write. */
-function structureProblems(result: DraftResult, prefix: string): Problem[] {
+function structureProblems(result: DraftResult, prefix: string, start: string): Problem[] {
   if (result.plan) return [];
   if (!result.problems.length) return [{ path: prefix, message: "the plan has more days than there are targets for" }];
-  return result.problems.map((p) => ({ path: draftProblemPath(p, result.draft, prefix), message: p.message }));
+  return result.problems.map((p) => ({ path: draftProblemPath(p, result.draft, prefix), message: datedDays(p.message, start) }));
 }
 
 /** What the program added and the nutrition rules a solved draft still breaks: written all the same, said after. */
-function solvedNotes(result: DraftResult): string[] {
-  const out = [...result.notes];
+function solvedNotes(result: DraftResult, start: string): string[] {
+  const out = result.notes.map((n) => datedDays(n, start));
   if (result.problems.length) {
     out.push("Written all the same; the planner's rules still find these, say them to the reader:");
-    out.push(...result.problems.map((p) => `- ${p.message}`));
+    out.push(...result.problems.map((p) => `- ${datedDays(p.message, start)}`));
   }
   return out;
 }
@@ -118,23 +132,74 @@ function mainWords(draft: PlanDraft, main: DraftMain): string {
   return dishOf(main.dish)?.name ?? main.dish;
 }
 
-/** One line per pot or meal of the draft that changed, in the reader's terms. */
-function draftLines(before: PlanDraft, after: PlanDraft, start?: { before: string; after: string }): string[] {
+/** A local date as the reader reads it, "November 7" / "11月7日". */
+function shown(date: string): string {
+  return formatDateTime(new Date(`${date}T00:00:00Z`), { month: "long", day: "numeric", timeZone: "UTC" });
+}
+
+const dayDate = (start: string, day: number) => shown(addDays(start, day - 1));
+
+const SLOT_WORD = {
+  breakfast: "meals.meal.breakfast",
+  lunch: "meals.meal.lunch",
+  dinner: "meals.meal.dinner",
+  snack: "meals.meal.snack",
+} as const;
+
+const PART_WORD = {
+  morning: "meals.draft.part.morning",
+  afternoon: "meals.draft.part.afternoon",
+  evening: "meals.draft.part.evening",
+} as const;
+
+/**
+ * One line per change to the draft in the reader's terms, each with its date:
+ * the first day, the days the plan covers, pots, prep sessions, the prep day's
+ * dinner and the meals. They go to the confirmation card and to the model.
+ */
+function draftLines(before: PlanDraft, after: PlanDraft, starts: { before: string; after: string }): string[] {
   const out: string[] = [];
-  if (start && start.before !== start.after) out.push(`Day 1 is now ${start.after}`);
+  const start = starts.after;
+  if (starts.before !== start) out.push(t("meals.edit.startMoves", { was: shown(starts.before), now: shown(start) }));
+  if (before.days.length !== after.days.length) {
+    out.push(
+      t("meals.edit.range", {
+        from: shown(start),
+        to: dayDate(start, after.days.length),
+        oldFrom: shown(starts.before),
+        oldTo: dayDate(starts.before, before.days.length),
+      }),
+    );
+  }
   for (const b of after.batches) {
     const was = before.batches.find((x) => x.id === b.id);
     if (was && was.dish === b.dish && was.rawG === b.rawG) continue;
-    const name = dishOf(b.dish)?.name ?? b.dish;
-    out.push(`Pot ${b.id}: ${name}${b.rawG !== undefined ? `, ${b.rawG} g raw` : ""}`);
+    const dish = dishOf(b.dish)?.name ?? b.dish;
+    out.push(b.rawG !== undefined ? t("meals.edit.potRaw", { id: b.id, dish, g: b.rawG }) : t("meals.edit.pot", { id: b.id, dish }));
+  }
+  for (const s of after.sessions) {
+    const was = before.sessions.find((x) => x.id === s.id);
+    if (was && was.day === s.day && was.part === s.part) continue;
+    out.push(t("meals.edit.session", { id: s.id, date: dayDate(start, s.day), part: t(PART_WORD[s.part]) }));
+  }
+  for (const s of before.sessions) {
+    if (!after.sessions.some((x) => x.id === s.id)) out.push(t("meals.edit.sessionGone", { id: s.id }));
+  }
+  if (!before.prepDinner !== !after.prepDinner) {
+    out.push(t(after.prepDinner ? "meals.edit.prepDinnerOn" : "meals.edit.prepDinnerOff", { date: dayDate(start, PREP_DAY) }));
+  } else if (before.prepDinner && after.prepDinner && mainWords(before, before.prepDinner.main) !== mainWords(after, after.prepDinner.main)) {
+    out.push(t("meals.edit.prepDinner", { date: dayDate(start, PREP_DAY), name: mainWords(after, after.prepDinner.main) }));
   }
   after.days.forEach((d, i) => {
     const was = before.days[i];
+    const date = dayDate(start, i + 1);
+    if (!was || was.breakfast !== d.breakfast) {
+      out.push(t("meals.edit.meal", { date, slot: t(SLOT_WORD.breakfast), name: dishOf(d.breakfast)?.name ?? d.breakfast }));
+    }
     for (const slot of ["lunch", "dinner"] as const) {
       const now = mainWords(after, d[slot].main);
-      if (!was || mainWords(before, was[slot].main) !== now) out.push(`${mealName(i + 1, slot)}: ${now}`);
+      if (!was || mainWords(before, was[slot].main) !== now) out.push(t("meals.edit.meal", { date, slot: t(SLOT_WORD[slot]), name: now }));
     }
-    if (!was || was.breakfast !== d.breakfast) out.push(`Day ${i + 1} breakfast: ${dishOf(d.breakfast)?.name ?? d.breakfast}`);
   });
   return out;
 }
@@ -192,7 +257,7 @@ ${PLAN_DRAFT_SHAPE}`,
       if (ahead === null || ahead < 0 || ahead > 6) return [{ path: "startDate", message: "Day 1 is today or one of the six days after it" }];
       const ctx = await context(after);
       if (!ctx) return [{ path: "draft", message: NO_TARGETS }];
-      return structureProblems(checkDraft(after.draft, ctx, { storage: false }), "draft");
+      return structureProblems(checkDraft(after.draft, ctx, { storage: false }), "draft", after.startDate);
     },
     gate: () => null,
     async land(before, after, ctx): Promise<Landed> {
@@ -210,7 +275,7 @@ ${PLAN_DRAFT_SHAPE}`,
         version: before.version + 1,
         updatedAt: ctx.now,
       });
-      return { ok: true, notes: ["The draft card in the conversation shows the new version.", ...solvedNotes(result)] };
+      return { ok: true, notes: ["The draft card in the conversation shows the new version.", ...solvedNotes(result, after.startDate)] };
     },
     describe: (before, after) => draftLines(before.draft, after.draft, { before: before.startDate, after: after.startDate }),
   };
@@ -317,7 +382,7 @@ ${PLAN_DRAFT_SHAPE}`,
       if (!after.plan?.planner) return [{ path: "plan.planner", message: "only a plan the planner drafted can be changed here" }];
       const c = checked(after);
       if (!c?.check) return [{ path: "plan.planner.draft", message: NO_TARGETS }];
-      return structureProblems(c.check.result, "plan.planner.draft");
+      return structureProblems(c.check.result, "plan.planner.draft", after.plan.planner.start);
     },
     gate(before, after): Gate | null {
       const a = draftOfPlan(before.plan);
@@ -363,7 +428,7 @@ ${PLAN_DRAFT_SHAPE}`,
       void ports.drawDishes?.().catch(() => {});
       const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
       void startPhotoSearch(plan, cache, ports, before.photosAskedAt ?? 0).catch(() => {});
-      return { ok: true, notes: ["The plan, its prep and the shopping list follow the new grams.", ...solvedNotes(result)] };
+      return { ok: true, notes: ["The plan, its prep and the shopping list follow the new grams.", ...solvedNotes(result, was.planner.start)] };
     },
     // The plan and the list as they were, not solved again: a solve under today's
     // profile would not give back the grams that were written. A replaced plan
@@ -382,11 +447,14 @@ ${PLAN_DRAFT_SHAPE}`,
     describe(before, after) {
       const a = draftOfPlan(before.plan);
       const b = draftOfPlan(after.plan);
-      const lines = a && b ? draftLines(a, b) : [];
+      const lines = a && b && before.plan && after.plan ? draftLines(a, b, { before: before.plan.planner?.start ?? before.plan.startDate, after: after.plan.planner?.start ?? after.plan.startDate }) : [];
       for (const day of after.plan?.days ?? []) {
         const old = before.plan?.days.find((d) => d.date === day.date);
         for (const k of MEAL_KEYS) {
-          if (old && old[k].note !== day[k].note) lines.push(`${day.date} ${k} note: ${day[k].note ?? "removed"}`);
+          if (!old || old[k].note === day[k].note) continue;
+          const note = day[k].note;
+          const slot = t(SLOT_WORD[k]);
+          lines.push(note === undefined ? t("meals.edit.noteGone", { date: shown(day.date), slot }) : t("meals.edit.note", { date: shown(day.date), slot, note }));
         }
       }
       return lines;
@@ -490,8 +558,8 @@ interface Dish {
     describe(before, after) {
       const { written, removed } = changedDishes(before, after);
       return [
-        ...written.map((d) => `${before.dishes[d.id] ? "Changed" : "Added"} dish ${d.name} (${d.id})`),
-        ...removed.map((id) => `Removed dish ${before.dishes[id]?.name ?? id} (${id})`),
+        ...written.map((d) => t(before.dishes[d.id] ? "meals.edit.dishChanged" : "meals.edit.dishAdded", { name: d.name, id: d.id })),
+        ...removed.map((id) => t("meals.edit.dishRemoved", { name: before.dishes[id]?.name ?? id, id })),
       ];
     },
   };
