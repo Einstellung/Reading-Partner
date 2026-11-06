@@ -14,6 +14,7 @@
 // hold it: a bell that lands here (bell.ts), and the reader typing to the companion from
 // its menu (door-chat.ts, ui/components/companion/DoorChat.tsx).
 
+import type { RaiseConfirmCard } from "../housekeeper/write";
 import { openDesk, type DeskEnv, type DeskMessage, type DeskRef } from "../desk";
 import { type SourceUnit } from "../memory";
 import { resolvePalace } from "../palace";
@@ -68,6 +69,8 @@ export interface DoorTurnInput {
   tools?: readonly AgentTool[];
   /** Where a topic proposal is drawn; nothing is proposed without one. */
   topic?: TopicProposalSurface;
+  /** Where an edit_data change that waits for the reader puts its card (turn.ts). */
+  raiseConfirmCard?: RaiseConfirmCard;
   /** What the surface tells the model beside its tools (turn.ts). */
   prompt?: string;
   /**
@@ -123,6 +126,7 @@ export async function openDoorTurn(input: DoorTurnInput): Promise<AssembledTurn 
     ...(input.tools ? { tools: input.tools } : {}),
     ...(input.topic ? { topic: input.topic } : {}),
     ...(input.prompt ? { prompt: input.prompt } : {}),
+    ...(input.raiseConfirmCard ? { raiseConfirmCard: input.raiseConfirmCard } : {}),
   });
 }
 

@@ -175,7 +175,12 @@ export async function deliverBookBell(
   const book: BookOrigin = { ...origin, home: origin.bookId };
   const { threadId, bookId, home } = book;
   const { runtime } = durable;
-  const answered = (reply: string): TurnDeliveryOutcome => ({ status: "answered", reply, watching: deps.watching(book) });
+  const answered = (reply: string): TurnDeliveryOutcome => ({
+    status: "answered",
+    reply,
+    watching: deps.watching(book),
+    address: { key: home, threadId },
+  });
 
   const conversation = await runtime.conversationFor(bookThreadKey(book), bookThreadOrigin(book), BACKGROUND_CONTEXT);
   const earlier = await bellTurn(runtime, conversation.id, input.bellId, BACKGROUND_CONTEXT);

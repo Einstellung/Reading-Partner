@@ -71,7 +71,7 @@ palace 总表（`src/palace/kinds.ts`）每行加一个纯数据字段 `ai?: { w
 
 `gate` 返回非 null 时不落盘，housekeeper 把这次改动存成一条待确认记录 `housekeeper-pending/<id>.json`（`kind`、`id`、`base`、交回的值、`describe` 的几行、发起者、时间），出一张通用确认卡（聊天卡片 kind `housekeeper-confirm`，画在 `ui/components/chat`），卡上是 `describe` 的几行和「确认」「不要」。卡片自己调 housekeeper 的确认和删除（`ui/components/chat/housekeeper-confirm.ts`），不经各对话宿主的 `onCardAction`，所以落在哪个对话都一样能点；卡上的状态从待确认记录在不在读出来。点确认时从第 6 步接着走：文件已经不是 `base` 就提示「数据变了」，卡片作废；点不要就删记录。待确认记录同步（`data`），七天后由通用 `age` 规则回收。
 
-卡片出在发起者所在的对话：soul 回合经 `AssembleInput.raiseConfirmCard` 出卡，没传这个端口的表面出不了卡，要确认的改动直接退回「这里出不了确认卡」，不留记录。worker 没有卡片通道，待确认记录带着 `initiator.runId` 留下（`pendingOfRun` 按 run 取出），工具回给 worker「等派你的那个对话里的用户确认」。随交回在派它的对话出卡这一步还没接：bell 投递走各 place 的 `TurnDeliverer`，它的结果（`TurnDeliveryOutcome`）不带落到的 thread key，要在各 place 的投递里取出这个 run 的待确认记录、把卡追加进那个线程。
+卡片出在发起者所在的对话：soul 回合经 `AssembleInput.raiseConfirmCard` 出卡，没传这个端口的表面出不了卡，要确认的改动直接退回「这里出不了确认卡」，不留记录。worker 没有卡片通道，待确认记录带着 `initiator.runId` 留下（`pendingOfRun` 按 run 取出），工具回给 worker「等派你的那个对话里的用户确认」。交回时出卡：各 place 的 `TurnDeliverer` 答完在 `TurnDeliveryOutcome.address` 带上回答落到的线程文件（door、简报、三餐经 `reading/turn/place-bell.ts`，书经 `reading/turn/deliver.ts`），`soul/bell.ts` 在 ack 之前调 `soul/run-confirm-cards.ts`，把 `pendingOfRun(runId)` 的每条记录作为一条卡片消息追加在回答后面（卡片 id `housekeeper-<pendingId>`）。开着的对话靠线程追加广播看到它：door 和书本来就听，info（简报、三餐）只为这种卡加了监听。程序派的 run 不起回合（bell.ts），它留下的待确认记录不出卡，七天后回收。
 
 现有的卡片闸照旧：三餐草稿卡的「就这样」和 `apply_meal_plan` 仍是整份替换计划的那道确认，`edit_data` 不做「应用草稿」。
 
@@ -97,7 +97,7 @@ housekeeper 不自己写数据文件，`land` 和 `restore` 都经领域自己�
 - `soul/turn.ts` 的 `assembleTurn`：工具清单定稿、`withCodemode` 之后加 `edit_data`、`undo_edit`，沙盒里能调的读工具就是这张桌子的全部读工具。桌子、角色、surface 都不用各自挂。
 - `legion/subagent/run.ts` 的 `runSubagent`：在 `withCodemode` 之后加。tasking worker、语音的 `think`、回合内的子对话都走这里。
 
-发起者信息（线程、run、place）和出卡的端口由这两处传给工具：`assembleTurn` 取 `env.thread.id` 和 origin 的 place，`runSubagent` 取 `SubagentRequest.edit`（agent worker 填 run id）。还没有领域登记 entry 时两个工具不挂，工具清单和缓存前缀不变。
+发起者信息（线程、run、place）和出卡的端口由这两处传给工具：`assembleTurn` 取 `env.thread.id` 和 origin 的 place，`runSubagent` 取 `SubagentRequest.edit`（agent worker 填 run id）。出卡端口 `raiseConfirmCard` 由宿主传进 `assembleTurn`：info 对话（`use-info-call.ts` 经 `assembleInfoTurn`）、door（`use-door-chat.ts` 经 `prepareDoorTurn`/`openDoorTurn`）、复述（`useRetell.ts` 经 `buildRetellTurn`）、排练教练（`useCoach.ts` 经 `buildCoachTurn`）。阅读对话、手机课堂、语音通话和 bell/恢复的回合没传，要确认的改动在那里被退回。还没有领域登记 entry 时两个工具不挂，工具清单和缓存前缀不变。
 
 `soul/roles.ts` 的 `RoleWrite` 现在只是声明，运行时没人拦。经 housekeeper 的写入由它真的执行闸：`card` 就是护栏 4 的确认卡；`instruction` 是护栏通过即落盘，`why` 记下用户的那句话；`trial` 是落盘前先在副本上把重算跑通。旧写工具收编一个，就从角色的 `writes` 里删它一条，全部收编后 `RoleWrite` 删掉。
 

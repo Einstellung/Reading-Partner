@@ -12,7 +12,7 @@
 
 import type { BoxOrigin } from "../../box";
 import type { AgentTool } from "../../legion/durable/contract";
-import { assembleTurn } from "../../soul";
+import { assembleTurn, type AssembleInput } from "../../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../../desk";
 import type { Settings } from "../../platform/app/settings";
 import {
@@ -38,6 +38,8 @@ export { configuredModel } from "../../soul";
 
 export interface RetellTurnInput extends RetellDeskRef {
   settings: Settings;
+  // Where an edit_data change that waits for the reader puts its card (docs/platform/687).
+  raiseConfirmCard?: AssembleInput["raiseConfirmCard"];
 }
 
 export interface RetellTurn {
@@ -63,7 +65,7 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
   // went through a shell — registers it on the way in rather than failing on a
   // desk this module owns anyway.
   if (!deskKindRegistered(RETELL_KIND)) registerRetellDesk();
-  const { settings, ...retellRef } = input;
+  const { settings, raiseConfirmCard, ...retellRef } = input;
   const { retell } = retellRef;
   const env: DeskEnv = {
     settings,
@@ -72,7 +74,7 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
     thread: { key: retellThreadKey(retell.id), id: retell.id },
   };
   const desk = await openDesk([{ kind: RETELL_KIND, ref: retellRef }], env);
-  const assembled = await assembleTurn({ desk });
+  const assembled = await assembleTurn({ desk, ...(raiseConfirmCard ? { raiseConfirmCard } : {}) });
   // The assembly answers null only on an aborted signal, and no signal rides a
   // retell turn: the view drops the reply rather than the assembly.
   if (!assembled) throw new Error("retell: the assembly abandoned a turn that carries no signal");

@@ -91,10 +91,12 @@ export interface TurnDelivery {
 
 /**
  * How a bell's turn ended. `reply` is what the soul said to the bell, for the
- * card's cover; `watching` whether the reader was looking as it landed.
+ * card's cover; `watching` whether the reader was looking as it landed;
+ * `address` the thread file the reply landed in, where the confirmation cards
+ * the run left are appended after it (docs/platform/687 确认).
  */
 export type TurnDeliveryOutcome =
-  | { status: "answered"; reply: string; watching: boolean }
+  | { status: "answered"; reply: string; watching: boolean; address?: { key: string; threadId: string } }
   | { status: "failed"; reason: string };
 
 /**

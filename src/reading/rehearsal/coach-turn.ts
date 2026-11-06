@@ -11,7 +11,7 @@
 
 import type { BoxOrigin } from "../../box";
 import type { AgentTool } from "../../legion/durable/contract";
-import { assembleTurn } from "../../soul";
+import { assembleTurn, type AssembleInput } from "../../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../../desk";
 import type { Settings } from "../../platform/app/settings";
 import { talkThreadKey } from "../talk";
@@ -34,6 +34,8 @@ export {
 
 export interface CoachTurnInput extends OutlineDeskRef {
   settings: Settings;
+  // Where an edit_data change that waits for the reader puts its card (docs/platform/687).
+  raiseConfirmCard?: AssembleInput["raiseConfirmCard"];
 }
 
 export interface CoachTurn {
@@ -57,7 +59,7 @@ export async function buildCoachTurn(input: CoachTurnInput): Promise<CoachTurn> 
   // (useShellBootstrap); a turn assembled without one registers it on the way in
   // rather than failing on a desk this module owns anyway.
   if (!deskKindRegistered(OUTLINE_KIND)) registerRehearsalDesk();
-  const { settings, ...outlineRef } = input;
+  const { settings, raiseConfirmCard, ...outlineRef } = input;
   const env: DeskEnv = {
     settings,
     // A talk has exactly one conversation, and its id is the outline's
@@ -65,7 +67,7 @@ export async function buildCoachTurn(input: CoachTurnInput): Promise<CoachTurn> 
     thread: { key: talkThreadKey(input.outline.id), id: input.outline.id },
   };
   const desk = await openDesk([{ kind: OUTLINE_KIND, ref: outlineRef }], env);
-  const assembled = await assembleTurn({ desk });
+  const assembled = await assembleTurn({ desk, ...(raiseConfirmCard ? { raiseConfirmCard } : {}) });
   // The assembly answers null only on an aborted signal, and no signal rides a
   // coach turn: the view drops the reply rather than the assembly.
   if (!assembled) throw new Error("coach: the assembly abandoned a turn that carries no signal");

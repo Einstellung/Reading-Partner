@@ -6,6 +6,7 @@
 // What it cannot do it says, rather than writing into a row itself: the words
 // for "no model is set up" and the refusal belong to the surface showing them.
 
+import type { RaiseConfirmCard } from "../housekeeper/write";
 import type { AgentTool } from "../legion/durable/contract";
 import type { DeskMessage, DeskRef } from "../desk";
 import type { TopicProposalSurface } from "../memory";
@@ -25,6 +26,8 @@ export interface DoorSendInput {
   /** What the surface mounts beside the soul's own set. */
   tools?: readonly AgentTool[];
   topic?: TopicProposalSurface;
+  /** Where an edit_data change that waits for the reader puts its card. */
+  raiseConfirmCard?: RaiseConfirmCard;
   /** What the surface tells the model beside its tools. */
   prompt?: string;
   /** Material open beside the conversation (door.ts DoorTurnInput.desk). */
@@ -76,6 +79,7 @@ export async function prepareDoorTurn(
     signal: input.signal,
     ...(input.tools ? { tools: input.tools } : {}),
     ...(input.topic ? { topic: input.topic } : {}),
+    ...(input.raiseConfirmCard ? { raiseConfirmCard: input.raiseConfirmCard } : {}),
     ...(input.prompt ? { prompt: input.prompt } : {}),
     ...(input.desk?.length ? { desk: input.desk } : {}),
   });

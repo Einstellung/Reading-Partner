@@ -95,7 +95,12 @@ export async function deliverPlaceBell(
   const durable = await deps.durable();
   if (!durable) return { status: "failed", reason: "the turn runtime has not started" };
   const { runtime } = durable;
-  const answered = (reply: string): TurnDeliveryOutcome => ({ status: "answered", reply, watching: place.watching() });
+  const answered = (reply: string): TurnDeliveryOutcome => ({
+    status: "answered",
+    reply,
+    watching: place.watching(),
+    address: place.address,
+  });
 
   const conversation = await runtime.conversationFor(place.key, place.origin, BACKGROUND_CONTEXT);
   const earlier = await bellTurn(runtime, conversation.id, input.bellId, BACKGROUND_CONTEXT);
