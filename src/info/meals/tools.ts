@@ -69,7 +69,6 @@ import {
 import { WEEK_DAYS, addDays, dayOn, isoWeekday, lastDate, planExhausted } from "./plan/week";
 import { buildDraftCard } from "./build-draft-card";
 import { houseOil, oilRefused } from "./dishes/house-oil";
-import { SEED_DISHES } from "./dishes/seed";
 import { fillDraft } from "./planner/fill";
 import { readerPortions } from "./planner/portions";
 import { FRIDGE_DAYS_AFTER_COOK } from "./dishes/methods";
@@ -387,8 +386,8 @@ export function mealsGuidance(
   if (opts.draft?.phase === "proposed") out.push("", ...draftOnCard(opts.draft));
   if (profile) {
     const lib = planLibrary(profile);
-    const portions = targets ? readerPortions(lib, SEED_DISHES, dayTargetsOn(targets, profile, today)) : undefined;
-    out.push("", "LIBRARY (dish ids for the draft; only what they can have and their kitchen can make)", ...libraryListing(lib, SEED_DISHES, portions));
+    const portions = targets ? readerPortions(lib, lib.all(), dayTargetsOn(targets, profile, today)) : undefined;
+    out.push("", "LIBRARY (dish ids for the draft; only what they can have and their kitchen can make)", ...libraryListing(lib, lib.all(), portions));
   }
   out.push(
     "",

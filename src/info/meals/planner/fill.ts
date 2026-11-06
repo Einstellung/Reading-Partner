@@ -15,7 +15,6 @@
 // cannot fix goes back naming the picks to change (explain).
 
 import { referenceServing, totals, type Totals } from "../dishes/serving";
-import { SEED_DISHES } from "../dishes/seed";
 import type { Dish } from "../dishes/types";
 import { FOODS, foodById, type Food } from "../nutrition/foods";
 import { calciumSources, checkDraft, FRUIT_PORTIONS, type DraftContext, type DraftProblem, type DraftResult } from "./checks";
@@ -71,7 +70,7 @@ interface Menu {
 }
 
 function menuOf(lib: PlanLibrary): Menu {
-  const usable = SEED_DISHES.map((d) => lib.dish(d.id)).filter((d): d is Dish => !!d && d.equipment.every((e) => lib.kitchen.has(e)));
+  const usable = lib.all().map((d) => lib.dish(d.id)).filter((d): d is Dish => !!d && d.equipment.every((e) => lib.kitchen.has(e)));
   const fruitOk = (f: Food) =>
     f.roles.includes("fruit") && !lib.foodBlocked(f.id) && !(buyFor(f, fruitPortionG(f)).by === "pack" && (f.keeps === "d1-2" || f.keeps === "d3-5"));
   const ordered = FRUIT_ORDER.map((id) => foodById(id)).filter((f): f is Food => !!f && fruitOk(f));

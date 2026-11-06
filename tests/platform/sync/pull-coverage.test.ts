@@ -17,6 +17,7 @@ import { expect, test } from "bun:test";
 import { PALACE } from "../../../src/palace";
 import { ASK_PULL_ROUTE } from "../../../src/info/briefer/handoff";
 import { READER_PULL_ROUTE } from "../../../src/info/briefer/reader";
+import { MEALS_DISHES_PULL_ROUTE } from "../../../src/info/meals/dishes/user-dishes";
 import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/info/meals/photos/photo-sweep";
 import { MEALS_PICTURES_PULL_ROUTE } from "../../../src/info/meals/photos/dish-draw-sweep";
 import { SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
@@ -45,6 +46,7 @@ const ROUTES: PullMatcher[] = [
   ASK_PULL_ROUTE,
   MEALS_PHOTOS_PULL_ROUTE,
   MEALS_PICTURES_PULL_ROUTE,
+  MEALS_DISHES_PULL_ROUTE,
 ];
 
 // Synced files that no route needs, and why. Each is read when the screen or the

@@ -119,7 +119,7 @@ housekeeper 是 capability，现在只 import platform 和 palace。写入放进
 
 `info-meals`，`info-meals.json`。可改：`plan.planner.draft`、各顿的 `note`。程序算：`plan.days` 里做的那几顿除 `note` 外的字段（`solved`、`items`、`name`、`method`、`minutes`）、`shopping.items`、`plan.planner.picks`。锁定：`plan.id`、`startDate`、`createdAt`、`revision`、`planner.start`、`preppedAt`、`prepRun`，以及这一步还由原工具负责的 `charter`、`shopping` 的读者那一半、`deviations`、`photosAskedAt`。`gate`：改动让计划覆盖的日期或备餐日吃哪几顿变了（天数、备餐日、备餐时段）算整份替换，计划变成 null 算删除；其余原地改。
 
-`info-meals-dishes`，新文件 `info-meals-dishes.json`，用户自己的菜（docs/671「菜库」里说的 `origin: "user"` 的菜，`write_dish` 至今没做）。按菜 id 的 records 合并。`planLibrary` 读种子库加这个文件。只能新增和改自己的菜，id 不能和种子菜重；删除要确认。
+`info-meals-dishes`，新文件 `info-meals-dishes.json`，用户自己的菜（docs/671「菜库」里说的 `origin: "user"` 的菜，`write_dish` 至今没做）。按菜 id 的 records 合并。`planLibrary` 读种子库加这个文件：菜库是同步读的，文件在内存里留一份（`dishes/user-dishes.ts`），启动时读，本机写入和 pull 到时换掉；`PlanLibrary.all()` 是建库用的全部菜，菜单列表和补草稿都从它取。用户的菜没有发布的菜图，走 `drawDishes`。只能新增和改自己的菜，id 不能和种子菜重；`writeUserDish` 是校验加写入的纯函数（存成 `origin: "user"`，改菜保留第一次的 `createdAt`），`removeUserDish` 删一道，删除要确认。
 
 输入层新增一个字段：`DraftBatch.rawG?`，这一锅蛋白食材的总生重（全家，用户报的现成量；豆腐加肉的菜是两样加起来）。`solveDraft` 有它时把这锅的蛋白固定在 `rawG / people`，吃这锅的几顿平分，主食、加餐照常补一天的热量，整包取整、钠超限降倍数和易坏整包的修剪都不再动它；超出这道菜的 `maxMainScale` 或低于参考份量乘顿数（`solve.ts` 的 `potRawRange`），就是一条 `pot` 问题，属结构规则，挡下。
 
@@ -128,7 +128,7 @@ housekeeper 是 capability，现在只 import platform 和 palace。写入放进
 `check` 接现有检查：
 
 - 草稿两个 kind：`checkDraft`（`planner/checks.ts`）。求解前的结构规则（菜认识且能排、锅和备餐时段对得上、冷藏天数 `fridge`、厨房有这口锅 `equipment`、`fruit_food` 等，`DraftRule` 里 `red_meat` 之前那些）挡下；求解后读计划的营养规则（红肉、豆类、全谷、蔬菜、钙、钠、蛋白、热量、整包剩余）不挡，落盘后在结果里点名，和 `apply_meal_plan` 现在的做法一样。
-- 用户的菜：`checkDish`（`dishes/check.ts`）的入库检查全部挡下。
+- 用户的菜：`checkDish`（`dishes/check.ts`）的入库检查全部挡下，由 `writeUserDish` 跑。
 
 `land` 的重算：
 
@@ -136,7 +136,7 @@ housekeeper 是 capability，现在只 import platform 和 palace。写入放进
 - 已存计划原地改：照 `apply.ts` 的 `resolvedWeek` 走 planner 那支，`checkPlannerRecord`、`resolvePlannerWeek` 重解做的那几顿（只覆盖今天起的日子，过去的日子照存的留着，计划就是记录），`plannerShoppingList` 加 `reconcileShoppingList` 重出购物单、保留读者的勾和自己加的行，`revision` 加一，`ports.changed()`。做法页和备餐步骤按 key 存，菜或克数变了 key 就变，经 `live.ts` 现有的「本机写了这周」那条路由 `recipe-sweep.ts` 重写；新菜名的图片走 `drawDishes`、`startPhotoSearch`。
 - 已存计划整份替换（确认后）：`weekFromDraft` 加 `freshShoppingList`，和 `applyDraft` 一样。
 
-两件事按这套怎么改：10-31 那份是已存计划，一次 `edit_data({ kind: "info-meals" })`，程序把鸡肉那锅和牛肉那锅的 `rawG` 设成 600 和 400，重解后各顿克数、购物单、备餐步骤都跟着变。11-06 那份是未保存草稿，两次 `edit_data`：先在 `info-meals-dishes` 加一道菜，从 `salsa_shredded_chicken` 抄过来，改名、做法类别改焖、设备改灶台、做法概述和吃法名改成鸡丁，过入库检查；再在 `info-meals-draft` 把那一锅的 `dish` 换成它，过 `checkDraft`，卡片换成第二版。tasking worker 手上是同一套工具，调法相同。
+两件事按这套怎么改：10-31 那份是已存计划，一次 `edit_data({ kind: "info-meals" })`，程序把鸡肉那锅和牛肉那锅的 `rawG` 设成 600 和 400，重解后各顿克数、购物单、备餐步骤都跟着变。11-06 那份是未保存草稿，两次 `edit_data`：先在 `info-meals-dishes` 加一道菜，从 `salsa_shredded_chicken` 抄过来，改名、做法类别改焖（`braise`）、设备改灶台、做法概述和吃法名改成鸡丁，过入库检查；再在 `info-meals-draft` 把那一锅的 `dish` 换成它，过 `checkDraft`，卡片换成第二版。tasking worker 手上是同一套工具，调法相同。
 
 两处提示词要改：三餐对话的说明（`tools.ts` `mealsGuidance`）删掉 `write_meals_method` 那句，改说改计划、草稿、菜用 `edit_data`；tasking worker 的定义（`info/tasking/tasking-agent.ts`）不再说三餐只读。
 
