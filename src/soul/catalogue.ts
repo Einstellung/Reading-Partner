@@ -20,6 +20,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/durable/contract";
 import { appConversationIo, type ConversationIo } from "../conversations";
 import { PALACE, resolvePalace } from "../palace";
+import { editableRows } from "../housekeeper/write";
 import { appData } from "../platform/app/appdata";
 import { asString } from "../platform/std/json";
 
@@ -415,8 +416,14 @@ export async function readCatalogue(io: CatalogueIo = appCatalogueIo): Promise<C
 /** How many entries one kind prints before it says how many are left. */
 export const LIST_CAP = 50;
 
+// A kind the palace marks ai.write and a domain registered: the soul is told it
+// can change it (docs/platform/687).
+function editable(kind: string): string {
+  return editableRows(PALACE).some((r) => r.kind === kind) ? " Can be changed with edit_data." : "";
+}
+
 function overview(catalogue: Catalogue): string {
-  const lines = catalogue.kinds.map((k) => `${k.kind} (${k.count}) — ${k.about}`);
+  const lines = catalogue.kinds.map((k) => `${k.kind} (${k.count}) — ${k.about}${editable(k.kind)}`);
   return (
     "What this reader keeps, one line per kind of thing. " +
     "Call list_kind with a kind's name to see the entries.\n\n" +
@@ -438,11 +445,11 @@ function listing(kind: CatalogueKind): string {
       "the memory tools are how they are read."
     );
   }
-  if (kind.count === 0) return `No ${kind.kind} yet. ${kind.about}`;
+  if (kind.count === 0) return `No ${kind.kind} yet. ${kind.about}${editable(kind.kind)}`;
   const shown = kind.entries.slice(0, LIST_CAP).map(entryLine);
   const rest = kind.count - shown.length;
   const tail = rest > 0 ? `\n… and ${rest} more.` : "";
-  return `${kind.kind} (${kind.count}), newest first:\n${shown.join("\n")}${tail}`;
+  return `${kind.kind} (${kind.count}), newest first:${editable(kind.kind)}\n${shown.join("\n")}${tail}`;
 }
 
 /**

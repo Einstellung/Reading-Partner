@@ -56,6 +56,7 @@ export function agentWorker(spec: AgentWorkerSpec, deps: AgentWorkerDeps = {}) {
           definition,
           task,
           signal: stop.signal,
+          edit: { initiator: { runId: ctx.run.id } },
           // The sub-agent's phases in the runner's own wording. Only a tool name
           // this device injected ever travels this way (subagent/types.ts).
           onProgress: (progress) => {

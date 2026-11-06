@@ -18,6 +18,7 @@ import { providers, toPiMessages } from "../ai/providers";
 import { modelIdFor, type ModelTier } from "../ai/model-tier";
 import type { AgentTool } from "../legion/durable/contract";
 import { withCodemode } from "../legion/codemode";
+import { withEditData, type RaiseConfirmCard } from "../housekeeper/write";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
 import { buildAboutAppTool, introBlock } from "./intro";
 import type { BoxOrigin, BoxStore } from "../box";
@@ -58,6 +59,10 @@ export interface AssembleInput {
   // What the surface tells the model beside its tools: the door's drafting
   // rules for a topic search (docs/info/88). Printed last.
   prompt?: string;
+  // Where an edit_data change that waits for the reader puts its card
+  // (docs/platform/687). A surface that passes nothing can show none, and such
+  // a change is refused with nothing written.
+  raiseConfirmCard?: RaiseConfirmCard;
 }
 
 export interface AssembledTurn {
@@ -131,7 +136,15 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   const aboutApp = buildAboutAppTool({ name, places: listPlaces(), tools: [...soul.tools, ...surfaceTools] });
   // run_code last, built over the final list so a program can call every read
   // this desk holds, whoever brought it (docs/soul/686).
-  const tools = withCodemode([...soul.tools, aboutApp, ...surfaceTools, ...items.flatMap((i) => i.tools)]);
+  // edit_data and undo_edit right after it, over the same reads, carrying who
+  // asked and where a confirmation card goes (docs/platform/687).
+  const tools = withEditData(
+    withCodemode([...soul.tools, aboutApp, ...surfaceTools, ...items.flatMap((i) => i.tools)]),
+    {
+      initiator: { threadId: env.thread.id, ...(origin === undefined ? {} : { place: origin.place }) },
+      ...(input.raiseConfirmCard ? { raiseCard: input.raiseConfirmCard } : {}),
+    },
+  );
   const toolNames = tools.map((t) => t.name);
   // Two tools answering to one name is the mistake openDesk refuses between two
   // items, and the assembly can make it in more ways than that: the soul's own

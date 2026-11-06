@@ -171,6 +171,11 @@ export interface PalaceRow {
   // package that registers the opener, not here.
   desk?: true;
   deskKind?: string;
+  // The AI may change this kind's data through the housekeeper's edit_data
+  // (docs/platform/687). Pure data, naming no function: the domain registers the
+  // entry that says how (src/housekeeper/write), and the write guard holds the
+  // two halves to each other.
+  ai?: { write?: true };
   // One line saying what this kind is, in the reader's own terms. It is what the
   // soul is shown when it asks what the palace holds (src/soul/catalogue.ts,
   // docs/71), so a row carries one exactly when the soul is meant to know the
@@ -380,6 +385,34 @@ export const PALACE = [
     deleteWith: "never",
     retention: { rule: "tail", lines: 2000 },
     note: "one line per thing the nightly housekeeper did or refused (src/housekeeper, docs/80); it trims itself",
+  },
+  {
+    kind: "housekeeper-version",
+    domain: "platform",
+    match: keyed(/^housekeeper-versions\/[a-z0-9][a-z0-9-]*\/\d{8}T\d{9}Z-[a-z0-9]+\.json$/),
+    dir: { prefix: "housekeeper-versions", depth: 2 },
+    samples: ["housekeeper-versions/info-meals/20261106T120000000Z-a1b2c3.json"],
+    id: "fixed",
+    refs: [],
+    sync: "data",
+    merge: "opaque",
+    deleteWith: "never",
+    retention: { rule: "keep-last", count: 20, by: "name" },
+    note: "the file as it was before one edit_data or undo_edit write, a directory per kind and a file per write, written once and never changed, so there are never two contents of one to merge (src/housekeeper/write, docs/platform/687)",
+  },
+  {
+    kind: "housekeeper-pending",
+    domain: "platform",
+    match: keyed(/^housekeeper-pending\/p-[a-z0-9-]+\.json$/),
+    dir: { prefix: "housekeeper-pending", depth: 1 },
+    samples: ["housekeeper-pending/p-20261106t120000000z-a1b2c3.json"],
+    id: "fixed",
+    refs: [],
+    sync: "data",
+    merge: "opaque",
+    deleteWith: "never",
+    retention: { rule: "age", days: 7, from: "mtime" },
+    note: "an edit_data write held for the reader's confirmation card, deleted when it is confirmed or declined (src/housekeeper/write, docs/platform/687)",
   },
   {
     kind: "turn-log",

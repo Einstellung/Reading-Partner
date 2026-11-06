@@ -113,7 +113,7 @@ export function buildCodemodeTool(tools: readonly AgentTool[], deps: CodemodeDep
 // One read as the VM sees it. Arguments are checked and coerced against the
 // tool's schema the way the turn's own loop does before `execute`; the result
 // is the text the model would have been handed, images left out.
-function sandboxTool(tool: AgentTool, calls: { left: number; max: number }): CodemodeTool {
+export function sandboxTool(tool: AgentTool, calls: { left: number; max: number }): CodemodeTool {
   const inputSchema = tool.parameters as unknown as CodemodeJsonSchema;
   const outputSchema: CodemodeJsonSchema = { type: "string" };
   return {

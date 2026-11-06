@@ -15,7 +15,7 @@ palace 总表（`src/palace/kinds.ts`）每行加一个纯数据字段 `ai?: { w
 | 字段 | 内容 |
 |---|---|
 | `kind` | palace 行的 kind 名，该行必须带 `ai.write` |
-| `open(id)` | 读出这份数据交给沙盒的副本（一个可 JSON 序列化的值）和它的 `base`（读到的文件文本的 hash）；`id` 给一个 kind 多份数据的情形，单文件 kind 传 null。数据不存在时返回 null |
+| `open(id)` | 读出这份数据交给沙盒的副本（一个可 JSON 序列化的值）和它的 `base`（读到的文件文本经 `textBase` 算的 hash，housekeeper 重读时用同一个函数比）；文件路径由 housekeeper 从 palace 行取（`pathFor(id)`，单文件 kind 取行的文件名）；`id` 给一个 kind 多份数据的情形，单文件 kind 传 null。数据不存在时返回 null |
 | `shape` | 一段 TypeScript 声明，描述副本的结构，每个字段注明是输入、程序算的（从哪个输入算）还是锁定的。沙盒里给模型看 |
 | `parse(value)` | 护栏 1：交回的值能否读成这个 kind 的合法结构，不能就返回原因 |
 | `computed` | 护栏 2：程序算的字段，路径模式（`plan.days.*.*.solved`）加一句「要改它就改哪个输入」 |
@@ -55,7 +55,7 @@ palace 总表（`src/palace/kinds.ts`）每行加一个纯数据字段 `ai?: { w
 4. 护栏 1：`parse`。护栏 2：改动路径命中 `computed` 或 `locked` 的，逐条退回，`computed` 的带上「改哪个输入」。护栏 3：`check`。任何一条不过就整份退回，什么都不写。
 5. 护栏 4：`gate` 不为 null 的，转「确认」。
 6. 落盘前重读文件，hash 和 `base` 不同（这期间同步或别的回合改了它）就退回「数据刚变了，重新 open」。
-7. 写版本记录（护栏 5），再 `land`。`land` 里重算失败就不落盘、退回原因，版本记录随之删掉。
+7. `land`，成功后写版本记录（护栏 5），记下改前文本和 `land` 留下的文本的 hash。`land` 里重算失败就不落盘、退回原因，什么都不留。
 
 ## 护栏
 
@@ -69,17 +69,17 @@ palace 总表（`src/palace/kinds.ts`）每行加一个纯数据字段 `ai?: { w
 
 ## 确认
 
-`gate` 返回非 null 时不落盘，housekeeper 把这次改动存成一条待确认记录 `housekeeper-pending/<id>.json`（`kind`、`id`、`base`、交回的值、`describe` 的几行、发起者、时间），出一张通用确认卡（聊天卡片 kind `housekeeper-confirm`，画在 `ui/components/chat`），卡上是 `describe` 的几行和「确认」「不要」。点确认时从第 6 步接着走：文件已经不是 `base` 就提示「数据变了」，卡片作废；点不要就删记录。待确认记录同步（`data`），七天后由通用 `age` 规则回收。
+`gate` 返回非 null 时不落盘，housekeeper 把这次改动存成一条待确认记录 `housekeeper-pending/<id>.json`（`kind`、`id`、`base`、交回的值、`describe` 的几行、发起者、时间），出一张通用确认卡（聊天卡片 kind `housekeeper-confirm`，画在 `ui/components/chat`），卡上是 `describe` 的几行和「确认」「不要」。卡片自己调 housekeeper 的确认和删除（`ui/components/chat/housekeeper-confirm.ts`），不经各对话宿主的 `onCardAction`，所以落在哪个对话都一样能点；卡上的状态从待确认记录在不在读出来。点确认时从第 6 步接着走：文件已经不是 `base` 就提示「数据变了」，卡片作废；点不要就删记录。待确认记录同步（`data`），七天后由通用 `age` 规则回收。
 
-卡片出在发起者所在的对话：soul 回合出在它自己的线程；worker 没有卡片通道，待确认记录随它的交回（delivery）落到派它的那个对话，在那里出卡。
+卡片出在发起者所在的对话：soul 回合经 `AssembleInput.raiseConfirmCard` 出卡，没传这个端口的表面出不了卡，要确认的改动直接退回「这里出不了确认卡」，不留记录。worker 没有卡片通道，待确认记录带着 `initiator.runId` 留下（`pendingOfRun` 按 run 取出），工具回给 worker「等派你的那个对话里的用户确认」。随交回在派它的对话出卡这一步还没接：bell 投递走各 place 的 `TurnDeliverer`，它的结果（`TurnDeliveryOutcome`）不带落到的 thread key，要在各 place 的投递里取出这个 run 的待确认记录、把卡追加进那个线程。
 
 现有的卡片闸照旧：三餐草稿卡的「就这样」和 `apply_meal_plan` 仍是整份替换计划的那道确认，`edit_data` 不做「应用草稿」。
 
 ## 上一版与撤销
 
-每次落盘前，housekeeper 写一条版本记录 `housekeeper-versions/<kind>/<writeId>.json`：`writeId`（时间在前、按名字排序就是先后）、`kind`、`id`、时间、设备、发起者（线程、run）、`why`、改前的整份文件文本、改后文本的 hash、`undoes`（撤销记录才有）。每条只写一次不再改，同步走 `data`，合并策略 `opaque`（不会有两份内容）。palace 行 retention `keep-last` 每个 kind 目录 20 条，按名字。三餐的 `info-meals.json` 现在约 100 KB，20 条约 2 MB。
+每次落盘后，housekeeper 写一条版本记录 `housekeeper-versions/<kind>/<writeId>.json`：`writeId`（时间在前、按名字排序就是先后）、`kind`、`id`、时间、设备、发起者（线程、run）、`why`、改前的整份文件文本、改后文本的 hash、`undoes`（撤销记录才有）。每条只写一次不再改，同步走 `data`，合并策略 `opaque`（不会有两份内容）。palace 行 retention `keep-last` 每个 kind 目录 20 条，按名字；通用 marker 原来只列 sample 所在的目录，现在对第二层名字不限的 `dir` 规则（`housekeeper-versions`）也列出各子目录。三餐的 `info-meals.json` 现在约 100 KB，20 条约 2 MB。
 
-`undo_edit` 找这份数据最近一条还没被撤销的非撤销记录，要求当前文件文本的 hash 等于它记的改后 hash；不等说明之后又有别的改动，拒绝，并把那之后的改动列给模型，让它用 `edit_data` 照用户的意思改。相等就用 `restore` 写回改前文本，自己也记一条带 `undoes` 的版本，所以连续撤销一步一步往前退。撤销也过护栏 4：撤掉一次整份替换本身就是整份替换，要出卡。
+`undo_edit` 找这份数据最近一条还没被撤销的非撤销记录，要求从它到最近一条记录首尾相接（每条的改前文本 hash 等于前一条的改后 hash），且当前文件文本的 hash 等于最近一条的改后 hash：撤销走 `land` 会重盖时间戳，字节回不到原样，只比目标那一条，连续撤销第二步就被拒（坑 [688](../pitfall/storage/688-an-undo-through-land-does-not-restore-the-bytes.md)）。接不上说明之后又有别的改动，拒绝，并把那之后的改动列给模型，让它用 `edit_data` 照用户的意思改。相等就用 `restore` 写回改前文本，自己也记一条带 `undoes` 的版本，所以连续撤销一步一步往前退。撤销也过护栏 4：撤掉一次整份替换本身就是整份替换，要出卡。
 
 版本随同步走，所以 worker 在另一台设备上改的，用户在 iPad 上说「改回去」也撤得了。
 
@@ -97,7 +97,7 @@ housekeeper 不自己写数据文件，`land` 和 `restore` 都经领域自己�
 - `soul/turn.ts` 的 `assembleTurn`：工具清单定稿、`withCodemode` 之后加 `edit_data`、`undo_edit`，沙盒里能调的读工具就是这张桌子的全部读工具。桌子、角色、surface 都不用各自挂。
 - `legion/subagent/run.ts` 的 `runSubagent`：在 `withCodemode` 之后加。tasking worker、语音的 `think`、回合内的子对话都走这里。
 
-发起者信息（线程、run、place）和出卡的端口由这两处传给工具。
+发起者信息（线程、run、place）和出卡的端口由这两处传给工具：`assembleTurn` 取 `env.thread.id` 和 origin 的 place，`runSubagent` 取 `SubagentRequest.edit`（agent worker 填 run id）。还没有领域登记 entry 时两个工具不挂，工具清单和缓存前缀不变。
 
 `soul/roles.ts` 的 `RoleWrite` 现在只是声明，运行时没人拦。经 housekeeper 的写入由它真的执行闸：`card` 就是护栏 4 的确认卡；`instruction` 是护栏通过即落盘，`why` 记下用户的那句话；`trial` 是落盘前先在副本上把重算跑通。旧写工具收编一个，就从角色的 `writes` 里删它一条，全部收编后 `RoleWrite` 删掉。
 

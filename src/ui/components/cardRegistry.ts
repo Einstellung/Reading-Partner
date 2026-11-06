@@ -19,6 +19,7 @@ import { COMPANION_CARD_REGISTRY } from "./companion/IntakeCard";
 import { READING_CARD_REGISTRY } from "./reader/RetellCard";
 import { TOPIC_SEARCH_CARD_REGISTRY } from "./companion/TopicSearchCard";
 import { ISSUE_QUESTION_CARD_REGISTRY } from "./companion/IssueQuestionCard";
+import { HOUSEKEEPER_CARD_REGISTRY } from "./chat/HousekeeperConfirmCard";
 
 export const CARD_REGISTRY: CardRegistry = {
   ...INFO_CARD_REGISTRY,
@@ -28,4 +29,5 @@ export const CARD_REGISTRY: CardRegistry = {
   ...TOPIC_SEARCH_CARD_REGISTRY,
   ...BOX_CARD_REGISTRY,
   ...ISSUE_QUESTION_CARD_REGISTRY,
+  ...HOUSEKEEPER_CARD_REGISTRY,
 };

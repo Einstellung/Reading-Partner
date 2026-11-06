@@ -131,6 +131,14 @@ export function genericMarker(rows: readonly PalaceRow[] = PALACE): GarbageMarke
       const ruled = rows.filter((r) => isGenericRule(r.retention));
       if (ruled.length === 0) return [];
       const dirs = new Set(ruled.flatMap((r) => r.samples.map(dirOf)));
+      // A row whose descend rule lets every name through at the second level
+      // keeps its files in directories named at run time (a kind per directory
+      // under housekeeper-versions/), which no sample can list.
+      for (const r of ruled) {
+        if (!r.dir || r.dir.depth !== 2 || r.dir.nested !== undefined || r.dir.prefix.endsWith("-")) continue;
+        const subs = await ctx.io.list(r.dir.prefix).catch(() => []);
+        for (const sub of subs) if (!sub.isFile) dirs.add(join(r.dir.prefix, sub.name));
+      }
       const found = new Map<PalaceRow, Found[]>();
       for (const dir of [...dirs].sort()) {
         const entries = await ctx.io.list(dir).catch(() => []);

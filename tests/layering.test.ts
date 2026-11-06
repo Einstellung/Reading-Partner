@@ -100,6 +100,13 @@ const LAYER: Record<string, Layer> = {
   // domains register their markers into it, and the shell hands its night to
   // legion/schedule, so it never reaches for either.
   housekeeper: "capability",
+  // AI writes through the housekeeper (docs/platform/687): the writable-kind
+  // registry, edit_data and undo_edit over the run_code sandbox, versions and
+  // the confirmation card's records. Reads legion/codemode, the durable tool
+  // contract, palace, platform and i18n; the root neither imports it nor
+  // re-exports it, so legion reaching the root for a marker never reaches
+  // codemode by it.
+  "housekeeper/write": "capability",
   // Running an agent: the stall watchdog and the pacing limiter every unattended
   // call goes through, the observable shell the long pipelines share, and the
   // isolated sub-agent runner. A capability like ai itself, and one layer out
