@@ -9,7 +9,10 @@
 //   halved over lunch and dinner; never under the reference serving, never a
 //   protein line over its food's maximum. A pot's meals share one scale, and
 //   a pot's packed protein rounds to whole packs when that moves it 30 % or
-//   less ("一盒整盒下锅"). Seasoning grows with the square root of the scale
+//   less ("一盒整盒下锅"). A pot with its raw protein given (DraftBatch.rawG,
+//   what they already have) is held at it instead: one scale making its
+//   protein lines add up to rawG over everyone eating, never moved by packs
+//   or sodium; checks.ts holds rawG to potRawRange. Seasoning grows with the square root of the scale
 //   (scaledMain). A day still over DAY_SODIUM_MG steps its mains' scales down
 //   while it keeps DAY_PROTEIN_FLOOR of its protein target and its kcal floor.
 // - The staple fills the meal's kcal within its range, the range growing with
@@ -25,7 +28,8 @@
 // - Packs (packFit): a perishable pack the plan needs just over whole packs
 //   of (PACK_TRIM_SHARE) is trimmed to them; what a bought pack leaves over
 //   grows the vegetable sides and a way's fresh vegetables that use it, up to
-//   the food's maximum a meal.
+//   the food's maximum a meal. A held pot's protein foods are what they
+//   have, never trimmed.
 // - The prep day's dinner (draft.ts prepDinner) is solved as one dinner
 //   against the prep day's dinner target: its pot share at the pot's scale,
 //   its staple filling the rest of the dinner's kcal. No day rule reads it.
@@ -171,6 +175,27 @@ export function maxMainScale(dish: Dish): number {
     .filter((l) => l.role === "protein" && l.grams > 0)
     .map((l) => (foodById(l.food)?.maxG ?? Number.POSITIVE_INFINITY) / l.grams);
   return Math.max(1, Math.min(Number.POSITIVE_INFINITY, ...caps));
+}
+
+/** A reference serving's protein lines added up, grams: what one meal of a pot at scale 1 holds of what rawG counts. */
+export function potProteinRefG(dish: Dish): number {
+  return (referenceServing(dish)?.ingredients ?? []).filter((l) => l.role === "protein" && l.grams > 0).reduce((s, l) => s + l.grams, 0);
+}
+
+/**
+ * The raw protein a pot of `dish` feeding `meals` meals for `people` may be
+ * given (DraftBatch.rawG), whole grams: from the reference serving at every
+ * meal to the dish's largest portion (maxMainScale) at every meal.
+ */
+export function potRawRange(dish: Dish, meals: number, people = 1): { min: number; max: number } {
+  const ref = potProteinRefG(dish) * meals * people;
+  return { min: Math.ceil(ref - 1e-6), max: Math.floor(maxMainScale(dish) * ref + 1e-6) };
+}
+
+/** The scale a pot with its raw protein given is held at: rawG shared over its meals and the people eating. */
+function heldScale(dish: Dish, rawG: number, meals: number, people: number): number {
+  const ref = potProteinRefG(dish) * Math.max(1, meals) * Math.max(1, people);
+  return ref > 0 ? rawG / ref : 1;
 }
 
 /** The main dish and how it is eaten at one lunch or dinner. */
@@ -348,11 +373,11 @@ function fitLines(fit: PackFit, lines: PlanLine[], day: number, slot: PlanSlot, 
  * fresh vegetables use the food, opened and not yet spoiled, each up to the
  * food's maximum a meal, in proportion to the room each has.
  */
-function packFit(days: readonly SolvedDay[], prepDinner: SolvedMeal | undefined, draft: PlanDraft, people: number): PackFit {
+function packFit(days: readonly SolvedDay[], prepDinner: SolvedMeal | undefined, draft: PlanDraft, people: number, held: ReadonlySet<string>): PackFit {
   const fit: PackFit = { scale: new Map(), extra: new Map() };
   for (const line of packList({ days: [...days], batches: [], ...(prepDinner ? { prepDinner } : {}) }, draft, people)) {
     const food = foodById(line.food);
-    if (!food || !leftoverChecked(food) || line.buy.by !== "pack") continue;
+    if (!food || !leftoverChecked(food) || line.buy.by !== "pack" || held.has(food.id)) continue;
     const bought = line.buy.count * line.buy.packG;
     if (bought <= line.grams) continue;
     const fewer = bought - line.buy.packG;
@@ -420,10 +445,19 @@ export function solveDraft(
   const meal = (day: number, slot: MainSlot) => `${day}:${slot}`;
   const unitOf = new Map<string, string>();
   const scale = new Map<string, number>();
+  // Pots held at the raw protein they were given, and the foods of their protein lines.
+  const held = new Set<string>();
+  const heldFoods = new Set<string>();
   for (const b of draft.batches) {
     const dish = need(lib, b.dish);
-    const want = b.meals.reduce((s, m) => s + proteinOf(m.day), 0) / Math.max(1, b.meals.length);
-    scale.set(b.id, clamp(want / REFERENCE_TARGET.main.value, 1, maxMainScale(dish)));
+    if (b.rawG !== undefined) {
+      held.add(b.id);
+      scale.set(b.id, heldScale(dish, b.rawG, b.meals.length, people));
+      for (const l of referenceServing(dish)?.ingredients ?? []) if (l.role === "protein") heldFoods.add(l.food);
+    } else {
+      const want = b.meals.reduce((s, m) => s + proteinOf(m.day), 0) / Math.max(1, b.meals.length);
+      scale.set(b.id, clamp(want / REFERENCE_TARGET.main.value, 1, maxMainScale(dish)));
+    }
     for (const m of b.meals) unitOf.set(meal(m.day, m.slot), b.id);
   }
   const ownUnit = (day: number, slot: MainSlot, m: DraftMeal) => {
@@ -452,8 +486,9 @@ export function solveDraft(
     const prepMain = draft.prepDinner ? mainAt(PREP_DAY, "dinner", draft.prepDinner) : null;
     const linesAt = (m: MealAt) => (m.day === PREP_DAY ? (prepMain?.lines ?? []) : (mains[m.day - 1]?.[m.slot].lines ?? []));
 
-    // Whole packs into the pot.
+    // Whole packs into the pot; a held pot stays at what they have.
     for (const b of draft.batches) {
+      if (held.has(b.id)) continue;
       const meals = b.meals.map(linesAt);
       const foods = new Set(meals.flat().filter((l) => l.role === "protein" && foodById(l.food)?.pack).map((l) => l.food));
       for (const food of foods) {
@@ -541,7 +576,7 @@ export function solveDraft(
   const frozen = new Set<string>();
   for (let round = 0; round < MAX_SODIUM_ROUNDS; round++) {
     const units = [...new Set(solved.days.filter((d) => d.totals.sodium > DAY_SODIUM_MG).flatMap((d) => MAIN_SLOTS.map((slot) => unitOf.get(meal(d.day, slot)) ?? "")))]
-      .filter((u) => !frozen.has(u) && (scale.get(u) ?? 1) > 1);
+      .filter((u) => !frozen.has(u) && !held.has(u) && (scale.get(u) ?? 1) > 1);
     if (!units.length) break;
     for (const u of units) {
       const fed = new Set(draft.days.map((_, i) => i + 1).filter((day) => MAIN_SLOTS.some((slot) => unitOf.get(meal(day, slot)) === u)));
@@ -560,7 +595,7 @@ export function solveDraft(
     }
   }
   // Whole packs: solved once more with the perishables trimmed or their leftover shared out.
-  const fitted = packFit(solved.days, solved.prepDinner, draft, people);
+  const fitted = packFit(solved.days, solved.prepDinner, draft, people, heldFoods);
   if (fitted.scale.size || fitted.extra.size) {
     fit = fitted;
     solved = solveAll();

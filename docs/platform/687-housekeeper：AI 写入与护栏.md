@@ -121,9 +121,9 @@ housekeeper 是 capability，现在只 import platform 和 palace。写入放进
 
 `info-meals-dishes`，新文件 `info-meals-dishes.json`，用户自己的菜（docs/671「菜库」里说的 `origin: "user"` 的菜，`write_dish` 至今没做）。按菜 id 的 records 合并。`planLibrary` 读种子库加这个文件。只能新增和改自己的菜，id 不能和种子菜重；删除要确认。
 
-输入层新增一个字段：`DraftBatch.rawG?`，这一锅蛋白食材的总生重（全家，用户报的现成量）。`solveDraft` 有它时把这锅的蛋白固定在 `rawG / people`，吃这锅的几顿平分，主食、加餐照常补一天的热量，整包取整不再动它；超出这道菜的 `maxMainScale` 或低于参考份量乘顿数，就是一条 `pot` 问题。
+输入层新增一个字段：`DraftBatch.rawG?`，这一锅蛋白食材的总生重（全家，用户报的现成量；豆腐加肉的菜是两样加起来）。`solveDraft` 有它时把这锅的蛋白固定在 `rawG / people`，吃这锅的几顿平分，主食、加餐照常补一天的热量，整包取整、钠超限降倍数和易坏整包的修剪都不再动它；超出这道菜的 `maxMainScale` 或低于参考份量乘顿数（`solve.ts` 的 `potRawRange`），就是一条 `pot` 问题，属结构规则，挡下。
 
-`picks` 跟着改：`edit_data` 改了 `draft` 里某一锅的菜、`rawG` 或某顿的主菜、吃法，`land` 把同一位置的值写进 `picks`，其余不动，这样之后改档案触发的重新补草稿（`planner/redraft.ts`）不会把这次改动补没。
+`picks` 跟着改：`edit_data` 改了 `draft` 里某一锅的菜、`rawG` 或某顿的主菜、吃法、早餐，`land` 用 `planner/redraft.ts` 的 `editedPicks(before, after, picks)` 把同一位置的值写进 `picks`，其余不动；锅和备餐时段补草稿时从不改，整份取 `after` 的。这样之后改档案触发的重新补草稿（`redraft`）不会把这次改动补没。
 
 `check` 接现有检查：
 

@@ -18,6 +18,7 @@ import {
   parseDraft,
   PREP_DAY,
   type DraftMain,
+  type MainSlot,
   type PlanDraft,
   type PlanSlot,
 } from "./draft";
@@ -77,6 +78,49 @@ export function revisionPicks(draft: PlanDraft, asked: PlanDraft | undefined): R
     sessions: draft.sessions,
     ...(draft.prepDinner ? { prepDinner: { main: main(draft.prepDinner.main, undefined) } } : {}),
     ...(asked?.asked ? { asked: asked.asked } : {}),
+  };
+}
+
+/**
+ * The picks after the draft they were filled into was edited (docs/platform/687
+ * 三餐): what changed between `before` and `after` in the places the picks hold
+ * (a pot's dish or rawG, a meal's main or way, a breakfast) is written into the
+ * picks at the same place; the rest of the picks stays. The pots and the
+ * session are the draft's own (the fill never changes them), so they are
+ * taken from `after` whole. Without picks, the ones `before` was read as stand
+ * in for them. A redraft after a profile change then starts from the edit
+ * instead of filling it away.
+ */
+export function editedPicks(before: PlanDraft, after: PlanDraft, picks: PlanDraft | undefined): PlanDraft {
+  const base = picks ?? parseDraft(revisionPicks(before, undefined));
+  const same = (a: DraftMain | undefined, b: DraftMain | undefined) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const copyMain = (m: DraftMain): DraftMain => ({ ...m });
+  const days = after.days.map((d, i) => {
+    const was = before.days[i];
+    const had = base.days[i];
+    const main = (slot: MainSlot) => {
+      const kept = had?.[slot];
+      if (kept && was && same(was[slot].main, d[slot].main)) return { main: copyMain(kept.main), sides: [...kept.sides] };
+      return { main: copyMain(d[slot].main), sides: [...(kept?.sides ?? [])] };
+    };
+    return {
+      breakfast: was && was.breakfast === d.breakfast ? (had?.breakfast ?? "") : d.breakfast,
+      lunch: main("lunch"),
+      dinner: main("dinner"),
+      fruit: [...(had?.fruit ?? [])],
+    };
+  });
+  const prepDinner = after.prepDinner
+    ? before.prepDinner && base.prepDinner && same(before.prepDinner.main, after.prepDinner.main)
+      ? { main: copyMain(base.prepDinner.main), sides: [...base.prepDinner.sides] }
+      : { main: copyMain(after.prepDinner.main), sides: [...(base.prepDinner?.sides ?? [])] }
+    : undefined;
+  return {
+    days,
+    batches: after.batches.map((b) => ({ ...b, meals: b.meals.map((m) => ({ ...m })) })),
+    sessions: after.sessions.map((s) => ({ ...s })),
+    ...(base.asked ? { asked: { ...base.asked } } : {}),
+    ...(prepDinner ? { prepDinner } : {}),
   };
 }
 
