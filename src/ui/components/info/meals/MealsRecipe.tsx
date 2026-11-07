@@ -13,6 +13,7 @@ import { finishView } from "./finish-source";
 import type { Finishing } from "../../../../info/meals/finish/types";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import type { MealKey, MealsState } from "../../../../info/meals/plan/types";
+import { mealDish, type MealDish } from "../../../../info/meals/recipe/meal-dish";
 import { potCooking, type PotCooking } from "../../../../info/meals/recipe/pot-cooking";
 import { packStep, recipeRequest, type RecipeEntry } from "../../../../info/meals/recipe/recipe";
 import { hostRegion } from "../../../../info/meals/region";
@@ -20,7 +21,7 @@ import { dayViewOn, ingredientPicture, weekdayName, type MealView } from "../../
 import { IconSparkle } from "../../base/icons";
 import { Button } from "../../ui/button";
 import { cn } from "../../lib/utils";
-import { CardLabel, MealsColumn, MealsHeader } from "./MealsChrome";
+import { CardLabel, CuisineTag, MealsColumn, MealsHeader } from "./MealsChrome";
 import { IngredientThumb } from "./MealsImages";
 import { usePrepSteps } from "./use-prep-steps";
 import { useRecipe, useRecipeLanguage } from "./use-recipe";
@@ -84,6 +85,20 @@ function RecipeHead({ view, photos }: { view: MealView; photos: PhotoCache }) {
           })}
         </tbody>
       </table>
+    </section>
+  );
+}
+
+/** The library dish the meal belongs to: its name and cuisine, how it is made, what it tastes like (as the prep page's pot card words it). */
+function DishIntro({ dish }: { dish: MealDish }) {
+  return (
+    <section className={CARD}>
+      <div className="flex items-start gap-2">
+        <span className="min-w-0 flex-1 font-display text-[17px] font-medium leading-snug text-foreground">{dish.name}</span>
+        {dish.cuisine && <CuisineTag>{dish.cuisine}</CuisineTag>}
+      </div>
+      {dish.summary && <p className="m-0 mt-2 text-[14px] leading-snug text-foreground">{dish.summary}</p>}
+      {dish.taste && <p className="m-0 mt-1 text-[13px] leading-snug text-muted-foreground">{dish.taste}</p>}
     </section>
   );
 }
@@ -226,6 +241,7 @@ export function MealsRecipe(props: MealsRecipeProps) {
   // Only a meal of a prep batch reads the session's stored steps; nothing here asks for them.
   const { status: prepSteps } = usePrepSteps(view?.pot?.batch ? state : null, today, false);
   const cooking = view && profile ? potCooking(view, prepSteps, profile, uiLanguage) : null;
+  const dish = view && profile ? mealDish(view, state?.plan ?? null, date, profile, uiLanguage) : null;
 
   return (
     <MealsColumn>
@@ -234,6 +250,7 @@ export function MealsRecipe(props: MealsRecipeProps) {
         <div className="flex flex-col gap-4">
           <RecipeHead view={view} photos={photos} />
           <div className="flex flex-col gap-4">
+            {dish && <DishIntro dish={dish} />}
             {finishing ? <FinishingSteps finishing={finishing} /> : <RecipeBody view={view} request={request} />}
             {cooking && <PotCookingSteps cooking={cooking} />}
           </div>

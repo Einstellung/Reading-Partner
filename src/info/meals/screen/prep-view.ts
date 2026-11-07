@@ -31,6 +31,8 @@ export interface PrepPotView {
   name: string;
   /** The dish's one-line summary. */
   method: string;
+  /** What the dish tastes like, or empty when it has no taste line. */
+  taste: string;
   /** 「电压力锅 · 动手 15 分 · 共约 40 分」. */
   how: string;
   cuisine: string;
@@ -114,6 +116,7 @@ function potView(draft: PlanDraft, lib: PlanLibrary, solved: SolvedPlan, state: 
     batch: b.id,
     name: dishName(dish, b.dish),
     method: dish ? (zh() ? dish.summary : dish.summaryEn) : "",
+    taste: (dish ? (zh() ? dish.taste : dish.tasteEn) : undefined)?.trim() ?? "",
     how: [equipment, ...(dish ? [prepTimeText({ activeMin: dish.activeMin, totalMin: dish.totalMin })] : [])].filter(Boolean).join(" · "),
     cuisine: dish ? t(`meals.cuisine.${dish.cuisine}`) : "",
     meal: stored && stored.mode === "make" ? stored : null,

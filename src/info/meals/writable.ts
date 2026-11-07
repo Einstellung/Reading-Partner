@@ -539,6 +539,7 @@ interface Dish {
   name: string; nameEn: string;          // the dish's name, Chinese and English
   summary: string;                       // one Chinese sentence, at most 40 characters, on how it is cooked
   summaryEn: string;
+  taste?: string; tasteEn?: string;      // optional: one plain sentence on what it tastes like and its texture, shown on the dish's page
   role: "main" | "side" | "staple" | "breakfast";
   cuisine: string;                       // as the seed dishes name them
   method: string;                        // how it is cooked: "braise", "stir_fry", "pressure_cook", "stew", ...
