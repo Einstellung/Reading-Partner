@@ -1,7 +1,8 @@
 // One made meal's recipe (docs/73 做法页), pushed over its day: the dish, its
 // ingredients at their solved grams, and the steps, which end with packing the
 // pot on the meal a pot is cooked at. A meal eaten from a prepped box shows its
-// finishing steps instead (docs/671), with no call.
+// finishing steps instead (docs/671), with no call. A meal of a prep batch also
+// shows how its pot is cooked, from the prep session's stored steps.
 //
 // Rendering and event binding only. The request, the parse and the packing
 // step are in info/meals/recipe; the call and the stored copy in use-recipe.
@@ -12,6 +13,7 @@ import { finishView } from "./finish-source";
 import type { Finishing } from "../../../../info/meals/finish/types";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import type { MealKey, MealsState } from "../../../../info/meals/plan/types";
+import { potCooking, type PotCooking } from "../../../../info/meals/recipe/pot-cooking";
 import { packStep, recipeRequest, type RecipeEntry } from "../../../../info/meals/recipe/recipe";
 import { hostRegion } from "../../../../info/meals/region";
 import { dayViewOn, ingredientPicture, weekdayName, type MealView } from "../../../../info/meals/screen/view";
@@ -20,6 +22,7 @@ import { Button } from "../../ui/button";
 import { cn } from "../../lib/utils";
 import { CardLabel, MealsColumn, MealsHeader } from "./MealsChrome";
 import { IngredientThumb } from "./MealsImages";
+import { usePrepSteps } from "./use-prep-steps";
 import { useRecipe, useRecipeLanguage } from "./use-recipe";
 
 export interface MealsRecipeProps {
@@ -34,6 +37,9 @@ export interface MealsRecipeProps {
 }
 
 const CARD = "rounded-2xl border border-border-soft bg-card p-5";
+const STEP_ROW = "flex gap-3 border-t border-border-subtle py-2.5 text-[15px] leading-[1.65] text-foreground first:border-t-0";
+const STEP_DOT =
+  "mt-px size-6 flex-none rounded-full border border-accent-line text-center text-[12px] leading-[22px] tabular-nums text-accent-line";
 
 /** The dish and its ingredients. The steps keep their state in RecipeBody, so their landing does not redraw this. */
 function RecipeHead({ view, photos }: { view: MealView; photos: PhotoCache }) {
@@ -123,13 +129,8 @@ function RecipeSteps({ view, recipe, fresh }: { view: MealView; recipe: RecipeEn
       <CardLabel>{t("meals.how")}</CardLabel>
       <ol className="m-0 mt-2 list-none p-0">
         {steps.map((step, i) => (
-          <li
-            key={i}
-            className="flex gap-3 border-t border-border-subtle py-2.5 text-[15px] leading-[1.65] text-foreground first:border-t-0"
-          >
-            <span className="mt-px size-6 flex-none rounded-full border border-accent-line text-center text-[12px] leading-[22px] tabular-nums text-accent-line">
-              {i + 1}
-            </span>
+          <li key={i} className={STEP_ROW}>
+            <span className={STEP_DOT}>{i + 1}</span>
             <span className="min-w-0">{step}</span>
           </li>
         ))}
@@ -151,17 +152,42 @@ function FinishingSteps({ finishing }: { finishing: Finishing }) {
       </p>
       <ol className="m-0 mt-2 list-none border-t border-border-subtle p-0">
         {finishing.steps.map((step, i) => (
-          <li
-            key={i}
-            className="flex gap-3 border-t border-border-subtle py-2.5 text-[15px] leading-[1.65] text-foreground first:border-t-0"
-          >
-            <span className="mt-px size-6 flex-none rounded-full border border-accent-line text-center text-[12px] leading-[22px] tabular-nums text-accent-line">
-              {i + 1}
-            </span>
+          <li key={i} className={STEP_ROW}>
+            <span className={STEP_DOT}>{i + 1}</span>
             <span className="min-w-0">{step}</span>
           </li>
         ))}
       </ol>
+    </section>
+  );
+}
+
+/** How the meal's pot is cooked at the prep session: its steps, the rice's after them, or the plan's line before they are written. */
+function PotCookingSteps({ cooking }: { cooking: PotCooking }) {
+  const t = useT();
+  return (
+    <section className={CARD}>
+      <CardLabel>{t("meals.finish.potCook")}</CardLabel>
+      {cooking.kind === "method" ? (
+        <>
+          <p className="m-0 mt-2.5 text-[13px] text-muted-foreground">{cooking.name}</p>
+          <p className="m-0 mt-1 text-[15px] leading-[1.65] text-foreground">{cooking.method}</p>
+        </>
+      ) : (
+        cooking.groups.map((group, g) => (
+          <div key={g} className="mt-2.5">
+            <p className="m-0 text-[13px] text-muted-foreground">{group.name}</p>
+            <ol className="m-0 mt-1 list-none p-0">
+              {group.steps.map((step, i) => (
+                <li key={i} className={STEP_ROW}>
+                  <span className={STEP_DOT}>{i + 1}</span>
+                  <span className="min-w-0">{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))
+      )}
     </section>
   );
 }
@@ -197,6 +223,9 @@ export function MealsRecipe(props: MealsRecipeProps) {
   // A meal eaten from a prepped box shows its finishing steps and asks the model for nothing.
   const finishing = state && day && view ? (finish.day(state, day, uiLanguage).get(meal) ?? null) : null;
   const request = !finishing && view && profile && language ? recipeRequest(view, profile, language) : null;
+  // Only a meal of a prep batch reads the session's stored steps; nothing here asks for them.
+  const { status: prepSteps } = usePrepSteps(view?.pot?.batch ? state : null, today, false);
+  const cooking = view && profile ? potCooking(view, prepSteps, profile, uiLanguage) : null;
 
   return (
     <MealsColumn>
@@ -206,6 +235,7 @@ export function MealsRecipe(props: MealsRecipeProps) {
           <RecipeHead view={view} photos={photos} />
           <div className="flex flex-col gap-4">
             {finishing ? <FinishingSteps finishing={finishing} /> : <RecipeBody view={view} request={request} />}
+            {cooking && <PotCookingSteps cooking={cooking} />}
           </div>
         </div>
       ) : (

@@ -71,6 +71,7 @@ export default {
   "recipe.retry": "Try again",
   "recipe.listSep": ", ",
   "finish.need": "Have out",
+  "finish.potCook": "How the pot is cooked",
   "recipe.pack": "Pack the rest with its sauce into {count} boxes, one per meal, each marked with its day and meal: {where}.",
   "recipe.packFridge": "{boxes} in the fridge",
   "recipe.packFreezer": "{boxes} in the freezer today",

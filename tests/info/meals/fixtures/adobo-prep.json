@@ -1,0 +1,134 @@
+{
+ "kind": "prep",
+ "at": 1794024712874,
+ "name": "菲律宾酱油醋焖鸡（adobo） + 牛肉黑豆炖菜（chili）",
+ "session": "prep",
+ "steps": [
+  {
+   "id": "1",
+   "text": "将牛腱子切块，洋葱和红彩椒切丁，沥干黑豆。",
+   "device": "counter",
+   "pot": "beef",
+   "active": 7,
+   "wait": 0,
+   "after": []
+  },
+  {
+   "id": "2",
+   "text": "锅中加少许油，用中火煎香牛肉和洋葱。",
+   "device": "stove",
+   "pot": "beef",
+   "active": 6,
+   "wait": 0,
+   "after": [
+    "1"
+   ]
+  },
+  {
+   "id": "3",
+   "text": "加入黑豆、番茄碎、红彩椒、烟熏红椒粉、孜然粉、美式辣椒粉和适量水，盖锅用小火炖90分钟。",
+   "device": "stove",
+   "pot": "beef",
+   "active": 2,
+   "wait": 90,
+   "after": [
+    "2"
+   ]
+  },
+  {
+   "id": "4",
+   "text": "淘洗约420克生糙米并沥水。",
+   "device": "counter",
+   "pot": "rice",
+   "active": 3,
+   "wait": 0,
+   "after": []
+  },
+  {
+   "id": "5",
+   "text": "将糙米和2.5杯水（625毫升）放入压力锅，盖好后高压煮22分钟，另预留约10分钟升压。",
+   "device": "pressure_cooker",
+   "pot": "rice",
+   "active": 2,
+   "wait": 32,
+   "after": [
+    "4"
+   ]
+  },
+  {
+   "id": "6",
+   "text": "将鸡腿肉切块，洋葱切片。",
+   "device": "counter",
+   "pot": "chicken",
+   "active": 5,
+   "wait": 0,
+   "after": []
+  },
+  {
+   "id": "7",
+   "text": "锅中加少许油，用中火炒软鸡肉和洋葱。",
+   "device": "stove",
+   "pot": "chicken",
+   "active": 5,
+   "wait": 0,
+   "after": [
+    "6"
+   ]
+  },
+  {
+   "id": "8",
+   "text": "加入酱油、白醋、蒜蓉、黑胡椒和少许水，盖锅用小火焖25分钟。",
+   "device": "stove",
+   "pot": "chicken",
+   "active": 2,
+   "wait": 25,
+   "after": [
+    "7"
+   ]
+  },
+  {
+   "id": "9",
+   "text": "让压力锅自然泄压10分钟。",
+   "device": "pressure_cooker",
+   "pot": "rice",
+   "active": 0,
+   "wait": 10,
+   "after": [
+    "5"
+   ]
+  },
+  {
+   "id": "10",
+   "text": "切开最厚的鸡肉，确认内部不再呈粉红色且流出的肉汁清澈。",
+   "device": "stove",
+   "pot": "chicken",
+   "active": 1,
+   "wait": 0,
+   "after": [
+    "8"
+   ]
+  },
+  {
+   "id": "11",
+   "text": "确认压力已完全释放后打开锅盖，用饭勺拨松糙米饭。",
+   "device": "pressure_cooker",
+   "pot": "rice",
+   "active": 2,
+   "wait": 0,
+   "after": [
+    "9"
+   ]
+  },
+  {
+   "id": "12",
+   "text": "确认黑豆从外到里都软烂，牛肉也已炖软。",
+   "device": "stove",
+   "pot": "beef",
+   "active": 1,
+   "wait": 0,
+   "after": [
+    "3"
+   ]
+  }
+ ]
+}

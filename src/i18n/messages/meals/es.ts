@@ -61,6 +61,7 @@ export default {
   "recipe.retry": "Reintentar",
   "recipe.listSep": ", ",
   "finish.need": "Ten a mano",
+  "finish.potCook": "Cómo se cocina la olla",
   "recipe.pack": "Reparte el resto con su salsa en {count} cajas, una por comida, y anota en cada una el día y la comida: {where}.",
   "recipe.packFridge": "{boxes} a la nevera",
   "recipe.packFreezer": "{boxes} al congelador hoy",

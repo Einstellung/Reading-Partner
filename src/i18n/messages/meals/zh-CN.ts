@@ -56,6 +56,7 @@ export default {
   "recipe.retry": "重试",
   "recipe.listSep": "、",
   "finish.need": "需要",
+  "finish.potCook": "这锅怎么做",
   "recipe.pack": "剩下的连汤汁分成 {count} 盒，一盒一顿，盒上写好哪天哪顿：{where}。",
   "recipe.packFridge": "{boxes}放冷藏",
   "recipe.packFreezer": "{boxes}今天就冷冻",
