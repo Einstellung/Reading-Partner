@@ -58,6 +58,7 @@ export default {
   "recipe.retry": "もう一度",
   "recipe.listSep": "、",
   "finish.need": "用意するもの",
+  "finish.potCook": "この鍋の作り方",
   "recipe.pack": "残りは汁ごと {count} 個の容器に一食ずつ分け、容器に日と食事を書く：{where}。",
   "recipe.packFridge": "{boxes}は冷蔵",
   "recipe.packFreezer": "{boxes}は今日のうちに冷凍",
