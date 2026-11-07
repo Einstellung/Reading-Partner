@@ -23,6 +23,17 @@ describe("seed dishes", () => {
     expect(bad).toEqual([]);
   });
 
+  test("every dish has a taste line in Chinese and in English, in plain words", () => {
+    const BANNED = /美味|完美|令人垂涎|绝佳|delicious|perfect|mouth-?watering|scrumptious|amazing/i;
+    for (const d of SEED_DISHES) {
+      expect(d.taste?.trim(), `${d.id} taste`).toBeTruthy();
+      expect(d.tasteEn?.trim(), `${d.id} tasteEn`).toBeTruthy();
+      expect(/[一-鿿]/.test(d.taste ?? ""), `${d.id} taste is Chinese`).toBe(true);
+      expect(/[一-鿿]/.test(d.tasteEn ?? ""), `${d.id} tasteEn is English`).toBe(false);
+      expect(BANNED.test(`${d.taste} ${d.tasteEn}`), `${d.id} marketing word`).toBe(false);
+    }
+  });
+
   test("no dish uses the carton stock: an opened carton goes bad half used, the paste keeps", () => {
     const using = SEED_DISHES.filter((d) => d.ingredients.some((i) => i.food === "low_sodium_stock")).map((d) => d.id);
     expect(using).toEqual([]);

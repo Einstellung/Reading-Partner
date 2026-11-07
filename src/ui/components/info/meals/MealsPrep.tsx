@@ -29,7 +29,7 @@ import { kitchenFor } from "../../../../info/meals/timeline/schedule";
 import { runFor, timelineView } from "../../../../info/meals/timeline/view";
 import { dishPicture, dishThumbnails, ingredientPicture } from "../../../../info/meals/screen/view";
 import { Button } from "../../ui/button";
-import { MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
+import { CuisineTag, MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
 import { MealsTimeline, PrepNowCard } from "./MealsTimeline";
 import { useOnForeground, useRunClock, useScreenWakeLock } from "./use-prep-steps";
@@ -81,12 +81,11 @@ function PotCard({ pot, photos }: { pot: PrepPotView; photos: PhotoCache }) {
       />
       <div className="flex items-start gap-2">
         <span className="min-w-0 flex-1 font-display text-[17px] font-medium leading-snug text-foreground">{pot.name}</span>
-        {pot.cuisine && (
-          <span className="flex-none rounded-full bg-muted-soft px-2 py-0.5 text-[11px] text-muted-foreground">{pot.cuisine}</span>
-        )}
+        {pot.cuisine && <CuisineTag>{pot.cuisine}</CuisineTag>}
       </div>
       {pot.how && <div className="mt-1 text-[13px] text-faint-foreground">{pot.how}</div>}
       {pot.method && <p className="m-0 mt-2 text-[14px] leading-snug text-foreground">{pot.method}</p>}
+      {pot.taste && <p className="m-0 mt-1 text-[13px] leading-snug text-muted-foreground">{pot.taste}</p>}
       <div className="mt-3 text-[12px] text-faint-foreground">{t("meals.prep.eats")}</div>
       <ul className="m-0 mt-1 flex list-none flex-wrap gap-1.5 p-0">
         {pot.meals.map((m) => (

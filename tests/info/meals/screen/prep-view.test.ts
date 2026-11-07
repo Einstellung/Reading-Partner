@@ -28,6 +28,7 @@ test("section 1: the pot, how it is cooked, the meals that eat it with the one e
   expect(pot).toMatchObject({ batch: "chili", name: "Chicken and kidney bean chili", cuisine: "American" });
   expect(pot.how).toMatch(/^Stove · \d+ min hands-on · about \d+ min$/);
   expect(pot.method.length).toBeGreaterThan(0);
+  expect(pot.taste).toBe("Savoury and mildly spicy, with clear chili powder and cumin, a little tomato tang, soft kidney beans and a thick sauce.");
   // The afternoon session's dinner is eaten from the pot as it is cooked.
   expect(pot.meals).toEqual([
     { text: "Day 1 Dinner", now: true },

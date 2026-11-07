@@ -171,6 +171,12 @@ export interface Dish {
   /** One Chinese sentence (at most 40 characters) on how it is cooked, written for the dish, never copied from a recipe. */
   summary: string;
   summaryEn: string;
+  /**
+   * One plain sentence on what the dish tastes like (flavour, strength, texture), as the recipe is
+   * written. Seed dishes have it; a reader's own dish may not.
+   */
+  taste?: string;
+  tasteEn?: string;
   role: DishRole;
   cuisine: Cuisine;
   method: MethodId;

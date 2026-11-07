@@ -215,6 +215,11 @@ export function TonightLines({ notes, className }: { notes: readonly string[]; c
   );
 }
 
+/** A dish's cuisine as a small chip: on the prep page's pot card and the meal page's dish card. */
+export function CuisineTag({ children }: { children: React.ReactNode }) {
+  return <span className="flex-none rounded-full bg-muted-soft px-2 py-0.5 text-[11px] text-muted-foreground">{children}</span>;
+}
+
 export function CardLabel({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return (
     <span
