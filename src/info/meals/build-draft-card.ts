@@ -42,6 +42,18 @@ function dishNamed(d: Dish | undefined, id: string): Named {
   return d ? { zh: d.name.replace(/（[^）]*）$/, ""), en: d.nameEn } : { zh: id, en: id };
 }
 
+/**
+ * What a dish is like, in both languages: its taste line, else its one-line
+ * method, each language falling back on its own. Nothing when the dish is
+ * missing or has neither (the card then draws no line).
+ */
+export function dishIntro(d: Dish | undefined): Named | undefined {
+  if (!d) return undefined;
+  const zh = d.taste?.trim() || d.summary?.trim() || "";
+  const en = d.tasteEn?.trim() || d.summaryEn?.trim() || "";
+  return zh || en ? { zh: zh || en, en: en || zh } : undefined;
+}
+
 /** A staple or side ref: a dish id from the library, else a food id. */
 export function refNamed(lib: PlanLibrary, id: string): Named {
   const d = lib.dish(id);
@@ -86,12 +98,14 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
   const letterOf = new Map(batches.map((b, i) => [b.id, LETTERS[i] ?? String(i + 1)]));
   const pots: DraftCardPot[] = batches.map((b) => {
     const dish = lib.dish(b.dish);
+    const intro = dishIntro(dish);
     return {
       letter: letterOf.get(b.id) ?? "",
       batch: b.id,
       name: dishNamed(dish, b.dish),
       equipment: dish?.equipment.find((e) => e !== "stove") ?? dish?.equipment[0] ?? "stove",
       cuisine: dish?.cuisine ?? "other",
+      ...(intro ? { intro } : {}),
       meals: b.meals.length,
     };
   });
@@ -125,9 +139,11 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
         changed,
       };
     }
+    const intro = dishIntro(lib.dish(main.dish));
     return {
       pot: null,
       name: refNamed(lib, main.dish),
+      ...(intro ? { intro } : {}),
       staple: main.staple ? refNamed(lib, main.staple) : null,
       sides,
       now: false,
@@ -139,11 +155,13 @@ export function buildDraftCard(input: DraftCardInput): MealsDraftCardData {
   const nightsOn = (day: number) => nights.filter((n) => n.day === day).flatMap((n) => n.items.map((item) => nightOf(item)));
   const days: DraftCardDay[] = draft.days.map((d, i) => {
     const day = i + 1;
+    const breakfastIntro = dishIntro(lib.dish(d.breakfast));
     return {
       day,
       date: addDays(input.startDate, i),
       breakfast: refNamed(lib, d.breakfast),
       breakfastChanged: prevDraft !== null && prevDraft.days[i]?.breakfast !== d.breakfast,
+      ...(breakfastIntro ? { breakfastIntro } : {}),
       lunch: meal(day, "lunch", d.lunch),
       dinner: meal(day, "dinner", d.dinner),
       fruit: d.fruit.map((f) => foodNamed(f).zh),
