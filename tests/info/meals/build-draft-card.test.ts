@@ -7,7 +7,8 @@ import { expect, test } from "bun:test";
 import { mealAtSession, prepMinutes } from "../../../src/info/meals/planner/prep";
 import { addDays } from "../../../src/info/meals/plan/week";
 import type { PlanDraft } from "../../../src/info/meals/planner/draft";
-import { draftCard, twoPotDraft } from "./planner/card-fixture";
+import { buildDraftCard, dishIntro } from "../../../src/info/meals/build-draft-card";
+import { checked, draftCard, LIB, twoPotDraft } from "./planner/card-fixture";
 import { goodDraft, START } from "./planner/fixture";
 
 test("a first draft is version 1 under the new id, dated from the host's start", () => {
@@ -96,4 +97,36 @@ test("a revision keeps the draft id, bumps the version and marks only the meals 
   expect(draftCard(revised(), second).version).toBe(3);
   // A first draft marks nothing.
   expect(first.days.some((d) => d.breakfastChanged || d.lunch.changed || d.dinner.changed)).toBe(false);
+});
+
+test("a pot, a fresh main and a breakfast carry the dish's taste line in both languages; a pot meal does not repeat it", () => {
+  const card = draftCard();
+  const chili = LIB.dish("chicken_bean_chili")!;
+  const kungPao = LIB.dish("kung_pao_chicken")!;
+  expect(chili.taste).toBeTruthy();
+  expect(card.pots[0]!.intro).toEqual({ zh: chili.taste!, en: chili.tasteEn! });
+  expect(card.days[0]!.lunch.intro).toEqual({ zh: kungPao.taste!, en: kungPao.tasteEn! });
+  expect(card.days[0]!.breakfastIntro).toEqual({ zh: LIB.dish("yogurt_blueberry_toast_egg")!.taste!, en: LIB.dish("yogurt_blueberry_toast_egg")!.tasteEn! });
+  expect(card.days[0]!.dinner.pot).toBe("A");
+  expect(card.days[0]!.dinner.intro).toBeUndefined();
+});
+
+test("the intro falls back to the one-line method when the dish has no taste line", () => {
+  const bare = (id: string) => {
+    const d = LIB.dish(id);
+    return d && (id === "chicken_bean_chili" || id === "kung_pao_chicken") ? { ...d, taste: undefined, tasteEn: undefined } : d;
+  };
+  const lib = { ...LIB, dish: bare } as typeof LIB;
+  const card = buildDraftCard({ result: checked(), lib, startDate: "2026-11-02", threadId: "meals", previous: null, newId: "42" });
+  const chili = LIB.dish("chicken_bean_chili")!;
+  const kungPao = LIB.dish("kung_pao_chicken")!;
+  expect(card.pots[0]!.intro).toEqual({ zh: chili.summary, en: chili.summaryEn });
+  expect(card.days[0]!.lunch.intro).toEqual({ zh: kungPao.summary, en: kungPao.summaryEn });
+});
+
+test("dishIntro: trims, falls back per language, and is absent for a missing or empty dish", () => {
+  const base = LIB.dish("kung_pao_chicken")!;
+  expect(dishIntro(undefined)).toBeUndefined();
+  expect(dishIntro({ ...base, taste: "  ", tasteEn: " Hot. ", summary: "Stir-fry zh", summaryEn: "" })).toEqual({ zh: "Stir-fry zh", en: "Hot." });
+  expect(dishIntro({ ...base, taste: undefined, tasteEn: undefined, summary: "", summaryEn: "" })).toBeUndefined();
 });

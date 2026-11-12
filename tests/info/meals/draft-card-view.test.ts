@@ -112,3 +112,63 @@ test("a pot's name has no trailing (original name) after it, in the data or on t
   expect(draftCardView(card).pots.map((p) => p.name)).toEqual(["鸡腿丁红芸豆炖菜"]);
   expect(JSON.stringify(draftCardView(card).days)).not.toContain("chili");
 });
+
+test("the pot legend gives each pot's intro under its name", () => {
+  const card = draftCard();
+  const intro = card.pots[0]!.intro!;
+  expect(draftCardView(card).pots[0]!.intro).toBe(intro.zh);
+  setLocale("en");
+  expect(draftCardView(card).pots[0]!.intro).toBe(intro.en);
+});
+
+test("a fresh main and a breakfast get a sub line; a pot meal and fruit do not", () => {
+  const card = draftCard();
+  const rows = draftCardView(card).days[0]!.rows;
+  const lunch = rows.find((r) => r.key === "lunch");
+  const dinner = rows.find((r) => r.key === "dinner");
+  const breakfast = rows.find((r) => r.key === "breakfast");
+  const fruit = rows.find((r) => r.key === "fruit");
+  if (lunch?.kind !== "meal" || dinner?.kind !== "meal" || breakfast?.kind !== "plain" || fruit?.kind !== "plain") throw new Error("rows expected");
+  expect(lunch.intro).toBe(card.days[0]!.lunch.intro!.zh);
+  // The staple stays its own line.
+  expect(lunch.subs).toEqual([{ text: "配糙米饭", indent: false }]);
+  expect(dinner.pot).not.toBeNull();
+  expect(dinner.intro).toBeNull();
+  expect(breakfast.sub).toBe(card.days[0]!.breakfastIntro!.zh);
+  expect(fruit.sub).toBeNull();
+});
+
+test("an intro on a pot meal's payload is not drawn: the legend has it", () => {
+  const card = draftCard();
+  const dinner = { ...card.days[0]!.dinner, intro: { zh: "x", en: "x" } };
+  const view = draftCardView({ ...card, days: [{ ...card.days[0]!, dinner }, ...card.days.slice(1)] });
+  const row = view.days[0]!.rows.find((r) => r.key === "dinner");
+  if (row?.kind !== "meal") throw new Error("meal row expected");
+  expect(row.intro).toBeNull();
+});
+
+test("a card saved before the intros existed draws no intro line anywhere", () => {
+  const card = draftCard();
+  const old: MealsDraftCardData = {
+    ...card,
+    pots: card.pots.map(({ intro: _i, ...p }) => p),
+    days: card.days.map(({ breakfastIntro: _b, lunch, dinner, ...d }) => {
+      const { intro: _l, ...l } = lunch;
+      const { intro: _d, ...n } = dinner;
+      return { ...d, lunch: l, dinner: n };
+    }),
+  };
+  expect(JSON.stringify(old)).not.toContain("intro");
+  const view = draftCardView(old);
+  expect(view.pots.map((p) => p.intro)).toEqual([null]);
+  for (const day of view.days) {
+    for (const row of day.rows) {
+      if (row.kind === "meal") expect(row.intro).toBeNull();
+      if (row.kind === "plain") expect(row.sub).toBeNull();
+    }
+  }
+  // Everything else is what the new card draws.
+  const strip = (v: ReturnType<typeof draftCardView>) =>
+    JSON.parse(JSON.stringify(v, (k, x) => (k === "intro" || k === "sub" ? null : x)));
+  expect(strip(view)).toEqual(strip(draftCardView(card)));
+});

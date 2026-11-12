@@ -25,13 +25,15 @@ export interface DraftTag {
 }
 
 export type DraftRow =
-  | { kind: "plain"; key: string; label: string; text: string; changed: boolean }
+  | { kind: "plain"; key: string; label: string; text: string; /** What the dish is like, or null (fruit, and cards from before it). */ sub: string | null; changed: boolean }
   | {
       kind: "meal";
       key: string;
       label: string;
       pot: PotChip | null;
       name: string;
+      /** What a fresh main is like, under the name; null for a pot meal and for cards from before it. */
+      intro: string | null;
       tags: DraftTag[];
       /** The staple and sides; `indent` lines them up under the name beside a chip. */
       subs: { text: string; indent: boolean }[];
@@ -62,7 +64,7 @@ export interface DraftCardView {
   version: string | null;
   title: string;
   note: string;
-  pots: { chip: PotChip; name: string; how: string; meals: string }[];
+  pots: { chip: PotChip; name: string; /** What the dish is like, or null on cards from before it. */ intro: string | null; how: string; meals: string }[];
   days: DraftDayView[];
   /** The row labels need the wide column: Chinese labels are one or two characters, every other language spells them out. */
   wideLabels: boolean;
@@ -117,7 +119,7 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
       ...(m.staple ? [{ text: t("meals.draft.with", { staple: pickName(m.staple) }), indent: false }] : []),
       ...m.sides.map((s) => ({ text: t("meals.draft.side", { side: pickName(s) }), indent: m.pot !== null })),
     ];
-    return { kind: "meal", key, label, pot: m.pot ? chip(m.pot) : null, name: pickName(m.name), tags, subs, changed: m.changed };
+    return { kind: "meal", key, label, pot: m.pot ? chip(m.pot) : null, name: pickName(m.name), intro: m.pot === null && m.intro ? pickName(m.intro) : null, tags, subs, changed: m.changed };
   };
 
   const prepRow = (): DraftRow | null => {
@@ -138,7 +140,7 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
 
   const dayRows = (d: DraftCardDay): DraftRow[] => {
     const rows: DraftRow[] = [
-      { kind: "plain", key: "breakfast", label: t("meals.draft.row.breakfast"), text: pickName(d.breakfast), changed: d.breakfastChanged },
+      { kind: "plain", key: "breakfast", label: t("meals.draft.row.breakfast"), text: pickName(d.breakfast), sub: d.breakfastIntro ? pickName(d.breakfastIntro) : null, changed: d.breakfastChanged },
       mealRow("lunch", t("meals.draft.row.lunch"), d.lunch),
       mealRow("dinner", t("meals.draft.row.dinner"), d.dinner),
     ];
@@ -146,7 +148,7 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
     const prep = prepRow();
     // Morning cooks before lunch, afternoon before dinner, evening after it.
     if (s && prep && s.day === d.day) rows.splice(s.part === "morning" ? 1 : s.part === "afternoon" ? 2 : 3, 0, prep);
-    if (d.fruit.length) rows.push({ kind: "plain", key: "fruit", label: t("meals.draft.row.fruit"), text: d.fruit.join(" · "), changed: false });
+    if (d.fruit.length) rows.push({ kind: "plain", key: "fruit", label: t("meals.draft.row.fruit"), text: d.fruit.join(" · "), sub: null, changed: false });
     return [...rows, ...nightRows(d.nights)];
   };
 
@@ -167,6 +169,7 @@ export function draftCardView(card: MealsDraftCardData): DraftCardView {
     pots: card.pots.map((p) => ({
       chip: chip(p.letter),
       name: pickName(p.name),
+      intro: p.intro ? pickName(p.intro) : null,
       how: `${t(`meals.equipment.${p.equipment}`)} · ${t(`meals.cuisine.${p.cuisine}`)}`,
       meals: t("meals.draft.potMeals", { count: p.meals }),
     })),

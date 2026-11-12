@@ -30,6 +30,8 @@ export interface DraftCardPot {
   name: Named;
   equipment: Equipment;
   cuisine: Cuisine;
+  /** What the dish is like: its taste line, else its one-line method. Absent on cards from before it, and for a dish the library no longer has. */
+  intro?: Named;
   /** Meals it feeds, the one eaten at the prep session counted. */
   meals: number;
 }
@@ -39,6 +41,8 @@ export interface DraftCardMeal {
   pot: string | null;
   /** The way's name for a pot meal, the dish's for a fresh one. */
   name: Named;
+  /** A fresh main's dish intro (taste line, else method); never set for a pot meal, whose pot legend has it. Absent on cards from before it. */
+  intro?: Named;
   /** A fresh main's staple, shown on its own line. */
   staple: Named | null;
   sides: Named[];
@@ -58,6 +62,8 @@ export interface DraftCardDay {
   date: string;
   breakfast: Named;
   breakfastChanged: boolean;
+  /** The breakfast dish's intro (taste line, else method). Absent on cards from before it. */
+  breakfastIntro?: Named;
   lunch: DraftCardMeal;
   dinner: DraftCardMeal;
   /** Fruit by name, one per portion. */

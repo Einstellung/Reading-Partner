@@ -78,7 +78,10 @@ function Row({ row, wide }: { row: DraftRow; wide: boolean }) {
     return (
       <div className={`grid ${cols} items-start gap-2 px-3.5 py-[7px]` + changed}>
         {label}
-        <span className="min-w-0 text-[15px] leading-[1.45]">{row.text}</span>
+        <span className="flex min-w-0 flex-col gap-[3px]">
+          <span className="text-[15px] leading-[1.45]">{row.text}</span>
+          {row.sub && <span className="text-[13px] leading-[1.4] text-muted-foreground">{row.sub}</span>}
+        </span>
       </div>
     );
   }
@@ -111,6 +114,9 @@ function Row({ row, wide }: { row: DraftRow; wide: boolean }) {
           </span>
         ) : (
           name
+        )}
+        {row.intro && (
+          <span className={"text-[13px] leading-[1.4] text-muted-foreground" + (row.pot ? " pl-[30px]" : "")}>{row.intro}</span>
         )}
         {row.subs.map((s) => (
           <span key={s.text} className={"text-[13px] text-muted-foreground" + (s.indent ? " pl-[30px]" : "")}>
@@ -178,6 +184,7 @@ export function MealsDraftCard(props: CardComponentProps<MealsDraftCardData>) {
               <Chip chip={p.chip} />
               <span className="min-w-0">
                 <b className="block text-[15px] font-medium">{p.name}</b>
+                {p.intro && <span className="block text-[13px] leading-[1.4] text-muted-foreground">{p.intro}</span>}
                 <span className="block text-[12px] text-faint-foreground">{p.how}</span>
               </span>
               <span className="whitespace-nowrap text-[13px] tabular-nums text-muted-foreground">{p.meals}</span>
