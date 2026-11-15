@@ -21,6 +21,7 @@
 - [77 手机EPUB课堂](./reading/77-手机EPUB课堂.md) — 手机读 EPUB 时进和 iPad 同一堂书级课堂
 - [79 手机EPUB翻页](./reading/79-手机EPUB翻页.md) — 手机 EPUB 左右翻页，屏页与分页表的换算
 - [82 手机阅读外壳](./reading/82-手机阅读外壳.md) — 收起的工具栏、长按选中、Highlight 与 Ask、Marks 和 Prep 页签
+- [688 有声阅读](./reading/688-有声阅读.md) — 对 Lumen 说读书，端上 Kokoro 朗读 EPUB，跟读高亮与锁屏控制；Experiments 设置页
 
 ## soul
 
