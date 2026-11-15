@@ -60,10 +60,15 @@ export const SHELL_NAV_ITEMS: readonly ShellNavItem[] = [
 // a switch that is off means the reader has said they do not want the line.
 // The old daily briefing is left out while its UI is switched off
 // (info/old-briefing.ts).
-export function shellNavItems(opts: { meals: boolean; oldBriefing?: boolean }): ShellNavItem[] {
+// Briefs is left out while the intel experiment is off (platform/experiments).
+export function shellNavItems(opts: { meals: boolean; briefs?: boolean; oldBriefing?: boolean }): ShellNavItem[] {
   const oldBriefing = opts.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
+  const briefs = opts.briefs ?? true;
   return SHELL_NAV_ITEMS.filter(
-    (item) => (item.id !== "meals" || opts.meals) && (item.id !== "briefing" || oldBriefing),
+    (item) =>
+      (item.id !== "meals" || opts.meals) &&
+      (item.id !== "briefing" || oldBriefing) &&
+      (item.id !== "briefs" || briefs),
   );
 }
 
@@ -71,12 +76,26 @@ export function shellNavItems(opts: { meals: boolean; oldBriefing?: boolean }): 
 // (info/old-briefing.ts) its page and its article are nowhere: a box card from
 // it, a card's Open, a place the soul names or a back from an article all land
 // on Today instead. Every shell routes its navigation through this.
+//
+// The same holds for a line whose experiment is off (platform/experiments):
+// the meals screens while meals is hidden, the Briefs shelf while intel is.
+// `shown` says which lines are drawn; left out, both are.
 export function reachableScreen(
   screen: HomeScreen,
   oldBriefing: boolean = OLD_BRIEFING_UI_ENABLED,
+  shown: { meals?: boolean; intel?: boolean } = {},
 ): HomeScreen {
   if (!oldBriefing && (screen === "briefing" || screen === "article")) return "vestibule";
+  if (hiddenByExperiments(screen, shown)) return "vestibule";
   return screen;
+}
+
+// Whether a screen belongs to a line that is not drawn: the meals page and its
+// rooms, or the Briefs shelf. A string so the phone's stack kinds, which use the
+// same names, can ask too.
+export function hiddenByExperiments(screen: string, shown: { meals?: boolean; intel?: boolean }): boolean {
+  if (shown.meals === false && (screen === "meals" || screen.startsWith("meals-"))) return true;
+  return shown.intel === false && screen === "briefs";
 }
 
 // Where an item goes. The shelf is what Topics opens; a topic that is already

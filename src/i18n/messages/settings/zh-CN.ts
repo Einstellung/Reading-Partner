@@ -8,6 +8,7 @@ export default {
   "tab.accounts": "账户",
   "tab.features": "功能",
   "tab.optional": "可选",
+  "tab.experiments": "实验室",
   connected: "已连接",
   save: "保存",
   signOut: "退出登录",
@@ -144,4 +145,12 @@ export default {
   "optional.baseUrl": "Base URL",
   "optional.sttHint":
     "在对话框里按住麦克风说话。硅基流动的 SenseVoice 档免费，API 密钥开箱即用；任何兼容 OpenAI 的转写接口也都可以。",
+
+  "experiments.intro": "还没做完的功能。每一项默认关，在这台设备上打开才出现。关掉只是不显示，不删任何数据，再打开全部回来。",
+  "experiments.meals.name": "三餐",
+  "experiments.meals.summary": "规划一周的饭菜，维护购物清单。打开后再到「可选」里开启三餐。",
+  "experiments.intel.name": "简报书与专题",
+  "experiments.intel.summary": "Today 旁边的简报书架，以及只看一次的专题调研。",
+  "experiments.companion.name": "{name}",
+  "experiments.companion.summary": "右下角的伙伴：长按说话或打字、贴链接给它、它交回东西的盒子。",
 } satisfies Translation<typeof en>;

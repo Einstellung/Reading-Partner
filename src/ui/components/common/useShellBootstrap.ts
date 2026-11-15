@@ -479,6 +479,9 @@ export function useShellBootstrap({
     // store (DEVICE_SETTING_KEYS); this copy of them is the startup read.
     const owned: Partial<DeviceSettings> = { ...next };
     delete owned.chatScale;
+    // The experiments are written by their own switches (platform/experiments)
+    // and this copy of them is the startup read, so they stay out too.
+    delete owned.experiments;
     for (const key of DEVICE_SETTING_KEYS) delete owned[key];
     patchDeviceSettings(owned).catch((e) => console.warn("failed to persist device settings", e));
   }, []);

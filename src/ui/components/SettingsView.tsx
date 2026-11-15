@@ -1,7 +1,7 @@
 // Settings: a page of the content area, with the sidebar still beside it and
 // the Settings row at its foot lit (docs/51). What each of the four tabs holds
 // is argued in settings/AccountPanel, settings/AccountsPanel,
-// settings/FeaturesPanel and settings/OptionalPanel; this file is the page, the
+// settings/FeaturesPanel, settings/OptionalPanel and settings/ExperimentsPanel; this file is the page, the
 // sub-nav, and the footer.
 //
 // The page is a screen like Today and the briefing: `absolute inset-0` over the
@@ -29,6 +29,9 @@ import AccountPanel from "./settings/AccountPanel";
 import AccountsPanel from "./settings/AccountsPanel";
 import FeaturesPanel from "./settings/FeaturesPanel";
 import OptionalPanel from "./settings/OptionalPanel";
+import ExperimentsPanel from "./settings/ExperimentsPanel";
+import { currentPlatform } from "../../platform/app/platform";
+import { experimentsFor } from "../../platform/experiments/registry";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 export interface SettingsBodyProps {
@@ -66,7 +69,13 @@ const SUBNAV_ROW =
   "data-[state=active]:bg-secondary data-[state=active]:font-medium " +
   "data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none";
 
-const TABS = ["account", "accounts", "features", "optional"] as const;
+// Experiments is the fifth, and only where this platform has an entry for it
+// (platform/experiments/registry.ts).
+const BASE_TABS = ["account", "accounts", "features", "optional"] as const;
+type Tab = (typeof BASE_TABS)[number] | "experiments";
+function settingsTabs(platform: string): readonly Tab[] {
+  return experimentsFor(platform).length > 0 ? [...BASE_TABS, "experiments"] : BASE_TABS;
+}
 
 export default function SettingsView(props: SettingsBodyProps) {
   const t = useT();
@@ -93,6 +102,7 @@ export function SettingsBody({
   onDeviceChange,
 }: SettingsBodyProps) {
   const t = useT();
+  const tabs = settingsTabs(currentPlatform());
   return (
     <Tabs
       defaultValue="account"
@@ -100,7 +110,7 @@ export function SettingsBody({
       className="flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:gap-8"
     >
       <TabsList className={SUBNAV}>
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <TabsTrigger key={tab} value={tab} className={SUBNAV_ROW}>
             {t(`settings.tab.${tab}`)}
           </TabsTrigger>
@@ -125,6 +135,11 @@ export function SettingsBody({
         <TabsContent value="optional">
           <OptionalPanel settings={settings} onSettingsChange={onSettingsChange} />
         </TabsContent>
+        {tabs.includes("experiments") && (
+          <TabsContent value="experiments">
+            <ExperimentsPanel />
+          </TabsContent>
+        )}
 
         <VersionLine />
       </div>

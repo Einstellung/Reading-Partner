@@ -195,11 +195,14 @@ export default function InfoHome(props: {
   // The old briefing's page and article are not drawn while its UI is off
   // (info/old-briefing.ts): a screen or a destination naming them is Today.
   const oldBriefing = props.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
-  const screen = props.screen === null ? null : reachableScreen(props.screen, oldBriefing);
+  // Nor are the meals screens while the meals line is off.
+  const shown = { meals: props.mealsEnabled === true };
+  const screen = props.screen === null ? null : reachableScreen(props.screen, oldBriefing, shown);
   const navigate = props.onNavigate;
+  const mealsShown = shown.meals;
   const onNavigate = useCallback(
-    (next: HomeScreen) => navigate(reachableScreen(next, oldBriefing)),
-    [navigate, oldBriefing],
+    (next: HomeScreen) => navigate(reachableScreen(next, oldBriefing, { meals: mealsShown })),
+    [navigate, oldBriefing, mealsShown],
   );
   const meals = useMeals(props.mealsEnabled === true);
   // The batch cook's written steps: read for every place that shows its

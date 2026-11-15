@@ -67,6 +67,8 @@ export default function ReaderTopBar(props: {
   // about the open book.
   companionShown: boolean;
   onToggleCompanion: () => void;
+  // False while the companion experiment is off: there is no switch for it.
+  companionAvailable?: boolean;
   // A brief opens without the lesson and the AI pen (reading/issue.ts).
   mode?: ReaderMode;
   // A study's version button (docs/info/91 「版本」), after the way back.
@@ -119,15 +121,20 @@ export default function ReaderTopBar(props: {
       disabled: !props.viewReady,
       onClick: () => view.current?.setLayout(paged ? "vertical" : "paged"),
     },
-    {
-      // The name alone, not companionToggleTitle's "Hide <name>": the row names the thing
-      // and the On/Off on its right says which way it stands.
-      kind: "toggle",
-      label: t("reader.top.companion", { name: companionName }),
-      icon: IconCompanion,
-      on: props.companionShown,
-      onClick: props.onToggleCompanion,
-    },
+    // Not drawn while the companion experiment is off (platform/experiments).
+    ...(props.companionAvailable === false
+      ? []
+      : [
+          {
+            // The name alone, not companionToggleTitle's "Hide <name>": the row names the thing
+            // and the On/Off on its right says which way it stands.
+            kind: "toggle" as const,
+            label: t("reader.top.companion", { name: companionName }),
+            icon: IconCompanion,
+            on: props.companionShown,
+            onClick: props.onToggleCompanion,
+          },
+        ]),
     { kind: "divider" },
     {
       kind: "action",

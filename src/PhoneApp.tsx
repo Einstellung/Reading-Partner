@@ -34,7 +34,7 @@ import {
 import { keptArticleOpening } from "./reading/saved/kept-document";
 import { registerPlaces } from "./desk";
 import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
-import { reachableScreen } from "./ui/components/base/shell-nav";
+import { hiddenByExperiments, reachableScreen } from "./ui/components/base/shell-nav";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import InfoShelf from "./ui/components/info/InfoShelf";
@@ -45,6 +45,7 @@ import { CompanionCorner } from "./ui/components/companion/CompanionCorner";
 import { useCornerLift } from "./ui/components/companion/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
 import { toggleCompanionShown, useCompanionShown } from "./ui/components/companion/use-companion-shown";
+import { useExperimentGates } from "./ui/components/common/use-experiment";
 import { PullToAsk } from "./ui/components/phone/gesture/PullToAsk";
 import PhoneReader from "./ui/components/phone/reader/PhoneReader";
 import PhoneLessonScreen from "./ui/components/phone/lesson/PhoneLessonScreen";
@@ -123,7 +124,11 @@ export default function PhoneApp({
   const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
   // The corner companion, per device (docs/68). The phone keeps its own answer:
   // a reader who put the companion away here has not put it away on the desk.
-  const companionShown = useCompanionShown();
+  // Settings › Experiments (platform/experiments): which of meals, Intel's
+  // Briefs and studies, and the companion this device draws. Off hides the
+  // entries and the screens; nothing behind them is stopped.
+  const gates = useExperimentGates();
+  const companionShown = useCompanionShown() && gates.companion;
   // Where it stands. Every conversation on this shell is the whole screen, so
   // any composer that reports itself is one sitting on the bottom edge, and the
   // corner rises above it (companion/corner-placement.ts) — the briefing's call, the
@@ -183,6 +188,15 @@ export default function PhoneApp({
     ready: bootstrapped,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
+  // The meals line is drawn only with both its switches on: the account's
+  // (settings.meals, docs/73) and this device's experiment.
+  const mealsOn = settings.meals && gates.meals;
+  const shownRef = useRef({ meals: mealsOn, intel: gates.intel });
+  shownRef.current = { meals: mealsOn, intel: gates.intel };
+  // A screen whose line was switched off under the settings sheet goes home.
+  useEffect(() => {
+    if (hiddenByExperiments(base.kind, { meals: mealsOn, intel: gates.intel })) setStack(INITIAL_STACK);
+  }, [base.kind, mealsOn, gates.intel]);
 
   // The one back. The three things that trigger it — a top bar button, the
   // left-edge swipe, the Android button — all arrive here. Both inputs come
@@ -281,7 +295,8 @@ export default function PhoneApp({
     // naming a destination; nothing asks for it through here.
     // The old briefing's page and article land on home while its UI is off
     // (info/old-briefing.ts), a box card's jump included.
-    const reached = reachableScreen(next);
+    // So does a line whose experiment is off (platform/experiments).
+    const reached = reachableScreen(next, undefined, shownRef.current);
     if (reached === "meals-day" || reached === "meals-recipe" || reached === "meals-prep") return;
     const kind = reached === "vestibule" ? "home" : reached;
     setStack((s) => goTo(s, screen(kind)));
@@ -401,7 +416,7 @@ export default function PhoneApp({
             // so a chat over one would not know what it was reading. The gesture
             // is this shell's, so it is this shell that wraps the screen in it.
             wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
-            mealsEnabled={settings.meals}
+            mealsEnabled={mealsOn}
             // One day of the week is a stack entry like an opened article, so
             // the date rides on it and the back gesture leaves it the same way
             // it leaves anything else.
@@ -445,10 +460,12 @@ export default function PhoneApp({
                 }
                 onOpenLibrary={() => setStack((s) => push(s, screen("library")))}
                 settingsAlert={syncReport.alert !== "none"}
-                meals={settings.meals}
+                meals={mealsOn}
+                intelShown={gates.intel}
                 onOpenMeals={() => onNavigate("meals")}
                 companionShown={companionShown}
                 onToggleCompanion={toggleCompanion}
+                companionAvailable={gates.companion}
               />
             )}
           />
@@ -467,7 +484,7 @@ export default function PhoneApp({
             />
           )}
 
-          {base.kind === "briefs" && (
+          {base.kind === "briefs" && gates.intel && (
             <InfoShelf
               // An issue or a volume is on no topic: the reader opens it from
               // the library alone.
@@ -581,6 +598,7 @@ export default function PhoneApp({
           coach or a retell cannot jump here and says so. Typing to the companion opens a chat of its own here,
           which draws cards like every other chat, so it gets the card table
           too. */}
+      {gates.companion && (
       <CardRegistryProvider>
       <CompanionCorner
         shell="phone"
@@ -615,6 +633,7 @@ export default function PhoneApp({
         }}
       />
       </CardRegistryProvider>
+      )}
     </KeyboardShell>
   );
 }

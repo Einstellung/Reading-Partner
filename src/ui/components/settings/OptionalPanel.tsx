@@ -20,6 +20,7 @@ import OnDeviceVoiceCard from "./OnDeviceVoiceCard";
 import { hasNativeSpeech, hasOnDeviceDictation } from "../../../platform/app/platform";
 import { subscribeVoiceCapability } from "../../../platform/app/voice-capability";
 import { isCallVoice } from "./on-device-voice";
+import { useExperiment } from "../common/use-experiment";
 
 export default function OptionalPanel({
   settings,
@@ -30,6 +31,7 @@ export default function OptionalPanel({
 }) {
   const t = useT();
   const speaks = useSyncExternalStore(subscribeVoiceCapability, hasNativeSpeech);
+  const mealsShown = useExperiment("meals");
   return (
     <>
       <p className="mt-0 mb-5 text-xs text-faint-foreground">{t("settings.optional.intro")}</p>
@@ -37,7 +39,9 @@ export default function OptionalPanel({
       <div className={SETTINGS_PANEL}>
         {/* Not a key, and the one thing on this tab that costs nothing to turn
             on. Off, the app has no meals screen and no entry to one; the data
-            it has already written stays where it is (docs/73). */}
+            it has already written stays where it is (docs/73). Not drawn at
+            all while the meals experiment is off (settings/ExperimentsPanel). */}
+        {mealsShown && (
         <SettingsSection title={t("settings.optional.meals")}>
           <div className={CARD}>
             <Label>
@@ -49,8 +53,8 @@ export default function OptionalPanel({
             </Label>
             <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.mealsHint")}</p>
           </div>
-
         </SettingsSection>
+        )}
 
         <SettingsSection title={t("settings.optional.lessonPrep")}>
           <div className={CARD}>

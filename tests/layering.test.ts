@@ -71,6 +71,9 @@ const LAYER: Record<string, Layer> = {
   "platform/http": "platform",
   // The standard library the app lacks: pure helpers that import nothing.
   "platform/std": "platform",
+  // Settings › Experiments (docs/reading/688): the registry and this device's
+  // switches, kept in device.json. Reads platform/app and i18n's key type.
+  "platform/experiments": "platform",
   "platform/sync": "platform",
   "platform/sync/merge": "platform",
 
