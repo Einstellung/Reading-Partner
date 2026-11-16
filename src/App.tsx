@@ -365,9 +365,9 @@ export default function App() {
     ready: bootstrapped,
     syncReport,
   } = useShellBootstrap({ settingsOpen: settingsShowing || readerSettings, pushToast });
-  // The meals line is drawn only with both its switches on: the account's
-  // (settings.meals, docs/73) and this device's experiment.
-  const mealsOn = settings.meals && gates.meals;
+  // The meals line (docs/73) is this device's Meals experiment, which counts
+  // only under Intel (platform/experiments). settings.meals is no longer read.
+  const mealsOn = gates.meals;
   const mealsOnRef = useRef(mealsOn);
   mealsOnRef.current = mealsOn;
   // A screen whose line was switched off while it was showing goes to Today.
@@ -1628,7 +1628,8 @@ export default function App() {
               frame={fingerSel.frame}
               onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
               onHighlight={highlightSelection}
-              onAsk={() => {
+              // A brief's Ask is the companion's: with it switched off the menu has only Highlight.
+              {...(readerMode === "issue" && !gates.companion ? {} : { onAsk: () => {
                 // In a brief the passage goes to the companion's conversation (docs/info/88).
                 if (readerMode === "issue") {
                   askCompanion({ text: fingerSel.selection.text });
@@ -1644,7 +1645,7 @@ export default function App() {
                 }
                 const last = fingerSel.selection.rects[fingerSel.selection.rects.length - 1];
                 askAboutSelection({ x: last.left + last.width / 2, y: last.top + last.height });
-              }}
+              } })}
             />
           )}
         </div>

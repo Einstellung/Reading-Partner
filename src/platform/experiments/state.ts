@@ -7,9 +7,15 @@ import {
   patchDeviceSettings,
   subscribeDeviceSettings,
 } from "../app/device";
-import { isOn, withExperiment, type ExperimentId } from "./registry";
+import { isEffective, isOn, withExperiment, type ExperimentId } from "./registry";
 
+/** Whether the feature is shown: what every caller outside the settings panel asks. */
 export function experimentOn(id: ExperimentId): boolean {
+  return isEffective(currentDeviceExperiments(), id);
+}
+
+/** The entry's own switch, whatever its parent says: what the settings panel draws. */
+export function experimentSwitch(id: ExperimentId): boolean {
   return isOn(currentDeviceExperiments(), id);
 }
 

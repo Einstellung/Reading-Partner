@@ -188,9 +188,9 @@ export default function PhoneApp({
     ready: bootstrapped,
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
-  // The meals line is drawn only with both its switches on: the account's
-  // (settings.meals, docs/73) and this device's experiment.
-  const mealsOn = settings.meals && gates.meals;
+  // The meals line (docs/73) is this device's Meals experiment, which counts
+  // only under Intel (platform/experiments). settings.meals is no longer read.
+  const mealsOn = gates.meals;
   const shownRef = useRef({ meals: mealsOn, intel: gates.intel });
   shownRef.current = { meals: mealsOn, intel: gates.intel };
   // A screen whose line was switched off under the settings sheet goes home.

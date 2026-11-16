@@ -3,8 +3,8 @@
 // reader can be taken; what runs behind it is not asked.
 
 export interface ExperimentGates {
-  // The meals line's screens, entries and cards. Its own switch under
-  // Optional (settings.meals) still has to be on as well.
+  // The meals line's screens, entries and cards. True only while Intel is on
+  // as well: Meals sits under it.
   meals: boolean;
   // The Briefs shelf and studies: everything of Intel beside Today.
   intel: boolean;

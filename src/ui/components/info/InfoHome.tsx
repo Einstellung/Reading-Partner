@@ -159,7 +159,7 @@ export default function InfoHome(props: {
   // that has it and this screen keeps importing nothing from either shell —
   // the same hole renderLaunch is (docs/22).
   wrapScreen?: (screen: AskableScreen, children: React.ReactNode) => React.ReactNode;
-  // Whether the meals line is switched on (settings.meals, docs/73). Off, and
+  // Whether the meals line is shown (the Meals experiment, docs/73). Off, and
   // there is no entry to this screen anywhere and nothing is read off disk for
   // it; the data stays where it is.
   mealsEnabled?: boolean;

@@ -89,7 +89,7 @@ export default function PhoneHome({
   onOpenTopic: (topicId: string) => void;
   onOpenLibrary: () => void;
   settingsAlert: boolean;
-  // Whether the meals line is switched on (settings.meals, docs/73). Off, and
+  // Whether the meals line is shown (the Meals experiment, docs/73). Off, and
   // the tile is not here at all.
   meals: boolean;
   onOpenMeals: () => void;

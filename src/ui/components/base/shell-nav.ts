@@ -55,7 +55,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavItem[] = [
   { id: "topics", labelKey: "shell.nav.topics" },
 ];
 
-// The items a sidebar actually draws. Meals is opt-in (settings.meals,
+// The items a sidebar actually draws. Meals is opt-in (the Meals experiment,
 // docs/73) and is left out entirely when it is off — not greyed, not a teaser:
 // a switch that is off means the reader has said they do not want the line.
 // The old daily briefing is left out while its UI is switched off

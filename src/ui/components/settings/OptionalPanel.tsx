@@ -10,7 +10,6 @@ import { useSyncExternalStore } from "react";
 import { type Settings } from "../../../platform/app/settings";
 import { useT } from "../../../i18n";
 import { Input } from "../ui/input";
-import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { CARD } from "./cardStyles";
 import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
@@ -20,7 +19,6 @@ import OnDeviceVoiceCard from "./OnDeviceVoiceCard";
 import { hasNativeSpeech, hasOnDeviceDictation } from "../../../platform/app/platform";
 import { subscribeVoiceCapability } from "../../../platform/app/voice-capability";
 import { isCallVoice } from "./on-device-voice";
-import { useExperiment } from "../common/use-experiment";
 
 export default function OptionalPanel({
   settings,
@@ -31,31 +29,13 @@ export default function OptionalPanel({
 }) {
   const t = useT();
   const speaks = useSyncExternalStore(subscribeVoiceCapability, hasNativeSpeech);
-  const mealsShown = useExperiment("meals");
   return (
     <>
       <p className="mt-0 mb-5 text-xs text-faint-foreground">{t("settings.optional.intro")}</p>
 
+      {/* Meals used to have its switch here; it is the Meals experiment now
+          (settings/ExperimentsPanel). */}
       <div className={SETTINGS_PANEL}>
-        {/* Not a key, and the one thing on this tab that costs nothing to turn
-            on. Off, the app has no meals screen and no entry to one; the data
-            it has already written stays where it is (docs/73). Not drawn at
-            all while the meals experiment is off (settings/ExperimentsPanel). */}
-        {mealsShown && (
-        <SettingsSection title={t("settings.optional.meals")}>
-          <div className={CARD}>
-            <Label>
-              <Switch
-                checked={settings.meals}
-                onCheckedChange={(v) => onSettingsChange({ ...settings, meals: v === true })}
-              />
-              {t("settings.optional.meals")}
-            </Label>
-            <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.mealsHint")}</p>
-          </div>
-        </SettingsSection>
-        )}
-
         <SettingsSection title={t("settings.optional.lessonPrep")}>
           <div className={CARD}>
             <Label layout="stack">

@@ -101,7 +101,7 @@ export default function AppSidebar(props: {
   // nothing.
   update?: UpdateState;
   onApplyUpdate?: () => void;
-  // Whether the meals line is switched on (settings.meals, docs/73). Off, and
+  // Whether the meals line is shown (the Meals experiment, docs/73). Off, and
   // its row is not in the column at all.
   meals?: boolean;
   // Whether Briefs has its row: false while the intel experiment is off

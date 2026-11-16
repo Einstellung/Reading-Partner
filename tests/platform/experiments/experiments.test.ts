@@ -4,8 +4,10 @@
 import { expect, test } from "bun:test";
 import en from "../../../src/i18n/messages/settings/en";
 import {
+  childrenOf,
   EXPERIMENTS,
   experimentsFor,
+  isEffective,
   isOn,
   withExperiment,
 } from "../../../src/platform/experiments/registry";
@@ -14,7 +16,7 @@ import { createDeviceStore, type DeviceIo, type DeviceSettings } from "../../../
 test("ids are unique", () => {
   const ids = EXPERIMENTS.map((e) => e.id);
   expect(new Set(ids).size).toBe(ids.length);
-  expect(ids).toEqual(["meals", "intel", "companion"]);
+  expect(ids).toEqual(["intel", "meals", "companion"]);
 });
 
 test("every name and summary key has English copy", () => {
@@ -29,7 +31,7 @@ test("every name and summary key has English copy", () => {
 
 test("the three entries are offered on every platform", () => {
   for (const platform of ["ios", "android", "macos", "windows", "linux", "unknown"]) {
-    expect(experimentsFor(platform).map((e) => e.id)).toEqual(["meals", "intel", "companion"]);
+    expect(experimentsFor(platform).map((e) => e.id)).toEqual(["intel", "meals", "companion"]);
   }
 });
 
@@ -39,6 +41,25 @@ test("absent means off, and only true is on", () => {
   expect(isOn({ meals: false }, "meals")).toBe(false);
   expect(isOn({ meals: true }, "meals")).toBe(true);
   expect(isOn({ meals: "yes" } as unknown as Record<string, boolean>, "meals")).toBe(false);
+});
+
+test("Meals sits under Intel: shown only with both on, and its own switch survives Intel going off", () => {
+  expect(childrenOf(EXPERIMENTS, "intel").map((e) => e.id)).toEqual(["meals"]);
+  expect(childrenOf(EXPERIMENTS, "companion")).toEqual([]);
+  expect(isEffective({ meals: true }, "meals")).toBe(false);
+  expect(isEffective({ intel: true }, "meals")).toBe(false);
+  expect(isEffective({ intel: true, meals: true }, "meals")).toBe(true);
+  expect(isEffective({ intel: true }, "intel")).toBe(true);
+  expect(isEffective({ companion: true }, "companion")).toBe(true);
+  // Intel off and on again: Meals's own value was never touched.
+  const off = withExperiment({ intel: true, meals: true }, "intel", false);
+  expect(isOn(off, "meals")).toBe(true);
+  expect(isEffective(off, "meals")).toBe(false);
+  expect(isEffective(withExperiment(off, "intel", true), "meals")).toBe(true);
+});
+
+test("the needs-parent line has copy", () => {
+  expect(typeof (en as unknown as Record<string, unknown>)["experiments.needsParent"]).toBe("string");
 });
 
 test("setting one id keeps every other key, unknown ones included", () => {
