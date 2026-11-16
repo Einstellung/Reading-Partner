@@ -17,7 +17,8 @@ export default function PhoneSelection(props: {
   frame: ScreenFrame;
   onMoveEnd: (end: "start" | "end", clientX: number, clientY: number) => void;
   onHighlight: () => void;
-  onAsk: () => void;
+  // Left out where there is no one to ask: a brief while the companion is off.
+  onAsk?: () => void;
 }) {
   const t = useT();
   const [moving, setMoving] = useState(false);
@@ -33,8 +34,12 @@ export default function PhoneSelection(props: {
       {!moving && (
         <PhonePopup rects={props.selection.rects} frame={props.frame} gap={28} label={t("phone.selection.label")}>
           <PopupItem onClick={props.onHighlight}>{t("phone.selection.highlight")}</PopupItem>
-          <PopupSep />
-          <PopupItem onClick={props.onAsk}>{t("phone.selection.ask")}</PopupItem>
+          {props.onAsk && (
+            <>
+              <PopupSep />
+              <PopupItem onClick={props.onAsk}>{t("phone.selection.ask")}</PopupItem>
+            </>
+          )}
         </PhonePopup>
       )}
     </>

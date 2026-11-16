@@ -172,6 +172,9 @@ export interface Settings {
   // Language the AI writes its user-facing output in. "auto" mirrors the user's
   // own language; every other value pins output to that language.
   aiLanguage: AiLanguage;
+  // No longer read: the meals line is the Meals experiment now, per device
+  // (platform/experiments). Kept so an old file's value rides through untouched.
+  //
   // Whether the meals screen is there at all (docs/73). Off by default and
   // opt-in, because it is the first thing the companion does that has nothing
   // to do with reading. It hides the entry and nothing else: a reader who turns

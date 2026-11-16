@@ -8,6 +8,7 @@ export default {
   "tab.accounts": "계정",
   "tab.features": "기능",
   "tab.optional": "선택 사항",
+  "tab.experiments": "Experiments",
   connected: "연결됨",
   save: "저장",
   signOut: "로그아웃",
@@ -146,4 +147,15 @@ export default {
   "optional.baseUrl": "기본 URL",
   "optional.sttHint":
     "채팅 입력란의 마이크를 누른 채 말하세요. SiliconFlow의 SenseVoice 요금제는 무료이며 API 키를 바로 쓸 수 있습니다. OpenAI 호환 받아쓰기 엔드포인트라면 무엇이든 됩니다.",
+
+  "experiments.intro":
+    "Features that are not finished. Each one is off until you turn it on here, on this device. Turning one off only hides it: nothing is deleted, and turning it back on brings everything back.",
+  "experiments.meals.name": "Meals",
+  "experiments.meals.summary": "Plan the week's meals and keep the shopping list.",
+  "experiments.intel.name": "Intel",
+  "experiments.intel.summary": "Briefs and studies.",
+  "experiments.companion.name": "{name}",
+  "experiments.needsParent": "Turn on Intel first.",
+  "experiments.companion.summary":
+    "The companion in the corner: hold it to talk or type, paste links to it, and the box of what it hands back.",
 } satisfies Translation<typeof en>;

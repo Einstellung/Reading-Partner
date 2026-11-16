@@ -7,7 +7,7 @@
 // The names of the books the items came from are looked up alongside, the
 // shelf's own name or the file name cleaned up where the entry never got one.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { UNSEEN, appBox } from "../../../box";
 import type { BoxItem } from "../../../box/types";
@@ -16,6 +16,8 @@ import { TICK_MS } from "../../../platform/sync";
 import { readIntake } from "../../../reading/ingest/topic-intake";
 import { displayFileTitle } from "../shelf/file-title";
 import { bookIdsIn, cardsHere } from "./box-cards";
+import { shownBoxItems } from "./box-jump";
+import { useExperiment } from "../common/use-experiment";
 
 // Whether this device has the intake a box item stands for.
 const hasIntakeHere = (intakeId: string) => readIntake(intakeId).then((intake) => intake !== null);
@@ -61,5 +63,12 @@ export function useBoxItems(): BoxItems {
       stop();
     };
   }, []);
-  return state;
+  // Filtered at the end rather than in the read: a flip redraws at once, and
+  // nothing is written back.
+  const meals = useExperiment("meals");
+  const intel = useExperiment("intel");
+  return useMemo(
+    () => ({ ...state, items: shownBoxItems(state.items, { meals, intel }) }),
+    [state, meals, intel],
+  );
 }

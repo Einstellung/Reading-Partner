@@ -69,6 +69,7 @@ import { askCompanion, publishOpenIssue } from "../../companion/issue-context";
 import { jumpInBook } from "../lesson/epub-lesson";
 import { StudyCiteSheet, StudyStripBar, StudyVersionButton } from "../../reader/study/StudyChrome";
 import { useStudyReader } from "../../reader/study/use-study-reader";
+import { useExperiment } from "../../common/use-experiment";
 
 const markDeleteIo: MarkDeleteIo = {
   loadThreads,
@@ -287,6 +288,10 @@ export default function PhoneReader(props: {
   // In a brief the passage goes to the companion's conversation instead, and no mark is
   // left for asking (docs/info/88 「简报的对话」).
   const issue = props.mode === "issue";
+  // With the companion experiment off there is no one to ask in a brief, so its
+  // menus offer no Ask (platform/experiments).
+  const companionOn = useExperiment("companion");
+  const noAsk = issue && !companionOn;
   const askCompanionAboutSelection = useCallback(() => {
     const text = selection?.selection.text ?? "";
     viewRef.current?.clearSelection();
@@ -457,7 +462,7 @@ export default function PhoneReader(props: {
             viewRef.current?.saveSelection({ stroke: "highlight", color: HIGHLIGHT_COLOR });
             setSelection(null);
           }}
-          onAsk={issue ? askCompanionAboutSelection : askAboutSelection}
+          {...(noAsk ? {} : { onAsk: issue ? askCompanionAboutSelection : askAboutSelection })}
         />
       )}
 
@@ -467,7 +472,7 @@ export default function PhoneReader(props: {
           frame={popup.frame}
           onClose={() => setPopup(null)}
           onDelete={askRemoveMark}
-          onAsk={issue ? askCompanionAboutMark : askAboutMark}
+          {...(noAsk ? {} : { onAsk: issue ? askCompanionAboutMark : askAboutMark })}
           onOpen={openConversation}
         />
       )}

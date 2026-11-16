@@ -40,6 +40,12 @@ export interface DoorToolPorts {
   latestLinesCard: TopicSearchDoorPorts["latestLinesCard"];
   sendLines: TopicSearchDoorPorts["sendLines"];
   studyBook: TopicSearchDoorPorts["studyBook"];
+  /**
+   * Whether Intel's Briefs and studies are shown on this device (platform/experiments).
+   * Off, the topic-search and study tools are not mounted: the door is their way in,
+   * and about_app lists what is mounted. Left out, they are.
+   */
+  intel?: boolean;
 }
 
 export function doorTools(ports: DoorToolPorts): AgentTool[] {
@@ -58,7 +64,7 @@ export function doorTools(ports: DoorToolPorts): AgentTool[] {
     }),
     // Looking up a study's seed papers, drafting, confirming, changing and stopping a topic search, resuming X, and
     // revising and ending a study (docs/info/88, 91); the cards' presses are in use-door-chat.ts.
-    ...topicSearchDoorTools({
+    ...(ports.intel === false ? [] : topicSearchDoorTools({
       threadId: ports.threadId,
       readerLines: ports.readerLines,
       raiseCard: (card) => ports.raiseCard("topic-search", card),
@@ -68,7 +74,7 @@ export function doorTools(ports: DoorToolPorts): AgentTool[] {
       latestLinesCard: ports.latestLinesCard,
       sendLines: ports.sendLines,
       studyBook: ports.studyBook,
-    }),
+    })),
     // How background work is getting on: queued, running, finished, on which device (legion/status).
     liveBackgroundStatusTool(),
   ];

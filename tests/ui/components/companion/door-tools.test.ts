@@ -36,3 +36,19 @@ test("the door says when to search where it can, and that it cannot where it can
   expect(notSearching.map((t) => t.name)).not.toContain("web_search");
   expect(doorToolsPrompt(notSearching)).toBe(WEB_SEARCH_UNAVAILABLE_PROMPT);
 });
+
+test("with Intel hidden the door mounts no topic-search or study tool, and keeps the rest", () => {
+  const settings = {
+    defaultProviderId: "anthropic",
+    defaultModelId: providers.anthropic.getModels()[0].id,
+    everydayModelId: null,
+  } as const;
+  const shown = doorTools(ports(settings)).map((t) => t.name);
+  const hidden = doorTools({ ...ports(settings), intel: false }).map((t) => t.name);
+  expect(shown).toContain("confirm_topic_search");
+  expect(hidden).not.toContain("confirm_topic_search");
+  expect(hidden).not.toContain("stop_topic_search");
+  expect(hidden).toContain("web_search");
+  expect(hidden.length).toBeLessThan(shown.length);
+  for (const name of hidden) expect(shown).toContain(name);
+});

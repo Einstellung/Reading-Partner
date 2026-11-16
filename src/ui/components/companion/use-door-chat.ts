@@ -91,6 +91,7 @@ import { parseMoveTarget, withLineEdit, withLineVerdict, type SendResult } from 
 import type { DraftQuery } from "../../../info/topic-search/topic-searches";
 import { endStudyLive, liveStudyBook } from "./study-end";
 import { BACKGROUND_STATUS_RULE } from "../../../legion/status/tool";
+import { experimentOn } from "../../../platform/experiments/state";
 import {
   INTAKE_CHOOSE_OP,
   INTAKE_NEW_TOPIC_OP,
@@ -238,6 +239,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
         const sent = noteOnLastLine(history, note);
         // The door's own tools, beside the soul's (door-tools.ts).
         const tools = doorTools({
+          intel: experimentOn("intel"),
           threadId: id,
           date,
           raiseCard: (prefix, payload) => raiseCardRef.current(prefix, payload),

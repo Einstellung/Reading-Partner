@@ -9,6 +9,7 @@ import { t } from "../../../i18n";
 import type { BoxItem, BoxItemState, BoxOrigin } from "../../../box/types";
 import { intakeIdOfItem } from "../../../reading/ingest/intake-box";
 import { issueBookOfItem } from "../../../info/issue/types";
+import type { ExperimentGates } from "../base/experiment-gates";
 
 export type Shell = "desktop" | "phone";
 
@@ -153,4 +154,19 @@ export function staysUntilDecided(item: Pick<BoxItem, "kind" | "body">): boolean
 /** The state a followed card moves to, or null for one that stays until decided. */
 export function stateAfterFollow(item: Pick<BoxItem, "kind" | "body">): BoxItemState | null {
   return staysUntilDecided(item) ? null : "told";
+}
+
+/**
+ * The cards of a line whose experiment is off are not drawn (platform/experiments):
+ * one from the meals page while meals is hidden, a brief's while intel is. They
+ * stay in the box untouched and come back with the switch.
+ */
+export function shownBoxItems<T extends Pick<BoxItem, "origin" | "kind" | "body">>(
+  items: readonly T[],
+  gates: Pick<ExperimentGates, "meals" | "intel">,
+): T[] {
+  return items.filter(
+    (item) =>
+      (gates.meals || item.origin.place !== "meals") && (gates.intel || issueBookOfItem(item) === null),
+  );
 }

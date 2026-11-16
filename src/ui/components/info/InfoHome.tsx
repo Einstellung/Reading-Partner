@@ -159,7 +159,7 @@ export default function InfoHome(props: {
   // that has it and this screen keeps importing nothing from either shell —
   // the same hole renderLaunch is (docs/22).
   wrapScreen?: (screen: AskableScreen, children: React.ReactNode) => React.ReactNode;
-  // Whether the meals line is switched on (settings.meals, docs/73). Off, and
+  // Whether the meals line is shown (the Meals experiment, docs/73). Off, and
   // there is no entry to this screen anywhere and nothing is read off disk for
   // it; the data stays where it is.
   mealsEnabled?: boolean;
@@ -195,11 +195,14 @@ export default function InfoHome(props: {
   // The old briefing's page and article are not drawn while its UI is off
   // (info/old-briefing.ts): a screen or a destination naming them is Today.
   const oldBriefing = props.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
-  const screen = props.screen === null ? null : reachableScreen(props.screen, oldBriefing);
+  // Nor are the meals screens while the meals line is off.
+  const shown = { meals: props.mealsEnabled === true };
+  const screen = props.screen === null ? null : reachableScreen(props.screen, oldBriefing, shown);
   const navigate = props.onNavigate;
+  const mealsShown = shown.meals;
   const onNavigate = useCallback(
-    (next: HomeScreen) => navigate(reachableScreen(next, oldBriefing)),
-    [navigate, oldBriefing],
+    (next: HomeScreen) => navigate(reachableScreen(next, oldBriefing, { meals: mealsShown })),
+    [navigate, oldBriefing, mealsShown],
   );
   const meals = useMeals(props.mealsEnabled === true);
   // The batch cook's written steps: read for every place that shows its

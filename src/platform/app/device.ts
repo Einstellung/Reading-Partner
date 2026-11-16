@@ -49,6 +49,11 @@ export interface DeviceSettings {
   // nothing to learn from it, and a synced "seen" would swallow the one
   // explanation the phone owes a reader.
   lessonIntroSeen: boolean;
+  // Which entries of Settings › Experiments are on (platform/experiments,
+  // docs/reading/688). Absent or missing an id means off. Per-device: an
+  // unfinished feature tried on one machine says nothing about another. An id
+  // the registry no longer has stays in the file and is not read.
+  experiments?: Record<string, boolean>;
   // The settings that only work with a credential that does not sync
   // (DEVICE_SETTING_KEYS in settings.ts): the provider and models a call goes
   // to, and the STT host and model. Owned by the settings store, which joins
@@ -140,12 +145,21 @@ export interface DeviceStore {
   id: () => string;
   save: (settings: DeviceSettings) => Promise<void>;
   patch: (patch: Partial<DeviceSettings>) => Promise<void>;
+  // The experiments map as last read or written, {} until init.
+  experiments: () => Record<string, boolean>;
+  // Told after every change to the in-memory copy: init, load, save.
+  subscribe: (listener: () => void) => () => void;
 }
 
 export function createDeviceStore(io: DeviceIo): DeviceStore {
   // The one in-memory copy, so the role can be answered without a read on every
   // call. Filled by init and kept in step by save.
   let cached: DeviceSettings | null = null;
+  const listeners = new Set<() => void>();
+  function setCached(next: DeviceSettings): void {
+    cached = next;
+    for (const listener of [...listeners]) listener();
+  }
 
   function withRole(settings: DeviceSettings): DeviceSettings {
     return { ...settings, role: deviceRoleFor(settings.role, io.isMobile()) };
@@ -154,7 +168,7 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
   // Written straight through, not debounced: these change when a user flips a
   // switch, which is rare enough that a write per flip costs nothing.
   function save(settings: DeviceSettings): Promise<void> {
-    cached = withRole(settings);
+    setCached(withRole(settings));
     return io.write(JSON.stringify(settings, null, 2));
   }
 
@@ -167,7 +181,7 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
     const read = await io.read();
     const stored = read.status === "ok" ? read.value : {};
     const settings = withRole({ ...DEFAULT_DEVICE_SETTINGS, ...stored });
-    cached = settings;
+    setCached(settings);
     return settings;
   }
 
@@ -194,9 +208,10 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
         }
       }
       const { settings, changed } = initialDeviceSettings(stored, legacy, io.newId);
-      cached = withRole(settings);
+      const next = withRole(settings);
+      setCached(next);
       if (changed) await save(settings).catch(() => {});
-      return cached;
+      return next;
     },
     // The role, for callers that cannot wait for a read: the shells resolve it
     // once at startup and everything after reads this. "reader" until it is
@@ -213,6 +228,13 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
     patch: async (patch) => {
       const current = cached ?? (await load());
       await save({ ...current, ...patch });
+    },
+    experiments: () => cached?.experiments ?? {},
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }
@@ -250,4 +272,12 @@ export function currentDeviceId(): string {
 
 export function patchDeviceSettings(patch: Partial<DeviceSettings>): Promise<void> {
   return store.patch(patch);
+}
+
+export function currentDeviceExperiments(): Record<string, boolean> {
+  return store.experiments();
+}
+
+export function subscribeDeviceSettings(listener: () => void): () => void {
+  return store.subscribe(listener);
 }

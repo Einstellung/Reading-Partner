@@ -101,9 +101,14 @@ export default function AppSidebar(props: {
   // nothing.
   update?: UpdateState;
   onApplyUpdate?: () => void;
-  // Whether the meals line is switched on (settings.meals, docs/73). Off, and
+  // Whether the meals line is shown (the Meals experiment, docs/73). Off, and
   // its row is not in the column at all.
   meals?: boolean;
+  // Whether Briefs has its row: false while the intel experiment is off
+  // (platform/experiments). Omitted, it has.
+  briefs?: boolean;
+  // False while the companion experiment is off: the wordmark toggles nothing.
+  companionAvailable?: boolean;
   // Whether the old daily briefing has its row (info/old-briefing.ts). The
   // switch's value unless a test says otherwise.
   oldBriefing?: boolean;
@@ -125,27 +130,32 @@ export default function AppSidebar(props: {
       <IconSidebar size={20} />
     </Button>
   );
+  const wordmark = (
+    <>
+      <img src={appIcon} alt="" width={28} height={28} className="h-7 w-7 flex-none rounded-[7px]" />
+      <span className={sidebarNameClass(collapsed)}>Reading Partner</span>
+    </>
+  );
 
   return (
     <nav aria-label={t("shell.sidebar.sections")} className={sidebarNavClass(collapsed)}>
       <div className={sidebarWordmarkClass(collapsed)}>
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-transparent p-0 text-left"
-          title={companionToggleTitle(props.companionShown, companionName)}
-          aria-label={companionToggleTitle(props.companionShown, companionName)}
-          aria-pressed={props.companionShown}
-          onClick={props.onToggleCompanion}
-        >
-          <img
-            src={appIcon}
-            alt=""
-            width={28}
-            height={28}
-            className="h-7 w-7 flex-none rounded-[7px]"
-          />
-          <span className={sidebarNameClass(collapsed)}>Reading Partner</span>
-        </button>
+        {/* While the companion experiment is off the wordmark is only a
+            wordmark: there is no companion for it to show or hide. */}
+        {props.companionAvailable === false ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">{wordmark}</div>
+        ) : (
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-transparent p-0 text-left"
+            title={companionToggleTitle(props.companionShown, companionName)}
+            aria-label={companionToggleTitle(props.companionShown, companionName)}
+            aria-pressed={props.companionShown}
+            onClick={props.onToggleCompanion}
+          >
+            {wordmark}
+          </button>
+        )}
         {/* Labelled, the toggle ends the wordmark row. Collapsed, the row has
             room for nothing but the icon, so the toggle drops to the top of the
             rail, under the icon and above the three destinations. */}
@@ -153,7 +163,11 @@ export default function AppSidebar(props: {
       </div>
       {collapsed && toggle}
 
-      {shellNavItems({ meals: props.meals === true, oldBriefing: props.oldBriefing }).map((item) => (
+      {shellNavItems({
+        meals: props.meals === true,
+        briefs: props.briefs !== false,
+        oldBriefing: props.oldBriefing,
+      }).map((item) => (
         <Row
           key={item.id}
           label={t(item.labelKey)}

@@ -8,6 +8,7 @@ export default {
   "tab.accounts": "Comptes",
   "tab.features": "Fonctions",
   "tab.optional": "Facultatif",
+  "tab.experiments": "Experiments",
   connected: "Connecté",
   save: "Enregistrer",
   signOut: "Se déconnecter",
@@ -149,4 +150,15 @@ export default {
   "optional.baseUrl": "URL de base",
   "optional.sttHint":
     "Maintenez le micro dans la zone de chat pour parler. L'offre SenseVoice de SiliconFlow est gratuite et sa clé API fonctionne telle quelle ; tout service de transcription compatible OpenAI convient aussi.",
+
+  "experiments.intro":
+    "Features that are not finished. Each one is off until you turn it on here, on this device. Turning one off only hides it: nothing is deleted, and turning it back on brings everything back.",
+  "experiments.meals.name": "Meals",
+  "experiments.meals.summary": "Plan the week's meals and keep the shopping list.",
+  "experiments.intel.name": "Intel",
+  "experiments.intel.summary": "Briefs and studies.",
+  "experiments.companion.name": "{name}",
+  "experiments.needsParent": "Turn on Intel first.",
+  "experiments.companion.summary":
+    "The companion in the corner: hold it to talk or type, paste links to it, and the box of what it hands back.",
 } satisfies Translation<typeof en>;

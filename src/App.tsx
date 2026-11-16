@@ -117,6 +117,7 @@ import { CompanionCorner } from "./ui/components/companion/CompanionCorner";
 import { useCornerLift } from "./ui/components/companion/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
 import { toggleCompanionShown, useCompanionShown } from "./ui/components/companion/use-companion-shown";
+import { useExperimentGates } from "./ui/components/common/use-experiment";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -304,7 +305,11 @@ export default function App() {
   // The corner companion, per device (docs/68). Read synchronously for the
   // same reason the sidebar's width is: the first frame should already be the
   // screen the reader left.
-  const companionShown = useCompanionShown();
+  // Settings › Experiments (platform/experiments): which of meals, Intel's
+  // Briefs and studies, and the companion this device draws. Off hides the
+  // entries and the screens; nothing behind them is stopped.
+  const gates = useExperimentGates();
+  const companionShown = useCompanionShown() && gates.companion;
   const toggleCompanion = toggleCompanionShown;
 
   const toggleShellSidebar = useCallback(() => {
@@ -360,6 +365,16 @@ export default function App() {
     ready: bootstrapped,
     syncReport,
   } = useShellBootstrap({ settingsOpen: settingsShowing || readerSettings, pushToast });
+  // The meals line (docs/73) is this device's Meals experiment, which counts
+  // only under Intel (platform/experiments). settings.meals is no longer read.
+  const mealsOn = gates.meals;
+  const mealsOnRef = useRef(mealsOn);
+  mealsOnRef.current = mealsOn;
+  // A screen whose line was switched off while it was showing goes to Today.
+  useEffect(() => {
+    const reached = reachableScreen(homeScreen, undefined, { meals: mealsOn, intel: gates.intel });
+    if (reached !== homeScreen) setHomeScreen(reached);
+  }, [homeScreen, mealsOn, gates.intel]);
   // A downloaded desktop update, drawn as a row in the sidebar (docs/76).
   const appUpdateState = useAppUpdate();
 
@@ -1290,7 +1305,7 @@ export default function App() {
       },
       goToMeals: () => {
         if (inReader) closeReader();
-        setHomeScreen("meals");
+        setHomeScreen(reachableScreen("meals", undefined, { meals: mealsOnRef.current }));
       },
       // A talk's coaching and a retell are drawn in their topic, read off the
       // thing itself; one that has gone since opens nothing.
@@ -1495,6 +1510,7 @@ export default function App() {
             gate={gate}
             companionShown={companionShown}
             onToggleCompanion={toggleCompanion}
+            companionAvailable={gates.companion}
             onOpenBookThread={openBookThread}
             mode={readerMode}
             onOpenSettings={openSettings}
@@ -1523,7 +1539,9 @@ export default function App() {
             onToggleCompanion={toggleCompanion}
             update={appUpdateState}
             onApplyUpdate={applyAppUpdate}
-            meals={settings.meals}
+            meals={mealsOn}
+            briefs={gates.intel}
+            companionAvailable={gates.companion}
           />
         )}
         {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the
@@ -1610,7 +1628,8 @@ export default function App() {
               frame={fingerSel.frame}
               onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
               onHighlight={highlightSelection}
-              onAsk={() => {
+              // A brief's Ask is the companion's: with it switched off the menu has only Highlight.
+              {...(readerMode === "issue" && !gates.companion ? {} : { onAsk: () => {
                 // In a brief the passage goes to the companion's conversation (docs/info/88).
                 if (readerMode === "issue") {
                   askCompanion({ text: fingerSel.selection.text });
@@ -1626,7 +1645,7 @@ export default function App() {
                 }
                 const last = fingerSel.selection.rects[fingerSel.selection.rects.length - 1];
                 askAboutSelection({ x: last.left + last.width / 2, y: last.top + last.height });
-              }}
+              } })}
             />
           )}
         </div>
@@ -1637,7 +1656,7 @@ export default function App() {
           <InfoHome
             screen={inReader ? null : homeScreen}
             onNavigate={setHomeScreen}
-            mealsEnabled={settings.meals}
+            mealsEnabled={mealsOn}
             role={deviceRole}
             continueBook={(() => {
               if (topics === null) return undefined;
@@ -1668,7 +1687,7 @@ export default function App() {
             />
           )}
 
-          {!inReader && homeScreen === "briefs" && (
+          {!inReader && homeScreen === "briefs" && gates.intel && (
             <InfoShelf
               onOpenBook={(bookId, name) => void openIssueBook(bookId, name)}
               onTell={(line) => pushToast("info", line)}
@@ -1895,6 +1914,7 @@ export default function App() {
           corner card is top right. The chat's composer does own the bottom
           edge, so there the corner stands above it, measured
           (companion/corner-placement.ts). */}
+      {gates.companion && (
       <CompanionCorner
         shell="desktop"
         shown={companionPlacement.shown}
@@ -1903,6 +1923,7 @@ export default function App() {
         openBookId={bookIdRef.current}
         targets={companionTargets}
       />
+      )}
 
       {readerSettings && (
         <SettingsDialog

@@ -7,11 +7,21 @@
 // (chat/cardRegistryContext.ts). One identifier per shell is the smallest thing
 // a test can look for, and tests/ui/components/chat/card-registry-context.test.tsx
 // looks for it in both.
+//
+// The cards of a line whose experiment is off render nothing (card-gates.ts).
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { CardRegistryContext } from "./chat/cardRegistryContext";
 import { CARD_REGISTRY } from "./cardRegistry";
+import { gatedRegistry, hiddenCardKinds } from "./card-gates";
+import { useExperiment } from "./common/use-experiment";
 
 export function CardRegistryProvider({ children }: { children: ReactNode }) {
-  return <CardRegistryContext.Provider value={CARD_REGISTRY}>{children}</CardRegistryContext.Provider>;
+  const meals = useExperiment("meals");
+  const intel = useExperiment("intel");
+  const registry = useMemo(
+    () => gatedRegistry(CARD_REGISTRY, hiddenCardKinds({ meals, intel })),
+    [meals, intel],
+  );
+  return <CardRegistryContext.Provider value={registry}>{children}</CardRegistryContext.Provider>;
 }

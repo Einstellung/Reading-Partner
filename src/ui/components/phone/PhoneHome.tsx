@@ -67,6 +67,8 @@ export default function PhoneHome({
   onOpenMeals,
   companionShown,
   onToggleCompanion,
+  companionAvailable = true,
+  intelShown = true,
   oldBriefing = OLD_BRIEFING_UI_ENABLED,
 }: {
   launch: LaunchProps;
@@ -87,7 +89,7 @@ export default function PhoneHome({
   onOpenTopic: (topicId: string) => void;
   onOpenLibrary: () => void;
   settingsAlert: boolean;
-  // Whether the meals line is switched on (settings.meals, docs/73). Off, and
+  // Whether the meals line is shown (the Meals experiment, docs/73). Off, and
   // the tile is not here at all.
   meals: boolean;
   onOpenMeals: () => void;
@@ -95,6 +97,12 @@ export default function PhoneHome({
   // app's own name on the home screen is what carries it.
   companionShown: boolean;
   onToggleCompanion: () => void;
+  // False while the companion experiment is off (platform/experiments): the
+  // name is a heading and toggles nothing.
+  companionAvailable?: boolean;
+  // False while the intel experiment is off: no brief covers and no way to the
+  // Briefs shelf. The section stays for the tiles beside them, if any.
+  intelShown?: boolean;
   // Whether the day's briefing card is drawn (info/old-briefing.ts). On, it is
   // on top and the kept articles always have their tile; off, the kept
   // articles show only once there are some: keeping one was the briefing's, so
@@ -155,6 +163,7 @@ export default function PhoneHome({
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="m-0 font-display text-[24px] font-semibold text-foreground">
+            {companionAvailable ? (
             <button
               type="button"
               className="bg-transparent p-0 text-left font-display text-[24px] font-semibold text-foreground"
@@ -165,6 +174,9 @@ export default function PhoneHome({
             >
               Reading Partner
             </button>
+            ) : (
+              "Reading Partner"
+            )}
           </h1>
           <p className="m-0 mt-1 text-[14px] text-faint-foreground">{t("phone.home.today")}</p>
         </div>
@@ -195,9 +207,10 @@ export default function PhoneHome({
         </div>
       )}
 
+      {(intelShown || tiles.length > 0) && (
       <section className="mt-6">
         <h2 className={SECTION_LABEL}>{t("phone.home.intelLabel")}</h2>
-        {intel === null ? (
+        {!intelShown ? null : intel === null ? (
           <CoverSkeleton />
         ) : intel.items.length === 0 ? (
           <>
@@ -239,9 +252,10 @@ export default function PhoneHome({
           </>
         )}
         {tiles.length > 0 && (
-          <div className={cn("mt-4 grid gap-3", tiles.length === 2 ? "grid-cols-2" : "grid-cols-1")}>{tiles}</div>
+          <div className={cn(intelShown && "mt-4", "grid gap-3", tiles.length === 2 ? "grid-cols-2" : "grid-cols-1")}>{tiles}</div>
         )}
       </section>
+      )}
 
       <section className="mt-7">
         <h2 className={SECTION_LABEL}>{t("phone.home.libraryLabel")}</h2>

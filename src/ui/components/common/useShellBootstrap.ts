@@ -12,6 +12,7 @@
 // articles there) and everything the values are drawn with.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useExperiment } from "./use-experiment";
 import { onStoreError } from "../../../platform/app/store-errors";
 import {
   registerPullRoute,
@@ -447,11 +448,14 @@ export function useShellBootstrap({
   // pass reading two files on every pull. Idempotent, so turning the setting on
   // mid-session starts it and nothing starts it twice.
   // The week's recipes are written on the same switch, on every device (docs/73 做法页).
+  // The switch is the Meals experiment (platform/experiments), which counts
+  // only while Intel is on; settings.meals is no longer read.
+  const mealsOn = useExperiment("meals");
   useEffect(() => {
-    if (!settings.meals) return;
+    if (!mealsOn) return;
     startMealsPhotoHousekeeping();
     startMealsRecipeHousekeeping();
-  }, [settings.meals]);
+  }, [mealsOn]);
 
   const syncReport = useSyncHealth();
   const syncToastedRef = useRef(false);
@@ -479,6 +483,9 @@ export function useShellBootstrap({
     // store (DEVICE_SETTING_KEYS); this copy of them is the startup read.
     const owned: Partial<DeviceSettings> = { ...next };
     delete owned.chatScale;
+    // The experiments are written by their own switches (platform/experiments)
+    // and this copy of them is the startup read, so they stay out too.
+    delete owned.experiments;
     for (const key of DEVICE_SETTING_KEYS) delete owned[key];
     patchDeviceSettings(owned).catch((e) => console.warn("failed to persist device settings", e));
   }, []);

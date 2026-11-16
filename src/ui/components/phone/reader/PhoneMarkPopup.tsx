@@ -16,7 +16,8 @@ export default function PhoneMarkPopup(props: {
   frame: ScreenFrame;
   onClose: () => void;
   onDelete: (id: string) => void;
-  onAsk: (id: string) => void;
+  // Left out where there is no one to ask: a brief while the companion is off.
+  onAsk?: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
   const t = useT();
@@ -55,8 +56,12 @@ export default function PhoneMarkPopup(props: {
       ) : (
         <PhonePopup rects={rects} frame={frame} gap={12} label={t("phone.markPopup.highlight")}>
           <PopupItem onClick={act(props.onDelete, mark.id)}>{t("phone.markPopup.delete")}</PopupItem>
-          <PopupSep />
-          <PopupItem onClick={act(props.onAsk, mark.id)}>{t("phone.markPopup.ask")}</PopupItem>
+          {props.onAsk && (
+            <>
+              <PopupSep />
+              <PopupItem onClick={act(props.onAsk, mark.id)}>{t("phone.markPopup.ask")}</PopupItem>
+            </>
+          )}
         </PhonePopup>
       )}
     </>
