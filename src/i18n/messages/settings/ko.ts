@@ -91,10 +91,10 @@ export default {
   "features.companionShowHint":
     "{name}: 리더를 포함한 모든 화면의 모서리에 있습니다. 끄면 모서리가 비고, 사이드바, 휴대폰 홈 화면, 리더의 더 보기 메뉴에 있는 {name} 버튼으로 다시 불러올 수 있습니다. 이 설정은 이 기기에만 저장됩니다.",
   "features.companionName": "동반자 이름",
-  "features.briefing": "정보",
-  "features.collect": "이 컴퓨터에서 소스 수집",
+  "features.briefing": "백그라운드 작업",
+  "features.collect": "이 컴퓨터에서 백그라운드 작업 맡기",
   "features.collectHint":
-    "각 소스는 자체 일정에 따라 확인되고, 주제 검색은 여기서 밤사이 실행됩니다. 끄면 이 컴퓨터는 수집을 완전히 멈추고, 다른 수집 기기가 있다면 그 기기가 이어받습니다.",
+    "이 컴퓨터가 밤사이 기억을 정리하고 동기화 충돌을 처리합니다. 끄면 다른 컴퓨터가 있을 경우 그 컴퓨터가 이어받습니다.",
   "features.thisComputer": "이 컴퓨터",
   "features.role": "이 컴퓨터의 역할",
   "features.roleCollector": "수집 — 여기서 소스를 읽음",

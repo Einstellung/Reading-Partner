@@ -92,10 +92,10 @@ export default {
   "features.companionShowHint":
     "{name} steht in der Ecke jedes Bildschirms, auch im Reader. Aus bleibt die Ecke leer; der Knopf in der Seitenleiste, auf dem Startbildschirm des Handys und im Mehr-Menü des Readers holt {name} zurück. Die Wahl bleibt auf diesem Gerät.",
   "features.companionName": "Name des Begleiters",
-  "features.briefing": "Intel",
-  "features.collect": "Quellen auf diesem Computer sammeln",
+  "features.briefing": "Hintergrundarbeit",
+  "features.collect": "Hintergrundarbeit auf diesem Computer übernehmen",
   "features.collectHint":
-    "Jede Quelle wird nach ihrem eigenen Zeitplan abgefragt, und Themensuchen laufen hier über Nacht. Aus: Dieser Rechner sammelt überhaupt nicht mehr, und ein anderer Sammler übernimmt, falls vorhanden.",
+    "Dieser Computer räumt nachts dein Gedächtnis auf und löst Synchronisierungskonflikte. Aus: Ein anderer deiner Computer übernimmt, falls vorhanden.",
   "features.thisComputer": "Dieser Computer",
   "features.role": "Dieser Rechner ist ein",
   "features.roleCollector": "Sammler – liest die Quellen hier",

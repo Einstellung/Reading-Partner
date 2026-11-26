@@ -92,10 +92,10 @@ export default {
   "features.companionShowHint":
     "{name} se tient dans le coin de chaque écran, lecteur compris. Désactivé, le coin reste vide ; le bouton de la barre latérale, de l'écran d'accueil du téléphone et du menu Plus du lecteur ramène {name}. Ce choix reste sur cet appareil.",
   "features.companionName": "Nom du compagnon",
-  "features.briefing": "Intel",
-  "features.collect": "Collecter vos sources sur cet ordinateur",
+  "features.briefing": "Tâches de fond",
+  "features.collect": "Assurer les tâches de fond sur cet ordinateur",
   "features.collectHint":
-    "Chaque source est consultée selon son propre calendrier, et les recherches par sujet tournent ici la nuit. Désactivé, cette machine arrête toute collecte et un autre collecteur, si vous en avez un, prend le relais.",
+    "Cet ordinateur range votre mémoire pendant la nuit et règle les conflits de synchronisation. Désactivé, un autre de vos ordinateurs, si vous en avez un, prend le relais.",
   "features.thisComputer": "Cet ordinateur",
   "features.role": "Cette machine est un",
   "features.roleCollector": "Collecteur — lit les sources ici",

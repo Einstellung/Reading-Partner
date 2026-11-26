@@ -92,9 +92,9 @@ export default function FeaturesPanel({
         <CompanionNameField settings={settings} onSettingsChange={onSettingsChange} />
       </SettingsSection>
 
-      {/* A reader collects nothing, so there is no schedule to switch off. */}
+      {/* Whether this computer stands for the nightly dream and the sync
+          conflict runs (presence/live.ts). A reader never does. */}
       {device?.role === "collector" && (
-        // Titled with the info side's name, Intel (docs/info/93).
         <SettingsSection title={t("settings.features.briefing")}>
           <div className={CARD}>
             <Label>

@@ -89,10 +89,10 @@ export default {
   "features.companionShowHint":
     "{name} 站在每个界面的角落，阅读时也在。关掉后角落空着；侧栏、手机首页和阅读器「更多」菜单里的 {name} 按钮可以再叫它出来。这个选择只留在这台设备上。",
   "features.companionName": "伙伴的名字",
-  "features.briefing": "信息",
-  "features.collect": "在这台电脑上从你的来源收集",
+  "features.briefing": "后台任务",
+  "features.collect": "让这台电脑承担后台任务",
   "features.collectHint":
-    "每个来源按各自的时间表检查，主题搜索在这里夜间运行。关闭后，这台机器完全停止收集，如果你有别的收集机，会由它接手。",
+    "这台电脑负责夜间整理记忆、处理同步冲突。关闭后由你的另一台电脑接手（如果有）。",
   "features.thisComputer": "这台电脑",
   "features.role": "这台机器是",
   "features.roleCollector": "收集机——在这里读取来源",

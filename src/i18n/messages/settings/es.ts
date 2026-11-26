@@ -92,10 +92,10 @@ export default {
   "features.companionShowHint":
     "{name} está en la esquina de cada pantalla, también en el lector. Desactivado, la esquina queda vacía; el botón de {name} en la barra lateral, en la pantalla de inicio del móvil y en el menú Más del lector hace que reaparezca. La elección se queda en este dispositivo.",
   "features.companionName": "Nombre del acompañante",
-  "features.briefing": "Intel",
-  "features.collect": "Recopilar de tus fuentes en este ordenador",
+  "features.briefing": "Trabajo en segundo plano",
+  "features.collect": "Hacer el trabajo en segundo plano en este ordenador",
   "features.collectHint":
-    "Cada fuente se consulta según su propio horario, y las búsquedas por tema se ejecutan aquí por la noche. Desactivado, este equipo deja de recopilar por completo y otro recopilador, si lo tienes, toma el relevo.",
+    "Este ordenador ordena tu memoria por la noche y resuelve los conflictos de sincronización. Desactivado, otro de tus ordenadores, si lo tienes, toma el relevo.",
   "features.thisComputer": "Este ordenador",
   "features.role": "Este equipo es un",
   "features.roleCollector": "Recopilador: lee las fuentes aquí",

@@ -92,10 +92,10 @@ export default {
   "features.companionShowHint":
     "{name} stands in the corner of every screen, the reader included. Off, the corner is empty; the {name} button in the sidebar, on the phone's home screen and in the reader's More menu brings it back. The choice stays on this device.",
   "features.companionName": "Companion name",
-  "features.briefing": "Intel",
-  "features.collect": "Collect from your sources on this computer",
+  "features.briefing": "Background work",
+  "features.collect": "Take on background work on this computer",
   "features.collectHint":
-    "Each source is checked on its own schedule, and topic searches run here overnight. Off, this machine stops collecting entirely and another collector, if you have one, takes over.",
+    "This computer tidies your memory overnight and settles sync conflicts. Off, another computer of yours takes this on, if you have one.",
   "features.thisComputer": "This computer",
   "features.role": "This machine is a",
   "features.roleCollector": "Collector — read the sources here",

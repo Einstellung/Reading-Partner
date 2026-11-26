@@ -92,10 +92,10 @@ export default {
   "features.companionShowHint":
     "{name} はリーダーを含むすべての画面の隅にいます。オフにすると隅は空になり、サイドバー、スマートフォンのホーム画面、リーダーの「その他」メニューにある {name} ボタンで戻せます。この設定はこのデバイスにだけ保存されます。",
   "features.companionName": "コンパニオンの名前",
-  "features.briefing": "情報",
-  "features.collect": "このコンピュータでソースを収集",
+  "features.briefing": "バックグラウンド処理",
+  "features.collect": "このコンピュータでバックグラウンド処理を引き受ける",
   "features.collectHint":
-    "各ソースはそれぞれのスケジュールで確認され、トピック検索はここで夜間に実行されます。オフにすると、このマシンは収集を完全に停止し、ほかに収集するマシンがあればそちらが引き継ぎます。",
+    "このコンピュータが夜間の記憶の整理と同期の競合の処理を受け持ちます。オフにすると、ほかにコンピュータがあればそちらが引き継ぎます。",
   "features.thisComputer": "このコンピュータ",
   "features.role": "このマシンの役割",
   "features.roleCollector": "収集用――ここでソースを読む",

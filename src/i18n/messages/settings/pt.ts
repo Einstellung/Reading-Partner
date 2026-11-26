@@ -93,10 +93,10 @@ export default {
   "features.companionShowHint":
     "{name} fica no canto de todas as telas, inclusive no leitor. Desativado, o canto fica vazio; o botão na barra lateral, na tela inicial do celular e no menu Mais do leitor traz {name} de volta. A escolha fica neste dispositivo.",
   "features.companionName": "Nome do companheiro",
-  "features.briefing": "Intel",
-  "features.collect": "Coletar das suas fontes neste computador",
+  "features.briefing": "Trabalho em segundo plano",
+  "features.collect": "Fazer o trabalho em segundo plano neste computador",
   "features.collectHint":
-    "Cada fonte é verificada no seu próprio horário, e as buscas por tema rodam aqui durante a noite. Desativado, esta máquina para de coletar por completo e outro coletor, se você tiver, assume.",
+    "Este computador organiza sua memória durante a noite e resolve conflitos de sincronização. Desativado, outro computador seu assume, se você tiver.",
   "features.thisComputer": "Este computador",
   "features.role": "Esta máquina é um",
   "features.roleCollector": "Coletor — lê as fontes aqui",
