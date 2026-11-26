@@ -36,15 +36,24 @@ worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkou
   - LAYER 表删 19 个已删目录和 `info` 行，相关注释改掉。
 - `03698f1f` 手机 nav-stack 删 `briefing`/`briefs`/`article`/`saved`/`savedArticle`，PhoneApp 不再画 SavedArticleView，`shell.savedArticle.backLabel` 删。栈只在内存里，没有要迁移的。
 
-### 还剩（第 5 项残留，没做）
+## 第七棒（2026-11-25）
 
-- `companion/issue-context.ts` + `tests/ui/components/companion/issue-context.test.ts`、`tests/soul/door-issue.test.ts`；调用方 App、PhoneReader、use-door-chat、DoorChat、CompanionCorner。
-- App 的 `readerMode === "issue"`、`reading/issue*.ts`、`box-jump` 的 `go-to-briefing` 步骤。
-- `reading/saved/` 里只属于 Intel 的部分（LibraryScreen 和链接收藏用的 saved-articles 留着；`saved-article-tools` 还挂在 durable catalog 上，要先看谁用）。
-- `library.ts` 的 `issue` 类型保留、书架过滤（盘上旧数据读到时忽略，不写迁移）。
-- `workshop/bindery` 的 `typographicCover`/`build-article` 现在 src 里没有调用方（只剩测试），是不是 Intel 专用要看 docs/67 再定。
-- 注释和文案里的 `info/` 路径：`grep -rnE "info/" src tests scripts | grep -v docs/info/` 44 行、38 个文件；import 已是 0。
-- Experiments 开关（D 段）照旧没做。
+- `c374c504` Intel 残留：删 `companion/issue-context.ts`、`reading/issue.ts`、`reading/issue-desk.ts`（及测试、`tests/soul/door-issue.test.ts`）；App 的 `readerMode`、PhoneReader/ReaderTopBar/PhoneReaderBar 的 `mode`/`noLearn`/`study`/`extra`、`reader-tool` 的 `mouseSelectsText` 和 `rackOmits` 的 mode 参数；DoorChat 的 openedFor/quote/引文跳转，CompanionCorner 的 issue 订阅和 `goToBriefing`。`box-jump` 删 `go-to-briefing`，`origin.place === "briefing"` 的卡不画、跟随也不去任何地方。`library.ts` 加 `isIssueEntry`，桌面 `splitMaterials`、手机 `shelfMaterials`/`continueReading` 过滤掉 issue 条目（配测试）。删 `reading/ingest/keep.ts`（简报的 Keep，已无调用方）和 `workshop/bindery/cover-svg.ts`（`typographicCover` 只剩测试）；`build-article.ts` 有 src 调用方，留着。`noteOnLastLine` 搬进 `take-link-tool.ts`，门口「自带对话的 desk 项被拒」那条测试搬进 `door.test.ts`。snowflake.ts 的 MIT 声明原在 `src/info/rank/third-party-licenses.txt`（随 info 删了），恢复成 `src/reading/ingest/x/third-party-licenses.txt`。注释旧路径清完，`docs/info/671`、`docs/info/73` 改 `docs/meals/…`。
+- `d06a3bb0` Experiments：删 `intel` 条目、`parent`/`childrenOf`/`isEffective`/`experimentSwitch`/`useExperimentSwitch`、`experiments.intel.*`/`needsParent`（9 种语言）；`ExperimentGates` 去掉 `intel`。迁移 `migrateExperiments`（registry.ts，纯函数配单测）：map 里有 `intel` 键时 meals = `meals && intel`、删 intel 键；没有 intel 键视为已迁移（旧面板在 Intel 关时不让开 Meals）。`main.tsx` 在 `initDeviceSettings` 之后调 `migrateStoredExperiments()` 写回一次。
+- 两个 commit 都是 7924/7925 pass、1 skip、0 fail，typecheck RC=0。
+
+### 还剩
+
+- 没在 xvfb 上跑真 app 截图（Experiments 页 Meals 独立开关；开着时侧栏/手机首页有三餐入口、能进三餐首页；关着时入口消失）。下一棒先做这个，照 `docs/platform/` 和坑里 headless 验证的做法，绝不开可见窗口。
+- 发现但没动的 Intel 残留：
+  - `soul/voice/live/door-material.ts` + `door-call.ts` 的 brief material/`doorBriefKickoff`、`reading/turn/door-think.ts` 里把简报摆上 desk 的部分：现在 use-voice-call 不传 material，应已是死代码。
+  - `epub/paged` 的 `mouseSelects`（`BookPane`/`EpubReaderPane`/`mark-layer.ts`）只为简报开过，现在恒为 false。
+  - Settings › Features 里 collector 才见的「Intel」段（`features.briefing`、`backgroundCollect`、`features.collect*`）。
+  - `memory/dream/live.ts` 的 `runDreamIfDue` 原唯一调用方是 collector 的每日 tick（随 Intel 删）：dream 现在是否还有人触发要查（`memory/dream/gate.ts` 注释说有三个入口）。
+  - `i18n/messages/sources/*` 里 accounts、add-source 卡、tasking 的键已无读者。
+  - `saved-articles.ts` 的 `saveArticle` 只剩测试在用（写入路径原是简报 Keep）；库和读取、LibraryScreen、book chat 的 saved-article 工具都还在用，没动。
+  - 原清单里其余项照旧：`src/sources` 的 index provider、`reading/ingest/x/search-page.ts`、soul/memory/legion 里只给 Intel 的代码、`palace/kinds.ts` 的 `info-thread` 行、`scripts/x-search-probe.ts`/`x-browse-host.ts`、`ai/model-tier` 的 `briefing`/`briefing-screen` kind。
+- `grep -rn "src/info\|components/info\|info/sources" src tests scripts` 已为空；`grep -rnE "info/" src tests scripts | grep -v docs/info/` 只剩 `tests/soul/bell.test.ts:443` 一个夹具字符串。
 
 ## 第五棒（2026-11-25）：停在 `HANDOFF-remove-info-tools/step5/`，取代下面 step4 那份
 
