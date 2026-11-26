@@ -12,7 +12,9 @@ import { join } from "node:path";
 import type { TurnLogLine } from "../../../src/legion/durable/turn-log-sink";
 import { storeThreadFiles } from "../../../src/legion/durable/thread-files";
 import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
-import { infoAddress, infoPlace, mealsPlace, type InfoOrigin, type MealsOrigin } from "../../../src/info/briefer/info-durable";
+import { infoPlace, type InfoOrigin } from "../../../src/info/briefer/info-durable";
+import { mealsPlace, type MealsOrigin } from "../../../src/meals/conversation/durable";
+import { addressOf } from "./support/info-file";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fileThreadStore, slowFauxModels } from "../../reading/turn/support/file-threads";
 import { INFO_ANSWER, INFO_LINE, KILL_ORIGINS, infoFileMessages, seedInfoFile } from "./support/info-file";
@@ -81,7 +83,7 @@ for (const place of ["info", "meals"] as const) {
     expect(cards).toEqual([{ origin, text: half }]);
     expect(
       log.map((line) => [line.event, (line as { reason?: string }).reason, (line as { conversation?: string }).conversation]),
-    ).toEqual([["end", "aborted", infoAddress(origin).threadId]]);
+    ).toEqual([["end", "aborted", addressOf(origin).threadId]]);
     await durable.runtime.close(ctx);
   }, 30_000);
 }

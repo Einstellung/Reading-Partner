@@ -19,7 +19,7 @@ const { act, cleanup, fireEvent, render } = await useDom();
 const { BatchCookCard } = await import("../../../../src/ui/components/meals/MealsBatchCook");
 const { MealsHome } = await import("../../../../src/ui/components/meals/MealsPage");
 const { MealsPrep } = await import("../../../../src/ui/components/meals/MealsPrep");
-const { leaveForAppliedPlan } = await import("../../../../src/ui/components/info/use-info-call");
+const { leaveForAppliedPlan } = await import("../../../../src/ui/components/meals/host");
 
 let before: Locale;
 beforeEach(() => {

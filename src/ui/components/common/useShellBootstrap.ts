@@ -47,6 +47,9 @@ import { registerMealsDesk } from "../../../meals/desk";
 import "../../../meals/plan/merge";
 import "../../../meals/draft-store";
 import { registerSecretaryRole } from "../../../info/briefer/role";
+import { registerMealsRole } from "../../../meals/conversation/role";
+import { registerMealsDelivery } from "../../../meals/conversation/deliver";
+import { registerMealsBell } from "../../../reading/turn/meals-bell";
 import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
 import { registerReadingDistillSources } from "../../../reading/distill/source";
 import { registerReadingDesk } from "../../../reading/desk";
@@ -68,7 +71,7 @@ import { registerProseAdjudicateWorker } from "../../../memory/adjudicate/live";
 import { amICollecting, noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
 import { registerTopicSearchRuns } from "../../../info/topic-search/runs-live";
 import { issueRunClosed, liveIssueExpiryMarker } from "../../../info/issue/live";
-import { registerBriefingDelivery, registerMealsDelivery } from "../../../info/briefer/deliver";
+import { registerBriefingDelivery } from "../../../info/briefer/deliver";
 import { deleteBook, deleteIfUnreferenced } from "../../../reading/delete/delete-book";
 import { retireReplacedBook } from "../../../reading/delete/retire-book";
 import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
@@ -277,6 +280,7 @@ export function bootDomains(): void {
   // Their bells now run on the durable runtime; the openers above stay for the
   // old soul sessions recover.ts finishes.
   registerInfoDelivery();
+  registerMealsBell();
   // The day's collection, as a run (docs/55 step 12). Registered on every
   // device: which one collects is the election's answer, and a device with no
   // worker for the kind could not win it.
@@ -309,6 +313,7 @@ export function bootDomains(): void {
   registerInfoDesk();
   registerMealsDesk();
   registerSecretaryRole();
+  registerMealsRole();
   // The nightly reclamation (docs/80), on every device for its own disk. A
   // domain's garbage marker is registered in this function with the rest of its
   // startup; the generic retention rules need nothing registered.

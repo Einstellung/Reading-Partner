@@ -1,5 +1,4 @@
-// A bell answered in a day's briefing conversation or in the meals
-// conversation (docs/68, docs/73, docs/soul/87), on the device's durable
+// A bell answered in a day's briefing conversation (docs/68, docs/soul/87), on the device's durable
 // runtime like the reader's own turns there (info/briefer/info-durable.ts). The
 // bell is the turn's input over the conversation as its file holds it; the
 // secretary's desk is laid the way it is for a turn resumed after a restart
@@ -29,12 +28,10 @@ import {
   type TurnDelivery,
   type TurnDeliveryOutcome,
 } from "../../soul";
-import { registerThinkDesk, type ThinkDeskLaid } from "../../soul/think";
+import { registerThinkDesk } from "../../soul/think";
 import type { AgentTool } from "../../legion/durable/contract";
 import { briefingThreadId } from "../../info/briefer/anchors";
-import { layBriefingTurn, layMealsTurn } from "../../info/briefer/deliver";
-import { buildLiveMealsReadTools } from "../../meals/read-live";
-import { MEALS_READ_PROMPT } from "../../meals/read-tools";
+import { layBriefingTurn } from "../../info/briefer/deliver";
 import {
   infoAddress,
   infoAssemblies,
@@ -42,7 +39,6 @@ import {
   infoWatchingNow,
   type AssembledInfoTurn,
   type InfoOrigin,
-  type MealsOrigin,
 } from "../../info/briefer/info-durable";
 import { readingDurable } from "./durable-runtime";
 import { appPlaceBellDeps, deliverPlaceBell, type PlaceBellDeps } from "./place-bell";
@@ -52,7 +48,7 @@ export interface InfoBellDeps extends PlaceBellDeps {
   openThread(key: string, threadId: string): Promise<void>;
   /** The secretary's desk over `messages`, which end with the bell. */
   lay(
-    origin: InfoOrigin | MealsOrigin,
+    origin: InfoOrigin,
     input: { settings: Settings; messages: DeskMessage[]; signal: AbortSignal; origin: BoxOrigin },
   ): Promise<AssembledTurn | null>;
   /** Where the place finds the history and the desk while the turn runs. */
@@ -67,20 +63,19 @@ function appInfoBellDeps(): InfoBellDeps {
       await loadThreads(key).catch(() => ({}));
       if (!getThread(key, threadId)) createThread(key, "info", threadId);
     },
-    lay: (origin, input) => (origin.place === "meals" ? layMealsTurn(input) : layBriefingTurn(origin.date, input)),
+    lay: (origin, input) => layBriefingTurn(origin.date, input),
     assembled: infoAssemblies,
     watching: infoWatchingNow,
   };
 }
 
-/** The conversation a bell asked about in a briefing or the meals conversation is answered in. */
-function conversationOf(origin: BoxOrigin): InfoOrigin | MealsOrigin | null {
+/** The conversation a bell asked about in a briefing is answered in. */
+function conversationOf(origin: BoxOrigin): InfoOrigin | null {
   if (origin.place === "briefing") return { place: "info", date: origin.date, threadId: briefingThreadId(origin.date) };
-  if (origin.place === "meals") return { place: "meals" };
   return null;
 }
 
-/** Answer a bell in the day's briefing conversation or the meals conversation. */
+/** Answer a bell in the day's briefing conversation. */
 export async function deliverInfoBell(
   input: TurnDelivery,
   deps: InfoBellDeps = appInfoBellDeps(),
@@ -148,7 +143,7 @@ const appInfoReplyDeps: InfoReplyDeps = {
 
 /**
  * Append a verbatim run's output (docs/companion/136 回来) to the day's
- * briefing conversation or the meals conversation, as the soul's reply,
+ * briefing conversation, as the soul's reply,
  * stamped with the run it came back from.
  */
 export async function appendInfoReply(input: ReplyAppend, deps: InfoReplyDeps = appInfoReplyDeps): Promise<boolean> {
@@ -182,25 +177,14 @@ async function briefingThinkDesk(origin: BoxOrigin): Promise<AgentTool[]> {
   return turn?.tools ?? [];
 }
 
-/** A think run delivered to the meals conversation reads the meals data, and nothing else. */
-async function mealsThinkDesk(): Promise<ThinkDeskLaid> {
-  return { tools: buildLiveMealsReadTools(), prompt: MEALS_READ_PROMPT };
-}
-
-/** Say that a run delegated from a briefing or the meals conversation is answered there. The undo is for tests. */
+/** Say that a run delegated from a briefing is answered there. The undo is for tests. */
 export function registerInfoDelivery(): () => void {
   const briefing = registerTurnDelivery("briefing", (input) => deliverInfoBell(input));
-  const meals = registerTurnDelivery("meals", (input) => deliverInfoBell(input));
   const briefingReply = registerReplyAppend("briefing", (input) => appendInfoReply(input));
-  const mealsReply = registerReplyAppend("meals", (input) => appendInfoReply(input));
   const thinkDesk = registerThinkDesk("briefing", briefingThinkDesk);
-  const mealsThink = registerThinkDesk("meals", mealsThinkDesk);
   return () => {
     briefing();
-    meals();
     briefingReply();
-    mealsReply();
     thinkDesk();
-    mealsThink();
   };
 }

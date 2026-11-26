@@ -9,7 +9,9 @@ import { TURN_SECTION } from "../../../src/legion/durable/device";
 import { storeThreadFiles } from "../../../src/legion/durable/thread-files";
 import { startTurn } from "../../../src/legion/durable/turn";
 import { openReadingDurable } from "../../../src/reading/turn/durable-runtime";
-import { infoPlace, infoThreadKey, mealsPlace } from "../../../src/info/briefer/info-durable";
+import { infoPlace } from "../../../src/info/briefer/info-durable";
+import { mealsPlace } from "../../../src/meals/conversation/durable";
+import { keyOf } from "./support/info-file";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fileThreadStore, slowFauxModels } from "../../reading/turn/support/file-threads";
 import { INFO_ANSWER, INFO_LINE, KILL_ORIGINS } from "./support/info-file";
@@ -30,7 +32,7 @@ const durable = await openReadingDurable({
 const turn = await startTurn(
   durable.runtime,
   {
-    key: infoThreadKey(origin),
+    key: keyOf(origin),
     origin,
     content: INFO_LINE.text,
     sections: { [TURN_SECTION]: "You are the secretary." },

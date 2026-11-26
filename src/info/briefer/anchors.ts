@@ -9,8 +9,6 @@
 // decidable from its inputs.
 
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND, type FileArticle } from "./desk";
-import type { MealsState } from "../../meals/plan/types";
-import { MEALS_THREAD_ID, mealsPosition } from "../../meals/conversation/anchor";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
 import { briefingOverview } from "../boxes/briefing";
@@ -202,26 +200,6 @@ export function onboardingAnchor(aiLanguage?: AiLanguage): InfoCallAnchor {
     desk: [{ kind: INFO_BRIEFING_KIND, ref: { onboarding: true, aiLanguage } }],
     position: { title: t("info.anchor.subscriptions"), line: t("info.anchor.setUpSources") },
   };
-}
-
-// --- meals ------------------------------------------------------------------
-//
-// The meals conversation's anchor is the meals line's own (meals/conversation).
-
-export { MEALS_BOOK_ID, MEALS_THREAD_ID, mealsAnchor, mealsKickoff } from "../../meals/conversation/anchor";
-
-/**
- * The corner position card as it stands now. It follows what the conversation
- * is about (docs/03), and an anchor is built once, when Ask is pressed; the
- * meals conversation changes the plan it is about, so its card is drawn from
- * the meals as last read rather than from the anchor's copy.
- */
-export function livePosition(
-  anchor: InfoCallAnchor,
-  meals: MealsState | null,
-): InfoCallAnchor["position"] {
-  if (anchor.threadId === MEALS_THREAD_ID && meals) return mealsPosition(meals);
-  return anchor.position;
 }
 
 // The day's briefing on the desk. One place because two anchors put it there —

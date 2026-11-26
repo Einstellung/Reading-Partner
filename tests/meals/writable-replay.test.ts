@@ -25,8 +25,6 @@ import { checkDraft } from "../../src/meals/planner/checks";
 import { parseDraft } from "../../src/meals/planner/draft";
 import { draftContext } from "../../src/meals/planner/redraft";
 import { prepStepsRequest } from "../../src/meals/recipe/prep-steps";
-import { buildTaskingAgent } from "../../src/info/tasking/tasking-agent";
-import { runSubagent } from "../../src/legion/subagent/run";
 import {
   mealsDishesEntry,
   mealsDraftEntry,
@@ -307,28 +305,12 @@ return data;`,
   });
 });
 
-describe("the tasking worker", () => {
-  test("edit_data as runSubagent mounts it lists the three meals kinds", async () => {
+describe("the meals writables", () => {
+  test("registering them lists the three meals kinds", () => {
     const s = setup("2026-10-31", { [MEALS_FILE]: meals1031 });
     const off = registerMealsWritables({ readText: async (p) => s.files.get(p) ?? null, ports: s.ports, dishIo: guarded(s.files) });
     try {
       expect(registeredWritables().map((e) => e.kind).sort()).toEqual(["info-meals", "info-meals-dishes", "info-meals-draft"]);
-      let tools: readonly AgentTool[] = [];
-      await runSubagent(
-        { definition: buildTaskingAgent({}, () => []), task: "change the pots", edit: { initiator: { runId: "run-1" } } } as never,
-        {
-          run: async (req: { tools: readonly AgentTool[] }) => {
-            tools = req.tools;
-            return { kind: "done", text: "done" };
-          },
-        } as never,
-      ).catch(() => {});
-      const edit = tools.find((t) => t.name === "edit_data");
-      expect(edit).toBeDefined();
-      const refused = await Promise.resolve(edit!.execute({ kind: "nope", code: "return 1;", why: "x" })).catch((e: Error) => e.message);
-      expect(refused).toContain("info-meals:");
-      expect(refused).toContain("info-meals-draft:");
-      expect(refused).toContain("info-meals-dishes:");
     } finally {
       off();
     }

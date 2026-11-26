@@ -1,5 +1,4 @@
-// Giving a run's answer back in the briefing it was asked about (docs/68), or
-// in the meals conversation (at the end of this file).
+// Giving a run's answer back in the briefing it was asked about (docs/68).
 //
 // The soul rings the bell and this lays the secretary's desk for that day: the
 // same day's briefing, the same thread the reader asked in, the same role. What
@@ -26,17 +25,9 @@ import { loadPublishedBriefing } from "../boxes/publish";
 import type { Briefing } from "../boxes/types";
 import { loadSources } from "../sources/source-store";
 import { hasTopicSearches } from "../topic-search/store";
-import { todayLocal } from "../collect/store";
-import { INFO_MEALS_KIND } from "../../meals/desk";
-import { buildLiveMealsTools } from "../../meals/live";
-import { loadMeals } from "../../meals/plan/store";
-import type { MealsState } from "../../meals/plan/types";
 import {
-  MEALS_BOOK_ID,
-  MEALS_THREAD_ID,
   briefingAnchor,
   briefingThreadId,
-  mealsAnchor,
   noBriefingAnchor,
 } from "./anchors";
 import { infoBookId } from "./call";
@@ -184,93 +175,4 @@ export async function openBriefingDelivery(
 /** Say that a run delegated from a briefing is answered in that briefing. The undo is for tests. */
 export function registerBriefingDelivery(deps: BriefingDeliveryDeps = {}): () => void {
   return registerDelivery("briefing", (input) => openBriefingDelivery(input, deps));
-}
-
-export interface MealsDeliveryDeps {
-  /** The household and the week. Off this device's own file unless a test hands one in. */
-  state?: () => Promise<MealsState>;
-  /** The host's local date. */
-  today?: () => string;
-  /** The meals tools for this turn. None of them draw, because nothing is watching. */
-  tools?: () => Promise<AgentTool[]>;
-}
-
-// The meals set as a turn nobody is watching can hold it: a proposal's card has
-// no screen to go to, and no screen is there to be told to reload.
-const liveMealsTools = async (): Promise<AgentTool[]> =>
-  buildLiveMealsTools({
-    threadId: MEALS_THREAD_ID,
-    onMealsCard: () => {},
-    today: () => todayLocal(),
-    changed: () => {},
-  });
-
-/**
- * The secretary's turn over the meals desk, with the tools a turn nobody is
- * watching can hold: a bell's answer, and the desk a meals turn resumed after a
- * restart calls its tools through (info-durable.ts).
- */
-export async function layMealsTurn(
-  input: { settings: Settings; messages: DeskMessage[]; signal?: AbortSignal; origin?: BoxOrigin },
-  deps: MealsDeliveryDeps = {},
-): Promise<AssembledTurn | null> {
-  const state = await (deps.state ?? (() => loadMeals()))();
-  const anchor = mealsAnchor(state, (deps.today ?? todayLocal)());
-  const desk = await openDesk(bindItemTools(anchor.desk, INFO_MEALS_KIND, deps.tools ?? liveMealsTools), {
-    settings: input.settings,
-    thread: { key: MEALS_BOOK_ID, id: MEALS_THREAD_ID },
-    ...(input.signal ? { signal: input.signal } : {}),
-  });
-  return assembleTurn({
-    desk,
-    messages: input.messages,
-    role: SECRETARY_ROLE_ID,
-    ...(input.origin ? { origin: input.origin } : {}),
-  });
-}
-
-/**
- * Assemble the turn that answers a bell in the meals conversation: the one
- * standing thread, on the meals desk with its tools. Null when it could not be
- * assembled — the bell then falls back to the door.
- */
-export async function openMealsDelivery(
-  input: DeliveryInput,
-  deps: MealsDeliveryDeps = {},
-): Promise<Delivery | null> {
-  if (input.origin.place !== "meals") return null;
-  const key = MEALS_BOOK_ID;
-  const threadId = MEALS_THREAD_ID;
-  await loadThreads(key).catch(() => ({}));
-  const existing = getThread(key, threadId);
-  const history: DeskMessage[] = (existing?.messages ?? []).map((m) => ({
-    role: m.role,
-    text: m.text,
-  }));
-  if (!existing) createThread(key, "info", threadId);
-
-  const turn = await layMealsTurn(
-    {
-      settings: input.settings,
-      messages: [...history, { role: "user", text: input.bell }],
-      ...(input.signal ? { signal: input.signal } : {}),
-    },
-    deps,
-  );
-  if (!turn) return null;
-  return {
-    key,
-    threadId,
-    turn: {
-      systemPrompt: turn.systemPrompt,
-      tools: turn.tools,
-      messages: turn.messages,
-      refusal: turn.refusal,
-    },
-  };
-}
-
-/** Say that a run delegated from the meals conversation is answered there. The undo is for tests. */
-export function registerMealsDelivery(deps: MealsDeliveryDeps = {}): () => void {
-  return registerDelivery("meals", (input) => openMealsDelivery(input, deps));
 }

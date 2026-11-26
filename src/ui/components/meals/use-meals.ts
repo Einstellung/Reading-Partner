@@ -7,7 +7,7 @@
 // on a file, and the on-disk list is re-read whenever the AI applies a plan.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { todayLocal } from "../../../info/collect/store";
+import { todayLocal } from "../../../meals/today";
 import { liveMealsPorts } from "../../../meals/live";
 import { setShoppingChecked } from "../../../meals/plan/shopping";
 import { markShoppingTripDone } from "../../../meals/tools";

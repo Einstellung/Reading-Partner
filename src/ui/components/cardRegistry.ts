@@ -14,6 +14,7 @@
 import { ASIDE_CARD_REGISTRY } from "./reader/AsideCard";
 import type { CardRegistry } from "./chat/chatParts";
 import { INFO_CARD_REGISTRY } from "./info/InfoCards";
+import { MEALS_CARD_REGISTRY } from "./meals/MealsCards";
 import { BOX_CARD_REGISTRY } from "./companion/BoxCard";
 import { COMPANION_CARD_REGISTRY } from "./companion/IntakeCard";
 import { READING_CARD_REGISTRY } from "./reader/RetellCard";
@@ -23,6 +24,7 @@ import { HOUSEKEEPER_CARD_REGISTRY } from "./chat/HousekeeperConfirmCard";
 
 export const CARD_REGISTRY: CardRegistry = {
   ...INFO_CARD_REGISTRY,
+  ...MEALS_CARD_REGISTRY,
   ...READING_CARD_REGISTRY,
   ...ASIDE_CARD_REGISTRY,
   ...COMPANION_CARD_REGISTRY,

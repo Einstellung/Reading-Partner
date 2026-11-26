@@ -12,12 +12,18 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BoxOrigin } from "../../../src/box";
-import { infoPlace, infoThreadKey, mealsPlace, type AssembledInfoTurn, type InfoOrigin, type MealsOrigin } from "../../../src/info/briefer/info-durable";
+import { infoPlace, infoThreadKey, type AssembledInfoTurn, type InfoOrigin } from "../../../src/info/briefer/info-durable";
 import { briefingThreadId } from "../../../src/info/briefer/anchors";
 import type { Settings } from "../../../src/platform/app/settings";
 import type { CallRow } from "../../../src/reading/turn/call-state";
 import { openReadingDurable, type ReadingDurable } from "../../../src/reading/turn/durable-runtime";
 import { deliverInfoBell, type InfoBellDeps } from "../../../src/reading/turn/info-bell";
+import { deliverMealsBell, type MealsBellDeps } from "../../../src/reading/turn/meals-bell";
+import { MEALS_CONVERSATION_KEY, mealsPlace, type MealsOrigin } from "../../../src/meals/conversation/durable";
+
+const keyOf = (o: InfoOrigin | MealsOrigin) => (o.place === "meals" ? MEALS_CONVERSATION_KEY : infoThreadKey(o));
+// The meals bell over the same rig: its desk is laid by the same stub.
+const mealsDeps = (d: InfoBellDeps): MealsBellDeps => ({ ...d, lay: (input) => d.lay({ place: "meals" } as never, input) });
 import { createPlaceSession, openPlaceSession, registerOpenSession, withPlaceTurnRows } from "../../../src/reading/turn/place-session";
 import type { AssembledTurn, TurnDelivery } from "../../../src/soul";
 import { testHost } from "../../legion/durable/support/runtime";
@@ -94,7 +100,7 @@ function bell(id: string, origin: BoxOrigin = { place: "briefing", date: DATE },
 }
 
 function openChat(durable: ReadingDurable, assembled: Map<string, AssembledInfoTurn>, origin: InfoOrigin | MealsOrigin = BRIEFING) {
-  const key = infoThreadKey(origin);
+  const key = keyOf(origin);
   let screen: CallRow[] = [{ role: "ai", text: "Here is today's briefing.", ts: 500 }, LINE];
   let streamed!: () => void;
   const streaming = new Promise<void>((resolve) => (streamed = resolve));
@@ -161,7 +167,7 @@ test("a briefing bell with nobody looking runs headless over the day's thread, l
 
 test("a meals bell lands in the standing meals conversation", async () => {
   const { durable, file, deps, laid, opened } = await rig(["Tuesday's shopping is set."]);
-  const outcome = await deliverInfoBell(bell("m1", { place: "meals" }), deps);
+  const outcome = await deliverMealsBell(bell("m1", { place: "meals" }), mealsDeps(deps));
   expect(outcome).toEqual({ status: "answered", reply: "Tuesday's shopping is set.", watching: false, address: expect.any(Object) });
   expect(opened).toEqual(["info-meals/meals"]);
   expect(laid.map((l) => l.origin)).toEqual([MEALS]);
@@ -196,7 +202,7 @@ test("a bell for the meals conversation does not wait on a busy briefing convers
   chat.session.ask();
   await chat.streaming;
   let waited = 0;
-  const outcome = await deliverInfoBell(bell("m2", { place: "meals" }, () => (waited += 1)), deps);
+  const outcome = await deliverMealsBell(bell("m2", { place: "meals" }, () => (waited += 1)), mealsDeps(deps));
   expect(outcome).toMatchObject({ status: "answered" });
   expect(waited).toBe(0);
   // The reader's briefing turn is still streaming: the meals bell went past it.
@@ -211,7 +217,7 @@ test("a bell for the meals conversation does not wait on a busy briefing convers
 test("a bell's turn in the open meals conversation streams there and can be stopped, keeping the half sentence", async () => {
   const { durable, file, assembled, deps } = await rig([LONG], 60);
   const chat = openChat(durable, assembled, MEALS);
-  const outcome = deliverInfoBell(bell("m3", { place: "meals" }), deps);
+  const outcome = deliverMealsBell(bell("m3", { place: "meals" }), mealsDeps(deps));
   await chat.streaming;
   expect(chat.session.running()).toBe(true);
   chat.session.stop();
@@ -221,7 +227,7 @@ test("a bell's turn in the open meals conversation streams there and can be stop
   expect(half[0]!.text.length).toBeGreaterThan(30);
   expect(half[0]!.text.length).toBeLessThan(LONG.length);
   chat.close();
-  expect(openPlaceSession(infoThreadKey(MEALS))).toBeUndefined();
+  expect(openPlaceSession(MEALS_CONVERSATION_KEY)).toBeUndefined();
   await durable.runtime.close(ctx);
 });
 

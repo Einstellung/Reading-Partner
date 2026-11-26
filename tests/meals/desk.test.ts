@@ -4,7 +4,7 @@
 
 import { expect, test } from "bun:test";
 import { bindItemRef, openDesk, type DeskEnv } from "../../src/desk";
-import { mealsAnchor } from "../../src/info/briefer/anchors";
+import { mealsAnchor } from "../../src/meals/conversation/anchor";
 import { INFO_MEALS_KIND, registerMealsDesk } from "../../src/meals/desk";
 import { DEFAULT_SETTINGS } from "../../src/platform/app/settings";
 import { MON, state } from "./fixtures/week";

@@ -6,43 +6,21 @@
 // Rendering and event binding only. The briefing view, the open article and the
 // conversation that is up all live in use-info-home.ts.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback } from "react";
 import { savedArticleId } from "../../../reading/saved/saved-articles";
 import { reachableScreen, showsLaunchCard, type HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
+import type { MealKey } from "../../../meals/plan/types";
+import type { EntryTileView } from "../../../meals/screen/batch-cook";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
-import { livePosition, mealsKickoff } from "../../../info/briefer/anchors";
-import { EMPTY_MEALS, type MealKey } from "../../../meals/plan/types";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
-import { MealsHome } from "../meals/MealsPage";
-import { MealsDay } from "../meals/MealsDay";
-import { MealsRecipe } from "../meals/MealsRecipe";
-import { MealsShopping } from "../meals/MealsShopping";
-import { MealsMethod } from "../meals/MealsMethod";
-import { MealsOnboarding } from "../meals/MealsOnboarding";
-import { MealsPrep } from "../meals/MealsPrep";
-import { appliedAction, batchCookEntry, entryTileView, type EntryAction, type EntryTileView } from "../../../meals/screen/batch-cook";
-import { markPrepDone, saveProfile } from "../../../meals/apply";
-import { planNote } from "../../../meals/screen/plan-note";
-import { liveMealsPorts } from "../../../meals/live";
-import { loadMeals } from "../../../meals/plan/store";
-import type { Profile } from "../../../meals/nutrition/targets";
-import { useMeals } from "../meals/use-meals";
-import { usePrepSteps } from "../meals/use-prep-steps";
-import { writtenMinutes } from "../../../meals/screen/prep-timeline";
-import { recordPrepSessionEvent, startPrepSession, type PrepSteps } from "../../../meals/prep-session";
-import { putMealsPrepCard } from "../../../meals/conversation/call";
-import { runFor } from "../../../meals/timeline/view";
-import { usePrepVoice } from "../meals/use-prep-voice";
-import { kitchenFor } from "../../../meals/timeline/schedule";
-import type { MealsFocus } from "../../../meals/tools";
-import type { StepEvent } from "../../../meals/timeline/run";
-import { weekdayName } from "../../../meals/screen/view";
+import { useMealsHost } from "../meals/use-meals-host";
+import { MealsHost } from "../meals/MealsHost";
 import { useInfoHome } from "./use-info-home";
 import { useRegisterVoiceContext } from "../companion/voice-context";
 import { noLabsOpen } from "./no-labs";
@@ -52,20 +30,6 @@ import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 // The screen union lives in base/shell-nav.ts, which is what maps it to the
 // shell's sidebar; re-exported here so its importers are unchanged.
 export type { HomeScreen } from "../base/shell-nav";
-
-// The three screens of the meals line. They share one hook, one thread and one
-// sidebar item, so they are drawn by one branch.
-function isMealsScreen(screen: HomeScreen | null): boolean {
-  return (
-    screen === "meals" ||
-    screen === "meals-shopping" ||
-    screen === "meals-day" ||
-    screen === "meals-recipe" ||
-    screen === "meals-prep" ||
-    screen === "meals-method" ||
-    screen === "meals-onboarding"
-  );
-}
 
 // What a shell needs to know to put its own affordance around a screen that has
 // something to talk about: the chat the screen's Ask button opens, in the
@@ -204,23 +168,20 @@ export default function InfoHome(props: {
     (next: HomeScreen) => navigate(reachableScreen(next, oldBriefing, { meals: mealsShown })),
     [navigate, oldBriefing, mealsShown],
   );
-  const meals = useMeals(props.mealsEnabled === true);
-  // The batch cook's written steps: read for every place that shows its
-  // minutes, and written on the spot when the prep page opens before the sweep
-  // got to them (docs/671 菜品图).
-  const prepSteps = usePrepSteps(meals.state, meals.today, screen === "meals-prep");
-  const prepWritten = writtenMinutes(prepSteps.status, meals.state?.charter?.profile);
-  // The day the desktop shell has open. It has no navigation stack to hold it,
-  // and the phone's entry overrides this the moment it supplies one.
-  const [localMealsDay, setLocalMealsDay] = useState<string | null>(null);
-  const [localMealsRecipe, setLocalMealsRecipe] = useState<MealKey | null>(null);
-  // Where the desktop shell opened Method & sources from, to go back to it.
-  const [methodFrom, setMethodFrom] = useState<HomeScreen>("meals");
-  const [localMealsPrep, setLocalMealsPrep] = useState<string | null>(null);
   const info = useInfoHome({
     role: props.role,
     onNavigate,
     onTopicsChanged: props.onTopicsChanged,
+    onOverlayChange: props.onOverlayChange,
+  });
+
+  // The meals line's state, held here rather than by its screens so the prep
+  // run, its call and the conversation outlive the screen being shown.
+  const mealsHost = useMealsHost({
+    enabled: props.mealsEnabled === true,
+    screen,
+    onNavigate,
+    onOpenMealsPrep: props.onOpenMealsPrep,
     onOverlayChange: props.onOverlayChange,
   });
 
@@ -230,56 +191,6 @@ export default function InfoHome(props: {
   // prop. Not while the text call is up: that is the same conversation in the
   // other medium, and two of them on one screen is two microphones' worth of
   // the same day.
-  // The batch cook's ways in (docs/671 备餐页): its page, and the planning chat
-  // over the Meals page, from the page's card, the home tile and Re-plan alike.
-  const openMealsPrep = (session: string) => {
-    setLocalMealsPrep(session);
-    if (props.onOpenMealsPrep) props.onOpenMealsPrep(session);
-    else onNavigate("meals-prep");
-  };
-  const planMeals = () => {
-    if (screen !== "meals") onNavigate("meals");
-    info.askMeals(meals.state ?? EMPTY_MEALS, meals.today, { focus: { kind: "week" }, kickoff: mealsKickoff() });
-  };
-  const runMealsAction = (action: EntryAction) => {
-    if (action.kind === "plan") planMeals();
-    else if (action.kind === "prep") openMealsPrep(action.session);
-    else onNavigate("meals");
-  };
-  const mealsTile = props.mealsEnabled
-    ? entryTileView(batchCookEntry(meals.state, meals.today, new Date().getHours(), prepWritten), meals.today)
-    : null;
-  const prepPorts = () => liveMealsPorts({ today: () => meals.today, changed: meals.reload });
-  // The run, its card in the meals conversation and its voice call
-  // (docs/671 时间线与语音), held here so they outlive the prep page.
-  const prepProfile = meals.state?.charter?.profile;
-  const prepReady = prepSteps.status.kind === "ready" ? prepSteps.status : null;
-  const prepTimeline: PrepSteps | null = useMemo(
-    () =>
-      prepReady
-        ? { key: prepReady.key, steps: prepReady.steps, kitchen: kitchenFor(prepProfile), boxes: prepProfile?.boxes !== false }
-        : null,
-    [prepReady, prepProfile],
-  );
-  const prepPlanner = meals.state?.plan?.planner;
-  const prepVoice = usePrepVoice({
-    steps: prepTimeline,
-    run: prepTimeline ? runFor(prepPlanner?.prepRun, prepTimeline.key) : null,
-    done: typeof prepPlanner?.preppedAt === "number",
-    ports: prepPorts,
-  });
-  const prepSession = () => ({ ports: prepPorts(), putCard: putMealsPrepCard });
-  const startMealsPrep = async () => {
-    if (!prepTimeline) return false;
-    // Asked for inside the tap, before anything is awaited: the call's audio wants the gesture.
-    const voice = prepVoice.request();
-    return (await startPrepSession(prepSession(), prepTimeline, () => voice)).kind === "started";
-  };
-  const recordMealsPrep = (event: StepEvent) => {
-    if (!prepTimeline) return;
-    void recordPrepSessionEvent(prepSession(), prepTimeline, event).catch(() => {});
-  };
-
   useRegisterVoiceContext(
     screen === "briefing" && info.snap?.briefing && !info.infoCall
       ? { dateKey: info.snap.briefing.date, briefing: info.snap.briefing }
@@ -306,9 +217,9 @@ export default function InfoHome(props: {
               onOpenBriefing: () => onNavigate("briefing"),
               onOpenSettings: props.onOpenSettings,
               onStartSubscribing: info.openOnboarding,
-              mealsTile,
+              mealsTile: mealsHost.tile,
               // Tapped before info-meals.json is read: the Meals page, which holds until it is.
-              onMealsTile: () => runMealsAction(mealsTile?.action ?? { kind: "meals" }),
+              onMealsTile: () => mealsHost.runAction(mealsHost.tile?.action ?? { kind: "meals" }),
             })
           ) : (
             <Vestibule
@@ -369,177 +280,21 @@ export default function InfoHome(props: {
         );
       })()}
 
-      {isMealsScreen(screen) && props.mealsEnabled && (() => {
-        // One standing thread for all three screens; what the reader has open
-        // rides along as the focus rather than forking it (docs/73).
-        const openChat = (focus: MealsFocus, kickoff?: string) =>
-          info.askMeals(meals.state ?? EMPTY_MEALS, meals.today, {
-            focus,
-            ...(kickoff ? { kickoff } : {}),
-          });
-        const day = props.mealsDay ?? localMealsDay;
-        // The phone pushes the day onto its stack; the desktop and tablet shell
-        // has no stack, so this screen remembers the day and switches to it.
-        const openDay = (date: string) => {
-          setLocalMealsDay(date);
-          if (props.onOpenMealsDay) props.onOpenMealsDay(date);
-          else onNavigate("meals-day");
-        };
-        const back = () => onNavigate("meals");
-        const recipeMeal = props.mealsRecipe ?? localMealsRecipe;
-        const openRecipe = (meal: MealKey) => {
-          if (!day) return;
-          setLocalMealsRecipe(meal);
-          if (props.onOpenMealsRecipe) props.onOpenMealsRecipe(day, meal);
-          else onNavigate("meals-recipe");
-        };
-        const backFromRecipe = () => (props.onMealsBack ? props.onMealsBack() : onNavigate("meals-day"));
-        const backFromSide = () => (props.onMealsBack ? props.onMealsBack() : onNavigate(methodFrom));
-        const openMethod = () => {
-          setMethodFrom(screen);
-          onNavigate("meals-method");
-        };
-        // Onboarding's last button: save the answers, then ask for the week
-        // with the state as it now is, profile and all.
-        const finishOnboarding = async (profile: Profile): Promise<boolean> => {
-          const saved = await saveProfile(
-            profile,
-            liveMealsPorts({ today: () => meals.today, changed: meals.reload }),
-          );
-          if (!saved.ok) return false;
-          planNote.show(saved.check ?? null);
-          const fresh = await loadMeals().catch(() => null);
-          if (screen !== "meals") onNavigate("meals");
-          info.askMeals(fresh ?? meals.state ?? EMPTY_MEALS, meals.today, {
-            focus: { kind: "week" },
-            kickoff: mealsKickoff(),
-          });
-          return true;
-        };
-
-        let inner: React.ReactNode;
-        let ask: AskableScreen;
-        // Which screen the scroll container is showing. It keys the container,
-        // so a new screen starts at its top instead of at wherever the last
-        // one was scrolled to (they all share this one element otherwise).
-        let shown: string;
-        // The recipe is drawn over its day rather than in place of it, so the
-        // day keeps its scroll and comes back as it was left.
-        let over: React.ReactNode = null;
-        if (screen === "meals-onboarding" || (screen === "meals" && meals.state && !meals.state.charter)) {
-          const replay = screen === "meals-onboarding";
-          shown = replay ? "onboarding-replay" : "onboarding";
-          ask = { label: t("info.ask.aboutMeals"), onAsk: () => openChat({ kind: "week" }) };
-          inner = (
-            <MealsOnboarding
-              key={replay ? "replay" : "first"}
-              existing={meals.state?.charter?.profile ?? null}
-              onFinish={finishOnboarding}
-              {...(replay ? { onBack: backFromSide } : {})}
-            />
-          );
-        } else if (screen === "meals-method") {
-          shown = "method";
-          ask = { label: t("info.ask.aboutNumbers"), onAsk: () => openChat({ kind: "week" }) };
-          inner = <MealsMethod state={meals.state} onBack={backFromSide} />;
-        } else if (screen === "meals-shopping") {
-          shown = "shopping";
-          ask = { label: t("info.ask.aboutShopping"), onAsk: () => openChat({ kind: "shopping" }) };
-          inner = (
-            <MealsShopping
-              state={meals.state}
-              photos={meals.photos}
-              onBack={back}
-              onAsk={ask.onAsk}
-              onToggleItem={meals.toggleItem}
-              onDone={meals.markDone}
-            />
-          );
-        } else if ((screen === "meals-day" || screen === "meals-recipe") && day) {
-          shown = `day:${day}`;
-          if (screen === "meals-recipe" && recipeMeal) {
-            over = (
-              <div className="absolute inset-0 z-20 overflow-y-auto bg-background animate-in slide-in-from-right duration-300 motion-reduce:animate-none">
-                <MealsRecipe
-                  state={meals.state}
-                  photos={meals.photos}
-                  today={meals.today}
-                  date={day}
-                  meal={recipeMeal}
-                  onBack={backFromRecipe}
-                />
-              </div>
-            );
-          }
-          const label =
-            day === meals.today ? t("info.ask.aboutToday") : t("info.ask.aboutWeekday", { weekday: weekdayName(day) });
-          ask = { label, onAsk: () => openChat({ kind: "day", date: day }) };
-          inner = (
-            <MealsDay
-              state={meals.state}
-              photos={meals.photos}
-              today={meals.today}
-              date={day}
-              onBack={back}
-              onAsk={ask.onAsk}
-              onOpenMethod={openMethod}
-              onOpenRecipe={openRecipe}
-            />
-          );
-        } else if (screen === "meals-prep") {
-          shown = "prep";
-          ask = { label: t("meals.askPlan"), onAsk: () => openChat({ kind: "week" }) };
-          inner = (
-            <MealsPrep
-              state={meals.state}
-              photos={meals.photos}
-              today={meals.today}
-              session={props.mealsPrep ?? localMealsPrep}
-              onBack={back}
-              onAsk={ask.onAsk}
-              onDone={() => void markPrepDone(prepPorts())}
-              steps={prepSteps.status}
-              onRetrySteps={prepSteps.retry}
-              onStart={startMealsPrep}
-              onStep={recordMealsPrep}
-              voice={prepVoice.state}
-              onResumeVoice={() => void prepVoice.request()}
-              onForeground={meals.reload}
-            />
-          );
-        } else {
-          shown = "home";
-          ask = { label: t("info.ask.aboutPlan"), onAsk: () => openChat({ kind: "week" }) };
-          inner = (
-            <MealsHome
-              state={meals.state}
-              photos={meals.photos}
-              today={meals.today}
-              onPlan={planMeals}
-              onOpenPrep={openMealsPrep}
-              written={prepWritten}
-              onAsk={ask.onAsk}
-              onOpenShopping={() => onNavigate("meals-shopping")}
-              onOpenDay={openDay}
-              onOpenMethod={openMethod}
-              onReplayOnboarding={() => onNavigate("meals-onboarding")}
-            />
-          );
-        }
-        const page = (
-          <div key={shown} className="absolute inset-0 overflow-y-auto bg-background">
-            {inner}
-          </div>
-        );
-        // The same pull-down the briefing has, on all three: the phone's way
-        // into a chat is one gesture everywhere (docs/22).
-        return (
-          <>
-            {props.wrapScreen ? props.wrapScreen(ask, page) : page}
-            {over}
-          </>
-        );
-      })()}
+      <MealsHost
+        host={mealsHost}
+        screen={screen}
+        onNavigate={onNavigate}
+        enabled={props.mealsEnabled === true}
+        mealsDay={props.mealsDay}
+        onOpenMealsDay={props.onOpenMealsDay}
+        mealsRecipe={props.mealsRecipe}
+        onOpenMealsRecipe={props.onOpenMealsRecipe}
+        mealsPrep={props.mealsPrep}
+        onMealsBack={props.onMealsBack}
+        wrapScreen={props.wrapScreen}
+        pipCards={props.pipCards}
+        onTopicsChanged={() => void props.onTopicsChanged()}
+      />
 
       {screen === "article" && info.openArticleId && info.snap?.briefing && (() => {
         const openArticleId = info.openArticleId;
@@ -578,7 +333,7 @@ export default function InfoHome(props: {
       {info.infoCall && info.view && (
         <InfoCall
           anchor={info.infoCall}
-          position={livePosition(info.infoCall, meals.state)}
+          position={info.infoCall.position}
           dateKey={info.snap?.briefing?.date ?? todayLocal()}
           view={info.view}
           collecting={info.collecting}
@@ -587,11 +342,6 @@ export default function InfoHome(props: {
           onSourcesChanged={info.refreshSources}
           onTopicsChanged={() => void props.onTopicsChanged()}
           onOpenBriefing={() => onNavigate("briefing")}
-          onMealsChanged={meals.reload}
-          onOpenMeals={(to) => onNavigate(to)}
-          // After a plan is applied, into its batch cook; a plan that cooks
-          // nothing ahead lands on the Meals page.
-          onMealsApplied={(session) => runMealsAction(appliedAction(session))}
           pipCards={props.pipCards}
         />
       )}

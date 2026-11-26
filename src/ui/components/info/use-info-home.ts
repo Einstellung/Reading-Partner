@@ -17,8 +17,6 @@ import type { DeviceRole } from "../../../platform/app/device";
 import { buildGlossary } from "../../../ai/voice";
 import { getInfoView } from "../../../info/program/live";
 import { todayLocal } from "../../../info/collect/store";
-import type { MealsFocus } from "../../../meals/tools";
-import type { MealsState } from "../../../meals/plan/types";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import {
   clearCollectorLeftovers,
@@ -43,7 +41,6 @@ import { assembleReaderSection } from "../../../memory/live/assemble";
 import {
   articleAnchor,
   briefingAnchor,
-  mealsAnchor,
   noBriefingAnchor,
   onboardingAnchor,
   type InfoCallAnchor,
@@ -135,9 +132,6 @@ export interface InfoHomeController {
   keepArticle: (itemId: string) => Promise<void>;
   dismissItem: (itemId: string, meta: BriefingItemMeta, category?: string) => void;
   askBriefing: () => Promise<void>;
-  // The meals conversation. The state and the date are the screen's, already
-  // read (use-meals.ts), so this only names the thread to open.
-  askMeals: (state: MealsState, today: string, opts?: { kickoff?: string; focus?: MealsFocus }) => void;
   askLaunch: () => Promise<void>;
   askArticle: (itemId: string) => Promise<void>;
 }
@@ -307,13 +301,6 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     return { reader, sources, aiLanguage: settings.aiLanguage, topicSearch, canSignIn, collecting };
   }, [canSignIn, collecting]);
 
-  const askMeals = useCallback(
-    (state: MealsState, today: string, opts?: { kickoff?: string; focus?: MealsFocus }) => {
-      setInfoCall(mealsAnchor(state, today, opts));
-    },
-    [],
-  );
-
   const askBriefing = useCallback(async () => {
     const b = viewRef.current?.snapshot().briefing;
     if (!b) return;
@@ -390,7 +377,6 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     keepArticle,
     dismissItem,
     askBriefing,
-    askMeals,
     askLaunch,
     askArticle,
   };

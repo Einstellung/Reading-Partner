@@ -6,8 +6,7 @@
 import { expect, spyOn, test } from "bun:test";
 import * as modelCall from "../../src/ai/model-call";
 import type { ModelCallReport } from "../../src/ai/model-usage";
-import { infoPlace, infoThreadOrigin, mealsPlace } from "../../src/info/briefer/info-durable";
-import { mealsAnchor } from "../../src/info/briefer/anchors";
+import { MEALS_ORIGIN, mealsPlace } from "../../src/meals/conversation/durable";
 import { drawDishPicture } from "../../src/meals/photos/dish-draw-sweep";
 import { writePrepStepsOnce, writeRecipeOnce } from "../../src/meals/recipe/recipe-live";
 import type { PrepStepsRequest } from "../../src/meals/recipe/prep-steps";
@@ -15,18 +14,13 @@ import type { RecipeRequest } from "../../src/meals/recipe/recipe";
 import { usageReport } from "../../src/legion/durable/device";
 import { fakeThreads } from "../reading/turn/support/durable-threads";
 
-const DATE = "2026-10-11";
 const shared = { threads: fakeThreads().threads, describe: () => ({}) as never, now: () => 0 };
 const message = { provider: "p", model: "m", stopReason: "stop", usage: { input: 1, output: 1 } } as never;
 
-test("the meals conversation logs as meals-chat, the briefing as info", () => {
-  const meals = infoThreadOrigin(mealsAnchor({ household: null, plan: null } as never, DATE), DATE);
-  const briefing = infoThreadOrigin({ threadId: `briefing-${DATE}` }, DATE);
-  const mealsTelemetry = mealsPlace()(shared).telemetry(meals);
-  const infoTelemetry = infoPlace()(shared).telemetry(briefing);
+test("the meals conversation logs as meals-chat", () => {
+  const mealsTelemetry = mealsPlace()(shared).telemetry(MEALS_ORIGIN as never);
   expect(usageReport(message, mealsTelemetry).caller).toBe("meals-chat");
-  expect(usageReport(message, infoTelemetry).caller).toBe("info");
-  // The cache log keeps its surface for both.
+  // The cache log keeps the surface it always had.
   expect(mealsTelemetry.surface).toBe("info");
 });
 

@@ -1,7 +1,6 @@
 // The info conversations' places on the device's durable runtime (docs/soul/87,
 // 第二阶段): a conversation about a day's briefing, one of its articles or the
-// first-run setup is a thread in that day's file, and the meals conversation is
-// the one standing thread in its own (docs/71, 对话按归属存). Their turns run,
+// first-run setup is a thread in that day's file (docs/71, 对话按归属存). Their turns run,
 // land and recover the way a book's and the door's do (legion/durable/device.ts).
 //
 // The turn this process assembled for a conversation — its history and the
@@ -25,18 +24,15 @@ import type { AgentTool } from "../../legion/durable/contract";
 import { loadSettings, toReasoning } from "../../platform/app/settings";
 import { coverOf } from "../../soul";
 import { t } from "../../i18n";
-import { MEALS_BOOK_ID, MEALS_THREAD_ID, type InfoCallAnchor } from "./anchors";
+import type { InfoCallAnchor } from "./anchors";
 import { infoBookId } from "./call";
-import { layBriefingTurn, layMealsTurn } from "./deliver";
+import { layBriefingTurn } from "./deliver";
 import { assembleInfoTurn, type InfoTurnInput } from "./info-turn";
 
 /** A conversation anchored to a day: the briefing's, an article's, the setup's. */
 export type InfoOrigin = { place: "info"; date: string; threadId: string };
-/** The standing meals conversation. */
-export type MealsOrigin = { place: "meals" };
-
-export function infoThreadOrigin(anchor: Pick<InfoCallAnchor, "threadId">, dateKey: string): InfoOrigin | MealsOrigin {
-  return anchor.threadId === MEALS_THREAD_ID ? { place: "meals" } : { place: "info", date: dateKey, threadId: anchor.threadId };
+export function infoThreadOrigin(anchor: Pick<InfoCallAnchor, "threadId">, dateKey: string): InfoOrigin {
+  return { place: "info", date: dateKey, threadId: anchor.threadId };
 }
 
 export function asInfoOrigin(origin: ThreadOrigin): InfoOrigin {
@@ -47,26 +43,19 @@ export function asInfoOrigin(origin: ThreadOrigin): InfoOrigin {
   return o;
 }
 
-export function asMealsOrigin(origin: ThreadOrigin): MealsOrigin {
-  if (origin.place !== "meals") throw new Error("not a meals thread origin");
-  return { place: "meals" };
-}
-
 /** The conversation's key in `rp.conversations`. The day keeps apart the setup thread, whose id every day's file repeats. */
-export function infoThreadKey(origin: InfoOrigin | MealsOrigin): string {
-  return origin.place === "meals" ? `meals:${MEALS_THREAD_ID}` : `info:${origin.date}:${origin.threadId}`;
+export function infoThreadKey(origin: InfoOrigin): string {
+  return `info:${origin.date}:${origin.threadId}`;
 }
 
 /** The thread file and thread a conversation lands in. */
-export function infoAddress(origin: InfoOrigin | MealsOrigin): ThreadAddress {
-  return origin.place === "meals"
-    ? { key: MEALS_BOOK_ID, threadId: MEALS_THREAD_ID }
-    : { key: infoBookId(origin.date), threadId: origin.threadId };
+export function infoAddress(origin: InfoOrigin): ThreadAddress {
+  return { key: infoBookId(origin.date), threadId: origin.threadId };
 }
 
-/** Where a reply nobody saw is put in the box: the day's briefing, or the meals conversation (info-turn.ts infoOrigin). */
-function boxOriginOf(origin: InfoOrigin | MealsOrigin): BoxOrigin {
-  return origin.place === "meals" ? { place: "meals" } : { place: "briefing", date: origin.date };
+/** Where a reply nobody saw is put in the box: the day's briefing (info-turn.ts infoOrigin). */
+function boxOriginOf(origin: InfoOrigin): BoxOrigin {
+  return { place: "briefing", date: origin.date };
 }
 
 /** What a turn assembled in this process for a conversation: the history before the reader's line, and the desk's tools. */
@@ -75,7 +64,7 @@ export interface AssembledInfoTurn {
   tools: readonly AgentTool[];
 }
 
-/** The info and meals turns assembled in this process, by conversation key. */
+/** The info turns assembled in this process, by conversation key. */
 export const infoAssemblies = new Map<string, AssembledInfoTurn>();
 
 const watched = new Map<string, number>();
@@ -101,24 +90,21 @@ export function infoWatchingNow(key: string): boolean {
 export interface InfoPlaceDeps {
   assembled?: Map<string, AssembledInfoTurn>;
   /** The desk after a restart: the one a bell's answer is laid on. */
-  openDesk?: (origin: InfoOrigin | MealsOrigin, context: Context) => Promise<readonly AgentTool[]>;
+  openDesk?: (origin: InfoOrigin, context: Context) => Promise<readonly AgentTool[]>;
   /** Whether the reader has this conversation open as the turn lands. */
   watching?: (key: string) => boolean;
   /** The box card for a reply nobody saw. */
-  card?: (origin: InfoOrigin | MealsOrigin, ts: number, text: string) => Promise<void>;
+  card?: (origin: InfoOrigin, ts: number, text: string) => Promise<void>;
 }
 
-async function openRestartDesk(origin: InfoOrigin | MealsOrigin): Promise<readonly AgentTool[]> {
+async function openRestartDesk(origin: InfoOrigin): Promise<readonly AgentTool[]> {
   const settings = await loadSettings();
-  const turn =
-    origin.place === "meals"
-      ? await layMealsTurn({ settings, messages: [], origin: boxOriginOf(origin) })
-      : await layBriefingTurn(origin.date, { settings, messages: [], origin: boxOriginOf(origin) });
+  const turn = await layBriefingTurn(origin.date, { settings, messages: [], origin: boxOriginOf(origin) });
   return turn?.tools ?? [];
 }
 
 /** The same card an answer that landed unseen always gets: named by the thread and the moment. */
-async function putInfoCard(origin: InfoOrigin | MealsOrigin, ts: number, text: string): Promise<void> {
+async function putInfoCard(origin: InfoOrigin, ts: number, text: string): Promise<void> {
   await appBox()
     .put({
       boxId: `${infoAddress(origin).threadId}:${ts}`,
@@ -131,7 +117,7 @@ async function putInfoCard(origin: InfoOrigin | MealsOrigin, ts: number, text: s
     .catch((e: unknown) => console.warn("a reply landed but its box item would not write", e));
 }
 
-function conversationPlace<O extends InfoOrigin | MealsOrigin>(
+function conversationPlace<O extends InfoOrigin>(
   asOrigin: (origin: ThreadOrigin) => O,
   deps: InfoPlaceDeps,
 ): PlaceFactory {
@@ -167,7 +153,7 @@ function conversationPlace<O extends InfoOrigin | MealsOrigin>(
     },
     telemetry: (origin) => {
       const o = asOrigin(origin);
-      return { surface: "info", ...(o.place === "meals" ? { caller: "meals-chat" as const } : {}), thread: infoAddress(o).threadId };
+      return { surface: "info", thread: infoAddress(o).threadId };
     },
   });
 }
@@ -177,16 +163,11 @@ export function infoPlace(deps: InfoPlaceDeps = {}): PlaceFactory {
   return conversationPlace(asInfoOrigin, deps);
 }
 
-/** The standing meals conversation. */
-export function mealsPlace(deps: InfoPlaceDeps = {}): PlaceFactory {
-  return conversationPlace(asMealsOrigin, deps);
-}
-
 export type InfoTurnPrepared =
   | {
       kind: "turn";
       key: string;
-      origin: InfoOrigin | MealsOrigin;
+      origin: InfoOrigin;
       /** What the desk opened, for the card gestures that reach back into it. */
       items: DeskItem[];
       systemPrompt: string;
@@ -202,7 +183,7 @@ export type InfoTurnPrepared =
   | { kind: "aborted" };
 
 /**
- * Assemble a turn of an info or meals conversation over `messages`, which end
+ * Assemble a turn of an info conversation over `messages`, which end
  * with the line it answers, and leave its history and tools where the place
  * finds them.
  */

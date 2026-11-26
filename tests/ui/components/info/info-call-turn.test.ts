@@ -22,8 +22,12 @@ import * as threads from "../../../../src/platform/app/threads";
 import { DEFAULT_SETTINGS } from "../../../../src/platform/app/settings";
 import { INFO_BRIEFING_KIND, registerInfoDesk } from "../../../../src/info/briefer/desk";
 import { registerSecretaryRole } from "../../../../src/info/briefer/role";
-import { mealsAnchor, type InfoCallAnchor } from "../../../../src/info/briefer/anchors";
-import { infoPlace, mealsPlace } from "../../../../src/info/briefer/info-durable";
+import type { InfoCallAnchor } from "../../../../src/info/briefer/anchors";
+import { infoPlace } from "../../../../src/info/briefer/info-durable";
+import { mealsPlace } from "../../../../src/meals/conversation/durable";
+import { mealsAnchor } from "../../../../src/meals/conversation/anchor";
+import { registerMealsRole } from "../../../../src/meals/conversation/role";
+import { useMealsCall } from "../../../../src/ui/components/meals/use-meals-call";
 import { registerMealsDesk } from "../../../../src/meals/desk";
 import { EMPTY_MEALS } from "../../../../src/meals/plan/types";
 import type { ThreadFiles } from "../../../../src/legion/durable/thread-files";
@@ -231,8 +235,13 @@ test("a turn stopped while it is being assembled leaves no row and sends nothing
 
 test("a meals turn lands in the meals conversation, not the day's briefing", async () => {
   registerMealsDesk();
+  registerMealsRole();
   const { landed, durable } = await stubHost(["Fish on Tuesday."]);
-  const { result } = await open(options(mealsAnchor(EMPTY_MEALS, "2026-08-13")));
+  const anchor = mealsAnchor(EMPTY_MEALS, "2026-08-13");
+  const { result } = renderHook(() => useMealsCall({ anchor, pipCards: true, onHangUp: () => {} }));
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 20));
+  });
   await act(async () => {
     await result.current.send("plan this week");
   });

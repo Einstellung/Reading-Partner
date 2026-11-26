@@ -19,10 +19,7 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
 } from "../../../info/boxes/cards";
-import type { MealsAppliedCardData } from "../../../meals/cards";
-import { appliedLine } from "../../../meals/screen/view";
-import { MealsDraftCard } from "../meals/MealsDraftCard";
-import { MealsPrepCard } from "../meals/MealsPrepCard";
+import type { MealsCard } from "../../../meals/cards";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -324,16 +321,6 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 // The info domain's share of the card registry, merged with the other domains'
 // in ui/components/cardRegistry.ts — which is where the render layer looks a card
 // up.
-// The row an Apply leaves: one quiet line in the reader's language for a week
-// applied from the old weekly card, nothing for a draft (its card above has
-// collapsed to say it). The row's text is the model's note and is not drawn
-// (meals/cards.ts).
-export function MealsAppliedCard({ payload }: CardComponentProps<MealsAppliedCardData>) {
-  useT();
-  if (payload.draft) return null;
-  return <div className="text-[12px] leading-snug text-faint-foreground">{appliedLine(payload)}</div>;
-}
-
 // An old briefing card in a stored conversation, while that UI is off.
 function NoCard(): null {
   return null;
@@ -346,7 +333,7 @@ function NoCard(): null {
 // card stays: the door files with it too.
 export function infoCardRegistry(
   oldBriefing: boolean = OLD_BRIEFING_UI_ENABLED,
-): CardRegistryFor<InfoCard["kind"]> {
+): CardRegistryFor<Exclude<InfoCard["kind"], MealsCard["kind"]>> {
   const old = <T,>(card: T) => (oldBriefing ? card : NoCard);
   return {
     "probe-confirm": old(ProbeConfirmCard),
@@ -356,10 +343,7 @@ export function infoCardRegistry(
     "lab-proposal": old(LabProposalCard),
     "lab-archive": old(LabArchiveCard),
     "briefing-failed": old(BriefingFailedCard),
-    "meals-draft": MealsDraftCard,
-    "meals-applied": MealsAppliedCard,
-    "meals-prep": MealsPrepCard,
   };
 }
 
-export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = infoCardRegistry();
+export const INFO_CARD_REGISTRY: CardRegistryFor<Exclude<InfoCard["kind"], MealsCard["kind"]>> = infoCardRegistry();

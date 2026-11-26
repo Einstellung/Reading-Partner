@@ -23,18 +23,17 @@ import {
   infoPlace,
   infoThreadKey,
   infoThreadOrigin,
-  mealsPlace,
   type AssembledInfoTurn,
   type InfoOrigin,
-  type MealsOrigin,
 } from "../../../src/info/briefer/info-durable";
-import { mealsAnchor } from "../../../src/info/briefer/anchors";
+import { MEALS_ADDRESS, MEALS_CONVERSATION_KEY, MEALS_ORIGIN, mealsPlace, type MealsOrigin } from "../../../src/meals/conversation/durable";
+import { addressOf, keyOf } from "./support/info-file";
 import { testHost } from "../../legion/durable/support/runtime";
 import { fakeThreads } from "../../reading/turn/support/durable-threads";
 
 const DATE = "2026-10-11";
 const INFO = infoThreadOrigin({ threadId: `briefing-${DATE}` }, DATE) as InfoOrigin;
-const MEALS = infoThreadOrigin(mealsAnchor({ household: null, plan: null } as never, DATE), DATE) as MealsOrigin;
+const MEALS: MealsOrigin = MEALS_ORIGIN;
 const LINE = { role: "user" as const, text: "What matters today?", ts: 1000 };
 const LONG = "The rate decision matters most, then the chip export rules. ".repeat(30);
 
@@ -47,9 +46,9 @@ test("the two conversations are keyed and filed apart", () => {
   expect(INFO).toEqual({ place: "info", date: DATE, threadId: `briefing-${DATE}` });
   expect(MEALS).toEqual({ place: "meals" });
   expect(infoThreadKey(INFO)).toBe(`info:${DATE}:briefing-${DATE}`);
-  expect(infoThreadKey(MEALS)).toBe("meals:meals");
+  expect(MEALS_CONVERSATION_KEY).toBe("meals:meals");
   expect(infoAddress(INFO)).toEqual({ key: `info-${DATE}`, threadId: `briefing-${DATE}` });
-  expect(infoAddress(MEALS)).toEqual({ key: "info-meals", threadId: "meals" });
+  expect(MEALS_ADDRESS).toEqual({ key: "info-meals", threadId: "meals" });
   // The setup thread repeats in every day's file; the day keeps their keys apart.
   const setup = (date: string) => infoThreadKey(infoThreadOrigin({ threadId: "onboarding" }, date));
   expect(setup("2026-10-11")).not.toBe(setup("2026-10-12"));
@@ -96,7 +95,7 @@ function session(
   origin: InfoOrigin | MealsOrigin,
   opening = false,
 ) {
-  const key = infoThreadKey(origin);
+  const key = keyOf(origin);
   let screen: CallRow[] = opening ? [] : [LINE];
   const filed: { text: string; ts: number }[] = [];
   let ended!: () => void;
@@ -114,7 +113,7 @@ function session(
         request: {
           key,
           origin,
-          conversation: infoAddress(origin).threadId,
+          conversation: addressOf(origin).threadId,
           surface: "info",
           line: opening ? { text: "Open the conversation." } : { text: LINE.text, ts: LINE.ts },
           systemPrompt: "You are the secretary.",
@@ -207,7 +206,7 @@ for (const { name, origin } of PLACES) {
       await startTurn(
         durable.runtime,
         {
-          key: infoThreadKey(origin),
+          key: keyOf(origin),
           origin,
           content: LINE.text,
           sections: { [TURN_SECTION]: "You are the secretary." },

@@ -10,7 +10,11 @@ import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/setti
 import { appendMessage, createThread, rebuildThreadStoreForTests } from "../../../src/platform/app/threads";
 import { registerInfoDesk } from "../../../src/info/briefer/desk";
 import { registerSecretaryRole } from "../../../src/info/briefer/role";
-import { registerBriefingDelivery, registerMealsDelivery } from "../../../src/info/briefer/deliver";
+import { registerBriefingDelivery } from "../../../src/info/briefer/deliver";
+import { registerMealsDelivery } from "../../../src/meals/conversation/deliver";
+import { registerMealsRole } from "../../../src/meals/conversation/role";
+
+registerMealsRole();
 import { registerMealsDesk } from "../../../src/meals/desk";
 import { EMPTY_MEALS } from "../../../src/meals/plan/types";
 import type { AgentTool } from "../../../src/legion/durable/contract";
