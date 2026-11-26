@@ -13,7 +13,7 @@ import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
-import { Vestibule } from "./Vestibule";
+import { Vestibule } from "../shelf/Vestibule";
 import { BriefingPage } from "./BriefingPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
@@ -181,21 +181,8 @@ export default function InfoHome(props: {
               topics={props.topics ?? null}
               onOpenTopic={props.onOpenTopic ?? (() => {})}
               onCreateTopic={props.onCreateTopic ?? (() => {})}
-              snap={info.snap}
-              ready={props.launchReady}
-              configured={props.configured}
-              hasSources={info.hasSources}
-              noLabs={noLabsOpen(info.labs)}
-              collecting={info.collecting}
-              notices={info.notices}
               onContinue={props.onContinue ?? (() => {})}
               onOpenLibrary={() => onNavigate("library")}
-              onAsk={() => void info.askLaunch()}
-              onStop={info.stopBriefing}
-              onOpenBriefing={() => onNavigate("briefing")}
-              onOpenSettings={props.onOpenSettings}
-              onStartSubscribing={info.openOnboarding}
-              oldBriefing={oldBriefing}
             />
           )}
         </div>

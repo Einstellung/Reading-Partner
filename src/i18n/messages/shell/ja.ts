@@ -138,4 +138,19 @@ export default {
   "intake.reason.siteRefused": "サイトが文書を返しませんでした",
   "intake.reason.httpStatus": "リンクを開けませんでした（HTTP {status}）",
   "intake.reason.failed": "このリンクを読み取れませんでした",
+
+  // --- Today (shelf/Vestibule.tsx, shelf/today.ts) ---------------------------
+  "vestibule.title": "今日",
+  "vestibule.continueReading": "読書を再開",
+  "vestibule.nothingOpen": "まだ開いた本がありません。ライブラリでトピックに本を追加してください。",
+  "vestibule.goToLibrary": "ライブラリへ",
+  "vestibule.yourTopics": "あなたのトピック",
+  "vestibule.allTopics": "すべてのトピック →",
+  "vestibule.newTopic": "新しいトピック",
+  "vestibule.newTopicDescription": "トピックは一つの問いと、それについて読む本のことです。",
+  "vestibule.newTopicPlaceholder": "例：JIT はなぜ速いのか",
+  "vestibule.create": "作成",
+  "today.pageOf": "{page} / {pages} ページ",
+  "today.page": "{page} ページ",
+  "today.marks": { other: "マーク {count} 件" },
 } satisfies Translation<typeof en>;

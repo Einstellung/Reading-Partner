@@ -141,4 +141,19 @@ export default {
   "intake.reason.siteRefused": "el sitio no entregó el documento",
   "intake.reason.httpStatus": "el enlace no se abrió (HTTP {status})",
   "intake.reason.failed": "no se pudo leer este enlace",
+
+  // --- Today (shelf/Vestibule.tsx, shelf/today.ts) ---------------------------
+  "vestibule.title": "Hoy",
+  "vestibule.continueReading": "Continuar leyendo",
+  "vestibule.nothingOpen": "Aún no hay nada abierto. Añade un libro a un tema en la biblioteca.",
+  "vestibule.goToLibrary": "Ir a la biblioteca",
+  "vestibule.yourTopics": "Tus temas",
+  "vestibule.allTopics": "Todos los temas →",
+  "vestibule.newTopic": "Nuevo tema",
+  "vestibule.newTopicDescription": "Un tema es una pregunta y los libros que lees para responderla.",
+  "vestibule.newTopicPlaceholder": "p. ej. por qué son rápidos los JIT",
+  "vestibule.create": "Crear",
+  "today.pageOf": "pág. {page} de {pages}",
+  "today.page": "pág. {page}",
+  "today.marks": { one: "{count} marca", other: "{count} marcas" },
 } satisfies Translation<typeof en>;

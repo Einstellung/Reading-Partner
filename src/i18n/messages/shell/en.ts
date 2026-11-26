@@ -164,4 +164,19 @@ export default {
   "intake.reason.siteRefused": "the site didn't hand over the document",
   "intake.reason.httpStatus": "the link didn't open (HTTP {status})",
   "intake.reason.failed": "this link couldn't be read",
+
+  // --- Today (shelf/Vestibule.tsx, shelf/today.ts) ---------------------------
+  "vestibule.title": "Today",
+  "vestibule.continueReading": "Continue reading",
+  "vestibule.nothingOpen": "Nothing open yet. Add a book to a topic in the library.",
+  "vestibule.goToLibrary": "Go to library",
+  "vestibule.yourTopics": "Your topics",
+  "vestibule.allTopics": "All topics →",
+  "vestibule.newTopic": "New topic",
+  "vestibule.newTopicDescription": "A topic is one question and the books you read against it.",
+  "vestibule.newTopicPlaceholder": "e.g. what makes JITs fast",
+  "vestibule.create": "Create",
+  "today.pageOf": "p. {page} of {pages}",
+  "today.page": "p. {page}",
+  "today.marks": { one: "{count} mark", other: "{count} marks" },
 } as const;

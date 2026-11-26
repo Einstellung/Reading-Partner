@@ -137,4 +137,19 @@ export default {
   "intake.reason.siteRefused": "网站没有给出这份文档",
   "intake.reason.httpStatus": "链接打不开（HTTP {status}）",
   "intake.reason.failed": "没能读到这个链接的内容",
+
+  // --- Today (shelf/Vestibule.tsx, shelf/today.ts) ---------------------------
+  "vestibule.title": "今天",
+  "vestibule.continueReading": "继续阅读",
+  "vestibule.nothingOpen": "还没有打开的书。去书库把一本书加入主题。",
+  "vestibule.goToLibrary": "前往书库",
+  "vestibule.yourTopics": "你的主题",
+  "vestibule.allTopics": "全部主题 →",
+  "vestibule.newTopic": "新建主题",
+  "vestibule.newTopicDescription": "主题是一个问题，以及你为回答它而读的书。",
+  "vestibule.newTopicPlaceholder": "例如：JIT 为什么快",
+  "vestibule.create": "创建",
+  "today.pageOf": "第 {page}/{pages} 页",
+  "today.page": "第 {page} 页",
+  "today.marks": { other: "{count} 处标记" },
 } satisfies Translation<typeof en>;
