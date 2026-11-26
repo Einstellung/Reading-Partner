@@ -1,12 +1,21 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { getLocale, LOCALES, setLocale, type Locale } from "../../../src/i18n";
+import { AREAS } from "../../../src/i18n/areas";
 import { computeTargets } from "../../../src/meals/nutrition/targets";
 import {
+  AVOID_OPTIONS,
+  KITCHEN_OPTIONS,
   RESULT_STEP,
+  SHOP_OPTIONS,
   STEPS,
   answerText,
   initialOnboarding,
+  introLine,
+  noConsentReply,
   onboardingReducer,
+  optionLabel,
+  questionText,
   resultLine,
   toProfile,
   type OnboardingAction,
@@ -14,7 +23,13 @@ import {
 } from "../../../src/meals/screen/onboarding";
 import { profile } from "../fixtures/week";
 
-const run = (actions: OnboardingAction[], s: OnboardingState = initialOnboarding()) =>
+// The tests up to "the thread follows the UI language" pin the original
+// Chinese lines, so they run in zh-CN; the rest switch the locale themselves.
+const initialLocale: Locale = getLocale();
+beforeEach(() => setLocale("zh-CN"));
+afterEach(() => setLocale(initialLocale));
+
+const run =(actions: OnboardingAction[], s: OnboardingState = initialOnboarding()) =>
   actions.reduce(onboardingReducer, s);
 
 // The prototype's example: a man cutting, training Mon/Wed/Fri evenings.
@@ -146,5 +161,78 @@ describe("answer lines", () => {
     expect(line).toContain(`练的那天 ${t.training.kcal} kcal`);
     expect(line).toContain(`休息日 ${t.rest.kcal} kcal`);
     expect(line).toContain("比维持量少");
+  });
+});
+
+describe("the thread follows the UI language", () => {
+  const CJK = /[㐀-鿿぀-ヿ가-힯]/;
+  const answers = run(EXAMPLE).answers;
+  const exampleProfile = () => {
+    const p = toProfile(answers);
+    if (!p) throw new Error("no profile");
+    return p;
+  };
+
+  test("zh-CN keeps the original lines", () => {
+    expect(introLine()).toBe("先问几个问题，都是点选，一两分钟。答完我算出你每天的热量和蛋白，再排这一周。");
+    expect(noConsentReply()).toBe("好，不存身体数据。那就算不了热量，只能按份量给你排。改主意了点上面那条回答。");
+    expect(questionText("consent")).toBe("排之前要用到你的体重和体脂。这两项属于健康信息，先单独问你要不要给。");
+    expect(questionText("logistics")).toBe("最后几件杂事，一屏点完。");
+    expect(optionLabel("不吃辣")).toBe("不吃辣");
+    expect(optionLabel("电压力锅")).toBe("电压力锅");
+    expect(answerText({ ...answers, avoid: ["无"] }, "logistics")).toBe("1 人 · 超市 · 微波炉 · 无忌口");
+  });
+
+  test("English shows English everywhere, and the stored words do not change", () => {
+    setLocale("en");
+    expect(introLine()).toContain("A few questions first");
+    expect(noConsentReply()).toContain("I won't keep any body data");
+    for (const id of STEPS) expect(questionText(id)).not.toMatch(CJK);
+    expect(answerText(answers, "consent")).toBe("Agree");
+    expect(answerText(answers, "goal")).toBe("Lose fat");
+    expect(answerText(answers, "body")).toBe("Male · 30 yr · 170 cm · 65.0 kg · Body fat 20.0%");
+    expect(answerText(answers, "train")).toBe("Mon, Wed, Fri · After work");
+    expect(answerText(answers, "logistics")).toBe("1 person · Supermarket · Microwave · No beef");
+    expect(answerText({ ...answers, trainingDays: [], noTraining: true }, "train")).toBe("Not training right now");
+    expect(answerText({ ...answers, avoid: ["无"], people: 6 }, "logistics")).toBe(
+      "4 or more · Supermarket · Microwave · No dislikes",
+    );
+    const p = exampleProfile();
+    expect(p.shops).toEqual(["超市"]);
+    expect(p.kitchen).toEqual(["微波炉"]);
+    const line = resultLine(computeTargets(p, "CN"), p);
+    expect(line).toContain("Done. ");
+    expect(line).toContain("below maintenance");
+    expect(line).not.toMatch(CJK);
+  });
+
+  test("every line reads in every language, with no placeholder left and no Chinese in the Latin and Cyrillic ones", () => {
+    const p = exampleProfile();
+    for (const locale of LOCALES) {
+      setLocale(locale);
+      const lines = [
+        introLine(),
+        noConsentReply(),
+        ...STEPS.map(questionText),
+        ...[...SHOP_OPTIONS, ...KITCHEN_OPTIONS, ...AVOID_OPTIONS.map((o) => o.value)].map(optionLabel),
+        ...STEPS.map((id) => answerText(answers, id)),
+        resultLine(computeTargets(p, "CN"), p),
+      ];
+      const cjkOk = locale === "zh-CN" || locale === "ja" || locale === "ko";
+      for (const line of lines) {
+        expect({ locale, line, empty: line.length === 0 }).toEqual({ locale, line, empty: false });
+        expect({ locale, line, open: /\{\w+\}/.test(line) }).toEqual({ locale, line, open: false });
+        if (!cjkOk) expect({ locale, line, cjk: CJK.test(line) }).toEqual({ locale, line, cjk: false });
+      }
+    }
+  });
+
+  test("the catalog has every onboarding line in every language", () => {
+    const meals = AREAS.meals as unknown as Record<Locale, Record<string, unknown>>;
+    const keys = Object.keys(meals.en).filter((k) => k.startsWith("onboarding."));
+    expect(keys.length).toBeGreaterThan(60);
+    for (const locale of LOCALES) {
+      expect(Object.keys(meals[locale]).filter((k) => k.startsWith("onboarding.")).sort()).toEqual([...keys].sort());
+    }
   });
 });
