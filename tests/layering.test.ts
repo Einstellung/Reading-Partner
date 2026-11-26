@@ -254,6 +254,11 @@ const LAYER: Record<string, Layer> = {
   // Drive), plus read_page. reading/papers and reading's link intake reach
   // them here.
   sources: "domain",
+  // This device's presence among the reader's machines: the claim it writes
+  // (legion/claim) and the daily round a claiming machine runs, which carries
+  // memory's dream where the election says and the prose conflict sweep
+  // everywhere the round runs. Before Intel was removed it was the collector's.
+  presence: "domain",
   // One file per library; a directory of its own because each plugin knows one API.
   "sources/plugins": "domain",
   reading: "domain",

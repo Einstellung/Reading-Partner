@@ -4,8 +4,9 @@
 // Pure, so it is testable. live.ts holds one gate for the process.
 //
 // It exists because of what 0.12 did on the owner's machine
-// (docs/pitfall/210). runDreamIfDue is called from three entry points —
-// start-up, foreground and the five-minute tick — and the state file is written
+// (docs/pitfall/210). runDreamIfDue is called from three entry points of the
+// daily round (src/presence/daily.ts) — start-up, foreground and the
+// five-minute tick — and the state file is written
 // at the END of a run, so four calls inside 35 seconds all read "not run today"
 // and all four ran. Two of them wrote the same ten conclusions twice, once in
 // each language. On the same launch the night read observations that still had

@@ -43,6 +43,7 @@ import { Vestibule } from "./ui/components/shelf/Vestibule";
 import { useMealsHost } from "./ui/components/meals/use-meals-host";
 import { MealsHost } from "./ui/components/meals/MealsHost";
 import { startDistillSweeps } from "./memory";
+import { refreshDevicePresence } from "./presence/live";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import { displaySource, readLibraryBook, type BookFormat } from "./platform/app/library";
@@ -423,6 +424,15 @@ export default function App() {
     pageDwellRef.current = { page, since: now };
   }, [stats]);
 
+  // What this machine does about background work, whenever the answer changes —
+  // and once when device.json first lands, which is how a collector starts at
+  // all (src/presence). A reader falls straight through to giving up its claim.
+  const deviceRole = device?.role ?? null;
+  const backgroundCollect = device?.backgroundCollect ?? null;
+  useEffect(() => {
+    if (deviceRole === null) return;
+    refreshDevicePresence();
+  }, [deviceRole, backgroundCollect]);
 
   const activeTopic = useMemo(
     () => topics?.find((t) => t.id === activeTopicId) ?? null,
