@@ -83,7 +83,7 @@ export default {
   "features.language": "Sprache",
   "features.languageAuto": "Automatisch (App: System, KI: deine Sprache)",
   "features.languageHint":
-    "Die Sprache der App und von allem, was die KI schreibt: Chat-Antworten, Notizen und Briefs. Bei „Automatisch“ erscheint die App in der Systemsprache und die KI antwortet in der Sprache, in der du schreibst. Die Spracherkennung folgt immer dem, was du sprichst.",
+    "Die Sprache der App und von allem, was die KI schreibt: Chat-Antworten und Notizen. Bei „Automatisch“ erscheint die App in der Systemsprache und die KI antwortet in der Sprache, in der du schreibst. Die Spracherkennung folgt immer dem, was du sprichst.",
   "features.paper": "Papierhintergrund",
   "features.paperHint":
     "Macht das Weiß hinter der ganzen App – Chats, Regale, Seitenleisten, dieses Fenster und die Seiten eines Buchs – zu einem gebrochenen Papierweiß. Es gibt nur diesen einen Ton und keine dunklere Stufe; das ist kein Dunkelmodus. Die Wahl bleibt auf diesem Gerät.",
@@ -98,10 +98,10 @@ export default {
     "Dieser Computer räumt nachts dein Gedächtnis auf und löst Synchronisierungskonflikte. Aus: Ein anderer deiner Computer übernimmt, falls vorhanden.",
   "features.thisComputer": "Dieser Computer",
   "features.role": "Dieser Rechner ist ein",
-  "features.roleCollector": "Sammler – liest die Quellen hier",
-  "features.roleReader": "Leser – liest, was ein anderer Rechner gesammelt hat",
+  "features.roleCollector": "Sammler – kann Hintergrundarbeit übernehmen",
+  "features.roleReader": "Leser – überlässt Hintergrundarbeit anderen Rechnern",
   "features.roleHint":
-    "Ein Sammler liest deine abonnierten Seiten den ganzen Tag und veröffentlicht deine Briefs für deine anderen Geräte; ein Leser zeigt, was ein Sammler veröffentlicht hat, und lädt selbst nie etwas von einer Seite. Smartphones und Tablets sind immer Leser. Wenn zwei Rechner sammeln, arbeitet der, der am längsten läuft.",
+    "Ein Sammler kann Hintergrundarbeit übernehmen: nachts dein Gedächtnis aufräumen und Synchronisationskonflikte klären. Ein Leser tut das nie. Smartphones und Tablets sind immer Leser. Wenn zwei Sammler bereit sind, arbeitet der, der am längsten läuft.",
   "features.autostart": "Reading Partner beim Start dieses Computers öffnen",
   "features.autostartHint":
     "Standardmäßig aus. Schalte es auf dem Rechner ein, der deine Quellen den ganzen Tag sammeln soll – zusammen mit dem Symbol in der Menüleiste bzw. im Infobereich entstehen deine Briefs, ob du die App geöffnet hast oder nicht. Diese Einstellung gehört zu diesem Computer und wird nicht auf deine anderen Geräte übertragen.",

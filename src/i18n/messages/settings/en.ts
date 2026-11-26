@@ -83,7 +83,7 @@ export default {
   "features.language": "Language",
   "features.languageAuto": "Auto (system UI, AI matches you)",
   "features.languageHint":
-    "The language of the app and of everything the AI writes: chat replies, notes, and briefs. Auto shows the app in your system language and lets the AI answer in the language you write in. Voice transcription always follows what you speak.",
+    "The language of the app and of everything the AI writes: chat replies and notes. Auto shows the app in your system language and lets the AI answer in the language you write in. Voice transcription always follows what you speak.",
   "features.paper": "Paper background",
   "features.paperHint":
     "Turns the white behind the whole app — chats, shelves, sidebars, this dialog, and the pages of a book — into an off-white paper colour. There is one shade and no darker step; this is not a dark mode. The choice stays on this device.",
@@ -98,10 +98,10 @@ export default {
     "This computer tidies your memory overnight and settles sync conflicts. Off, another computer of yours takes this on, if you have one.",
   "features.thisComputer": "This computer",
   "features.role": "This machine is a",
-  "features.roleCollector": "Collector — read the sources here",
-  "features.roleReader": "Reader — read what another machine collected",
+  "features.roleCollector": "Collector — can take on background work",
+  "features.roleReader": "Reader — leaves background work to other computers",
   "features.roleHint":
-    "A collector reads your subscribed sites all day and publishes your briefs for your other devices; a reader shows what a collector published and never fetches from a site itself. Phones and tablets are always readers. If two machines collect, the one that has been running longest does the work.",
+    "A collector can take on background work: tidying your memory overnight and settling sync conflicts. A reader never does. Phones and tablets are always readers. If two collectors are willing, the one that has been running longest does the work.",
   "features.autostart": "Start Reading Partner when this computer starts",
   "features.autostartHint":
     "Off by default. Turn it on for the machine you want collecting your sources all day — together with the tray, it means your briefs are being built whether or not you opened the app. This setting belongs to this computer and is not carried to your other devices.",

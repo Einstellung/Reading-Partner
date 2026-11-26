@@ -83,7 +83,7 @@ export default {
   "features.language": "Idioma",
   "features.languageAuto": "Automático (app: sistema; IA: tu idioma)",
   "features.languageHint":
-    "El idioma de la app y de todo lo que escribe la IA: respuestas del chat, notas y los boletines. En automático, la app usa el idioma del sistema y la IA responde en el idioma en que escribes. La transcripción de voz siempre sigue lo que dices.",
+    "El idioma de la app y de todo lo que escribe la IA: respuestas del chat y notas. En automático, la app usa el idioma del sistema y la IA responde en el idioma en que escribes. La transcripción de voz siempre sigue lo que dices.",
   "features.paper": "Fondo de papel",
   "features.paperHint":
     "Convierte el blanco de toda la app (chats, estanterías, barras laterales, este cuadro de diálogo y las páginas de los libros) en un color de papel hueso. Hay un solo tono y ninguno más oscuro; no es un modo oscuro. La elección se guarda solo en este dispositivo.",
@@ -98,10 +98,10 @@ export default {
     "Este ordenador ordena tu memoria por la noche y resuelve los conflictos de sincronización. Desactivado, otro de tus ordenadores, si lo tienes, toma el relevo.",
   "features.thisComputer": "Este ordenador",
   "features.role": "Este equipo es un",
-  "features.roleCollector": "Recopilador: lee las fuentes aquí",
-  "features.roleReader": "Lector: lee lo que recopiló otro equipo",
+  "features.roleCollector": "Recopilador: puede encargarse del trabajo en segundo plano",
+  "features.roleReader": "Lector: deja el trabajo en segundo plano a otros equipos",
   "features.roleHint":
-    "Un recopilador lee tus sitios suscritos todo el día y publica tus boletines para tus otros dispositivos; un lector muestra lo que publicó un recopilador y nunca descarga nada de un sitio por su cuenta. Los teléfonos y las tabletas son siempre lectores. Si dos equipos recopilan, trabaja el que lleva más tiempo en marcha.",
+    "Un recopilador puede encargarse del trabajo en segundo plano: ordenar tu memoria por la noche y resolver los conflictos de sincronización. Un lector nunca lo hace. Los teléfonos y las tabletas son siempre lectores. Si dos recopiladores están dispuestos, trabaja el que lleva más tiempo en marcha.",
   "features.autostart": "Abrir Reading Partner al iniciar este ordenador",
   "features.autostartHint":
     "Desactivado de forma predeterminada. Actívalo en el equipo que quieras que recopile tus fuentes todo el día: junto con el icono de la bandeja, tus boletines se preparan tanto si abres la app como si no. Este ajuste es de este ordenador y no pasa a tus otros dispositivos.",
