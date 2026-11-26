@@ -25,7 +25,30 @@ worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkou
 
 搬家用的脚本在 `HANDOFF-remove-info-tools/`（合并前和本文件一起删）：`bun HANDOFF-remove-info-tools/mv.ts . moves.json`，moves.json 是 `[[旧路径, 新路径], …]`（文件或目录），按旧位置解析 src/tests/scripts 里每个相对 import、算新路径、再 `git mv`；`import.meta.dir` 拼的 fixture 路径、字符串和注释里的路径它不管，要手动 grep。`bun HANDOFF-remove-info-tools/deps.ts . report` 列出谁还 import info（谓词写死了 `src/info/`，按需改）。
 
-## 还剩：第 4 步（删 Intel）已做了大半，停在 `HANDOFF-remove-info-tools/step4/`
+## 第五棒（2026-11-25）：停在 `HANDOFF-remove-info-tools/step5/`，取代下面 step4 那份
+
+step5 = step4 补丁 + 第五棒的修改。分支仍停在上一个 commit，代码没有新 commit（不绿）。worktree 里可能还留着打好补丁的未提交状态（auto mode 拦了 `git restore`），先 `git status` 看：干净的话
+
+```
+xargs -a HANDOFF-remove-info-tools/step5/step5-deleted.txt git rm -q
+git apply HANDOFF-remove-info-tools/step5/step5.patch
+git add src/ui/components/chat/TopicProposalCard.tsx
+```
+
+打上后 `bun run typecheck` 两个项目都过（RC=0）。全量 `scripts/t.sh` 跑过一次（在恢复 info-thread 行之前）：7943 pass / 29 fail。
+
+第五棒做了：交接第 1-4 项全部（registry、pull-coverage、tool-contract、think-kind、sources 四个、structured-output、chatParts、scroll-restore-contract 的类型错；experiment-gates、shell-nav、shell-places、phone-home-render 按新签名重写，三餐用例保留，PhoneHome 原 Intel 位置换成 Meals tile）；另修了 app-sidebar-render（Briefing 行换成 Meals 行）、door-tools（删 Intel 开关那条）、meals/host、card-registry-context（spy 对象从 InfoHome 换成 `MealsHost` 命名导出，两个壳都挂它）、derived（删 `info/labs`、`ui/components/info/saveArticle.ts` 两项）。chatParts 里上一棒删掉的通用协议用例（latestCardOf、patchCardPayload、round-trip、reopen）用 topic-proposal 卡恢复了。registry 里上一棒删掉的「desk 行都有 opener」守卫恢复了（去掉 registerInfoDesk）。
+
+palace kinds：删了 29 个 Intel 行（info-feedback、info-sources、info-labs、topic-search 全家、info-shelf、info-issue-spoken、info-picture、info-cables、info-briefing/bodies-published、info-pool-*、info-ask、info-daily-*、info-site-sessions、info-source-health、info-issue-state、topic-search-runs、topic-search-graph-cache）。retention-guard 读 flow 文件，这些行的 flow 指向已删的 `src/info/...`，不删就红，所以必须进删除 commit。行删了以后文件出 sync range：本地扫描（syncFs.ts:148）和远端列表（driveBackend.ts:584）都按 inSyncRange 过滤，reconcile 两边都看不见，不会推断删除（`HOLDINGS_INFER_DELETIONS = false`），盘上的文件原样留着。`info-thread` 行保留（about 改成「Intel 删除前的简报对话」，去掉指向 info-briefing-published 的 ref）：conversations/search、topic-of、messages-engine、soul/catalogue、distill-sources 十几条测试拿 `threads-info-<date>.json` 当对话夹具，留着它旧简报对话还能被搜到。要不要删交主会话定；删的话这些夹具要换成 `threads-<bookId>.json`，`delete-topic.ts` 的 `"info-thread"` handler 一起删。
+
+还红的（恢复 info-thread 后单跑这几组，10 fail）：
+- `tests/palace/registry.test.ts`：`under("distilledMessages")` 列表把 `"info-thread"` 加回去（第五棒先删后恢复了行，测试没跟着改回），SOURCED 也加回 `"info-thread"`，`booted()` 里没有 info 的 distill source 了，SOURCED 那条要么去掉 info-thread、要么在 info-thread 行上去掉 `distill`（没人注册它的 source）。
+- 同步测试拿已删行当夹具：「a feedback log that lost lines…」「the feedback log unions its lines…」（info-feedback）、「pool marks merge per item…」（info-pool-marks）、「the source list merges per source」（info-sources）、「core user-data files are in range」「the files the app writes are classified…」「the never-infer list is never inferred」。用 `grep -rln "info-feedback\|info-pool-marks\|info-sources\|info-labs" tests` 找；换成仍在的同类行（LINES+records 用 `memory-usage-` 或 legion ledger，records 用 `info-meals-dishes` 等），或删掉只为 Intel 写的那条。`src/memory/profile/feedback.ts` 只剩测试在用，可一起删。
+- `tests/i18n/settings-render.test.tsx:35` 期待 "Account"：Accounts 页删了，tab 现在是 "AI & sync / Features / Optional / Experiments"，断言换成别的 tab 名。
+- `tests/ui/components/chat-scale-contract.test.ts` 两条，没看。
+- 修完再跑全量；layering 表没报错，可能还要看。
+
+## 原第 4 步说明（step4 已被 step5 取代，下面的「接着要修的」第五棒已做完的不再重复）
 
 第四棒在工作区里把 src 侧改到 `bun run typecheck` 的 src 项目全过，tests 项目还有十几个文件没修完，没跑过 `scripts/t.sh`。不留红 commit，所以整包存成补丁，分支停在 `aca3644f`。接着做：
 
