@@ -3,7 +3,13 @@
 // then shows the daily targets. Every step's rule, its answer line and the
 // profile it ends in are here, so MealsOnboarding.tsx only draws the thread
 // and dispatches taps.
+//
+// Every line the reader sees comes from the meals catalog (meals.onboarding.*)
+// and follows the UI language. The values the answers store (the shop and
+// kitchen words, 无 for no dislikes) stay Chinese: they go to disk in the
+// profile and planner/library.ts equipmentNamed reads them.
 
+import { t, type MessageKey } from "../../i18n";
 import type { FoodTag } from "../nutrition/foods";
 import {
   DEFAULT_EFFORT,
@@ -71,50 +77,99 @@ export const STEP_SIZE: Readonly<Record<StepperField, number>> = {
   waistCm: 1,
 };
 
-export const ZH_WEEKDAY = ["", "一", "二", "三", "四", "五", "六", "日"];
+/** A catalog key of the onboarding thread whose text has no placeholder. */
+export type OnboardingKey = Exclude<
+  Extract<MessageKey, `meals.onboarding.${string}`>,
+  `meals.onboarding.answer.${string}` | `meals.onboarding.result.${"daily" | "mixed" | "cut" | "gain" | "join"}` | "meals.onboarding.daysJoined"
+>;
 
-export const CONSENT_OPTIONS: readonly { value: Consent; label: string }[] = [
-  { value: "manual", label: "同意" },
-  { value: "no", label: "不同意" },
+const WEEKDAY_KEYS: readonly OnboardingKey[] = [
+  "meals.onboarding.weekday.1",
+  "meals.onboarding.weekday.2",
+  "meals.onboarding.weekday.3",
+  "meals.onboarding.weekday.4",
+  "meals.onboarding.weekday.5",
+  "meals.onboarding.weekday.6",
+  "meals.onboarding.weekday.7",
 ];
-export const GOAL_OPTIONS: readonly { value: Goal; label: string; sub: string }[] = [
-  { value: "cut", label: "减脂", sub: "每周掉体重的 0.5% 左右，蛋白拉高保肌肉" },
-  { value: "gain", label: "增肌", sub: "比维持量多吃 5%，练的那天多给" },
-  { value: "steady", label: "精力稳", sub: "吃够维持量，三餐匀开，不犯困" },
+
+/** The short weekday on a day button, 1 = Monday. */
+export function weekdayLabel(day: number): string {
+  const key = WEEKDAY_KEYS[day - 1];
+  return key ? t(key) : "";
+}
+
+export const CONSENT_OPTIONS: readonly { value: Consent; label: OnboardingKey }[] = [
+  { value: "manual", label: "meals.onboarding.agree" },
+  { value: "no", label: "meals.onboarding.disagree" },
 ];
-export const SEX_OPTIONS: readonly { value: Sex; label: string }[] = [
-  { value: "m", label: "男" },
-  { value: "f", label: "女" },
+export const GOAL_OPTIONS: readonly { value: Goal; label: OnboardingKey; sub: OnboardingKey }[] = [
+  { value: "cut", label: "meals.onboarding.goal.cut", sub: "meals.onboarding.goal.cutSub" },
+  { value: "gain", label: "meals.onboarding.goal.gain", sub: "meals.onboarding.goal.gainSub" },
+  { value: "steady", label: "meals.onboarding.goal.steady", sub: "meals.onboarding.goal.steadySub" },
 ];
-export const TRAIN_TIME_OPTIONS: readonly { value: TrainTime; label: string; short: string }[] = [
-  { value: "morning", label: "早上上班前", short: "早上" },
-  { value: "midday", label: "午休", short: "午休" },
-  { value: "evening", label: "下班后", short: "下班后" },
+export const SEX_OPTIONS: readonly { value: Sex; label: OnboardingKey }[] = [
+  { value: "m", label: "meals.onboarding.sex.m" },
+  { value: "f", label: "meals.onboarding.sex.f" },
 ];
-export const WORK_OPTIONS: readonly { value: Work; label: string; sub: string }[] = [
-  { value: "sit", label: "大多坐着", sub: "办公室、开车" },
-  { value: "stand", label: "常站或走", sub: "店员、老师、护士" },
-  { value: "labor", label: "体力活", sub: "搬运、工地、农活" },
+export const TRAIN_TIME_OPTIONS: readonly { value: TrainTime; label: OnboardingKey; short: OnboardingKey }[] = [
+  { value: "morning", label: "meals.onboarding.time.morning", short: "meals.onboarding.time.morningShort" },
+  { value: "midday", label: "meals.onboarding.time.midday", short: "meals.onboarding.time.middayShort" },
+  { value: "evening", label: "meals.onboarding.time.evening", short: "meals.onboarding.time.eveningShort" },
 ];
-export const PEOPLE_OPTIONS: readonly { value: number; label: string }[] = [
-  { value: 1, label: "1 人" },
-  { value: 2, label: "2 人" },
-  { value: 3, label: "3 人" },
-  { value: 4, label: "4 人以上" },
+export const WORK_OPTIONS: readonly { value: Work; label: OnboardingKey; sub: OnboardingKey }[] = [
+  { value: "sit", label: "meals.onboarding.work.sit", sub: "meals.onboarding.work.sitSub" },
+  { value: "stand", label: "meals.onboarding.work.stand", sub: "meals.onboarding.work.standSub" },
+  { value: "labor", label: "meals.onboarding.work.labor", sub: "meals.onboarding.work.laborSub" },
 ];
+export const PEOPLE_OPTIONS: readonly { value: number; label: OnboardingKey }[] = [
+  { value: 1, label: "meals.onboarding.people.n1" },
+  { value: 2, label: "meals.onboarding.people.n2" },
+  { value: 3, label: "meals.onboarding.people.n3" },
+  { value: 4, label: "meals.onboarding.people.n4plus" },
+];
+
+/** The label of a head count; 4 and up read "4 or more". */
+export function peopleLabel(n: number): string {
+  const o = PEOPLE_OPTIONS.find((p) => p.value === Math.min(4, n)) ?? PEOPLE_OPTIONS[0]!;
+  return t(o.label);
+}
+
+// The words a shop or kitchen pick is stored as, in the profile. They stay
+// Chinese whatever the UI language; OPTION_LABELS is how each reads on screen.
 export const SHOP_OPTIONS: readonly string[] = ["超市", "网上", "菜市场", "便利店"];
 // Every appliance past the default stove and microwave (planner/library.ts
 // equipmentNamed reads these words) counts only when it is picked here or
 // named in the conversation.
 export const KITCHEN_OPTIONS: readonly string[] = ["一口锅", "微波炉", "电饭煲", "电压力锅", "蒸锅", "豆浆机", "烤箱", "空气炸锅"];
 export const NO_DISLIKES = "无";
-// Each dislike and the food tag the program checks it by.
-export const AVOID_OPTIONS: readonly { label: string; tag: FoodTag | null }[] = [
-  { label: NO_DISLIKES, tag: null },
-  { label: "不吃牛肉", tag: "beef" },
-  { label: "不吃海鲜", tag: "seafood" },
-  { label: "不吃辣", tag: "spicy" },
+// Each dislike (stored by its Chinese word) and the food tag the program checks it by.
+export const AVOID_OPTIONS: readonly { value: string; label: OnboardingKey; tag: FoodTag | null }[] = [
+  { value: NO_DISLIKES, label: "meals.onboarding.avoid.none", tag: null },
+  { value: "不吃牛肉", label: "meals.onboarding.avoid.beef", tag: "beef" },
+  { value: "不吃海鲜", label: "meals.onboarding.avoid.seafood", tag: "seafood" },
+  { value: "不吃辣", label: "meals.onboarding.avoid.spicy", tag: "spicy" },
 ];
+const OPTION_LABELS: Readonly<Record<string, OnboardingKey>> = {
+  超市: "meals.onboarding.shop.supermarket",
+  网上: "meals.onboarding.shop.online",
+  菜市场: "meals.onboarding.shop.market",
+  便利店: "meals.onboarding.shop.convenience",
+  一口锅: "meals.onboarding.kitchen.pot",
+  微波炉: "meals.onboarding.kitchen.microwave",
+  电饭煲: "meals.onboarding.kitchen.riceCooker",
+  电压力锅: "meals.onboarding.kitchen.pressureCooker",
+  蒸锅: "meals.onboarding.kitchen.steamer",
+  豆浆机: "meals.onboarding.kitchen.soyMilk",
+  烤箱: "meals.onboarding.kitchen.oven",
+  空气炸锅: "meals.onboarding.kitchen.airFryer",
+};
+
+/** How a stored shop, kitchen or dislike word reads in the UI language. */
+export function optionLabel(value: string): string {
+  const key = OPTION_LABELS[value] ?? AVOID_OPTIONS.find((o) => o.value === value)?.label;
+  return key ? t(key) : value;
+}
 
 const DEFAULT_BODY = { age: 30, heightCm: 170, weightKg: 65, bodyFatPct: 20, waistCm: 80 };
 
@@ -262,29 +317,45 @@ export function onboardingReducer(s: OnboardingState, action: OnboardingAction):
 
 /** The reader's answer to a step, as the bubble under the question shows it. */
 export function answerText(a: Answers, id: StepId): string {
+  const sep = t("meals.onboarding.listSep");
   switch (id) {
-    case "consent":
-      return CONSENT_OPTIONS.find((o) => o.value === a.consent)?.label ?? "";
-    case "goal":
-      return GOAL_OPTIONS.find((o) => o.value === a.goal)?.label ?? "";
-    case "body":
-      return (
-        `${a.sex === "f" ? "女" : "男"} · ${a.age} 岁 · ${a.heightCm} cm · ${a.weightKg.toFixed(1)} kg` +
-        (a.bodyFatKnown ? ` · 体脂 ${a.bodyFatPct.toFixed(1)}%` : " · 体脂不知道") +
-        (a.waistKnown ? ` · 腰围 ${a.waistCm} cm` : "")
-      );
-    case "train": {
-      if (!a.trainingDays.length) return "现在不练";
-      const days = a.trainingDays.map((d) => ZH_WEEKDAY[d]).join("、");
-      const time = TRAIN_TIME_OPTIONS.find((o) => o.value === a.trainTime)?.short ?? "";
-      return `周${days} · ${time}`;
+    case "consent": {
+      const o = CONSENT_OPTIONS.find((c) => c.value === a.consent);
+      return o ? t(o.label) : "";
     }
-    case "work":
-      return WORK_OPTIONS.find((o) => o.value === a.work)?.label ?? "";
+    case "goal": {
+      const o = GOAL_OPTIONS.find((g) => g.value === a.goal);
+      return o ? t(o.label) : "";
+    }
+    case "body":
+      return [
+        t(a.sex === "f" ? "meals.onboarding.sex.f" : "meals.onboarding.sex.m"),
+        `${a.age} ${t("meals.yearsUnit")}`,
+        `${a.heightCm} cm`,
+        `${a.weightKg.toFixed(1)} kg`,
+        a.bodyFatKnown
+          ? t("meals.onboarding.answer.bodyFat", { pct: a.bodyFatPct.toFixed(1) })
+          : t("meals.onboarding.answer.bodyFatUnknown"),
+        ...(a.waistKnown ? [t("meals.onboarding.answer.waist", { cm: a.waistCm })] : []),
+      ].join(" · ");
+    case "train": {
+      if (!a.trainingDays.length) return t("meals.noTrainingNow");
+      const days = t("meals.onboarding.daysJoined", { days: a.trainingDays.map(weekdayLabel).join(sep) });
+      const o = TRAIN_TIME_OPTIONS.find((x) => x.value === a.trainTime);
+      return `${days} · ${o ? t(o.short) : ""}`;
+    }
+    case "work": {
+      const o = WORK_OPTIONS.find((w) => w.value === a.work);
+      return o ? t(o.label) : "";
+    }
     case "logistics": {
-      const people = a.people >= 4 ? "4 人以上" : `${a.people} 人`;
-      const avoid = a.avoid.length === 1 && a.avoid[0] === NO_DISLIKES ? "无忌口" : a.avoid.join("、");
-      return `${people} · ${a.shops.join("、")} · ${a.kitchen.join("、")} · ${avoid}`;
+      const none = a.avoid.length === 1 && a.avoid[0] === NO_DISLIKES;
+      return [
+        peopleLabel(a.people),
+        a.shops.map(optionLabel).join(sep),
+        a.kitchen.map(optionLabel).join(sep),
+        none ? t("meals.onboarding.avoid.noneAnswer") : a.avoid.map(optionLabel).join(sep),
+      ].join(" · ");
     }
   }
 }
@@ -295,7 +366,7 @@ export function toProfile(a: Answers): Profile | null {
   if (!a.goal || !a.sex || !a.work) return null;
   if (!stepDone(a, "train") || !stepDone(a, "logistics")) return null;
   const dislikes = a.avoid.flatMap((label) => {
-    const tag = AVOID_OPTIONS.find((o) => o.label === label)?.tag;
+    const tag = AVOID_OPTIONS.find((o) => o.value === label)?.tag;
     return tag ? [tag] : [];
   });
   return {
@@ -319,37 +390,51 @@ export function toProfile(a: Answers): Profile | null {
 }
 
 /** What the thread says above the targets card. */
-export function resultLine(t: Targets, p: Profile): string {
-  let say: string;
-  if (t.trainingDaysPerWeek === 0) say = `算好了。每天 ${t.rest.kcal} kcal，蛋白 ${t.rest.protein} g。`;
-  else if (t.trainingDaysPerWeek === 7) say = `算好了。每天 ${t.training.kcal} kcal，蛋白 ${t.training.protein} g。`;
+export function resultLine(tg: Targets, p: Profile): string {
+  let first: string;
+  if (tg.trainingDaysPerWeek === 0)
+    first = t("meals.onboarding.result.daily", { kcal: tg.rest.kcal, protein: tg.rest.protein });
+  else if (tg.trainingDaysPerWeek === 7)
+    first = t("meals.onboarding.result.daily", { kcal: tg.training.kcal, protein: tg.training.protein });
   else
-    say = `算好了。练的那天 ${t.training.kcal} kcal，休息日 ${t.rest.kcal} kcal，蛋白每天都是 ${t.training.protein} g。`;
-  const gap = Math.round(Math.abs(t.tdeeAverage - t.weekAverageKcal));
+    first = t("meals.onboarding.result.mixed", {
+      trainingKcal: tg.training.kcal,
+      restKcal: tg.rest.kcal,
+      protein: tg.training.protein,
+    });
+  const gap = Math.round(Math.abs(tg.tdeeAverage - tg.weekAverageKcal));
+  let second: string;
   if (p.goal === "cut")
-    say += `一周平均每天比维持量少 ${gap} kcal，大约每周掉 ${Math.abs(t.weightChangeKgPerWeek).toFixed(2)} kg。`;
-  else if (p.goal === "gain") say += `一周平均每天比维持量多 ${gap} kcal。`;
-  else say += "按维持量吃。";
-  return say + "体重变了在对话里说一声，我重算。";
+    second = t("meals.onboarding.result.cut", { gap, kg: Math.abs(tg.weightChangeKgPerWeek).toFixed(2) });
+  else if (p.goal === "gain") second = t("meals.onboarding.result.gain", { gap });
+  else second = t("meals.onboarding.result.steady");
+  return t("meals.onboarding.result.join", { first, second, third: t("meals.onboarding.result.closing") });
 }
 
-export const INTRO_LINE = "先问几个问题，都是点选，一两分钟。答完我算出你每天的热量和蛋白，再排这一周。";
-export const NO_CONSENT_REPLY = "好，不存身体数据。那就算不了热量，只能按份量给你排。改主意了点上面那条回答。";
+/** What the thread opens with. */
+export function introLine(): string {
+  return t("meals.onboarding.intro");
+}
+
+/** The reply to a withheld consent. */
+export function noConsentReply(): string {
+  return t("meals.onboarding.noConsentReply");
+}
 
 /** What the thread asks at a step. */
 export function questionText(id: StepId): string {
   switch (id) {
     case "consent":
-      return "排之前要用到你的体重和体脂。这两项属于健康信息，先单独问你要不要给。";
+      return t("meals.onboarding.q.consent");
     case "goal":
-      return "这段时间主要想要什么？";
+      return t("meals.onboarding.q.goal");
     case "body":
-      return "身体数据。点加减调到你的数。体脂和腰围不知道可以不填。";
+      return t("meals.onboarding.q.body");
     case "train":
-      return "每周哪几天练？一般什么时候练？练的那天加餐会挪到练完之后。";
+      return t("meals.onboarding.q.train");
     case "work":
-      return "不算训练，平时上班大多是什么状态？";
+      return t("meals.onboarding.q.work");
     case "logistics":
-      return "最后几件杂事，一屏点完。";
+      return t("meals.onboarding.q.logistics");
   }
 }

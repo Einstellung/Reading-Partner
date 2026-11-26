@@ -3,10 +3,11 @@
 // the meals tools' progress labels, and the flavour names meals/plan/types.ts
 // defines. The source every other locale is typed against.
 //
-// Out of scope (docs/ui/81): meals/screen/onboarding.ts (the scripted
-// questions and their answer options) is not an area this catalog covers — see
-// the migration report. method-screen.ts's worked formulas and citations stay
-// English; only its section titles and the standing notes are here.
+// The onboarding thread's scripted lines and answer options
+// (meals/screen/onboarding.ts) are the "onboarding.*" keys. The shop, kitchen
+// and dislike words the answers store stay Chinese, as the profile keeps them;
+// only how they read on screen is here. method-screen.ts's worked formulas and
+// citations stay English; only its section titles and the standing notes are here.
 
 export default {
   title: "Meals",
@@ -136,6 +137,78 @@ export default {
     "Used only to work out how many calories and how much protein you need each day — nothing else.",
   "consent.whereValue": "Kept only on this device and in your account. Never given to third parties or used for ads.",
   "consent.undoValue": "You can withdraw consent and delete this data in Settings at any time.",
+
+  // Onboarding thread (meals/screen/onboarding.ts)
+  "onboarding.intro": "A few questions first, all taps, a minute or two. Once you answer, I work out your daily calories and protein, then plan the week.",
+  "onboarding.noConsentReply": "OK, I won't keep any body data. That means I can't work out calories and can only plan by portion. If you change your mind, tap the answer above.",
+  "onboarding.q.consent": "Before planning I need your weight and body fat. Both count as health information, so I'm asking separately whether you want to share them.",
+  "onboarding.q.goal": "What do you mainly want from this stretch?",
+  "onboarding.q.body": "Your body numbers. Tap plus and minus to set them. Body fat and waist can stay empty if you don't know them.",
+  "onboarding.q.train": "Which days a week do you train, and at what time of day? On training days the snack moves to right after training.",
+  "onboarding.q.work": "Leaving training aside, what is your usual day at work like?",
+  "onboarding.q.logistics": "A few last practical things, all on one screen.",
+  "onboarding.agree": "Agree",
+  "onboarding.disagree": "Don't agree",
+  "onboarding.goal.cut": "Lose fat",
+  "onboarding.goal.cutSub": "About 0.5% of body weight a week, with protein high to keep muscle",
+  "onboarding.goal.gain": "Build muscle",
+  "onboarding.goal.gainSub": "5% above maintenance, with more on training days",
+  "onboarding.goal.steady": "Steady energy",
+  "onboarding.goal.steadySub": "Eat at maintenance, spread evenly over meals, no afternoon slump",
+  "onboarding.sex.m": "Male",
+  "onboarding.sex.f": "Female",
+  "onboarding.time.morning": "Before work in the morning",
+  "onboarding.time.morningShort": "Morning",
+  "onboarding.time.midday": "Lunch break",
+  "onboarding.time.middayShort": "Lunch break",
+  "onboarding.time.evening": "After work",
+  "onboarding.time.eveningShort": "After work",
+  "onboarding.work.sit": "Mostly sitting",
+  "onboarding.work.sitSub": "Office, driving",
+  "onboarding.work.stand": "On my feet or walking",
+  "onboarding.work.standSub": "Shop, teaching, nursing",
+  "onboarding.work.labor": "Physical work",
+  "onboarding.work.laborSub": "Moving goods, construction, farming",
+  "onboarding.people.n1": "1 person",
+  "onboarding.people.n2": "2 people",
+  "onboarding.people.n3": "3 people",
+  "onboarding.people.n4plus": "4 or more",
+  "onboarding.shop.supermarket": "Supermarket",
+  "onboarding.shop.online": "Online",
+  "onboarding.shop.market": "Wet market",
+  "onboarding.shop.convenience": "Convenience store",
+  "onboarding.kitchen.pot": "One pot",
+  "onboarding.kitchen.microwave": "Microwave",
+  "onboarding.kitchen.riceCooker": "Rice cooker",
+  "onboarding.kitchen.pressureCooker": "Electric pressure cooker",
+  "onboarding.kitchen.steamer": "Steamer",
+  "onboarding.kitchen.soyMilk": "Soy milk maker",
+  "onboarding.kitchen.oven": "Oven",
+  "onboarding.kitchen.airFryer": "Air fryer",
+  "onboarding.avoid.none": "None",
+  "onboarding.avoid.noneAnswer": "No dislikes",
+  "onboarding.avoid.beef": "No beef",
+  "onboarding.avoid.seafood": "No seafood",
+  "onboarding.avoid.spicy": "Nothing spicy",
+  "onboarding.weekday.1": "Mon",
+  "onboarding.weekday.2": "Tue",
+  "onboarding.weekday.3": "Wed",
+  "onboarding.weekday.4": "Thu",
+  "onboarding.weekday.5": "Fri",
+  "onboarding.weekday.6": "Sat",
+  "onboarding.weekday.7": "Sun",
+  "onboarding.daysJoined": "{days}",
+  "onboarding.listSep": ", ",
+  "onboarding.answer.bodyFat": "Body fat {pct}%",
+  "onboarding.answer.bodyFatUnknown": "Body fat unknown",
+  "onboarding.answer.waist": "Waist {cm} cm",
+  "onboarding.result.daily": "Done. {kcal} kcal a day, {protein} g protein.",
+  "onboarding.result.mixed": "Done. {trainingKcal} kcal on training days, {restKcal} kcal on rest days, {protein} g protein every day.",
+  "onboarding.result.cut": "Averaged over the week, that is {gap} kcal a day below maintenance, about {kg} kg lost per week.",
+  "onboarding.result.gain": "Averaged over the week, that is {gap} kcal a day above maintenance.",
+  "onboarding.result.steady": "Eat at maintenance.",
+  "onboarding.result.closing": "If your weight changes, tell me in the conversation and I'll recalculate.",
+  "onboarding.result.join": "{first} {second} {third}",
 
   // view.ts
   "mode.make": "Make",

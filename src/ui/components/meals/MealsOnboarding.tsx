@@ -12,9 +12,7 @@ import {
   AVOID_OPTIONS,
   CONSENT_OPTIONS,
   GOAL_OPTIONS,
-  INTRO_LINE,
   KITCHEN_OPTIONS,
-  NO_CONSENT_REPLY,
   PEOPLE_OPTIONS,
   RESULT_STEP,
   SEX_OPTIONS,
@@ -22,9 +20,12 @@ import {
   STEPS,
   TRAIN_TIME_OPTIONS,
   WORK_OPTIONS,
-  ZH_WEEKDAY,
   answerText,
   initialOnboarding,
+  introLine,
+  noConsentReply,
+  optionLabel,
+  weekdayLabel,
   onboardingReducer,
   questionText,
   resultLine,
@@ -192,7 +193,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
                 <Opt
                   key={o.value}
                   selected={a.consent === o.value}
-                  label={o.label}
+                  label={t(o.label)}
                   onClick={() => dispatch({ type: "consent", value: o.value })}
                 />
               ))}
@@ -208,8 +209,8 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               <Opt
                 key={o.value}
                 selected={a.goal === o.value}
-                label={o.label}
-                sub={o.sub}
+                label={t(o.label)}
+                sub={t(o.sub)}
                 onClick={() => dispatch({ type: "goal", value: o.value })}
               />
             ))}
@@ -225,7 +226,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
                 <Opt
                   key={o.value}
                   selected={a.sex === o.value}
-                  label={o.label}
+                  label={t(o.label)}
                   onClick={() => dispatch({ type: "sex", value: o.value })}
                 />
               ))}
@@ -287,7 +288,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
                 )}
                 onClick={() => dispatch({ type: "toggleDay", day: d })}
               >
-                {ZH_WEEKDAY[d]}
+                {weekdayLabel(d)}
               </Button>
             ))}
           </div>
@@ -306,7 +307,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
                   <Opt
                     key={o.value}
                     selected={a.trainTime === o.value}
-                    label={o.label}
+                    label={t(o.label)}
                     onClick={() => dispatch({ type: "trainTime", value: o.value })}
                   />
                 ))}
@@ -324,8 +325,8 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               <Opt
                 key={o.value}
                 selected={a.work === o.value}
-                label={o.label}
-                sub={o.sub}
+                label={t(o.label)}
+                sub={t(o.sub)}
                 onClick={() => dispatch({ type: "work", value: o.value })}
               />
             ))}
@@ -341,7 +342,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               <Opt
                 key={o.value}
                 selected={a.people === o.value}
-                label={o.label}
+                label={t(o.label)}
                 onClick={() => dispatch({ type: "people", value: o.value })}
               />
             ))}
@@ -352,7 +353,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               <Opt
                 key={v}
                 selected={a.shops.includes(v)}
-                label={v}
+                label={optionLabel(v)}
                 onClick={() => dispatch({ type: "toggle", field: "shops", value: v })}
               />
             ))}
@@ -363,7 +364,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               <Opt
                 key={v}
                 selected={a.kitchen.includes(v)}
-                label={v}
+                label={optionLabel(v)}
                 onClick={() => dispatch({ type: "toggle", field: "kitchen", value: v })}
               />
             ))}
@@ -372,10 +373,10 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
           <Opts>
             {AVOID_OPTIONS.map((o) => (
               <Opt
-                key={o.label}
-                selected={a.avoid.includes(o.label)}
-                label={o.label}
-                onClick={() => dispatch({ type: "toggle", field: "avoid", value: o.label })}
+                key={o.value}
+                selected={a.avoid.includes(o.value)}
+                label={t(o.label)}
+                onClick={() => dispatch({ type: "toggle", field: "avoid", value: o.value })}
               />
             ))}
           </Opts>
@@ -447,7 +448,7 @@ export function MealsOnboarding(props: MealsOnboardingProps) {
       <MealsHeader title={t("meals.title")} onBack={props.onBack} />
       <div className="flex flex-col gap-3.5">
         <Ai>
-          <p className="m-0">{INTRO_LINE}</p>
+          <p className="m-0">{introLine()}</p>
         </Ai>
         {shown.map((id, i) => (
           <div key={id} className="flex flex-col gap-3.5">
@@ -469,7 +470,7 @@ export function MealsOnboarding(props: MealsOnboardingProps) {
             )}
             {i === s.step && id === "consent" && s.answers.consent === "no" && (
               <Ai>
-                <p className="m-0">{NO_CONSENT_REPLY}</p>
+                <p className="m-0">{noConsentReply()}</p>
               </Ai>
             )}
           </div>
