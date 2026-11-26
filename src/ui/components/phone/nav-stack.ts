@@ -1,9 +1,9 @@
 // The phone shell's navigation stack (docs/22). Pure — no React, no DOM — so
 // the one definition of "back" can be read and tested on its own.
 //
-// The shell used to hold a flat `screen` plus two loose pieces of state (the
-// opened saved article, the settings overlay), and every top bar wrote its own
-// destination into it. Here every screen is an entry, home is the floor, and
+// The shell used to hold a flat `screen` plus loose pieces of state (the
+// settings overlay among them), and every top bar wrote its own destination
+// into it. Here every screen is an entry, home is the floor, and
 // back is `pop`. The three things that trigger a back — a top bar button, the
 // left-edge swipe, the Android system button — all end up in the same function.
 //
@@ -12,13 +12,9 @@
 // that keeps rendering underneath it.
 
 import type { MealKey } from "../../../meals/plan/types";
-import type { SavedArticle } from "../../../reading/saved/saved-articles";
 
 export type ScreenKind =
   | "home"
-  | "briefing"
-  | "briefs"
-  | "article"
   | "meals"
   | "meals-shopping"
   | "meals-day"
@@ -26,28 +22,20 @@ export type ScreenKind =
   | "meals-prep"
   | "meals-method"
   | "meals-onboarding"
-  | "saved"
-  | "savedArticle"
   | "library"
   | "topic"
   | "reader"
   | "lesson"
   | "settings";
 
-// Only the screens that stand for one thing carry anything: the opened saved
-// article (the record itself, the way the shell used to keep it beside
-// `screen`), the open topic, and the book being read. The reader is an entry
+// Only the screens that stand for one thing carry anything: the open day or
+// recipe, the open topic, and the book being read. The reader is an entry
 // like any other — back leaves the book the same way it leaves a list (docs/70).
 export type PhoneScreen =
   | { kind: "home" }
-  | { kind: "briefing" }
-  // The info shelf (docs/info/88), pushed from home.
-  | { kind: "briefs" }
-  | { kind: "article" }
   | { kind: "meals" }
   | { kind: "meals-shopping" }
-  // Which day is open. One of a week, so the entry carries the date the way an
-  // opened saved article carries its record.
+  // Which day is open. One of a week, so the entry carries the date.
   | { kind: "meals-day"; date: string }
   // One made meal's recipe, pushed over its day.
   | { kind: "meals-recipe"; date: string; meal: MealKey }
@@ -56,8 +44,6 @@ export type PhoneScreen =
   | { kind: "meals-prep"; session: string }
   | { kind: "meals-method" }
   | { kind: "meals-onboarding" }
-  | { kind: "saved" }
-  | { kind: "savedArticle"; article: SavedArticle }
   | { kind: "library" }
   | { kind: "topic"; topicId: string }
   | { kind: "reader"; bookId: string; name: string }
@@ -71,7 +57,7 @@ export type PhoneScreen =
 
 export type PayloadFreeKind = Exclude<
   ScreenKind,
-  "savedArticle" | "topic" | "reader" | "lesson" | "meals-day" | "meals-recipe" | "meals-prep"
+  "topic" | "reader" | "lesson" | "meals-day" | "meals-recipe" | "meals-prep"
 >;
 
 export type NavStack = readonly PhoneScreen[];
@@ -96,7 +82,7 @@ export function canGoBack(stack: NavStack): boolean {
 }
 
 // What a back does. A view drawn over the screens rather than beside them — the
-// info call, the lesson's aside (docs/74), an EPUB's lesson over its reader
+// meals call, the lesson's aside (docs/74), an EPUB's lesson over its reader
 // (docs/77) — is not a stack entry, and back has
 // to close it rather than navigate underneath it:
 // popping while it is up leaves the overlay on screen and drops the reader on a
@@ -125,14 +111,13 @@ export function push(stack: NavStack, next: PhoneScreen): NavStack {
   return [...stack, next];
 }
 
-// Navigate to a screen the way InfoHome asks for it: by naming a destination
-// rather than a direction. A destination already on the stack is a back — the
-// article's top bar asks for "briefing", which is where it was opened from — so
-// it unwinds to that entry instead of stacking a second copy. Anything else is
-// a push.
+// Navigate to a screen by naming a destination rather than a direction. A
+// destination already on the stack is a back — the prep page asks for "meals",
+// which is where it was opened from — so it unwinds to that entry instead of
+// stacking a second copy. Anything else is a push.
 //
 // The unwind keeps the entry that is already there, payload and all, which is
-// why a screen that carries one (savedArticle) is pushed directly instead.
+// why a screen that carries one (a topic, a book) is pushed directly instead.
 export function goTo(stack: NavStack, next: PhoneScreen): NavStack {
   for (let i = stack.length - 1; i >= 0; i--) {
     if (stack[i].kind === next.kind) return stack.slice(0, i + 1);

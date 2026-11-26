@@ -22,7 +22,6 @@ export default {
   "action.cancel": "Отмена",
   "action.delete": "Удалить",
 
-  "savedArticle.backLabel": "Сохранённое",
 
   "nav.settings": "Настройки",
   "nav.settingsNeedsAttention": "Настройки — синхронизация требует внимания",

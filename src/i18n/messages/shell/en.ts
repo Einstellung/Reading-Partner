@@ -35,7 +35,6 @@ export default {
   "action.delete": "Delete",
 
   // The phone's saved-article screen, opened from the vestibule.
-  "savedArticle.backLabel": "Saved",
 
   // AppSidebar / SettingsButton.
   "nav.settings": "Settings",

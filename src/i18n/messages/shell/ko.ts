@@ -22,7 +22,6 @@ export default {
   "action.cancel": "취소",
   "action.delete": "삭제",
 
-  "savedArticle.backLabel": "저장됨",
 
   "nav.settings": "설정",
   "nav.settingsNeedsAttention": "설정 — 동기화 확인 필요",

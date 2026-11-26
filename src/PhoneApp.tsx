@@ -58,7 +58,6 @@ import {
   type PhoneScreen,
 } from "./ui/components/phone/nav-stack";
 import { useEdgeBack } from "./ui/components/phone/gesture/useEdgeBack";
-import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import { useT } from "./i18n";
@@ -396,10 +395,6 @@ export default function PhoneApp({
           )}
 
 
-
-          {base.kind === "savedArticle" && (
-            <SavedArticleView article={base.article} backLabel={t("shell.savedArticle.backLabel")} onBack={goBack} />
-          )}
 
           {(base.kind === "library" || base.kind === "topic") && (
             <PhoneShelf

@@ -23,7 +23,6 @@ export default {
   "action.cancel": "Cancelar",
   "action.delete": "Excluir",
 
-  "savedArticle.backLabel": "Salvos",
 
   "nav.settings": "Ajustes",
   "nav.settingsNeedsAttention": "Ajustes — a sincronização precisa de atenção",

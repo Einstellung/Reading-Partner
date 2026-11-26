@@ -22,7 +22,6 @@ export default {
   "action.cancel": "Abbrechen",
   "action.delete": "Löschen",
 
-  "savedArticle.backLabel": "Gespeichert",
 
   "nav.settings": "Einstellungen",
   "nav.settingsNeedsAttention": "Einstellungen — Synchronisierung braucht Aufmerksamkeit",

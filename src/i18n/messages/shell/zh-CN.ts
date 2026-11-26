@@ -22,7 +22,6 @@ export default {
   "action.cancel": "取消",
   "action.delete": "删除",
 
-  "savedArticle.backLabel": "收藏",
 
   "nav.settings": "设置",
   "nav.settingsNeedsAttention": "设置——同步需要处理",

@@ -22,7 +22,6 @@ export default {
   "action.cancel": "キャンセル",
   "action.delete": "削除",
 
-  "savedArticle.backLabel": "保存済み",
 
   "nav.settings": "設定",
   "nav.settingsNeedsAttention": "設定 — 同期に対応が必要です",
