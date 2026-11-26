@@ -4,7 +4,7 @@
 
 worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkout 的旧 node_modules，typecheck 报一串 durable 类型错）。
 
-## 已做（每个都 t.sh 全绿、typecheck 过；7273f559 时 9325 tests / 0 fail）
+## 已做（每个都 t.sh 全绿、typecheck 过）
 
 1. `955710ce` 纯搬家：`src/info/meals` → `src/meals`，`tests/info/meals` → `tests/meals`，`ui/components/info/meals` + `MealsDraftCard.tsx` + `MealsPrepCard.tsx` → `ui/components/meals`，`tests/ui/components/info/meals` → `tests/ui/components/meals`。LAYER 表、palace kinds 里的 `flow("src/meals/...")`、注释里的路径同步改。
 2. `aea456ca` 纯搬家：`info/links` → `reading/ingest/links`；X 链接阅读器（`live/outbound/permalink/post/read-post/reader/snowflake/search-page`）→ `reading/ingest/x`；`info/sources/plugins` → `src/sources/plugins`，`read-page-tool/drive-site/plugin/descriptor/item` → `src/sources`。测试同步搬，`scripts/` 的 import 一并改。LAYER 登记 `reading/ingest/links`、`reading/ingest/x`、`sources`、`sources/plugins`（都是 domain）。
@@ -21,63 +21,60 @@ worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkou
 6. `1171973a` 测试：三餐那半复制出来，断言不变。`tests/meals/conversation/{meals-durable,meals-kill,deliver}.test.ts` + `meals-kill-child.ts` + `support/meals-file.ts`；`tests/reading/turn/meals-bell.test.ts`（两条：落进常驻对话、开着时流进去可停）；`tests/ui/components/meals/meals-call-turn.test.ts`（后两个按 src 路径镜像放）。原文件里的三餐用例还在，随 `tests/info`、`tests/ui/components/info`、`info-bell.test.ts` 一起删；info-bell 的 "does not wait on a busy briefing conversation" 是拿简报作对照的，随简报删，不搬。
 7. `7273f559` 挂载点：`App.tsx`、`PhoneApp.tsx` 自己调 `useMealsHost`、画 `<MealsHost>`（手机端带 day/recipe/prep/back/PullToAsk/pipCards=false），`PhoneHome` 的 `mealsTile`/`onMealsTile` 成了它自己的 props（不再走 `LaunchProps`）。InfoHome 不再碰三餐，`reachableScreen` 不再替三餐屏改道（三餐屏交给 MealsHost 的 `enabled`）。没在 xvfb 上点过。
 8. 坑 699：在途回合的 place 重开时不再登记，打开不报错、不重问，半句静默丢掉。所以删 Intel 时 `useBackgroundServices` 的 `info: infoPlace()` 可以直接拿掉。
+9. `aca3644f` Today 搬出 info：`Vestibule.tsx` → `ui/components/shelf/Vestibule.tsx`（简报卡和 `oldBriefing` 去掉，`CardBodyPlaceholder` 内联），`today.ts` 拆两半：`shelf/today.ts` 只留 `todayDateLine`/`continueMetaLine`，简报卡那几行留在 `ui/components/info/today.ts` 给 HomeCard 随 info 删。键 `info.vestibule.*`、`info.today.{pageOf,page,marks}` 复制成 `shell.vestibule.*`、`shell.today.*`（9 种语言）。`launch-placeholder.test.tsx` 搬到 `tests/ui/components/shelf/` 并改成直接渲染 Vestibule（简报占位那几条随简报删）。9322 pass / 1 skip / 0 fail。
 
 搬家用的脚本在 `HANDOFF-remove-info-tools/`（合并前和本文件一起删）：`bun HANDOFF-remove-info-tools/mv.ts . moves.json`，moves.json 是 `[[旧路径, 新路径], …]`（文件或目录），按旧位置解析 src/tests/scripts 里每个相对 import、算新路径、再 `git mv`；`import.meta.dir` 拼的 fixture 路径、字符串和注释里的路径它不管，要手动 grep。`bun HANDOFF-remove-info-tools/deps.ts . report` 列出谁还 import info（谓词写死了 `src/info/`，按需改）。
 
-## 还剩
+## 还剩：第 4 步（删 Intel）已做了大半，停在 `HANDOFF-remove-info-tools/step4/`
 
-顺序建议 A → B → C → D，A+B 是一件事，最好一个 agent 做完。
+第四棒在工作区里把 src 侧改到 `bun run typecheck` 的 src 项目全过，tests 项目还有十几个文件没修完，没跑过 `scripts/t.sh`。不留红 commit，所以整包存成补丁，分支停在 `aca3644f`。接着做：
 
-### A+B 剩下的
+```
+cd <worktree>
+xargs -a HANDOFF-remove-info-tools/step4/step4-deleted.txt git rm -rq
+git apply HANDOFF-remove-info-tools/step4/step4.patch
+git add src/ui/components/chat/TopicProposalCard.tsx
+```
 
-- xvfb 无窗口点一遍：桌面和手机的三餐首页、Ask、草稿卡 Apply、备菜页、首页 Meals tile。
-- `InfoCallAnchor` 上的 `bookKey`/`kickoff` 随 `info/briefer/anchors.ts` 一起删。
+（原 WIP commit `c81884a6` 只在 reflog 里，补丁是它减去下面四个测试文件。）
 
-### B'. 入口（下一棒和 D 一起做）
+### 补丁里已做的
 
-- `AppSidebar.tsx`（桌面侧栏 Intel 那格换成 Meals）、`PhoneHome.tsx` + `phone/home-intel.ts`（手机首页 Intel 那格换成 Meals）、`base/places.ts`、`base/shell-nav.ts`（`HomeScreen` 的 `meals*` 屏、`reachableScreen`）、`phone/nav-stack.ts`。Meals 开关关着就不显示入口。
+- `git rm`（348 个文件，清单在 `step4-deleted.txt`）：`src/info`、`src/ui/components/info`、`src/i18n/messages/info`、`tests/info`、`tests/ui/components/info`、`reading/turn/info-bell.ts`+测试、`smoke/orb-spike-harness.tsx`（VoiceOrbEntry 在 info 目录里一起没了）、companion 的 `TopicSearchCard`/`Study{Lines,Move,Seeds}Card`/`IssueQuestionCard`/`issue-call`/`study-end`/`use-study-run`/`voice-context`/`voice-call-mode`、`ui/components/reader/study/`、`phone/home-intel.ts`、`phone/SavedList.tsx`、`settings/AccountsPanel.tsx`+`use-accounts.ts`、`scripts/topic-{expand-probe,labels-replay,search-data,search-live}.ts`、`scripts/x-reader-live.ts`（它驱动的是主题搜索的 X 搜索读取器 `topic-search/x-reader`，那个随 info 删了，留着没东西可跑；`x-browse-host.ts`、`x-search-probe.ts` 不 import info，没动），以及这些文件的测试。
+- 运行期摘线：`useShellBootstrap` 去掉 distill source、tasking、briefing/info delivery、collect worker、topic search runs、info desk、secretary role、两个 info garbage marker；`useBackgroundServices` 去掉 `info: infoPlace()`；`dev-faux` 去掉 `infoAssemblies`；`i18n/areas.ts` 去掉 info。
+- 壳：App 直接画 `<Vestibule>`（`homeScreen === "vestibule"` 时，套原 InfoHome 的 `absolute inset-0 overflow-y-auto` 容器），去掉 InfoShelf、`openIssueBook`、`refreshInfoCollector`、study reader；`goToBriefing` 落 Today。PhoneApp 在 `base.kind === "home"` 时直接画 `<PhoneHome>`，去掉 InfoHome、InfoShelf、收藏列表和 saved-articles 的读取/同步路由；`infoScreenFor` 改名 `homeScreenFor`。PhoneHome 去掉 Intel 封面、收藏 tile、旧简报卡和 `LaunchProps`，原 Intel 那一节换成 Meals tile（`meals` 开时），新 prop `onOpenSettings`。`use-home-data` 只剩 `useReadingProgress`。PhoneReader 去掉 study。
+- 导航：`shell-nav` 的 `HomeScreen` 去掉 `briefing`/`briefs`/`article`，`ShellNavId` 去掉 `briefing`/`briefs`，`reachableScreen(screen, shown)` 改成两参，`hiddenByExperiments` 只看 meals，`showsLaunchCard` 删；`places.ts` 去掉 `briefing` 和设置说明里的「(X, Bloomberg)」；`AppSidebar` 去掉 Briefing/Briefs 两格和 `briefs`/`oldBriefing` props（桌面 Meals 那格原本就在，`gates.meals` 控制）。
+- 卡片：`CardPayload` 去掉 `InfoCard`/`TopicSearchCard`/`IssueQuestionCard`，直接列 `MealsCard`、`TopicProposalCardData`；`ThreadMessage.card` 旧字段删；topic-proposal 卡（门口和三餐都用）从 InfoCards 搬成 `ui/components/chat/TopicProposalCard.tsx`，键 `info.cards.*` 那 6 个复制成 `chat.topicCard.*`；`card-gates` 去掉 `INTEL_CARD_KINDS`，`hiddenCardKinds` 只看 meals；`box-jump` 的 `shownBoxItems` 只看 meals，盘上剩的 `brief-issue` 盒子项一律不画。
+- companion：`use-door-chat` 去掉主题搜索、study、issue 问题卡、issue 开场（`openedFor`）、`loadTopicSearchGuidance`；`door-tools` 去掉 topic-search 工具和 `intel` 开关；`use-voice-call` 只建门口通话（`createDoorVoiceCall`，不带 issue material）；`CompanionCorner` 去掉 voice context 和 `markIssueTold`。
+- `durable-catalog` 去掉 source/companion/tasking/topic-search 工具。
+- Settings：Accounts 页整页删（`BASE_TABS` 去掉 `accounts`）。那页只有站点登录（X、Bloomberg，`accountRows` 全由 Intel 的源推出）；app 自己的账号/设备登记（docs/north-star/accounts.md）没有 UI 在这页里，代码没动。`AccountPanel` 去掉旧简报的 Screening/Analysis 段。
+- 测试：domain-markers、retention-guard、palace/registry、saved-articles、think-kind、tool-contract、sources 五个、structured-output、chatParts、scroll-restore-contract 剪掉了 Intel 的用例和 import，但还没编过（见下）。
 
-### C. 删 Intel
+### 接着要修的（`bun run typecheck` 的 tests 项目报的）
 
-先做这几步（第三棒查清了，还没动）：
+- `tests/palace/registry.test.ts`：第 28 行还在引 `registerInfoDistillSource`，几个 import 变成未用。
+- `tests/platform/sync/pull-coverage.test.ts`：`ASK_PULL_ROUTE`/`READER_PULL_ROUTE`/`SOURCES_PULL_ROUTE` 三个 import 没剪；剪完看覆盖断言要不要同步改（palace kinds 里 info 的 kind 还在）。
+- `tests/soul/tool-contract.test.ts`：第 246 行 `const companion = buildCompanionTools(...)` 和用它的那条测试要删。
+- `tests/soul/think-kind.test.ts`、`tests/sources/plugins/{arxiv,github,huggingface,s2}.test.ts`、`tests/structured-output.test.ts`：剩下未用的 import。
+- 这四个没进补丁，还是 `aca3644f` 的原样，要手改：`tests/ui/components/base/{experiment-gates,shell-nav,shell-places}.test.ts`、`tests/ui/components/phone/phone-home-render.test.tsx`。按上面的新签名改（`reachableScreen` 两参、没有 briefing/briefs、`shellNavItems({ meals })`、PhoneHome 新 props），只删 Intel 的断言，三餐和其余的留着（第四棒用关键词批量剪，把三餐的也剪了，所以退回原样）。
+- 之后跑 `scripts/t.sh`：`tests/layering.test.ts` 的 LAYER 表要去掉已删目录（`info` 各子目录、`ui/components/info`、`ui/components/reader/study` 等）；其余运行期失败未知。
+- 可能还有 src 里指向已删模块的测试，比如 `tests/ui/components/companion/{door-tools,voice-call-handle,box-jump}.test.ts`、`tests/soul/companion-intro.test.ts`、`tests/ui/components/phone/phone-nav-stack.test.ts`，typecheck 过了再看运行结果。
+- commit 建议拆两个：先逻辑改动（补丁），再 `git rm`。分不开就一个 commit，message 里写清。
 
-1. 运行期摘线（逻辑 commit）：`useShellBootstrap.ts` 里的 `registerInfoDistillSource`、`registerTaskingWorker`、`registerBriefingDelivery`、`registerInfoDelivery`、`registerInfoCollectWorker`、`registerTopicSearchRuns`、`registerInfoDesk`、`registerSecretaryRole`、`infoDailyMarker`、`liveIssueExpiryMarker`（及 `amICollecting`/`noteCollectorHalt`/`issueRunClosed` 的 import）；`useBackgroundServices.ts` 的 `info: infoPlace()`（坑 699）。`registerMealsDelivery`、`registerMealsBell`、`registerMealsDesk`、`registerMealsRole` 留着。
-2. 桌面 Today 不是 Intel：`Vestibule.tsx` 画的是 PeerUpdateNotice、Continue reading、主题书架，简报卡在 `OLD_BRIEFING_UI_ENABLED`（false）后面。删 info 前把它搬出去（比如 `ui/components/shelf/`），去掉简报卡；`HomeCard.tsx` 的 `Card`/`CardLabel`/`CardBodyPlaceholder` 一起搬（PhoneHome 用前两个，`BriefingCardBody` 只给手机的旧简报卡）。`info.vestibule.*`、`info.shelf.new`/`items` 的键跟着搬。
-3. 壳：App 的 `InfoHome` 换成直接画 Vestibule；`briefs` 屏的 `InfoShelf`、`openIssueBook` 删。PhoneApp 直接画 `PhoneHome`（`LaunchProps` 里只有 `onOpenSettings` 等几项不是简报的），`InfoShelf`、`openShelfCard`、`use-home-data.ts` 的 intel 书架、`home-intel.ts`、收藏（`reading/saved`、`SavedList`、`saveArticle`）是 Intel 的。和 B' 一起做最省事。
-4. 然后 `git rm`：`src/info`、`src/ui/components/info`、`tests/info`、`tests/ui/components/info`、`reading/turn/info-bell.ts` + `tests/reading/turn/info-bell.test.ts`（`tests/soul/think-kind.test.ts` 用 `appendInfoReply`，剪那条）、`src/i18n/messages/info`（areas.ts 去掉）。`VoiceOrbEntry.tsx` 只有 `smoke/orb-spike-harness.tsx` 在用，一起删。
+### 补丁之外、这一棒没碰的 Intel 残留（不 import info，能编过）
 
-第三棒结束时还 import info 的文件（`grep -rlE "from ['\"][^'\"]*(/info/|components/info/|/info['\"])"`）：
+- `phone/nav-stack.ts` 的 `briefing`/`briefs`/`article`/`saved`/`savedArticle` 栈项；PhoneApp 还画 `savedArticle`（已无入口）。
+- `companion/issue-context.ts`（打开的简报、Ask 一段简报）、`box-jump` 的 `go-to-briefing` 步骤、App 的 `readerMode === "issue"`、`reading/issue*.ts`、`reading/saved/`（只删了收藏页，`saved-article-tools` 还挂在 durable catalog 上）。
+- 原清单里的其余项照旧：`src/sources` 的 index provider、`reading/ingest/x/search-page.ts`、soul/memory/legion/workshop 里只给 Intel 的代码、`palace/kinds.ts` 的 info kind、`scripts/x-search-probe.ts`/`x-browse-host.ts`、`workshop/bindery/cover-svg.ts` 里 `info.issue.book.volumeCount`（键已随 info 目录删，要换成别的或删 `volumeCover`）。
+- 注释里指向已删模块的话还没清（`grep -rn "info/" src tests scripts`）。
 
-- src/scripts 42 个：scripts/{topic-expand-probe,topic-labels-replay,topic-search-data,topic-search-live,x-reader-live}.ts；src/{App,PhoneApp}.tsx、src/dev-faux.ts、src/i18n/areas.ts、src/reading/turn/info-bell.ts、src/smoke/orb-spike-harness.tsx；ui/components/base/{places,shell-nav}.ts；ui/components/{cardRegistry,chat/chatParts,chat/types}.ts；ui/components/common/{durable-catalog,useBackgroundServices,useShellBootstrap}.ts；ui/components/companion/{box-jump,CompanionCorner,door-tools,issue-call,IssueQuestionCard,study-end,StudyLinesCard,StudyMoveCard,StudySeedsCard,TopicSearchCard,use-door-chat,use-study-run,use-voice-call,voice-call-mode,voice-context}；ui/components/phone/{home-intel,PhoneHome,use-home-data}；ui/components/reader/study/{study-live,use-study-reader}.ts；ui/components/settings/{AccountPanel,AccountsPanel,use-accounts}。`x-reader-live.ts` 留，改 import。
-- tests 22 个（tests/info 和 tests/ui/components/info 之外）：tests/sources/{plugin,plugins/arxiv,plugins/github,plugins/huggingface,plugins/s2}.test.ts、tests/palace/registry.test.ts、tests/housekeeper/{domain-markers,retention-guard}.test.ts、tests/platform/sync/pull-coverage.test.ts、tests/ui/components/common/scroll-restore-contract.test.ts、tests/ui/components/settings/accounts-panel.test.tsx、tests/ui/components/companion/{study-end,voice-call-mode}.test.ts、tests/ui/components/phone/{phone-home-render,home-intel}.test.ts(x)、tests/ui/components/chat/chatParts.test.ts、tests/ui/components/base/experiment-gates.test.ts、tests/structured-output.test.ts、tests/soul/{think-kind,tool-contract}.test.ts、tests/reading/saved/saved-articles.test.ts、tests/reading/turn/info-bell.test.ts。
-- soul、memory、palace、legion、reading（除 info-bell）不直接 import info；它们里面只为 Intel 的代码（下面列的）要按名字 grep，不是按 import。
+### D. Experiments（没做）
 
-Accounts 面板：第三棒没动。`use-accounts.ts` 依赖 `info/sources/{accounts,source-store,site-session}`、`info/topic-search/store`（`hasTopicSearches`）、`info/briefer/reader`（`CollectorSites` 类型）、`info/program/live`（`getInfoView`）。X 登录只给主题搜索、Bloomberg 只给简报全文，留着就得把这三个 sources 文件搬到它旁边并换掉主题搜索和采集机的输入；主会话定删还是留。`i18n/messages/sources` 还被 `src/sources/plugins/*`、`read-page-tool.ts`、`websearch/tool.ts` 用，留。
-
-原清单：
-
-- 整个删：`src/info`（剩下的全部）、`src/ui/components/info`（B 做完后；先确认 `VoiceOrbEntry.tsx` 是不是只给简报用）、`tests/info`、`tests/ui/components/info`、`src/i18n/messages/info`（三餐键搬走后）。
-- `src/sources`：`plugins/arxiv.ts`、`github.ts`、`huggingface.ts`、`s2.ts` 只留 site adapter（bindery 读这些站自己的链接要用）和 client，删 index provider；`all.ts` 只留 `registerSourceSiteAdapters`；`plugin.ts`、`descriptor.ts`、`item.ts` 剥完没人用就删。对应测试 `tests/sources/plugins/{arxiv,github,huggingface,s2}.test.ts`、`tests/sources/{plugin,descriptor}.test.ts` 跟着剪。`tests/reading/ingest/article.test.ts`、`tests/workshop/bindery/pdf.test.ts` 用 `arxivSiteAdapter`，要留。
-- `reading/ingest/x/search-page.ts`：`permalink.ts` 只用它的 `spelledUrl`、`XLinkOut`，留这两个，搜索页解析删（`tests/info/x/search-page.test.ts` 和 fixtures 随 tests/info 删）。
-- reading 里服务简报/主题搜索的：`issue.ts`、`issue-desk.ts`（简报书在阅读器里）、`saved/`（简报收藏）、`turn/door-think.ts`（把简报铺上桌）、`session/open-epub.ts`、`epub/reader-logic.ts`、`replace/carry-marks.ts`、`retell/cards.ts`、`prep/papers/live.ts`、`desk-tools.ts`，逐个 grep issue/brief/study 判断。`platform/app/library.ts` 的 `issue` 书目类型：盘上已有的 issue 条目不能让书架出错，留类型、过滤掉即可，拿不准就留。
-- companion：`TopicSearchCard`、`Study*Card`、`IssueQuestionCard`、`issue-call`、`issue-context`、`study-end`、`use-study-run`、`box-jump`、`door-tools`（主题搜索工具）、`use-door-chat`（主题搜索、issue 开场、`briefer/call`）、`voice-call-mode`/`voice-context`/`use-voice-call`（简报语音）、`CompanionCorner`（issue box-state）、`intake-view`。
-- `ui/components/reader/study/*`（主题搜索 study 阅读器）、`ReaderTopBar.tsx`、`reader-tool.ts`、`phone/reader/*`。
-- `ui/components/chat/{chatParts,types,cardRegistryContext,quoted-question}.ts`、`cardRegistry.ts`、`card-gates.ts`。
-- settings：`AccountsPanel.tsx` + `use-accounts.ts`（站点登录，全由 Intel 订阅的源推出来：Bloomberg、X 搜索登录）删；`AccountPanel.tsx`（old-briefing 开关）、`FeaturesPanel.tsx` 剪。`tests/ui/components/settings/accounts-panel.test.tsx` 删。
-- `ui/components/common/durable-catalog.ts`（tasking/companion/source/topic-search 工具，`tests/soul/tool-contract.test.ts` 同步）。
-- soul（`door.ts`、`turn.ts` 的主题搜索规则、`voice/live/*` 的 door-material 和简报通话）、memory（statements 里跟主题搜索联动的 concern follow、dream）、`legion/durable/program-task.ts`（info/program）、`workshop/bindery/cover-svg.ts`（study 封面）、`workshop/extract/webview-browse.ts`（X 搜索会话）：先确认只有 Intel 在用再删。
-- `palace/kinds.ts`：写入方被删的 kind 一起删（主题搜索、labels、studies、issues、issue openings、攒着问、collect pool、rank、x progress、graph cache、briefings、sources 等）；`tests/palace/registry.test.ts`、`tests/platform/sync/pull-coverage.test.ts`、`tests/housekeeper/{domain-markers,retention-guard}.test.ts` 同步。不写迁移删用户文件。
-- `smoke/orb-spike-harness.tsx`、`dev-faux.ts`、`tests/structured-output.test.ts`（用 analysis/synthesis、cable/types）、`tests/soul/think-kind.test.ts`、`tests/ui/components/common/scroll-restore-contract.test.ts`、`tests/ui/components/base/experiment-gates.test.ts`、`tests/ui/components/chat/chatParts.test.ts`、`tests/ui/components/companion/{study-end,voice-call-mode}.test.ts`。
-- `scripts/topic-search-live.ts` 删；`x-reader-live.ts`、`link-intake-compare*` 留。
-- `i18n/messages/sources`：看还有谁用。
-- 删完 `grep -rn "info/" src tests scripts` 清注释里指向已删模块的话。
-
-### D. Experiments
-
-- `platform/experiments/registry.ts`：删 `intel`，`meals` 去掉 parent。保留旧值：旧 map 里 `intel` 和 `meals` 都是 true 的，升级后 meals 仍开；`intel` 关着、`meals` 存着 true 的，原来是 effectively off，按「保留用户已有的开关值」的字面意思，算法要先定一句再写（建议：旧 map 有 `intel` 键时 meals 的值取 `meals && intel`，一次写回）。
-- `ui/components/settings/ExperimentsPanel.tsx`（子项、"Turn on Intel first"）、`base/experiment-gates.ts`、`common/use-experiment.ts`，以及 `settings.experiments.intel.*` 和 meals summary 的 9 种语言。
+- `platform/experiments/registry.ts`：删 `intel`，`meals` 去掉 parent；迁移：旧 map 有 `intel` 键时 meals 取 `meals && intel`，一次写回。
+- `ExperimentsPanel.tsx`（子项、"Turn on Intel first"）、`base/experiment-gates.ts`、`common/use-experiment.ts`，`settings.experiments.intel.*` 和 meals summary 的 9 种语言。补丁里 `gates.intel` 已经没有读的地方了（除 experiments 自己）。
 
 ## 要报给主会话的
 
-- 项目 `CLAUDE.md` 那句「每个库一个插件文件在 `info/sources/plugins/`」已过期，现在是 `src/sources/plugins/`；这次没动 CLAUDE.md。
-- 坑：worktree 缺 node_modules 的那个已有 698。699 已用（删掉的 place 上在途回合静默丢半句），700 还没用。
+- 项目 `CLAUDE.md` 那句「每个库一个插件文件在 `info/sources/plugins/`」已过期，现在是 `src/sources/plugins/`；没动 CLAUDE.md。
+- 坑：698、699 已用；700、701 预分给这条线，还没用。
+- 没在 xvfb 上点过界面。
