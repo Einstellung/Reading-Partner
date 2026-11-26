@@ -33,8 +33,8 @@ import { registerThinkDesk, type ThinkDeskLaid } from "../../soul/think";
 import type { AgentTool } from "../../legion/durable/contract";
 import { briefingThreadId } from "../../info/briefer/anchors";
 import { layBriefingTurn, layMealsTurn } from "../../info/briefer/deliver";
-import { buildLiveMealsReadTools } from "../../info/meals/read-live";
-import { MEALS_READ_PROMPT } from "../../info/meals/read-tools";
+import { buildLiveMealsReadTools } from "../../meals/read-live";
+import { MEALS_READ_PROMPT } from "../../meals/read-tools";
 import {
   infoAddress,
   infoAssemblies,

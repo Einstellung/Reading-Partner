@@ -17,10 +17,10 @@ import { expect, test } from "bun:test";
 import { PALACE } from "../../../src/palace";
 import { ASK_PULL_ROUTE } from "../../../src/info/briefer/handoff";
 import { READER_PULL_ROUTE } from "../../../src/info/briefer/reader";
-import { MEALS_DISHES_PULL_ROUTE } from "../../../src/info/meals/dishes/user-dishes";
-import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/info/meals/photos/photo-sweep";
-import { MEALS_PICTURES_PULL_ROUTE } from "../../../src/info/meals/photos/dish-draw-sweep";
-import { MEALS_DRAFT_PULL_ROUTE } from "../../../src/info/meals/draft-store";
+import { MEALS_DISHES_PULL_ROUTE } from "../../../src/meals/dishes/user-dishes";
+import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/meals/photos/photo-sweep";
+import { MEALS_PICTURES_PULL_ROUTE } from "../../../src/meals/photos/dish-draw-sweep";
+import { MEALS_DRAFT_PULL_ROUTE } from "../../../src/meals/draft-store";
 import { SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
 import {
   BOOK_CACHE_PULL_ROUTE,

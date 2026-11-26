@@ -9,7 +9,7 @@ import { bindItemRef, bindItemTools, openDesk, type DeskItem } from "../../desk"
 import type { AgentTool } from "../../legion/durable/contract";
 import type { Settings } from "../../platform/app/settings";
 import { assembleTurn, type AssembleInput, type AssembledTurn } from "../../soul";
-import { INFO_MEALS_KIND, type MealsDeskRef, type MealsDraft, type MealsTools } from "../meals/desk";
+import { INFO_MEALS_KIND, type MealsDeskRef, type MealsDraft, type MealsTools } from "../../meals/desk";
 import { MEALS_THREAD_ID, type InfoCallAnchor } from "./anchors";
 import { INFO_BRIEFING_KIND } from "./desk";
 import { SECRETARY_ROLE_ID } from "./role";

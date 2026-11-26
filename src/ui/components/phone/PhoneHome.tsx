@@ -116,7 +116,7 @@ export default function PhoneHome({
   const tiles: ReactNode[] = [];
   if (meals) {
     tiles.push(
-      // The batch cook's state (info/meals/screen/batch-cook.ts): plan one, the
+      // The batch cook's state (meals/screen/batch-cook.ts): plan one, the
       // prep ahead, or the next meal; a tap goes where the state says.
       <button key="meals" className={TILE} onClick={launch.onMealsTile ?? onOpenMeals}>
         <span className={KICKER}>{t("phone.home.mealsLabel")}</span>

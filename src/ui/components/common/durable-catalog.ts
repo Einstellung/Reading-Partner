@@ -37,7 +37,7 @@ import { buildTaskingTools } from "../../../info/tasking/tools";
 import { buildResearchAgent } from "../../../reading/papers/research-agent";
 import { subagentTool } from "../../../legion/subagent/tool";
 import { buildTakeLinkTool } from "../../../reading/ingest/take-link-tool";
-import { buildMealsCatalogTools } from "../../../info/meals/tools";
+import { buildMealsCatalogTools } from "../../../meals/tools";
 import { topicSearchDoorTools } from "../../../info/topic-search/live";
 import { buildBackgroundStatusTool } from "../../../legion/status/tool";
 import { buildWebSearchTool } from "../../../websearch/tool";

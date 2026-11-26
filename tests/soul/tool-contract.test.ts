@@ -40,7 +40,7 @@ import { buildReadPageTool } from "../../src/info/sources/read-page-tool";
 import { buildTaskingTools } from "../../src/info/tasking/tools";
 import { subagentTool } from "../../src/legion/subagent/tool";
 import { buildTakeLinkTool } from "../../src/reading/ingest/take-link-tool";
-import { buildMealsCatalogTools } from "../../src/info/meals/tools";
+import { buildMealsCatalogTools } from "../../src/meals/tools";
 import { topicSearchDoorTools } from "../../src/info/topic-search/live";
 import { buildBackgroundStatusTool } from "../../src/legion/status/tool";
 import { buildCodemodeTool } from "../../src/legion/codemode";
@@ -215,7 +215,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     names: ["take_link"],
   },
   {
-    where: "info/meals",
+    where: "meals",
     tools: buildMealsCatalogTools(any({ threadId: "meals", ports: {} })),
     names: [
       "propose_meal_plan",

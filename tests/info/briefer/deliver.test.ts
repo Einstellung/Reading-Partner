@@ -11,8 +11,8 @@ import { appendMessage, createThread, rebuildThreadStoreForTests } from "../../.
 import { registerInfoDesk } from "../../../src/info/briefer/desk";
 import { registerSecretaryRole } from "../../../src/info/briefer/role";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../src/info/briefer/deliver";
-import { registerMealsDesk } from "../../../src/info/meals/desk";
-import { EMPTY_MEALS } from "../../../src/info/meals/plan/types";
+import { registerMealsDesk } from "../../../src/meals/desk";
+import { EMPTY_MEALS } from "../../../src/meals/plan/types";
 import type { AgentTool } from "../../../src/legion/durable/contract";
 import { installAppData } from "../../support/appdata-fake";
 

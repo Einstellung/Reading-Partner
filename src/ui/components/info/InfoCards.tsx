@@ -19,10 +19,10 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
 } from "../../../info/boxes/cards";
-import type { MealsAppliedCardData } from "../../../info/meals/cards";
-import { appliedLine } from "../../../info/meals/screen/view";
-import { MealsDraftCard } from "./MealsDraftCard";
-import { MealsPrepCard } from "./MealsPrepCard";
+import type { MealsAppliedCardData } from "../../../meals/cards";
+import { appliedLine } from "../../../meals/screen/view";
+import { MealsDraftCard } from "../meals/MealsDraftCard";
+import { MealsPrepCard } from "../meals/MealsPrepCard";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -327,7 +327,7 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 // The row an Apply leaves: one quiet line in the reader's language for a week
 // applied from the old weekly card, nothing for a draft (its card above has
 // collapsed to say it). The row's text is the model's note and is not drawn
-// (info/meals/cards.ts).
+// (meals/cards.ts).
 export function MealsAppliedCard({ payload }: CardComponentProps<MealsAppliedCardData>) {
   useT();
   if (payload.draft) return null;

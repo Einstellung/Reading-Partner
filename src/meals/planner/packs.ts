@@ -1,0 +1,238 @@
+// The shopping list in whole retail packs (docs/671 整包与开封, 给用户看的量).
+// Every food the solved plan uses is added up, times the people eating, and
+// bought the way a shop sells it: whole packs of perishables, whole pieces of
+// loose produce, whole eggs. What a perishable pack leaves over is computed
+// with the day it spoils once opened; a leftover no meal uses goes back to the
+// model as a draft problem (checks.ts). Pantry and long-keeping foods, food
+// bought frozen, and raw meat and fish (what no meal uses is frozen raw,
+// storage.ts) are not checked. Only salt, pepper, sugar and the cooking oil
+// are taken to be at home; a spice, a sauce or a bag of rice is bought whole. Raw meat and fish wait in the fridge until
+// their cooking day when they keep that long and are frozen the day they are
+// bought when they do not. Grams stay inside the program: what the user reads
+// is packs, pieces and "about" weights.
+
+import { t } from "../../i18n";
+import { foodById, type Food } from "../nutrition/foods";
+import type { PackKind } from "../nutrition/food-columns";
+import { draftMeal, isBatchMain, PREP_DAY, type PlanDraft, type PlanSlot } from "./draft";
+import type { SolvedPlan } from "./solve";
+
+export type PackBuy =
+  | { by: "pack"; count: number; packG: number; kind: PackKind; /** The weight on the label when it is not what the plan counts (a tin of beans is drained). */ labelG?: number }
+  | { by: "piece"; count: number; pieceG: number }
+  | { by: "unit"; count: number }
+  | { by: "onHand" }
+  | { by: "weight" };
+
+export interface PackLine {
+  food: string;
+  /** What the plan needs, times the people eating. Never shown. */
+  grams: number;
+  buy: PackBuy;
+  /** The first plan day a meal or a prep session uses it. */
+  firstDay: number;
+  /** The last plan day a meal or a prep session uses it. */
+  lastDay: number;
+  /** Raw meat or fish some meal cooks after it stops keeping raw: portioned and frozen the day it is bought. */
+  freeze: boolean;
+  /** Bought frozen (fish fillets, shrimp, frozen vegetables): kept frozen. */
+  frozen: boolean;
+  /** For perishables only: what is bought but no meal uses, and the day an opened pack of it spoils. */
+  leftover: { grams: number; spoilsDay: number } | null;
+  /** What the reader has at home of it, taken off before buying (lessHave). */
+  have?: number;
+}
+
+/** A leftover under this share of one pack or piece, or under the grams, is noise from rounding, not a problem. */
+export const LEFTOVER_IGNORE = { share: 0.2, grams: 50 } as const;
+
+/**
+ * The shelf-life classes whose leftover packs are checked: fresh produce,
+ * tofu, fresh noodles. A w1 pack (milk, yogurt, bread, tortillas) keeps past
+ * a 3-day plan into the next one, so its leftover is not a problem.
+ */
+const LEFTOVER_CHECKED: ReadonlySet<string> = new Set(["d1-2", "d3-5"]);
+
+/** Whole packs or pieces for a weight, a few grams over a whole one not counting as another. */
+const wholeCount = (grams: number, unit: number) => Math.max(1, Math.ceil(grams / unit - 0.02));
+
+/** A food whose leftover pack is held to being finished: fresh produce, tofu, fresh noodles bought in packs. */
+export function leftoverChecked(food: Food): boolean {
+  return LEFTOVER_CHECKED.has(food.keeps) && !!food.pack && !keptInCupboard(food) && !isRawFlesh(food) && !isBoughtFrozen(food);
+}
+
+/** The list is bought by day 1: a food's keeping days count from it. */
+export const SHOP_DAY = 1;
+
+/** The day the list is bought by: the prep day (0) when the session is cooked on it, else day 1. */
+export function shopDay(draft: Pick<PlanDraft, "sessions">): number {
+  return Math.min(SHOP_DAY, ...draft.sessions.map((s) => s.day).filter((d) => Number.isFinite(d)));
+}
+
+/** Days raw meat and fish keep in the fridge after the day they are bought, by shelf-life class (the low end). */
+const RAW_KEEP_DAYS: Readonly<Record<string, number>> = { "d1-2": 1, "d3-5": 3 };
+
+/** Raw meat, poultry or fish bought fresh. */
+export function isRawFlesh(food: Food): boolean {
+  return food.category === "protein" && food.keeps in RAW_KEEP_DAYS && ["meat", "poultry", "seafood"].includes(food.proteinCategory ?? "");
+}
+
+/** The last plan day raw meat or fish bought on the shop day can be cooked without freezing it first. */
+export function rawKeepsUntil(food: Food, shop = SHOP_DAY): number {
+  return shop + (RAW_KEEP_DAYS[food.keeps] ?? 0);
+}
+
+/** Sold frozen and kept frozen. */
+export function isBoughtFrozen(food: Food): boolean {
+  return food.category === "frozen";
+}
+
+/**
+ * A seasoning, oil or spread, or a food bought dry (rice): once bought it is
+ * kept from plan to plan in the cupboard, or the fridge once opened. Fresh
+ * produce is not (a lemon is bought), nor are nuts and cheese sold for one
+ * plan (almonds, sliced cheese).
+ */
+export function keptInCupboard(food: Food): boolean {
+  if (food.boughtDry) return true;
+  if (food.category === "produce") return false;
+  const keeps = food.keeps === "pantry" || food.keeps === "w2plus";
+  return keeps && (food.roles.includes("sauce") || food.roles.includes("fat")) && !food.roles.includes("protein");
+}
+
+/** What to buy of a food for these grams; salt, pepper and sugar are at home already. */
+export function buyFor(food: Food, grams: number): PackBuy {
+  if (food.assumedHome) return { by: "onHand" };
+  if (food.pack) return { by: "pack", count: wholeCount(grams, food.pack.grams), packG: food.pack.grams, kind: food.pack.kind, ...(food.pack.labelG ? { labelG: food.pack.labelG } : {}) };
+  if (food.unit) return { by: "unit", count: Math.max(1, Math.round(grams / food.unit.grams)) };
+  if (food.piece) return { by: "piece", count: wholeCount(grams, food.piece.grams), pieceG: food.piece.grams };
+  return { by: "weight" };
+}
+
+/** The day each meal's main lines are needed: a pot's on its prep session's day. */
+function dayNeeded(draft: PlanDraft, day: number, slot: PlanSlot): number {
+  if (slot === "breakfast") return day;
+  const main = draftMeal(draft, day, slot)?.main;
+  if (!main || !isBatchMain(main)) return day;
+  const batch = draft.batches.find((b) => b.id === main.batch);
+  const session = draft.sessions.find((s) => s.id === batch?.session);
+  return session?.day ?? day;
+}
+
+/**
+ * The cooking oil a plan takes to be at home: the oil on its cooking-fat lines
+ * (the household's when the profile names one, else each dish's own) and the
+ * fat the solver adds. A dressing or sesame oil is bought.
+ */
+function homeOils(plan: SolvedPlan): Set<string> {
+  const out = new Set<string>();
+  const meals = [...plan.days.flatMap((d) => [d.meals.breakfast, d.meals.lunch, d.meals.dinner]), ...(plan.prepDinner ? [plan.prepDinner] : [])];
+  for (const m of meals) for (const l of m.lines) if (l.role === "oil" && (l.cookingOil || l.source === "oil")) out.add(l.food);
+  return out;
+}
+
+export function packList(plan: SolvedPlan, draft: PlanDraft, people = 1): PackLine[] {
+  const atHome = homeOils(plan);
+  const need = new Map<string, { grams: number; firstDay: number; lastDay: number }>();
+  const add = (food: string, grams: number, day: number) => {
+    const had = need.get(food);
+    need.set(food, {
+      grams: (had?.grams ?? 0) + grams * people,
+      firstDay: Math.min(had?.firstDay ?? day, day),
+      lastDay: Math.max(had?.lastDay ?? day, day),
+    });
+  };
+  for (const d of plan.days) {
+    for (const slot of ["breakfast", "lunch", "dinner"] as const) {
+      for (const l of d.meals[slot].lines) add(l.food, l.grams, l.source === "main" ? dayNeeded(draft, d.day, slot) : d.day);
+    }
+    for (const l of [...d.fruit, ...d.snack]) add(l.food, l.grams, d.day);
+  }
+  if (plan.prepDinner) {
+    for (const l of plan.prepDinner.lines) add(l.food, l.grams, l.source === "main" ? dayNeeded(draft, PREP_DAY, "dinner") : PREP_DAY);
+  }
+  const shop = shopDay(draft);
+  const out: PackLine[] = [];
+  for (const [id, n] of need) {
+    const food = foodById(id);
+    if (!food) continue;
+    const buy: PackBuy = atHome.has(id) ? { by: "onHand" } : buyFor(food, n.grams);
+    const raw = isRawFlesh(food);
+    const freeze = raw && n.lastDay > rawKeepsUntil(food, shop);
+    const frozen = isBoughtFrozen(food);
+    // Loose produce is bought by the piece, so what is left is less than one
+    // piece; only packs are held to finishing (docs/671 整包与开封).
+    const checked = leftoverChecked(food) && buy.by === "pack";
+    const leftover: PackLine["leftover"] =
+      checked && buy.by === "pack"
+        ? { grams: Math.max(0, buy.count * buy.packG - n.grams), spoilsDay: n.firstDay + (food.pack?.openDays ?? 0) }
+        : null;
+    out.push({ food: id, grams: n.grams, buy, firstDay: n.firstDay, lastDay: n.lastDay, freeze, frozen, leftover });
+  }
+  return out.sort((a, b) => a.firstDay - b.firstDay || a.food.localeCompare(b.food));
+}
+
+/**
+ * A line less what the reader has at home (ShoppingState.have): the rest is
+ * bought in whole packs, and a line it covers is bought not at all and shown
+ * with the cupboard checks. Under a gram left is the arithmetic of sharing a
+ * pot out, not something to buy. A line already taken to be at home stays.
+ */
+export function lessHave(line: PackLine, have: number | undefined): PackLine {
+  const food = foodById(line.food);
+  if (!food || !have || have <= 0 || line.buy.by === "onHand") return line;
+  const rest = line.grams - have;
+  if (rest < 1) return { ...line, buy: { by: "onHand" }, have, freeze: false, leftover: null };
+  const buy = buyFor(food, rest);
+  const leftover = line.leftover && buy.by === "pack" ? { ...line.leftover, grams: Math.max(0, buy.count * buy.packG - rest) } : null;
+  return { ...line, buy, have, leftover };
+}
+
+/** A leftover worth sending back: at least a fifth of a pack and at least 50 g. */
+export function leftoverMatters(line: PackLine): boolean {
+  if (!line.leftover || line.buy.by !== "pack") return false;
+  return line.leftover.grams >= Math.max(LEFTOVER_IGNORE.share * line.buy.packG, LEFTOVER_IGNORE.grams);
+}
+
+/** The name a food is shown by: its Chinese name without the trailing note. */
+export function shownName(food: Food): string {
+  return food.zh.replace(/（[^）]*）$/, "");
+}
+
+/** The name a food is bought and kept by: a food planned cooked but bought dry goes by its dry name (糙米, not 糙米饭). */
+export function boughtName(food: Food): string {
+  return food.boughtDry?.zh ?? shownName(food);
+}
+
+const about = (g: number) => Math.max(10, Math.round(g / 10) * 10);
+
+/** How much to buy, in the reader's language: "1 盒（约 500 g）", "2 个（约 250 g）", "家里常备", "家里有 600 g". */
+export function buyText(line: PackLine): string {
+  const b = line.buy;
+  if (b.by === "onHand" && line.have) return t("meals.pack.have", { grams: Math.round(line.have) });
+  if (b.by === "pack") return t("meals.pack.about", { qty: t(`meals.pack.${b.kind}`, { count: b.count }), grams: b.count * (b.labelG ?? b.packG) });
+  if (b.by === "piece") return t("meals.pack.about", { qty: t("meals.pack.piece", { count: b.count }), grams: about(b.count * b.pieceG) });
+  if (b.by === "unit") return t("meals.pack.piece", { count: b.count });
+  if (b.by === "onHand") return t("meals.pack.onHand");
+  return "";
+}
+
+/** One line of the list as the reader sees it: "去皮鸡腿肉 1 盒（约 500 g）". */
+export function packLineText(line: PackLine): string {
+  const food = foodById(line.food);
+  const name = food ? boughtName(food) : line.food;
+  if (line.buy.by === "weight") return t("meals.pack.about", { qty: name, grams: about(line.grams) });
+  return `${name} ${buyText(line)}`;
+}
+
+/** What to do with it once bought: "买回当天分装冷冻", "买回直接冷冻", or nothing. */
+export function keepText(line: PackLine): string {
+  if (line.frozen) return t("meals.pack.keepFrozen");
+  if (line.freeze) return t("meals.pack.freeze");
+  return "";
+}
+
+/** "一锅分 3 顿". */
+export function potText(meals: number): string {
+  return t("meals.pack.pot", { count: meals });
+}

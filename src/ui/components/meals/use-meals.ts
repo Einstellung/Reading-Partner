@@ -1,0 +1,141 @@
+// The meals screen's live state (docs/73): what is on disk, and the one thing
+// the screen writes.
+//
+// Ticking a line is the only write that is not a card: it is the reader's own
+// hand in the shop, nothing is proposed and nothing is approved. It goes to
+// screen state first and to disk after, so a thumb in a supermarket never waits
+// on a file, and the on-disk list is re-read whenever the AI applies a plan.
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { todayLocal } from "../../../info/collect/store";
+import { liveMealsPorts } from "../../../meals/live";
+import { setShoppingChecked } from "../../../meals/plan/shopping";
+import { markShoppingTripDone } from "../../../meals/tools";
+import type { PhotoCache } from "../../../meals/photos/dish-photos";
+import { MEALS_PICTURES_PULL_ROUTE, onDishDrawn } from "../../../meals/photos/dish-draw-sweep";
+import { weekDishKeys } from "../../../meals/photos/dish-drawing";
+import { loadMealsPhotos, withDrawingSources } from "../../../meals/photos/photo-store";
+import { weekArtIds, withDishArt } from "../../../meals/photos/dish-art";
+import { dishArtStore } from "../../../meals/photos/dish-art-store";
+import { registerPullRoute } from "../../../platform/sync/pull-routes";
+import { watchMealsEdits } from "../../../meals/writable";
+import { loadMeals, saveShoppingTick } from "../../../meals/plan/store";
+import type { MealsState } from "../../../meals/plan/types";
+
+export interface MealsController {
+  // Null until info-meals.json has answered. The screen holds on null rather
+  // than drawing an empty week it is about to replace.
+  state: MealsState | null;
+  // The photographs found so far, from the file the search run writes. Empty
+  // until it has answered, and empty is a week drawn from its ingredients.
+  photos: PhotoCache;
+  today: string;
+  reload: () => void;
+  toggleItem: (key: string, checked: boolean) => void;
+  // The trip is over. The host's button, not a tool: the reader is the one who
+  // came home (docs/73), and nothing in this slice reopens it.
+  markDone: () => void;
+}
+
+export function useMeals(enabled: boolean): MealsController {
+  const [state, setState] = useState<MealsState | null>(null);
+  const [photos, setPhotos] = useState<PhotoCache>({});
+  const [today, setToday] = useState(todayLocal);
+  // The reader's own ticks in flight, so a reload that lands between the tick
+  // and its write does not put the box back.
+  const live = useRef(true);
+  const rounds = useRef(0);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+
+  const reload = useCallback(() => {
+    if (!enabled) {
+      setState(null);
+      return;
+    }
+    setToday(todayLocal());
+    const week = loadMeals();
+    void week.then(
+      (next) => {
+        if (live.current) setState(next);
+      },
+      () => {
+        // A file that will not read leaves the screen on what it has. The store
+        // refuses to overwrite it either (readGuardedJson), so nothing is lost
+        // by waiting.
+      },
+    );
+    // A cache that will not read is no pictures, not a screen that holds: the
+    // week is worth showing without them. The week's drawn dishes and the
+    // library pictures already on disk are read into memory before the one
+    // set, so a reload never takes a picture down and puts it back. The library
+    // pictures not on disk yet are downloaded after it, and set again when they
+    // land; a newer reload by then has the say.
+    const round = ++rounds.current;
+    const current = () => live.current && round === rounds.current;
+    void loadMealsPhotos().then(
+      async (cache) => {
+        const plan = await week.then((s) => s.plan, () => null);
+        const drawn = await withDrawingSources(cache, weekDishKeys(plan));
+        const art = dishArtStore();
+        const ids = weekArtIds(plan);
+        const onDisk = await art.cached(ids);
+        if (current()) setPhotos(withDishArt(drawn, plan, onDisk));
+        const missing = ids.filter((id) => !(id in onDisk));
+        if (!missing.length) return;
+        const landed = await art.download(missing);
+        if (Object.keys(landed).length && current()) setPhotos(withDishArt(drawn, plan, { ...onDisk, ...landed }));
+      },
+      () => {},
+    );
+  }, [enabled]);
+
+  useEffect(reload, [reload]);
+
+  // A picture landing — drawn here, or pulled from another device with the
+  // cache entry or the file it points at — redraws the cards that wanted it.
+  useEffect(() => {
+    if (!enabled) return;
+    const offDrawn = onDishDrawn(reload);
+    const offPull = registerPullRoute({ ...MEALS_PICTURES_PULL_ROUTE, onPulled: reload });
+    // A change edit_data landed from a conversation or a worker (docs/platform/687).
+    const offEdits = watchMealsEdits(reload);
+    return () => {
+      offDrawn();
+      offEdits();
+      offPull();
+    };
+  }, [enabled, reload]);
+
+  const toggleItem = useCallback((key: string, checked: boolean) => {
+    setState((prev) => {
+      if (!prev) return prev;
+      const shopping = setShoppingChecked(prev.shopping, key, checked);
+      // Fired and forgotten: a failed write leaves the tick on screen and the
+      // list on disk as it was, which is the same list the next re-derive
+      // reconciles against. The tick goes onto the trip on disk, never this
+      // screen's copy of it, which a plan confirmed since may have replaced.
+      void saveShoppingTick(key, checked).catch(() => {});
+      return { ...prev, shopping };
+    });
+  }, []);
+
+  // Done goes through the same ports the tools write on, so what lands on disk
+  // is one shape whoever called it, and the screen is told the way a tool tells
+  // it. Optimistic on screen first, like a tick: the reader is standing in a
+  // doorway with bags.
+  const markDone = useCallback(() => {
+    const date = todayLocal();
+    setState((prev) => (prev ? { ...prev, shopping: { ...prev.shopping, doneOn: date } } : prev));
+    void markShoppingTripDone(
+      liveMealsPorts({ today: () => date, changed: () => reload() }),
+      date,
+    ).catch(() => {});
+  }, [reload]);
+
+  return { state, photos, today, reload, toggleItem, markDone };
+}

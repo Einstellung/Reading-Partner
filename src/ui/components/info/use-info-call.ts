@@ -57,17 +57,17 @@ import {
   applyLabProposal,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
-import { applyDraftFile, checkNote, type Applied } from "../../../info/meals/apply";
-import { currentDraft as waitingDraft, draftCardFromFile, type MealsDraftFile } from "../../../info/meals/draft-file";
-import { loadMealsDraft, watchMealsDraft } from "../../../info/meals/draft-store";
-import { hostRegion } from "../../../info/meals/region";
-import { planNote } from "../../../info/meals/screen/plan-note";
-import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../info/meals/cards";
-import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
-import { loadMeals } from "../../../info/meals/plan/store";
-import { startPrepFromChat } from "../../../info/meals/prep-session";
+import { applyDraftFile, checkNote, type Applied } from "../../../meals/apply";
+import { currentDraft as waitingDraft, draftCardFromFile, type MealsDraftFile } from "../../../meals/draft-file";
+import { loadMealsDraft, watchMealsDraft } from "../../../meals/draft-store";
+import { hostRegion } from "../../../meals/region";
+import { planNote } from "../../../meals/screen/plan-note";
+import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../meals/cards";
+import { buildLiveMealsTools, liveMealsPorts } from "../../../meals/live";
+import { loadMeals } from "../../../meals/plan/store";
+import { startPrepFromChat } from "../../../meals/prep-session";
 import { putMealsPrepCard } from "../../../info/briefer/meals-call";
-import { requestPrepVoice } from "./meals/use-prep-voice";
+import { requestPrepVoice } from "../meals/use-prep-voice";
 import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
@@ -565,7 +565,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // The draft's 「就这样」, or apply_meal_plan: the plan and the shopping list
   // derived from it in one write, the screen reloaded through the ports'
   // `changed`, and the card collapsed to its applied form. The model is told in
-  // a row that draws nothing (info/meals/cards.ts) unless the tool asked, whose
+  // a row that draws nothing (meals/cards.ts) unless the tool asked, whose
   // own result tells it.
   const handleApplyMealsDraft = useCallback(
     async (cardId: string, fromTool = false): Promise<Applied | null> => {

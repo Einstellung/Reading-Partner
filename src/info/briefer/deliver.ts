@@ -27,10 +27,10 @@ import type { Briefing } from "../boxes/types";
 import { loadSources } from "../sources/source-store";
 import { hasTopicSearches } from "../topic-search/store";
 import { todayLocal } from "../collect/store";
-import { INFO_MEALS_KIND } from "../meals/desk";
-import { buildLiveMealsTools } from "../meals/live";
-import { loadMeals } from "../meals/plan/store";
-import type { MealsState } from "../meals/plan/types";
+import { INFO_MEALS_KIND } from "../../meals/desk";
+import { buildLiveMealsTools } from "../../meals/live";
+import { loadMeals } from "../../meals/plan/store";
+import type { MealsState } from "../../meals/plan/types";
 import {
   MEALS_BOOK_ID,
   MEALS_THREAD_ID,

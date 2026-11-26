@@ -17,8 +17,8 @@ import type { DeviceRole } from "../../../platform/app/device";
 import { buildGlossary } from "../../../ai/voice";
 import { getInfoView } from "../../../info/program/live";
 import { todayLocal } from "../../../info/collect/store";
-import type { MealsFocus } from "../../../info/meals/tools";
-import type { MealsState } from "../../../info/meals/plan/types";
+import type { MealsFocus } from "../../../meals/tools";
+import type { MealsState } from "../../../meals/plan/types";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import {
   clearCollectorLeftovers,

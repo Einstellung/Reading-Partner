@@ -11,7 +11,7 @@
 // overlay: it is always pushed last, so `baseScreen` hands the shell the screen
 // that keeps rendering underneath it.
 
-import type { MealKey } from "../../../info/meals/plan/types";
+import type { MealKey } from "../../../meals/plan/types";
 import type { SavedArticle } from "../../../reading/saved/saved-articles";
 
 export type ScreenKind =

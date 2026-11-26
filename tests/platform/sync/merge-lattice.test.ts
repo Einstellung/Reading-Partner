@@ -9,8 +9,8 @@
 import { expect, test } from "bun:test";
 import "../../../src/box";
 import "../../../src/legion/run";
-import "../../../src/info/meals/plan/merge";
-import "../../../src/info/meals/draft-store";
+import "../../../src/meals/plan/merge";
+import "../../../src/meals/draft-store";
 import { PALACE, rowOf } from "../../../src/palace";
 import { mergeFile } from "../../../src/platform/sync/merge";
 import { strategyFor } from "../../../src/platform/sync/merge/contract";

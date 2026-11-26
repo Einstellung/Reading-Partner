@@ -9,10 +9,10 @@
 // decidable from its inputs.
 
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND, type FileArticle } from "./desk";
-import { INFO_MEALS_KIND } from "../meals/desk";
-import type { MealsFocus } from "../meals/tools";
-import type { MealsState } from "../meals/plan/types";
-import { leftToBuy } from "../meals/plan/shopping";
+import { INFO_MEALS_KIND } from "../../meals/desk";
+import type { MealsFocus } from "../../meals/tools";
+import type { MealsState } from "../../meals/plan/types";
+import { leftToBuy } from "../../meals/plan/shopping";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
 import { briefingOverview } from "../boxes/briefing";

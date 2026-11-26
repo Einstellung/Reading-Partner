@@ -17,8 +17,8 @@
 import { DEFAULT_SUBAGENT_ROUNDS, type SubagentDefinition } from "../../legion/subagent";
 import { buildTaskingTools, type TaskingToolDeps } from "./tools";
 import type { AgentTool } from "../../legion/durable/contract";
-import { buildLiveMealsReadTools } from "../meals/read-live";
-import { MEALS_READ_PROMPT } from "../meals/read-tools";
+import { buildLiveMealsReadTools } from "../../meals/read-live";
+import { MEALS_READ_PROMPT } from "../../meals/read-tools";
 import { t } from "../../i18n";
 
 /** The legion kind the info domain registers for this work (worker.ts). */
@@ -83,7 +83,7 @@ export const TASKING_SYSTEM_PROMPT = [
  */
 export function buildTaskingAgent(
   deps: TaskingToolDeps = {},
-  // The meals data's reads (info/meals/read-tools.ts); edit_data, which runSubagent mounts, changes it. A question or a change handed over from the meals conversation lands here.
+  // The meals data's reads (meals/read-tools.ts); edit_data, which runSubagent mounts, changes it. A question or a change handed over from the meals conversation lands here.
   mealsTools: () => AgentTool[] = buildLiveMealsReadTools,
 ): SubagentDefinition {
   return {

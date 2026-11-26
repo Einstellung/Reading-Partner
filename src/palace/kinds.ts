@@ -1260,7 +1260,7 @@ export const PALACE = [
     deleteWith: "never",
     retention: NEVER,
     ai: { write: true },
-    note: "the week's dinners, the list derived from them and the nights that went differently (docs/73): one record, merged whole, because a per-field merge would assemble a week that never existed on either device; the copy whose plan was confirmed later wins (info/meals/plan/merge.ts), two copies of one plan keep one and park the other",
+    note: "the week's dinners, the list derived from them and the nights that went differently (docs/73): one record, merged whole, because a per-field merge would assemble a week that never existed on either device; the copy whose plan was confirmed later wins (meals/plan/merge.ts), two copies of one plan keep one and park the other",
   },
   {
     kind: "info-meals-draft",
@@ -1276,7 +1276,7 @@ export const PALACE = [
     deleteWith: "never",
     retention: NEVER,
     ai: { write: true },
-    note: "the one unsaved draft (docs/platform/687 三餐), written by propose_meal_plan and marked applied by 「就这样」 or apply_meal_plan; the draft card in the conversation is drawn from it and patched when it changes. One record, merged whole: the copy written later wins (info/meals/draft-file.ts)",
+    note: "the one unsaved draft (docs/platform/687 三餐), written by propose_meal_plan and marked applied by 「就这样」 or apply_meal_plan; the draft card in the conversation is drawn from it and patched when it changes. One record, merged whole: the copy written later wins (meals/draft-file.ts)",
   },
   {
     kind: "info-link-records",
@@ -1347,7 +1347,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     retention: NEVER,
-    note: "the library's dish pictures downloaded from a GitHub release, under its tag (info/meals/photos/dish-art-store.ts); immutable per tag, so a file on disk is never fetched again, and every device downloads its own. A new tag leaves the old tag's directory behind, which nothing reclaims yet",
+    note: "the library's dish pictures downloaded from a GitHub release, under its tag (meals/photos/dish-art-store.ts); immutable per tag, so a file on disk is never fetched again, and every device downloads its own. A new tag leaves the old tag's directory behind, which nothing reclaims yet",
   },
   {
     kind: "info-meals-recipes",
@@ -1360,7 +1360,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "map", container: "recipes", idField: null },
     deleteWith: "never",
-    retention: inline(flow("src/info/meals/recipe/recipe-store.ts", "saveRecipe")),
+    retention: inline(flow("src/meals/recipe/recipe-store.ts", "saveRecipe")),
     note: "the step-by-step recipes of made meals (docs/73 做法页), keyed by a hash of the dish, each food at its solved grams, the kitchen and the language, so a changed meal asks for a new one; its own file because info-meals.json is merged whole and a recipe landing would undo a menu change made on the other device; records-merged per key, and every save drops entries older than 60 days and keeps the newest 150",
   },
   {

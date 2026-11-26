@@ -24,8 +24,8 @@ import { INFO_BRIEFING_KIND, registerInfoDesk } from "../../../../src/info/brief
 import { registerSecretaryRole } from "../../../../src/info/briefer/role";
 import { mealsAnchor, type InfoCallAnchor } from "../../../../src/info/briefer/anchors";
 import { infoPlace, mealsPlace } from "../../../../src/info/briefer/info-durable";
-import { registerMealsDesk } from "../../../../src/info/meals/desk";
-import { EMPTY_MEALS } from "../../../../src/info/meals/plan/types";
+import { registerMealsDesk } from "../../../../src/meals/desk";
+import { EMPTY_MEALS } from "../../../../src/meals/plan/types";
 import type { ThreadFiles } from "../../../../src/legion/durable/thread-files";
 import type { BriefingView } from "../../../../src/info/briefer/reader";
 import type { Thread, ThreadMessage } from "../../../../src/platform/app/threads";

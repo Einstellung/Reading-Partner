@@ -239,31 +239,31 @@ const LAYER: Record<string, Layer> = {
   // with its own store rather than a Lab record, because it claims no sources
   // and must not enter the collection pipeline. It reads nothing else under
   // info/, so it is a leaf.
-  "info/meals": "domain",
+  "meals": "domain",
   // The headless nutrition core: targets from body data, the food table, the
-  // gram solver. Imports nothing from info/meals, which imports it.
-  "info/meals/nutrition": "domain",
+  // gram solver. Imports nothing from meals, which imports it.
+  "meals/nutrition": "domain",
   // The week's own data: the plan and its charter, the shopping list derived
   // from it, the solver and the persisted store.
-  "info/meals/plan": "domain",
+  "meals/plan": "domain",
   // The dish library (docs/671 菜库): the dish type, method categories and the
   // storage derived from them, the reference serving and the entry check.
-  "info/meals/dishes": "domain",
+  "meals/dishes": "domain",
   // The library-based plan core (docs/671): the draft the model hands in, the
   // per-person grams, the draft checks and the shopping list in whole packs.
-  "info/meals/planner": "domain",
+  "meals/planner": "domain",
   // Everything that fetches or caches a dish or ingredient photo.
-  "info/meals/photos": "domain",
+  "meals/photos": "domain",
   // One made meal's recipe page: the prompt, the stored recipes, the call.
-  "info/meals/recipe": "domain",
+  "meals/recipe": "domain",
   // The day and week screens' text and layout, plus onboarding.
-  "info/meals/screen": "domain",
+  "meals/screen": "domain",
   // What a meal eaten from a prepped box shows on the eating day, and the
   // evening-before notes (docs/671 吃的那天): program-written, no model.
-  "info/meals/finish": "domain",
+  "meals/finish": "domain",
   // The prep session's timeline (docs/671 时间线与语音): the steps, the
   // scheduler, the running state and the words read out.
-  "info/meals/timeline": "domain",
+  "meals/timeline": "domain",
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",
@@ -394,7 +394,7 @@ const LAYER: Record<string, Layer> = {
   "ui/components/chat/voice": "ui",
   "ui/components/common": "ui",
   "ui/components/info": "ui",
-  "ui/components/info/meals": "ui",
+  "ui/components/meals": "ui",
   "ui/components/lib": "ui",
   // The companion: its body, its motion maths and its two raster layers.
   "ui/components/companion": "ui",

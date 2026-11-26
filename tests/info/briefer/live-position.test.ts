@@ -5,7 +5,7 @@
 
 import { expect, test } from "bun:test";
 import { briefingAnchor, livePosition, mealsAnchor } from "../../../src/info/briefer/anchors";
-import { EMPTY_MEALS, type MealsState, type ShoppingItem, type WeekPlan } from "../../../src/info/meals/plan/types";
+import { EMPTY_MEALS, type MealsState, type ShoppingItem, type WeekPlan } from "../../../src/meals/plan/types";
 import type { Briefing } from "../../../src/info/boxes/types";
 
 function line(name: string): ShoppingItem {

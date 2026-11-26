@@ -1,9 +1,9 @@
-// Meals: the four screens under ui/components/info/meals (docs/73), plus the
-// vocabulary info/meals/screen/view.ts and screen-lines.ts compute for them,
-// the meals tools' progress labels, and the flavour names info/meals/plan/types.ts
+// Meals: the four screens under ui/components/meals (docs/73), plus the
+// vocabulary meals/screen/view.ts and screen-lines.ts compute for them,
+// the meals tools' progress labels, and the flavour names meals/plan/types.ts
 // defines. The source every other locale is typed against.
 //
-// Out of scope (docs/ui/81): info/meals/screen/onboarding.ts (the scripted
+// Out of scope (docs/ui/81): meals/screen/onboarding.ts (the scripted
 // questions and their answer options) is not an area this catalog covers — see
 // the migration report. method-screen.ts's worked formulas and citations stay
 // English; only its section titles and the standing notes are here.

@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import { registerInfoDelivery } from "../../../src/reading/turn/info-bell";
 import { thinkDesk } from "../../../src/soul/think";
-import { MEALS_READ_PROMPT, MEALS_READ_TOOLS } from "../../../src/info/meals/read-tools";
+import { MEALS_READ_PROMPT, MEALS_READ_TOOLS } from "../../../src/meals/read-tools";
 import { buildTaskingAgent } from "../../../src/info/tasking/tasking-agent";
 
 test("a think run at the meals place gets the meals read tools and their prompt", async () => {
