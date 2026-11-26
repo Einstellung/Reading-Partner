@@ -143,9 +143,6 @@ export default {
   "experiments.intro": "还没做完的功能。每一项默认关，在这台设备上打开才出现。关掉只是不显示，不删任何数据，再打开全部回来。",
   "experiments.meals.name": "三餐",
   "experiments.meals.summary": "规划一周的饭菜，维护购物清单。",
-  "experiments.intel.name": "情报",
-  "experiments.intel.summary": "简报书与专题。",
   "experiments.companion.name": "{name}",
-  "experiments.needsParent": "先打开情报。",
   "experiments.companion.summary": "右下角的伙伴：长按说话或打字、贴链接给它、它交回东西的盒子。",
 } satisfies Translation<typeof en>;

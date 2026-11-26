@@ -5,6 +5,7 @@ import { installFetchBridge } from "./ai/fetch-bridge";
 import { applyStoredAutostart } from "./platform/app/autostart";
 import { startUpdateChecks } from "./platform/app/updater";
 import { initDeviceSettings } from "./platform/app/device";
+import { migrateStoredExperiments } from "./platform/experiments/state";
 import { detectShell } from "./platform/app/shell";
 import { loadVoiceCapability } from "./platform/app/voice-capability";
 import { dropRetiredTtsKey } from "./ai/auth/credentials";
@@ -134,6 +135,7 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // registration is the machine's, not the window's. A no-op on mobile.
   void initDeviceSettings()
     .catch(() => {})
+    .then(() => migrateStoredExperiments().catch(() => {}))
     .then(() => applyStoredAutostart());
 
   // Whether this device can hold a voice call (docs/companion/89): asked once,
