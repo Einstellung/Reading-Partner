@@ -1,6 +1,6 @@
 # 备餐时间线交接（A1：排程、步骤、进度）
 
-分支 `meals-timeline-core`，设计见 docs/info/671「菜品图」末段、「时间线与语音」「数据模型」。
+分支 `meals-timeline-core`，设计见 docs/meals/671「菜品图」末段、「时间线与语音」「数据模型」。
 
 ## 做了什么
 

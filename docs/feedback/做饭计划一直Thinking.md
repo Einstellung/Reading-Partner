@@ -42,7 +42,7 @@
 - 回合总时限：held lane 上的回合从 run 开始计，info 30 分钟（周计划一轮写满一周，最多 8 轮），其余 15 分钟（8 轮，每轮生成加一次最长 45 秒的 webview 取页），工具执行期间不暂停（`stall.ts` 的 `turnLimitFor`）。到点和停摆一样 `requestAbort`，界面收到 `TURN_LIMIT_MESSAGE`（`TurnLimitError`），不自动重问。pi 在 abort 之后仍等正在跑的工具（坑 500），只读工具在 abort 时放手，写工具仍等它返回。
 - 诊断日志：AppData 下 `turn-log.jsonl`（palace kind `turn-log`，sync local，housekeeper 留尾 5000 行），每行一个 JSON：`start`、`queued`、`lane`、`first-byte`（每轮）、`round`（每轮结束）、`end`（`done` / `aborted` / `stalled` / `timed-out` / `refused` / `error`）。`readTurnLog()` 给以后导出用。
 - 回合回调新增 `onWait`：`{ kind: "queued" }` 是排在同一对话上一个回合后面，`{ kind: "first-byte", round }` 是这一轮请求已发出、还没收到字节。
-- 周计划检查不过只退回没过的几顿，草稿留着，只重交那几顿（docs/info/73）。
+- 周计划检查不过只退回没过的几顿，草稿留着，只重交那几顿（docs/meals/73）。
 
 ## 还留着的
 
