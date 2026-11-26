@@ -25,6 +25,27 @@ worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkou
 
 搬家用的脚本在 `HANDOFF-remove-info-tools/`（合并前和本文件一起删）：`bun HANDOFF-remove-info-tools/mv.ts . moves.json`，moves.json 是 `[[旧路径, 新路径], …]`（文件或目录），按旧位置解析 src/tests/scripts 里每个相对 import、算新路径、再 `git mv`；`import.meta.dir` 拼的 fixture 路径、字符串和注释里的路径它不管，要手动 grep。`bun HANDOFF-remove-info-tools/deps.ts . report` 列出谁还 import info（谓词写死了 `src/info/`，按需改）。
 
+## 第六棒（2026-11-25）：删除已提交
+
+- `92437d84` 删除 commit（step5 补丁 + 本棒修绿）。7964 pass / 1 skip / 0 fail，typecheck RC=0。`HANDOFF-remove-info-tools/step4`、`step5` 的补丁已落进这个 commit，不用再打。
+  - `info-thread` 行保留且留着 `distill`（`tests/memory/distill-sources.test.ts` 拿它注册假 source）；registry.test 的 `distilledMessages` 列表含它，SOURCED 不含（没人注册它的 source），注释写了原因。
+  - 同步测试的夹具换成仍在的行：`info-feedback.jsonl` → `memory-usage-d1.jsonl`（LINES）/ `legion/ledger/…jsonl`（never-infer），`info-pool-marks.json` → `info-meals-dishes.json`（带 wrapper 的 map），`info-sources.json` → `saved-articles.json`（顶层数组），opaque 的 `info-ask`/`info-briefing`/`info-bodies` → `legion/claim/…`。range.test 把已删行的文件挪进 out-of-range 那条，钉住「出 sync range、盘上原样留着」。
+  - 删 `src/memory/profile/feedback.ts` + 测试（只剩测试在用）；settings 的 `tab.accounts`、`account.{briefing,screening,analysis,briefingHint}` 9 种语言删掉。
+  - chat-scale-contract：「手机那条 CallView 不缩放」原来盯 InfoCall，改盯 `meals/MealsCall.tsx`；info-refusal.test 改名 `meals-refusal.test.ts`，盯 `use-meals-call.ts`；use-companion-name 删 `info.shelf.empty` 和简报封面那条。
+  - `cover-svg.ts` 删 `issueCover`/`studyCover`/`volumeCover`（调用方全在 info 里，`volumeCover` 用的键已删），只留稿的 `typographicCover`；color-tokens 里 cover-svg 那条放行一并删。
+  - LAYER 表删 19 个已删目录和 `info` 行，相关注释改掉。
+- `03698f1f` 手机 nav-stack 删 `briefing`/`briefs`/`article`/`saved`/`savedArticle`，PhoneApp 不再画 SavedArticleView，`shell.savedArticle.backLabel` 删。栈只在内存里，没有要迁移的。
+
+### 还剩（第 5 项残留，没做）
+
+- `companion/issue-context.ts` + `tests/ui/components/companion/issue-context.test.ts`、`tests/soul/door-issue.test.ts`；调用方 App、PhoneReader、use-door-chat、DoorChat、CompanionCorner。
+- App 的 `readerMode === "issue"`、`reading/issue*.ts`、`box-jump` 的 `go-to-briefing` 步骤。
+- `reading/saved/` 里只属于 Intel 的部分（LibraryScreen 和链接收藏用的 saved-articles 留着；`saved-article-tools` 还挂在 durable catalog 上，要先看谁用）。
+- `library.ts` 的 `issue` 类型保留、书架过滤（盘上旧数据读到时忽略，不写迁移）。
+- `workshop/bindery` 的 `typographicCover`/`build-article` 现在 src 里没有调用方（只剩测试），是不是 Intel 专用要看 docs/67 再定。
+- 注释和文案里的 `info/` 路径：`grep -rnE "info/" src tests scripts | grep -v docs/info/` 44 行、38 个文件；import 已是 0。
+- Experiments 开关（D 段）照旧没做。
+
 ## 第五棒（2026-11-25）：停在 `HANDOFF-remove-info-tools/step5/`，取代下面 step4 那份
 
 step5 = step4 补丁 + 第五棒的修改。分支仍停在上一个 commit，代码没有新 commit（不绿）。worktree 里可能还留着打好补丁的未提交状态（auto mode 拦了 `git restore`），先 `git status` 看：干净的话
@@ -99,5 +120,5 @@ git add src/ui/components/chat/TopicProposalCard.tsx
 ## 要报给主会话的
 
 - 项目 `CLAUDE.md` 那句「每个库一个插件文件在 `info/sources/plugins/`」已过期，现在是 `src/sources/plugins/`；没动 CLAUDE.md。
-- 坑：698、699 已用；700、701 预分给这条线，还没用。
+- 坑：698、699 已用；700、701 预分给这条线，第六棒没踩到新坑，仍未用。
 - 没在 xvfb 上点过界面。
