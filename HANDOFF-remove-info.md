@@ -4,11 +4,18 @@
 
 worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkout 的旧 node_modules，typecheck 报一串 durable 类型错）。
 
-## 已做（每个都 t.sh 9312 pass / 0 fail，typecheck 过）
+## 已做（每个都 t.sh 全绿、typecheck 过；8567ad90 时 9313 tests / 0 fail）
 
 1. `955710ce` 纯搬家：`src/info/meals` → `src/meals`，`tests/info/meals` → `tests/meals`，`ui/components/info/meals` + `MealsDraftCard.tsx` + `MealsPrepCard.tsx` → `ui/components/meals`，`tests/ui/components/info/meals` → `tests/ui/components/meals`。LAYER 表、palace kinds 里的 `flow("src/meals/...")`、注释里的路径同步改。
 2. `aea456ca` 纯搬家：`info/links` → `reading/ingest/links`；X 链接阅读器（`live/outbound/permalink/post/read-post/reader/snowflake/search-page`）→ `reading/ingest/x`；`info/sources/plugins` → `src/sources/plugins`，`read-page-tool/drive-site/plugin/descriptor/item` → `src/sources`。测试同步搬，`scripts/` 的 import 一并改。LAYER 登记 `reading/ingest/links`、`reading/ingest/x`、`sources`、`sources/plugins`（都是 domain）。
 3. `9af337f8` 三餐对话的 anchor 和备菜语音通话进 `src/meals/conversation/`（`anchor.ts` 新写，`call.ts` 是 `briefer/meals-call.ts` 搬过来）。`briefer/anchors.ts` 暂时 re-export，删 briefer 时直接让调用方 import `meals/conversation/anchor`。
+
+4. `8567ad90` A+B 的逻辑部分：三餐对话离开 briefer 和 InfoHome。
+   - domain：`meals/conversation/role.ts`（角色 id `meals`，duty 只讲周计划、采购单、做法、备菜，不提简报、没有 tasking；tools/writes 为空，工具照旧挂在 meals desk item 上）、`durable.ts`（`mealsPlace`、`prepareMealsTurn`、`assembleMealsTurn`、`mealsAssemblies`、`watchMealsConversation`、`MEALS_CONVERSATION_KEY`/`MEALS_ADDRESS`/`MEALS_BOX_ORIGIN`）、`deliver.ts`（`layMealsTurn`、`registerMealsDelivery`）；`meals/today.ts` 出 `todayLocal`；`reading/turn/meals-bell.ts`（`registerMealsBell`：turn delivery、reply append、think desk 三样）。info-durable/info-turn/deliver/info-bell/anchors 里的三餐分支全删，`livePosition` 删。
+   - UI：`ui/components/meals/` 新增 `use-meals-call.ts` + `MealsCall.tsx`（对话面板）、`MealsCards.tsx`（`MEALS_CARD_REGISTRY`，cardRegistry.ts 登记）、`use-meals-host.ts`（原 InfoHome 里三餐的全部状态：useMeals、备菜步骤与语音、本地日/菜谱/备菜、对话 anchor、overlay、首页 tile）+ `MealsHost.tsx`（三餐各屏和对话的渲染）、`host.ts`（`isMealsScreen`、`mealsStickKey`、`leaveForAppliedPlan`、`mealsCallPosition`、`topicFiledNote`，配 `tests/ui/components/meals/host.test.ts`）。InfoHome 只调 `useMealsHost` 并挂 `<MealsHost>`，手机首页 tile 走 `mealsHost.tile`/`runAction`。
+   - 盘上的值都没变：`info-meals`、`meals`、`meals:meals`、`{place:"meals"}`、caller `meals-chat`；遥测 surface 和 thread kind 仍写 `"info"`（日志和文件里本来就是这个值，故意保留）。
+   - tasking 测试组已删（`meals-think.test.ts` 的 tasking 那条、`writable-replay.test.ts` 的 "the tasking worker"，后者换成只验三个 meals writable 登记）。
+   - `grep -rnE "from ['\"][^'\"]*(/info/|components/info)" src/meals src/ui/components/meals src/reading/turn/meals-bell.ts tests/meals tests/ui/components/meals` 无结果。
 
 搬家用的脚本在 `HANDOFF-remove-info-tools/`（合并前和本文件一起删）：`bun HANDOFF-remove-info-tools/mv.ts . moves.json`，moves.json 是 `[[旧路径, 新路径], …]`（文件或目录），按旧位置解析 src/tests/scripts 里每个相对 import、算新路径、再 `git mv`；`import.meta.dir` 拼的 fixture 路径、字符串和注释里的路径它不管，要手动 grep。`bun HANDOFF-remove-info-tools/deps.ts . report` 列出谁还 import info（谓词写死了 `src/info/`，按需改）。
 
@@ -16,25 +23,17 @@ worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkou
 
 顺序建议 A → B → C → D，A+B 是一件事，最好一个 agent 做完。
 
-### A. 三餐对话从 briefer 拆出来（domain 侧，放 `src/meals/conversation/`）
+### A+B 剩下的（下一棒先做，再做 C）
 
-三餐对话今天整个跑在 briefer 的对话机器上：
+- i18n：三餐代码里还有 14 处 `t("info.…")`：`meals/conversation/anchor.ts` 的 `info.anchor.meals*`，`MealsHost.tsx` 的 `info.ask.about{Meals,Numbers,Shopping,Today,Weekday,Plan}`，`meals/conversation/durable.ts` 的 `info.errors.noProvider`/`extractorFailed`，`ui/components/meals/host.ts` 的 `info.call.note.topicFiled`（door 也用这个键，C 时它也得有新家）。搬进 `i18n/messages/meals`，9 种语言一起，`grep -rn 't("info\.' src/meals src/ui/components/meals` 归零。这是纯文案搬家，单独 commit。
+- 测试：`tests/info` 里还夹着三餐那半，删 tests/info 前先剪进 `tests/meals/conversation/`：`info-durable.test.ts`（PLACES 循环的 meals 项、key/address 那条）、`info-kill.test.ts` + `info-kill-child.ts` + `support/info-file.ts`（`KILL_ORIGINS.meals`、`keyOf`/`addressOf`）、`deliver.test.ts`（meals delivery 那条）、`tests/ui/components/info/info-call-turn.test.ts`（"a meals turn lands in the meals conversation" 已改走 `useMealsCall`）。`tests/reading/turn/info-bell.test.ts` 里两条 meals bell 测试已改走 `deliverMealsBell`，删简报 bell 时搬成 `meals-bell.test.ts`。
+- 挂载点：InfoHome 删掉时，`App.tsx` / `PhoneApp.tsx` 直接调 `useMealsHost` 并渲染 `<MealsHost>`（props 和 InfoHome 现在传的一样），`PhoneHome` 的 tile 改从 `useMealsHost` 的 `tile`/`runAction` 拿。hook 要挂在不随屏幕卸载的位置，备菜语音和对话才能跨屏活着。
+- 没在 xvfb 上看过界面；只靠测试（meals-batch-cook、info-call-turn 的 meals 那条、host.test）。下一棒动挂载点时用 `xvfb-run` 点一遍三餐首页、Ask、草稿卡 Apply、备菜页。
+- `InfoCallAnchor` 上的 `bookKey`/`kickoff` 字段只给过三餐用，随 C 删。
 
-- `info/briefer/info-durable.ts`：`MealsOrigin`、`asMealsOrigin`、key `meals:meals`、地址 `{ key: MEALS_BOOK_ID, threadId: MEALS_THREAD_ID }`、`conversationPlace`（watch 计数、`infoAssemblies`）、`mealsPlace`、`prepareInfoTurn`（UI 发三餐回合也走它）。拆成 `meals/conversation/durable.ts`，出 `mealsPlace` 和 `prepareMealsTurn`。
-- `info/briefer/info-turn.ts`：`assembleInfoTurn` 的三餐分支（`bindItemTools(INFO_MEALS_KIND, mealsTools)`、`bindItemRef` 的 draft/fresh），box origin `{ place: "meals" }`。
-- `info/briefer/deliver.ts` 185 行往后：`layMealsTurn`、`openMealsDelivery`、`registerMealsDelivery` → `meals/conversation/deliver.ts`。
-- `info/briefer/role.ts`：三餐回合用的是 `secretary` 角色，duty 讲的是「陪用户过每日简报」并让模型 delegate 给 tasking。删 Intel 后要给三餐一个自己的角色（短 duty：帮用户规划和做三餐，工具只在用户要求时用，诚实、用用户的语言）。tasking 随 Intel 删，三餐就没有「派出去查」了，`tests/reading/turn/meals-think.test.ts` 和 `tests/meals/writable-replay.test.ts` 里 "the tasking worker" 那组跟着删。这一条要在最后报告里写明。
-- `todayLocal` 在 `info/collect/store.ts`（就是 `localDateString(new Date())`），`ui/components/meals/use-meals.ts` 和 deliver 在用，搬进 meals。
-- `reading/turn/info-bell.ts`：简报和三餐两种 bell，只留三餐那半（改名如 `meals-bell.ts`），`tests/reading/turn/info-bell.test.ts` 同步。
-- 注册点：`ui/components/common/useBackgroundServices.ts:107`（`info: infoPlace(), meals: mealsPlace()`，留 meals），`useShellBootstrap.ts`（`registerMealsDelivery`、`registerSecretaryRole`、`registerInfoDelivery`，以及 46-71 行、264-311 行那批 info 注册）。
-- 盘上的值不能变：thread 文件 key `info-meals`、thread id `meals`、对话 key `meals:meals`、box origin `{ place: "meals" }`、telemetry caller `meals-chat`。
-- i18n：`info.anchor.meals*` 和三餐代码里其余的 `t("info.…")` 键搬进 meals 目录，9 种语言一起（`grep -rn 't("info\.' src/meals src/ui/components/meals`）。
+### B'. 入口（下一棒和 D 一起做）
 
-### B. 三餐 UI 的宿主
-
-- `ui/components/info/InfoHome.tsx` 托着三餐所有屏（`isMealsScreen`、MealsHome/Day/Recipe/Shopping/Method/Onboarding/Prep、手机首页三餐 tile、返回），`use-info-call.ts`（758 行）+ `InfoCall.tsx` 是三餐用的对话面板，`InfoCards.tsx` 把 `MealsDraftCard`/`MealsPrepCard` 注册进卡片表。
-- 在 `ui/components/meals/` 里做三餐自己的宿主、`use-meals-call.ts`、`MealsCall.tsx` 和卡片注册，其余随 C 删。
-- 入口：`AppSidebar.tsx`（桌面侧栏 Intel 那格换成 Meals）、`PhoneHome.tsx` + `phone/home-intel.ts`（手机首页 Intel 那格换成 Meals）、`base/places.ts`、`base/shell-nav.ts`（`HomeScreen` 的 `meals*` 屏、`reachableScreen`）、`phone/nav-stack.ts`、`App.tsx`、`PhoneApp.tsx`。Meals 开关关着就不显示入口。
+- `AppSidebar.tsx`（桌面侧栏 Intel 那格换成 Meals）、`PhoneHome.tsx` + `phone/home-intel.ts`（手机首页 Intel 那格换成 Meals）、`base/places.ts`、`base/shell-nav.ts`（`HomeScreen` 的 `meals*` 屏、`reachableScreen`）、`phone/nav-stack.ts`。Meals 开关关着就不显示入口。
 
 ### C. 删 Intel
 
