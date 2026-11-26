@@ -38,6 +38,8 @@ import { hiddenByExperiments, reachableScreen } from "./ui/components/base/shell
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import InfoShelf from "./ui/components/info/InfoShelf";
+import { useMealsHost } from "./ui/components/meals/use-meals-host";
+import { MealsHost } from "./ui/components/meals/MealsHost";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import { openShelfCard } from "./ui/components/info/info-shelf-live";
 import { useHomeIntel } from "./ui/components/phone/use-home-data";
@@ -302,6 +304,16 @@ export default function PhoneApp({
     setStack((s) => goTo(s, screen(kind)));
   }, []);
 
+  // The meals line's state, held by the shell rather than by its screens so the
+  // prep run, its call and the conversation outlive the screen being shown.
+  const mealsHost = useMealsHost({
+    enabled: mealsOn,
+    screen: infoScreenFor(base),
+    onNavigate,
+    onOpenMealsPrep: (session) => setStack((s) => openPrep(s, session)),
+    onOverlayChange,
+  });
+
   // Into a book. The entry carries the book; the rest of what leaving it needs
   // is held beside the stack.
   const openReader = useCallback((book: PhoneBookOpen) => {
@@ -416,27 +428,6 @@ export default function PhoneApp({
             // so a chat over one would not know what it was reading. The gesture
             // is this shell's, so it is this shell that wraps the screen in it.
             wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
-            mealsEnabled={mealsOn}
-            // One day of the week is a stack entry like an opened article, so
-            // the date rides on it and the back gesture leaves it the same way
-            // it leaves anything else.
-            mealsDay={base.kind === "meals-day" || base.kind === "meals-recipe" ? base.date : null}
-            onOpenMealsDay={(date) => setStack((s) => push(s, { kind: "meals-day", date }))}
-            // A meal's recipe is pushed over its day, so the back gesture
-            // lands on the day where the reader left it.
-            mealsRecipe={base.kind === "meals-recipe" ? base.meal : null}
-            onOpenMealsRecipe={(date, meal) => setStack((s) => push(s, { kind: "meals-recipe", date, meal }))}
-            // The batch cook is an entry over the Meals page and carries its
-            // session, so back from it is the Meals page wherever it was opened.
-            mealsPrep={base.kind === "meals-prep" ? base.session : null}
-            onOpenMealsPrep={(session) => setStack((s) => openPrep(s, session))}
-            // Method & sources and a replayed onboarding are opened from more
-            // than one screen, so their back is the stack's own.
-            onMealsBack={goBack}
-            // No corner cards over the chat. The reader pulled it down or
-            // pressed Ask and pops it with a back, so the chat is a screen like
-            // any other; a card that shrank it away would be a second way out,
-            // parked in a corner of a screen 393pt wide.
             pipCards={false}
             renderLaunch={(launch) => (
               <PhoneHome
@@ -463,12 +454,43 @@ export default function PhoneApp({
                 meals={mealsOn}
                 intelShown={gates.intel}
                 onOpenMeals={() => onNavigate("meals")}
+                mealsTile={mealsHost.tile}
+                // Tapped before info-meals.json is read: the Meals page, which holds until it is.
+                onMealsTile={() => mealsHost.runAction(mealsHost.tile?.action ?? { kind: "meals" })}
                 companionShown={companionShown}
                 onToggleCompanion={toggleCompanion}
                 companionAvailable={gates.companion}
               />
             )}
           />
+
+          {infoScreenFor(base) !== null && (
+            <MealsHost
+              host={mealsHost}
+              screen={infoScreenFor(base)!}
+              onNavigate={onNavigate}
+              enabled={mealsOn}
+              // One day of the week is a stack entry like an opened article, so
+              // the date rides on it and the back gesture leaves it the same way
+              // it leaves anything else.
+              mealsDay={base.kind === "meals-day" || base.kind === "meals-recipe" ? base.date : null}
+              onOpenMealsDay={(date) => setStack((s) => push(s, { kind: "meals-day", date }))}
+              // A meal's recipe is pushed over its day, so the back gesture
+              // lands on the day where the reader left it.
+              mealsRecipe={base.kind === "meals-recipe" ? base.meal : null}
+              onOpenMealsRecipe={(date, meal) => setStack((s) => push(s, { kind: "meals-recipe", date, meal }))}
+              // The batch cook is an entry over the Meals page and carries its
+              // session, so back from it is the Meals page wherever it was opened.
+              mealsPrep={base.kind === "meals-prep" ? base.session : null}
+              // Method & sources and a replayed onboarding are opened from more
+              // than one screen, so their back is the stack's own.
+              onMealsBack={goBack}
+              wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
+              // No corner cards over the chat: on the phone it is a screen of the stack.
+              pipCards={false}
+              onTopicsChanged={() => void refreshSavedArticles()}
+            />
+          )}
 
           {base.kind === "saved" && (
             <SavedList

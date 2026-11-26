@@ -27,8 +27,8 @@ const LAUNCH = {
   onOpenBriefing: () => {},
   onOpenSettings: () => {},
   onStartSubscribing: () => {},
-  mealsTile: { mid: "Plan a batch cook", foot: "One shop, one cook, 1 to 3 days", action: { kind: "plan" as const } },
 };
+const MEALS_TILE = { mid: "Plan a batch cook", foot: "One shop, one cook, 1 to 3 days", action: { kind: "plan" as const } };
 
 function issue(bookId: string, over: Partial<IssueCard> = {}): IssueCard {
   return {
@@ -68,6 +68,7 @@ async function draw(over: Partial<Props> = {}) {
   const opened: string[] = [];
   const props: Props = {
     launch: LAUNCH,
+    mealsTile: MEALS_TILE,
     intel: INTEL,
     onOpenIntel: (item) => opened.push(`intel:${item.card.bookId}`),
     savedCount: 7,
@@ -174,11 +175,8 @@ test("the book to continue is the first library cover, with its topic and how fa
 test("the meals tile says what the batch cook needs and a tap goes where the state says", async () => {
   const tapped: string[] = [];
   const prep = await draw({
-    launch: {
-      ...LAUNCH,
-      mealsTile: { mid: "Prep: Today, afternoon", foot: "72 min hands-on · about 95 min", action: { kind: "prep", session: "s1" } },
-      onMealsTile: () => tapped.push("tile"),
-    },
+    mealsTile: { mid: "Prep: Today, afternoon", foot: "72 min hands-on · about 95 min", action: { kind: "prep", session: "s1" } },
+    onMealsTile: () => tapped.push("tile"),
   });
   const tile = button(prep.container, "Prep: Today, afternoon");
   expect(tile.textContent).toContain("72 min hands-on · about 95 min");
@@ -190,7 +188,7 @@ test("the meals tile says what the batch cook needs and a tap goes where the sta
   cleanup();
 
   // While info-meals.json is being read the tile holds a placeholder and a tap is the plain way in.
-  const loading = await draw({ launch: { ...LAUNCH, mealsTile: null } });
+  const loading = await draw({ mealsTile: null });
   const held = button(loading.container, "Meals");
   expect(held.querySelector(".animate-pulse")).not.toBeNull();
   await act(async () => {

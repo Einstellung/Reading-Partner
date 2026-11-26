@@ -15,6 +15,7 @@ import { companionToggleTitle } from "../base/companion-toggle";
 import { useCompanionName } from "../base/use-companion-name";
 import { BriefingCardBody, Card, CardLabel } from "../info/HomeCard";
 import type { LaunchProps } from "../info/InfoHome";
+import type { EntryTileView } from "../../../meals/screen/batch-cook";
 import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 import CoverBand from "../shelf/CoverBand";
 import {
@@ -65,6 +66,8 @@ export default function PhoneHome({
   settingsAlert,
   meals,
   onOpenMeals,
+  mealsTile,
+  onMealsTile,
   companionShown,
   onToggleCompanion,
   companionAvailable = true,
@@ -93,6 +96,10 @@ export default function PhoneHome({
   // the tile is not here at all.
   meals: boolean;
   onOpenMeals: () => void;
+  // The Meals tile (meals/screen/batch-cook.ts): null while info-meals.json is
+  // being read, and what a tap on it does (ui/components/meals/use-meals-host.ts).
+  mealsTile?: EntryTileView | null;
+  onMealsTile?: () => void;
   // The corner companion's switch (docs/68). The phone has no sidebar, so the
   // app's own name on the home screen is what carries it.
   companionShown: boolean;
@@ -118,16 +125,16 @@ export default function PhoneHome({
     tiles.push(
       // The batch cook's state (meals/screen/batch-cook.ts): plan one, the
       // prep ahead, or the next meal; a tap goes where the state says.
-      <button key="meals" className={TILE} onClick={launch.onMealsTile ?? onOpenMeals}>
+      <button key="meals" className={TILE} onClick={onMealsTile ?? onOpenMeals}>
         <span className={KICKER}>{t("phone.home.mealsLabel")}</span>
         <span className={TILE_MID}>
-          {launch.mealsTile ? (
-            <span className="line-clamp-2 font-serif text-[19px] leading-tight text-foreground">{launch.mealsTile.mid}</span>
+          {mealsTile ? (
+            <span className="line-clamp-2 font-serif text-[19px] leading-tight text-foreground">{mealsTile.mid}</span>
           ) : (
             <span className="block h-[24px] w-20 animate-pulse rounded-md bg-muted" aria-hidden="true" />
           )}
         </span>
-        <span className={TILE_FOOT}>{launch.mealsTile?.foot ?? ""}</span>
+        <span className={TILE_FOOT}>{mealsTile?.foot ?? ""}</span>
       </button>,
     );
   }

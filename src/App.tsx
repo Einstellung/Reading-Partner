@@ -40,6 +40,8 @@ import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import InfoShelf from "./ui/components/info/InfoShelf";
+import { useMealsHost } from "./ui/components/meals/use-meals-host";
+import { MealsHost } from "./ui/components/meals/MealsHost";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
@@ -1270,6 +1272,9 @@ export default function App() {
       : null;
 
   const inReader = !!title;
+  // The meals line's state, held by the shell rather than by its screens so the
+  // prep run, its call and the conversation outlive the screen being shown.
+  const mealsHost = useMealsHost({ enabled: mealsOn, screen: inReader ? null : homeScreen, onNavigate: setHomeScreen });
 
   // What a card in the companion's column can reach in this shell (companion/box-jump.ts
   // decides which of these a given card needs, and in what order).
@@ -1656,7 +1661,6 @@ export default function App() {
           <InfoHome
             screen={inReader ? null : homeScreen}
             onNavigate={setHomeScreen}
-            mealsEnabled={mealsOn}
             role={deviceRole}
             continueBook={(() => {
               if (topics === null) return undefined;
@@ -1677,6 +1681,16 @@ export default function App() {
             onOpenSettings={openSettings}
             onTopicsChanged={refreshTopics}
           />
+
+          {!inReader && (
+            <MealsHost
+              host={mealsHost}
+              screen={homeScreen}
+              onNavigate={setHomeScreen}
+              enabled={mealsOn}
+              onTopicsChanged={() => void refreshTopics()}
+            />
+          )}
 
           {!inReader && settingsShowing && (
             <SettingsView

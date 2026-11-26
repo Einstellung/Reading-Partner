@@ -11,16 +11,12 @@ import { savedArticleId } from "../../../reading/saved/saved-articles";
 import { reachableScreen, showsLaunchCard, type HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
-import type { MealKey } from "../../../meals/plan/types";
-import type { EntryTileView } from "../../../meals/screen/batch-cook";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
-import { useMealsHost } from "../meals/use-meals-host";
-import { MealsHost } from "../meals/MealsHost";
 import { useInfoHome } from "./use-info-home";
 import { useRegisterVoiceContext } from "../companion/voice-context";
 import { noLabsOpen } from "./no-labs";
@@ -66,11 +62,6 @@ export interface LaunchProps {
   onOpenBriefing: () => void;
   onOpenSettings: () => void;
   onStartSubscribing: () => void;
-  // The phone home's Meals tile (meals/screen/batch-cook.ts): null while
-  // info-meals.json is being read, and what a tap on it does. Left out by a
-  // shell that draws no tile.
-  mealsTile?: EntryTileView | null;
-  onMealsTile?: () => void;
 }
 
 export default function InfoHome(props: {
@@ -123,28 +114,6 @@ export default function InfoHome(props: {
   // that has it and this screen keeps importing nothing from either shell —
   // the same hole renderLaunch is (docs/22).
   wrapScreen?: (screen: AskableScreen, children: React.ReactNode) => React.ReactNode;
-  // Whether the meals line is shown (the Meals experiment, docs/73). Off, and
-  // there is no entry to this screen anywhere and nothing is read off disk for
-  // it; the data stays where it is.
-  mealsEnabled?: boolean;
-  // Which day of the week the shell has open, and how it opens one. The day is
-  // one screen of a week, so a shell with a navigation stack (the phone's) puts
-  // the date on the stack entry and hands it back here; a shell without one
-  // (the desktop's) leaves both out and this screen remembers it itself.
-  mealsDay?: string | null;
-  onOpenMealsDay?: (date: string) => void;
-  // Which meal's recipe is open over the day, and how one is opened: the same
-  // split as the day's, the phone's stack entry or this screen's own memory.
-  mealsRecipe?: MealKey | null;
-  onOpenMealsRecipe?: (date: string, meal: MealKey) => void;
-  // Which prep session's page is open (docs/671 备餐页), and how one is opened:
-  // the phone's stack entry, or this screen's own memory on the desktop.
-  mealsPrep?: string | null;
-  onOpenMealsPrep?: (session: string) => void;
-  // Back from Method & sources and from a replayed onboarding, both of which
-  // are opened from more than one screen. The phone passes its stack's pop; the
-  // desktop leaves it out and this screen goes back to where it opened them.
-  onMealsBack?: () => void;
   // Whether the call keeps its corner cards (docs/03). Default, and the desktop
   // shell: it does. The phone shell turns them off — there the chat is a screen
   // of the navigation stack with gestures in and out of it, and a card that
@@ -159,29 +128,17 @@ export default function InfoHome(props: {
   // The old briefing's page and article are not drawn while its UI is off
   // (info/old-briefing.ts): a screen or a destination naming them is Today.
   const oldBriefing = props.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
-  // Nor are the meals screens while the meals line is off.
-  const shown = { meals: props.mealsEnabled === true };
-  const screen = props.screen === null ? null : reachableScreen(props.screen, oldBriefing, shown);
+  // The meals screens are the shell's meals host's (ui/components/meals/MealsHost).
+  const screen = props.screen === null ? null : reachableScreen(props.screen, oldBriefing);
   const navigate = props.onNavigate;
-  const mealsShown = shown.meals;
   const onNavigate = useCallback(
-    (next: HomeScreen) => navigate(reachableScreen(next, oldBriefing, { meals: mealsShown })),
-    [navigate, oldBriefing, mealsShown],
+    (next: HomeScreen) => navigate(reachableScreen(next, oldBriefing)),
+    [navigate, oldBriefing],
   );
   const info = useInfoHome({
     role: props.role,
     onNavigate,
     onTopicsChanged: props.onTopicsChanged,
-    onOverlayChange: props.onOverlayChange,
-  });
-
-  // The meals line's state, held here rather than by its screens so the prep
-  // run, its call and the conversation outlive the screen being shown.
-  const mealsHost = useMealsHost({
-    enabled: props.mealsEnabled === true,
-    screen,
-    onNavigate,
-    onOpenMealsPrep: props.onOpenMealsPrep,
     onOverlayChange: props.onOverlayChange,
   });
 
@@ -217,9 +174,6 @@ export default function InfoHome(props: {
               onOpenBriefing: () => onNavigate("briefing"),
               onOpenSettings: props.onOpenSettings,
               onStartSubscribing: info.openOnboarding,
-              mealsTile: mealsHost.tile,
-              // Tapped before info-meals.json is read: the Meals page, which holds until it is.
-              onMealsTile: () => mealsHost.runAction(mealsHost.tile?.action ?? { kind: "meals" }),
             })
           ) : (
             <Vestibule
@@ -279,22 +233,6 @@ export default function InfoHome(props: {
           </>
         );
       })()}
-
-      <MealsHost
-        host={mealsHost}
-        screen={screen}
-        onNavigate={onNavigate}
-        enabled={props.mealsEnabled === true}
-        mealsDay={props.mealsDay}
-        onOpenMealsDay={props.onOpenMealsDay}
-        mealsRecipe={props.mealsRecipe}
-        onOpenMealsRecipe={props.onOpenMealsRecipe}
-        mealsPrep={props.mealsPrep}
-        onMealsBack={props.onMealsBack}
-        wrapScreen={props.wrapScreen}
-        pipCards={props.pipCards}
-        onTopicsChanged={() => void props.onTopicsChanged()}
-      />
 
       {screen === "article" && info.openArticleId && info.snap?.briefing && (() => {
         const openArticleId = info.openArticleId;
