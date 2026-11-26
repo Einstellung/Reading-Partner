@@ -24,7 +24,6 @@ import {
   type SavedArticle,
   type SavedArticleInput,
 } from "../../../src/reading/saved/saved-articles";
-import { toSavedArticleInput } from "../../../src/ui/components/info/saveArticle";
 import { articleHtmlForWebview, rewriteImageSrcs } from "../../../src/platform/app/image-proxy";
 
 function input(over: Partial<SavedArticleInput> = {}): SavedArticleInput {
@@ -393,35 +392,4 @@ test("formatPublishedAt shows an unparseable date verbatim and nothing for none"
   expect(formatPublishedAt("2026-07-20T08:00:00Z")).toBe(
     new Date("2026-07-20T08:00:00Z").toLocaleDateString(),
   );
-});
-
-// --- toSavedArticleInput (ui/components/info/saveArticle.ts) ----------------
-
-// summaryOnly is no longer worked out here. The briefing view answers with the
-// body and with whether the article itself was ever read (docs/36) — off the
-// day's item snapshot on a collector, off the published bodies on a reader —
-// and this mapping carries that answer through unchanged.
-test("what the view answered with is what gets kept", () => {
-  const kept = toSavedArticleInput({
-    topicId: "brief",
-    meta: {
-      title: "A title",
-      url: "https://example.com/a",
-      source: "src",
-      sourceName: "Source",
-      publishedAt: "2026-07-20T08:00:00Z",
-    },
-    body: { html: "<p>body</p>", text: "body", summaryOnly: true },
-  });
-  expect(kept).toEqual({
-    topicId: "brief",
-    url: "https://example.com/a",
-    title: "A title",
-    source: "src",
-    sourceName: "Source",
-    publishedAt: "2026-07-20T08:00:00Z",
-    summaryOnly: true,
-    text: "body",
-    html: "<p>body</p>",
-  });
 });

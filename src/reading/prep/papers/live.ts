@@ -14,8 +14,8 @@ import { recordParse } from "../../../platform/app/structured-output";
 import { decodePage, looksLikeHttpUrl, sniffContentType } from "../../sources";
 import { loadExtractReadable } from "../../../workshop/extract/readable-lazy";
 import { readWebSource } from "./web-source";
-import { arxivPdfUrl, fetchFromArxiv, normalizeArxivId } from "../../../info/sources/plugins/arxiv-client";
-import { fetchFromOpenAlex } from "../../../info/sources/plugins/openalex-client";
+import { arxivPdfUrl, fetchFromArxiv, normalizeArxivId } from "../../../sources/plugins/arxiv-client";
+import { fetchFromOpenAlex } from "../../../sources/plugins/openalex-client";
 import { fetchWithRetry } from "../../../platform/http/throttled-fetch";
 import { runDigest } from "./digest";
 import { serializeNote } from "./notes";
@@ -34,7 +34,7 @@ import {
   writePaperPdf,
   writePrepNote,
 } from "./store";
-import { fetchFromS2 } from "../../../info/sources/plugins/s2-client";
+import { fetchFromS2 } from "../../../sources/plugins/s2-client";
 import {
   capturedFetch,
   PrepPipeline,

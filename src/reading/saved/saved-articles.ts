@@ -29,9 +29,7 @@
 // The body is kept twice inside that file: `text` for the AI path, `html` for
 // reading it today. The html keeps its external image URLs — they render
 // through the img: proxy (docs/pitfall/30) — but any data: image is stripped,
-// since a base64 body would dominate the file. Same rule and same function as
-// the bodies the collector publishes (info/boxes/publish.ts), so an article
-// read from the briefing and the copy kept from it hold the same markup.
+// since a base64 body would dominate the file.
 //
 // Un-keeping the last record that points at a body deletes the body, here and
 // in Drive (removeSavedArticle). The remote half is a purge request because
@@ -413,29 +411,13 @@ export async function loadSavedArticleBody(
   return raw === null ? NO_ARTICLE_BODY : parseArticleBody(raw);
 }
 
-// Write one body and answer with the hash the record will point at. "" when
-// there is no body at all: an article kept from a headline-only source has
-// nothing to store, and a file per nothing is still a file to sync.
-//
-// A file already there holds these exact bytes, so the write is skipped. That is
-// not only an optimisation: a body file is never rewritten, which is the whole
-// of what lets sync treat it as cold.
-async function writeArticleBody(io: SavedArticlesIo, body: SavedArticleBody): Promise<string> {
-  if (body.text === "" && body.html === "") return "";
-  const bytes = articleBodyBytes(body);
-  const hash = await contentHash(new TextEncoder().encode(bytes));
-  const path = articleBodyPath(hash);
-  if (!(await io.exists(path))) await io.write(path, bytes);
-  return hash;
-}
-
 // The records read, and whether what came off disk had to be repaired. An empty
 // list is the answer for a file that is not there yet, and for one whose bad
 // content has just been moved aside. It is not the answer for a file that is
 // sitting there unread: the kept articles cannot be rebuilt from anywhere — the
 // briefing they came from is a day old and gone — so the reader would be shown
 // an empty shelf, and the next keep would write "the one article being kept"
-// over it. Raising is also what keeps the file from being overwritten: both
+// over it. Raising is also what keeps the file from being overwritten: the
 // writers below read before they save.
 //
 // Content that does not parse is quarantined by readGuardedJson and a fresh list
@@ -490,27 +472,6 @@ async function save(io: SavedArticlesIo, list: SavedArticle[], repaired: boolean
   if (repaired && !(await quarantineBeforeWrite(io, SAVED_ARTICLES_FILE))) return false;
   await io.write(SAVED_ARTICLES_FILE, JSON.stringify(list, null, 2));
   return true;
-}
-
-// Save one article under a topic. Returns the record written, or null when the
-// article has no identity (no URL and no title) and so cannot be de-duplicated.
-// Raises when the records file is there and could not be read: every other kept
-// article is in it.
-export async function saveArticle(
-  input: SavedArticleInput,
-  io: SavedArticlesIo = savedArticlesIo,
-): Promise<SavedArticle | null> {
-  if (savedArticleId(input.url, input.title) === "") return null;
-  // The body first, the record second. The other order leaves a record pointing
-  // at a file that was never written, which reads as "kept without a body" for
-  // good; this order leaves at worst a body file nobody points at, which costs
-  // one cold upload and nothing else.
-  const body = buildArticleBody(input);
-  const hash = await writeArticleBody(io, body);
-  const article = buildSavedArticle(input, Date.now(), { hash, chars: body.text.length });
-  const read = await readSavedArticles(io);
-  const wrote = await save(io, upsertSavedArticle(read.list, article), read.repaired);
-  return wrote ? article : null;
 }
 
 // Move a kept article to another topic (docs/21): the write behind the reader

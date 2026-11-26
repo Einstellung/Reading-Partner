@@ -1,4 +1,4 @@
-// The program's own sentences in a call (docs/info/671 时间线与语音): `say` speaks
+// The program's own sentences in a call (docs/meals/671 时间线与语音): `say` speaks
 // them through the read-out path with no model turn, as soon as nobody is
 // talking; a screen's tools and place lines ride on every turn while attached.
 

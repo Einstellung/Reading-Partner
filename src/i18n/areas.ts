@@ -2,7 +2,6 @@
 // per area; the area's own directory under messages/ holds its nine files.
 
 import chat from "./messages/chat";
-import info from "./messages/info";
 import library from "./messages/library";
 import meals from "./messages/meals";
 import phone from "./messages/phone";
@@ -14,7 +13,6 @@ import study from "./messages/study";
 
 export const AREAS = {
   chat,
-  info,
   library,
   meals,
   phone,

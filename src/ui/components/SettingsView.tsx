@@ -1,7 +1,7 @@
 // Settings: a page of the content area, with the sidebar still beside it and
 // the Settings row at its foot lit (docs/51). What each of the four tabs holds
-// is argued in settings/AccountPanel, settings/AccountsPanel,
-// settings/FeaturesPanel, settings/OptionalPanel and settings/ExperimentsPanel; this file is the page, the
+// is argued in settings/AccountPanel, settings/FeaturesPanel,
+// settings/OptionalPanel and settings/ExperimentsPanel; this file is the page, the
 // sub-nav, and the footer.
 //
 // The page is a screen like Today and the briefing: `absolute inset-0` over the
@@ -26,7 +26,6 @@ import { type Settings } from "../../platform/app/settings";
 import { type DeviceSettings } from "../../platform/app/device";
 import { useT } from "../../i18n";
 import AccountPanel from "./settings/AccountPanel";
-import AccountsPanel from "./settings/AccountsPanel";
 import FeaturesPanel from "./settings/FeaturesPanel";
 import OptionalPanel from "./settings/OptionalPanel";
 import ExperimentsPanel from "./settings/ExperimentsPanel";
@@ -71,7 +70,7 @@ const SUBNAV_ROW =
 
 // Experiments is the fifth, and only where this platform has an entry for it
 // (platform/experiments/registry.ts).
-const BASE_TABS = ["account", "accounts", "features", "optional"] as const;
+const BASE_TABS = ["account", "features", "optional"] as const;
 type Tab = (typeof BASE_TABS)[number] | "experiments";
 function settingsTabs(platform: string): readonly Tab[] {
   return experimentsFor(platform).length > 0 ? [...BASE_TABS, "experiments"] : BASE_TABS;
@@ -120,9 +119,6 @@ export function SettingsBody({
       <div className="min-w-0 max-w-[720px] flex-1">
         <TabsContent value="account">
           <AccountPanel settings={settings} onSettingsChange={onSettingsChange} />
-        </TabsContent>
-        <TabsContent value="accounts">
-          <AccountsPanel role={device?.role ?? null} />
         </TabsContent>
         <TabsContent value="features">
           <FeaturesPanel

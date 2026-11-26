@@ -1,4 +1,4 @@
-// The device's one voice call as the rest of the app sees it (docs/68, docs/info/671
+// The device's one voice call as the rest of the app sees it (docs/68, docs/meals/671
 // 时间线与语音). The corner holds the call (ui/components/companion/use-voice-call.ts);
 // three things reach it from elsewhere through here, as a signal rather than
 // props through two shells, the way voice-context.ts does:

@@ -540,4 +540,20 @@ export default {
   "finish.tonightThaw": "오늘 밤 내일 {meal}에 쓸 {food}을(를) 냉동실에서 냉장실로 옮긴다.",
   "finish.tonightSoyMilk": "오늘 밤 두유 제조기에 {foods}, 물을 넣고 내일 아침 시간에 맞춰 예약한다.",
   "finish.prepSession": "밀프렙",
+
+  // The meals conversation
+  "anchor.kickoff": "이번 주를 계획해줘.",
+  "anchor.title": "식단",
+  "anchor.placeholder": "식단에 대해 질문…",
+  "anchor.noPlan": "이번 주 계획이 아직 없습니다",
+  "anchor.thisWeek": "이번 주 식단",
+  "anchor.leftToBuy": { other: "이번 주 식단 · {count}개 더 구매 필요" },
+  "ask.aboutMeals": "식단에 대해 질문",
+  "ask.aboutNumbers": "이 수치에 대해 질문",
+  "ask.aboutShopping": "장보기에 대해 질문",
+  "ask.aboutToday": "오늘에 대해 질문",
+  "ask.aboutWeekday": "{weekday}에 대해 질문",
+  "ask.aboutPlan": "계획에 대해 질문",
+  "errors.noProvider": "AI 제공자가 설정되지 않았습니다 (설정에서 확인).",
+  "errors.extractorFailed": "기사 추출기를 불러오지 못했습니다. 다시 시도하세요.",
 } satisfies Translation<typeof en>;

@@ -6,7 +6,6 @@ export default {
   title: "Ajustes",
   done: "OK",
   "tab.account": "IA e sincronização",
-  "tab.accounts": "Contas",
   "tab.features": "Recursos",
   "tab.optional": "Opcional",
   "tab.experiments": "Experiments",
@@ -36,11 +35,6 @@ export default {
   "account.voiceFront": "Chamada de voz",
   "account.voiceFrontHint":
     "A primeira resposta rápida de uma chamada de voz roda aqui, antes de qualquer trabalho em segundo plano. Um modelo rápido responde antes; deixe o raciocínio desligado, a menos que as respostas fiquem superficiais demais. Um provedor que não consegue desligar o raciocínio usa o nível mais baixo. Ele usa o provedor acima.",
-  "account.briefing": "Resumo de notícias",
-  "account.screening": "Triagem",
-  "account.analysis": "Análise",
-  "account.briefingHint":
-    "Por enquanto o resumo não é montado durante a noite: está em pausa enquanto é redesenhado, e você ainda pode pedir um manualmente. A triagem lê as manchetes do dia para decidir quais artigos vale a pena buscar, por isso é a etapa para manter baixa; a análise lê os que passaram.",
   "account.thinking": "Raciocínio",
   "account.chat": "Chat",
   "account.lessonPrep": "Preparação de aulas",
@@ -90,7 +84,7 @@ export default {
   "features.language": "Idioma",
   "features.languageAuto": "Automático (app: sistema; IA: seu idioma)",
   "features.languageHint":
-    "O idioma do app e de tudo o que a IA escreve: respostas do chat, notas e os boletins. No automático, o app usa o idioma do sistema e a IA responde no idioma em que você escreve. A transcrição de voz sempre segue o que você fala.",
+    "O idioma do app e de tudo o que a IA escreve: respostas do chat e notas. No automático, o app usa o idioma do sistema e a IA responde no idioma em que você escreve. A transcrição de voz sempre segue o que você fala.",
   "features.paper": "Fundo de papel",
   "features.paperHint":
     "Troca o branco por trás de todo o app (chats, estantes, barras laterais, esta janela e as páginas dos livros) por uma cor de papel off-white. Há um só tom e nenhum mais escuro; não é um modo escuro. A escolha fica neste dispositivo.",
@@ -99,16 +93,16 @@ export default {
   "features.companionShowHint":
     "{name} fica no canto de todas as telas, inclusive no leitor. Desativado, o canto fica vazio; o botão na barra lateral, na tela inicial do celular e no menu Mais do leitor traz {name} de volta. A escolha fica neste dispositivo.",
   "features.companionName": "Nome do companheiro",
-  "features.briefing": "Intel",
-  "features.collect": "Coletar das suas fontes neste computador",
+  "features.briefing": "Trabalho em segundo plano",
+  "features.collect": "Fazer o trabalho em segundo plano neste computador",
   "features.collectHint":
-    "Cada fonte é verificada no seu próprio horário, e as buscas por tema rodam aqui durante a noite. Desativado, esta máquina para de coletar por completo e outro coletor, se você tiver, assume.",
+    "Este computador organiza sua memória durante a noite e resolve conflitos de sincronização. Desativado, outro computador seu assume, se você tiver.",
   "features.thisComputer": "Este computador",
   "features.role": "Esta máquina é um",
-  "features.roleCollector": "Coletor — lê as fontes aqui",
-  "features.roleReader": "Leitor — lê o que outra máquina coletou",
+  "features.roleCollector": "Coletor — pode assumir o trabalho em segundo plano",
+  "features.roleReader": "Leitor — deixa o trabalho em segundo plano para outros computadores",
   "features.roleHint":
-    "Um coletor lê os sites que você assina o dia todo e publica os seus boletins para os seus outros dispositivos; um leitor mostra o que um coletor publicou e nunca busca nada de um site por conta própria. Celulares e tablets são sempre leitores. Se duas máquinas coletam, trabalha a que está ligada há mais tempo.",
+    "Um coletor pode assumir o trabalho em segundo plano: organizar sua memória durante a noite e resolver conflitos de sincronização. Um leitor nunca faz isso. Celulares e tablets são sempre leitores. Se dois coletores estiverem dispostos, trabalha o que está ligado há mais tempo.",
   "features.autostart": "Abrir o Reading Partner quando este computador iniciar",
   "features.autostartHint":
     "Desativado por padrão. Ative na máquina que você quer que colete suas fontes o dia todo: junto com o ícone da bandeja, os seus boletins são montados quer você abra o app ou não. Este ajuste pertence a este computador e não vai para os seus outros dispositivos.",
@@ -156,10 +150,7 @@ export default {
     "Features that are not finished. Each one is off until you turn it on here, on this device. Turning one off only hides it: nothing is deleted, and turning it back on brings everything back.",
   "experiments.meals.name": "Meals",
   "experiments.meals.summary": "Plan the week's meals and keep the shopping list.",
-  "experiments.intel.name": "Intel",
-  "experiments.intel.summary": "Briefs and studies.",
   "experiments.companion.name": "{name}",
-  "experiments.needsParent": "Turn on Intel first.",
   "experiments.companion.summary":
     "The companion in the corner: hold it to talk or type, paste links to it, and the box of what it hands back.",
 } satisfies Translation<typeof en>;

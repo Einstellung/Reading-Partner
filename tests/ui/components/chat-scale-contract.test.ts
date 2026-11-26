@@ -28,7 +28,7 @@ const keys = read("ui/components/base/chat-scale-keys.ts");
 const chat = read("ui/components/chat/MessageList.tsx") + read("ui/components/chat/Composer.tsx");
 const callView = read("ui/components/chat/call/CallView.tsx");
 const retellView = read("ui/components/retell/RetellView.tsx");
-const infoCall = read("ui/components/info/InfoCall.tsx");
+const mealsCall = read("ui/components/meals/MealsCall.tsx");
 const markdown = read("ui/components/markdown/MarkdownRenderer.tsx");
 
 test("the scope publishes the variable and takes the gestures", () => {
@@ -65,10 +65,10 @@ test("the message rows read the variable instead of importing the scale", () => 
 });
 
 test("a surface can stay out, and the phone's does", () => {
-  // The phone reaches CallView through InfoCall and has neither gesture, so
+  // The phone reaches CallView through MealsCall and has neither gesture, so
   // what it would get is a non-passive wheel listener and nothing else.
   expect(callView).toContain("scalable = true");
-  expect(infoCall).toContain("scalable={false}");
+  expect(mealsCall).toContain("scalable={false}");
 });
 
 test("the composer's height cap is CSS, so it grows with the type", () => {

@@ -556,4 +556,20 @@ export default {
   "finish.tonightThaw": "Сегодня вечером переложите {food} на завтра ({meal}) из морозилки в холодильник.",
   "finish.tonightSoyMilk": "Сегодня вечером заправьте соевую машину: {foods} и вода, таймер на завтрашний завтрак.",
   "finish.prepSession": "заготовка",
+
+  // The meals conversation
+  "anchor.kickoff": "Спланируй эту неделю.",
+  "anchor.title": "Питание",
+  "anchor.placeholder": "Спросить о питании…",
+  "anchor.noPlan": "На эту неделю плана пока нет",
+  "anchor.thisWeek": "Меню на эту неделю",
+  "anchor.leftToBuy": { one: "Меню на эту неделю · осталось купить {count}", few: "Меню на эту неделю · осталось купить {count}", many: "Меню на эту неделю · осталось купить {count}", other: "Меню на эту неделю · осталось купить {count}" },
+  "ask.aboutMeals": "Спросить о питании",
+  "ask.aboutNumbers": "Спросить об этих цифрах",
+  "ask.aboutShopping": "Спросить о покупках",
+  "ask.aboutToday": "Спросить о сегодняшнем дне",
+  "ask.aboutWeekday": "Спросить о {weekday}",
+  "ask.aboutPlan": "Спросить о плане",
+  "errors.noProvider": "Провайдер ИИ не настроен (Настройки).",
+  "errors.extractorFailed": "Не удалось загрузить модуль извлечения статей. Попробуйте снова.",
 } satisfies Translation<typeof en>;

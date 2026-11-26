@@ -1,5 +1,6 @@
 // Live wiring of prose adjudication (docs/59 §6): the worker legion runs, and
-// the sweep the daily tick calls on every device.
+// the sweep the daily round (src/presence/daily.ts) calls on every device that
+// runs it.
 //
 // The model call is background work nobody is waiting on, so it runs on the
 // everyday tier ("prep") and is accounted as the nightly pass's is — the plan

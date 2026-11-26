@@ -10,10 +10,9 @@
 // through a start and a stop.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createLiveVoiceCall } from "../../../info/briefer/voice-call-live";
 import { doorDate } from "../../../soul";
 import type { FrontCard } from "../../../soul/voice/front/cascade";
-import { NO_VOICE_CALL, type LiveCallHooks } from "../../../soul/voice/live/call";
+import { NO_VOICE_CALL } from "../../../soul/voice/live/call";
 import { registerCallHost, type CallBuilder } from "../../../soul/voice/live/call-host";
 import { createDoorVoiceCall } from "../../../soul/voice/live/door-call";
 import type { SessionPhase } from "../../../soul/voice/voice-session";
@@ -23,28 +22,14 @@ import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 import type { VoiceCallHandle } from "../orb/orb";
 import type { TurnActivity } from "../../../ai/turn-view/activity";
 import { attentionWithScan, backgroundScan } from "./background-scan";
-import { issueCallMaterial } from "./issue-call";
 import { useAttention } from "./use-attention";
 import type { Attention } from "./companion-motion";
-import { voiceCallMode, type VoiceCallMode } from "./voice-call-mode";
-import type { VoiceContext } from "./voice-context";
 
 export interface VoiceCallOptions {
-  /**
-   * What the screen behind the corner published to talk about, or null where
-   * it published nothing; then the call is held at the door (voice-call-mode.ts).
-   */
-  context: VoiceContext | null;
   /** Whether the reader has a book open behind the corner: the door call's front is told so. */
   inReader?: boolean;
 }
 
-function createModeCall(mode: VoiceCallMode, hooks: LiveCallHooks): Promise<VoiceCall | null> {
-  return mode.kind === "briefing"
-    ? createLiveVoiceCall({ dateKey: mode.dateKey, briefing: mode.briefing, ...hooks })
-    : // With a brief open in the reader, the call is about it (issue-call.ts).
-      createDoorVoiceCall({ date: mode.date, inReader: mode.inReader, material: issueCallMaterial(), ...hooks });
-}
 
 export type { VoiceCallView };
 
@@ -61,7 +46,7 @@ export interface VoiceCallState extends VoiceCallView {
 }
 
 export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
-  const { context, inReader = false } = opts;
+  const { inReader = false } = opts;
   const [phase, setPhase] = useState<SessionPhase>("idle");
   const [error, setError] = useState<VoiceCallError | null>(null);
   const [card, setCard] = useState<FrontCard | null>(null);
@@ -83,8 +68,8 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
   // The latest options, read at start time: a call is started from a gesture,
   // not from a render, and rebuilding the callbacks per render would churn the
   // orb's props for no reason.
-  const optsRef = useRef({ context, inReader });
-  optsRef.current = { context, inReader };
+  const optsRef = useRef({ inReader });
+  optsRef.current = { inReader };
 
   const subscribeLevel = useCallback((cb: (level: number) => void) => {
     levelCbs.current.add(cb);
@@ -132,8 +117,9 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
       try {
         // The day at the door is the day the call starts on, and stays that day.
         const hooks = { onShow: setCard, onRunning: setRunning };
-        const mode = voiceCallMode(optsRef.current.context, { date: doorDate(), inReader: optsRef.current.inReader });
-        const call = build ? await build(hooks) : await createModeCall(mode, hooks);
+        const call = build
+          ? await build(hooks)
+          : await createDoorVoiceCall({ date: doorDate(), inReader: optsRef.current.inReader, ...hooks });
         if (!call) {
           setError({ reason: "start-failed", message: NO_VOICE_CALL });
           return;

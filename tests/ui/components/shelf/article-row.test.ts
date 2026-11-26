@@ -101,6 +101,18 @@ test("an entry with no kind is a book", () => {
   expect(split.articles).toEqual([]);
 });
 
+// Intel is gone (2026-11); a brief it filed stays in library.json and on no shelf.
+test("an old brief is neither a card nor a row", () => {
+  const brief = file({ path: "/t/Brief.pdf", name: "Brief.pdf", hash: "i1" });
+  const book = file({ path: "/t/Book.pdf", name: "Book.pdf", hash: "b1" });
+  const split = splitMaterials([brief, book], {
+    i1: { hash: "i1", title: "Brief", originalFilename: "Brief.pdf", addedAt: 1, kind: "issue" },
+    b1: { hash: "b1", title: "Book.pdf", originalFilename: "Book.pdf", addedAt: 1 },
+  });
+  expect(split.books.map((f) => f.path)).toEqual(["/t/Book.pdf"]);
+  expect(split.articles).toEqual([]);
+});
+
 test("a saved article's line is its source and date, whichever it has", () => {
   const date = new Date("2026-08-30T12:00:00Z").toLocaleDateString();
   expect(savedArticleLine({ sourceName: "Hacker News", publishedAt: "2026-08-30T12:00:00Z" })).toBe(

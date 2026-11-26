@@ -3,9 +3,9 @@
 // voice-call.ts holds the driver and knows none of this; this file builds the
 // bridge and the cascade front (docs/companion/136).
 //
-// Where the call is held is the caller's: the briefing page holds it on the
-// day's briefing (info/briefer/voice-call-live.ts), every other screen at the
-// door (door-call.ts). What differs is handed in — the threads its lines go to,
+// Where the call is held is the caller's: the meals page holds it on the meals
+// conversation (meals/conversation/call.ts), every other screen at the door
+// (door-call.ts). What differs is handed in — the threads its lines go to,
 // the place the front is told, where the back delivers, and what hanging up
 // starts — and everything else is one wiring.
 

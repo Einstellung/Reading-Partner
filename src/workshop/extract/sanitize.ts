@@ -35,7 +35,7 @@
 // The text helpers below (htmlToText, stripTagsToText, decodeEntities,
 // stripDataImages) stay string-based and DOM-free: they feed prompts, length
 // measurements and a file-size guard, not innerHTML, and their callers
-// (info/sources/*, workshop/extract/read-page.ts, reading/sources/article.ts)
+// (sources/*, workshop/extract/read-page.ts, reading/ingest/article.ts)
 // run in bun tests without a DOM.
 //
 // Remote images are kept (news pages are mostly images) and left to load

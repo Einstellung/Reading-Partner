@@ -7,16 +7,17 @@ import {
   patchDeviceSettings,
   subscribeDeviceSettings,
 } from "../app/device";
-import { isEffective, isOn, withExperiment, type ExperimentId } from "./registry";
+import { isOn, migrateExperiments, withExperiment, type ExperimentId } from "./registry";
 
 /** Whether the feature is shown: what every caller outside the settings panel asks. */
 export function experimentOn(id: ExperimentId): boolean {
-  return isEffective(currentDeviceExperiments(), id);
+  return isOn(currentDeviceExperiments(), id);
 }
 
-/** The entry's own switch, whatever its parent says: what the settings panel draws. */
-export function experimentSwitch(id: ExperimentId): boolean {
-  return isOn(currentDeviceExperiments(), id);
+/** Rewrite a map from before Intel was removed (migrateExperiments), once, after initDeviceSettings. */
+export async function migrateStoredExperiments(): Promise<void> {
+  const migrated = migrateExperiments(currentDeviceExperiments());
+  if (migrated) await patchDeviceSettings({ experiments: migrated });
 }
 
 /** Written through device.json's patch, so the other device fields are untouched. */

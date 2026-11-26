@@ -1,9 +1,9 @@
-// Meals: the four screens under ui/components/info/meals (docs/73), plus the
-// vocabulary info/meals/screen/view.ts and screen-lines.ts compute for them,
-// the meals tools' progress labels, and the flavour names info/meals/plan/types.ts
+// Meals: the four screens under ui/components/meals (docs/73), plus the
+// vocabulary meals/screen/view.ts and screen-lines.ts compute for them,
+// the meals tools' progress labels, and the flavour names meals/plan/types.ts
 // defines. The source every other locale is typed against.
 //
-// Out of scope (docs/ui/81): info/meals/screen/onboarding.ts (the scripted
+// Out of scope (docs/ui/81): meals/screen/onboarding.ts (the scripted
 // questions and their answer options) is not an area this catalog covers — see
 // the migration report. method-screen.ts's worked formulas and citations stay
 // English; only its section titles and the standing notes are here.
@@ -580,4 +580,20 @@ export default {
   "finish.tonightThaw": "Move the {food} for tomorrow's {meal} from the freezer to the fridge tonight.",
   "finish.tonightSoyMilk": "Load the soy milk maker with {foods} and water tonight, set for tomorrow's breakfast.",
   "finish.prepSession": "prep session",
+
+  // The meals conversation
+  "anchor.kickoff": "Plan this week.",
+  "anchor.title": "Meals",
+  "anchor.placeholder": "Ask about meals…",
+  "anchor.noPlan": "No week planned yet",
+  "anchor.thisWeek": "This week's meals",
+  "anchor.leftToBuy": { one: "This week's meals · {count} still to buy", other: "This week's meals · {count} still to buy" },
+  "ask.aboutMeals": "Ask about meals",
+  "ask.aboutNumbers": "Ask about the numbers",
+  "ask.aboutShopping": "Ask about shopping",
+  "ask.aboutToday": "Ask about today",
+  "ask.aboutWeekday": "Ask about {weekday}",
+  "ask.aboutPlan": "Ask about the plan",
+  "errors.noProvider": "No AI provider configured (Settings).",
+  "errors.extractorFailed": "The article extractor could not be loaded. Try again.",
 } as const;

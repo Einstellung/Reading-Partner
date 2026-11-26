@@ -1,7 +1,7 @@
-// The saved-article chat tools (docs/21, the AI path the store was landed for): the
-// reader keeps articles on the info side, and from the open book's chat the model can
-// list what is there and put the one they name into the current book's prep list,
-// then read it with the existing read_paper.
+// The saved-article chat tools (docs/21, the AI path the store was landed for):
+// from the open book's chat the model can list the articles the reader kept and
+// put the one they name into the current book's prep list, then read it with the
+// existing read_paper.
 //
 // Nothing is fetched. The text was captured when the reader kept the article, and
 // that copy is the one that exists — the page may be paywalled, JS-only or gone
@@ -10,8 +10,8 @@
 //
 // The list is not filtered by the topic of the book being read, and that is not a
 // missing filter: every kept article is filed under the fixed Brief topic
-// (ensureBriefTopic, wired in ui/components/info/use-info-home.ts), so filtering
-// by the reading topic would answer "nothing kept" every time.
+// (ensureBriefTopic), so filtering by the reading topic would answer "nothing
+// kept" every time.
 //
 // summaryOnly rides all the way through — the row in the list, the text the
 // digest and read_paper see, the paper's digest angle, this tool's answer.

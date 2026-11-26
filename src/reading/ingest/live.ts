@@ -1,25 +1,17 @@
-// Live deps for the URL ingest and for keeping a briefing article: the app's own
-// fetch, the readable extractor out of its lazy chunk, the library, the topic
-// store and the kept-article records.
+// Live deps for the URL ingest: the app's own fetch, the readable extractor out
+// of its lazy chunk, the library and the topic store.
 //
 // Separate from article.ts so that file stays testable: everything here reaches
 // the host, and none of it can run in bun.
 
-import { getLibraryEntry, importBook } from "../../platform/app/library";
+import { importBook } from "../../platform/app/library";
 import { addSupplement } from "../../platform/app/supplements";
 import { addFileToTopic } from "../../platform/app/topics";
-import {
-  loadSavedArticles,
-  saveArticle,
-  type SavedArticle,
-  type SavedArticleInput,
-} from "../saved/saved-articles";
-import { keepArticle, type KeepDeps } from "./keep";
 import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { fetchWithRetry } from "../../platform/http/throttled-fetch";
 import { runBackgroundTurn } from "../../legion/durable/background";
-import { xPostOfUrl } from "../../info/x/post";
-import { saveLinkRecord } from "../../info/links/store";
+import { xPostOfUrl } from "./x/post";
+import { saveLinkRecord } from "./links/store";
 import { takeLinkInFiled, type IngestBatch } from "./link-intake";
 import {
   ingestArticleUrl,
@@ -59,23 +51,6 @@ export async function liveIngestDeps(): Promise<ArticleIngestDeps> {
       await addSupplement(bookId, { ...ref, addedAt: Date.now() });
     },
   };
-}
-
-/** The keep's deps with the real host behind them (keep.ts). */
-export function liveKeepDeps(): KeepDeps {
-  return {
-    fetch: fetchBytes,
-    importBook,
-    attachToTopic: (topicId, path, hash) => addFileToTopic(topicId, path, hash),
-    save: (input) => saveArticle(input),
-    existing: async (id) => (await loadSavedArticles()).find((a) => a.id === id) ?? null,
-    libraryEntry: getLibraryEntry,
-  };
-}
-
-/** Keep a briefing article with the real host behind it. Answers the record written. */
-export async function keepArticleLive(input: SavedArticleInput): Promise<SavedArticle | null> {
-  return (await keepArticle(input, liveKeepDeps())).record;
 }
 
 /** What the run hands an ingest besides the link: the reader's words, and where to say what is being read. */

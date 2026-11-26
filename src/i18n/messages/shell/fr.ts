@@ -22,7 +22,6 @@ export default {
   "action.cancel": "Annuler",
   "action.delete": "Supprimer",
 
-  "savedArticle.backLabel": "Enregistré",
 
   "nav.settings": "Réglages",
   "nav.settingsNeedsAttention": "Réglages — la synchronisation nécessite votre attention",
@@ -141,4 +140,19 @@ export default {
   "intake.reason.siteRefused": "le site n'a pas fourni le document",
   "intake.reason.httpStatus": "le lien ne s'est pas ouvert (HTTP {status})",
   "intake.reason.failed": "ce lien n'a pas pu être lu",
+
+  // --- Today (shelf/Vestibule.tsx, shelf/today.ts) ---------------------------
+  "vestibule.title": "Aujourd'hui",
+  "vestibule.continueReading": "Reprendre la lecture",
+  "vestibule.nothingOpen": "Rien n'est encore ouvert. Ajoutez un livre à un thème dans la bibliothèque.",
+  "vestibule.goToLibrary": "Aller à la bibliothèque",
+  "vestibule.yourTopics": "Vos thèmes",
+  "vestibule.allTopics": "Tous les thèmes →",
+  "vestibule.newTopic": "Nouveau thème",
+  "vestibule.newTopicDescription": "Un thème, c'est une question et les livres que vous lisez pour y répondre.",
+  "vestibule.newTopicPlaceholder": "p. ex. pourquoi les JIT sont rapides",
+  "vestibule.create": "Créer",
+  "today.pageOf": "p. {page} sur {pages}",
+  "today.page": "p. {page}",
+  "today.marks": { one: "{count} repère", other: "{count} repères" },
 } satisfies Translation<typeof en>;

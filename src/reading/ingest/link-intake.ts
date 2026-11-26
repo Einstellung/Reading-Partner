@@ -1,11 +1,11 @@
 // A link taken in through the link agent (docs/86), filed the way reading files
 // everything: a built EPUB as an article, a whole PDF or EPUB as a book, each
-// listed where the target says. info/links builds and decides; this file only
+// listed where the target says. reading/ingest/links builds and decides; this file only
 // hands it the filing and turns its intake into the batch the ingest-url run
 // reports. X links come this way (ingestUrlLive); other links keep the one-page
 // path until each source is measured (docs/86 「以后」).
 
-import { notTakenOf, takeLinkIn, type LinkIntake, type LinkIntakeDeps, type NotTaken } from "../../info/links";
+import { notTakenOf, takeLinkIn, type LinkIntake, type LinkIntakeDeps, type NotTaken } from "./links";
 import { fileBound, type ArticleIngestDeps, type IngestedDocument, type IngestTarget } from "./article";
 
 /** What one pasted link became: any number of documents, and what was left out. */

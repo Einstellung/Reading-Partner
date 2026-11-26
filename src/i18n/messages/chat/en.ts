@@ -119,4 +119,16 @@ export default {
   "call.deleteConversation": "Delete conversation",
   "call.deleteTitle": "Delete this conversation?",
   "call.deleteDescription": "The conversation goes, and with it the mark it was opened from. This cannot be undone.",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": 'Filed this conversation under "{name}".',
+  "errors.noProvider": "No AI provider configured (Settings).",
+
+  // --- Topic proposal card (TopicProposalCard.tsx) --------------------------
+  "topicCard.filed": "Filed",
+  "topicCard.whereThisBelongs": "Where this belongs",
+  "topicCard.newTopic": "A new topic",
+  "topicCard.onYourShelf": "On your shelf.",
+  "topicCard.createAndFile": "Create and file",
+  "topicCard.fileIt": "File it",
 } as const;

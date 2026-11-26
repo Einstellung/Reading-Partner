@@ -32,12 +32,12 @@ function render(): string {
 test("the settings body follows the current locale", () => {
   setLocale("en");
   const en = render();
-  expect(en).toContain("Account");
+  expect(en).toContain("AI &amp; sync");
   expect(en).toContain("Providers");
 
   setLocale("zh-CN");
   const zh = render();
-  expect(zh).toContain("账户");
+  expect(zh).toContain("AI 与同步");
   expect(zh).toContain("服务商");
   expect(zh).not.toContain("Providers");
 });

@@ -5,9 +5,9 @@
 // for the real ones. Nothing here reaches the network; it only proves the
 // script's plumbing end to end.
 
-import type { PageAttempt, XReadDeps } from "../../src/info/x/read-post";
+import type { PageAttempt, XReadDeps } from "../../src/reading/ingest/x/read-post";
 import { registerSiteAdapter, registeredSiteAdapters, type FetchedBytes, type Material } from "../../src/workshop/bindery";
-import { ARTICLE_BODY, ARTICLE_TITLE, articlePost, fakeX, focalText, page, syn } from "../../tests/info/x/fixtures";
+import { ARTICLE_BODY, ARTICLE_TITLE, articlePost, fakeX, focalText, page, syn } from "../../tests/reading/ingest/x/fixtures";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const PROSE = "This paragraph carries enough plain words to pass the quality gate on its own. ".repeat(10);

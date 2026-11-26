@@ -22,7 +22,6 @@ export default {
   "action.cancel": "취소",
   "action.delete": "삭제",
 
-  "savedArticle.backLabel": "저장됨",
 
   "nav.settings": "설정",
   "nav.settingsNeedsAttention": "설정 — 동기화 확인 필요",
@@ -138,4 +137,19 @@ export default {
   "intake.reason.siteRefused": "사이트가 문서를 내주지 않았습니다",
   "intake.reason.httpStatus": "링크가 열리지 않았습니다 (HTTP {status})",
   "intake.reason.failed": "이 링크를 읽지 못했습니다",
+
+  // --- Today (shelf/Vestibule.tsx, shelf/today.ts) ---------------------------
+  "vestibule.title": "오늘",
+  "vestibule.continueReading": "이어서 읽기",
+  "vestibule.nothingOpen": "아직 열어본 책이 없어요. 라이브러리에서 주제에 책을 추가하세요.",
+  "vestibule.goToLibrary": "라이브러리로 이동",
+  "vestibule.yourTopics": "내 주제",
+  "vestibule.allTopics": "모든 주제 →",
+  "vestibule.newTopic": "새 주제",
+  "vestibule.newTopicDescription": "주제는 하나의 질문과 그에 답하기 위해 읽는 책들입니다.",
+  "vestibule.newTopicPlaceholder": "예: JIT는 왜 빠른가",
+  "vestibule.create": "만들기",
+  "today.pageOf": "{page} / {pages} 페이지",
+  "today.page": "{page} 페이지",
+  "today.marks": { other: "표시 {count}개" },
 } satisfies Translation<typeof en>;

@@ -15,13 +15,10 @@
 
 import { expect, test } from "bun:test";
 import { PALACE } from "../../../src/palace";
-import { ASK_PULL_ROUTE } from "../../../src/info/briefer/handoff";
-import { READER_PULL_ROUTE } from "../../../src/info/briefer/reader";
-import { MEALS_DISHES_PULL_ROUTE } from "../../../src/info/meals/dishes/user-dishes";
-import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/info/meals/photos/photo-sweep";
-import { MEALS_PICTURES_PULL_ROUTE } from "../../../src/info/meals/photos/dish-draw-sweep";
-import { MEALS_DRAFT_PULL_ROUTE } from "../../../src/info/meals/draft-store";
-import { SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
+import { MEALS_DISHES_PULL_ROUTE } from "../../../src/meals/dishes/user-dishes";
+import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/meals/photos/photo-sweep";
+import { MEALS_PICTURES_PULL_ROUTE } from "../../../src/meals/photos/dish-draw-sweep";
+import { MEALS_DRAFT_PULL_ROUTE } from "../../../src/meals/draft-store";
 import {
   BOOK_CACHE_PULL_ROUTE,
   dispatchPull,
@@ -42,9 +39,6 @@ const ROUTES: PullMatcher[] = [
   SHELF_PULL_ROUTE,
   KEPT_ARTICLES_PULL_ROUTE,
   SETTINGS_PULL_ROUTE,
-  READER_PULL_ROUTE,
-  SOURCES_PULL_ROUTE,
-  ASK_PULL_ROUTE,
   MEALS_PHOTOS_PULL_ROUTE,
   MEALS_PICTURES_PULL_ROUTE,
   MEALS_DISHES_PULL_ROUTE,
@@ -57,22 +51,8 @@ const ROUTES: PullMatcher[] = [
 const NO_IN_MEMORY_STATE: Record<string, string> = {
   "user-profile.md": "retired at 0.18 (docs/48): nothing reads it, and the file is left alone",
   "info-profile.md": "the profile's old name, retired with it",
-  "info-feedback.jsonl": "append-only, and read in full when it is read at all",
-  "info-pool-marks.json": "read at the start of a collection run, not held between them",
-  "info-labs.json": "the roster is read from disk each time it is wanted — a run, a prompt, a card",
-  "info-topic-searches.json": "read from disk each time it is wanted — a door turn, a tool call, an Apply",
-  "topic-search-ts-": "a topic search result is written once at the end of a run and read from disk each time it is wanted — the next run's history, the result card",
-  "topic-search-labels-": "a topic's labels are read from disk each time they are wanted — an update's examples, a question's answer — and appended to in one go",
-  "topic-study-": "a study's record is read from disk each time it is wanted — a card, the version list, an update — and written back in one go",
-  "info-topic-search-questions.json": "read from disk at the start of a run's write phase and written back at its end, never held between runs",
-  "info-shelf.json": "read from disk each time an issue is assembled, and appended to once per issue; nothing holds it between",
-  "info-issue-spoken.json": "read from disk each time a brief is opened, to see whether the companion has said its opening; nothing holds it between",
   "info-meals-recipes.json": "a recipe is read from disk when its page opens, and written once under its own key",
   "info-link-records.json": "the link records are read from disk and written back in one go, at the end of an ingest",
-  "info-picture-":
-    "a room's picture is read at the start of its analysis run and written by the collector alone",
-  "info-cables-":
-    "a day's cables are read when that day's analysis runs, and the day is written once",
   "retell-": "a retell is read from disk when it is opened",
   "outline-": "a talk's outline is read from disk when it is opened, and again before each edit",
   "rehearsal-": "a rehearsal is read from disk when the topic's list is drawn",
@@ -81,6 +61,7 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
     "what was said on one pass is read when that pass's row is opened, and the file is " +
     "written once under the run's own id, so a pull can add one but never change the one on screen",
   "statements.json": "the statement store reads the file on every call and holds nothing",
+  "legion/claim/": "a device's claim is read from disk each time one is wanted, an election or a capability check, and nothing holds it between",
   // Listed above "observations" so a claim reports this reason rather than the
   // observation store's, which is about a different file entirely.
   "memory-usage-": "append-only, and nothing reads it yet",
@@ -181,7 +162,7 @@ test("no allowlist entry is stale", () => {
   expect(stale).toEqual([]);
 });
 
-// What the four hand-rolled subscribers each got right about their own files,
+// What the hand-rolled subscribers each got right about their own files,
 // checked against the routes that replaced them.
 test("the routes claim the files their subscribers used to", () => {
   expect(claim("library.json")).toBe("shelf");
@@ -193,11 +174,6 @@ test("the routes claim the files their subscribers used to", () => {
   expect(claim("threads-abc123.json")).toBe("book-caches");
   expect(claim("annotations-abc123.json")).toBe("book-caches");
   expect(claim("threads-retell-t1.json")).toBe("book-caches");
-  expect(claim("info-briefing.json")).toBe("reader");
-  expect(claim("info-bodies.json")).toBe("reader");
-  expect(claim("legion/claim/device1.json")).toBe("reader");
-  expect(claim("info-sources.json")).toBe("sources");
-  expect(claim("info-ask-device1.json")).toBe("ask");
 });
 
 // Not a cache to drop: neither store holds anything between calls. The route is
@@ -223,10 +199,7 @@ test("a kept article's index and its bodies are both synced, and only those name
 
 test("a route hears only its own files", () => {
   expect(SHELF_PULL_ROUTE.matches("annotations-abc.json")).toBe(false);
-  expect(BOOK_CACHE_PULL_ROUTE.matches("info-briefing.json")).toBe(false);
-  expect(READER_PULL_ROUTE.matches("info-sources.json")).toBe(false);
-  expect(SOURCES_PULL_ROUTE.matches("info-ask-device1.json")).toBe(false);
-  expect(ASK_PULL_ROUTE.matches("info-collector-device1.json")).toBe(false);
+  expect(BOOK_CACHE_PULL_ROUTE.matches("info-meals.json")).toBe(false);
   expect(SETTINGS_PULL_ROUTE.matches("device.json")).toBe(false);
 });
 

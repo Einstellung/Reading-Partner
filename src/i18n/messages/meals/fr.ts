@@ -549,4 +549,20 @@ export default {
   "finish.tonightThaw": "Ce soir, passez {food} pour demain ({meal}) du congélateur au réfrigérateur.",
   "finish.tonightSoyMilk": "Ce soir, remplissez le blender à lait de soja avec {foods} et de l'eau, programmé pour le petit-déjeuner de demain.",
   "finish.prepSession": "séance de préparation",
+
+  // The meals conversation
+  "anchor.kickoff": "Planifie cette semaine.",
+  "anchor.title": "Repas",
+  "anchor.placeholder": "Poser une question sur les repas…",
+  "anchor.noPlan": "Pas encore de plan pour cette semaine",
+  "anchor.thisWeek": "Les repas de cette semaine",
+  "anchor.leftToBuy": { one: "Les repas de cette semaine · encore {count} à acheter", other: "Les repas de cette semaine · encore {count} à acheter" },
+  "ask.aboutMeals": "Poser une question sur les repas",
+  "ask.aboutNumbers": "Poser une question sur ces chiffres",
+  "ask.aboutShopping": "Poser une question sur les courses",
+  "ask.aboutToday": "Poser une question sur aujourd'hui",
+  "ask.aboutWeekday": "Poser une question sur {weekday}",
+  "ask.aboutPlan": "Poser une question sur le plan",
+  "errors.noProvider": "Aucun fournisseur d'IA configuré (Réglages).",
+  "errors.extractorFailed": "Impossible de charger l'extracteur d'articles. Réessayez.",
 } satisfies Translation<typeof en>;

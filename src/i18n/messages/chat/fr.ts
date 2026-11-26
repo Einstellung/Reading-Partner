@@ -115,4 +115,16 @@ export default {
   "call.deleteConversation": "Supprimer la conversation",
   "call.deleteTitle": "Supprimer cette conversation ?",
   "call.deleteDescription": "La conversation sera supprimée, ainsi que la marque depuis laquelle elle a été ouverte. Cette action est irréversible.",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": 'Cette conversation a été classée sous « {name} ».',
+  "errors.noProvider": "Aucun fournisseur d'IA configuré (Réglages).",
+
+  // --- Topic proposal card (TopicProposalCard.tsx) --------------------------
+  "topicCard.filed": "Classée",
+  "topicCard.whereThisBelongs": "Où cela va",
+  "topicCard.newTopic": "Un nouveau thème",
+  "topicCard.onYourShelf": "Sur votre étagère.",
+  "topicCard.createAndFile": "Créer et classer",
+  "topicCard.fileIt": "Classer",
 } satisfies Translation<typeof en>;

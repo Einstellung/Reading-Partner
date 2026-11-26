@@ -445,8 +445,7 @@ test("a run a program delegated is acked without a turn or a card", async () => 
   );
   const door = place("door", []);
   expect(await answerBell({ settings, bells, runs, box, now: () => NOW })).toBe(1);
-  // No turn and no card: the day's briefing puts its own there
-  // (info/boxes/red-box.ts).
+  // No turn and no card: a program's run is the program's to report.
   expect(door).toEqual([]);
   expect([...cards.values()]).toEqual([]);
   // The ledger still gets everything it waits on.

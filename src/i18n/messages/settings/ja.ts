@@ -5,7 +5,6 @@ export default {
   title: "設定",
   done: "完了",
   "tab.account": "AI と同期",
-  "tab.accounts": "アカウント",
   "tab.features": "機能",
   "tab.optional": "オプション",
   "tab.experiments": "Experiments",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "音声通話",
   "account.voiceFrontHint":
     "音声通話の最初の素早い返答はバックグラウンド作業より先にここで実行されます。速いモデルほど早く返答します。返答が浅すぎる場合を除き、思考はオフのままにしてください。思考をオフにできないプロバイダでは最も低いレベルが使われます。プロバイダは上と同じものを使います。",
-  "account.briefing": "ブリーフィング",
-  "account.screening": "選別",
-  "account.analysis": "分析",
-  "account.briefingHint":
-    "ブリーフィングは現在、夜間には作成されません。再設計のあいだ停止していますが、手動で依頼することはできます。選別はその日の見出しを読んで取得する記事を決める段階なので、低めに保つのが適切です。分析は通過した記事を読みます。",
   "account.thinking": "思考",
   "account.chat": "チャット",
   "account.lessonPrep": "授業の準備",
@@ -89,7 +83,7 @@ export default {
   "features.language": "言語",
   "features.languageAuto": "自動（表示はシステム、AI はあなたに合わせる）",
   "features.languageHint":
-    "アプリの表示言語であり、AI が書くすべての言語です：チャットの返信、ノート、ブリーフ。自動では、アプリはシステムの言語で表示され、AI はあなたが書いた言語で答えます。音声の文字起こしは常に話した言語に従います。",
+    "アプリの表示言語であり、AI が書くすべての言語です：チャットの返信とノート。自動では、アプリはシステムの言語で表示され、AI はあなたが書いた言語で答えます。音声の文字起こしは常に話した言語に従います。",
   "features.paper": "紙の背景",
   "features.paperHint":
     "アプリ全体の背後の白――チャット、本棚、サイドバー、このダイアログ、本のページ――を生成り色の紙の色にします。色は一種類で、より暗い段階はありません。ダークモードではありません。この選択はこのデバイスにだけ保存されます。",
@@ -98,16 +92,16 @@ export default {
   "features.companionShowHint":
     "{name} はリーダーを含むすべての画面の隅にいます。オフにすると隅は空になり、サイドバー、スマートフォンのホーム画面、リーダーの「その他」メニューにある {name} ボタンで戻せます。この設定はこのデバイスにだけ保存されます。",
   "features.companionName": "コンパニオンの名前",
-  "features.briefing": "情報",
-  "features.collect": "このコンピュータでソースを収集",
+  "features.briefing": "バックグラウンド処理",
+  "features.collect": "このコンピュータでバックグラウンド処理を引き受ける",
   "features.collectHint":
-    "各ソースはそれぞれのスケジュールで確認され、トピック検索はここで夜間に実行されます。オフにすると、このマシンは収集を完全に停止し、ほかに収集するマシンがあればそちらが引き継ぎます。",
+    "このコンピュータが夜間の記憶の整理と同期の競合の処理を受け持ちます。オフにすると、ほかにコンピュータがあればそちらが引き継ぎます。",
   "features.thisComputer": "このコンピュータ",
   "features.role": "このマシンの役割",
-  "features.roleCollector": "収集用――ここでソースを読む",
-  "features.roleReader": "閲覧用――別のマシンが収集したものを読む",
+  "features.roleCollector": "収集用――バックグラウンド作業を引き受けられる",
+  "features.roleReader": "閲覧用――バックグラウンド作業はほかのコンピュータに任せる",
   "features.roleHint":
-    "収集用マシンは購読中のサイトを一日中読み、ほかのデバイス向けにブリーフを公開します。閲覧用マシンは収集用マシンが公開したものを表示し、自分でサイトから取得することはありません。スマートフォンとタブレットは常に閲覧用です。2 台が収集している場合は、最も長く動いているほうが作業します。",
+    "収集用マシンはバックグラウンド作業を引き受けられます：夜間の記憶の整理と同期の競合の解決です。閲覧用マシンは引き受けません。スマートフォンとタブレットは常に閲覧用です。引き受ける収集用マシンが 2 台ある場合は、最も長く動いているほうが作業します。",
   "features.autostart": "コンピュータの起動時に Reading Partner を起動",
   "features.autostartHint":
     "デフォルトはオフです。一日中ソースを収集させたいマシンでオンにしてください。トレイと組み合わせれば、アプリを開いたかどうかに関係なくブリーフが作成されます。この設定はこのコンピュータのもので、ほかのデバイスには引き継がれません。",
@@ -155,10 +149,7 @@ export default {
     "Features that are not finished. Each one is off until you turn it on here, on this device. Turning one off only hides it: nothing is deleted, and turning it back on brings everything back.",
   "experiments.meals.name": "Meals",
   "experiments.meals.summary": "Plan the week's meals and keep the shopping list.",
-  "experiments.intel.name": "Intel",
-  "experiments.intel.summary": "Briefs and studies.",
   "experiments.companion.name": "{name}",
-  "experiments.needsParent": "Turn on Intel first.",
   "experiments.companion.summary":
     "The companion in the corner: hold it to talk or type, paste links to it, and the box of what it hands back.",
 } satisfies Translation<typeof en>;

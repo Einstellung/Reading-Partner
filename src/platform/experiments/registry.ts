@@ -6,13 +6,12 @@
 // place the companion can take the reader to. Nothing is deleted, so turning it
 // back on finds everything where it was.
 //
-// An entry may sit under another (Meals under Intel). It counts as on only
-// while its parent is on too; its own switch keeps its value meanwhile, so
-// turning the parent back on brings it back as it was.
+// Meals sat under Intel until Intel was removed (2026-11); migrateExperiments
+// turns a map from then into one where Meals stands alone.
 
 import type { MessageKey } from "../../i18n/translate";
 
-export type ExperimentId = "intel" | "meals" | "companion";
+export type ExperimentId = "meals" | "companion";
 
 export interface Experiment {
   id: ExperimentId;
@@ -22,23 +21,14 @@ export interface Experiment {
   summary: MessageKey;
   // currentPlatform() values the entry is offered on, or "all".
   hosts: "all" | readonly string[];
-  // The entry this one is drawn under and depends on.
-  parent?: ExperimentId;
 }
 
 export const EXPERIMENTS: readonly Experiment[] = [
-  {
-    id: "intel",
-    name: "settings.experiments.intel.name",
-    summary: "settings.experiments.intel.summary",
-    hosts: "all",
-  },
   {
     id: "meals",
     name: "settings.experiments.meals.name",
     summary: "settings.experiments.meals.summary",
     hosts: "all",
-    parent: "intel",
   },
   {
     id: "companion",
@@ -53,20 +43,24 @@ export function experimentsFor(platform: string): Experiment[] {
   return EXPERIMENTS.filter((e) => e.hosts === "all" || e.hosts.includes(platform));
 }
 
-/** The entries drawn under this one, in registry order. */
-export function childrenOf(list: readonly Experiment[], id: ExperimentId): Experiment[] {
-  return list.filter((e) => e.parent === id);
-}
-
 /** Whether a stored map has this id's own switch on. Absent, or anything but true, is off. */
 export function isOn(stored: Record<string, boolean> | undefined, id: ExperimentId): boolean {
   return stored?.[id] === true;
 }
 
-/** Whether the feature is shown: its own switch on, and every parent's. */
-export function isEffective(stored: Record<string, boolean> | undefined, id: ExperimentId): boolean {
-  const parent = EXPERIMENTS.find((e) => e.id === id)?.parent;
-  return isOn(stored, id) && (parent === undefined || isEffective(stored, parent));
+/**
+ * A map written while Meals sat under Intel, in the form it has now: Meals is
+ * on only if both were, since Meals did not show with Intel off, and the Intel
+ * key goes. Every other key rides through. A map with no Intel key is already
+ * in this form (the old panel would not turn Meals on before Intel), and comes
+ * back as null: nothing to write.
+ */
+export function migrateExperiments(
+  stored: Record<string, boolean> | undefined,
+): Record<string, boolean> | null {
+  if (!stored || !Object.prototype.hasOwnProperty.call(stored, "intel")) return null;
+  const { intel, ...rest } = stored;
+  return { ...rest, meals: rest.meals === true && intel === true };
 }
 
 /** The stored map with one id set; every other key, known or not, rides through. */

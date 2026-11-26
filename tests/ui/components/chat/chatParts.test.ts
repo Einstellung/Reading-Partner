@@ -21,14 +21,15 @@ import {
 } from "../../../../src/ui/components/chat/chatParts";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 import type { ThreadMessage as StoredMessage } from "../../../../src/platform/app/threads";
-import type { ProbeConfirmCardData } from "../../../../src/info/sources/source-cards";
 
-const probe = (added?: boolean): ProbeConfirmCardData => ({
-  kind: "probe-confirm",
-  descriptor: { id: "s1", name: "Example", enabled: true } as ProbeConfirmCardData["descriptor"],
-  pipeLabel: "RSS (full text)",
-  samples: [{ title: "a", chars: 900, fullText: true }],
-  ...(added !== undefined ? { added } : {}),
+import type { TopicProposalCardData } from "../../../../src/memory";
+
+const proposal = (applied?: boolean): TopicProposalCardData => ({
+  kind: "topic-proposal",
+  threadId: "t1",
+  topic: { newName: "Example" },
+  meaning: "adds a second account of the same result",
+  phase: applied ? "applied" : "draft",
 });
 
 // --- messageToParts adapter -------------------------------------------------
@@ -38,19 +39,12 @@ test("messageToParts maps legacy text + tools to a text part then a trace part",
     role: "ai",
     ts: 1,
     text: "hi",
-    tools: [{ name: "probe_source", label: "Probing", state: "running" }],
+    tools: [{ name: "read_page", label: "Reading a page", state: "running" }],
   };
   expect(messageToParts(m)).toEqual([
     { type: "text", text: "hi" },
-    { type: "tool-trace", tools: [{ name: "probe_source", label: "Probing", state: "running" }] },
+    { type: "tool-trace", tools: [{ name: "read_page", label: "Reading a page", state: "running" }] },
   ]);
-});
-
-test("messageToParts maps a legacy card field to a card part keyed by ts", () => {
-  const m: ThreadMessage = { role: "ai", ts: 42, text: "", card: probe() };
-  const parts = messageToParts(m);
-  expect(parts).toHaveLength(1);
-  expect(parts[0]).toMatchObject({ type: "card", id: "42" });
 });
 
 test("messageToParts treats an explicit parts array as authoritative", () => {
@@ -67,7 +61,7 @@ test("messageToParts on a plain empty AI row yields no parts", () => {
 
 test("insertBeforeLast drops a card row above the last (streaming) row", () => {
   const streaming: ThreadMessage = { role: "ai", ts: 2, text: "", streaming: true };
-  const row = cardRow("c1", probe(), 1);
+  const row = cardRow("c1", proposal(), 1);
   expect(insertBeforeLast([streaming], row)).toEqual([row, streaming]);
   // An empty list becomes just the card row.
   expect(insertBeforeLast([], row)).toEqual([row]);
@@ -75,57 +69,45 @@ test("insertBeforeLast drops a card row above the last (streaming) row", () => {
 
 test("upsertCardRow appends when the id is new, then updates that row in place", () => {
   let msgs: ThreadMessage[] = [{ role: "ai", ts: 1, text: "reply" }];
-  msgs = upsertCardRow(msgs, "briefing", { kind: "briefing-progress", phase: "fetching", collect: null, analysis: null });
+  msgs = upsertCardRow(msgs, "filing", proposal());
   expect(msgs).toHaveLength(2);
-  expect(findCardPart(msgs, "briefing")?.payload.kind).toBe("briefing-progress");
+  expect(findCardPart(msgs, "filing")?.payload.kind).toBe("topic-proposal");
 
-  const ready: CardPayload = { kind: "briefing-ready", date: "2026-07-22", worth: 3, oneLiners: 1, labs: 2 };
-  const after = upsertCardRow(msgs, "briefing", ready);
+  const applied: CardPayload = proposal(true);
+  const after = upsertCardRow(msgs, "filing", applied);
   expect(after).toHaveLength(2); // reused the same row, not appended
-  expect(findCardPart(after, "briefing")?.payload).toEqual(ready);
+  expect(findCardPart(after, "filing")?.payload).toEqual(applied);
 });
 
 test("latestCardOf finds the newest card of a kind, by row and then by part", () => {
-  const ready: CardPayload = { kind: "briefing-ready", date: "2026-07-22", worth: 3, oneLiners: 1, labs: 2 };
+  const box: CardPayload = { kind: "box-item", itemId: "b1" } as unknown as CardPayload;
   const msgs: ThreadMessage[] = [
-    cardRow("old", probe(false), 1),
-    { role: "ai", ts: 2, text: "", parts: [{ type: "card", id: "mid", card: probe(true) }, { type: "card", id: "r", card: ready }] },
-    cardRow("other", ready, 3),
+    cardRow("old", proposal(false), 1),
+    { role: "ai", ts: 2, text: "", parts: [{ type: "card", id: "mid", card: proposal(true) }, { type: "card", id: "r", card: box }] },
+    cardRow("other", box, 3),
   ];
-  expect(latestCardOf(msgs, "probe-confirm")).toEqual({ cardId: "mid", ts: 2, payload: probe(true) });
-  expect(latestCardOf(msgs, "briefing-ready")?.cardId).toBe("other");
-  expect(latestCardOf(msgs, "briefing-progress")).toBeUndefined();
+  expect(latestCardOf(msgs, "topic-proposal")).toEqual({ cardId: "mid", ts: 2, payload: proposal(true) });
+  expect(latestCardOf(msgs, "box-item")?.cardId).toBe("other");
+  expect(latestCardOf(msgs, "meals-draft")).toBeUndefined();
 });
 
 test("patchCardPayload merges into the addressed card; a miss returns the same ref", () => {
-  const msgs = [cardRow("c1", probe(false))];
-  const flipped = patchCardPayload(msgs, "c1", { added: true });
-  expect((findCardPart(flipped, "c1")?.payload as ProbeConfirmCardData).added).toBe(true);
+  const msgs = [cardRow("c1", proposal(false))];
+  const flipped = patchCardPayload(msgs, "c1", { phase: "applied" });
+  expect((findCardPart(flipped, "c1")?.payload as TopicProposalCardData).phase).toBe("applied");
   // untouched original
-  expect((findCardPart(msgs, "c1")?.payload as ProbeConfirmCardData).added).toBe(false);
-  expect(patchCardPayload(msgs, "missing", { added: true })).toBe(msgs);
+  expect((findCardPart(msgs, "c1")?.payload as TopicProposalCardData).phase).toBe("draft");
+  expect(patchCardPayload(msgs, "missing", { phase: "applied" })).toBe(msgs);
 });
-
-test("findCardPart returns the host row ts and the payload", () => {
-  const msgs = [{ role: "ai" as const, ts: 7, text: "x" }, cardRow("c1", probe(), 9)];
-  expect(findCardPart(msgs, "c1")).toMatchObject({ ts: 9 });
-  expect(findCardPart(msgs, "nope")).toBeUndefined();
-});
-
-test("nextCardId is unique per call", () => {
-  expect(nextCardId("probe")).not.toBe(nextCardId("probe"));
-});
-
-// --- persistence round-trip ------------------------------------------------
 
 test("toPersistedCardPart -> JSON -> rehydrateParts round-trips a card", () => {
-  const persisted = toPersistedCardPart("c1", probe(true));
+  const persisted = toPersistedCardPart("c1", proposal(true));
   const wire = JSON.parse(JSON.stringify([persisted]));
   const live = rehydrateParts(wire);
   expect(live[0]).toMatchObject({ type: "card", id: "c1" });
   expect((live[0] as Extract<ChatPart, { type: "card" }>).card).toMatchObject({
-    kind: "probe-confirm",
-    added: true,
+    kind: "topic-proposal",
+    phase: "applied",
   });
 });
 
@@ -134,13 +116,25 @@ test("rehydrateMessage restores a stored card row on thread reopen", () => {
     role: "ai",
     text: "",
     ts: 5,
-    parts: JSON.parse(JSON.stringify([toPersistedCardPart("c1", probe(true))])),
+    parts: JSON.parse(JSON.stringify([toPersistedCardPart("c1", proposal(true))])),
   };
   const live = rehydrateMessage(stored);
   expect(live).toMatchObject({ role: "ai", text: "", ts: 5 });
   expect(live.parts?.[0]).toMatchObject({ type: "card", id: "c1" });
-  expect((live.parts?.[0] as Extract<ChatPart, { type: "card" }>).card.kind).toBe("probe-confirm");
+  expect((live.parts?.[0] as Extract<ChatPart, { type: "card" }>).card.kind).toBe("topic-proposal");
 });
+
+test("findCardPart returns the host row ts and the payload", () => {
+  const msgs = [{ role: "ai" as const, ts: 7, text: "x" }, cardRow("c1", proposal(), 9)];
+  expect(findCardPart(msgs, "c1")).toMatchObject({ ts: 9 });
+  expect(findCardPart(msgs, "nope")).toBeUndefined();
+});
+
+test("nextCardId is unique per call", () => {
+  expect(nextCardId("filing")).not.toBe(nextCardId("filing"));
+});
+
+// --- persistence round-trip ------------------------------------------------
 
 test("rehydrateMessage carries the run a delivered reply answers", () => {
   // What the soul said about a run that came back (docs/72). The mark is on
@@ -213,7 +207,7 @@ test("rehydrateMessage does not give a stored card row a second body", () => {
     role: "ai",
     text: "",
     ts: 5,
-    parts: [toPersistedCardPart("c1", probe(true))],
+    parts: [toPersistedCardPart("c1", proposal(true))],
   };
   const parts = messageToParts(rehydrateMessage(stored));
   expect(parts).toHaveLength(1);
@@ -249,7 +243,7 @@ test("the glance skips a card row and answers with the prose above it", () => {
       role: "ai",
       text: '[Aside, now closed: the reader stepped out of this conversation to ask "x".]',
       ts: 3,
-      parts: [{ type: "card", id: "aside-1", card: probe() }],
+      parts: [{ type: "card", id: "aside-1", card: proposal() }],
     },
   ];
   expect(chatGlance(messages)).toBe("three matrices");
@@ -258,7 +252,7 @@ test("the glance skips a card row and answers with the prose above it", () => {
 test("the glance skips a row with nothing in it, and answers null for a conversation with none", () => {
   expect(chatGlance([{ role: "ai", text: "  ", ts: 1 }])).toBeNull();
   expect(chatGlance([])).toBeNull();
-  expect(chatGlance([cardRow("c1", probe())])).toBeNull();
+  expect(chatGlance([cardRow("c1", proposal())])).toBeNull();
 });
 
 test("the glance takes the newest prose when nothing is a card", () => {

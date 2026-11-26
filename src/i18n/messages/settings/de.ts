@@ -5,7 +5,6 @@ export default {
   title: "Einstellungen",
   done: "Fertig",
   "tab.account": "KI & Sync",
-  "tab.accounts": "Konten",
   "tab.features": "Funktionen",
   "tab.optional": "Optional",
   "tab.experiments": "Experiments",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "Sprachanruf",
   "account.voiceFrontHint":
     "Die schnelle erste Antwort eines Sprachanrufs läuft hier, vor jeder Hintergrundarbeit. Ein schnelles Modell antwortet am zügigsten; lass das Denken aus, solange die Antworten nicht zu flach sind. Anbieter, die das Denken nicht abschalten können, nutzen ihre niedrigste Stufe. Es nutzt den Anbieter oben.",
-  "account.briefing": "Briefing",
-  "account.screening": "Sichtung",
-  "account.analysis": "Analyse",
-  "account.briefingHint":
-    "Das Briefing wird vorerst nicht über Nacht erstellt: Es ist pausiert, solange es neu gestaltet wird, und du kannst weiterhin per Hand eines anfordern. Die Sichtung liest die Schlagzeilen des Tages und entscheidet, welche Artikel sich zu laden lohnen – diese Stufe sollte niedrig bleiben; die Analyse liest die, die durchgekommen sind.",
   "account.thinking": "Denken",
   "account.chat": "Chat",
   "account.lessonPrep": "Unterrichtsvorbereitung",
@@ -89,7 +83,7 @@ export default {
   "features.language": "Sprache",
   "features.languageAuto": "Automatisch (App: System, KI: deine Sprache)",
   "features.languageHint":
-    "Die Sprache der App und von allem, was die KI schreibt: Chat-Antworten, Notizen und Briefs. Bei „Automatisch“ erscheint die App in der Systemsprache und die KI antwortet in der Sprache, in der du schreibst. Die Spracherkennung folgt immer dem, was du sprichst.",
+    "Die Sprache der App und von allem, was die KI schreibt: Chat-Antworten und Notizen. Bei „Automatisch“ erscheint die App in der Systemsprache und die KI antwortet in der Sprache, in der du schreibst. Die Spracherkennung folgt immer dem, was du sprichst.",
   "features.paper": "Papierhintergrund",
   "features.paperHint":
     "Macht das Weiß hinter der ganzen App – Chats, Regale, Seitenleisten, dieses Fenster und die Seiten eines Buchs – zu einem gebrochenen Papierweiß. Es gibt nur diesen einen Ton und keine dunklere Stufe; das ist kein Dunkelmodus. Die Wahl bleibt auf diesem Gerät.",
@@ -98,16 +92,16 @@ export default {
   "features.companionShowHint":
     "{name} steht in der Ecke jedes Bildschirms, auch im Reader. Aus bleibt die Ecke leer; der Knopf in der Seitenleiste, auf dem Startbildschirm des Handys und im Mehr-Menü des Readers holt {name} zurück. Die Wahl bleibt auf diesem Gerät.",
   "features.companionName": "Name des Begleiters",
-  "features.briefing": "Intel",
-  "features.collect": "Quellen auf diesem Computer sammeln",
+  "features.briefing": "Hintergrundarbeit",
+  "features.collect": "Hintergrundarbeit auf diesem Computer übernehmen",
   "features.collectHint":
-    "Jede Quelle wird nach ihrem eigenen Zeitplan abgefragt, und Themensuchen laufen hier über Nacht. Aus: Dieser Rechner sammelt überhaupt nicht mehr, und ein anderer Sammler übernimmt, falls vorhanden.",
+    "Dieser Computer räumt nachts dein Gedächtnis auf und löst Synchronisierungskonflikte. Aus: Ein anderer deiner Computer übernimmt, falls vorhanden.",
   "features.thisComputer": "Dieser Computer",
   "features.role": "Dieser Rechner ist ein",
-  "features.roleCollector": "Sammler – liest die Quellen hier",
-  "features.roleReader": "Leser – liest, was ein anderer Rechner gesammelt hat",
+  "features.roleCollector": "Sammler – kann Hintergrundarbeit übernehmen",
+  "features.roleReader": "Leser – überlässt Hintergrundarbeit anderen Rechnern",
   "features.roleHint":
-    "Ein Sammler liest deine abonnierten Seiten den ganzen Tag und veröffentlicht deine Briefs für deine anderen Geräte; ein Leser zeigt, was ein Sammler veröffentlicht hat, und lädt selbst nie etwas von einer Seite. Smartphones und Tablets sind immer Leser. Wenn zwei Rechner sammeln, arbeitet der, der am längsten läuft.",
+    "Ein Sammler kann Hintergrundarbeit übernehmen: nachts dein Gedächtnis aufräumen und Synchronisationskonflikte klären. Ein Leser tut das nie. Smartphones und Tablets sind immer Leser. Wenn zwei Sammler bereit sind, arbeitet der, der am längsten läuft.",
   "features.autostart": "Reading Partner beim Start dieses Computers öffnen",
   "features.autostartHint":
     "Standardmäßig aus. Schalte es auf dem Rechner ein, der deine Quellen den ganzen Tag sammeln soll – zusammen mit dem Symbol in der Menüleiste bzw. im Infobereich entstehen deine Briefs, ob du die App geöffnet hast oder nicht. Diese Einstellung gehört zu diesem Computer und wird nicht auf deine anderen Geräte übertragen.",
@@ -155,10 +149,7 @@ export default {
     "Features that are not finished. Each one is off until you turn it on here, on this device. Turning one off only hides it: nothing is deleted, and turning it back on brings everything back.",
   "experiments.meals.name": "Meals",
   "experiments.meals.summary": "Plan the week's meals and keep the shopping list.",
-  "experiments.intel.name": "Intel",
-  "experiments.intel.summary": "Briefs and studies.",
   "experiments.companion.name": "{name}",
-  "experiments.needsParent": "Turn on Intel first.",
   "experiments.companion.summary":
     "The companion in the corner: hold it to talk or type, paste links to it, and the box of what it hands back.",
 } satisfies Translation<typeof en>;

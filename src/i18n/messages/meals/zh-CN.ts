@@ -538,4 +538,20 @@ export default {
   "finish.tonightThaw": "今晚把明天{meal}用的{food}从冷冻室移到冷藏室。",
   "finish.tonightSoyMilk": "今晚把{foods}和水放进豆浆机，定好明天早饭的时间。",
   "finish.prepSession": "备餐",
+
+  // The meals conversation
+  "anchor.kickoff": "规划这一周。",
+  "anchor.title": "三餐",
+  "anchor.placeholder": "就三餐提问…",
+  "anchor.noPlan": "本周还没有计划",
+  "anchor.thisWeek": "本周的餐食",
+  "anchor.leftToBuy": { other: "本周的餐食 · 还有 {count} 项要买" },
+  "ask.aboutMeals": "就三餐提问",
+  "ask.aboutNumbers": "就这些数据提问",
+  "ask.aboutShopping": "就购物清单提问",
+  "ask.aboutToday": "就今天提问",
+  "ask.aboutWeekday": "就{weekday}提问",
+  "ask.aboutPlan": "问这个计划",
+  "errors.noProvider": "未配置 AI 服务商（请在设置中配置）。",
+  "errors.extractorFailed": "无法加载文章提取器，请重试。",
 } satisfies Translation<typeof en>;

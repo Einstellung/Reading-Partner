@@ -30,15 +30,11 @@ import { buildCitationTools } from "../../../reading/papers/citation-tool";
 import { buildPaperSearchTools } from "../../../reading/papers/search-tool";
 import { buildRetellTools } from "../../../reading/retell/tools";
 import { buildArrangeTools } from "../../../reading/talk/tools";
-import { buildSourceTools } from "../../../info/sources/source-tools";
-import { buildCompanionTools } from "../../../info/briefer/companion-tools";
-import { buildReadPageTool } from "../../../info/sources/read-page-tool";
-import { buildTaskingTools } from "../../../info/tasking/tools";
+import { buildReadPageTool } from "../../../sources/read-page-tool";
 import { buildResearchAgent } from "../../../reading/papers/research-agent";
 import { subagentTool } from "../../../legion/subagent/tool";
 import { buildTakeLinkTool } from "../../../reading/ingest/take-link-tool";
-import { buildMealsCatalogTools } from "../../../info/meals/tools";
-import { topicSearchDoorTools } from "../../../info/topic-search/live";
+import { buildMealsCatalogTools } from "../../../meals/tools";
 import { buildBackgroundStatusTool } from "../../../legion/status/tool";
 import { buildWebSearchTool } from "../../../websearch/tool";
 import { buildCodemodeTool } from "../../../legion/codemode";
@@ -77,35 +73,18 @@ export function appToolCatalog(): AgentTool[] {
     ...buildPaperSearchTools(inert({ search: async () => [], canIngest: false })),
     ...buildRetellTools(inert({ chapters: [], record: async () => {}, read: async () => null, outline: async () => null })),
     ...buildArrangeTools(inert({ readOutline: async () => null, editOutline: async () => null })),
-    ...buildSourceTools(inert({ fetchFn: noFetch, extract: async () => null, addSource: async () => {}, onProbeCard: () => {} })),
     buildReadPageTool(inert({ fetchFn: noFetch })),
     buildWebSearchTool(inert({ search: async () => ({ text: "", sources: [] }) })),
-    ...buildTaskingTools({}),
     subagentTool(buildResearchAgent(inert({})), inert({})),
     buildTakeLinkTool(inert({ links: () => [], origin: { place: "door", date: "" } })),
     ...buildMealsCatalogTools(inert({ threadId: "", ports: {} })),
     // The door's topic-search tools (docs/info/88): drafting, confirming, changing, stopping, resuming X.
-    ...topicSearchDoorTools(inert({ threadId: "" })),
     // The door's look at background work (legion/status).
     buildBackgroundStatusTool(inert({})),
     // run_code, which every soul turn and sub-agent mounts over its reads (docs/soul/686).
     buildCodemodeTool([]),
     // edit_data and undo_edit, mounted beside it (docs/platform/687).
     ...buildEditTools([], { initiator: {} }),
-    ...buildCompanionTools(
-      inert({
-        fetchFn: noFetch,
-        extract: async () => null,
-        addSource: async () => {},
-        onProbeCard: () => {},
-        startBriefing: () => "started",
-        labs: { labs: async () => [], sources: async () => [], onLabCard: () => {}, threadId: "" },
-        siteSignIn: { signInSites: async () => [], openSignIn: async () => ({ closed: true, elapsedMs: 0 }) },
-        // Every tool a stored session may name, the old briefing's included
-        // while its UI is off (info/old-briefing.ts).
-        oldBriefing: true,
-      }),
-    ),
   ];
   const byName = new Map<string, AgentTool>();
   for (const tool of tools) if (!byName.has(tool.name)) byName.set(tool.name, tool);

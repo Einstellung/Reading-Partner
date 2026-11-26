@@ -2,63 +2,6 @@ import type { Translation } from "../types";
 import type en from "./en";
 
 export default {
-  collectorSignedIn: "Con sesión iniciada en {device}",
-  collectorNeedsSignIn: "Hay que iniciar sesión en {device}",
-  signInNote:
-    "Iniciar sesión abre la propia página del sitio en una ventana. Ciérrala cuando termines — tu contraseña nunca llega a esta app, solo queda la cookie del sitio.",
-  checkTitle: "Carga el sitio en segundo plano y comprueba si aún pide iniciar sesión",
-  check: "Comprobar",
-  signOut: "Cerrar sesión",
-  signIn: "Iniciar sesión",
-  "account.benefitX": "Las búsquedas por tema leen la búsqueda de X con tu cuenta.",
-  "account.cautionX": "La lectura automática se hace con la cuenta con la que inicias sesión. Hay una pequeña probabilidad de que los controles de riesgo de X reaccionen, así que te sugerimos iniciar sesión con una cuenta secundaria en lugar de la principal.",
-  "account.benefitBloomberg": "Artículos completos de Bloomberg en tus boletines en lugar de la vista previa de ~500 caracteres.",
-  "account.usedBy": "Lo usa: {names}",
-  "account.signInOnCollector": "Inicia sesión en el ordenador que recopila tus fuentes",
-
-  "session.notChecked": "Sin comprobar",
-  "session.couldNotTell": "No se pudo determinar",
-  "session.signedIn": "Sesión iniciada",
-  "session.notSignedIn": "Sin sesión iniciada",
-  "session.expired": "Sesión caducada",
-  "session.workSigningIn": "Termina en la ventana de inicio de sesión y luego ciérrala",
-  "session.workConfirming": "Confirmando tu inicio de sesión…",
-  "session.workChecking": "Comprobando el sitio…",
-  "session.workSigningOut": "Cerrando sesión…",
-
-  "pipe.apiFullArticles": "API con artículos completos",
-  "pipe.apiHeadlinesOnly": "API, solo titulares",
-  "pipe.articleList": "Lista de artículos, obtiene cada página",
-  "pipe.liveUpdates": "Actualizaciones en directo",
-  "pipe.indexQuery": "Consulta de índice ({provider})",
-  "pipe.fullTextInFeed": "Texto completo en el feed",
-  "pipe.fullTextInFeedPaywalled": "Texto completo en el feed (algunos de pago)",
-  "pipe.feedFetchesPage": "Titulares del feed, obtiene cada página",
-  "pipe.feedOpensWindow": "Titulares del feed, abre cada artículo en una ventana del navegador",
-  "pipe.headlinesOnlyBrowser": "Solo titulares, se abre en el navegador",
-
-  "tool.theSite": "el sitio",
-  "tool.probingSite": "Explorando {input}",
-  "tool.fetchingWebviewArticles": {
-    one: "Obteniendo {count} artículo mediante una ventana de navegador en segundo plano — decenas de segundos",
-    other: "Obteniendo {count} artículos mediante una ventana de navegador en segundo plano — decenas de segundos",
-  },
-  "tool.fetchingArticles": {
-    one: "Obteniendo {count} artículo para probar",
-    other: "Obteniendo {count} artículos para probar",
-  },
-  "tool.addingSource": "Añadiendo la fuente",
-  "tool.trialReceiptLabel": "Fuente probada",
-  "tool.trialReceiptSummary": "{name} ({pipe})",
-  "tool.addReceiptLabel": "Fuente añadida",
-
-  "tasking.label": "Investigando",
-  "tasking.searchingCablesFor": "Buscando en los cables «{query}»",
-  "tasking.searchingCables": "Buscando en los cables",
-  "tasking.readingCable": "Leyendo un cable",
-  "tasking.readingPictureFor": "Leyendo el panorama de {lab}",
-  "tasking.readingPicture": "Leyendo el panorama",
-
   "readPage.thePage": "la página",
   "readPage.reading": "Leyendo {url}",
   "webSearch.searching": "Buscando en la web: {query}",

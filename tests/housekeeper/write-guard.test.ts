@@ -9,8 +9,8 @@ import { PALACE, type PalaceRow } from "../../src/palace";
 import { genericMarker } from "../../src/housekeeper";
 import { registeredWritables, registerWritable, writeGuardProblems } from "../../src/housekeeper/write";
 import { NOTES_KIND, NOTES_ROW, memIo, notesEntry } from "./write-fixture";
-import type { MealsPorts } from "../../src/info/meals/apply";
-import { registerMealsWritables } from "../../src/info/meals/writable";
+import type { MealsPorts } from "../../src/meals/apply";
+import { registerMealsWritables } from "../../src/meals/writable";
 
 // The domains register their entries on the way up (useShellBootstrap's
 // bootDomains); this registers the same ones, inside the test and undone after,

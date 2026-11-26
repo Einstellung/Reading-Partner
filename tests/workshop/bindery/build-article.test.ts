@@ -9,7 +9,6 @@ import { openZip } from "../../../src/workshop/bindery/zip";
 import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { fulltextFrom } from "../../../src/reading/epub/fulltext";
-import { typographicCover } from "../../../src/workshop/bindery/cover-svg";
 import { PNG } from "../../reading/epub/fixture";
 
 const GIF = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0x80, 0, 0]);
@@ -288,12 +287,11 @@ test("a formula in the page is a formula in the book", async () => {
 
 // --- the generated cover -----------------------------------------------------
 
-const COVER = typographicCover({
-  kicker: "能源研究室",
-  date: "2026-09-13",
-  title: "How a web page becomes a book",
-  footer: ["iea.org", "reuters.com"],
-});
+// Any SVG: the builder packs the cover's text verbatim.
+const svg = (title: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">` +
+  `<rect width="600" height="800" fill="#f2ede3"/><text x="56" y="381" font-size="44">${title}</text></svg>`;
+const COVER = svg("How a web page becomes a book");
 
 test("a cover is packed as an entry and named by the package, both ways", async () => {
   const bytes = await buildArticleEpub({ ...INPUT, cover: { svg: COVER } });
@@ -339,7 +337,7 @@ test("two covers on one article are two files, and the same cover is the same fi
   expect(await buildArticleEpub({ ...INPUT, cover: { svg: COVER } })).toEqual(one);
   const other = await buildArticleEpub({
     ...INPUT,
-    cover: { svg: typographicCover({ kicker: "别的研究室", date: "", title: "别的", footer: [] }) },
+    cover: { svg: svg("别的") },
   });
   expect(other).not.toEqual(one);
   expect(await buildArticleEpub(INPUT)).not.toEqual(one);

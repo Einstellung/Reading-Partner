@@ -23,7 +23,6 @@ export default {
   "action.cancel": "Cancelar",
   "action.delete": "Excluir",
 
-  "savedArticle.backLabel": "Salvos",
 
   "nav.settings": "Ajustes",
   "nav.settingsNeedsAttention": "Ajustes — a sincronização precisa de atenção",
@@ -142,4 +141,19 @@ export default {
   "intake.reason.siteRefused": "o site não entregou o documento",
   "intake.reason.httpStatus": "o link não abriu (HTTP {status})",
   "intake.reason.failed": "não foi possível ler este link",
+
+  // --- Today (shelf/Vestibule.tsx, shelf/today.ts) ---------------------------
+  "vestibule.title": "Hoje",
+  "vestibule.continueReading": "Continuar lendo",
+  "vestibule.nothingOpen": "Nada aberto ainda. Adicione um livro a um tema na biblioteca.",
+  "vestibule.goToLibrary": "Ir para a biblioteca",
+  "vestibule.yourTopics": "Seus temas",
+  "vestibule.allTopics": "Todos os temas →",
+  "vestibule.newTopic": "Novo tema",
+  "vestibule.newTopicDescription": "Um tema é uma pergunta e os livros que você lê para respondê-la.",
+  "vestibule.newTopicPlaceholder": "ex.: por que JITs são rápidos",
+  "vestibule.create": "Criar",
+  "today.pageOf": "pág. {page} de {pages}",
+  "today.page": "pág. {page}",
+  "today.marks": { one: "{count} marcação", other: "{count} marcações" },
 } satisfies Translation<typeof en>;

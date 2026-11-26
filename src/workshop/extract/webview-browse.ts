@@ -4,7 +4,7 @@
 // sends back, and closes.
 //
 // It knows no site. What to load, what a script reads and how fast to go are
-// the caller's; the X search reading lives in info/x. One session per machine:
+// the caller's. One session per machine:
 // opening a second while one is live answers `busy`, and a session left
 // untouched for its idle window closes itself.
 //

@@ -120,6 +120,15 @@ test("an article is an EPUB and opens as one", () => {
   expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "open" });
 });
 
+// Intel is gone (2026-11); a brief it filed stays in library.json and on no shelf.
+test("an old brief is not on the shelf and is not offered to continue", () => {
+  const entries = { h1: entry("h1"), b1: entry("b1", { kind: "issue", format: "pdf" }), b2: entry("b2", { kind: "issue" }) };
+  const files = [file("brief.pdf", "b1", 300), file("brief.epub", "b2", 200), file("book.epub", "h1", 100)];
+  expect(shelfMaterials(files, entries, new Set(["h1", "b1", "b2"])).map((m) => m.bookId)).toEqual(["h1"]);
+  const topics = [{ id: "t1", name: "JITs", createdAt: 1, files } as Topic];
+  expect(continueReading(topics, entries)?.bookId).toBe("h1");
+});
+
 test("a PDF that is here opens as a lesson", () => {
   const entries = { h1: entry("h1", { format: "pdf" }) };
   const [m] = shelfMaterials([file("book.pdf", "h1")], entries, new Set(["h1"]));

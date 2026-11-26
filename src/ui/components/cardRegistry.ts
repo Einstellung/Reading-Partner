@@ -6,28 +6,26 @@
 // compile error here (the CardRegistry annotation below), which is where a new
 // card kind is meant to be noticed.
 //
-// It sits above chat/, info/ and reader/ rather than inside chat/, because
+// It sits above chat/, meals/ and reader/ rather than inside chat/, because
 // gathering means importing all three and chat is what the other two import for
 // the card protocol. It reaches a chat through CardRegistryProvider, which is
 // what a shell mounts.
 
 import { ASIDE_CARD_REGISTRY } from "./reader/AsideCard";
 import type { CardRegistry } from "./chat/chatParts";
-import { INFO_CARD_REGISTRY } from "./info/InfoCards";
+import { MEALS_CARD_REGISTRY } from "./meals/MealsCards";
 import { BOX_CARD_REGISTRY } from "./companion/BoxCard";
 import { COMPANION_CARD_REGISTRY } from "./companion/IntakeCard";
 import { READING_CARD_REGISTRY } from "./reader/RetellCard";
-import { TOPIC_SEARCH_CARD_REGISTRY } from "./companion/TopicSearchCard";
-import { ISSUE_QUESTION_CARD_REGISTRY } from "./companion/IssueQuestionCard";
 import { HOUSEKEEPER_CARD_REGISTRY } from "./chat/HousekeeperConfirmCard";
+import { TOPIC_PROPOSAL_CARD_REGISTRY } from "./chat/TopicProposalCard";
 
 export const CARD_REGISTRY: CardRegistry = {
-  ...INFO_CARD_REGISTRY,
+  ...TOPIC_PROPOSAL_CARD_REGISTRY,
+  ...MEALS_CARD_REGISTRY,
   ...READING_CARD_REGISTRY,
   ...ASIDE_CARD_REGISTRY,
   ...COMPANION_CARD_REGISTRY,
-  ...TOPIC_SEARCH_CARD_REGISTRY,
   ...BOX_CARD_REGISTRY,
-  ...ISSUE_QUESTION_CARD_REGISTRY,
   ...HOUSEKEEPER_CARD_REGISTRY,
 };

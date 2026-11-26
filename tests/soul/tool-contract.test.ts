@@ -34,14 +34,10 @@ import { buildCitationTools } from "../../src/reading/papers/citation-tool";
 import { buildPaperSearchTools } from "../../src/reading/papers/search-tool";
 import { buildRetellTools } from "../../src/reading/retell/tools";
 import { buildArrangeTools } from "../../src/reading/talk/tools";
-import { buildSourceTools } from "../../src/info/sources/source-tools";
-import { buildCompanionTools } from "../../src/info/briefer/companion-tools";
-import { buildReadPageTool } from "../../src/info/sources/read-page-tool";
-import { buildTaskingTools } from "../../src/info/tasking/tools";
+import { buildReadPageTool } from "../../src/sources/read-page-tool";
 import { subagentTool } from "../../src/legion/subagent/tool";
 import { buildTakeLinkTool } from "../../src/reading/ingest/take-link-tool";
-import { buildMealsCatalogTools } from "../../src/info/meals/tools";
-import { topicSearchDoorTools } from "../../src/info/topic-search/live";
+import { buildMealsCatalogTools } from "../../src/meals/tools";
 import { buildBackgroundStatusTool } from "../../src/legion/status/tool";
 import { buildCodemodeTool } from "../../src/legion/codemode";
 import { normalizeToolResult, toolLabel } from "../../src/legion/durable/tool-result";
@@ -178,21 +174,9 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     ], safe: ["read_talk_outline"],
   },
   {
-    where: "info/sources",
-    tools: buildSourceTools(any({ fetchFn: async () => new Response(""), extract: async () => null, addSource: async () => {}, onProbeCard: () => {} })),
-    names: ["probe_source", "trial_source", "add_source"], safe: ["probe_source"],
-  },
-  {
-    where: "info/sources/read-page-tool",
+    where: "sources/read-page-tool",
     tools: [buildReadPageTool(any({ fetchFn: async () => new Response("") }))],
     names: ["read_page"], safe: ["read_page"],
-  },
-  {
-    where: "info/tasking",
-    tools: buildTaskingTools({}),
-    // A tasking run reads pages the way the collection does, so it mounts the
-    // extractor's read_page as well as its own three.
-    names: ["search_cables", "read_cable", "read_picture", "read_page"], safe: ["search_cables", "read_cable", "read_picture", "read_page"],
   },
   {
     where: "legion/subagent",
@@ -215,7 +199,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     names: ["take_link"],
   },
   {
-    where: "info/meals",
+    where: "meals",
     tools: buildMealsCatalogTools(any({ threadId: "meals", ports: {} })),
     names: [
       "propose_meal_plan",
@@ -238,22 +222,6 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     safe: ["meals_read_plan", "meals_read_prep", "meals_read_shopping", "meals_read_recipes", "meals_read_charter", "meals_read_foods", "meals_read_draft"],
   },
   {
-    where: "info/topic-search",
-    tools: topicSearchDoorTools(any({ threadId: "t" })),
-    names: [
-      "find_seed_paper",
-      "propose_topic_search",
-      "confirm_topic_search",
-      "update_topic_search",
-      "stop_topic_search",
-      "resume_x_reading",
-      "retry_topic_search_first_run",
-      "propose_study_lines",
-      "update_study_brief",
-      "end_study",
-    ],
-  },
-  {
     where: "legion/status",
     tools: [buildBackgroundStatusTool(any({}))],
     names: ["background_status"], safe: ["background_status"],
@@ -272,24 +240,6 @@ const catalog = appToolCatalog();
 // file's "no places registered, no tool" is a real assertion.
 unregisterPlaces();
 
-// The companion's own tools are built separately: its factory takes a bag of
-// deps and drops whole tools when a dep is missing, so the roster is what a
-// fully-equipped info turn mounts.
-const companion = buildCompanionTools(
-  any({
-    fetchFn: async () => new Response(""),
-    extract: async () => null,
-    addSource: async () => {},
-    onProbeCard: () => {},
-    startBriefing: () => "started",
-    labs: { labs: async () => [], sources: async () => [], onLabCard: () => {}, threadId: "t" },
-    siteSignIn: { signInSites: async () => [], openSignIn: async () => ({ closed: true, elapsedMs: 1 }) },
-    // The old briefing's tools too, though its UI is off (src/info/old-briefing.ts):
-    // the catalog still registers them for stored sessions.
-    oldBriefing: true,
-  }),
-);
-
 test("every factory mounts the tools the roster names", () => {
   for (const { where, tools, names } of ROSTER) {
     expect(`${where}: ${tools.map((t) => t.name).sort().join(",")}`).toBe(
@@ -302,7 +252,7 @@ test("every factory mounts the tools the roster names", () => {
 // there fails every call with "Tool … is not available".
 test("the durable catalog registers every tool in the roster", () => {
   const registered = new Set(catalog.map((t) => t.name));
-  const missing = [...ROSTER.flatMap(({ names }) => names), ...companion.map((t) => t.name)].filter(
+  const missing = ROSTER.flatMap(({ names }) => names).filter(
     (name) => !registered.has(name),
   );
   expect(missing).toEqual([]);
@@ -310,8 +260,7 @@ test("the durable catalog registers every tool in the roster", () => {
 
 // The durable runtime registers one schema per name, from the catalog, and the
 // model calls every desk's tool of that name through it (pitfall 524). So any
-// tool a factory builds - here, the roster's and the companion's, built with
-// deps of their own - has to take the arguments the catalog's tool of that name
+// tool a factory builds - here, the roster's, built with deps of their own - has to take the arguments the catalog's tool of that name
 // declares. Compared with the descriptions inside the schema left out: those may
 // print a process-wide registry (delegate's kinds, go_to's places), read at both
 // ends from the same registry, and the roster fakes one.
@@ -325,7 +274,7 @@ function shape(schema: unknown): unknown {
 
 test("every tool of one name takes the arguments the durable catalog registered for it", () => {
   const registered = new Map(catalog.map((t) => [t.name, t]));
-  for (const tool of [...ROSTER.flatMap((r) => r.tools), ...companion]) {
+  for (const tool of ROSTER.flatMap((r) => r.tools)) {
     const entry = registered.get(tool.name);
     if (!entry) continue;
     expect(`${tool.name}: ${JSON.stringify(shape(tool.parameters))}`).toBe(
@@ -346,9 +295,6 @@ test("read_chapter is one tool whether or not the book has a chapter table", () 
   }
 });
 
-// The companion's replay column: the online reads are safe, the rest unsafe.
-const COMPANION_SAFE = ["probe_source", "read_page"];
-
 test("every tool declares its replay, and the roster says which", () => {
   for (const { where, tools, safe = [] } of ROSTER) {
     for (const tool of tools) {
@@ -356,25 +302,6 @@ test("every tool declares its replay, and the roster says which", () => {
       expect(`${where}: ${tool.name} ${tool.replay ?? "unsafe"}`).toBe(`${where}: ${tool.name} ${expected}`);
     }
   }
-  for (const tool of companion) {
-    const expected = COMPANION_SAFE.includes(tool.name) ? "safe" : "unsafe";
-    expect(`companion: ${tool.name} ${tool.replay ?? "unsafe"}`).toBe(`companion: ${tool.name} ${expected}`);
-  }
-});
-
-test("the info companion mounts its own tools plus the source tools", () => {
-  expect(companion.map((t) => t.name).sort()).toEqual(
-    [
-      "add_source",
-      "archive_lab",
-      "generate_briefing",
-      "open_site_sign_in",
-      "probe_source",
-      "propose_lab",
-      "read_page",
-      "trial_source",
-    ].sort(),
-  );
 });
 
 const EFFECTS = new Set(["read", "write"]);
@@ -386,7 +313,7 @@ const GATES = new Set(["card", "trial", "instruction"]);
 const QUIET = ["observation_update", "statement_write", "take_link"];
 
 test("every tool declares a label, an effect and — where it has one — a known gate", () => {
-  const all = [...ROSTER.flatMap((r) => r.tools), ...companion];
+  const all = ROSTER.flatMap((r) => r.tools);
   expect(all.length).toBeGreaterThan(40);
   for (const tool of all) {
     // Called with no arguments at all: a label that reaches into args without
@@ -412,7 +339,7 @@ test("every tool declares a label, an effect and — where it has one — a know
 });
 
 test("the quiet tools are the ones the roster names, and no others", () => {
-  const all = [...ROSTER.flatMap((r) => r.tools), ...companion];
+  const all = ROSTER.flatMap((r) => r.tools);
   expect(all.filter((t) => t.quiet).map((t) => t.name).sort()).toEqual([...QUIET].sort());
 });
 

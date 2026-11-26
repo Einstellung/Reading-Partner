@@ -12,11 +12,10 @@
 // not fold a card into text.
 
 import type { FC } from "react";
-import type { InfoCard } from "../../../info/boxes/cards";
+import type { MealsCard } from "../../../meals/cards";
+import type { TopicProposalCardData } from "../../../memory";
 import type { AsideCard } from "../../../reading/aside";
 import type { IntakeCard } from "../../../reading/ingest/intake-card";
-import type { TopicSearchCard } from "../../../info/topic-search/cards";
-import type { IssueQuestionCard } from "../../../info/issue/question-card";
 import type { BoxItemCard } from "../../../box/card";
 import type { HousekeeperConfirmCard } from "../../../housekeeper/write/card";
 import type { ReadingCard } from "../../../reading/retell/cards";
@@ -29,7 +28,7 @@ import type { ThreadMessage } from "./types";
 import { persistedTrace, type Receipt, type ToolStatus } from "../../../ai/turn-view/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
-// (info/boxes/cards.ts, reading/retell/cards.ts, reading/aside.ts); this
+// (reading/retell/cards.ts, reading/aside.ts); this
 // protocol only references the union, so the dependency direction stays
 // components -> domain and never the reverse. Each unit contributes its own
 // member — a unit, not a whole domain: reading/aside contributes separately from
@@ -37,13 +36,12 @@ import { persistedTrace, type Receipt, type ToolStatus } from "../../../ai/turn-
 // registry (ui/components/cardRegistry.ts, one level above chat/) is where the
 // components are gathered.
 export type CardPayload =
-  | InfoCard
+  | MealsCard
+  | TopicProposalCardData
   | ReadingCard
   | AsideCard
   | IntakeCard
-  | TopicSearchCard
   | BoxItemCard
-  | IssueQuestionCard
   | HousekeeperConfirmCard;
 export type CardKind = CardPayload["kind"];
 
@@ -167,7 +165,6 @@ function legacyParts(m: ThreadMessage): ChatPart[] {
   const parts: ChatPart[] = [];
   if (m.text) parts.push({ type: "text", text: m.text });
   if (m.tools && m.tools.length) parts.push({ type: "tool-trace", tools: m.tools });
-  if (m.card) parts.push({ type: "card", id: String(m.ts), card: m.card });
   return parts;
 }
 

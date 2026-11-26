@@ -16,7 +16,7 @@ import { delegableWorkerKinds, workerFor, type WorkerContext } from "../../src/l
 import { buildDelegateTools } from "../../src/soul/delegate";
 import { withoutBriefNote, type SubagentTurnRequest } from "../../src/legion/subagent";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
-import { rebuildThreadStoreForTests, type ThreadMessage } from "../../src/platform/app/threads";
+import { rebuildThreadStoreForTests } from "../../src/platform/app/threads";
 import {
   answerBell,
   declareVerbatim,
@@ -35,9 +35,6 @@ import {
   registerThinkWorker,
   thinkWorker,
 } from "../../src/soul/think";
-import { appendInfoReply } from "../../src/reading/turn/info-bell";
-import { infoBookId } from "../../src/info/briefer/call";
-import { briefingThreadId } from "../../src/info/briefer/anchors";
 import { installAppData } from "../support/appdata-fake";
 import { mapDisk } from "../support/map-disk";
 
@@ -297,27 +294,4 @@ test("a kind not declared verbatim is still answered with a turn", async () => {
   await s.answer();
   expect(s.turns).toHaveLength(1);
   expect(s.appended).toEqual([]);
-});
-
-test("the briefing appender writes the soul's reply into the day's briefing thread, stamped with the run", async () => {
-  const written: { key: string; threadId: string; message: ThreadMessage }[] = [];
-  const opened: string[] = [];
-  const ok = await appendInfoReply(
-    { origin: PLACE, text: "Rates did it.", runId: "r-1", at: 1000 },
-    {
-      openThread: async (key, threadId) => {
-        opened.push(`${key}/${threadId}`);
-      },
-      append: (key, threadId, message) => written.push({ key, threadId, message }),
-      flush: async () => {},
-    },
-  );
-  expect(ok).toBe(true);
-  expect(opened).toEqual([`${infoBookId(DATE)}/${briefingThreadId(DATE)}`]);
-  expect(written[0]).toMatchObject({
-    key: infoBookId(DATE),
-    threadId: briefingThreadId(DATE),
-    message: { role: "ai", text: "Rates did it.", ts: 1000, origin: { runId: "r-1" } },
-  });
-  expect(await appendInfoReply({ origin: { place: "door", date: DATE }, text: "x", runId: "r", at: 1 })).toBe(false);
 });

@@ -3,12 +3,8 @@
 // showing. None of it touches the DOM, so the rendering can change without
 // re-deriving any of it (CLAUDE.md).
 //
-// HomeScreen lives here rather than in InfoHome.tsx because this is what maps it
-// to the sidebar, and a type in a .tsx would drag React into every test that
-// wants to assert the mapping. InfoHome re-exports it, so its importers are
-// unchanged.
-
-import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
+// HomeScreen lives here because this is what maps it to the sidebar, and a type
+// in a .tsx would drag React into every test that wants to assert the mapping.
 
 // The launch layer in front of the library. "library" belongs to App, which
 // renders the shelf; it is in the union so the two navigate through one setter.
@@ -17,11 +13,6 @@ import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 export type HomeScreen =
   | "vestibule"
   | "library"
-  | "briefing"
-  // The info shelf: the brief's issues as books, and the topic volumes
-  // (docs/info/88).
-  | "briefs"
-  | "article"
   | "meals"
   | "meals-shopping"
   | "meals-day"
@@ -31,7 +22,7 @@ export type HomeScreen =
   | "meals-onboarding"
   | "settings";
 
-export type ShellNavId = "today" | "briefing" | "briefs" | "meals" | "topics" | "settings";
+export type ShellNavId = "today" | "meals" | "topics" | "settings";
 
 // Top to bottom, in the order a day uses them: what is open now, what came in
 // overnight, everything else. Settings is a nav id but not one of these — it is
@@ -41,16 +32,12 @@ export interface ShellNavItem {
   id: ShellNavId;
   labelKey:
     | "shell.nav.today"
-    | "shell.nav.briefing"
-    | "shell.nav.briefs"
     | "shell.nav.meals"
     | "shell.nav.topics";
 }
 
 export const SHELL_NAV_ITEMS: readonly ShellNavItem[] = [
   { id: "today", labelKey: "shell.nav.today" },
-  { id: "briefing", labelKey: "shell.nav.briefing" },
-  { id: "briefs", labelKey: "shell.nav.briefs" },
   { id: "meals", labelKey: "shell.nav.meals" },
   { id: "topics", labelKey: "shell.nav.topics" },
 ];
@@ -58,44 +45,22 @@ export const SHELL_NAV_ITEMS: readonly ShellNavItem[] = [
 // The items a sidebar actually draws. Meals is opt-in (the Meals experiment,
 // docs/73) and is left out entirely when it is off — not greyed, not a teaser:
 // a switch that is off means the reader has said they do not want the line.
-// The old daily briefing is left out while its UI is switched off
-// (info/old-briefing.ts).
-// Briefs is left out while the intel experiment is off (platform/experiments).
-export function shellNavItems(opts: { meals: boolean; briefs?: boolean; oldBriefing?: boolean }): ShellNavItem[] {
-  const oldBriefing = opts.oldBriefing ?? OLD_BRIEFING_UI_ENABLED;
-  const briefs = opts.briefs ?? true;
-  return SHELL_NAV_ITEMS.filter(
-    (item) =>
-      (item.id !== "meals" || opts.meals) &&
-      (item.id !== "briefing" || oldBriefing) &&
-      (item.id !== "briefs" || briefs),
-  );
+export function shellNavItems(opts: { meals: boolean }): ShellNavItem[] {
+  return SHELL_NAV_ITEMS.filter((item) => item.id !== "meals" || opts.meals);
 }
 
-// The screen a request actually lands on. While the old briefing's UI is off
-// (info/old-briefing.ts) its page and its article are nowhere: a box card from
-// it, a card's Open, a place the soul names or a back from an article all land
-// on Today instead. Every shell routes its navigation through this.
-//
-// The same holds for a line whose experiment is off (platform/experiments):
-// the meals screens while meals is hidden, the Briefs shelf while intel is.
-// `shown` says which lines are drawn; left out, both are.
-export function reachableScreen(
-  screen: HomeScreen,
-  oldBriefing: boolean = OLD_BRIEFING_UI_ENABLED,
-  shown: { meals?: boolean; intel?: boolean } = {},
-): HomeScreen {
-  if (!oldBriefing && (screen === "briefing" || screen === "article")) return "vestibule";
-  if (hiddenByExperiments(screen, shown)) return "vestibule";
-  return screen;
+// The screen a request actually lands on: Today, for a screen of a line whose
+// experiment is off (platform/experiments) — the meals screens while meals is
+// hidden. `shown` says which lines are drawn; left out, all are. Every shell
+// routes its navigation through this.
+export function reachableScreen(screen: HomeScreen, shown: { meals?: boolean } = {}): HomeScreen {
+  return hiddenByExperiments(screen, shown) ? "vestibule" : screen;
 }
 
 // Whether a screen belongs to a line that is not drawn: the meals page and its
-// rooms, or the Briefs shelf. A string so the phone's stack kinds, which use the
-// same names, can ask too.
-export function hiddenByExperiments(screen: string, shown: { meals?: boolean; intel?: boolean }): boolean {
-  if (shown.meals === false && (screen === "meals" || screen.startsWith("meals-"))) return true;
-  return shown.intel === false && screen === "briefs";
+// rooms. A string so the phone's stack kinds, which use the same names, can ask too.
+export function hiddenByExperiments(screen: string, shown: { meals?: boolean }): boolean {
+  return shown.meals === false && (screen === "meals" || screen.startsWith("meals-"));
 }
 
 // Where an item goes. The shelf is what Topics opens; a topic that is already
@@ -104,10 +69,6 @@ export function screenForNav(id: ShellNavId): HomeScreen {
   switch (id) {
     case "today":
       return "vestibule";
-    case "briefing":
-      return "briefing";
-    case "briefs":
-      return "briefs";
     case "meals":
       return "meals";
     case "topics":
@@ -117,21 +78,14 @@ export function screenForNav(id: ShellNavId): HomeScreen {
   }
 }
 
-// Which item is lit. The briefing's side room — an opened article — is still
-// the briefing: it is reached from it and goes back to it, and an unlit sidebar
+// Which item is lit. A room of a page — one day of the week, a recipe — is still
+// that page: it is reached from it and goes back to it, and an unlit sidebar
 // would say the reader had left the app's map.
 // Null while the reader is open, where the sidebar is not drawn at all.
 export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
   switch (screen) {
     case "vestibule":
       return "today";
-    case "briefing":
-    case "article":
-      return "briefing";
-    case "briefs":
-      return "briefs";
-    // The shopping trip and one day are rooms of the meals page: reached from
-    // it, going back to it, the same as the briefing's article above.
     case "meals":
     case "meals-shopping":
     case "meals-day":
@@ -147,12 +101,4 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
     default:
       return null;
   }
-}
-
-// Whether the home area draws the launch card (the vestibule) for this screen.
-// The briefing screen has nothing to draw when today's briefing does not exist
-// (a reader device before sync, a fresh day before collection, no sources), so
-// it falls back to the card that already says why.
-export function showsLaunchCard(screen: HomeScreen, hasBriefing: boolean): boolean {
-  return screen === "vestibule" || (screen === "briefing" && !hasBriefing);
 }

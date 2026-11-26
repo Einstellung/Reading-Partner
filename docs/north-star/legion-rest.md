@@ -18,7 +18,7 @@
 - 老清单里的 mailbox `post` / `told` 和死信队列不再是欠账。55 把投递词表定成 queued / delivered / acked，`told` 是盒子的状态（`src/box/types.ts`）归 info；死信视图是 `src/legion/ledger/store.ts` 的 `deadLetters(day)`。
 - schedule（`src/legion/schedule/schedule.ts`）只产出 wake 铃，不是任务队列：runner 里「同一 kind 本机同时只跑一个」，不同 kind 之间不拦，没有 FIFO 也没有跨 kind 按资源串行。
 - claim 的能力标签只登记了一种：`WEBVIEW_FETCH`（`src/legion/claim/capabilities.ts`），GPU、常开这类标签还没人声明。
-- 夜里 dream 仍是 `src/info/program/live.ts` 里 `amICollecting` + `isDreamDue` 直接触发，不经 schedule 的 wake 铃；analyst 角色也没注册，`registerRole`（`src/soul/roles.ts`）今天只有 info 的 secretary 一行（`src/info/briefer/role.ts`）。
+- 夜里 dream 仍是 `src/presence/daily.ts` 的每日 round 里按选举（kind `dream`）+ `isDreamDue` 直接触发，不经 schedule 的 wake 铃；analyst 角色也没注册，`registerRole`（`src/soul/roles.ts`）今天只有三餐的 `meals` 角色一行（`src/meals/conversation/role.ts`）。
 - collect 没有拆成分析员和综合两个子 run，batch 续跑目前认的是第一个调用方。见 55 第 12 步、[71](../soul/71-soul.md)。
 - ledger 没有重放：`housekeeping.ts` 和 `fold.ts` 只写 `briefHash`，没有校验哈希、也没有建一个回指原 run 的新 run。折叠只写行；run 文件的回收归 housekeeper 的 `legion-run-files` marker（[80](../platform/80-回收：retention、garbage marker 与 housekeeper.md)）。
 - 死信没有界面：`deadLetters(day)`（`src/legion/ledger/store.ts`）在 src 里没有第二个调用点。

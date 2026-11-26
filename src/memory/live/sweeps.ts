@@ -20,8 +20,9 @@ export type DistillTrigger =
   | "foreground"
   | "book-switch"
   | "talk-exit"
-  // An info conversation closed: the chat unmounted, or the voice call hung up
-  // (src/info/briefer). The counterpart of "hangup" for the conversations that
+  // The meals conversation closed: the chat unmounted, or the voice call hung up
+  // (ui/components/meals/use-meals-call.ts). The value is the one the briefing's
+  // conversations wrote before Intel was removed. The counterpart of "hangup" for the conversations that
   // hang off no book.
   | "info-close";
 

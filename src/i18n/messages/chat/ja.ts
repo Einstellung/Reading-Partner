@@ -115,4 +115,16 @@ export default {
   "call.deleteConversation": "会話を削除",
   "call.deleteTitle": "この会話を削除しますか？",
   "call.deleteDescription": "会話と、それを開いたマークが削除されます。この操作は取り消せません。",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": "この会話を「{name}」に整理しました。",
+  "errors.noProvider": "AI プロバイダーが設定されていません（設定を確認してください）。",
+
+  // --- Topic proposal card (TopicProposalCard.tsx) --------------------------
+  "topicCard.filed": "整理済み",
+  "topicCard.whereThisBelongs": "どのトピックに属するか",
+  "topicCard.newTopic": "新しいトピック",
+  "topicCard.onYourShelf": "本棚に追加しました。",
+  "topicCard.createAndFile": "作成して整理",
+  "topicCard.fileIt": "整理する",
 } satisfies Translation<typeof en>;

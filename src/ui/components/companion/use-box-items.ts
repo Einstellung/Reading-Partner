@@ -66,9 +66,8 @@ export function useBoxItems(): BoxItems {
   // Filtered at the end rather than in the read: a flip redraws at once, and
   // nothing is written back.
   const meals = useExperiment("meals");
-  const intel = useExperiment("intel");
   return useMemo(
-    () => ({ ...state, items: shownBoxItems(state.items, { meals, intel }) }),
-    [state, meals, intel],
+    () => ({ ...state, items: shownBoxItems(state.items, { meals }) }),
+    [state, meals],
   );
 }

@@ -136,7 +136,7 @@ test("the never-infer list is never inferred", () => {
     "statements.json",
     "deleted-books.jsonl",
     "observations/deleted-observations.jsonl",
-    "info-feedback.jsonl",
+    "legion/ledger/2026-09-15.jsonl",
   ]) {
     const out = inferDeletions({
       base: holdings({ files: { [path]: ["h1", 5] } }),

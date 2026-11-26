@@ -19,10 +19,7 @@ import {
   type NavStack,
   type PhoneScreen,
 } from "../../../../src/ui/components/phone/nav-stack";
-import type { SavedArticle } from "../../../../src/reading/saved/saved-articles";
 
-const article = { id: "a1", title: "One" } as unknown as SavedArticle;
-const other = { id: "a2", title: "Two" } as unknown as SavedArticle;
 
 function kinds(stack: NavStack): string[] {
   return stack.map((s) => s.kind);
@@ -36,10 +33,10 @@ test("the stack starts at home and home is the floor", () => {
 });
 
 test("push then back returns the stack it came from", () => {
-  const s1 = push(INITIAL_STACK, screen("briefing"));
-  const s2 = push(s1, screen("article"));
+  const s1 = push(INITIAL_STACK, screen("meals"));
+  const s2 = push(s1, screen("meals-shopping"));
   expect(canGoBack(s2)).toBe(true);
-  expect(kinds(back(s2))).toEqual(["home", "briefing"]);
+  expect(kinds(back(s2))).toEqual(["home", "meals"]);
   expect(kinds(back(back(s2)))).toEqual(["home"]);
   expect(back(back(back(s2)))).toEqual(INITIAL_STACK);
 });
@@ -62,16 +59,16 @@ test("a lesson is an entry like any other and back leaves it", () => {
 });
 
 test("goTo pushes a destination that is not on the stack", () => {
-  const s = goTo(INITIAL_STACK, screen("briefing"));
-  expect(kinds(s)).toEqual(["home", "briefing"]);
-  expect(kinds(goTo(s, screen("article")))).toEqual(["home", "briefing", "article"]);
+  const s = goTo(INITIAL_STACK, screen("meals"));
+  expect(kinds(s)).toEqual(["home", "meals"]);
+  expect(kinds(goTo(s, screen("meals-shopping")))).toEqual(["home", "meals", "meals-shopping"]);
 });
 
 test("goTo unwinds to a destination already on the stack instead of stacking it", () => {
-  // How the article's top bar back arrives: it asks for "briefing", which is
-  // where it was opened from.
-  const s = goTo(goTo(INITIAL_STACK, screen("briefing")), screen("article"));
-  expect(kinds(goTo(s, screen("briefing")))).toEqual(["home", "briefing"]);
+  // How a back by destination arrives: the shopping list asks for "meals",
+  // which is where it was opened from.
+  const s = goTo(goTo(INITIAL_STACK, screen("meals")), screen("meals-shopping"));
+  expect(kinds(goTo(s, screen("meals")))).toEqual(["home", "meals"]);
   // And the deepest screen unwinding to home is the same as backing out of all
   // of it.
   expect(kinds(goTo(s, screen("home")))).toEqual(["home"]);
@@ -80,29 +77,29 @@ test("goTo unwinds to a destination already on the stack instead of stacking it"
 test("goTo unwinds to the nearest copy when a kind appears twice", () => {
   const s: NavStack = [
     HOME,
-    screen("briefing"),
-    screen("saved"),
-    screen("briefing"),
-    screen("article"),
+    screen("meals"),
+    screen("library"),
+    screen("meals"),
+    screen("meals-shopping"),
   ];
-  expect(kinds(goTo(s, screen("briefing")))).toEqual(["home", "briefing", "saved", "briefing"]);
+  expect(kinds(goTo(s, screen("meals")))).toEqual(["home", "meals", "library", "meals"]);
 });
 
-test("a saved article is pushed with its record and back drops it", () => {
-  const s = push(push(INITIAL_STACK, screen("saved")), { kind: "savedArticle", article });
-  expect(top(s)).toEqual({ kind: "savedArticle", article });
-  expect(kinds(back(s))).toEqual(["home", "saved"]);
+test("a topic is pushed with its id and back drops it", () => {
+  const s = push(push(INITIAL_STACK, screen("library")), { kind: "topic", topicId: "t1" });
+  expect(top(s)).toEqual({ kind: "topic", topicId: "t1" });
+  expect(kinds(back(s))).toEqual(["home", "library"]);
   // Opening a second one from the list stacks it: unwinding by kind would keep
-  // the first article's record, which is the wrong article.
-  const s2 = push(back(s), { kind: "savedArticle", article: other });
-  expect((top(s2) as Extract<PhoneScreen, { kind: "savedArticle" }>).article).toBe(other);
+  // the first topic's id, which is the wrong topic.
+  const s2 = push(back(s), { kind: "topic", topicId: "t2" });
+  expect((top(s2) as Extract<PhoneScreen, { kind: "topic" }>).topicId).toBe("t2");
 });
 
 test("Settings is an entry, and the screen under it keeps drawing", () => {
-  const s = push(push(INITIAL_STACK, screen("briefing")), screen("settings"));
+  const s = push(push(INITIAL_STACK, screen("meals")), screen("settings"));
   expect(top(s).kind).toBe("settings");
-  expect(baseScreen(s).kind).toBe("briefing");
-  expect(kinds(back(s))).toEqual(["home", "briefing"]);
+  expect(baseScreen(s).kind).toBe("meals");
+  expect(kinds(back(s))).toEqual(["home", "meals"]);
 });
 
 test("baseScreen falls back to home when nothing but Settings is open", () => {
@@ -111,9 +108,9 @@ test("baseScreen falls back to home when nothing but Settings is open", () => {
 });
 
 test("back closes an open overlay before it touches the stack", () => {
-  const deep: NavStack = [HOME, screen("briefing"), screen("article")];
+  const deep: NavStack = [HOME, screen("meals"), screen("meals-shopping")];
   expect(resolveBack(deep, false)).toBe("pop");
-  // The info call is not an entry, and popping under it would leave it on
+  // The meals call is not an entry, and popping under it would leave it on
   // screen over a screen the reader never chose.
   expect(resolveBack(deep, true)).toBe("dismissOverlay");
 });
@@ -159,7 +156,7 @@ test("an overlay on the floor is still something to go back from", () => {
   expect(resolveBack(INITIAL_STACK, true)).toBe("dismissOverlay");
   expect(backIsAvailable(INITIAL_STACK, false)).toBe(false);
   expect(backIsAvailable(INITIAL_STACK, true)).toBe(true);
-  expect(backIsAvailable([HOME, screen("briefing")], false)).toBe(true);
+  expect(backIsAvailable([HOME, screen("meals")], false)).toBe(true);
 });
 
 test("the prep page opens over the Meals page, so back from it is the Meals page wherever it was opened", () => {

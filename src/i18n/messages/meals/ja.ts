@@ -540,4 +540,20 @@ export default {
   "finish.tonightThaw": "今夜、明日の{meal}に使う{food}を冷凍庫から冷蔵庫へ移す。",
   "finish.tonightSoyMilk": "今夜、豆乳メーカーに{foods}と水を入れ、明日の朝食に合わせてタイマーをかける。",
   "finish.prepSession": "作り置き",
+
+  // The meals conversation
+  "anchor.kickoff": "今週を計画して。",
+  "anchor.title": "食事",
+  "anchor.placeholder": "食事について質問…",
+  "anchor.noPlan": "今週の計画はまだありません",
+  "anchor.thisWeek": "今週の食事",
+  "anchor.leftToBuy": { other: "今週の食事 · あと {count} 件購入" },
+  "ask.aboutMeals": "食事について質問",
+  "ask.aboutNumbers": "この数値について質問",
+  "ask.aboutShopping": "買い物について質問",
+  "ask.aboutToday": "今日について質問",
+  "ask.aboutWeekday": "{weekday}について質問",
+  "ask.aboutPlan": "計画について質問",
+  "errors.noProvider": "AI プロバイダーが設定されていません（設定を確認してください）。",
+  "errors.extractorFailed": "記事抽出機能を読み込めませんでした。もう一度お試しください。",
 } satisfies Translation<typeof en>;

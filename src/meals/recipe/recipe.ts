@@ -1,0 +1,307 @@
+// One made meal's recipe page (docs/73 做法页): what the model is asked, what
+// its answer is held to, and the step the program adds to it.
+//
+// The model writes the steps. It never writes a gram — the list above the
+// steps carries the solved weights — and never how a pot is packed and kept:
+// the meal a pot is cooked at ends with a packing step written here from the
+// plan (docs/73 一锅, 事实不经模型).
+
+import { t } from "../../i18n";
+import { localeForSetting, type Locale } from "../../i18n/locale";
+import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
+import { readObject } from "../../platform/std/json";
+import type { ParseTally } from "../../platform/app/structured-output";
+import { hashText } from "../../platform/sync/merge/text";
+import { eatsBox } from "../finish/finishing";
+import { foodById } from "../nutrition/foods";
+import type { Effort, Profile } from "../nutrition/targets";
+import type { PotPortion, PotStorage } from "../plan/pots";
+import { boxName, type IngredientRow, type MealView } from "../screen/view";
+
+/** What the model wrote for one meal. */
+export interface RecipeText {
+  steps: string[];
+}
+
+/** One stored recipe: the text, when it was written and what it was for. */
+export interface RecipeEntry extends RecipeText {
+  at: number;
+  // The dish's name, for whoever reads the file.
+  name: string;
+}
+
+/** What the model is told about the pot a meal is cooked at or eats from. */
+export interface RecipePot {
+  name: string;
+  method: string;
+  // The pot's food, by its table name.
+  food: string;
+  rawG: number;
+  // How many meals it feeds.
+  count: number;
+  // This meal cooks it, rather than eating a box of it.
+  cooks: boolean;
+  storage: PotStorage;
+}
+
+/** Everything one call is written from. */
+export interface RecipeRequest {
+  key: string;
+  name: string;
+  flavour: string;
+  minutes: number | null;
+  method: string;
+  rows: ReadonlyArray<Pick<IngredientRow, "foodId" | "name" | "grams" | "units">>;
+  kitchen: readonly string[];
+  effort: Effort;
+  language: Locale;
+  pot: RecipePot | null;
+}
+
+/**
+ * The language a recipe is written in: the answer-language setting, "auto"
+ * taken as the system language the UI is drawn in. Always a named language,
+ * so the prompt never leaves the model to pick one (pitfall 647). `system` is
+ * the device's language list, injected in tests.
+ */
+export function recipeLanguage(aiLanguage: AiLanguage, system?: readonly string[]): Locale {
+  return localeForSetting(aiLanguage, system);
+}
+
+function languageName(language: Locale): string {
+  return aiLanguageName(language) ?? "English";
+}
+
+// Raised when the prompt changes what the steps may use. 2: the listed
+// seasoning is the flavour, nothing fresh or bottled beyond the list. 3:
+// doneness by sight and touch, the pressure cooker's water in cups and ml,
+// no "to taste".
+export const RECIPE_PROMPT_VERSION = 3;
+
+/** Whether the reader's kitchen, as they described it, has a food thermometer. */
+export function ownsThermometer(kitchen: readonly string[] | undefined): boolean {
+  return (kitchen ?? []).some((k) => /thermometer|温度计/i.test(k));
+}
+
+/**
+ * How the steps say food is done, shared with the prep session's steps
+ * (prep-steps.ts). Readers have no thermometer unless their kitchen names one.
+ */
+export function donenessLine(thermometer: boolean): string {
+  const by =
+    "- Say when something has to be cooked through to be safe to eat (chicken, pork, beans, eggs, green beans), and say how to tell by sight and touch: chicken and pork are done when the juices run clear and no pink is left in the thickest part, fish when it turns opaque and flakes easily with a fork, beans and green beans when they are tender all the way through, eggs when the white and the yolk are set.";
+  return thermometer
+    ? `${by} The reader has a food thermometer, so you may add the safe internal temperature after the sign.`
+    : `${by} Never give an internal temperature and never ask for a thermometer: the reader has none.`;
+}
+
+/** The water a pressure cooker gets, shared with the prep session's steps. */
+export const PRESSURE_WATER_LINE =
+  "- When something goes in the pressure cooker, say how much water or liquid goes in as a measure: 1 cup (250 ml) unless the dish needs more (a braise covered in liquid, dried beans), then the amount it needs. Say it once, in the step that adds it. Never write \"the minimum the manual asks for\" and never send the reader to the manual.";
+
+/** Salt as a measure, shared with the prep session's steps. */
+export const SALT_LINE =
+  "- Never write \"to taste\" (\"salt to taste\", \"season to taste\"). Salt on the list goes in at its listed amount; salt that is not on the list is either left out because the blend is already salted, or given as a measure (a pinch, 1/4 teaspoon).";
+
+/**
+ * The stored recipe's key: the dish, every food at its solved grams, the
+ * kitchen and the language, and for a pot meal what the steps depend on —
+ * whether it cooks the pot or eats a box, the pot's name, method, weight and
+ * meals, and where the box waits. Any of them changing asks for a new recipe,
+ * and the old one is left for retention to drop. RECIPE_PROMPT_VERSION goes
+ * in too, so a prompt that changes what the steps may use rewrites every
+ * stored recipe of the week once.
+ */
+export function recipeKey(
+  name: string,
+  rows: ReadonlyArray<Pick<IngredientRow, "foodId" | "grams">>,
+  kitchen: readonly string[],
+  language: string,
+  pot: RecipePot | null = null,
+): string {
+  const foods = rows.map((r) => `${r.foodId}:${r.grams}`).sort();
+  const base: unknown[] = [name, foods, [...kitchen], language, RECIPE_PROMPT_VERSION];
+  if (pot) base.push([pot.cooks ? "cook" : "eat", pot.name, pot.method, pot.rawG, pot.count, pot.storage]);
+  return hashText(JSON.stringify(base));
+}
+
+/** What the recipe call is told about a meal's share of a pot. */
+export function recipePot(portion: PotPortion | null): RecipePot | null {
+  if (!portion) return null;
+  const { pot } = portion;
+  return {
+    name: pot.name,
+    method: pot.method,
+    food: foodById(pot.foodId)?.zh ?? pot.foodId,
+    rawG: pot.rawG,
+    count: portion.count,
+    cooks: portion.cooks,
+    storage: portion.storage,
+  };
+}
+
+/** Whether the page has steps to write for a meal: one that is made, with ingredients. */
+export function hasRecipe(view: Pick<MealView, "mode" | "rows">): boolean {
+  return view.mode === "make" && view.rows.length > 0;
+}
+
+/**
+ * Whether the model writes a meal's steps: a made meal with ingredients that
+ * does not eat from a prepped box. A box meal's steps are the program's
+ * (finish/finishing.ts), so no call is made for it.
+ */
+export function modelWritesRecipe(view: Pick<MealView, "mode" | "rows" | "pot">): boolean {
+  return hasRecipe(view) && !eatsBox(view);
+}
+
+/** The request for one made meal, or null for a meal whose steps the model does not write. */
+export function recipeRequest(view: MealView, profile: Profile, language: Locale): RecipeRequest | null {
+  if (!modelWritesRecipe(view)) return null;
+  const rows = view.rows.map((r) => ({ foodId: r.foodId, name: r.name, grams: r.grams, units: r.units }));
+  const pot = recipePot(view.pot);
+  return {
+    key: recipeKey(view.name, rows, profile.kitchen, language, pot),
+    name: view.name,
+    flavour: view.flavourLabel,
+    minutes: view.minutes,
+    method: view.method,
+    rows,
+    kitchen: profile.kitchen,
+    effort: profile.effort,
+    language,
+    pot,
+  };
+}
+
+const EFFORT_LINE: Record<Effort, string> = {
+  simple:
+    "The reader chose the simple level: keep to the method line, no extra techniques, one pan or tray where the dish allows, 3 or 4 steps.",
+  homestyle: "The reader chose the home-style level: a little more care is welcome, but nothing a home cook would not do.",
+};
+
+/** The system prompt. */
+export function recipeSystemPrompt(request: Pick<RecipeRequest, "effort" | "language"> & { kitchen?: readonly string[] }): string {
+  const language = languageName(request.language);
+  return [
+    `Write the steps in ${language}.`,
+    "",
+    "You write the cooking steps for one meal of a meal plan. The reader follows them in their own kitchen, one step at a time, so every step has to be doable exactly as written with the equipment they have.",
+    "",
+    "Steps:",
+    "- 3 to 6 steps, in the order the reader does them, each one or two short sentences. Say the heat and the minutes. Use waiting time (while the oven heats, cut the vegetables).",
+    "- The listed seasoning (a dry blend, a jar of sauce) is the dish's flavour. It goes on or in as it comes from the jar or packet: rubbed on, sprinkled over or stirred in. Never mix a sauce from several bottles.",
+    "- Use only the listed ingredients, plus salt, pepper, cooking oil and water. No fresh ginger, garlic, scallion, chilli or herbs and no sauce or condiment that is not on the list. Most blends are already salted.",
+    SALT_LINE,
+    "- When the plan's method line has the meat rubbed or marinated the night before, make that the first step: say plainly that it is done the evening before and that the meat waits covered in the fridge overnight. The steps after it are the day itself. Otherwise the seasoning goes on just before cooking.",
+    "- Do not repeat the grams from the ingredient list: the list is printed right above the steps. A small measure that is not on the list (2 spoons of water) is fine.",
+    "- Write to the reader's kitchen as they described it and keep to its limits. If the steamer rack holds one bun, steam one and heat the rest another way. Frozen steamed buns go straight onto the rack, no thawing. If the dish wants a tool they do not have, use one they do.",
+    donenessLine(ownsThermometer(request.kitchen)),
+    PRESSURE_WATER_LINE,
+    `- ${EFFORT_LINE[request.effort]}`,
+    "- Some meals cook a pot of meat that several meals eat from, or eat one box of such a pot. The message says which and what to write. The app adds the step that packs the pot into boxes and says where each box is kept: never write packing, storage times or which day a box is for.",
+    "",
+    `Write every sentence in ${language}. The dish name, the method line, the ingredient names, the pot and the kitchen notes may be in another language, often Chinese: that is how the plan stores them, not the language to answer in. Translate what you use and still write every step in ${language}.`,
+    "",
+    "Reply with one JSON object and nothing else:",
+    '{"steps": ["…", "…"]}',
+  ].join("\n");
+}
+
+// What the user message says about the pot, after the ingredients.
+function potLines(pot: RecipePot): string[] {
+  if (pot.cooks) {
+    return [
+      `This meal cooks a pot: ${pot.name}, ${pot.rawG} g of raw ${pot.food}. How: ${pot.method}`,
+      `The pot feeds ${pot.count} meals and this one eats its share now; the ingredient list gives this meal's share of the ${pot.food}.`,
+      `Write the steps for cooking the whole ${pot.rawG} g, then for putting this meal together with its fresh parts. Stop before packing the rest: the app adds that step.`,
+    ];
+  }
+  if (pot.storage === "fresh") {
+    return [
+      `This meal eats from a pot cooked earlier today: ${pot.name} (${pot.food}), cooked like this: ${pot.method}.`,
+      `The ${pot.food} is already cooked; the list gives this meal's share by its raw weight. Do not cook it again: take this meal's share from the pot, heat it through if it has cooled, and make the fresh parts (the staple, the vegetables).`,
+    ];
+  }
+  const where =
+    pot.storage === "freezer"
+      ? "It was moved from the freezer to the fridge last night and has thawed."
+      : "It is in the fridge.";
+  return [
+    `This meal eats one box from a pot cooked earlier: ${pot.name} (${pot.food}), cooked like this: ${pot.method}. ${where}`,
+    `The ${pot.food} is already cooked; the list gives its raw weight. Do not cook it again: take the box out, heat it through with this kitchen, and make the fresh parts (the staple, the vegetables) while it heats.`,
+  ];
+}
+
+/** A line's amount in a prompt: its grams, or "a pinch" for a spice the meal uses under a gram of. */
+export function promptAmount(grams: number): string {
+  return grams >= 1 ? `${grams} g` : "a pinch";
+}
+
+/** The user message: the meal, numbered, then the pot it cooks or eats from. */
+export function recipeUserText(request: RecipeRequest): string {
+  const lines = [
+    `Write the steps in ${languageName(request.language)}, whatever language the lines below are in.`,
+    "",
+    `Dish: ${request.name}`,
+    ...(request.flavour ? [`Flavour: ${request.flavour}`] : []),
+    ...(request.minutes !== null ? [`Hands-on minutes: ${request.minutes}`] : []),
+    ...(request.method ? [`The plan's one-line method: ${request.method}`] : []),
+    "Ingredients for this one meal:",
+    ...request.rows.map((r, i) => `${i + 1}. ${r.name} ${promptAmount(r.grams)}${r.units ? ` (${r.units})` : ""}`),
+    "Kitchen:",
+    ...(request.kitchen.length > 0 ? request.kitchen.map((k) => `- ${k}`) : ["- (not described: assume a stove, one pot, one pan and a microwave)"]),
+    ...(request.pot ? ["", ...potLines(request.pot)] : []),
+  ];
+  return lines.join("\n");
+}
+
+// "1. ", "1、", "Step 1:", "第1步：" — the page numbers the steps itself.
+const LEADING_NUMBER = /^\s*(?:step\s*\d+\s*[:.：]|第\s*\d+\s*步\s*[:：]?|\d+\s*[.)、:：])\s*/i;
+
+function sentence(raw: unknown): string {
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+/**
+ * The model's reply as a recipe, or an error. Steps that are not text are
+ * dropped and a leading number is taken off. Anything else in the reply is
+ * ignored.
+ */
+export function parseRecipe(text: string, tally?: ParseTally): { ok: true; value: RecipeText } | { ok: false; error: string } {
+  const read = readObject(text);
+  if (!read.ok) return read;
+  const raw = read.value.steps;
+  const all = Array.isArray(raw) ? raw : [];
+  const steps = all.map((s) => sentence(s).replace(LEADING_NUMBER, "").trim()).filter((s) => s.length > 0);
+  if (tally) {
+    tally.seen += all.length;
+    tally.kept += steps.length;
+  }
+  if (steps.length === 0) {
+    if (tally) tally.fail = all.length === 0 ? "missing-field" : "empty-result";
+    return { ok: false, error: "no steps in reply" };
+  }
+  return { ok: true, value: { steps } };
+}
+
+/**
+ * The last step of the meal a pot is cooked at, by the program: how many boxes
+ * the rest goes into, which go in the fridge and which in the freezer, each
+ * marked with its day and meal. Null for any other meal.
+ */
+export function packStep(portion: PotPortion | null): string | null {
+  if (!portion?.cooks || portion.boxes.length === 0) return null;
+  const sep = t("meals.recipe.listSep");
+  const names = (storage: PotStorage) =>
+    portion.boxes
+      .filter((b) => b.storage === storage)
+      .map((b) => boxName(b.ref))
+      .join(sep);
+  const fridge = names("fridge");
+  const freezer = names("freezer");
+  const where = [
+    ...(fridge ? [t("meals.recipe.packFridge", { boxes: fridge })] : []),
+    ...(freezer ? [t("meals.recipe.packFreezer", { boxes: freezer })] : []),
+  ].join(t("meals.recipe.packJoin"));
+  return t("meals.recipe.pack", { count: portion.boxes.length, where });
+}

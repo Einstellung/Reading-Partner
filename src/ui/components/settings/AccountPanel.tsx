@@ -27,7 +27,6 @@ import {
   type ProviderInfo,
 } from "../../../ai";
 import { useT } from "../../../i18n";
-import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 import { type Settings, type ThinkingSetting } from "../../../platform/app/settings";
 import { CARD } from "./cardStyles";
 import { ChoiceField, FieldGrid } from "./ChoiceField";
@@ -47,13 +46,9 @@ const VOICE_FRONT_THINKING_OPTIONS: ThinkingSetting[] = ["off", "low"];
 export default function AccountPanel({
   settings,
   onSettingsChange,
-  oldBriefing = OLD_BRIEFING_UI_ENABLED,
 }: {
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
-  // Whether the old daily briefing's Screening and Analysis are offered
-  // (info/old-briefing.ts). The switch's value unless a test says otherwise.
-  oldBriefing?: boolean;
 }) {
   const t = useT();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -206,29 +201,6 @@ export default function AccountPanel({
               />
             </FieldGrid>
             <p className="m-0 text-xs text-faint-foreground">{t("settings.account.voiceFrontHint")}</p>
-          </div>
-        </SettingsSection>
-      )}
-
-      {/* Only the old daily briefing reads these (info/old-briefing.ts). */}
-      {connectedProviders.length > 0 && oldBriefing && (
-        <SettingsSection title={t("settings.account.briefing")}>
-          <div className={CARD}>
-            <FieldGrid>
-              <ThinkingField
-                label={t("settings.account.screening")}
-                value={settings.briefingScreenThinking}
-                onChange={(briefingScreenThinking) =>
-                  onSettingsChange({ ...settings, briefingScreenThinking })
-                }
-              />
-              <ThinkingField
-                label={t("settings.account.analysis")}
-                value={settings.briefingThinking}
-                onChange={(briefingThinking) => onSettingsChange({ ...settings, briefingThinking })}
-              />
-            </FieldGrid>
-            <p className="m-0 text-xs text-faint-foreground">{t("settings.account.briefingHint")}</p>
           </div>
         </SettingsSection>
       )}

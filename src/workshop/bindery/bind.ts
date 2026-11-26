@@ -163,7 +163,7 @@ function withLanguage(m: Manuscript): Manuscript {
 /**
  * The third step alone: the pictures and the EPUB for a manuscript readMaterial
  * passed. For a caller that read the material first and decided afterwards to
- * keep it (info/links reads a page, shows it to a model, and files it only when
+ * keep it (reading/ingest/links reads a page, shows it to a model, and files it only when
  * the model asks), so the page is not read twice. bind is readMaterial then
  * this, so either way the bytes are the same.
  */

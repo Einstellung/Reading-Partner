@@ -171,9 +171,8 @@ test("a conversation row's sample is the file its store key names, and nothing e
 // list under it: deciding whether a new topicId reaches disk, and under which
 // kind, is the point.
 const STORES_A_TOPIC_ID: Record<string, readonly PalaceKind[]> = {
-  "info/labs/types.ts": ["info-labs"],
   "memory/usage/model-calls.ts": ["model-calls"],
-  "platform/app/threads.ts": ["info-thread", "conversation", "info-meals-thread"],
+  "platform/app/threads.ts": ["conversation", "info-meals-thread"],
   "reading/ingest/intake-store.ts": ["link-intake"],
   "reading/rehearsal/types.ts": ["rehearsal"],
   "reading/retell/types.ts": ["retell"],
@@ -213,7 +212,6 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "reading/translate/book-run.ts",
   "reading/translate/tool-live.ts",
   "reading/translate/tool.ts",
-  "ui/components/info/saveArticle.ts",
   // The phone's shelf and reader carry the topic a book was opened from, so
   // leaving it can mark that file as read (docs/70). Nothing here is a record.
   // The lesson carries it for the same reason and one more: the prompt's

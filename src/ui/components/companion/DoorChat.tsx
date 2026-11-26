@@ -32,17 +32,12 @@
 // view's, so closing this leaves it running. Opened during a call, the composer
 // is a bar that says what the call is doing and the button beside it ends the
 // call; there is no typing while one is up. What is said in the call is written
-// into today's conversation as it settles (info/briefer/call-transcript.ts) and
+// into today's conversation as it settles (soul/voice/live/call-transcript.ts) and
 // arrives here like any other line. Where a call cannot start the button is
 // grey, and a tap on it says why in one line (door-voice.ts).
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
-import type { Fulltext } from "../../../fulltext/types";
-import type { Citation } from "../../../reading/prep/anchors";
-import { createQuoteCheck } from "../../../reading/session/citations";
-import { CitationContext, QuoteCheckContext } from "../markdown/Markdown";
-import { doorCitationJump, openingReplyTs, useOpenIssue, type IssueQuote } from "./issue-context";
 
 import { BOX_CARD_DISMISS_OP, BOX_CARD_FOLLOW_OP } from "../../../box/card";
 import type { BoxItem } from "../../../box/types";
@@ -51,7 +46,7 @@ import { doorDate } from "../../../soul";
 import { IconClose, IconEnd, IconExpand, IconShrink, IconWave } from "../base/icons";
 import type { CardAction } from "../chat/chatParts";
 import CallView from "../chat/call/CallView";
-import { holdInView, revealSent } from "../common/stick-to-bottom";
+import { holdInView } from "../common/stick-to-bottom";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { ShellKeyboardContext, useShellKeyboard, type ShellKeyboard } from "../common/useKeyboardInset";
@@ -104,9 +99,6 @@ export function DoorChat({
 	focus,
 	box,
 	onOpenDocument,
-	openedFor,
-	quote = null,
-	onQuoteDone,
 	voice,
 	onClose,
 }: {
@@ -124,12 +116,6 @@ export function DoorChat({
 	/** The row to bring into view once the conversation is drawn (a box card's jump). Read once, at mount. */
 	focus?: DoorFocus;
 	onOpenDocument?: (doc: IntakeOpenDocument) => void;
-	/** The brief whose opening brought the conversation up; read once, at mount. */
-	openedFor?: string;
-	/** A passage asked about in the brief, shown above the composer and sent with the next line. */
-	quote?: IssueQuote | null;
-	/** The passage was sent or put away. */
-	onQuoteDone?: () => void;
 	/** Voice chat: the button beside the composer, and the bar in its place during a call. */
 	voice?: DoorVoice;
 	onClose: () => void;
@@ -140,37 +126,7 @@ export function DoorChat({
 	const chat = useDoorChat({
 		...(date ? { date } : {}),
 		...(onOpenDocument ? { onOpenDocument } : {}),
-		...(openedFor ? { openedFor } : {}),
 	});
-
-	// With a brief open, the companion's page citations are the brief's: checked against
-	// its text, and a tap puts the conversation away and takes the reader to the
-	// passage (issue-context.ts). Otherwise whatever the shell provides stands.
-	const issue = useOpenIssue();
-	const [issueText, setIssueText] = useState<Fulltext | null>(null);
-	useEffect(() => {
-		let live = true;
-		setIssueText(null);
-		void issue
-			?.fulltext()
-			.then((text) => {
-				if (live) setIssueText(text);
-			})
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, [issue]);
-	const verifyQuote = useMemo(() => createQuoteCheck(issueText), [issueText]);
-	const onCitation = useCallback(
-		(c: Citation) => {
-			const jump = doorCitationJump(c, issue !== null);
-			if (!jump || !issue) return;
-			onClose();
-			issue.jump(jump.pageIndex, jump.quote);
-		},
-		[issue, onClose],
-	);
 
 	// Today's conversation carries the box; an earlier day opened from a card
 	// is that day as it was.
@@ -260,30 +216,6 @@ export function DoorChat({
 		};
 	}, [selector, chat.ready, chat.messages.length]);
 
-	// The brief's opening, once it lands, is put near the top of the conversation
-	// so what follows it (the questions) is in view. Once, not a follow: nothing
-	// after it moves the list (common/stick-to-bottom.ts revealSent).
-	const [cameUpAt] = useState(() => Date.now());
-	const openingPlaced = useRef(false);
-	useEffect(() => {
-		if (!openedFor || openingPlaced.current) return;
-		const ts = openingReplyTs(chat.messages, cameUpAt);
-		if (ts === null) return;
-		let inner = 0;
-		const outer = requestAnimationFrame(() => {
-			inner = requestAnimationFrame(() => {
-				const row = document.querySelector(`[data-reply-ts="${ts}"]`);
-				if (!row) return;
-				openingPlaced.current = true;
-				revealSent(row);
-			});
-		});
-		return () => {
-			cancelAnimationFrame(outer);
-			cancelAnimationFrame(inner);
-		};
-	}, [openedFor, chat.messages, cameUpAt]);
-
 	// The greyed button's reason, up for a moment after a tap on it.
 	const [voiceNote, setVoiceNote] = useState<string | null>(null);
 	useEffect(() => {
@@ -291,7 +223,6 @@ export function DoorChat({
 		const timer = window.setTimeout(() => setVoiceNote(null), VOICE_NOTE_MS);
 		return () => window.clearTimeout(timer);
 	}, [voiceNote]);
-	const voiceLive = voice?.live ?? false;
 	const voiceButton = voice ? (
 		voice.live ? (
 			<Button
@@ -382,45 +313,16 @@ export function DoorChat({
 		</div>
 	);
 
-	// The passage an Ask in the brief brought, above the composer until it is
-	// sent with the question or put away.
-	const quoteStrip = quote && !voiceLive ? (
-		<div className="mb-2 flex items-start gap-1 rounded-xl border border-border-subtle bg-background py-1.5 pl-3 pr-1">
-			<p className="m-0 line-clamp-3 flex-1 py-1 text-[13px] italic leading-snug text-muted-foreground">
-				“{quote.text}”
-			</p>
-			<Button
-				type="button"
-				variant="ghost"
-				size="icon"
-				aria-label={t("shell.door.dropQuote")}
-				title={t("shell.door.dropQuote")}
-				onClick={onQuoteDone}
-				className="text-muted-foreground"
-			>
-				<IconClose size={14} />
-			</Button>
-		</div>
-	) : undefined;
-
 	const view = (
 		<CallView
 			messages={rows}
-			onSend={(text) => {
-				void chat.send(text, quote ?? undefined);
-				if (quote) onQuoteDone?.();
-			}}
+			onSend={(text) => void chat.send(text)}
 			footer={
 				voiceNote ? (
-					<>
-						{quoteStrip}
-						<p role="status" className="m-0 mb-2 px-1 text-[12.5px] text-muted-foreground">
-							{voiceNote}
-						</p>
-					</>
-				) : (
-					quoteStrip
-				)
+					<p role="status" className="m-0 mb-2 px-1 text-[12.5px] text-muted-foreground">
+						{voiceNote}
+					</p>
+				) : undefined
 			}
 			beside={voiceButton}
 			replaceComposer={voiceBar}
@@ -436,13 +338,6 @@ export function DoorChat({
 			stickKey={chat.stickKey}
 			header={header}
 		/>
-	);
-	const cited = issue ? (
-		<CitationContext.Provider value={onCitation}>
-			<QuoteCheckContext.Provider value={verifyQuote}>{view}</QuoteCheckContext.Provider>
-		</CitationContext.Provider>
-	) : (
-		view
 	);
 
 	if (form === "sheet") {
@@ -460,7 +355,7 @@ export function DoorChat({
 				>
 					<div ref={sheetRef} className="flex h-full flex-col bg-chat-surface p-safe">
 						<BottomSheetLayer />
-						{cited}
+						{view}
 					</div>
 				</div>
 			</OverlaySurface>
@@ -493,7 +388,7 @@ export function DoorChat({
 						if (event.key === "Escape") onClose();
 					}}
 				>
-					<ShellKeyboardContext.Provider value={inPanel}>{cited}</ShellKeyboardContext.Provider>
+					<ShellKeyboardContext.Provider value={inPanel}>{view}</ShellKeyboardContext.Provider>
 				</div>
 			</div>
 		</OverlaySurface>

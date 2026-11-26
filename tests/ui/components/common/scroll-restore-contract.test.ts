@@ -3,24 +3,15 @@
 // at all, whether the surfaces that must stay out of the memory are still out of
 // it, and whether anything still empties the store.
 //
-// The info call's key and the entry it drops on unmount are its hook's, so they
-// are rendered and asserted on. The rest is read off the source: happy-dom
+// It is read off the source: happy-dom
 // reports 0 for every scroll metric, does not clamp scrollTop and fires no
 // scroll events, so a mount/unmount test of the pin itself would be faking both
 // mechanisms it claims to check, and App is not a component a test can stand up.
 
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { recallScroll, rememberScroll } from "../../../../src/ui/components/common/scroll-memory";
-import { infoStickKey, useInfoCall } from "../../../../src/ui/components/info/use-info-call";
-import type { BriefingView } from "../../../../src/info/briefer/reader";
-import type { InfoCallAnchor } from "../../../../src/info/briefer/anchors";
-import { useDom } from "../../../support/dom";
-
-const { cleanup, renderHook } = await useDom();
-afterEach(cleanup);
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../../src");
 
@@ -36,7 +27,6 @@ function read(path: string): string {
 const chat = read("ui/components/chat/MessageList.tsx");
 const callView = read("ui/components/chat/call/CallView.tsx");
 const app = read("App.tsx");
-const infoCall = read("ui/components/info/InfoCall.tsx");
 
 test("the list binds the pin to the memory for the key it was given", () => {
   expect(chat).toMatch(/stickToBottom\(list, \{\s*\.\.\.scrollMemory\(stickKey\),/);
@@ -57,55 +47,6 @@ test("the reading call names the conversation and clears the store when it ends"
 
 // The least an info call needs to mount: nothing here is read by the key or the
 // unmount, and the thread it tries to load is not on disk in this runner.
-const ANCHOR: InfoCallAnchor = {
-  threadId: "briefing",
-  emptyTitle: "",
-  placeholder: "",
-  desk: [],
-  position: { title: "", line: null },
-};
-
-const VIEW = {
-  snapshot: () => ({}),
-  subscribe: () => () => {},
-  init: async () => {},
-  stop: () => {},
-  article: async () => ({}),
-  request: () => ({}),
-  notices: () => [],
-  collectorSites: () => null,
-} as unknown as BriefingView;
-
-function mountInfoCall(dateKey: string) {
-  return renderHook(() =>
-    useInfoCall({ anchor: ANCHOR, dateKey, view: VIEW, collecting: false, pipCards: true, onHangUp: () => {} }),
-  );
-}
-
-test("an info call keys by the date too", () => {
-  // The briefing thread's id is a constant, so two days would share one slot.
-  expect(infoStickKey("2026-08-21", "briefing")).toBe("info:2026-08-21:briefing");
-  expect(infoStickKey("2026-08-22", "briefing")).not.toBe(infoStickKey("2026-08-21", "briefing"));
-  // And the prefix keeps it out of the reading thread-id space, where a raw
-  // thread id is the whole key.
-  expect(infoStickKey("2026-08-21", "briefing")).not.toBe("briefing");
-});
-
-test("the hook hands the list that key, and drops the entry on unmount", () => {
-  const view = mountInfoCall("2026-08-21");
-  const key = view.result.current.stickKey;
-  expect(key).toBe(infoStickKey("2026-08-21", ANCHOR.threadId));
-  rememberScroll(key, { top: 240, stuck: false });
-  // An info call ends by unmounting, where a reading call ends at call === null
-  // and App empties the store.
-  view.unmount();
-  expect(recallScroll(key)).toBe(null);
-});
-
-test("the info call's list is given the key its hook made", () => {
-  expect(infoCall).toContain("stickKey={call.stickKey}");
-});
-
 test("the surfaces that are not remembered pass no key", () => {
   // The corner bubble is a different surface and is not unmounted by the swap;
   // a key on it would let it read the call window's position. The retell and the

@@ -14,9 +14,8 @@ import type { CardPayload } from "../chat/chatParts";
 import type { Settings } from "../../../platform/app/settings";
 import { liveWebSearchTools } from "../../../websearch/tool";
 import { webSearchPrompt } from "../../../websearch/prompt";
-import { buildReadPageTool } from "../../../info/sources/read-page-tool";
+import { buildReadPageTool } from "../../../sources/read-page-tool";
 import { infoFetch } from "../../../workshop/extract/http";
-import { topicSearchDoorTools, type TopicSearchDoorPorts } from "../../../info/topic-search/live";
 import { liveBackgroundStatusTool } from "../../../legion/status/live";
 
 export interface DoorToolPorts {
@@ -29,23 +28,6 @@ export interface DoorToolPorts {
   links: readonly string[];
   /** Which provider and models this turn runs on: web_search mounts only where the provider can search. */
   settings: Pick<Settings, "defaultProviderId" | "defaultModelId" | "everydayModelId">;
-  /** The reader's lines so far, oldest first: where a topic search's concern takes its evidence. */
-  readerLines: TopicSearchDoorPorts["readerLines"];
-  /** The newest topic-search card on screen, and its Apply: confirm_topic_search (use-door-chat.ts). */
-  latestTopicSearchCard: TopicSearchDoorPorts["latestCard"];
-  applyTopicSearchCard: TopicSearchDoorPorts["applyCard"];
-  /** The seed cards on screen, oldest first: propose_topic_search takes the confirmed ones (docs/info/91). */
-  seedCards: TopicSearchDoorPorts["seedCards"];
-  /** The newest confirm-lines card on screen and its button, and where a study's book is: the study tools (docs/info/91). */
-  latestLinesCard: TopicSearchDoorPorts["latestLinesCard"];
-  sendLines: TopicSearchDoorPorts["sendLines"];
-  studyBook: TopicSearchDoorPorts["studyBook"];
-  /**
-   * Whether Intel's Briefs and studies are shown on this device (platform/experiments).
-   * Off, the topic-search and study tools are not mounted: the door is their way in,
-   * and about_app lists what is mounted. Left out, they are.
-   */
-  intel?: boolean;
 }
 
 export function doorTools(ports: DoorToolPorts): AgentTool[] {
@@ -62,19 +44,6 @@ export function doorTools(ports: DoorToolPorts): AgentTool[] {
       topics: () => listTopics(),
       raiseCard: (card) => ports.raiseCard("intake", card),
     }),
-    // Looking up a study's seed papers, drafting, confirming, changing and stopping a topic search, resuming X, and
-    // revising and ending a study (docs/info/88, 91); the cards' presses are in use-door-chat.ts.
-    ...(ports.intel === false ? [] : topicSearchDoorTools({
-      threadId: ports.threadId,
-      readerLines: ports.readerLines,
-      raiseCard: (card) => ports.raiseCard("topic-search", card),
-      latestCard: ports.latestTopicSearchCard,
-      applyCard: ports.applyTopicSearchCard,
-      seedCards: ports.seedCards,
-      latestLinesCard: ports.latestLinesCard,
-      sendLines: ports.sendLines,
-      studyBook: ports.studyBook,
-    })),
     // How background work is getting on: queued, running, finished, on which device (legion/status).
     liveBackgroundStatusTool(),
   ];

@@ -32,7 +32,7 @@ function persist(over: Partial<Settings>): void {
   );
 }
 
-const EVERYDAY: ThinkingKind[] = ["prep", "distill", "briefing", "briefing-screen", "meals"];
+const EVERYDAY: ThinkingKind[] = ["prep", "distill", "meals"];
 const TALK: ThinkingKind[] = ["chat"];
 
 // The table itself, read straight. Which work is everyday is a decision made in
@@ -99,18 +99,16 @@ test("each kind reads its own effort setting", async () => {
     defaultModelId: "chat-model",
     chatThinking: "high",
     prepThinking: "medium",
-    briefingScreenThinking: "off",
-    briefingThinking: "low",
   });
   expect((await resolveModel("chat")).reasoning).toBe("high");
   expect((await resolveModel("prep")).reasoning).toBe("medium");
   expect((await resolveModel("distill")).reasoning).toBe("high");
-  // "off" means no reasoning is passed at all, not a level named off.
-  expect((await resolveModel("briefing-screen")).reasoning).toBeUndefined();
-  expect((await resolveModel("briefing")).reasoning).toBe("low");
   // The meals turn borrows the conversational effort rather than adding a
   // setting of its own.
   expect((await resolveModel("meals")).reasoning).toBe("high");
+  // "off" means no reasoning is passed at all, not a level named off.
+  persist({ defaultModelId: "chat-model", prepThinking: "off" });
+  expect((await resolveModel("prep")).reasoning).toBeUndefined();
 });
 
 // --- a model the provider has dropped ----------------------------------------

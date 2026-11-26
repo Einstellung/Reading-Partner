@@ -94,7 +94,7 @@ export interface PlaceSession {
    */
   bell(after: number, request: PlaceBellRequest): Promise<BookTurnEnd> | null;
   /**
-   * Run a voice call's turn here (info/briefer/voice-durable.ts), ending as a
+   * Run a voice call's turn here (meals/conversation/call.ts), ending as a
    * bell's does; every view's rows go to `onRows` as well, for the call to
    * speak. Null when a turn is running; `ended` rejects when the turn could
    * not start.

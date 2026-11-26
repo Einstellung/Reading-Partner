@@ -12,7 +12,7 @@
 //              must never reach up into a domain, because that is how ai/ ended
 //              up in a cycle with four of them (reading-turn assembly used to
 //              live there).
-//   domain     one product area each (info/, reading/ and the units inside it),
+//   domain     one product area each (meals/, reading/ and the units inside it),
 //              free to use platform, capability and each other, as long as the
 //              graph stays acyclic.
 //   ui         React components (ui/components and the directories inside it).
@@ -54,7 +54,6 @@ const LAYER: Record<string, Layer> = {
   "i18n/messages": "platform",
   "i18n/messages/library": "platform",
   "i18n/messages/reader": "platform",
-  "i18n/messages/info": "platform",
   "i18n/messages/meals": "platform",
   "i18n/messages/chat": "platform",
   "i18n/messages/settings": "platform",
@@ -150,9 +149,8 @@ const LAYER: Record<string, Layer> = {
   "legion/durable": "capability",
   memory: "capability",
   // The nightly pass that turns observations into statements. A capability like
-  // the rest of memory: the collector election that decides which machine runs
-  // it lives in info/, and the call goes that way round — info calls dream,
-  // dream never reaches for info.
+  // the rest of memory: whatever decides when it runs calls dream, and dream
+  // never reaches back.
   // Which conversations are raw material for a distillation pass, and what the
   // sweep owes each of them (docs/58). A capability with a registry in it: the
   // domains register their own kinds at startup, so nothing here reaches up into
@@ -168,7 +166,6 @@ const LAYER: Record<string, Layer> = {
   "memory/dream": "capability",
   "memory/live": "capability",
   "memory/observations": "capability",
-  "memory/profile": "capability",
   // Statements about the reader, on top of the episodic observations. Same
   // layer as memory/observations and one direction only: statements read
   // observations, observations never read statements.
@@ -187,7 +184,7 @@ const LAYER: Record<string, Layer> = {
   // How the soul speaks aloud and listens (docs/71): the full-duplex call, its
   // state machine, the native bridge, turn detection and the text a TTS voice
   // is handed. A capability with the soul because the voice is the soul's on
-  // whatever desk it speaks over; info/briefer holds the wiring of one caller.
+  // whatever desk it speaks over.
   "soul/voice": "capability",
   // The back half of a voice call (docs/companion/136): the `think` kind, the
   // call's numbered list of handed-off tasks, and the seam the front calls.
@@ -202,7 +199,7 @@ const LAYER: Record<string, Layer> = {
   // A call wired to the device (docs/68): the plugin, the front and the back
   // half in one builder, the writer of its lines, and the call held at the
   // door. Its own node because it reads soul/voice/front, which reads
-  // soul/voice; info/briefer hands it the briefing's call.
+  // soul/voice.
   "soul/voice/live": "capability",
   // Turning raw material into usable material (docs/85), grouped by what is
   // done to it rather than by who asks: the secretary, reading and the meals
@@ -221,86 +218,49 @@ const LAYER: Record<string, Layer> = {
   // cover. Reading's EPUB reader imports the sanitizer and the zip from here.
   "workshop/bindery": "capability",
 
-  info: "domain",
-  // The nouns the info side is cut along (docs/63), in the order they may depend
-  // on each other: cable and labs are leaves and reach for nothing else under
-  // info, then picture (which may read labs), then sources, then
-  // collect (what the sources published and what survived screening), analysis
-  // (what a room makes of its cables), boxes (what is assembled out of it),
-  // briefer (everything the AI says about it) and program (the day's wiring).
-  // Only the acyclic test enforces that; the order itself is a reading rule.
-  "info/analysis": "domain",
-  "info/boxes": "domain",
-  "info/briefer": "domain",
-  "info/cable": "domain",
-  "info/collect": "domain",
-  "info/labs": "domain",
-  // The meals line (docs/73): a research room by the reasoning of docs/63,
-  // with its own store rather than a Lab record, because it claims no sources
-  // and must not enter the collection pipeline. It reads nothing else under
-  // info/, so it is a leaf.
-  "info/meals": "domain",
+  // The meals line (docs/73): the week's plan, the dish library, the prep and
+  // the standing conversation about them.
+  "meals": "domain",
   // The headless nutrition core: targets from body data, the food table, the
-  // gram solver. Imports nothing from info/meals, which imports it.
-  "info/meals/nutrition": "domain",
+  // gram solver. Imports nothing from meals, which imports it.
+  "meals/nutrition": "domain",
   // The week's own data: the plan and its charter, the shopping list derived
   // from it, the solver and the persisted store.
-  "info/meals/plan": "domain",
+  "meals/plan": "domain",
   // The dish library (docs/671 菜库): the dish type, method categories and the
   // storage derived from them, the reference serving and the entry check.
-  "info/meals/dishes": "domain",
+  "meals/dishes": "domain",
   // The library-based plan core (docs/671): the draft the model hands in, the
   // per-person grams, the draft checks and the shopping list in whole packs.
-  "info/meals/planner": "domain",
+  "meals/planner": "domain",
   // Everything that fetches or caches a dish or ingredient photo.
-  "info/meals/photos": "domain",
+  "meals/photos": "domain",
   // One made meal's recipe page: the prompt, the stored recipes, the call.
-  "info/meals/recipe": "domain",
+  "meals/recipe": "domain",
   // The day and week screens' text and layout, plus onboarding.
-  "info/meals/screen": "domain",
+  "meals/screen": "domain",
   // What a meal eaten from a prepped box shows on the eating day, and the
   // evening-before notes (docs/671 吃的那天): program-written, no model.
-  "info/meals/finish": "domain",
+  "meals/finish": "domain",
   // The prep session's timeline (docs/671 时间线与语音): the steps, the
   // scheduler, the running state and the words read out.
-  "info/meals/timeline": "domain",
-  "info/picture": "domain",
-  "info/program": "domain",
-  "info/sources": "domain",
-  // The source plugins (docs/69): one file per library (arXiv, GitHub, Hugging
-  // Face, Semantic Scholar, OpenAlex, PubMed) plus each library's client. Under
-  // sources because a source is the bureau's (docs/63); a directory of its own
-  // because each plugin knows one API. reading/papers queries the libraries
-  // through here too — info is reading's inlet, and the import runs that way.
-  "info/sources/plugins": "domain",
-  // A question the briefing did not answer, handed to a legion run (docs/63).
-  // It reads what the rest of info already filed — the cables, the article
-  // bodies, a room's picture — and the briefer only names its kind, so the edge
-  // runs briefer -> tasking and never back.
-  "info/tasking": "domain",
-  // Topic searches (docs/info/88): the config, the drafting card and the door
-  // tools' logic. Mounted at the door by ui/components/companion/door-tools.ts.
-  "info/topic-search": "domain",
-  // AI-driven link intake (docs/86): the link agent's prompt, tools, candidate
-  // table and caps, the reader registry, the receipt and the source records.
-  // Knows no site and no reader: info/x registers into it, reading files for it.
-  "info/links": "domain",
-  // An X link read (docs/84): the embed endpoint, the permalink page in the
-  // hidden webview, and the post's record; registered as a reader of
-  // info/links, and still the rule-based fan-out until the switch (docs/86).
-  "info/x": "domain",
-  // A topic search's scoring (docs/88): local relevance, weighted RRF, X
-  // engagement, the final score, events and their clusters, and the 30-day
-  // dedupe. Pure; reads the arXiv, GitHub and X link parsers for event keys.
-  "info/rank": "domain",
-  // The material registry of topic searches and dossiers (docs/info/88 材料登记):
-  // M<n> numbers, sections, the cached bodies. Reads info/rank's canonical URL.
-  "info/dossier": "domain",
-  // The nightly brief (docs/info/88 「简报书」): the night's topic-search results
-  // planned and rendered as one EPUB, filed, attached, indexed on the info shelf
-  // and handed to the box. Reads topic-search's result types; topic-search
-  // never imports it (the runs reach it through a port the shell hands in).
-  "info/issue": "domain",
+  "meals/timeline": "domain",
+  // The meals conversation (docs/73): its standing thread's anchor and the
+  // prep's voice call.
+  "meals/conversation": "domain",
+  // The libraries the app looks things up in (docs/69): each library's client
+  // (arXiv, Semantic Scholar, OpenAlex, PubMed) and the site adapters the
+  // bindery reads a library's own links with (arXiv, GitHub, Hugging Face,
+  // Drive), plus read_page. reading/papers and reading's link intake reach
+  // them here.
+  sources: "domain",
+  // This device's presence among the reader's machines: the claim it writes
+  // (legion/claim) and the daily round a claiming machine runs, which carries
+  // memory's dream where the election says and the prose conflict sweep
+  // everywhere the round runs. Before Intel was removed it was the collector's.
+  presence: "domain",
+  // One file per library; a directory of its own because each plugin knows one API.
+  "sources/plugins": "domain",
   reading: "domain",
   "reading/chapters": "domain",
   // A reading turn's own corner: the desk assembly's tool set and history
@@ -310,7 +270,7 @@ const LAYER: Record<string, Layer> = {
   // assembly) and reading/saved, never the other way — that direction is
   // what keeps the desk out of a cycle with the call state it feeds.
   "reading/turn": "domain",
-  // The articles the reader kept on the info side (docs/21), as their own
+  // The articles the reader kept (docs/21), as their own
   // corner: the store, the chat tools and the desk item that lays them
   // beside the open book. Reaches for nothing else under reading/, so the
   // desk (reading/desk.ts) and reading/turn can both depend on it.
@@ -360,6 +320,15 @@ const LAYER: Record<string, Layer> = {
   // around it — it reaches for workshop/extract, the library and the topic
   // store, and reading/epub reaches for none of them.
   "reading/ingest": "domain",
+  // AI-driven link intake (docs/86): the link agent's prompt, tools, candidate
+  // table and caps, the reader registry, the receipt and the source records.
+  // Knows no site and no reader: reading/ingest/x registers into it, and
+  // reading/ingest files for it.
+  "reading/ingest/links": "domain",
+  // An X link read (docs/84): the embed endpoint, the permalink page in the
+  // hidden webview, and the post's record; registered as a reader of
+  // reading/ingest/links.
+  "reading/ingest/x": "domain",
   "reading/lecture": "domain",
   // The phone's lesson (docs/71): a PDF taught in text, with no reader under
   // it. A domain of its own rather than a corner of reading/lecture — that
@@ -393,25 +362,21 @@ const LAYER: Record<string, Layer> = {
   "ui/components/chat/call": "ui",
   "ui/components/chat/voice": "ui",
   "ui/components/common": "ui",
-  "ui/components/info": "ui",
-  "ui/components/info/meals": "ui",
+  "ui/components/meals": "ui",
   "ui/components/lib": "ui",
   // The companion: its body, its motion maths and its two raster layers.
   "ui/components/companion": "ui",
   "ui/components/library": "ui",
   "ui/components/library/topic": "ui",
   "ui/components/markdown": "ui",
-  // The voice session's orb (docs/45). Its own directory rather than a file in
-  // info/: the display maths is the orb's, and the info screen that mounts it
-  // is one caller.
+  // The voice session's orb (docs/45): the display maths is the orb's, and a
+  // screen that mounts it is one caller.
   "ui/components/orb": "ui",
   "ui/components/phone": "ui",
   "ui/components/phone/gesture": "ui",
   "ui/components/phone/lesson": "ui",
   "ui/components/phone/reader": "ui",
   "ui/components/reader": "ui",
-  // A study's brief in the reader (docs/info/91 版本): versions, update strip, section sheet.
-  "ui/components/reader/study": "ui",
   "ui/components/reader/sidebar": "ui",
   "ui/components/rehearsal": "ui",
   "ui/components/retell": "ui",

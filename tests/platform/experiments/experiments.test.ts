@@ -4,11 +4,10 @@
 import { expect, test } from "bun:test";
 import en from "../../../src/i18n/messages/settings/en";
 import {
-  childrenOf,
   EXPERIMENTS,
   experimentsFor,
-  isEffective,
   isOn,
+  migrateExperiments,
   withExperiment,
 } from "../../../src/platform/experiments/registry";
 import { createDeviceStore, type DeviceIo, type DeviceSettings } from "../../../src/platform/app/device";
@@ -16,7 +15,7 @@ import { createDeviceStore, type DeviceIo, type DeviceSettings } from "../../../
 test("ids are unique", () => {
   const ids = EXPERIMENTS.map((e) => e.id);
   expect(new Set(ids).size).toBe(ids.length);
-  expect(ids).toEqual(["intel", "meals", "companion"]);
+  expect(ids).toEqual(["meals", "companion"]);
 });
 
 test("every name and summary key has English copy", () => {
@@ -29,9 +28,9 @@ test("every name and summary key has English copy", () => {
   }
 });
 
-test("the three entries are offered on every platform", () => {
+test("both entries are offered on every platform", () => {
   for (const platform of ["ios", "android", "macos", "windows", "linux", "unknown"]) {
-    expect(experimentsFor(platform).map((e) => e.id)).toEqual(["intel", "meals", "companion"]);
+    expect(experimentsFor(platform).map((e) => e.id)).toEqual(["meals", "companion"]);
   }
 });
 
@@ -43,29 +42,34 @@ test("absent means off, and only true is on", () => {
   expect(isOn({ meals: "yes" } as unknown as Record<string, boolean>, "meals")).toBe(false);
 });
 
-test("Meals sits under Intel: shown only with both on, and its own switch survives Intel going off", () => {
-  expect(childrenOf(EXPERIMENTS, "intel").map((e) => e.id)).toEqual(["meals"]);
-  expect(childrenOf(EXPERIMENTS, "companion")).toEqual([]);
-  expect(isEffective({ meals: true }, "meals")).toBe(false);
-  expect(isEffective({ intel: true }, "meals")).toBe(false);
-  expect(isEffective({ intel: true, meals: true }, "meals")).toBe(true);
-  expect(isEffective({ intel: true }, "intel")).toBe(true);
-  expect(isEffective({ companion: true }, "companion")).toBe(true);
-  // Intel off and on again: Meals's own value was never touched.
-  const off = withExperiment({ intel: true, meals: true }, "intel", false);
-  expect(isOn(off, "meals")).toBe(true);
-  expect(isEffective(off, "meals")).toBe(false);
-  expect(isEffective(withExperiment(off, "intel", true), "meals")).toBe(true);
+// Meals sat under Intel until Intel was removed (2026-11): it showed only with both on.
+test("a map from before Intel was removed keeps Meals only where both were on", () => {
+  expect(migrateExperiments({ intel: true, meals: true })).toEqual({ meals: true });
+  expect(migrateExperiments({ intel: true, meals: false })).toEqual({ meals: false });
+  expect(migrateExperiments({ intel: false, meals: true })).toEqual({ meals: false });
+  expect(migrateExperiments({ intel: false, meals: false })).toEqual({ meals: false });
 });
 
-test("the needs-parent line has copy", () => {
-  expect(typeof (en as unknown as Record<string, unknown>)["experiments.needsParent"]).toBe("string");
+test("a missing field is off, and the other keys ride through", () => {
+  expect(migrateExperiments({ intel: true })).toEqual({ meals: false });
+  expect(migrateExperiments({ intel: true, meals: true, companion: true, "read-aloud": false })).toEqual({
+    meals: true,
+    companion: true,
+    "read-aloud": false,
+  });
+});
+
+test("a map with no Intel key is already migrated and is left alone", () => {
+  expect(migrateExperiments(undefined)).toBeNull();
+  expect(migrateExperiments({})).toBeNull();
+  expect(migrateExperiments({ meals: true, companion: true })).toBeNull();
+  expect(migrateExperiments({ meals: false })).toBeNull();
 });
 
 test("setting one id keeps every other key, unknown ones included", () => {
-  expect(withExperiment({ "read-aloud": true, intel: true }, "meals", true)).toEqual({
+  expect(withExperiment({ "read-aloud": true, companion: true }, "meals", true)).toEqual({
     "read-aloud": true,
-    intel: true,
+    companion: true,
     meals: true,
   });
   expect(withExperiment(undefined, "companion", false)).toEqual({ companion: false });
@@ -103,16 +107,16 @@ test("a patch writes the switch, keeps an unknown id on disk, and tells subscrib
   const stop = store.subscribe(() => {
     told += 1;
   });
-  await store.patch({ experiments: withExperiment(store.experiments(), "intel", true) });
+  await store.patch({ experiments: withExperiment(store.experiments(), "companion", true) });
   expect(told).toBe(1);
-  expect(written()?.experiments).toEqual({ "read-aloud": true, intel: true });
-  expect(isOn(store.experiments(), "intel")).toBe(true);
+  expect(written()?.experiments).toEqual({ "read-aloud": true, companion: true });
+  expect(isOn(store.experiments(), "companion")).toBe(true);
   expect(isOn(store.experiments(), "meals")).toBe(false);
   stop();
   await store.patch({ autostart: false });
   expect(told).toBe(1);
   // A patch of another field leaves the switches as they were.
-  expect(written()?.experiments).toEqual({ "read-aloud": true, intel: true });
+  expect(written()?.experiments).toEqual({ "read-aloud": true, companion: true });
 });
 
 test("before the file is read every experiment is off", () => {

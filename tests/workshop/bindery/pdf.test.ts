@@ -4,7 +4,7 @@
 // Run: bash scripts/t.sh tests/workshop/bindery/pdf.test.ts
 
 import { afterEach, expect, test } from "bun:test";
-import { arxivSiteAdapter } from "../../../src/info/sources/plugins/arxiv";
+import { arxivSiteAdapter } from "../../../src/sources/plugins/arxiv";
 import {
   bind,
   contentDispositionFilename,

@@ -101,7 +101,6 @@ import {
 } from "./desk-history";
 import { bookSideTools, SHELF_TOOL_PROMPTS } from "./desk-tools";
 import { savedArticlesKind } from "./saved/saved-articles-desk";
-import { issueDeskKind } from "./issue-desk";
 
 // The book is one of the two kinds of thing a reading turn puts on the desk; the
 // kept articles beside it are the other (reading/saved/saved-articles-desk.ts). Named
@@ -199,8 +198,6 @@ export function registerReadingDesk(): () => void {
   const off = [
     registerDeskItemKind(bookKind),
     registerDeskItemKind(savedArticlesKind),
-    // The brief beside the door's conversation (issue-desk.ts).
-    registerDeskItemKind(issueDeskKind()),
   ];
   return () => {
     for (const undo of off) undo();

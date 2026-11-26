@@ -15,7 +15,7 @@ import appIcon from "../../assets/app-icon.png";
 import { useT } from "../../../i18n";
 import { companionToggleTitle } from "../base/companion-toggle";
 import { useCompanionName } from "../base/use-companion-name";
-import { IconBriefing, IconBriefs, IconBooks, IconMeals, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
+import { IconBooks, IconMeals, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
 import { restartLabel, type UpdateState } from "../../../platform/app/update-policy";
 import { shellNavItems, type ShellNavId } from "../base/shell-nav";
 import {
@@ -31,8 +31,6 @@ import { Button } from "../ui/button";
 
 const ICONS: Record<ShellNavId, (p: { size?: number }) => JSX.Element> = {
   today: IconToday,
-  briefing: IconBriefing,
-  briefs: IconBriefs,
   meals: IconMeals,
   topics: IconBooks,
   settings: IconGear,
@@ -104,14 +102,8 @@ export default function AppSidebar(props: {
   // Whether the meals line is shown (the Meals experiment, docs/73). Off, and
   // its row is not in the column at all.
   meals?: boolean;
-  // Whether Briefs has its row: false while the intel experiment is off
-  // (platform/experiments). Omitted, it has.
-  briefs?: boolean;
   // False while the companion experiment is off: the wordmark toggles nothing.
   companionAvailable?: boolean;
-  // Whether the old daily briefing has its row (info/old-briefing.ts). The
-  // switch's value unless a test says otherwise.
-  oldBriefing?: boolean;
 }) {
   const t = useT();
   const companionName = useCompanionName();
@@ -165,8 +157,6 @@ export default function AppSidebar(props: {
 
       {shellNavItems({
         meals: props.meals === true,
-        briefs: props.briefs !== false,
-        oldBriefing: props.oldBriefing,
       }).map((item) => (
         <Row
           key={item.id}

@@ -23,9 +23,7 @@ import {
   loadSavedArticles,
   orphanedBody,
   removeSavedArticle,
-  saveArticle,
   type SavedArticle,
-  type SavedArticleInput,
 } from "../../../src/reading/saved/saved-articles";
 
 const FILE = SAVED_ARTICLES_FILE;
@@ -54,20 +52,6 @@ const KEPT = [
   record({ id: "https://example.com/b", url: "https://example.com/b", title: "B" }),
   record({ id: "https://example.com/c", url: "https://example.com/c", title: "C" }),
 ];
-
-function input(): SavedArticleInput {
-  return {
-    topicId: "brief",
-    url: "https://example.com/new",
-    title: "New",
-    source: "src",
-    sourceName: "Source",
-    publishedAt: "",
-    summaryOnly: false,
-    text: "n",
-    html: "<p>n</p>",
-  };
-}
 
 function idsOnDisk(path = FILE): string[] {
   return (io.json(path) as SavedArticle[]).map((a) => a.id);
@@ -104,15 +88,6 @@ test("un-keeping after a failed read leaves every kept article on disk", async (
   expect(io.files.has(ASIDE)).toBe(false);
 });
 
-test("keeping an article after a failed read writes nothing and says so", async () => {
-  const bytes = JSON.stringify(KEPT);
-  io.files.set(FILE, bytes);
-  io.readFails = true;
-
-  await expect(saveArticle(input(), io)).rejects.toThrow(/could not be read/);
-  expect(io.files.get(FILE)).toBe(bytes);
-});
-
 // --- the bytes that will not parse ------------------------------------------
 
 test("un-keeping after an unparseable read keeps the bytes and does not blank them", async () => {
@@ -128,17 +103,6 @@ test("un-keeping after an unparseable read keeps the bytes and does not blank th
   expect(io.json(FILE)).toEqual([]);
 });
 
-test("keeping an article after an unparseable read starts a new file beside the old bytes", async () => {
-  const bytes = "{ not json";
-  io.files.set(FILE, bytes);
-
-  const saved = await saveArticle(input(), io);
-
-  expect(saved?.id).toBe("https://example.com/new");
-  expect(io.files.get(ASIDE)).toBe(bytes);
-  expect(idsOnDisk()).toEqual(["https://example.com/new"]);
-});
-
 test("a file that is not an array of records is moved aside, not overwritten in place", async () => {
   const bytes = JSON.stringify({ articles: KEPT });
   io.files.set(FILE, bytes);
@@ -152,7 +116,7 @@ test("a file that is not an array of records is moved aside, not overwritten in 
 
 test("a record this build does not understand survives an un-keep", async () => {
   // An extra field, and a record with no id but a url: neither is something
-  // saveArticle wrote, and both are still the reader's article.
+  // this build writes, and both are still the reader's article.
   io.files.set(
     FILE,
     JSON.stringify([
@@ -198,42 +162,16 @@ test("a repair that cannot be set aside is refused rather than written", async (
 
 // --- the ordinary path still works ------------------------------------------
 
-test("a keep and an un-keep against a readable file do what they say", async () => {
+test("an un-keep against a readable file does what it says", async () => {
   io.files.set(FILE, JSON.stringify(KEPT));
 
-  expect(await saveArticle(input(), io)).not.toBeNull();
-  expect(idsOnDisk()).toEqual([
-    "https://example.com/a",
-    "https://example.com/b",
-    "https://example.com/c",
-    "https://example.com/new",
-  ]);
-
   await removeSavedArticle("https://example.com/a", io);
-  expect(idsOnDisk()).toEqual([
-    "https://example.com/b",
-    "https://example.com/c",
-    "https://example.com/new",
-  ]);
+  expect(idsOnDisk()).toEqual(["https://example.com/b", "https://example.com/c"]);
   expect((await loadSavedArticles(io)).map((a) => a.id)).toEqual([
     "https://example.com/b",
     "https://example.com/c",
-    "https://example.com/new",
   ]);
   expect(io.files.has(ASIDE)).toBe(false);
-});
-
-test("the first keep on a device with no file writes just that article", async () => {
-  expect(await saveArticle(input(), io)).not.toBeNull();
-  expect(idsOnDisk()).toEqual(["https://example.com/new"]);
-  expect(io.files.has(ASIDE)).toBe(false);
-});
-
-// The one thing left that comes back null. An article with neither a URL nor a
-// title has no id to de-duplicate on, so keeping it twice would file it twice.
-test("an article with no identity is not kept, and null says so", async () => {
-  expect(await saveArticle({ ...input(), url: "", title: "" }, io)).toBeNull();
-  expect(io.files.has(FILE)).toBe(false);
 });
 
 // --- the cheap probe --------------------------------------------------------
@@ -280,39 +218,6 @@ test("hasSavedArticles says no when the file cannot be read", async () => {
 // to learn that one article had been added. The body moved into a file named
 // after its own bytes: written once, then cold forever (docs/21).
 
-// One record as the pre-split build wrote it: the body sitting inside it.
-function bodyFiles(from: FakeAppData = io): string[] {
-  return [...from.files.keys()].filter((f) => f.startsWith("article-bodies/")).sort();
-}
-
-test("a keep puts the body in its own file and leaves a pointer in the index", async () => {
-  const saved = await saveArticle({ ...input(), text: "the body", html: "<p>the body</p>" }, io);
-
-  expect(saved?.bodyHash).toMatch(/^[0-9a-f]{32}$/);
-  expect(saved?.textChars).toBe(8);
-  // Nothing of the body is in the index. This is the whole point: what the index
-  // costs to sync is what is in it.
-  const onDisk = (io.json(FILE) as SavedArticle[])[0];
-  expect("text" in onDisk).toBe(false);
-  expect("html" in onDisk).toBe(false);
-  expect(io.files.get(FILE)!).not.toContain("the body");
-
-  expect(bodyFiles()).toEqual([articleBodyPath(saved!.bodyHash)]);
-  expect(await loadSavedArticleBody(onDisk, io)).toEqual({
-    text: "the body",
-    html: "<p>the body</p>",
-  });
-});
-
-// Nothing was captured, so there is nothing to put in a file. A file per nothing
-// is still a file to sync.
-test("an article kept with no body gets no body file", async () => {
-  const saved = await saveArticle({ ...input(), text: "", html: "" }, io);
-  expect(saved?.bodyHash).toBe("");
-  expect(saved?.textChars).toBe(0);
-  expect(bodyFiles()).toEqual([]);
-});
-
 // Two devices, two files, and they arrive separately. The record can be here
 // before its body is; that reads as an article with nothing in it yet, not as a
 // failure, and never as a raise into the screen drawing the list.
@@ -327,15 +232,6 @@ test("a bodyHash that is not a hash never becomes a path", async () => {
   io.files.set("../../secrets.json", JSON.stringify({ text: "secret", html: "" }));
   const hostile = { ...record(), bodyHash: "../../secrets" };
   expect(await loadSavedArticleBody(hostile, io)).toEqual({ text: "", html: "" });
-});
-
-test("un-keeping drops the record and the body it alone pointed at", async () => {
-  const saved = await saveArticle({ ...input(), text: "the body", html: "<p>the body</p>" }, io);
-  await removeSavedArticle(saved!.id, io);
-
-  expect(io.json(FILE)).toEqual([]);
-  expect(bodyFiles()).toEqual([]);
-  expect(io.purged).toEqual([articleBodyPath(saved!.bodyHash)]);
 });
 
 // --- the body an un-keep leaves behind ---------------------------------------

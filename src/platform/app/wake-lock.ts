@@ -122,7 +122,7 @@ export function createScreenWakeLock(target: WakeLockTarget | null): ScreenWakeL
 }
 
 // One lock for everyone who keeps the screen on for the same stretch (the prep
-// run on its page and the prep's voice call, docs/info/671): each holder says
+// run on its page and the prep's voice call, docs/meals/671): each holder says
 // whether it wants it, the screen stays on while any does, and one sentinel is
 // held, so a holder letting go cannot drop the other's. Made when the first
 // holder asks and dropped when the last lets go, so the next stretch reads the

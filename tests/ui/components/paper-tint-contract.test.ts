@@ -221,8 +221,6 @@ test("nothing in the UI writes a white hex either", () => {
 // listed by file and by exact class so a plain grey added to the same file
 // still fails.
 const PALE_ALLOWED = new Map([
-  ["ui/components/info/BriefingPage.tsx", ["bg-[#fdf8ee]"]],
-  ["ui/components/info/InfoCards.tsx", ["bg-[#fdf5f3]", "bg-[#f8e8e4]"]],
   ["ui/components/library/SavedArticleView.tsx", ["bg-[#fdf8ec]"]],
 ]);
 

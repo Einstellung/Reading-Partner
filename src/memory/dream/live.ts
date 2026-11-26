@@ -1,10 +1,10 @@
 // Live wiring of dream: the two stores it reads, the state file it keeps, and
 // the real model call.
 //
-// The only entry point is runDreamIfDue, and the only caller is the collector's
-// daily tick (info/program/live.ts). Dream runs on one machine — the elected
-// collector (docs/36) — because two machines would each pay for the night and
-// write two readings of the same observations.
+// The only entry point is runDreamIfDue, and the only caller is the daily round
+// (src/presence/daily.ts), which calls it only on the device the election picks
+// (docs/36) — because two machines would each pay for the night and write two
+// readings of the same observations.
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
@@ -70,9 +70,9 @@ async function allObservations(): Promise<Observation[]> {
 // start-up, foreground and the five-minute tick all reach the same object.
 const gate = createDreamGate();
 
-// One night, if one is due. Never throws: this rides the collector's five-minute
-// tick, and a night that cannot run must not take the morning briefing's
-// schedule down with it.
+// One night, if one is due. Never throws: this rides the daily round's
+// five-minute tick (src/presence/daily.ts), and a night that cannot run must not
+// take the round's schedule down with it.
 export async function runDreamIfDue(now = Date.now()): Promise<DreamResult | null> {
   const day = localDate(now);
   // Turned away rather than queued: three entry points fire within seconds of a

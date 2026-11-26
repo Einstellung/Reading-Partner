@@ -5,7 +5,6 @@ export default {
   title: "设置",
   done: "完成",
   "tab.account": "AI 与同步",
-  "tab.accounts": "账户",
   "tab.features": "功能",
   "tab.optional": "可选",
   "tab.experiments": "实验室",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "语音通话",
   "account.voiceFrontHint":
     "语音通话里先开口的那句快速回答用这里的模型，在任何后台工作之前。模型越快，开口越早；回答太浅时再打开思考。无法关闭思考的服务商使用它的最低档。它使用上面的服务商。",
-  "account.briefing": "新闻简报",
-  "account.screening": "筛选",
-  "account.analysis": "分析",
-  "account.briefingHint":
-    "简报暂时不在夜间生成：重新设计期间已暂停，你仍可以手动请求。筛选阅读当天的标题来决定哪些文章值得抓取，所以这一步宜设低；分析阅读通过筛选的文章。",
   "account.thinking": "思考",
   "account.chat": "对话",
   "account.lessonPrep": "备课",
@@ -86,7 +80,7 @@ export default {
   "features.language": "语言",
   "features.languageAuto": "自动（界面随系统，AI 随你）",
   "features.languageHint":
-    "应用界面的语言，也是 AI 所写内容的语言：对话回复、笔记和简报。选自动时，界面使用系统语言，AI 用你书写的语言回答。语音转写始终跟随你说的语言。",
+    "应用界面的语言，也是 AI 所写内容的语言：对话回复和笔记。选自动时，界面使用系统语言，AI 用你书写的语言回答。语音转写始终跟随你说的语言。",
   "features.paper": "纸张背景",
   "features.paperHint":
     "把整个应用背后的白色——对话、书架、侧栏、这个窗口和书页——换成米白的纸张色。只有这一种颜色，没有更深的档位；这不是深色模式。该选择只保存在这台设备上。",
@@ -95,16 +89,16 @@ export default {
   "features.companionShowHint":
     "{name} 站在每个界面的角落，阅读时也在。关掉后角落空着；侧栏、手机首页和阅读器「更多」菜单里的 {name} 按钮可以再叫它出来。这个选择只留在这台设备上。",
   "features.companionName": "伙伴的名字",
-  "features.briefing": "信息",
-  "features.collect": "在这台电脑上从你的来源收集",
+  "features.briefing": "后台任务",
+  "features.collect": "让这台电脑承担后台任务",
   "features.collectHint":
-    "每个来源按各自的时间表检查，主题搜索在这里夜间运行。关闭后，这台机器完全停止收集，如果你有别的收集机，会由它接手。",
+    "这台电脑负责夜间整理记忆、处理同步冲突。关闭后由你的另一台电脑接手（如果有）。",
   "features.thisComputer": "这台电脑",
   "features.role": "这台机器是",
-  "features.roleCollector": "收集机——在这里读取来源",
-  "features.roleReader": "阅读机——读取另一台机器收集的内容",
+  "features.roleCollector": "收集机——可以承担后台任务",
+  "features.roleReader": "阅读机——后台任务交给别的电脑",
   "features.roleHint":
-    "收集机全天读取你订阅的网站，并为你的其他设备发布简报；阅读机显示收集机发布的内容，自己从不抓取网站。手机和平板始终是阅读机。如果有两台机器在收集，由运行时间最长的那台工作。",
+    "收集机可以承担后台任务：夜间整理记忆、处理同步冲突；阅读机从不承担。手机和平板始终是阅读机。如果有两台收集机愿意承担，由运行时间最长的那台工作。",
   "features.autostart": "开机时启动 Reading Partner",
   "features.autostartHint":
     "默认关闭。在你希望全天收集来源的那台机器上打开——配合托盘图标，无论你是否打开应用，简报都会在后台生成。该设置属于这台电脑，不会同步到你的其他设备。",
@@ -149,9 +143,6 @@ export default {
   "experiments.intro": "还没做完的功能。每一项默认关，在这台设备上打开才出现。关掉只是不显示，不删任何数据，再打开全部回来。",
   "experiments.meals.name": "三餐",
   "experiments.meals.summary": "规划一周的饭菜，维护购物清单。",
-  "experiments.intel.name": "情报",
-  "experiments.intel.summary": "简报书与专题。",
   "experiments.companion.name": "{name}",
-  "experiments.needsParent": "先打开情报。",
   "experiments.companion.summary": "右下角的伙伴：长按说话或打字、贴链接给它、它交回东西的盒子。",
 } satisfies Translation<typeof en>;

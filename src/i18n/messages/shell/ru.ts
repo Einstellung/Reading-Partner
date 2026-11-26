@@ -22,7 +22,6 @@ export default {
   "action.cancel": "Отмена",
   "action.delete": "Удалить",
 
-  "savedArticle.backLabel": "Сохранённое",
 
   "nav.settings": "Настройки",
   "nav.settingsNeedsAttention": "Настройки — синхронизация требует внимания",
@@ -145,4 +144,19 @@ export default {
   "intake.reason.siteRefused": "сайт не отдал документ",
   "intake.reason.httpStatus": "ссылка не открылась (HTTP {status})",
   "intake.reason.failed": "эту ссылку не удалось прочитать",
+
+  // --- Today (shelf/Vestibule.tsx, shelf/today.ts) ---------------------------
+  "vestibule.title": "Сегодня",
+  "vestibule.continueReading": "Продолжить чтение",
+  "vestibule.nothingOpen": "Пока ничего не открыто. Добавьте книгу в тему в библиотеке.",
+  "vestibule.goToLibrary": "В библиотеку",
+  "vestibule.yourTopics": "Ваши темы",
+  "vestibule.allTopics": "Все темы →",
+  "vestibule.newTopic": "Новая тема",
+  "vestibule.newTopicDescription": "Тема — это один вопрос и книги, которые вы читаете ради ответа на него.",
+  "vestibule.newTopicPlaceholder": "напр. почему JIT быстрые",
+  "vestibule.create": "Создать",
+  "today.pageOf": "стр. {page} из {pages}",
+  "today.page": "стр. {page}",
+  "today.marks": { one: "{count} пометка", few: "{count} пометки", many: "{count} пометок", other: "{count} пометки" },
 } satisfies Translation<typeof en>;
