@@ -36,6 +36,52 @@ worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkou
   - LAYER 表删 19 个已删目录和 `info` 行，相关注释改掉。
 - `03698f1f` 手机 nav-stack 删 `briefing`/`briefs`/`article`/`saved`/`savedArticle`，PhoneApp 不再画 SavedArticleView，`shell.savedArticle.backLabel` 删。栈只在内存里，没有要迁移的。
 
+## 第八棒（2026-11-25）：删除带出的回归
+
+- `0c328e0f` 恢复本机 claim 和每日 round，放在新的 domain 目录 `src/presence/`（LAYER 已登记）：
+  - `daily.ts`：`createDailyRound`，`DAILY_TICK_MS` 五分钟，三个入口（启动后第一次、每个 tick、回前台），每次先问选举、选中才 `runDreamIfDue`，再无条件 `sweepProseConflictsNow`；选举读失败只 warn，不抛，tick 照排；退出时取消 tick。`DREAM_KIND = "dream"`。
+  - `session.ts`：`createDevicePresence`（原 `refreshInfoCollector` + collector session 去掉简报部分）：role 不是 collector 就 `writer.stop()`；已在跑就 `publish()`；否则 `writer.start()` 后启动 round（只启一次，之后切 reader 也不停，和删前 pipeline 建了就不拆一致）。注册 `registerKindCapabilities("dream", [])`：删前 dream 选的是 `collect` kind，它的能力登记来自 collect worker，worker 删了 `electFor("collect")` 永远是 null。`dream` 不要求能力，选出的机器和原来 `collect` 的一样（最久在线的 candidate）。
+  - `live.ts`：claim writer 绑定（`legion/claim` 目录里同样的 claim 文件、hostname、`WEBVIEW_FETCH` 标签、willing = `device.backgroundCollect`、首次 pull 等待、心跳挂退出），`refreshDevicePresence()`。`App.tsx` 在原位置恢复 `[deviceRole, backgroundCollect]` 的 effect。手机删前就不调，现在也不调。
+  - claim 不再带 Intel 的 `sources`/`sites`/`halt`/`lastRunAt`/`lastBriefingDate`/`lastAskAt`。
+  - 测试：`tests/presence/daily.test.ts`（6 条）、`tests/presence/session.test.ts`（5 条，真 claim writer + 真 round：单机 collector 启动即 dream+sweep、到 tick 再来一次；输了选举只 sweep；开关关了不参选但 sweep；reader 不写 claim 不跑 round；collector 改 reader 交出 claim）。
+  - 注释改到新位置：`memory/dream/live.ts`、`gate.ts`、`memory/adjudicate/live.ts`；`docs/platform/59` §6 落地、`docs/north-star/legion-rest.md`。
+- 7936 pass / 1 skip / 0 fail，typecheck RC=0。坑 700、701 没用上。
+
+### 审计：删前 `src/info/**` 调 info 以外模块的地方
+
+脚本扫了 `7bb6743c` 时 `src/info` 下 298 个非测试文件的 417 条跨目录 import，按有副作用的调用归并成下表。`info/meals/*` 已在第一棒整体搬走，不在表里。
+
+| # | 调用（删前位置） | 干什么 | 判定 |
+|---|---|---|---|
+| 1 | `legion/claim` `createClaimWriter`（program/presence.ts，由 live.ts 的 session 绑定） | 全 app 唯一写本机 claim 的地方 | 别人依赖：runner 的 synced run（现在只有 `adjudicate-prose`）靠选举找执行者，没 claim 就永远没人接；`background_status` 工具读 claim；dream 的选举。已恢复（presence/live.ts） |
+| 2 | `memory/dream/live` `runDreamIfDue`（live.ts `checkDailyRound`） | 夜间 dream，只在选中的设备 | 别人依赖。已恢复（presence/daily.ts） |
+| 3 | `memory/adjudicate/live` `sweepProseConflictsNow`（同上） | prose 冲突副本建 pending run | 别人依赖。已恢复 |
+| 4 | `legion/runner/worker` `registerWorker(collect, requires: [])`（program/collect-worker.ts，`registerInfoCollectWorker`） | collect run 的 worker | worker 本身只为 Intel；附带的 `registerKindCapabilities("collect")` 是 dream 选举能出答案的前提。换成 `dream` kind 的登记 |
+| 5 | `platform/app/lifecycle` `observeAppLifecycle`/`observeAppExit`（live.ts pipeline 构造时） | 回前台：collector/pipeline/checkDailyRound；退出：collector 挂起、停 tick | tick 那两行别人依赖，已恢复；其余只为 Intel |
+| 6 | `platform/sync` `subscribeSyncStatus`、`@tauri-apps/plugin-os`、`platform/app/platform` `hasWebviewFetch`、`platform/app/device`（live.ts） | claim 的首次 pull 等待、设备名、能力标签、角色和开关 | 随 1 恢复 |
+| 7 | `useShellBootstrap` 的 `amICollecting` | 只喂 `liveIssueExpiryMarker` 的 `isCollector` | 只为 Intel（选举本身随 1 恢复，没人要这个导出） |
+| 8 | `useShellBootstrap` 的 `noteCollectorHalt` | 主题搜索 run 停下时写 claim 的 `halt` | 只为 Intel |
+| 9 | `platform/sync/pull-routes` `registerPullRoute`（`SOURCES_PULL_ROUTE`、`ASK_PULL_ROUTE`） | 源列表、阅读端的 ask | 只为 Intel |
+| 10 | `legion/schedule` `registerSchedule("info-daily-round")`（daily.ts，模块顶层） | 五点的 wake 铃 | 只为 Intel；`fired.json` 里的旧戳无害 |
+| 11 | `registerWorker` tasking/主题搜索、`registerProgramTask`、`deviceRuntime`、`registerRunDescriber` | Intel 的 run | 只为 Intel；盘上遗留的这些 kind 的 run 文件 runner 找不到 worker 直接跳过（`runner.ts` `if (!reg) return`） |
+| 12 | `soul` `registerRole`（secretary）、`registerDelivery`（briefing/info）；`desk` `registerDeskItemKind`（`info-briefing`/`info-article`） | 简报对话 | 只为 Intel；两个 desk kind 删前就只有 info 自己的回合放上 desk |
+| 13 | `memory` `registerDistillSource("info-thread")` | 只列 `threads-info-<date>.json` | 只为 Intel；三餐线程 `threads-info-meals.json` 删前就不蒸馏（palace 行写明） |
+| 14 | `housekeeper` `registerGarbageMarker`（`infoDailyMarker`、`liveIssueExpiryMarker`） | 只清 Intel 自己的文件 | 只为 Intel；这些文件现在留在盘上 |
+| 15 | `box` `appBox`/`deliverBriefing`、`platform/app/library` `importBook`、`supplements` `addSupplement`、`platform/app/threads` 写、`soul` `openDoorThread`/`doorKey` | 简报进盒子、issue 入书架、简报语音抄进门口对话、issue 开场 | 只为 Intel |
+| 16 | `memory` `statementStore` 写（topic-search）；`listStatements`、`standingStatements`、`assembleReaderSection`、`buildObservationSnapshot`、`getObservationAdapter`（只读） | 主题搜索的 statement、拼 Intel 的 prompt | 只为 Intel |
+| 17 | `memory` `distillInfoThread`（简报语音挂断） | 蒸馏简报对话 | 只为 Intel；三餐自己调 |
+| 18 | `platform/app/tray` `setTrayStatus`、`wake-lock`、`keep-awake` | collector 状态行、生成时防息屏 | 只为 Intel |
+| 19 | `legion/claim` `appClaims().readAll`、`electFor`（reader 视图、`collectorReport`、主题搜索 eta） | 只读 claim | 只为 Intel |
+| 20 | `sources` `registerAllSourcePlugins()`（live.ts 模块顶层） | 注册 index provider | 注册表现在没有读者（`pluginOf`/`sourcePlugin` 只有 Intel 的 engine/probe 用），不恢复；`registerSourceSiteAdapters` 一直在 bootstrap 里 |
+| 21 | `workshop/extract` webview-article/webview-session/readable、`ai`、`websearch`、`i18n`、`platform/std`、`platform/http` 等 | Intel 自己取正文、登录站点、调模型 | 只为 Intel；reading 的 X 读取走未登录 webview，不依赖 Accounts 页的登录 |
+
+### 拿不准，交主会话
+
+- Settings › Features 里 collector 才见的「Intel」段（`backgroundCollect` 开关）和 This computer 的角色选择：现在是 claim writer 的 willing 和角色输入，决定本机参不参选 dream 和 adjudicate 的执行。不能当 Intel 残留删；文案还写 Intel/collect，改不改、改成什么交主会话。上面「还剩」里那条要按这个改。
+- sweep 范围：任务书写「每台设备都跑」；删前实际只在跑 tick 的设备上跑，即角色为 collector 的桌面（含开关关了的），手机从不跑，docs/59 落地一节也这么写。按删前恢复，没扩到手机。
+- 新 claim 不带 `sites`。还没升级的旧版设备读到它时，旧 `info/briefer/reader.ts` `collectorNotices` 的 `Object.keys(c.sites)` 会抛，只影响过渡期旧版的 Intel 页。要兼容就在 writer 的 `extras` 写 `sites: {}`，没做。
+- `docs/north-star/legion-rest.md` 同一行后半句还说 `registerRole` 只有 info 的 secretary，已过期，没改。
+
 ## 第七棒（2026-11-25）
 
 - `c374c504` Intel 残留：删 `companion/issue-context.ts`、`reading/issue.ts`、`reading/issue-desk.ts`（及测试、`tests/soul/door-issue.test.ts`）；App 的 `readerMode`、PhoneReader/ReaderTopBar/PhoneReaderBar 的 `mode`/`noLearn`/`study`/`extra`、`reader-tool` 的 `mouseSelectsText` 和 `rackOmits` 的 mode 参数；DoorChat 的 openedFor/quote/引文跳转，CompanionCorner 的 issue 订阅和 `goToBriefing`。`box-jump` 删 `go-to-briefing`，`origin.place === "briefing"` 的卡不画、跟随也不去任何地方。`library.ts` 加 `isIssueEntry`，桌面 `splitMaterials`、手机 `shelfMaterials`/`continueReading` 过滤掉 issue 条目（配测试）。删 `reading/ingest/keep.ts`（简报的 Keep，已无调用方）和 `workshop/bindery/cover-svg.ts`（`typographicCover` 只剩测试）；`build-article.ts` 有 src 调用方，留着。`noteOnLastLine` 搬进 `take-link-tool.ts`，门口「自带对话的 desk 项被拒」那条测试搬进 `door.test.ts`。snowflake.ts 的 MIT 声明原在 `src/info/rank/third-party-licenses.txt`（随 info 删了），恢复成 `src/reading/ingest/x/third-party-licenses.txt`。注释旧路径清完，`docs/info/671`、`docs/info/73` 改 `docs/meals/…`。
@@ -48,8 +94,8 @@ worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkou
 - 发现但没动的 Intel 残留：
   - `soul/voice/live/door-material.ts` + `door-call.ts` 的 brief material/`doorBriefKickoff`、`reading/turn/door-think.ts` 里把简报摆上 desk 的部分：现在 use-voice-call 不传 material，应已是死代码。
   - `epub/paged` 的 `mouseSelects`（`BookPane`/`EpubReaderPane`/`mark-layer.ts`）只为简报开过，现在恒为 false。
-  - Settings › Features 里 collector 才见的「Intel」段（`features.briefing`、`backgroundCollect`、`features.collect*`）。
-  - `memory/dream/live.ts` 的 `runDreamIfDue` 原唯一调用方是 collector 的每日 tick（随 Intel 删）：dream 现在是否还有人触发要查（`memory/dream/gate.ts` 注释说有三个入口）。
+  - Settings › Features 里 collector 才见的「Intel」段（`features.briefing`、`backgroundCollect`、`features.collect*`）：开关不能删，见第八棒「拿不准」，只改文案。
+  - ~~dream 没人触发~~：第八棒已恢复（`src/presence/`）。
   - `i18n/messages/sources/*` 里 accounts、add-source 卡、tasking 的键已无读者。
   - `saved-articles.ts` 的 `saveArticle` 只剩测试在用（写入路径原是简报 Keep）；库和读取、LibraryScreen、book chat 的 saved-article 工具都还在用，没动。
   - 原清单里其余项照旧：`src/sources` 的 index provider、`reading/ingest/x/search-page.ts`、soul/memory/legion 里只给 Intel 的代码、`palace/kinds.ts` 的 `info-thread` 行、`scripts/x-search-probe.ts`/`x-browse-host.ts`、`ai/model-tier` 的 `briefing`/`briefing-screen` kind。
