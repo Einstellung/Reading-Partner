@@ -1,70 +1,14 @@
-// The index provider registry and the engine's `index` dispatch (docs/69):
-// a descriptor naming an unregistered provider fails as a source, a rejected
-// query fails as a source, and a provider's items are stamped with the
-// descriptor's identity. Run: bun test.
+// The helpers every source plugin shares (src/sources/plugin.ts, docs/69).
+// Run: bun test.
 
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   daysBefore,
-  pluginOf,
-  sourcePlugin,
-  sourcePluginIds,
   queryInt,
   queryString,
   queryStrings,
-  registerSourcePlugin,
-  resetSourcePluginsForTests,
-  type SourcePlugin,
 } from "../../src/sources/plugin";
-import type { SourceDescriptor } from "../../src/sources/descriptor";
 import { formatSignals } from "../../src/sources/item";
-
-afterEach(() => resetSourcePluginsForTests());
-
-const fake: SourcePlugin = {
-  id: "fake",
-  name: "Fake Library",
-  hosts: ["fake.example"],
-  defaultLimit: 7,
-  validateQuery: (q) => (typeof q.topic === "string" ? null : "needs a topic"),
-  describeQuery: (q) => `topic ${String(q.topic)}`,
-  discover: async (_desc, q, deps) => [
-    {
-      id: "x-1",
-      source: "wrong",
-      sourceName: "wrong",
-      title: `${String(q.topic)} paper`,
-      url: "https://fake.example/1",
-      publishedAt: deps.today(),
-      summaryOnly: true,
-      signals: { stars: deps.limit, tags: ["t"] },
-    },
-  ],
-};
-
-function indexDesc(query: Record<string, unknown>, provider = "fake"): SourceDescriptor {
-  return {
-    id: "src-1",
-    name: "Fake topic",
-    line: "test",
-    enabled: true,
-    discovery: { kind: "index", provider, query },
-    fulltext: { mode: "none" },
-  };
-}
-
-// bun runs every test file in one process, so the registry may already hold
-// what another file registered at module scope; assert only about "fake".
-test("registry: register, look up, list, reset", () => {
-  expect(sourcePlugin("fake")).toBeUndefined();
-  registerSourcePlugin(fake);
-  expect(sourcePlugin("fake")).toBe(fake);
-  expect(sourcePluginIds()).toContain("fake");
-  expect(pluginOf(indexDesc({ topic: "a" }))?.provider.id).toBe("fake");
-  expect(pluginOf(indexDesc({ topic: "a" }, "nope"))).toBeUndefined();
-  resetSourcePluginsForTests();
-  expect(sourcePlugin("fake")).toBeUndefined();
-});
 
 test("query helpers read loosely typed fields", () => {
   const q = { a: " x ", b: ["p", " q ", 3, ""], c: 4.7, d: -1, e: "" };

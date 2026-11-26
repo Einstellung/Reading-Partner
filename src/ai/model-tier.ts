@@ -2,7 +2,7 @@
 // on which (docs/75).
 //
 //   talk      calls the reader is waiting on, watching the reply come in —
-//             reading chat, the companion, the info companion. settings.defaultModelId.
+//             reading chat, the companion, the meals thread. settings.defaultModelId.
 //   everyday  background calls nobody is waiting on. settings.everydayModelId,
 //             which follows the talk model until the reader picks one.
 //
@@ -14,8 +14,8 @@
 // screen and no setting that says which tasks are everyday: a new task that
 // should run cheap is one line in the table below. Every headless kind in use
 // today is background work and runs everyday: lesson prep, the sub-agent
-// runs, the observation distillation passes, the nightly dream, the two
-// briefing stages, and the meals line's headless write-the-recipe pass.
+// runs, the observation distillation passes, the nightly dream, and the meals
+// line's headless write-the-recipe pass.
 // "chat" is the talk kind, for a headless call the reader is waiting on.
 // Conversations are always talk: the reader is watching the reply come in,
 // meals thread included.
@@ -30,8 +30,6 @@ export type ThinkingKind =
 	| "chat"
 	| "prep"
 	| "distill"
-	| "briefing"
-	| "briefing-screen"
 	| "meals"
 	| "think";
 
@@ -40,8 +38,6 @@ const TIER_FOR_KIND: Record<ThinkingKind, ModelTier> = {
 	chat: "talk",
 	prep: "everyday",
 	distill: "everyday",
-	briefing: "everyday",
-	"briefing-screen": "everyday",
 	meals: "everyday",
 	// A voice call's hard question, handed off (docs/companion/136): the reader
 	// is on the call waiting for it, and it runs to the end on this tier after

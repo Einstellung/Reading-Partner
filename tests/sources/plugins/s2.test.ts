@@ -3,9 +3,8 @@
 // fixture row follows the shapes and examples in S2's own OpenAPI spec
 // (/graph/v1/swagger.json), not a captured response. Run: bun test.
 
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
-  resetSourcePluginsForTests,
   type PluginDeps,
 } from "../../../src/sources/plugin";
 import { s2IndexUrl, s2Plugin, s2SearchTerms } from "../../../src/sources/plugins/s2";
@@ -13,7 +12,6 @@ import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import { itemId } from "../../../src/workshop/extract/id";
 import { jsonResponse } from "../../support/fetch";
 
-afterEach(() => resetSourcePluginsForTests());
 
 const TODAY = "2026-09-13";
 const FIXED_NOW = Date.UTC(2026, 8, 13, 12);

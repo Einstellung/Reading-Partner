@@ -1,66 +1,8 @@
 // Sources: the page-reading tool's label (sources/read-page-tool.ts) and the
-// errors a source plugin can surface (sources/plugins/). Some keys here were
-// Intel's (accounts, add-source cards, tasking) and have no reader since it was
-// removed (2026-11). The source every other locale is typed against.
+// errors a source plugin can surface (sources/plugins/). The source every
+// other locale is typed against.
 
 export default {
-  collectorSignedIn: "Signed in on {device}",
-  collectorNeedsSignIn: "Needs signing in on {device}",
-  signInNote:
-    "Signing in opens the site's own page in a window. Close it when you are done — your password never reaches this app, and only the site's cookie stays behind.",
-  checkTitle: "Load the site in the background and see whether it still asks you to sign in",
-  check: "Check",
-  signOut: "Sign out",
-  signIn: "Sign in",
-  "account.benefitX": "Topic searches read X's search as you.",
-  "account.cautionX": "Automated reading happens in the account you sign in with. There is a small chance X's risk controls react to it, so we suggest signing in with a secondary account rather than your main one.",
-  "account.benefitBloomberg": "Whole Bloomberg articles in your briefs instead of the ~500-character preview.",
-  "account.usedBy": "Used by {names}",
-  "account.signInOnCollector": "Sign in on the computer that collects your sources",
-
-  "session.notChecked": "Not checked",
-  "session.couldNotTell": "Could not tell",
-  "session.signedIn": "Signed in",
-  "session.notSignedIn": "Not signed in",
-  "session.expired": "Expired",
-  "session.workSigningIn": "Finish in the sign-in window, then close it",
-  "session.workConfirming": "Confirming your sign-in…",
-  "session.workChecking": "Checking the site…",
-  "session.workSigningOut": "Signing out…",
-
-  "pipe.apiFullArticles": "API with full articles",
-  "pipe.apiHeadlinesOnly": "API, headlines only",
-  "pipe.articleList": "Article list, fetches each page",
-  "pipe.liveUpdates": "Live updates",
-  "pipe.indexQuery": "Index query ({provider})",
-  "pipe.fullTextInFeed": "Full text in feed",
-  "pipe.fullTextInFeedPaywalled": "Full text in feed (some paywalled)",
-  "pipe.feedFetchesPage": "Feed headlines, fetches each page",
-  "pipe.feedOpensWindow": "Feed headlines, opens each article in a browser window",
-  "pipe.headlinesOnlyBrowser": "Headlines only, opens in browser",
-
-  "tool.theSite": "the site",
-  "tool.probingSite": "Probing {input}",
-  "tool.fetchingWebviewArticles": {
-    one: "Fetching {count} article through a background browser window — tens of seconds",
-    other: "Fetching {count} articles through a background browser window — tens of seconds",
-  },
-  "tool.fetchingArticles": {
-    one: "Fetching {count} article to test",
-    other: "Fetching {count} articles to test",
-  },
-  "tool.addingSource": "Adding the source",
-  "tool.trialReceiptLabel": "Trialled a source",
-  "tool.trialReceiptSummary": "{name} ({pipe})",
-  "tool.addReceiptLabel": "Added a source",
-
-  "tasking.label": "Looking into it",
-  "tasking.searchingCablesFor": "Searching the cables for “{query}”",
-  "tasking.searchingCables": "Searching the cables",
-  "tasking.readingCable": "Reading a cable",
-  "tasking.readingPictureFor": "Reading the picture for {lab}",
-  "tasking.readingPicture": "Reading the situation picture",
-
   "readPage.thePage": "the page",
   "readPage.reading": "Reading {url}",
   "webSearch.searching": "Searching the web: {query}",

@@ -3,16 +3,14 @@
 // sortBy — docs/pitfall/72), and discover() against a scripted Atom response,
 // standalone and through the engine's index path. Run: bun test.
 
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import { arxivIndexUrl, arxivPlugin } from "../../../src/sources/plugins/arxiv";
 import {
-  resetSourcePluginsForTests,
 } from "../../../src/sources/plugin";
 import type { FetchFn } from "../../../src/platform/app/host";
 import { textResponse } from "../../support/fetch";
 
-afterEach(() => resetSourcePluginsForTests());
 
 const TODAY = "2026-09-13";
 // 2026-09-13T12:00:00Z, so the engine's UTC `today` is TODAY.

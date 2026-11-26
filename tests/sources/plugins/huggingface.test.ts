@@ -3,7 +3,7 @@
 // kinds against fixtures trimmed from live Hub responses (2026-09-13). Fetch is
 // scripted, so nothing here touches the network. Run: bun test.
 
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   HF_SEARCH_MAX,
   huggingfacePlugin,
@@ -16,7 +16,6 @@ import {
   searchItem,
 } from "../../../src/sources/plugins/huggingface";
 import {
-  resetSourcePluginsForTests,
   type PluginDeps,
 } from "../../../src/sources/plugin";
 import { itemId } from "../../../src/workshop/extract/id";
@@ -417,7 +416,6 @@ test("an aborted signal stops before any request", async () => {
 
 // --- through the engine ------------------------------------------------------
 
-afterEach(() => resetSourcePluginsForTests());
 
 // --- search ------------------------------------------------------------------
 

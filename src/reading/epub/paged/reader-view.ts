@@ -108,8 +108,6 @@ export interface EpubReaderController extends ViewInstance {
   markPointerUp(e: PointerEvent): boolean;
   markPointerCancel(): void;
   markTapAt(clientX: number, clientY: number): boolean;
-  /** Whether a mouse with no tool selects words (a brief, mouse-select.ts). */
-  setMouseSelects(on: boolean): void;
   /** Whether a stroke is being drawn, so the pane can claim the touch. */
   isDrawing(): boolean;
   destroy(): void;
@@ -682,7 +680,6 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     markPointerUp: (e) => marks.pointerUp(e),
     markPointerCancel: () => marks.pointerCancel(),
     markTapAt: (x, y) => marks.tapAt(x, y),
-    setMouseSelects: (on) => marks.setMouseSelects(on),
     isDrawing: () => marks.isDrawing(),
 
     followLinkAt: (clientX, clientY) => {

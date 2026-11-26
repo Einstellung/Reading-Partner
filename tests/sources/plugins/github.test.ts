@@ -8,7 +8,7 @@
 // example, since the live endpoint has served no rows since 2026-03-01
 // (pitfall 322); the search body follows GitHub's REST docs.
 
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import {
   githubPlugin,
@@ -17,10 +17,9 @@ import {
   latestMonthValue,
   openDiggerUrl,
 } from "../../../src/sources/plugins/github";
-import { resetSourcePluginsForTests, type PluginDeps } from "../../../src/sources/plugin";
+import type { PluginDeps } from "../../../src/sources/plugin";
 import { jsonResponse, textResponse } from "../../support/fetch";
 
-afterEach(() => resetSourcePluginsForTests());
 
 const TODAY = "2026-09-13";
 const NOW = Date.UTC(2026, 8, 13, 12);

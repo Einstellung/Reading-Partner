@@ -3,63 +3,6 @@ import type en from "./en";
 
 // Brazilian Portuguese wording.
 export default {
-  collectorSignedIn: "Conectado em {device}",
-  collectorNeedsSignIn: "É preciso entrar em {device}",
-  signInNote:
-    "Entrar abre a própria página do site em uma janela. Feche-a quando terminar — sua senha nunca chega a este app, só fica o cookie do site.",
-  checkTitle: "Carrega o site em segundo plano e vê se ainda pede login",
-  check: "Verificar",
-  signOut: "Sair",
-  signIn: "Entrar",
-  "account.benefitX": "As pesquisas por tema leem a busca do X com a sua conta.",
-  "account.cautionX": "A leitura automática acontece na conta com que você entra. Há uma pequena chance de os controles de risco do X reagirem, por isso sugerimos entrar com uma conta secundária em vez da principal.",
-  "account.benefitBloomberg": "Artigos completos da Bloomberg nos boletins em vez da prévia de ~500 caracteres.",
-  "account.usedBy": "Usado por {names}",
-  "account.signInOnCollector": "Entre no computador que coleta suas fontes",
-
-  "session.notChecked": "Não verificado",
-  "session.couldNotTell": "Não foi possível determinar",
-  "session.signedIn": "Conectado",
-  "session.notSignedIn": "Não conectado",
-  "session.expired": "Sessão expirada",
-  "session.workSigningIn": "Termine na janela de login e depois feche-a",
-  "session.workConfirming": "Confirmando o login…",
-  "session.workChecking": "Verificando o site…",
-  "session.workSigningOut": "Saindo…",
-
-  "pipe.apiFullArticles": "API com artigos completos",
-  "pipe.apiHeadlinesOnly": "API, só manchetes",
-  "pipe.articleList": "Lista de artigos, busca cada página",
-  "pipe.liveUpdates": "Atualizações ao vivo",
-  "pipe.indexQuery": "Consulta de índice ({provider})",
-  "pipe.fullTextInFeed": "Texto completo no feed",
-  "pipe.fullTextInFeedPaywalled": "Texto completo no feed (alguns pagos)",
-  "pipe.feedFetchesPage": "Manchetes do feed, busca cada página",
-  "pipe.feedOpensWindow": "Manchetes do feed, abre cada artigo em uma janela do navegador",
-  "pipe.headlinesOnlyBrowser": "Só manchetes, abre no navegador",
-
-  "tool.theSite": "o site",
-  "tool.probingSite": "Investigando {input}",
-  "tool.fetchingWebviewArticles": {
-    one: "Buscando {count} artigo por uma janela de navegador em segundo plano — leva dezenas de segundos",
-    other: "Buscando {count} artigos por uma janela de navegador em segundo plano — leva dezenas de segundos",
-  },
-  "tool.fetchingArticles": {
-    one: "Buscando {count} artigo para testar",
-    other: "Buscando {count} artigos para testar",
-  },
-  "tool.addingSource": "Adicionando a fonte",
-  "tool.trialReceiptLabel": "Fonte testada",
-  "tool.trialReceiptSummary": "{name} ({pipe})",
-  "tool.addReceiptLabel": "Fonte adicionada",
-
-  "tasking.label": "Investigando",
-  "tasking.searchingCablesFor": "Buscando nos despachos por “{query}”",
-  "tasking.searchingCables": "Buscando nos despachos",
-  "tasking.readingCable": "Lendo um despacho",
-  "tasking.readingPictureFor": "Lendo o panorama de {lab}",
-  "tasking.readingPicture": "Lendo o panorama",
-
   "readPage.thePage": "a página",
   "readPage.reading": "Lendo {url}",
   "webSearch.searching": "Pesquisando na web: {query}",

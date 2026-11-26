@@ -1,9 +1,7 @@
 // The model lookup and the one plain streaming call every unattended feature
-// makes (lesson prep, book notes, slides, news triage, observation
-// distillation). `thinking` picks which effort setting applies and, through the
+// makes (lesson prep, book notes, slides, observation distillation). `thinking` picks which effort setting applies and, through the
 // tier table in model-tier.ts, which of the two models it runs on: "chat" for
-// the conversational path, "prep" for the background pipelines, "briefing" and
-// "briefing-screen" for the two stages of the nightly briefing, "meals" for the
+// the conversational path, "prep" for the background pipelines, "meals" for the
 // dinner line's own headless turn. Which of those are everyday work is written
 // in model-tier.ts, not here.
 
@@ -41,8 +39,7 @@ export type { ThinkingKind };
 // is the everyday one.
 function thinkingFor(s: Settings, kind: ThinkingKind): ThinkingSetting {
 	if (kind === "chat" || kind === "meals" || kind === "distill" || kind === "think") return s.chatThinking;
-	if (kind === "prep") return s.prepThinking;
-	return kind === "briefing" ? s.briefingThinking : s.briefingScreenThinking;
+	return s.prepThinking;
 }
 
 // Settings read off disk with a default model the provider's catalog no longer

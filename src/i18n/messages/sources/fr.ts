@@ -2,64 +2,6 @@ import type { Translation } from "../types";
 import type en from "./en";
 
 export default {
-  collectorSignedIn: "Connecté sur {device}",
-  collectorNeedsSignIn: "Connexion requise sur {device}",
-  signInNote:
-    "Se connecter ouvre la propre page du site dans une fenêtre. Fermez-la une fois terminé — votre mot de passe n'atteint jamais cette app, seul le cookie du site reste.",
-  checkTitle: "Charge le site en arrière-plan pour voir s'il demande encore de se connecter",
-  check: "Vérifier",
-  signOut: "Se déconnecter",
-  signIn: "Se connecter",
-  "account.benefitX": "Les recherches thématiques lisent la recherche de X avec votre compte.",
-  "account.cautionX": "La lecture automatique se fait avec le compte que vous connectez. Il y a une faible probabilité que les contrôles de risque de X réagissent ; nous vous suggérons donc de vous connecter avec un compte secondaire plutôt qu'avec votre compte principal.",
-  "account.benefitBloomberg": "Les articles Bloomberg en entier dans vos bulletins, au lieu de l'aperçu d'environ 500 caractères.",
-  "account.usedBy": "Utilisé par {names}",
-  "account.signInOnCollector": "Connectez-vous sur l'ordinateur qui collecte vos sources",
-
-  "session.notChecked": "Non vérifié",
-  "session.couldNotTell": "Impossible à déterminer",
-  "session.signedIn": "Connecté",
-  "session.notSignedIn": "Non connecté",
-  "session.expired": "Session expirée",
-  "session.workSigningIn": "Terminez dans la fenêtre de connexion, puis fermez-la",
-  "session.workConfirming": "Confirmation de la connexion…",
-  "session.workChecking": "Vérification du site…",
-  "session.workSigningOut": "Déconnexion…",
-
-  "pipe.apiFullArticles": "API avec articles complets",
-  "pipe.apiHeadlinesOnly": "API, titres seulement",
-  "pipe.articleList": "Liste d'articles, récupère chaque page",
-  "pipe.liveUpdates": "Mises à jour en direct",
-  "pipe.indexQuery": "Requête d'index ({provider})",
-  "pipe.fullTextInFeed": "Texte intégral dans le flux",
-  "pipe.fullTextInFeedPaywalled": "Texte intégral dans le flux (certains payants)",
-  "pipe.feedFetchesPage": "Titres du flux, récupère chaque page",
-  "pipe.feedOpensWindow": "Titres du flux, ouvre chaque article dans une fenêtre de navigateur",
-  "pipe.headlinesOnlyBrowser": "Titres seulement, s'ouvre dans le navigateur",
-
-  "tool.theSite": "le site",
-  "tool.probingSite": "Analyse de {input}",
-  "tool.fetchingWebviewArticles": {
-    one: "Récupération de {count} article via une fenêtre de navigateur en arrière-plan — plusieurs dizaines de secondes",
-    other:
-      "Récupération de {count} articles via une fenêtre de navigateur en arrière-plan — plusieurs dizaines de secondes",
-  },
-  "tool.fetchingArticles": {
-    one: "Récupération de {count} article pour le test",
-    other: "Récupération de {count} articles pour le test",
-  },
-  "tool.addingSource": "Ajout de la source",
-  "tool.trialReceiptLabel": "Source testée",
-  "tool.trialReceiptSummary": "{name} ({pipe})",
-  "tool.addReceiptLabel": "Source ajoutée",
-
-  "tasking.label": "Recherche en cours",
-  "tasking.searchingCablesFor": "Recherche dans les dépêches pour « {query} »",
-  "tasking.searchingCables": "Recherche dans les dépêches",
-  "tasking.readingCable": "Lecture d'une dépêche",
-  "tasking.readingPictureFor": "Lecture de la situation de {lab}",
-  "tasking.readingPicture": "Lecture de la situation",
-
   "readPage.thePage": "la page",
   "readPage.reading": "Lecture de {url}",
   "webSearch.searching": "Recherche sur le web : {query}",

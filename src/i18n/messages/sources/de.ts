@@ -2,63 +2,6 @@ import type { Translation } from "../types";
 import type en from "./en";
 
 export default {
-  collectorSignedIn: "Auf {device} angemeldet",
-  collectorNeedsSignIn: "Muss auf {device} angemeldet werden",
-  signInNote:
-    "Beim Anmelden öffnet sich die eigene Seite der Website in einem Fenster. Schließe es, wenn du fertig bist — dein Passwort erreicht diese App nie, es bleibt nur das Cookie der Website.",
-  checkTitle: "Lädt die Website im Hintergrund und prüft, ob sie noch zur Anmeldung auffordert",
-  check: "Prüfen",
-  signOut: "Abmelden",
-  signIn: "Anmelden",
-  "account.benefitX": "Themensuchen lesen die X-Suche mit deinem Konto.",
-  "account.cautionX": "Das automatische Lesen läuft über das Konto, mit dem du dich anmeldest. Es besteht eine geringe Chance, dass die Risikokontrollen von X darauf reagieren. Wir empfehlen daher, dich mit einem Zweitkonto statt mit deinem Hauptkonto anzumelden.",
-  "account.benefitBloomberg": "Vollständige Bloomberg-Artikel in deinen Briefs statt der Vorschau von etwa 500 Zeichen.",
-  "account.usedBy": "Genutzt von {names}",
-  "account.signInOnCollector": "Melde dich auf dem Computer an, der deine Quellen sammelt",
-
-  "session.notChecked": "Nicht geprüft",
-  "session.couldNotTell": "Konnte nicht festgestellt werden",
-  "session.signedIn": "Angemeldet",
-  "session.notSignedIn": "Nicht angemeldet",
-  "session.expired": "Abgelaufen",
-  "session.workSigningIn": "Im Anmeldefenster abschließen, dann schließen",
-  "session.workConfirming": "Anmeldung wird bestätigt…",
-  "session.workChecking": "Website wird geprüft…",
-  "session.workSigningOut": "Wird abgemeldet…",
-
-  "pipe.apiFullArticles": "API mit vollständigen Artikeln",
-  "pipe.apiHeadlinesOnly": "API, nur Überschriften",
-  "pipe.articleList": "Artikelliste, ruft jede Seite ab",
-  "pipe.liveUpdates": "Live-Updates",
-  "pipe.indexQuery": "Index-Abfrage ({provider})",
-  "pipe.fullTextInFeed": "Volltext im Feed",
-  "pipe.fullTextInFeedPaywalled": "Volltext im Feed (teils kostenpflichtig)",
-  "pipe.feedFetchesPage": "Feed-Überschriften, ruft jede Seite ab",
-  "pipe.feedOpensWindow": "Feed-Überschriften, öffnet jeden Artikel in einem Browserfenster",
-  "pipe.headlinesOnlyBrowser": "Nur Überschriften, öffnet im Browser",
-
-  "tool.theSite": "die Website",
-  "tool.probingSite": "{input} wird untersucht",
-  "tool.fetchingWebviewArticles": {
-    one: "{count} Artikel wird über ein Hintergrund-Browserfenster abgerufen — dauert einige Dutzend Sekunden",
-    other: "{count} Artikel werden über ein Hintergrund-Browserfenster abgerufen — dauert einige Dutzend Sekunden",
-  },
-  "tool.fetchingArticles": {
-    one: "{count} Artikel wird zum Testen abgerufen",
-    other: "{count} Artikel werden zum Testen abgerufen",
-  },
-  "tool.addingSource": "Quelle wird hinzugefügt",
-  "tool.trialReceiptLabel": "Quelle getestet",
-  "tool.trialReceiptSummary": "{name} ({pipe})",
-  "tool.addReceiptLabel": "Quelle hinzugefügt",
-
-  "tasking.label": "Wird nachgeforscht",
-  "tasking.searchingCablesFor": "Meldungen werden nach „{query}“ durchsucht",
-  "tasking.searchingCables": "Meldungen werden durchsucht",
-  "tasking.readingCable": "Eine Meldung wird gelesen",
-  "tasking.readingPictureFor": "Lagebild von {lab} wird gelesen",
-  "tasking.readingPicture": "Lagebild wird gelesen",
-
   "readPage.thePage": "die Seite",
   "readPage.reading": "{url} wird gelesen",
   "webSearch.searching": "Websuche: {query}",
