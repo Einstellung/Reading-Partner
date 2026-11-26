@@ -12,10 +12,8 @@
 
 import { expect, test } from "bun:test";
 import { deskKindRegistered } from "../../src/desk";
-import { registerInfoDistillSource } from "../../src/info/briefer/distill-source";
 import { registerReadingDistillSources } from "../../src/reading/distill/source";
 import { distillSourceOf } from "../../src/memory/distill/sources";
-import { registerInfoDesk } from "../../src/info/briefer/desk";
 import { registerReadingDesk } from "../../src/reading/desk";
 import { registerRehearsalDesk } from "../../src/reading/rehearsal/desk";
 import { registerRetellDesk } from "../../src/reading/retell/desk";
@@ -27,7 +25,7 @@ import { PALACE, resolvePalace, rowOf, rowsWhere, type PalaceKind } from "../../
 // process, and a file that boots on import leaves every other test file in the
 // run looking at domains it never asked for.
 function booted<T>(body: () => T): T {
-  const undo = [registerInfoDistillSource(), registerReadingDistillSources()];
+  const undo = [registerReadingDistillSources()];
   try {
     return body();
   } finally {
@@ -59,10 +57,11 @@ test("every distilled kind has an id to key its cursor under", () => {
 });
 
 // The kinds a distillation source has been written for. "conversation" is the
-// door's, registered by the soul rather than at boot, and is the one row with
-// `distill` still waiting for the shell to call it.
+// door's, registered by the soul rather than at boot, and is waiting for the
+// shell to call it. "info-thread" keeps its `distill` mark for the briefing
+// conversations still on disk from before Intel was removed: nothing writes
+// them any more, so no source reads them.
 const SOURCED = [
-  "info-thread",
   "reading-thread",
   "annotations",
   "retell-thread",
@@ -114,6 +113,13 @@ test("the distilled kinds are the ones the passes already read", () => {
   }
 });
 
+// deskKind is how a row says the opener goes by another name; on its own it
+// says nothing, and the guard above would never read it.
+test("a row naming a desk kind is marked as desk material", () => {
+  const dangling = rowsWhere((r) => r.deskKind !== undefined && r.desk !== true).map((r) => r.kind);
+  expect(dangling).toEqual([]);
+});
+
 // A row marked `desk` says this data can be put in front of the AI. Nothing on
 // the desk opens itself: a domain registers the opener at startup
 // (useShellBootstrap's bootDomains), and the mark on the row is the claim that
@@ -123,16 +129,8 @@ test("every kind marked as desk material has an opener registered", () => {
   registerReadingDesk();
   registerRetellDesk();
   registerRehearsalDesk();
-  registerInfoDesk();
   const unopenable = rowsWhere((r) => r.desk === true)
     .map((r) => r.deskKind ?? r.kind)
     .filter((kind) => !deskKindRegistered(kind));
   expect(unopenable).toEqual([]);
-});
-
-// deskKind is how a row says the opener goes by another name; on its own it
-// says nothing, and the guard above would never read it.
-test("a row naming a desk kind is marked as desk material", () => {
-  const dangling = rowsWhere((r) => r.deskKind !== undefined && r.desk !== true).map((r) => r.kind);
-  expect(dangling).toEqual([]);
 });

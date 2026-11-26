@@ -5,7 +5,6 @@ export default {
   title: "Réglages",
   done: "OK",
   "tab.account": "IA et synchro",
-  "tab.accounts": "Comptes",
   "tab.features": "Fonctions",
   "tab.optional": "Facultatif",
   "tab.experiments": "Experiments",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "Appel vocal",
   "account.voiceFrontHint":
     "La première réponse rapide d'un appel vocal tourne ici, avant tout travail en arrière-plan. Un modèle rapide répond le plus vite ; laissez la réflexion désactivée sauf si les réponses sont trop superficielles. Un fournisseur qui ne peut pas désactiver la réflexion utilise son niveau le plus bas. Il utilise le fournisseur ci-dessus.",
-  "account.briefing": "Briefing",
-  "account.screening": "Tri",
-  "account.analysis": "Analyse",
-  "account.briefingHint":
-    "Le briefing n'est pas préparé la nuit pour le moment : il est en pause pendant sa refonte, et vous pouvez toujours en demander un à la main. Le tri lit les titres du jour pour décider quels articles valent la peine d'être récupérés : c'est l'étape à garder basse. L'analyse lit ceux qui ont passé le tri.",
   "account.thinking": "Réflexion",
   "account.chat": "Chat",
   "account.lessonPrep": "Préparation des cours",

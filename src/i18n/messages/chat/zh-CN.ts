@@ -119,4 +119,12 @@ export default {
   // Said in a conversation outside a book (the door, meals)
   "call.note.topicFiled": "已把这段对话归档到「{name}」。",
   "errors.noProvider": "未配置 AI 服务商（请在设置中配置）。",
+
+  // --- Topic proposal card (TopicProposalCard.tsx) --------------------------
+  "topicCard.filed": "已归档",
+  "topicCard.whereThisBelongs": "这属于哪个主题",
+  "topicCard.newTopic": "一个新主题",
+  "topicCard.onYourShelf": "已放到你的书架上。",
+  "topicCard.createAndFile": "创建并归档",
+  "topicCard.fileIt": "归档",
 } satisfies Translation<typeof en>;

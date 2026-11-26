@@ -49,11 +49,10 @@ test("the files the app writes are classified by what they hold", () => {
   expect(strategyFor("library.json")).toBe("records");
   expect(strategyFor("topics.json")).toBe("topics");
   expect(strategyFor("reading-state.json")).toBe("records");
-  expect(strategyFor("info-sources.json")).toBe("records");
-  expect(strategyFor("info-feedback.jsonl")).toBe("records");
   expect(strategyFor("saved-articles.json")).toBe("records");
-  expect(strategyFor("info-pool-marks.json")).toBe("records");
   expect(strategyFor("info-meals-photos.json")).toBe("records");
+  expect(strategyFor("info-meals-dishes.json")).toBe("records");
+  expect(strategyFor("legion/ledger/2026-09-15.jsonl")).toBe("records");
   // One line per deleted observation. Records because nothing else propagates a
   // deletion: this module removes no file, so an observation deleted on one
   // device comes back from the other unless its tombstone travels and unions.
@@ -66,9 +65,7 @@ test("the files the app writes are classified by what they hold", () => {
   // One device writes each of these and nobody else touches it, so there is
   // nothing to merge; a crossing pair leaves a conflict copy nobody reads.
   expect(strategyFor("info-collector-abc.json")).toBe("opaque");
-  expect(strategyFor("info-ask-abc.json")).toBe("opaque");
-  expect(strategyFor("info-briefing.json")).toBe("opaque");
-  expect(strategyFor("info-bodies.json")).toBe("opaque");
+  expect(strategyFor("legion/claim/abc.json")).toBe("opaque");
   // A kept article's body (docs/21). Opaque because it is named after the hash
   // of its own bytes: the same name on two devices is the same content, so there
   // is nothing to merge. Named to land here rather than in "prose" (a .md tail)
@@ -244,19 +241,17 @@ test("two devices each keeping an article keep both", () => {
   expect(out.copies).toEqual([]);
 });
 
-// The pool marks travel so a machine taking over collection knows what its
-// predecessor already put in a briefing (docs/36). Keyed by item id, which is a
-// hash of source:key and therefore the same on both devices; `version` sits
-// beside the map as a wrapper key and has to survive the merge.
-test("pool marks merge per item and keep the wrapper", () => {
-  const mark = (day: string) => ({ keep: true, confidence: 0.9, screenedOn: day, briefedOn: day });
-  const base = json({ version: 1, marks: { a: mark("2026-08-10") } });
-  const local = json({ version: 1, marks: { a: mark("2026-08-10"), b: mark("2026-08-11") } });
-  const remote = json({ version: 1, marks: { a: mark("2026-08-10"), c: mark("2026-08-11") } });
-  const out = merge("info-pool-marks.json", base, local, remote);
-  const parsed = JSON.parse(text(out.merged)) as { version: number; marks: Record<string, unknown> };
+// The dish library merges per dish. Keyed by dish id, the same on both devices;
+// `version` sits beside the map as a wrapper key and has to survive the merge.
+test("a keyed map merges per key and keeps the wrapper", () => {
+  const dish = (name: string) => ({ name, cuisine: "home", addedAt: 1 });
+  const base = json({ version: 1, dishes: { a: dish("one") } });
+  const local = json({ version: 1, dishes: { a: dish("one"), b: dish("two") } });
+  const remote = json({ version: 1, dishes: { a: dish("one"), c: dish("three") } });
+  const out = merge("info-meals-dishes.json", base, local, remote);
+  const parsed = JSON.parse(text(out.merged)) as { version: number; dishes: Record<string, unknown> };
   expect(parsed.version).toBe(1);
-  expect(Object.keys(parsed.marks).sort()).toEqual(["a", "b", "c"]);
+  expect(Object.keys(parsed.dishes).sort()).toEqual(["a", "b", "c"]);
   expect(out.dropped).toEqual([]);
   expect(out.copies).toEqual([]);
 });
@@ -370,13 +365,13 @@ test("topics merge per topic under their wrapper", () => {
   );
 });
 
-test("the source list merges per source", () => {
-  const source = (id: string, enabled: boolean) => ({ id, kind: "rss", url: `https://${id}`, enabled });
-  const base = json([source("a", true), source("b", true)]);
-  const local = json([source("a", false), source("b", true)]);
-  const remote = json([source("a", true), source("b", true), source("c", true)]);
-  expect(merged("info-sources.json", base, local, remote)).toBe(
-    JSON.stringify([source("a", false), source("b", true), source("c", true)], null, 2),
+test("a top-level list merges per record", () => {
+  const kept = (id: string, title: string) => ({ id, topicId: "t1", title, savedAt: 1 });
+  const base = json([kept("a", "A"), kept("b", "B")]);
+  const local = json([kept("a", "A renamed"), kept("b", "B")]);
+  const remote = json([kept("a", "A"), kept("b", "B"), kept("c", "C")]);
+  expect(merged("saved-articles.json", base, local, remote)).toBe(
+    JSON.stringify([kept("a", "A renamed"), kept("b", "B"), kept("c", "C")], null, 2),
   );
 });
 
@@ -452,12 +447,14 @@ test("one statement appended to from both sides keeps one version and journals t
   expect(text(swapped.merged)).toBe(text(out.merged));
 });
 
-test("the feedback log unions its lines and keeps the trailing newline", () => {
-  const line = (ts: number) => JSON.stringify({ ts, itemId: `i${ts}`, title: "t", action: "opened" });
+const usageLine = (ts: number) => JSON.stringify({ at: ts, device: "d1", statementId: `s${ts}` });
+
+test("a line log unions its lines and keeps the trailing newline", () => {
+  const line = usageLine;
   const base = bytes(`${line(1)}\n`);
   const local = bytes(`${line(1)}\n${line(2)}\n`);
   const remote = bytes(`${line(1)}\n${line(3)}\n`);
-  const out = merge("info-feedback.jsonl", base, local, remote);
+  const out = merge("memory-usage-d1.jsonl", base, local, remote);
   const lines = text(out.merged).trimEnd().split("\n");
   expect(lines[0]).toBe(line(1));
   expect(lines.slice(1).sort()).toEqual([line(2), line(3)].sort());
@@ -465,22 +462,22 @@ test("the feedback log unions its lines and keeps the trailing newline", () => {
   expect(out.contested).toBe(false);
 });
 
-// The other half of that union, and the reason appendFeedback would rather skip
-// a reaction than write over a log it could not read (memory/profile/feedback.ts):
-// the lines merge is a union only when there is no base. With one, lines this
-// device no longer has are deletes, and they come off the other device too.
-test("a feedback log that lost lines does not get them back from the other device", () => {
-  const line = (ts: number) => JSON.stringify({ ts, itemId: `i${ts}`, title: "t", action: "opened" });
+// The other half of that union, and the reason a log writer would rather skip a
+// line than write over a log it could not read: the lines merge is a union only
+// when there is no base. With one, lines this device no longer has are deletes,
+// and they come off the other device too.
+test("a line log that lost lines does not get them back from the other device", () => {
+  const line = usageLine;
   const full = `${line(1)}\n${line(2)}\n${line(3)}\n`;
   // The desk truncated its log to one new line; the iPad still has all three.
-  const out = merge("info-feedback.jsonl", bytes(full), bytes(`${line(4)}\n`), bytes(full));
+  const out = merge("memory-usage-d1.jsonl", bytes(full), bytes(`${line(4)}\n`), bytes(full));
   expect(text(out.merged).trimEnd().split("\n")).toEqual([line(4)]);
   // Recoverable from the journal, but gone from the file on both devices.
   expect(out.dropped.map((d) => d.id)).toEqual([line(1), line(2), line(3)]);
 
   // Without a base the same pair is a union: nothing here can be told apart from
   // an addition, so nothing is removed.
-  const noBase = merge("info-feedback.jsonl", null, bytes(`${line(4)}\n`), bytes(full));
+  const noBase = merge("memory-usage-d1.jsonl", null, bytes(`${line(4)}\n`), bytes(full));
   expect(text(noBase.merged).trimEnd().split("\n").sort()).toEqual(
     [line(1), line(2), line(3), line(4)].sort(),
   );
@@ -1119,8 +1116,8 @@ const CASES: Case[] = [
     identified: false,
   },
   {
-    name: "a feedback log both sides appended to",
-    path: "info-feedback.jsonl",
+    name: "a line log both sides appended to",
+    path: "memory-usage-d1.jsonl",
     base: bytes('{"ts":1}\n'),
     local: bytes('{"ts":1}\n{"ts":2}\n'),
     remote: bytes('{"ts":1}\n{"ts":3}\n'),
@@ -1233,13 +1230,13 @@ const CASES: Case[] = [
     identified: false,
   },
   {
-    name: "a source list one side disabled a source in",
-    path: "info-sources.json",
-    base: json([{ id: "a", kind: "rss", url: "https://a", enabled: true }]),
-    local: json([{ id: "a", kind: "rss", url: "https://a", enabled: false }]),
+    name: "a kept-article list one side renamed an article in",
+    path: "saved-articles.json",
+    base: json([{ id: "a", topicId: "t1", title: "A", savedAt: 1 }]),
+    local: json([{ id: "a", topicId: "t1", title: "A renamed", savedAt: 1 }]),
     remote: json([
-      { id: "a", kind: "rss", url: "https://a", enabled: true },
-      { id: "b", kind: "rss", url: "https://b", enabled: true },
+      { id: "a", topicId: "t1", title: "A", savedAt: 1 },
+      { id: "b", topicId: "t1", title: "B", savedAt: 2 },
     ]),
     identified: false,
   },

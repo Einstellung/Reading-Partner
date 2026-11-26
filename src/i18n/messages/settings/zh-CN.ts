@@ -5,7 +5,6 @@ export default {
   title: "设置",
   done: "完成",
   "tab.account": "AI 与同步",
-  "tab.accounts": "账户",
   "tab.features": "功能",
   "tab.optional": "可选",
   "tab.experiments": "实验室",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "语音通话",
   "account.voiceFrontHint":
     "语音通话里先开口的那句快速回答用这里的模型，在任何后台工作之前。模型越快，开口越早；回答太浅时再打开思考。无法关闭思考的服务商使用它的最低档。它使用上面的服务商。",
-  "account.briefing": "新闻简报",
-  "account.screening": "筛选",
-  "account.analysis": "分析",
-  "account.briefingHint":
-    "简报暂时不在夜间生成：重新设计期间已暂停，你仍可以手动请求。筛选阅读当天的标题来决定哪些文章值得抓取，所以这一步宜设低；分析阅读通过筛选的文章。",
   "account.thinking": "思考",
   "account.chat": "对话",
   "account.lessonPrep": "备课",

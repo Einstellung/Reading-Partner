@@ -9,7 +9,6 @@
 // (pitfall 322); the search body follows GitHub's REST docs.
 
 import { afterEach, expect, test } from "bun:test";
-import { collectSource } from "../../../src/info/sources/engine";
 import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import {
   githubPlugin,
@@ -18,7 +17,7 @@ import {
   latestMonthValue,
   openDiggerUrl,
 } from "../../../src/sources/plugins/github";
-import { registerSourcePlugin, resetSourcePluginsForTests, type PluginDeps } from "../../../src/sources/plugin";
+import { resetSourcePluginsForTests, type PluginDeps } from "../../../src/sources/plugin";
 import { jsonResponse, textResponse } from "../../support/fetch";
 
 afterEach(() => resetSourcePluginsForTests());
@@ -374,32 +373,3 @@ test("a query already aborted sends nothing", async () => {
 });
 
 // --- through the engine -------------------------------------------------------------
-
-test("collectSource runs a github index descriptor and stamps the descriptor's identity", async () => {
-  registerSourcePlugin(githubPlugin);
-  const desc: SourceDescriptor = {
-    ...DESC,
-    id: "gh-new",
-    name: "New robotics repos",
-    limit: 2,
-    discovery: { kind: "index", provider: "github", query: { mode: "search", topics: ["robotics"], days: 7, minStars: 50 } },
-  };
-  const { calls, fetchFn } = scripted((url) => {
-    expect(new URL(url).searchParams.get("q")).toBe("created:>2026-09-06 stars:>=50 topic:robotics");
-    expect(new URL(url).searchParams.get("per_page")).toBe("2");
-    return jsonResponse(searchBody([searchRepo("x/one", 300), searchRepo("y/two", 200), searchRepo("z/three", 100)]));
-  }, { "x/one": { openrank: OPENRANK, activity: ACTIVITY } });
-  const items = await collectSource(desc, { fetchFn, now: () => NOW });
-  expect(items.map((i) => [i.source, i.sourceName, i.sourceKey])).toEqual([
-    ["gh-new", "New robotics repos", "x/one"],
-    ["gh-new", "New robotics repos", "y/two"],
-  ]);
-  expect(items[0].signals?.openrank).toBe(333.26);
-  expect(items[0].signals?.stars).toBe(300);
-  expect(items[1].signals?.openrank).toBeUndefined();
-  expect(calls).toHaveLength(1 + 4);
-
-  // A rejected query is a source failure with the provider's reason.
-  const bad = { ...desc, id: "gh-bad", discovery: { kind: "index" as const, provider: "github", query: { mode: "search", period: "week" } } };
-  await expect(collectSource(bad, { fetchFn })).rejects.toThrow(/index query rejected.*period applies to trending/);
-});

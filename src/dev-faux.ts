@@ -7,7 +7,6 @@
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { providers } from "./ai/providers";
 import { AssembledTurns, type AssembledBookTurn } from "./reading/turn/durable-book";
-import { infoAssemblies } from "./info/briefer/info-durable";
 import { mealsAssemblies } from "./meals/conversation/durable";
 import { retellAssemblies } from "./reading/retell/retell-durable";
 import { coachAssemblies } from "./reading/rehearsal/coach-durable";
@@ -81,7 +80,7 @@ if (import.meta.env.VITE_VERIFY_FAUX === "1") {
         put.call(this, key, { ...turn, tools: turn.tools.map(slow) });
       };
       // The info, meals, retell and coach turns keep their desks in plain maps.
-      for (const map of [infoAssemblies, mealsAssemblies, retellAssemblies, coachAssemblies] as Map<string, AssembledBookTurn>[]) {
+      for (const map of [mealsAssemblies, retellAssemblies, coachAssemblies] as Map<string, AssembledBookTurn>[]) {
         const set = map.set.bind(map);
         map.set = (key, turn) => set(key, { ...turn, tools: turn.tools.map(slow) });
       }

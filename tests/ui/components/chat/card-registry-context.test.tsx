@@ -1,6 +1,6 @@
 // Where a chat row gets its card components from (src/ui/components/chat/
 // cardRegistryContext.ts). The table is assembled above chat/ and handed down by
-// the shell, so chat/ never imports info/ or reader/ — the two directories that
+// the shell, so chat/ never imports meals/ or reader/ — the two directories that
 // import chat/ for the card protocol. Run: bun test.
 
 import { afterEach, expect, spyOn, test } from "bun:test";
@@ -23,7 +23,7 @@ const { CardRegistryContext } = await import("../../../../src/ui/components/chat
 const { CardRegistryProvider } = await import("../../../../src/ui/components/CardRegistryProvider");
 const { CARD_REGISTRY } = await import("../../../../src/ui/components/cardRegistry");
 const { MessageList } = await import("../../../../src/ui/components/chat/MessageList");
-const InfoHomeModule = await import("../../../../src/ui/components/info/InfoHome");
+const MealsHostModule = await import("../../../../src/ui/components/meals/MealsHost");
 
 const DECISION: RetellDecisionCardData = {
   kind: "retell-decision",
@@ -130,7 +130,7 @@ test("an old weekly meals-plan card draws nothing", () => {
   expect(html).not.toContain("[object");
 });
 
-// The shells themselves. Each mounts InfoHome where its screens go, and every
+// The shells themselves. Each mounts MealsHost where its screens go, and every
 // chat either of them shows is under that point in the tree — so a chat is put
 // there and asked to render a card. Under the provider the card comes out;
 // orphaned, the same chat renders nothing at all and says nothing about it,
@@ -142,10 +142,10 @@ test("an old weekly meals-plan card draws nothing", () => {
 // shell whose closing tag sits against its opening one with every chat outside
 // both.
 //
-// InfoHome is swapped for the chat rather than driven into opening its own: the
-// info call arrives through the briefing pipeline and an agent turn, neither of
-// which belongs in this test. The swap is spyOn on the module's default export
-// (docs/pitfall/122), so the shells are mounted exactly as they are written.
+// MealsHost is swapped for the chat rather than driven into opening its own: the
+// meals call arrives through an agent turn, which does not belong in this test.
+// The swap is spyOn on the module's export (docs/pitfall/122), so the shells are
+// mounted exactly as they are written.
 function ChatProbe() {
   return <MessageList messages={rowWithCard()} />;
 }
@@ -156,7 +156,7 @@ for (const [shell, load] of [
 ] as const) {
   test(`a chat where ${shell} mounts its screens renders its card`, async () => {
     const restore = hushShell();
-    const spy = spyOn(InfoHomeModule, "default").mockImplementation(ChatProbe);
+    const spy = spyOn(MealsHostModule, "MealsHost").mockImplementation(ChatProbe);
     try {
       const Shell = (await load()).default;
       const { container } = render(<Shell />);

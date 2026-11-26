@@ -8,7 +8,6 @@
 import { t } from "../../../i18n";
 import type { BoxItem, BoxItemState, BoxOrigin } from "../../../box/types";
 import { intakeIdOfItem } from "../../../reading/ingest/intake-box";
-import { issueBookOfItem } from "../../../info/issue/types";
 import type { ExperimentGates } from "../base/experiment-gates";
 
 export type Shell = "desktop" | "phone";
@@ -128,9 +127,6 @@ type ItemFacts = Pick<BoxItem, "origin" | "kind" | "body" | "runId">;
  * a run's at the reply that answered it. Anything else goes by origin.
  */
 export function planItemJump(item: ItemFacts, place: Place): Jump {
-  // A brief issue opens its book (docs/info/88); the door card for it is the 68 slice's.
-  const issueBook = issueBookOfItem(item);
-  if (issueBook) return { steps: [{ step: "open-book", bookId: issueBook }], unreachable: null };
   if (item.origin.place === "door") {
     const intakeId = intakeIdOfItem(item);
     const focus: DoorFocus | null = intakeId ? { intakeId } : item.runId ? { runId: item.runId } : null;
@@ -161,12 +157,15 @@ export function stateAfterFollow(item: Pick<BoxItem, "kind" | "body">): BoxItemS
  * one from the meals page while meals is hidden, a brief's while intel is. They
  * stay in the box untouched and come back with the switch.
  */
+// A brief's issue (Intel, removed 2026-11): any still in the box is not drawn.
+const BRIEF_ISSUE_KIND = "brief-issue";
+
 export function shownBoxItems<T extends Pick<BoxItem, "origin" | "kind" | "body">>(
   items: readonly T[],
-  gates: Pick<ExperimentGates, "meals" | "intel">,
+  gates: Pick<ExperimentGates, "meals">,
 ): T[] {
   return items.filter(
     (item) =>
-      (gates.meals || item.origin.place !== "meals") && (gates.intel || issueBookOfItem(item) === null),
+      (gates.meals || item.origin.place !== "meals") && item.kind !== BRIEF_ISSUE_KIND,
   );
 }

@@ -13,8 +13,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
-import { BRIEF_TOPIC_ID, listTopics, onFiledElsewhere, type Topic } from "./platform/app/topics";
-import { libraryHas, listLibraryEntries, type LibraryEntry } from "./platform/app/library";
+import { listTopics, onFiledElsewhere, type Topic } from "./platform/app/topics";
+import { listLibraryEntries, type LibraryEntry } from "./platform/app/library";
 import { readerModeOf } from "./reading/issue";
 import {
   libraryFilePath,
@@ -24,25 +24,14 @@ import {
 } from "./platform/app/open-in";
 import FlowReaderPane from "./reading/epub/flow/FlowReaderPane";
 import type { FlowReaderPaneProps } from "./reading/epub/flow/flow-contract";
-import { registerPullRoute } from "./platform/sync/pull-routes";
-import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
-import {
-  loadSavedArticles,
-  savedArticlesForTopic,
-  type SavedArticle,
-} from "./reading/saved/saved-articles";
-import { keptArticleOpening } from "./reading/saved/kept-document";
 import { registerPlaces } from "./desk";
 import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
 import { hiddenByExperiments, reachableScreen } from "./ui/components/base/shell-nav";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
-import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
-import InfoShelf from "./ui/components/info/InfoShelf";
+import type { HomeScreen } from "./ui/components/base/shell-nav";
 import { useMealsHost } from "./ui/components/meals/use-meals-host";
 import { MealsHost } from "./ui/components/meals/MealsHost";
 import PhoneHome from "./ui/components/phone/PhoneHome";
-import { openShelfCard } from "./ui/components/info/info-shelf-live";
-import { useHomeIntel } from "./ui/components/phone/use-home-data";
 import { CompanionCorner } from "./ui/components/companion/CompanionCorner";
 import { useCornerLift } from "./ui/components/companion/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
@@ -54,7 +43,6 @@ import PhoneLessonScreen from "./ui/components/phone/lesson/PhoneLessonScreen";
 import PhoneLessonIntroSheet from "./ui/components/phone/lesson/PhoneLessonIntroSheet";
 import PhoneShelf, { type PhoneBookOpen } from "./ui/components/phone/PhoneShelf";
 import { continueReading, conversationDoor } from "./ui/components/phone/shelf-list";
-import SavedList from "./ui/components/phone/SavedList";
 import {
   back,
   backIsAvailable,
@@ -80,17 +68,12 @@ import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import { KeyboardShell } from "./ui/components/common/KeyboardShell";
 import { useBackgroundServices } from "./ui/components/common/useBackgroundServices";
 
-// InfoHome's screen for a stack entry, or null on the ones it does not draw.
-// Null keeps it mounted with its pipeline and its opened article intact, the
-// same way App parks it while the reader is open.
-function infoScreenFor(base: PhoneScreen): HomeScreen | null {
+// The home screen a stack entry is, for MealsHost, or null on the ones that are
+// none of its business.
+function homeScreenFor(base: PhoneScreen): HomeScreen | null {
   switch (base.kind) {
     case "home":
       return "vestibule";
-    case "briefing":
-      return "briefing";
-    case "article":
-      return "article";
     case "meals":
       return "meals";
     case "meals-shopping":
@@ -138,11 +121,6 @@ export default function PhoneApp({
   // conversation nothing is measured and the corner keeps the corner.
   const { composerRef: composerSlot, placement: companion } = useCornerLift(companionShown, true);
   const toggleCompanion = toggleCompanionShown;
-  // The kept articles (docs/21). Fixed to the Brief topic: the phone has no
-  // other place to file one from. The one being read is a stack entry.
-  // Null until saved-articles.json has been read: "Nothing kept yet" is a claim
-  // about a file nobody has opened.
-  const [savedArticles, setSavedArticles] = useState<SavedArticle[] | null>(null);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
   // The shelf (docs/70): the topics and the book registry. Null until they have
   // been read — the home card says nothing about a library nobody has listed.
@@ -152,9 +130,6 @@ export default function PhoneApp({
   // entry carries what back and the title need; the topic and the path are what
   // leaving the book writes to, and only the shelf knew them.
   const [openedBook, setOpenedBook] = useState<PhoneBookOpen | null>(null);
-  // The home's Intel covers (docs/ui/22), read again whenever the registry is:
-  // a pull, and every way out of a book.
-  const homeIntel = useHomeIntel(entries);
   const refreshShelf = useCallback(async () => {
     const [list, registry] = await Promise.all([
       listTopics().catch((): Topic[] => []),
@@ -164,7 +139,7 @@ export default function PhoneApp({
     setEntries(registry);
   }, []);
 
-  // The info call InfoHome draws over its screens. It is not a stack entry, so
+  // A call drawn over the screens (the meals call). It is not a stack entry, so
   // back closes it instead of navigating underneath it; the ref keeps goBack
   // stable, and the flag is what arms the gesture and the Android button when
   // the stack itself is at its floor.
@@ -186,19 +161,18 @@ export default function PhoneApp({
     applySettings,
     device,
     applyDevice,
-    configured,
-    ready: bootstrapped,
+
     syncReport,
   } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
-  // The meals line (docs/73) is this device's Meals experiment, which counts
-  // only under Intel (platform/experiments). settings.meals is no longer read.
+  // The meals line (docs/73) is this device's Meals experiment
+  // (platform/experiments). settings.meals is no longer read.
   const mealsOn = gates.meals;
-  const shownRef = useRef({ meals: mealsOn, intel: gates.intel });
-  shownRef.current = { meals: mealsOn, intel: gates.intel };
+  const shownRef = useRef({ meals: mealsOn });
+  shownRef.current = { meals: mealsOn };
   // A screen whose line was switched off under the settings sheet goes home.
   useEffect(() => {
-    if (hiddenByExperiments(base.kind, { meals: mealsOn, intel: gates.intel })) setStack(INITIAL_STACK);
-  }, [base.kind, mealsOn, gates.intel]);
+    if (hiddenByExperiments(base.kind, { meals: mealsOn })) setStack(INITIAL_STACK);
+  }, [base.kind, mealsOn]);
 
   // The one back. The three things that trigger it — a top bar button, the
   // left-edge swipe, the Android button — all arrive here. Both inputs come
@@ -219,42 +193,11 @@ export default function PhoneApp({
     }
   }, []);
 
-  const refreshSavedArticles = useCallback(async () => {
-    const all = await loadSavedArticles().catch((): SavedArticle[] => []);
-    setSavedArticles(savedArticlesForTopic(all, BRIEF_TOPIC_ID));
-  }, []);
-
-  // The kept list is this shell's own: it is most of what the phone shows, and
-  // nothing in the shared bootstrap knows about it, so it is read here.
-  useEffect(() => {
-    void refreshSavedArticles();
-  }, [refreshSavedArticles]);
-
   // A book is on one topic, so an add of one another topic lists left it there
   // (platform/app/topics.ts addFile).
   useEffect(
     () => onFiledElsewhere((found) => pushToast("info", alreadyInLine(found.topic.name))),
     [pushToast, t],
-  );
-
-  // Account sync (docs/13). The kept articles are what this shell mostly shows
-  // and they arrive over sync, so a pulled saved-articles.json reloads the list.
-  // The shelf is the other half, and its route is registered by
-  // useBackgroundServices below: topics.json and library.json are what its
-  // cards are made of, and a book added on the desk reaches the phone as a pull
-  // and nothing else. The two routes overlap on saved-articles.json, which
-  // costs one extra read of the shelf's two files.
-  // Every other file a pull writes has a route of its own (platform/sync/
-  // pull-routes.ts), settings.json included — this shell holds it whole in
-  // memory and saves it whole, so a field merged in from another device is
-  // undone by the next save unless the shared bootstrap reads the copy back.
-  useEffect(
-    () =>
-      registerPullRoute({
-        ...KEPT_ARTICLES_PULL_ROUTE,
-        onPulled: () => void refreshSavedArticles(),
-      }),
-    [refreshSavedArticles],
   );
 
   const settingsRef = useRef(settings);
@@ -288,17 +231,14 @@ export default function PhoneApp({
     useMemo(() => ({ enabled: backable, onBack: goBack }), [backable, goBack]),
   );
 
-  // InfoHome navigates by naming a destination, and uses the same call for its
-  // own top bar backs ("briefing" from an article). goTo unwinds to a screen
+  // A screen navigates by naming a destination. goTo unwinds to a screen
   // already on the stack, so those stay backs instead of stacking a second copy.
   // "library" cannot arrive: the phone home screen has no way there.
   const onNavigate = useCallback((next: HomeScreen) => {
     // A day carries its date, so it is opened by onOpenMealsDay rather than by
     // naming a destination; nothing asks for it through here.
-    // The old briefing's page and article land on home while its UI is off
-    // (info/old-briefing.ts), a box card's jump included.
-    // So does a line whose experiment is off (platform/experiments).
-    const reached = reachableScreen(next, undefined, shownRef.current);
+    // A line whose experiment is off lands on home (platform/experiments).
+    const reached = reachableScreen(next, shownRef.current);
     if (reached === "meals-day" || reached === "meals-recipe" || reached === "meals-prep") return;
     const kind = reached === "vestibule" ? "home" : reached;
     setStack((s) => goTo(s, screen(kind)));
@@ -308,7 +248,7 @@ export default function PhoneApp({
   // prep run, its call and the conversation outlive the screen being shown.
   const mealsHost = useMealsHost({
     enabled: mealsOn,
-    screen: infoScreenFor(base),
+    screen: homeScreenFor(base),
     onNavigate,
     onOpenMealsPrep: (session) => setStack((s) => openPrep(s, session)),
     onOverlayChange,
@@ -320,17 +260,6 @@ export default function PhoneApp({
     setOpenedBook(book);
     setStack((s) => push(s, { kind: "reader", bookId: book.bookId, name: book.name }));
   }, []);
-
-  // A kept article opens as the document its keep built when this phone has the
-  // bytes, and as its kept snapshot otherwise (reading/saved/kept-document.ts).
-  const openKeptArticle = useCallback(
-    async (article: SavedArticle) => {
-      const doc = keptArticleOpening(article, topics ?? []);
-      if (doc && (await libraryHas(doc.bookId).catch(() => false))) return openReader(doc);
-      setStack((s) => push(s, { kind: "savedArticle", article }));
-    },
-    [topics, openReader],
-  );
 
   // Into a lesson (docs/70). The first one on this phone is explained before it
   // opens: the tap the reader made was on a book cover, and what comes up is a
@@ -413,35 +342,10 @@ export default function PhoneApp({
               fill it, and a shell that leaves this out renders no card at all. */}
           <CardRegistryProvider>
           <ComposerSlotContext.Provider value={composerSlot}>
-          <InfoHome
-            screen={infoScreenFor(base)}
-            onNavigate={onNavigate}
-            role={device?.role ?? null}
-            configured={configured}
-            launchReady={bootstrapped}
-            onOpenSettings={openSettings}
-            onTopicsChanged={refreshSavedArticles}
-            onOverlayChange={onOverlayChange}
-            // Pull down on the briefing or on an article to open the chat about
-            // it. Only those two: home and the kept list have nothing to talk
-            // about, and a kept article is still invisible to the AI (docs/21),
-            // so a chat over one would not know what it was reading. The gesture
-            // is this shell's, so it is this shell that wraps the screen in it.
-            wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
-            pipCards={false}
-            renderLaunch={(launch) => (
+          {base.kind === "home" && (
+            <div className="absolute inset-0 overflow-y-auto bg-background">
               <PhoneHome
-                launch={launch}
-                intel={homeIntel}
-                // An issue or a volume is on no topic: the reader opens it from the library alone.
-                onOpenIntel={(item) =>
-                  openShelfCard(item.card, homeIntel?.library ?? {}, (bookId, name) =>
-                    openReader({ bookId, name, topicId: "", path: "" }),
-                  )
-                }
-                savedCount={savedArticles?.length ?? null}
-                onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
-                onOpenBriefs={() => setStack((s) => push(s, screen("briefs")))}
+                onOpenSettings={openSettings}
                 topics={topics}
                 continueBook={topics === null ? undefined : continueReading(topics, entries)}
                 onContinue={(book) => openReader({ ...book, name: book.title })}
@@ -452,7 +356,6 @@ export default function PhoneApp({
                 onOpenLibrary={() => setStack((s) => push(s, screen("library")))}
                 settingsAlert={syncReport.alert !== "none"}
                 meals={mealsOn}
-                intelShown={gates.intel}
                 onOpenMeals={() => onNavigate("meals")}
                 mealsTile={mealsHost.tile}
                 // Tapped before info-meals.json is read: the Meals page, which holds until it is.
@@ -461,13 +364,13 @@ export default function PhoneApp({
                 onToggleCompanion={toggleCompanion}
                 companionAvailable={gates.companion}
               />
-            )}
-          />
+            </div>
+          )}
 
-          {infoScreenFor(base) !== null && (
+          {homeScreenFor(base) !== null && (
             <MealsHost
               host={mealsHost}
-              screen={infoScreenFor(base)!}
+              screen={homeScreenFor(base)!}
               onNavigate={onNavigate}
               enabled={mealsOn}
               // One day of the week is a stack entry like an opened article, so
@@ -488,36 +391,11 @@ export default function PhoneApp({
               wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
               // No corner cards over the chat: on the phone it is a screen of the stack.
               pipCards={false}
-              onTopicsChanged={() => void refreshSavedArticles()}
+              onTopicsChanged={() => void refreshShelf()}
             />
           )}
 
-          {base.kind === "saved" && (
-            <SavedList
-              articles={savedArticles ?? []}
-              onOpen={(article) => void openKeptArticle(article)}
-              onBack={goBack}
-              // Un-keeping takes the document off the shelf too.
-              onChanged={async () => {
-                await refreshSavedArticles();
-                await refreshShelf();
-              }}
-              onNotice={pushToast}
-            />
-          )}
 
-          {base.kind === "briefs" && gates.intel && (
-            <InfoShelf
-              // An issue or a volume is on no topic: the reader opens it from
-              // the library alone.
-              onOpenBook={(bookId, name) => openReader({ bookId, name, topicId: "", path: "" })}
-              onBack={goBack}
-              sheet
-              onTell={(line) => pushToast("info", line)}
-              onSay={(line) => pushToast("error", line)}
-              onTopicsChanged={refreshShelf}
-            />
-          )}
 
           {base.kind === "savedArticle" && (
             <SavedArticleView article={base.article} backLabel={t("shell.savedArticle.backLabel")} onBack={goBack} />
@@ -635,7 +513,7 @@ export default function PhoneApp({
             const entry = entries[bookId];
             if (entry) openReader({ bookId, name: entry.title, topicId: "", path: "" });
           },
-          goToBriefing: () => onNavigate("briefing"),
+          goToBriefing: () => onNavigate("vestibule"),
           goToMeals: () => onNavigate("meals"),
           // A book's conversation: a paper's lesson, or an EPUB's thread over its page.
           openBookConversation: (bookId, threadId) => {

@@ -5,7 +5,6 @@ export default {
   title: "설정",
   done: "완료",
   "tab.account": "AI 및 동기화",
-  "tab.accounts": "계정",
   "tab.features": "기능",
   "tab.optional": "선택 사항",
   "tab.experiments": "Experiments",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "음성 통화",
   "account.voiceFrontHint":
     "음성 통화의 빠른 첫 응답은 백그라운드 작업보다 먼저 여기서 실행됩니다. 빠른 모델일수록 먼저 답합니다. 답이 너무 얕지 않다면 사고는 꺼 두세요. 사고를 끌 수 없는 제공업체는 가장 낮은 단계를 사용합니다. 제공업체는 위와 같은 것을 사용합니다.",
-  "account.briefing": "브리핑",
-  "account.screening": "선별",
-  "account.analysis": "분석",
-  "account.briefingHint":
-    "브리핑은 당분간 밤사이 만들어지지 않습니다. 재설계하는 동안 중단되어 있으며, 직접 요청하면 만들 수 있습니다. 선별은 그날의 헤드라인을 읽고 가져올 기사를 정하는 단계라 낮게 두는 것이 좋고, 분석은 통과한 기사를 읽습니다.",
   "account.thinking": "사고",
   "account.chat": "채팅",
   "account.lessonPrep": "수업 준비",

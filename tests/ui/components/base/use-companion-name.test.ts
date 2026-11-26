@@ -49,7 +49,6 @@ const COMPANION_KEYS = [
   "settings.features.companionShowHint",
   "reader.top.companion",
   "phone.displaySheet.companion",
-  "info.shelf.empty",
 ];
 
 test("every label that means the companion carries the name in every language", () => {
@@ -61,11 +60,5 @@ test("every label that means the companion carries the name in every language", 
       expect(text, `${locale} ${key}`).not.toContain("卢明");
       expect(text, `${locale} ${key}`).not.toContain("{name}");
     }
-  }
-});
-
-test("the product's own name stays in the briefing cover", () => {
-  for (const locale of LOCALES) {
-    expect(translate(locale, "info.issue.book.coverKicker"), locale).toContain("Lumen");
   }
 });

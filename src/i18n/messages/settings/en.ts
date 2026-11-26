@@ -5,7 +5,6 @@ export default {
   title: "Settings",
   done: "Done",
   "tab.account": "AI & sync",
-  "tab.accounts": "Accounts",
   "tab.features": "Features",
   "tab.optional": "Optional",
   "tab.experiments": "Experiments",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "Voice call",
   "account.voiceFrontHint":
     "A voice call's quick first answer runs here, before any background work. A fast model answers soonest; leave thinking off unless the answers are too shallow. A provider that cannot turn thinking off uses its lowest level. It uses the provider above.",
-  "account.briefing": "Briefing",
-  "account.screening": "Screening",
-  "account.analysis": "Analysis",
-  "account.briefingHint":
-    "The briefing is not built overnight for now: it is paused while it is being redesigned, and you can still ask for one by hand. Screening reads the day's headlines to decide which articles are worth fetching, so it is the stage to keep low; analysis reads the ones that got through.",
   "account.thinking": "Thinking",
   "account.chat": "Chat",
   "account.lessonPrep": "Lesson prep",

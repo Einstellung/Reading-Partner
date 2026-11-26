@@ -5,7 +5,6 @@ export default {
   title: "設定",
   done: "完了",
   "tab.account": "AI と同期",
-  "tab.accounts": "アカウント",
   "tab.features": "機能",
   "tab.optional": "オプション",
   "tab.experiments": "Experiments",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "音声通話",
   "account.voiceFrontHint":
     "音声通話の最初の素早い返答はバックグラウンド作業より先にここで実行されます。速いモデルほど早く返答します。返答が浅すぎる場合を除き、思考はオフのままにしてください。思考をオフにできないプロバイダでは最も低いレベルが使われます。プロバイダは上と同じものを使います。",
-  "account.briefing": "ブリーフィング",
-  "account.screening": "選別",
-  "account.analysis": "分析",
-  "account.briefingHint":
-    "ブリーフィングは現在、夜間には作成されません。再設計のあいだ停止していますが、手動で依頼することはできます。選別はその日の見出しを読んで取得する記事を決める段階なので、低めに保つのが適切です。分析は通過した記事を読みます。",
   "account.thinking": "思考",
   "account.chat": "チャット",
   "account.lessonPrep": "授業の準備",

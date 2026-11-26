@@ -119,4 +119,12 @@ export default {
   // Said in a conversation outside a book (the door, meals)
   "call.note.topicFiled": 'Archivé esta conversación en "{name}".',
   "errors.noProvider": "No hay ningún proveedor de IA configurado (Ajustes).",
+
+  // --- Topic proposal card (TopicProposalCard.tsx) --------------------------
+  "topicCard.filed": "Archivado",
+  "topicCard.whereThisBelongs": "Dónde encaja esto",
+  "topicCard.newTopic": "Un tema nuevo",
+  "topicCard.onYourShelf": "En tu estantería.",
+  "topicCard.createAndFile": "Crear y archivar",
+  "topicCard.fileIt": "Archivar",
 } satisfies Translation<typeof en>;

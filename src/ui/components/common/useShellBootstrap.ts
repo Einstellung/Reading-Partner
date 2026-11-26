@@ -42,20 +42,16 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "../../../ai";
-import { registerInfoDesk } from "../../../info/briefer/desk";
 import { registerMealsDesk } from "../../../meals/desk";
 import "../../../meals/plan/merge";
 import "../../../meals/draft-store";
-import { registerSecretaryRole } from "../../../info/briefer/role";
 import { registerMealsRole } from "../../../meals/conversation/role";
 import { registerMealsDelivery } from "../../../meals/conversation/deliver";
 import { registerMealsBell } from "../../../reading/turn/meals-bell";
-import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
 import { registerReadingDistillSources } from "../../../reading/distill/source";
 import { registerReadingDesk } from "../../../reading/desk";
 import { registerBookDelivery } from "../../../reading/turn/deliver";
 import { registerDoorDelivery } from "../../../reading/turn/door-bell";
-import { registerInfoDelivery } from "../../../reading/turn/info-bell";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
 import { registerThinkWorker } from "../../../soul/think";
 import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
@@ -66,13 +62,8 @@ import { startMealsUserDishes } from "../../../meals/dishes/user-dishes";
 import { registerMealsWritables } from "../../../meals/writable";
 import { startMealsPhotoHousekeeping } from "../../../meals/photos/photo-sweep";
 import { startMealsRecipeHousekeeping } from "../../../meals/live";
-import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerProseAdjudicateWorker } from "../../../memory/adjudicate/live";
-import { amICollecting, noteCollectorHalt, registerInfoCollectWorker } from "../../../info/program/live";
-import { registerTopicSearchRuns } from "../../../info/topic-search/runs-live";
-import { issueRunClosed, liveIssueExpiryMarker } from "../../../info/issue/live";
-import { registerBriefingDelivery } from "../../../info/briefer/deliver";
-import { deleteBook, deleteIfUnreferenced } from "../../../reading/delete/delete-book";
+import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
 import { retireReplacedBook } from "../../../reading/delete/retire-book";
 import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
 import { setBookRetirer } from "../../../reading/replace/live";
@@ -85,7 +76,6 @@ import { LEDGER_FOLD_JOB, runFilesMarker } from "../../../legion/ledger";
 import { registerNightlyJob } from "../../../legion/schedule";
 import { applyLanguageSetting } from "../../../i18n";
 import { applyCompanionNameSetting } from "../base/use-companion-name";
-import { infoDailyMarker } from "../../../info/collect/store";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";
 
@@ -242,7 +232,6 @@ let booted = false;
 export function bootDomains(): void {
   if (booted) return;
   booted = true;
-  registerInfoDistillSource();
   registerReadingDistillSources();
   registerReadingDesk();
   // The literature research kind, and where its answer is given back (docs/68).
@@ -272,30 +261,13 @@ export function bootDomains(): void {
   registerMealsWritables();
   registerBookDelivery();
   registerDoorDelivery();
-  // The same pair on the info side: a question the briefing did not answer, and
-  // the day's briefing thread it is answered back into (docs/63, docs/68).
-  registerTaskingWorker();
-  registerBriefingDelivery();
   registerMealsDelivery();
   // Their bells now run on the durable runtime; the openers above stay for the
   // old soul sessions recover.ts finishes.
-  registerInfoDelivery();
   registerMealsBell();
-  // The day's collection, as a run (docs/55 step 12). Registered on every
-  // device: which one collects is the election's answer, and a device with no
-  // worker for the kind could not win it.
-  registerInfoCollectWorker();
-  // Topic searches' first look and nightly increment (docs/info/88): a run that
-  // reads X in the hidden window, so only a desktop collector claims it. The
-  // result builder is topic-search/build-live.ts's; a closed run goes to the
-  // nightly brief (info/issue), which files the issue through the platform.
-  registerTopicSearchRuns({
-    noteHalt: noteCollectorHalt,
-    closed: ({ runId, searchId, kind, night, resultFile, version }) => issueRunClosed({ runId, searchId, kind, night, resultFile, ...(version ? { version } : {}) }),
-  });
   // Settling a prose file sync parked a conflict copy of, with a model (docs/59
-  // §6). Registered on every device for the same reason as collect: the
-  // election picks the executor among the devices that hold the worker.
+  // §6). Registered on every device: the election picks the executor among
+  // the devices that hold the worker.
   registerProseAdjudicateWorker();
   // Removing a supplement deletes the document when nothing else lists it, and
   // a translation retires the original; both paths are reached from here rather
@@ -310,9 +282,7 @@ export function bootDomains(): void {
   registerTranslateBookWorker();
   registerRetellDesk();
   registerRehearsalDesk();
-  registerInfoDesk();
   registerMealsDesk();
-  registerSecretaryRole();
   registerMealsRole();
   // The nightly reclamation (docs/80), on every device for its own disk. A
   // domain's garbage marker is registered in this function with the rest of its
@@ -323,10 +293,6 @@ export function bootDomains(): void {
   registerNightlyJob(HOUSEKEEPER_JOB);
   registerGarbageMarker(runFilesMarker());
   registerGarbageMarker(bellMarker);
-  registerGarbageMarker(infoDailyMarker);
-  // Old issues of the brief go the way a book does (docs/info/88), on the
-  // collector, the one device that writes the info shelf.
-  registerGarbageMarker(liveIssueExpiryMarker({ deleteBook: (bookId) => deleteBook(bookId), isCollector: amICollecting }));
 }
 
 export interface ShellBootstrap {

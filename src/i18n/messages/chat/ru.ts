@@ -119,4 +119,12 @@ export default {
   // Said in a conversation outside a book (the door, meals)
   "call.note.topicFiled": "Этот разговор отнесён к теме «{name}».",
   "errors.noProvider": "Провайдер ИИ не настроен (Настройки).",
+
+  // --- Topic proposal card (TopicProposalCard.tsx) --------------------------
+  "topicCard.filed": "Отправлено в архив",
+  "topicCard.whereThisBelongs": "Куда это отнести",
+  "topicCard.newTopic": "Новая тема",
+  "topicCard.onYourShelf": "Уже на вашей полке.",
+  "topicCard.createAndFile": "Создать и отнести",
+  "topicCard.fileIt": "Отнести",
 } satisfies Translation<typeof en>;

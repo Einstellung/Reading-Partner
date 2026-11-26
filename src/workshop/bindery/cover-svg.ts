@@ -1,5 +1,4 @@
-// The cover of a document the app wrote itself — a 稿, a day's issue, a study,
-// a 合订本 (docs/67). A PDF has page one and an EPUB carries the cover its
+// The cover of a document the app wrote itself — a 稿 (docs/67). A PDF has page one and an EPUB carries the cover its
 // publisher declared; a document the app composed has neither, and an article
 // stays a row without one. What it gets is a typographic cover: a few lines of
 // type on tinted paper, drawn here as SVG and packed into the archive at build
@@ -18,12 +17,8 @@
 // MIN_TEXT_SIZE: that comes out at 11pt. A cover therefore carries few lines,
 // and nothing the label under the card already says (topics, item counts).
 //
-// The kinds are one family told apart by paper and layout, never by art: a
-// draft is cream paper set flush left; a day's issue is the same paper under a
-// newspaper's double rule, its number the large element; a study is pale sage
-// under a band of the shelf's study green; a volume is dark cloth, centred in
-// a stamped frame. Flat fills and strokes only, which every <img> decoder
-// draws the same.
+// A draft is cream paper set flush left. Flat fills and strokes only, which
+// every <img> decoder draws the same.
 //
 // The type is named but not shipped with the image. The shelf decodes this SVG
 // as an <img> (epub-cover.ts), and an image document loads no web font, so the
@@ -31,8 +26,6 @@
 // acceptable because the cover is a picture and not a page: nothing paginates
 // against it, so it costs no page number when it renders a little differently.
 
-import type { Locale } from "../../i18n/locale";
-import { translate } from "../../i18n/translate";
 import { escapeXml, oneLine } from "../../platform/std/text";
 
 /** The sheet. Portrait, in the proportion of a trade paperback. */
@@ -54,13 +47,8 @@ interface Sheet {
   rule: string;
 }
 
-// Cream: the paper a draft and a day's issue are printed on.
+// Cream: the paper a draft is printed on.
 const CREAM: Sheet = { paper: "#f2ede3", ink: "#2b2621", muted: "#6d6559", rule: "#b9b2a6" };
-// A study: pale sage under the shelf's study accent (styles.css --accent-line).
-const SAGE: Sheet = { paper: "#eceee5", ink: "#252922", muted: "#52664e", rule: "#52664e" };
-const SAGE_BAND_TEXT = "#f1f1ea";
-// A volume: the app's primary ink as cloth, the cream as its lettering.
-const CLOTH: Sheet = { paper: "#252922", ink: "#f2ede3", muted: "#c9c3b6", rule: "#6f726a" };
 
 const LABEL_SIZE = MIN_TEXT_SIZE;
 const LABEL_LEADING = 50;
@@ -68,8 +56,6 @@ const LABEL_MAX_LINES = 2;
 const TITLE_SIZE = 60;
 const TITLE_LEADING = 76;
 const TITLE_MAX_LINES = 4;
-/** The day issue's number, at most; a longer one is set smaller to fit. */
-const NUMBER_MAX_SIZE = 168;
 
 // Widths are measured in half-ems, because the two scripts on this cover round
 // to that: a Han character is one em wide in every serif that draws it, and a
@@ -267,10 +253,6 @@ function rule(y: number, stroke: string, width = 1, x1 = MARGIN, x2 = COVER_WIDT
   return `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${stroke}" stroke-width="${width}"/>`;
 }
 
-function rect(x: number, y: number, w: number, h: number, fill: string): string {
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`;
-}
-
 /** The first baseline of a title block centred on `axis`. */
 function titleTop(lines: number, axis: number): number {
   const height = Math.max(lines, 1) * TITLE_LEADING;
@@ -334,137 +316,5 @@ export function typographicCover(input: CoverInput): string {
     parts.push(rule(bottomFirst - 56, s.rule, 2));
     parts.push(...block(bottom, MARGIN, bottomFirst, LABEL_SIZE, LABEL_LEADING, s.muted));
   }
-  return sheet(s.paper, parts);
-}
-
-// --- a day's issue -------------------------------------------------------------
-
-/**
- * A day's issue. Its own title is the book's name — "Daily Brief No. 14 ·
- * Oct 27" — and the cover sets exactly that, in three pieces: the series as a
- * nameplate, the number large, the short date under it.
- */
-export interface IssueCoverInput {
-  /** The series, as the nameplate: "Lumen Daily Brief". */
-  kicker: string;
-  /** The issue's number as the book's name writes it: "No. 14". */
-  number: string;
-  /** The book name's date: "Oct 27". */
-  date: string;
-}
-
-/** The largest size, at most `max`, at which `content` fits the sheet's width on one line. */
-function fittedSize(content: string, max: number): number {
-  const units = Math.max(widthOf(content), 1);
-  return Math.min(max, Math.floor(CONTENT_WIDTH / (units * HALF_EM)));
-}
-
-export function issueCover(input: IssueCoverInput): string {
-  const s = CREAM;
-  const kicker = labelLines(input.kicker);
-  const number = oneLine(input.number);
-  const date = oneLine(input.date);
-  const parts: string[] = [];
-
-  // The nameplate: the series over a heavy rule and a hairline, top and bottom.
-  const kickerFirst = 100;
-  parts.push(...block(kicker, MARGIN, kickerFirst, LABEL_SIZE, LABEL_LEADING, s.ink, { weight: 600, spacing: 1 }));
-  const plate = kickerFirst + Math.max(kicker.length - 1, 0) * LABEL_LEADING + 32;
-  parts.push(rule(plate, s.ink, 8), rule(plate + 14, s.ink, 2));
-  parts.push(rule(COVER_HEIGHT - 70, s.ink, 2), rule(COVER_HEIGHT - 56, s.ink, 8));
-
-  const size = fittedSize(number, NUMBER_MAX_SIZE);
-  if (number !== "" && size >= TITLE_SIZE) {
-    parts.push(text(MARGIN - 4, 446, size, s.ink, number));
-  } else {
-    // A number too long to set large wraps like a title instead.
-    const lines = titleLines(number);
-    parts.push(...block(lines, MARGIN, titleTop(lines.length, 390), TITLE_SIZE, TITLE_LEADING, s.ink));
-  }
-  if (date !== "") parts.push(...block(wrapCoverText(date, unitsPerLine(TITLE_SIZE), 2), MARGIN, 556, TITLE_SIZE, TITLE_LEADING, s.muted));
-  return sheet(s.paper, parts);
-}
-
-// --- a study -------------------------------------------------------------------
-
-/** A study (docs/info/91): one question researched once, then revised by version. */
-export interface StudyCoverInput {
-  /** What it is: "Study · just this once". */
-  kicker: string;
-  /** The study's own title, its topic. */
-  title: string;
-  /** The version and the date, as its title has them: "Version 2", "Oct 27". */
-  edition: readonly string[];
-}
-
-export function studyCover(input: StudyCoverInput): string {
-  const s = SAGE;
-  const kicker = labelLines(input.kicker);
-  const edition = labelList(input.edition);
-  const title = titleLines(input.title);
-  const parts: string[] = [];
-
-  // The band: the kicker reversed out of the study green, as the shelf marks a study.
-  const kickerFirst = 92;
-  const bandBottom = kickerFirst + Math.max(kicker.length - 1, 0) * LABEL_LEADING + 44;
-  parts.push(rect(0, 0, COVER_WIDTH, bandBottom, s.rule));
-  parts.push(...block(kicker, MARGIN, kickerFirst, LABEL_SIZE, LABEL_LEADING, SAGE_BAND_TEXT, { spacing: 1 }));
-
-  const editionFirst = COVER_HEIGHT - 60 - Math.max(edition.length - 1, 0) * LABEL_LEADING;
-  const axis = (bandBottom + editionFirst - 60) / 2;
-  parts.push(...block(title, MARGIN, titleTop(title.length, axis), TITLE_SIZE, TITLE_LEADING, s.ink));
-  if (edition.length) {
-    parts.push(rect(MARGIN, editionFirst - 64, 96, 6, s.rule));
-    parts.push(...block(edition, MARGIN, editionFirst, LABEL_SIZE, LABEL_LEADING, s.muted));
-  }
-  return sheet(s.paper, parts);
-}
-
-// --- a volume ------------------------------------------------------------------
-
-/** What a bound volume puts on its cover. */
-export interface VolumeCoverInput {
-  /** The topic or the series the volume belongs to. */
-  series: string;
-  /** The volume's own name, in the middle, where a draft's title goes. */
-  title: string;
-  /** How many pieces were bound into it. */
-  count: number;
-  /** The span the pieces were published over, already formatted. */
-  dateRange: string;
-  /** The volume's language: the counter is written in it. */
-  locale: Locale;
-}
-
-/**
- * A volume's cover: the series on top, the volume's name in the middle, and
- * below it what is inside rather than where it came from, because a volume's
- * sources are the pieces it collected. Dark cloth, centred, inside a frame.
- */
-export function volumeCover(input: VolumeCoverInput): string {
-  const s = CLOTH;
-  const centre = COVER_WIDTH / 2;
-  const series = labelLines(input.series);
-  const title = titleLines(input.title);
-  const count = translate(input.locale, "info.issue.book.volumeCount", { count: input.count });
-  const bottom = labelList([count, input.dateRange]);
-  const middle: TextOptions = { anchor: "middle" };
-  const parts: string[] = [];
-
-  const inset = 22;
-  parts.push(
-    `<rect x="${inset}" y="${inset}" width="${COVER_WIDTH - inset * 2}" height="${COVER_HEIGHT - inset * 2}" ` +
-      `fill="none" stroke="${s.rule}" stroke-width="2"/>`,
-  );
-  const seriesFirst = 116;
-  parts.push(...block(series, centre, seriesFirst, LABEL_SIZE, LABEL_LEADING, s.muted, { ...middle, spacing: 1 }));
-  const seriesRule = seriesFirst + Math.max(series.length - 1, 0) * LABEL_LEADING + 36;
-  if (series.length) parts.push(rule(seriesRule, s.muted, 2, centre - 40, centre + 40));
-
-  const bottomFirst = COVER_HEIGHT - 84 - (bottom.length - 1) * LABEL_LEADING;
-  const axis = (seriesRule + bottomFirst - 70) / 2;
-  parts.push(...block(title, centre, titleTop(title.length, axis), TITLE_SIZE, TITLE_LEADING, s.ink, middle));
-  parts.push(rule(bottomFirst - 66, s.muted, 2, centre - 40, centre + 40));
-  parts.push(...block(bottom, centre, bottomFirst, LABEL_SIZE, LABEL_LEADING, s.muted, middle));
   return sheet(s.paper, parts);
 }

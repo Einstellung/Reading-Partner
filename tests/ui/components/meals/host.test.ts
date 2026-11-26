@@ -37,7 +37,7 @@ test("every meals screen is the host's, and no other screen is", () => {
   for (const s of ["meals", "meals-shopping", "meals-day", "meals-recipe", "meals-prep", "meals-method", "meals-onboarding"] as const) {
     expect(isMealsScreen(s)).toBe(true);
   }
-  expect(isMealsScreen("briefing")).toBe(false);
+  expect(isMealsScreen("library")).toBe(false);
   expect(isMealsScreen(null)).toBe(false);
 });
 

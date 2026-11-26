@@ -4,7 +4,6 @@
 
 import { expect, test } from "bun:test";
 import { runHousekeeper } from "../../src/housekeeper";
-import { infoDailyMarker } from "../../src/info/collect/store";
 import { ACKED_BELL_GRACE_MS, bellMarker } from "../../src/legion/bell";
 import { RUN_FILE_GRACE_MS, createLedgerStore, runFilesMarker } from "../../src/legion/ledger";
 import { createRunStore } from "../../src/legion/run/store";
@@ -16,30 +15,6 @@ const NOW = new Date(2026, 6, 25, 4, 0).getTime(); // 2026-07-25 04:00 local
 function outcomes(log: { path: string; outcome: string }[]): string[] {
   return log.map((l) => `${l.outcome} ${l.path}`).sort();
 }
-
-test("info-daily-files: past days go, today stays, old cables are purged before they are removed", async () => {
-  const d = memDisk({
-    "briefing-2026-07-25.json": { text: "{}", mtimeMs: NOW },
-    "briefing-2026-07-24.json": { text: "{}", mtimeMs: NOW },
-    "info-run-2026-07-20.json": { text: "{}", mtimeMs: NOW },
-    "info-cables-2026-06-25.json": { text: "{}", mtimeMs: NOW },
-    "info-cables-2026-06-24.json": { text: "{}", mtimeMs: NOW },
-    "topics.json": { text: "{}", mtimeMs: NOW },
-  });
-  await runHousekeeper({ now: NOW, readIo: d.read, executeIo: d.exec, markers: [infoDailyMarker] });
-  expect(outcomes(d.log)).toEqual([
-    "done briefing-2026-07-24.json",
-    "done info-cables-2026-06-24.json",
-    "done info-run-2026-07-20.json",
-  ]);
-  const cable = d.calls.filter((c) => c.includes("info-cables"));
-  expect(cable).toEqual(["purge info-cables-2026-06-24.json", "remove info-cables-2026-06-24.json"]);
-  expect([...d.disk.keys()].sort()).toEqual([
-    "briefing-2026-07-25.json",
-    "info-cables-2026-06-25.json",
-    "topics.json",
-  ]);
-});
 
 function bell(state: string, at: number): string {
   return JSON.stringify({ id: "b", type: "wake", at, state, payload: { scheduleId: "s", brief: "" } });

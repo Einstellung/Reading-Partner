@@ -6,7 +6,6 @@ export default {
   title: "Ajustes",
   done: "OK",
   "tab.account": "IA e sincronização",
-  "tab.accounts": "Contas",
   "tab.features": "Recursos",
   "tab.optional": "Opcional",
   "tab.experiments": "Experiments",
@@ -36,11 +35,6 @@ export default {
   "account.voiceFront": "Chamada de voz",
   "account.voiceFrontHint":
     "A primeira resposta rápida de uma chamada de voz roda aqui, antes de qualquer trabalho em segundo plano. Um modelo rápido responde antes; deixe o raciocínio desligado, a menos que as respostas fiquem superficiais demais. Um provedor que não consegue desligar o raciocínio usa o nível mais baixo. Ele usa o provedor acima.",
-  "account.briefing": "Resumo de notícias",
-  "account.screening": "Triagem",
-  "account.analysis": "Análise",
-  "account.briefingHint":
-    "Por enquanto o resumo não é montado durante a noite: está em pausa enquanto é redesenhado, e você ainda pode pedir um manualmente. A triagem lê as manchetes do dia para decidir quais artigos vale a pena buscar, por isso é a etapa para manter baixa; a análise lê os que passaram.",
   "account.thinking": "Raciocínio",
   "account.chat": "Chat",
   "account.lessonPrep": "Preparação de aulas",

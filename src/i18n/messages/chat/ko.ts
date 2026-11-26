@@ -119,4 +119,12 @@ export default {
   // Said in a conversation outside a book (the door, meals)
   "call.note.topicFiled": "이 대화를 「{name}」에 정리했습니다.",
   "errors.noProvider": "AI 제공자가 설정되지 않았습니다 (설정에서 확인).",
+
+  // --- Topic proposal card (TopicProposalCard.tsx) --------------------------
+  "topicCard.filed": "정리됨",
+  "topicCard.whereThisBelongs": "어느 주제에 속하는지",
+  "topicCard.newTopic": "새 주제",
+  "topicCard.onYourShelf": "책장에 담았습니다.",
+  "topicCard.createAndFile": "만들어서 정리",
+  "topicCard.fileIt": "정리하기",
 } satisfies Translation<typeof en>;

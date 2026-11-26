@@ -16,11 +16,9 @@ import {
   searchItem,
 } from "../../../src/sources/plugins/huggingface";
 import {
-  registerSourcePlugin,
   resetSourcePluginsForTests,
   type PluginDeps,
 } from "../../../src/sources/plugin";
-import { collectSource } from "../../../src/info/sources/engine";
 import { itemId } from "../../../src/workshop/extract/id";
 import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import { jsonResponse, textResponse } from "../../support/fetch";
@@ -420,27 +418,6 @@ test("an aborted signal stops before any request", async () => {
 // --- through the engine ------------------------------------------------------
 
 afterEach(() => resetSourcePluginsForTests());
-
-test("collectSource runs an index descriptor through the registered provider", async () => {
-  registerSourcePlugin(huggingfacePlugin);
-  const { calls, fetchFn } = scripted(() => jsonResponse(MODEL_ROWS));
-  const d = desc({ kind: "models", author: "lerobot" }, 10);
-  const items = await collectSource(d, { fetchFn, now: () => Date.UTC(2026, 8, 13) });
-  expect(calls.length).toBe(1);
-  expect(new URL(calls[0]).searchParams.get("limit")).toBe("10");
-  expect(items.length).toBe(2);
-  expect(items[0].source).toBe("hf-test");
-  expect(items[0].sourceName).toBe("HF test");
-  expect(items[0].id).toMatch(/^hf-test-/);
-  expect(items[0].signals?.likes).toBe(439);
-});
-
-test("collectSource rejects a query the provider does not accept", async () => {
-  registerSourcePlugin(huggingfacePlugin);
-  const { calls, fetchFn } = scripted(() => jsonResponse([]));
-  await expect(collectSource(desc({ kind: "spaces" }), { fetchFn })).rejects.toThrow(/index query rejected/);
-  expect(calls.length).toBe(0);
-});
 
 // --- search ------------------------------------------------------------------
 

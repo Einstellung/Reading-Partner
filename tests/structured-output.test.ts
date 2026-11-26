@@ -10,15 +10,12 @@ import {
   classifyJson,
   createParseReporter,
   looksTruncated,
-  newTally,
   replyShape,
   type ParseSite,
 } from "../src/platform/app/structured-output";
 import type { EventPayload, EventType } from "../src/platform/app/events";
 import { parsePlan } from "../src/reading/prep/papers/plan";
 import { parseChapterSpinePlan } from "../src/reading/prep/chapters/plan";
-import { parseSynthesisOutput } from "../src/info/analysis/synthesis";
-import type { Cable } from "../src/info/cable/types";
 
 const MODEL = { providerId: "anthropic", modelId: "claude-sonnet-4-5" };
 
@@ -208,37 +205,6 @@ test("defaults the parse substituted are counted as repairs, not failures", () =
   expect(lines[0].payload.ok).toBe(true);
   expect(lines[0].payload.kept).toBe(2);
   expect(lines[0].payload.repaired).toBe(1);
-});
-
-test("the synthesis records the picks it drops for naming cables nobody sent it", () => {
-  const { r, lines } = reporter();
-  const cables: Cable[] = [
-    { id: "a", date: "2026-07-21", title: "A", url: "", source: "s", sourceName: "S", publishedAt: "", hits: [] },
-  ];
-  const text = JSON.stringify({
-    changed: true,
-    cover: "A quiet day.",
-    mustRead: [{ itemId: "a", reason: "worth it" }],
-    oneLiners: [{ itemId: "ghost", line: "made up" }],
-  });
-  const tally = newTally();
-  const parsed = parseSynthesisOutput(text, cables, tally);
-  r.reportParse({ site: "info-synthesis", model: MODEL, text, tally });
-
-  expect(parsed.ok).toBe(true);
-  expect(lines[0].payload.seen).toBe(2);
-  expect(lines[0].payload.kept).toBe(1);
-});
-
-test("a synthesis that says the room changed and writes no cover is a missing field", () => {
-  const { r, lines } = reporter();
-  const text = '{"changed": true, "cover": "", "mustRead": [], "oneLiners": []}';
-  const tally = newTally();
-  const parsed = parseSynthesisOutput(text, [], tally);
-  expect(parsed.ok).toBe(false);
-  r.reportParse({ site: "info-synthesis", model: MODEL, text, tally, error: "missing cover" });
-  expect(lines[0].payload.ok).toBe(false);
-  expect(lines[0].payload.fail).toBe("missing-field");
 });
 
 // --- retries ---------------------------------------------------------------

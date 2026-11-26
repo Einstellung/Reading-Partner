@@ -5,7 +5,6 @@ export default {
   title: "Einstellungen",
   done: "Fertig",
   "tab.account": "KI & Sync",
-  "tab.accounts": "Konten",
   "tab.features": "Funktionen",
   "tab.optional": "Optional",
   "tab.experiments": "Experiments",
@@ -35,11 +34,6 @@ export default {
   "account.voiceFront": "Sprachanruf",
   "account.voiceFrontHint":
     "Die schnelle erste Antwort eines Sprachanrufs läuft hier, vor jeder Hintergrundarbeit. Ein schnelles Modell antwortet am zügigsten; lass das Denken aus, solange die Antworten nicht zu flach sind. Anbieter, die das Denken nicht abschalten können, nutzen ihre niedrigste Stufe. Es nutzt den Anbieter oben.",
-  "account.briefing": "Briefing",
-  "account.screening": "Sichtung",
-  "account.analysis": "Analyse",
-  "account.briefingHint":
-    "Das Briefing wird vorerst nicht über Nacht erstellt: Es ist pausiert, solange es neu gestaltet wird, und du kannst weiterhin per Hand eines anfordern. Die Sichtung liest die Schlagzeilen des Tages und entscheidet, welche Artikel sich zu laden lohnen – diese Stufe sollte niedrig bleiben; die Analyse liest die, die durchgekommen sind.",
   "account.thinking": "Denken",
   "account.chat": "Chat",
   "account.lessonPrep": "Unterrichtsvorbereitung",

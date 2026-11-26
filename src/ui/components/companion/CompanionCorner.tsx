@@ -62,7 +62,6 @@ import {
 } from "react";
 
 import { appBox } from "../../../box";
-import { markIssueTold } from "../../../info/issue/box-state";
 import type { BoxItem } from "../../../box/types";
 import { useT } from "../../../i18n";
 import { voiceStartFeedback, voiceStopFeedback } from "../../../platform/app/haptics";
@@ -78,7 +77,6 @@ import { Companion, CompanionCase } from "./Companion";
 import { DoorChat, type DoorBox } from "./DoorChat";
 import { PRESS_REST, companionPressStep, startsPress, type CompanionPressInput } from "./companion-press";
 import { useVoiceCall, voiceCallHandle } from "./use-voice-call";
-import { getVoiceContext, subscribeVoiceContext, type VoiceContext } from "./voice-context";
 import { badgeCount, caseLabel } from "./box-cards";
 import { useBoxItems } from "./use-box-items";
 import { useCompanionName } from "../base/use-companion-name";
@@ -169,15 +167,13 @@ export function CompanionCorner({
 	const motion = useCaseMotion(count);
 
 	// What a call would talk about, as whichever screen holds it publishes it.
-	const [context, setContext] = useState<VoiceContext | null>(getVoiceContext);
-	useEffect(() => subscribeVoiceContext(() => setContext(getVoiceContext())), []);
 
 	// Built unconditionally and held for the life of the shell. A call that
 	// belonged to the screen would die the moment the reader walked away from
 	// it, and there would be no way to hang up from where they landed.
 	// Where the call is held is read when it starts: the briefing where that
 	// page is up, the door everywhere else (voice-call-mode.ts).
-	const call = useVoiceCall({ context, inReader });
+	const call = useVoiceCall({ inReader });
 	const live = call.phase !== "idle";
 	// A host that cannot speak has no call to have — the whole audio path is
 	// native (docs/33). There the door's voice button is grey. Read through the
@@ -209,10 +205,6 @@ export function CompanionCorner({
 			const issue = getOpenIssue();
 			if (opensDoor(shownForRef.current, issue)) {
 				shownForRef.current = issue!.bookId;
-				// Opened from anywhere: the box has told the reader of this issue.
-				void markIssueTold(appBox(), issue!.bookId).catch((e: unknown) =>
-					console.warn("the issue's box item could not be marked told", e),
-				);
 				setNote(null);
 				setFull(false);
 				setDoor({ issue: issue!.bookId });

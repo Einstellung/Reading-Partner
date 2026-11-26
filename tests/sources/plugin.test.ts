@@ -4,7 +4,6 @@
 // descriptor's identity. Run: bun test.
 
 import { afterEach, expect, test } from "bun:test";
-import { collectAll, collectSource } from "../../src/info/sources/engine";
 import {
   daysBefore,
   pluginOf,
@@ -65,37 +64,6 @@ test("registry: register, look up, list, reset", () => {
   expect(pluginOf(indexDesc({ topic: "a" }, "nope"))).toBeUndefined();
   resetSourcePluginsForTests();
   expect(sourcePlugin("fake")).toBeUndefined();
-});
-
-test("collectSource: items are stamped with the descriptor's identity and the limit reaches the provider", async () => {
-  registerSourcePlugin(fake);
-  const fixed = Date.UTC(2026, 8, 13, 12);
-  const items = await collectSource(indexDesc({ topic: "robots" }), { now: () => fixed });
-  expect(items).toHaveLength(1);
-  expect(items[0].source).toBe("src-1");
-  expect(items[0].sourceName).toBe("Fake topic");
-  expect(items[0].title).toBe("robots paper");
-  expect(items[0].publishedAt).toBe("2026-09-13");
-  // No descriptor limit: the provider's default.
-  expect(items[0].signals?.stars).toBe(7);
-  const limited = await collectSource({ ...indexDesc({ topic: "r" }), limit: 3 }, { now: () => fixed });
-  expect(limited[0].signals?.stars).toBe(3);
-});
-
-test("collectSource: an unregistered provider and a rejected query are source failures with a reason", async () => {
-  await expect(collectSource(indexDesc({ topic: "a" }, "nope"))).rejects.toThrow(/unknown index provider "nope"/);
-  registerSourcePlugin(fake);
-  await expect(collectSource(indexDesc({}))).rejects.toThrow(/index query rejected.*needs a topic/);
-});
-
-test("collectAll: an index source that fails is recorded in health and sinks nothing else", async () => {
-  registerSourcePlugin(fake);
-  const { items, health } = await collectAll([indexDesc({ topic: "a" }), { ...indexDesc({}), id: "src-2" }], {
-    now: () => 1000,
-  });
-  expect(items.map((i) => i.source)).toEqual(["src-1"]);
-  expect(health["src-1"].lastItems).toBe(1);
-  expect(health["src-2"].lastError).toMatch(/needs a topic/);
 });
 
 test("query helpers read loosely typed fields", () => {

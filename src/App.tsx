@@ -38,8 +38,8 @@ import { prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
-import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
-import InfoShelf from "./ui/components/info/InfoShelf";
+import type { HomeScreen } from "./ui/components/base/shell-nav";
+import { Vestibule } from "./ui/components/shelf/Vestibule";
 import { useMealsHost } from "./ui/components/meals/use-meals-host";
 import { MealsHost } from "./ui/components/meals/MealsHost";
 import { startDistillSweeps } from "./memory";
@@ -48,8 +48,6 @@ import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import { displaySource, getLibraryEntry, readLibraryBook, type BookFormat } from "./platform/app/library";
 import { readerModeOf, type ReaderMode } from "./reading/issue";
 import { askCompanion, publishOpenIssue } from "./ui/components/companion/issue-context";
-import { StudyCiteSheet, StudyStripBar, StudyVersionButton } from "./ui/components/reader/study/StudyChrome";
-import { useStudyReader } from "./ui/components/reader/study/use-study-reader";
 import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -143,7 +141,6 @@ import {
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import { useT } from "./i18n";
 import { alreadyInLine } from "./ui/components/shelf/move-to";
-import { refreshInfoCollector } from "./info/program/live";
 
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
 // Per conversation, like the staging list itself.
@@ -245,7 +242,7 @@ export default function App() {
   const clearStudyOpen = useCallback(() => setStudyOpen(null), []);
 
   // The launch layer in front of the library, only meaningful when not in the
-  // reader. InfoHome renders every screen but the library.
+  // reader.
   const [homeScreen, setHomeScreen] = useState<HomeScreen>("vestibule");
 
   // The open book: bytes + saved state for EmbedReaderPane; null in the library.
@@ -364,19 +361,19 @@ export default function App() {
     device,
     applyDevice,
     configured,
-    ready: bootstrapped,
+
     syncReport,
   } = useShellBootstrap({ settingsOpen: settingsShowing || readerSettings, pushToast });
-  // The meals line (docs/73) is this device's Meals experiment, which counts
-  // only under Intel (platform/experiments). settings.meals is no longer read.
+  // The meals line (docs/73) is this device's Meals experiment
+  // (platform/experiments). settings.meals is no longer read.
   const mealsOn = gates.meals;
   const mealsOnRef = useRef(mealsOn);
   mealsOnRef.current = mealsOn;
   // A screen whose line was switched off while it was showing goes to Today.
   useEffect(() => {
-    const reached = reachableScreen(homeScreen, undefined, { meals: mealsOn, intel: gates.intel });
+    const reached = reachableScreen(homeScreen, { meals: mealsOn });
     if (reached !== homeScreen) setHomeScreen(reached);
-  }, [homeScreen, mealsOn, gates.intel]);
+  }, [homeScreen, mealsOn]);
   // A downloaded desktop update, drawn as a row in the sidebar (docs/76).
   const appUpdateState = useAppUpdate();
 
@@ -431,15 +428,6 @@ export default function App() {
     pageDwellRef.current = { page, since: now };
   }, [stats]);
 
-  // What this machine does about collecting, whenever the answer changes — and
-  // once when device.json first lands, which is how a collector starts at all
-  // (docs/36). A reader falls straight through to giving up its claim.
-  const deviceRole = device?.role ?? null;
-  const backgroundCollect = device?.backgroundCollect ?? null;
-  useEffect(() => {
-    if (deviceRole === null) return;
-    refreshInfoCollector();
-  }, [deviceRole, backgroundCollect]);
 
   const activeTopic = useMemo(
     () => topics?.find((t) => t.id === activeTopicId) ?? null,
@@ -691,22 +679,6 @@ export default function App() {
     });
   }, [issueBookId, bookTitle, jumpToQuote, annsRef]);
 
-  // A study's brief: its versions, the update strip and the section sheet (docs/info/91 「版本」).
-  const studyMovedAtRef = useRef(0);
-  useEffect(() => {
-    studyMovedAtRef.current = Date.now();
-  }, [stats?.pageIndex]);
-  const study = useStudyReader({
-    bookId: issueBookId ?? "",
-    isIssue: issueBookId !== null,
-    ready: viewReady,
-    openBook: (id) => void openBookRef.current(id),
-    page: () => (statsRef.current ? statsRef.current.pageIndex + 1 : null),
-    fulltext: () => currentFulltextRef.current ?? Promise.resolve(null),
-    goToPage: (pageIndex) => viewRef.current?.navigate({ pageIndex }),
-    lastMovedAt: () => studyMovedAtRef.current,
-    toast: (text) => pushToast("info", text),
-  });
 
   // A clicked citation chip in a chat reply. Survey pages jump the reader (and
   // un-cover it when chat is full-window); paper citations open that paper's
@@ -963,21 +935,6 @@ export default function App() {
     return bookId ? openDocument(bookId, bookTitle) : null;
   }, [openDocument, bookTitle]);
 
-  // A book on no topic, from the info shelf (docs/info/88): an issue of the
-  // brief or a topic volume, read straight from the library.
-  const openIssueBook = useCallback(
-    async (bookId: string, name: string) => {
-      try {
-        const bytes = await readLibraryBook(bookId);
-        if (!bytes) throw new Error("the book is not in the library");
-        await openInReader(bookId, name, bytes);
-      } catch (e) {
-        console.error("failed to open the book", e);
-        pushToast("error", t("shell.toast.cantOpenDownloading"));
-      }
-    },
-    [openInReader, pushToast, t],
-  );
 
   // Open a topic file. If its book id is known and the library holds the
   // authoritative copy, open straight from the library (the original path may be
@@ -1288,10 +1245,6 @@ export default function App() {
             return;
           }
         }
-        // A brief or a topic volume is on no topic (docs/info/88): it opens
-        // straight from the library, as from the info shelf.
-        const entry = await getLibraryEntry(bookId).catch(() => null);
-        if (entry) await openIssueBook(bookId, entry.title);
       },
       goToPage: (page: number) => viewRef.current?.navigate({ pageIndex: page - 1 }),
       openThread: (bookId: string, threadId: string) => {
@@ -1299,18 +1252,17 @@ export default function App() {
         if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
       },
       openAnnotation: openThreadForAnnotation,
-      // The info pages draw the current day; the date on the card is what the
-      // item is about, not a day the shell can navigate to. The book is closed
-      // first when one is open: the reader covers the home screen, so setting it
-      // underneath would be a card that does nothing visible and still counts
-      // itself told.
+      // The briefing is gone (Intel, removed 2026-11): an old card from it lands
+      // on Today. The book is closed first when one is open: the reader covers
+      // the home screen, so setting it underneath would be a card that does
+      // nothing visible and still counts itself told.
       goToBriefing: () => {
         if (inReader) closeReader();
-        setHomeScreen(reachableScreen("briefing"));
+        setHomeScreen("vestibule");
       },
       goToMeals: () => {
         if (inReader) closeReader();
-        setHomeScreen(reachableScreen("meals", undefined, { meals: mealsOnRef.current }));
+        setHomeScreen(reachableScreen("meals", { meals: mealsOnRef.current }));
       },
       // A talk's coaching and a retell are drawn in their topic, read off the
       // thing itself; one that has gone since opens nothing.
@@ -1338,7 +1290,7 @@ export default function App() {
         if (file) await openFile(file, doc.topicId);
       },
     }),
-    [topics, openFile, openIssueBook, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
+    [topics, openFile, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
   );
 
   // The same shelf lookup a receipt's book link needs. One way in, so a card and
@@ -1509,7 +1461,6 @@ export default function App() {
             onToggleSidebar={() => setSidebarOpen((v) => !v)}
             onCloseReader={closeReader}
             status={status}
-            {...(study ? { study: <StudyVersionButton study={study} /> } : {})}
             tool={{ type: toolType, color: HIGHLIGHT_COLOR }}
             onToolChange={(t) => setPickedTool(t.type)}
             gate={gate}
@@ -1524,8 +1475,6 @@ export default function App() {
         </header>
       )}
 
-      {inReader && study?.strip && <StudyStripBar study={study} className="flex-none" />}
-      {inReader && study && <StudyCiteSheet study={study} />}
       <main className="relative flex-1 min-h-0 flex">
         {!inReader && (
           <AppSidebar
@@ -1545,7 +1494,6 @@ export default function App() {
             update={appUpdateState}
             onApplyUpdate={applyAppUpdate}
             meals={mealsOn}
-            briefs={gates.intel}
             companionAvailable={gates.companion}
           />
         )}
@@ -1658,29 +1606,27 @@ export default function App() {
         {/* The column beside the sidebar. The home screens position themselves
             over it, so it is what they are inset to rather than the whole row. */}
         <div className={inReader ? "contents" : "relative min-w-0 flex-1"}>
-          <InfoHome
-            screen={inReader ? null : homeScreen}
-            onNavigate={setHomeScreen}
-            role={deviceRole}
-            continueBook={(() => {
-              if (topics === null) return undefined;
-              const recent = mostRecentlyOpened(topics);
-              return recent ? { file: recent.file, topicName: recent.topic.name } : null;
-            })()}
-            onContinue={continueReading}
-            topics={topics}
-            onOpenTopic={(t) => {
-              setActiveTopicId(t.id);
-              setHomeScreen("library");
-            }}
-            onCreateTopic={(name) => {
-              void createTopic(name).then(() => refreshTopics());
-            }}
-            configured={configured}
-            launchReady={bootstrapped}
-            onOpenSettings={openSettings}
-            onTopicsChanged={refreshTopics}
-          />
+          {!inReader && homeScreen === "vestibule" && (
+            <div className="absolute inset-0 overflow-y-auto bg-background">
+              <Vestibule
+                continueBook={(() => {
+                  if (topics === null) return undefined;
+                  const recent = mostRecentlyOpened(topics);
+                  return recent ? { file: recent.file, topicName: recent.topic.name } : null;
+                })()}
+                onContinue={continueReading}
+                topics={topics}
+                onOpenLibrary={() => setHomeScreen("library")}
+                onOpenTopic={(t) => {
+                  setActiveTopicId(t.id);
+                  setHomeScreen("library");
+                }}
+                onCreateTopic={(name) => {
+                  void createTopic(name).then(() => refreshTopics());
+                }}
+              />
+            </div>
+          )}
 
           {!inReader && (
             <MealsHost
@@ -1701,14 +1647,6 @@ export default function App() {
             />
           )}
 
-          {!inReader && homeScreen === "briefs" && gates.intel && (
-            <InfoShelf
-              onOpenBook={(bookId, name) => void openIssueBook(bookId, name)}
-              onTell={(line) => pushToast("info", line)}
-              onSay={(line) => pushToast("error", line)}
-              onTopicsChanged={refreshTopics}
-            />
-          )}
 
           {!inReader && homeScreen === "library" && (
             <ComposerSlotContext.Provider value={studyComposerSlot}>

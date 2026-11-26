@@ -18,10 +18,9 @@ import { useExperiment } from "./common/use-experiment";
 
 export function CardRegistryProvider({ children }: { children: ReactNode }) {
   const meals = useExperiment("meals");
-  const intel = useExperiment("intel");
   const registry = useMemo(
-    () => gatedRegistry(CARD_REGISTRY, hiddenCardKinds({ meals, intel })),
-    [meals, intel],
+    () => gatedRegistry(CARD_REGISTRY, hiddenCardKinds({ meals })),
+    [meals],
   );
   return <CardRegistryContext.Provider value={registry}>{children}</CardRegistryContext.Provider>;
 }

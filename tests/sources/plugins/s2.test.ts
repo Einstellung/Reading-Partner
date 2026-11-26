@@ -4,9 +4,7 @@
 // (/graph/v1/swagger.json), not a captured response. Run: bun test.
 
 import { afterEach, expect, test } from "bun:test";
-import { collectSource } from "../../../src/info/sources/engine";
 import {
-  registerSourcePlugin,
   resetSourcePluginsForTests,
   type PluginDeps,
 } from "../../../src/sources/plugin";
@@ -247,26 +245,3 @@ test("a status the search cannot use throws instead of reading as no results", a
 });
 
 // --- through the engine ------------------------------------------------------
-
-test("collectSource runs an s2 descriptor through the registered provider", async () => {
-  registerSourcePlugin(s2Plugin);
-  const seen: string[] = [];
-  const fetchFn = async (url: string) => {
-    seen.push(url);
-    return jsonResponse({ data: [ARXIV_ROW, PDF_ROW] });
-  };
-  const items = await collectSource(desc({ terms: ["vision-language-action", "robot"], days: 7 }, 5), {
-    fetchFn,
-    now: () => FIXED_NOW,
-  });
-  expect(seen).toHaveLength(1);
-  const u = decodeURIComponent(seen[0]);
-  expect(u).toContain("publicationDateOrYear=2026-09-06:");
-  expect(u).toContain("limit=5");
-  expect(items).toHaveLength(2);
-  expect(items[0].source).toBe("s2-vla");
-  expect(items[0].sourceName).toBe("S2 VLA");
-  expect(items[0].signals?.citations).toBe(12);
-
-  await expect(collectSource(desc({}), { fetchFn })).rejects.toThrow(/index query rejected.*terms/);
-});

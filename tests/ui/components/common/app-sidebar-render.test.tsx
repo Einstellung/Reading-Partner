@@ -1,5 +1,5 @@
 // The shell sidebar's rendered contract, pinned by a static render: the
-// wordmark, three items plus Settings, every row a 44px target, the labels only
+// wordmark, the items plus Settings, every row a 44px target, the labels only
 // from `lg` up, the collapse toggle in both shapes, and the alert dot on the
 // affordance that leads to it. Which item is lit is decided in shell-nav.test.ts;
 // the widths and the stored choice in shell-sidebar.test.ts. Run: bun test.
@@ -14,17 +14,16 @@ import AppSidebar from "../../../../src/ui/components/common/AppSidebar";
 
 function render(
   over: {
-    active?: "today" | "briefing" | "topics" | "settings" | null;
+    active?: "today" | "meals" | "topics" | "settings" | null;
     alert?: boolean;
     collapsed?: boolean;
-    oldBriefing?: boolean;
+    meals?: boolean;
   } = {},
 ) {
-  // The old briefing's row is forced on (src/info/old-briefing.ts) so it stays
-  // covered while its UI is off; the sidebar that ships is tested below.
+  // Meals forced on so its row stays covered; the sidebar without it is tested below.
   return renderToStaticMarkup(
     <AppSidebar
-      oldBriefing={over.oldBriefing ?? true}
+      meals={over.meals ?? true}
       active={"active" in over ? (over.active ?? null) : "today"}
       onSelect={() => {}}
       onOpenSettings={() => {}}
@@ -40,24 +39,23 @@ function render(
 test("the three items and Settings read as text, in order", () => {
   const html = render();
   expect(html.indexOf(">Today<")).toBeGreaterThan(-1);
-  expect(html.indexOf(">Briefing<")).toBeGreaterThan(html.indexOf(">Today<"));
-  expect(html.indexOf(">Topics<")).toBeGreaterThan(html.indexOf(">Briefing<"));
+  expect(html.indexOf(">Meals<")).toBeGreaterThan(html.indexOf(">Today<"));
+  expect(html.indexOf(">Topics<")).toBeGreaterThan(html.indexOf(">Meals<"));
   expect(html.indexOf(">Settings<")).toBeGreaterThan(html.indexOf(">Topics<"));
 });
 
-test("with the old briefing's UI off there is no Briefing row", () => {
-  const html = render({ oldBriefing: false });
-  expect(html).not.toContain(">Briefing<");
-  expect(html.indexOf(">Intel<")).toBeGreaterThan(html.indexOf(">Today<"));
-  expect(html.indexOf(">Topics<")).toBeGreaterThan(html.indexOf(">Intel<"));
-  expect(html.match(/h-11 w-11/g)?.length).toBe(5);
+test("with meals off there is no Meals row", () => {
+  const html = render({ meals: false });
+  expect(html).not.toContain(">Meals<");
+  expect(html.indexOf(">Topics<")).toBeGreaterThan(html.indexOf(">Today<"));
+  expect(html.match(/h-11 w-11/g)?.length).toBe(4);
 });
 
 // The labels leave the flow on the rail, so every row keeps its name for a
 // screen reader and its tooltip for a mouse.
 test("every row is named whether or not its label is showing", () => {
   const html = render();
-  for (const name of ["Today", "Briefing", "Topics", "Settings"]) {
+  for (const name of ["Today", "Meals", "Topics", "Settings"]) {
     expect(html).toContain(`aria-label="${name}"`);
     expect(html).toContain(`title="${name}"`);
   }
@@ -66,8 +64,8 @@ test("every row is named whether or not its label is showing", () => {
 // The rows and the collapse toggle, by the box they all share; the wordmark
 // above them is the same height and is not one of them.
 test("every row and the toggle are 44px touch targets", () => {
-  expect(render().match(/h-11 w-11/g)?.length).toBe(6);
-  expect(render({ collapsed: true }).match(/h-11 w-11/g)?.length).toBe(6);
+  expect(render().match(/h-11 w-11/g)?.length).toBe(5);
+  expect(render({ collapsed: true }).match(/h-11 w-11/g)?.length).toBe(5);
 });
 
 // The app's own icon, at the size the artwork is drawn for, and its name in the

@@ -9,32 +9,28 @@
 // since it describes what is there and not how that shell draws it.
 
 import type { Place } from "../../../desk";
-import { OLD_BRIEFING_UI_ENABLED } from "../../../info/old-briefing";
 import type { HomeScreen } from "./shell-nav";
 
-export const PLACE_IDS = ["today", "briefing", "topics", "settings"] as const;
+export const PLACE_IDS = ["today", "topics", "settings"] as const;
 export type PlaceId = (typeof PLACE_IDS)[number];
 
 // The phone has no shelf: nothing on its home screen leads to the library, so
 // there is nowhere for a place named "topics" to go.
-export const PHONE_PLACES: readonly PlaceId[] = ["today", "briefing", "settings"];
+export const PHONE_PLACES: readonly PlaceId[] = ["today", "settings"];
 
 // One sentence each, written for the reader rather than for the model: these
 // are what the soul reads out when it shows somebody around.
 export const PLACE_ABOUT: Record<PlaceId, string> = {
   today: "Where the reader lands when the app opens: what is open now, and where to carry on.",
-  briefing: "Today's briefing: what came in overnight from the sources the reader follows.",
   topics: "The shelf: the reader's topics and the books kept in each of them.",
   settings:
-    "The settings: the providers and model behind you, the accounts the reader signs in to (X, Bloomberg), and how this device behaves.",
+    "The settings: the providers and model behind you, and how this device behaves.",
 };
 
 export function screenForPlace(id: PlaceId): HomeScreen {
   switch (id) {
     case "today":
       return "vestibule";
-    case "briefing":
-      return "briefing";
     case "topics":
       return "library";
     case "settings":
@@ -54,17 +50,12 @@ export interface ShellPlaceMoves {
   reader?: { isOpen: () => boolean; close: () => void };
 }
 
-/**
- * The shell's places, in the order the soul is shown them. The briefing is not
- * one while the old briefing's UI is off (info/old-briefing.ts): a place the
- * soul offers has to be somewhere the reader can be taken.
- */
+/** The shell's places, in the order the soul is shown them. */
 export function shellPlaces(
   moves: ShellPlaceMoves,
   ids: readonly PlaceId[] = PLACE_IDS,
-  oldBriefing: boolean = OLD_BRIEFING_UI_ENABLED,
 ): Place[] {
-  return ids.filter((id) => id !== "briefing" || oldBriefing).map((id) => ({
+  return ids.map((id) => ({
     id,
     about: PLACE_ABOUT[id],
     go: () => {

@@ -119,4 +119,12 @@ export default {
   // Said in a conversation outside a book (the door, meals)
   "call.note.topicFiled": 'Dieses Gespräch wurde unter „{name}" abgelegt.',
   "errors.noProvider": "Kein KI-Anbieter eingerichtet (Einstellungen).",
+
+  // --- Topic proposal card (TopicProposalCard.tsx) --------------------------
+  "topicCard.filed": "Abgelegt",
+  "topicCard.whereThisBelongs": "Wohin das gehört",
+  "topicCard.newTopic": "Ein neues Thema",
+  "topicCard.onYourShelf": "In deinem Regal.",
+  "topicCard.createAndFile": "Erstellen und ablegen",
+  "topicCard.fileIt": "Ablegen",
 } satisfies Translation<typeof en>;

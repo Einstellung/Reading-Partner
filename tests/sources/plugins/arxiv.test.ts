@@ -4,11 +4,9 @@
 // standalone and through the engine's index path. Run: bun test.
 
 import { afterEach, expect, test } from "bun:test";
-import { collectSource } from "../../../src/info/sources/engine";
 import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import { arxivIndexUrl, arxivPlugin } from "../../../src/sources/plugins/arxiv";
 import {
-  registerSourcePlugin,
   resetSourcePluginsForTests,
 } from "../../../src/sources/plugin";
 import type { FetchFn } from "../../../src/platform/app/host";
@@ -189,29 +187,5 @@ test("discover honours an already-aborted signal before fetching", async () => {
       today: () => TODAY,
     }),
   ).rejects.toMatchObject({ name: "AbortError" });
-  expect(urls).toHaveLength(0);
-});
-
-test("the engine runs an arXiv index descriptor through the registered provider", async () => {
-  registerSourcePlugin(arxivPlugin);
-  const { fetchFn, urls } = scripted();
-  const items = await collectSource(desc, { fetchFn, now: () => NOW });
-  expect(urls).toHaveLength(1);
-  // The engine hands the provider its UTC day and the provider's default limit.
-  expect(urls[0]).toContain("max_results=50");
-  expect(searchQuery(urls[0])).toBe(
-    "(cat:cs.RO OR cat:cs.AI) AND all:manipulation AND submittedDate:[202609110000 TO 202609132359]",
-  );
-  expect(items).toHaveLength(3);
-  expect(items[0].source).toBe("arxiv-ro");
-  expect(items[0].sourceName).toBe("arXiv robotics");
-  expect(items[0].signals?.tags).toEqual(["cs.RO", "3 authors"]);
-});
-
-test("the engine rejects an arXiv descriptor whose query the provider refuses", async () => {
-  registerSourcePlugin(arxivPlugin);
-  const { fetchFn, urls } = scripted();
-  const bad: SourceDescriptor = { ...desc, discovery: { kind: "index", provider: "arxiv", query: {} } };
-  await expect(collectSource(bad, { fetchFn, now: () => NOW })).rejects.toThrow(/categories or terms/);
   expect(urls).toHaveLength(0);
 });

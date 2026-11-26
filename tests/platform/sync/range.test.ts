@@ -41,25 +41,17 @@ test("core user-data files are in range", () => {
     // written on whichever device the reader is holding.
     "outline-1754400000000.json",
     "runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json",
-    // The cross-scenario user profile and the info feedback log are the user's
-    // data (docs/16); info-profile.md is the profile's old name, kept in range
-    // through the transition.
+    // The cross-scenario user profile is the user's data (docs/16);
+    // info-profile.md is its old name, kept in range through the transition.
     "user-profile.md",
     "info-profile.md",
-    "info-feedback.jsonl",
     // Articles kept out of a briefing (docs/21): the reader's own picks, so they
     // travel — unlike the daily briefing/article caches they came from. The
     // index is the record per article; the bodies are one immutable file each.
     "saved-articles.json",
     "article-bodies/0123456789abcdef0123456789abcdef.json",
-    // What a collector publishes for the readers (docs/36), and the two files
-    // devices leave for each other: who is collecting, and a reader asking for a
-    // briefing it cannot build itself.
-    "info-briefing.json",
-    "info-bodies.json",
-    "info-pool-marks.json",
+    // What a device says it is and can do, left for the others (docs/55).
     "legion/claim/4d9f1b0a.json",
-    "info-ask-4d9f1b0a.json",
     // The standing meals conversation (docs/73): one thread file with a fixed
     // name, written on whichever device the reader plans dinner on.
     "threads-info-meals.json",
@@ -114,9 +106,17 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     "rehearsals/1754400000000.html",
     "library/abc123.pdf",
     "images/threads/t1/photo.png",
-    // Info triage: the daily briefing and article cache are derived, not synced.
-    // What the readers get is the collector's published pair above, which does
-    // not grow by the day (docs/36).
+    // What Intel wrote before it was removed (2026-11). Its rows went with it,
+    // so these files fall out of range and stay on disk as they are: a sync
+    // neither pushes them nor reads their absence as a deletion.
+    "info-feedback.jsonl",
+    "info-briefing.json",
+    "info-bodies.json",
+    "info-pool-marks.json",
+    "info-ask-4d9f1b0a.json",
+    "info-sources.json",
+    "info-labs.json",
+    // Info triage: the daily briefing and article cache were derived, not synced.
     "briefing-2026-07-21.json",
     "info-articles-2026-07-21.json",
     "info-items-2026-07-21.json",

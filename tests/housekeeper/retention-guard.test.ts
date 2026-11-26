@@ -13,8 +13,6 @@ import {
   isGenericRule,
   registerGarbageMarker,
 } from "../../src/housekeeper";
-import { infoDailyMarker } from "../../src/info/collect/store";
-import { issueExpiryMarker } from "../../src/info/issue/expiry";
 import { bellMarker } from "../../src/legion/bell";
 import { runFilesMarker } from "../../src/legion/ledger";
 import { PALACE, type PalaceRow } from "../../src/palace";
@@ -109,17 +107,6 @@ function withDomainMarkers<T>(body: () => T): T {
   const undo = [
     registerGarbageMarker(runFilesMarker()),
     registerGarbageMarker(bellMarker),
-    registerGarbageMarker(infoDailyMarker),
-    registerGarbageMarker(
-      issueExpiryMarker({
-        isCollector: async () => false,
-        deleteBook: async () => {},
-        dismissBoxItem: async () => {},
-        readShelf: async () => null,
-        writeShelf: async () => {},
-        today: () => "2026-10-15",
-      }),
-    ),
   ];
   try {
     return body();

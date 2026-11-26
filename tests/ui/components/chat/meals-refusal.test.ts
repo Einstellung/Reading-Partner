@@ -1,4 +1,4 @@
-// A model turn that stops without an answer, on the info side. The loop has two
+// A model turn that stops without an answer, on the meals side. The loop has two
 // exits (src/ai/agent.ts) and the companion used to wire only one, so a refusal
 // — the round cap, or a call that outgrew the window — arrived through onError
 // and was drawn as a failed reply. It goes through onRefusal now and lands in
@@ -115,6 +115,6 @@ test("a notice-only row is cleared by the next attempt; a card row is not", () =
 // (reading/turn/place-session.ts), which draws it as a refusal row.
 test("the companion's agent turn wires the refusal exit", () => {
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-  expect(read("../../../../src/ui/components/info/use-info-call.ts")).toContain('return { kind: "refused", message: prepared.text }');
+  expect(read("../../../../src/ui/components/meals/use-meals-call.ts")).toContain('return { kind: "refused", message: prepared.text }');
   expect(read("../../../../src/reading/turn/place-session.ts")).toContain('kind: "refusal"');
 });
