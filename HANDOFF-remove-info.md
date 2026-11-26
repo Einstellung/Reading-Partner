@@ -36,6 +36,25 @@ worktree 里先 `bun install --frozen-lockfile`（坑 698，否则借主 checkou
   - LAYER 表删 19 个已删目录和 `info` 行，相关注释改掉。
 - `03698f1f` 手机 nav-stack 删 `briefing`/`briefs`/`article`/`saved`/`savedArticle`，PhoneApp 不再画 SavedArticleView，`shell.savedArticle.backLabel` 删。栈只在内存里，没有要迁移的。
 
+## 第九棒（2026-11-25）：死代码、Features 文案；截图没做
+
+- `a280a868` 清死代码，7913 pass / 1 skip / 0 fail，typecheck RC=0：
+  - 门口语音的 brief material：删 `soul/voice/live/door-material.ts`；`door-call.ts` 去掉 `material`、`doorBriefKickoff`、`holdingMaterial`，`doorCallPlace` 只剩一参；`reading/turn/door-think.ts` 去掉 material/openItems，只回门口的工具。`ThinkDeskLaid` 三餐还在用，留着。
+  - EPUB 鼠标选词整条：删 `epub/paged/mouse-select.ts`、`engine/gesture/put-away.ts`（只给它打标记）及测试；`mark-layer` 的 `mouse` drag、`setMouseSelects`，`reader-view`、`EpubReaderPane`、`BookPane` 的 prop；`attach-touch` 不再 `notePutAway`。
+  - `i18n/messages/sources/*` 9 种语言删 accounts/session/pipe/tool/tasking 和 signIn/check 等 42 个键（逐个 grep 过无读者）。
+  - `saveArticle` + 只有它调的 `writeArticleBody` 删；store 测试里只测写入的 7 条删，「keep and un-keep」改成只验 un-keep。
+  - `ai/model-tier` 删 `briefing`/`briefing-screen`，`model-call` 的 `thinkingFor` 末行改回 prepThinking；model-tier 测试 "off" 那条改用 prep。
+  - 源插件注册表：`registerAllSourcePlugins`、`providers` map、`registerSourcePlugin`/`sourcePlugin`/`sourcePluginIds`/`resetSourcePluginsForTests`/`pluginOf` 删；`PLUGINS` 和 `registerSourceSiteAdapters` 留着（bindery 用）。
+- `4c378167` Features 段：键名不变，值改成 "Background work"/「后台任务」，开关和说明讲夜间整理记忆、同步冲突，9 种语言；FeaturesPanel 注释改。`docs/north-star/legion-rest.md` 的 registerRole 一句改成 meals 角色；`CLAUDE.md` 两处路径改成 `src/sources/...`（同句「注册表一份」已不实，按任务书没动）。
+
+拿不准、留着的：`platform/app/settings.ts` 的 `briefingThinking`/`briefingScreenThinking`（已无读者，但是盘上设置字段）；`saved-articles.ts` 的 `buildArticleBody`/`buildSavedArticle`/`SavedArticleInput`（现在只有测试用，纯函数）；`sources/plugin.ts` 的 index 能力（`validateQuery`/`describeQuery`/`discover`，Intel 的 engine 删后只剩插件实现和测试）；`docs/info/88` 等旧设计文档里讲 door-material 的段落。
+
+### 还剩（下一棒）
+
+1. 无窗口截图（任务书第 4 步，一张没截）。已备：私有 vite config `/tmp/claude-1000/-home-xinyuan-Documents-Github-Reading-Partner/704a6786-dd94-449b-9c5d-5b6bed2c6388/scratchpad/rig/rig-vite.config.ts`（端口 5391、cacheDir 在 scratchpad，坑 142），在 worktree 根跑 `bunx vite --config <它>`（坑 286），起完 curl 一个模块 grep 新标识符（坑 403）。浏览器：`~/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/` 现成，playwright 包在 bun cache（坑 289 用 executablePath）；或按坑 373 直接 CDP。纯浏览器下没有 Tauri（`isTauri()` 假），能不能读写 experiments/设备设置没试；不行就 `xvfb-run` 起 Tauri dev（坑 696：启动行用 exec，只杀记下的 PID）。截图存 `.../scratchpad/remove-info-shots/`，清单见任务书。
+2. 最后一个 commit：`git rm -r HANDOFF-remove-info.md HANDOFF-remove-info-tools/`。
+3. 坑 700、701 仍未用。
+
 ## 第八棒（2026-11-25）：删除带出的回归
 
 - `0c328e0f` 恢复本机 claim 和每日 round，放在新的 domain 目录 `src/presence/`（LAYER 已登记）：
