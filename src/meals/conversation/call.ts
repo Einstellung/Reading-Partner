@@ -1,4 +1,4 @@
-// The meals conversation's voice call and its prep card (docs/info/671 时间线与语音):
+// The meals conversation's voice call and its prep card (docs/meals/671 时间线与语音):
 // a call started with the prep is held on the one standing meals thread, its
 // lines are written there, and a run it hands off is answered there. The prep is
 // the call's focus: its steps and tools are laid on the call by the screen while

@@ -17,8 +17,7 @@ export interface ArxivEntry {
   // Submission date as the feed gives it (ISO 8601), or "" when absent. Only the
   // topic search reads it (to show the year); the title lookup ignores it.
   published: string;
-  // <arxiv:primary_category term="cs.RO"/>, when the entry carries one. The
-  // index provider (info/sources/index/arxiv) tags items with it.
+  // <arxiv:primary_category term="cs.RO"/>, when the entry carries one.
   primaryCategory?: string;
   // <arxiv:doi>, the published version's DOI, when the authors gave one.
   doi?: string;

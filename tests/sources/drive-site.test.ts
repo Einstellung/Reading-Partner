@@ -1,7 +1,7 @@
 // A Google Drive link read as the file (src/sources/drive-site.ts, docs/85):
 // which links it claims, a PDF passed through whole and named by the file name
 // Drive gives it, and every page Drive answers with instead turned back.
-// Run: bash scripts/t.sh tests/info/sources/drive-site.test.ts
+// Run: bash scripts/t.sh tests/sources/drive-site.test.ts
 
 import { afterEach, expect, test } from "bun:test";
 import {

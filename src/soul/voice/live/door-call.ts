@@ -47,8 +47,8 @@ export function doorCallPlace(opts: { inReader?: boolean }, material = ""): stri
 }
 
 // The opening line when the call starts with a brief open. The companion opened the
-// brief in the text conversation already (info/issue/opening.ts), so the call
-// greets and asks instead of summing it up again.
+// brief in the text conversation already, so the call greets and asks instead
+// of summing it up again.
 const BRIEF_OPENING =
   "(The user just opened the voice call with the brief open in the reader — you are speaking aloud, so keep it short. " +
   "Greet them and ask what in the brief they want to talk about. Do not sum the brief up and do not list its items.";

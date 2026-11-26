@@ -6,7 +6,7 @@
 // the result.
 //
 // It knows about no domain. What a book contributes is written in src/reading;
-// what a briefing contributes is written in src/info; this file only knows that
+// what the meals conversation contributes, in src/meals; this file only knows that
 // items have tools, prompts, a history and a ladder.
 
 import type { Api, Model } from "@earendil-works/pi-ai";

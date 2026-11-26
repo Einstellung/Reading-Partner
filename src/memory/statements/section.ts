@@ -13,7 +13,6 @@
 // renderings are deliberately not one function.
 //
 // Pure, and nothing here is evidence about the world: it is about the person.
-// The caller labels it that way (info/analysis/analyst.ts).
 
 import type { Statement } from "./types";
 

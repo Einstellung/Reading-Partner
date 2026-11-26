@@ -393,5 +393,3 @@ test("formatPublishedAt shows an unparseable date verbatim and nothing for none"
     new Date("2026-07-20T08:00:00Z").toLocaleDateString(),
   );
 });
-
-// --- toSavedArticleInput (ui/components/info/saveArticle.ts) ----------------

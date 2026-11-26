@@ -1,6 +1,5 @@
 // The meals desk's tools and the standing instruction that goes with them
-// (docs/671 对话, docs/73), modelled on info/briefer/lab-tool.ts: the planning
-// tool writes the unsaved draft (draft-file.ts) and raises its card; 「就这样」 on the card, or
+// (docs/meals/671 对话, docs/meals/73): the planning tool writes the unsaved draft (draft-file.ts) and raises its card; 「就这样」 on the card, or
 // apply_meal_plan when the reader confirms in words, performs the write, and a
 // row afterwards tells the model what landed.
 //

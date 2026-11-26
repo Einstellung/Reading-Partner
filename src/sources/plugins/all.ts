@@ -1,6 +1,6 @@
-// Register every source plugin (docs/69). Imported once by the program
-// (info/program/live.ts) so the engine can resolve `index` descriptors; a test
-// imports the one provider it exercises and registers it itself.
+// Register every source plugin (docs/69). Imported once at startup
+// (useShellBootstrap.ts); a test imports the one provider it exercises and
+// registers it itself.
 //
 // Each plugin file exports its plugin object and registers nothing on
 // import, so this is the only place the set is spelled out.

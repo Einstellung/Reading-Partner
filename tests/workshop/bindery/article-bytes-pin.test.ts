@@ -11,8 +11,8 @@ import { contentHash } from "../../../src/platform/app/content-hash";
 import { buildArticleEpub } from "../../../src/workshop/bindery/build-article";
 import { PINNED_ARTICLES } from "./pinned-articles";
 
-// The cover the "covered" digest was taken with, as cover-svg.ts drew it then.
-// Kept literal so that redrawing the covers does not move a pin about packing.
+// The cover the "covered" digest was taken with, as the app's cover drawer drew
+// it then. Kept literal: the pin is about packing, not drawing.
 const PINNED_COVER =
   `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800"><rect width="600" height="800" fill="#f2ede3"/>` +
   `<text x="56" y="108" font-family='"Noto Serif", "Noto Serif CJK SC", Georgia, serif' font-size="17" fill="#6d6559" letter-spacing="1.5">A room · 2026-10-07</text>` +

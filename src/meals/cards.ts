@@ -1,6 +1,6 @@
-// Chat-card payloads for the meals line (docs/671 对话), following the convention
-// in info/boxes/cards.ts: the payload is plain data in the info layer, so the
-// tool that drafts it and the component that draws it import one definition.
+// Chat-card payloads for the meals line (docs/meals/671 对话), following the
+// convention of reading/retell/cards.ts: the payload is plain data in the domain,
+// so the tool that drafts it and the component that draws it import one definition.
 //
 // The draft card is what propose_meal_plan raises. It carries no grams: which
 // dish each meal eats, which meals share a pot, the prep session and the

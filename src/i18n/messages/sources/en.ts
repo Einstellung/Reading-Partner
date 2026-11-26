@@ -1,11 +1,7 @@
-// Sources: the accounts and their sign-in state (info/sources/accounts.ts,
-// info/sources/site-session.ts, drawn by ui/components/settings/AccountsPanel),
-// the pipe-type phrase on the add-source chat cards (info/sources/probe.ts), the add-source AI tools' progress labels and receipts
-// (info/sources/source-tools.ts), the tasking sub-agent's progress labels
-// (info/tasking/), the page-reading tool's label (info/sources/
-// read-page-tool.ts), and the errors a source plugin can surface into a
-// source's health (sources/plugins/). The source every other locale is
-// typed against.
+// Sources: the page-reading tool's label (sources/read-page-tool.ts) and the
+// errors a source plugin can surface (sources/plugins/). Some keys here were
+// Intel's (accounts, add-source cards, tasking) and have no reader since it was
+// removed (2026-11). The source every other locale is typed against.
 
 export default {
   collectorSignedIn: "Signed in on {device}",

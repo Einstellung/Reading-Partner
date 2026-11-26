@@ -13,6 +13,7 @@ import {
   intakeTurnNote,
   doorTurnNote,
   linksToTake,
+  noteOnLastLine,
   type TakeLinkDeps,
 } from "../../../src/reading/ingest/take-link-tool";
 import type { IntakeCard } from "../../../src/reading/ingest/intake-card";
@@ -186,4 +187,16 @@ test("a run the runner refuses is the model's error, with no card", async () => 
   });
   await expect(h.tool.execute({ link: "1" })).rejects.toThrow(/not accepting/);
   expect(h.cards).toEqual([]);
+});
+
+test("the note goes on the reader's last line and on nothing else", () => {
+  const history = [
+    { role: "user", text: "a" },
+    { role: "ai", text: "b" },
+    { role: "user", text: "c" },
+  ];
+  expect(noteOnLastLine(history, " [n]")).toEqual([...history.slice(0, 2), { role: "user", text: "c [n]" }]);
+  expect(history[2].text).toBe("c");
+  expect(noteOnLastLine(history, "")).toEqual(history);
+  expect(noteOnLastLine(history.slice(0, 2), " [n]")).toEqual(history.slice(0, 2));
 });

@@ -1,4 +1,4 @@
-// What a meal that eats from a prepped box shows on the eating day (docs/info/671).
+// What a meal that eats from a prepped box shows on the eating day (docs/meals/671).
 export interface Finishing {
   /** One short line for the home card, e.g. "Heat the chicken box 3 min, stir-fry bok choy 4 min". */
   line: string;

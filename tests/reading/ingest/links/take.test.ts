@@ -1,5 +1,5 @@
 // The link agent (src/reading/ingest/links, docs/86) with no network and no model: pages
-// are fixtures, X answers are the recorded shapes in tests/info/x/fixtures, and
+// are fixtures, X answers are the recorded shapes in tests/reading/ingest/x/fixtures.ts, and
 // the loop is a scripted SubagentTurnFn calling the three tools.
 // Run: bash scripts/t.sh tests/reading/ingest/links
 

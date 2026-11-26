@@ -58,9 +58,8 @@ export interface ArticleMetadata {
 /**
  * A cover the app drew for a document it wrote itself — a 稿 or a 合订本
  * (docs/67 「封面」). Articles and books do not have one: a book declares its
- * own and an article is a row on the shelf without a card. The SVG comes from
- * cover-svg.ts and is packed verbatim, so the archive stays a function of its
- * content.
+ * own and an article is a row on the shelf without a card. The SVG is packed
+ * verbatim, so the archive stays a function of its content.
  */
 export interface ArticleCover {
   svg: string;

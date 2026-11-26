@@ -45,11 +45,12 @@ test("box cards of a hidden line are not drawn; the rest are", () => {
   expect(shownBoxItems(all, { meals: false })).toEqual([door]);
 });
 
-// Intel is gone (2026-11); a brief's issue card a box still holds is never drawn.
-test("a brief's issue card left in the box is not drawn", () => {
+// Intel is gone (2026-11); a briefing's card a box still holds is never drawn.
+test("a briefing's cards left in the box are not drawn", () => {
   const issue = item({ kind: "brief-issue" as BoxItem["kind"], body: "book-1" });
+  const fromBriefing = item({ origin: { place: "briefing", date: "2026-11-01" } });
   const door = item({});
-  expect(shownBoxItems([issue, door], { meals: true })).toEqual([door]);
+  expect(shownBoxItems([issue, fromBriefing, door], { meals: true })).toEqual([door]);
 });
 
 test("the cards of a hidden line render nothing, and every other card is the registry's own", () => {

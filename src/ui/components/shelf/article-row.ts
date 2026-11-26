@@ -9,6 +9,7 @@
 import {
   displaySource,
   isArticleEntry,
+  isIssueEntry,
   type LibraryEntry,
 } from "../../../platform/app/library";
 import type { FileRef } from "../../../platform/app/topics";
@@ -65,7 +66,8 @@ export interface MaterialSplit {
 }
 
 /**
- * Split a topic's files into the cards and the rows.
+ * Split a topic's files into the cards and the rows. An old brief (isIssueEntry)
+ * is in neither.
  *
  * Both halves keep the order they arrived in, which is the order the shelf has
  * always used (topics.ts sortedFiles: most recently opened first, falling back
@@ -86,6 +88,7 @@ export function splitMaterials(
   const articles: ArticleRow[] = [];
   for (const file of files) {
     const entry = file.hash ? entries[file.hash] : undefined;
+    if (isIssueEntry(entry)) continue;
     if (entry && isArticleEntry(entry)) {
       articles.push({ file, title: displayFileTitle(file.name), line: articleRowLine(entry) });
     } else {

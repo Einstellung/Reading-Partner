@@ -137,6 +137,17 @@ export function doorTurnNote(
   return holdsIntake ? intakeTurnNote(language) : "";
 }
 
+/**
+ * The conversation as the model is handed it: the app's note put on the end of
+ * the reader's last line. Only this copy carries it; the rows on screen and
+ * the thread file keep the line as it was said.
+ */
+export function noteOnLastLine<T extends { role: string; text: string }>(history: readonly T[], note: string): T[] {
+  const latest = history[history.length - 1];
+  if (!note || !latest || latest.role !== "user") return [...history];
+  return [...history.slice(0, -1), { ...latest, text: latest.text + note }];
+}
+
 export interface TakeLinkDeps {
   /** The numbered links of this turn (linksToTake), read when the tool runs. */
   links(): readonly string[];

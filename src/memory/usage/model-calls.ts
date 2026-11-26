@@ -26,7 +26,7 @@ export type ModelCaller =
   | "distill"
   // The unattended pipelines: plans, overviews, outlines, news triage.
   | "prep"
-  // The standing meals conversation's turns (src/info/briefer/info-durable.ts).
+  // The standing meals conversation's turns (src/meals/conversation/durable.ts).
   | "meals-chat"
   // A recipe written for a dish, by the sweep or the recipe page.
   | "meals-recipe"

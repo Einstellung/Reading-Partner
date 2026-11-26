@@ -4,8 +4,8 @@
 // adapters, which read a link into one document (docs/85); a link no reader
 // claims goes through the open tool's generic path.
 //
-// Registered at startup by the domain that knows the source (info/x registers
-// X), by name, the last one winning, as for site adapters. reading/ingest/links never
+// Registered at startup by the domain that knows the source (reading/ingest/x
+// registers X), by name, the last one winning, as for site adapters. reading/ingest/links never
 // imports a reader.
 
 import type { Material, Rejection } from "../../../workshop/bindery";

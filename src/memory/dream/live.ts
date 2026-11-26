@@ -1,8 +1,8 @@
 // Live wiring of dream: the two stores it reads, the state file it keeps, and
 // the real model call.
 //
-// The only entry point is runDreamIfDue, and the only caller is the collector's
-// daily tick (info/program/live.ts). Dream runs on one machine — the elected
+// The only entry point is runDreamIfDue; its caller was the collector's daily
+// tick, removed with Intel (2026-11). Dream runs on one machine — the elected
 // collector (docs/36) — because two machines would each pay for the night and
 // write two readings of the same observations.
 

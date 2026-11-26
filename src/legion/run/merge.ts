@@ -19,8 +19,7 @@
 //                           it, and then the first came back with its own answer
 //   3. the claimant         a claimed side beats an unclaimed one, and two
 //                           claimants are settled by the lexicographically
-//                           smaller deviceId — the same tie-break the collector
-//                           election uses (info/briefer/handoff.ts)
+//                           smaller deviceId
 //   4. content order        neither side was ever claimed and everything above
 //                           ties, so the smaller canonical serialisation wins.
 //                           Not the run id: both sides carry the same id, the

@@ -2,7 +2,7 @@
 //
 // The table itself is assembled one level up (ui/components/cardRegistry.ts)
 // from the domains that contribute cards. If chat/ imported it, chat would
-// import info/ and reader/, which both import chat/ back for the card protocol —
+// import meals/ and reader/, which both import chat/ back for the card protocol —
 // so the table arrives through a provider instead, and the only file that names
 // both is CardRegistryProvider, which each shell mounts around its chat.
 //

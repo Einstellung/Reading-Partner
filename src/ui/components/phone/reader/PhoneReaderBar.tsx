@@ -39,10 +39,6 @@ export default function PhoneReaderBar(props: {
   learnDot: LessonDot;
   // A panel is up: the dot over the page steps aside for it.
   covered: boolean;
-  // A brief: no Learn at all (reading/issue.ts).
-  noLearn?: boolean;
-  // A study's version button (docs/info/91 「版本」), beside the title.
-  extra?: React.ReactNode;
 }) {
   const t = useT();
   const pageText = readerPageText(props.stats, t);
@@ -98,7 +94,6 @@ export default function PhoneReaderBar(props: {
         <span className="min-w-0 flex-1 truncate font-display text-[15px] font-medium text-foreground">
           {props.title}
         </span>
-        {props.extra}
         <span className="flex-none px-1 text-[12px] whitespace-nowrap text-muted-foreground [font-variant-numeric:tabular-nums]">
           {position}
           {!props.status && pageText.printed && (
@@ -123,8 +118,7 @@ export default function PhoneReaderBar(props: {
         <BarTool label={t("phone.readerBar.display")} onClick={props.onDisplay}>
           <IconTextSize size={22} />
         </BarTool>
-        {/* A brief has no lesson, and nothing takes Learn's place (docs/info/88). */}
-        {!props.noLearn && <BarTool
+        <BarTool
           label={t("phone.readerBar.learn")}
           ariaLabel={bookThread + (props.learnDot ? dotWords[props.learnDot] : "")}
           title={bookThread}
@@ -141,7 +135,7 @@ export default function PhoneReaderBar(props: {
               )}
             />
           )}
-        </BarTool>}
+        </BarTool>
       </nav>
     </>
   );

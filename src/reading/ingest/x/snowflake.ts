@@ -4,7 +4,7 @@
 //
 // The decoding is ported from last30days-skill (lib/x_api.py, _decode_snowflake).
 // Portions Copyright (c) 2026 Matt Van Horn, under the MIT License; the full
-// notice is in src/info/rank/third-party-licenses.txt.
+// notice is in third-party-licenses.txt beside this file.
 
 /** X's snowflake epoch, 2010-11-04T01:42:54.657Z. */
 export const SNOWFLAKE_EPOCH_MS = 1288834974657;

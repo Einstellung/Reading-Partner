@@ -78,14 +78,14 @@ test("a coaching or retell card opens its view in its topic on the desk, and say
   }
 });
 
-test("the door opens its conversation and the briefing goes to its page, in either shell", () => {
+test("the door opens its conversation and an old briefing card goes nowhere, in either shell", () => {
   for (const place of [DESK, PHONE]) {
     expect(planJump({ place: "door", date: "2026-09-15" }, place)).toEqual({
       steps: [{ step: "open-door-chat", date: "2026-09-15" }],
       unreachable: null,
     });
     expect(planJump({ place: "briefing", date: "2026-09-15" }, place)).toEqual({
-      steps: [{ step: "go-to-briefing", date: "2026-09-15" }],
+      steps: [],
       unreachable: null,
     });
     expect(planJump({ place: "meals" }, place)).toEqual({

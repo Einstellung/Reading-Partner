@@ -2,6 +2,7 @@
 // desk. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
+import { registerDeskItemKind, type DeskItemKind } from "../../src/desk";
 import {
   DOOR_KIND,
   doorDate,
@@ -160,4 +161,27 @@ test("every day's conversations are offered to distillation, oldest first", asyn
     "d0 At the door 2026-09-09 topic-1",
     "d1 At the door 2026-09-10 null",
   ]);
+});
+
+test("an item that brings a conversation of its own is refused at the door", async () => {
+  const talker: DeskItemKind = {
+    kind: "talker",
+    open: async () => ({
+      kind: "talker",
+      label: "",
+      tools: [],
+      toolPrompts: [],
+      rungs: [],
+      prompt: () => "",
+      history: { compose: () => [{ role: "user", text: "not the door's" }] },
+    }),
+  };
+  const off = registerDeskItemKind(talker);
+  try {
+    await expect(
+      openDoorTurn({ settings, threadId: "d1", date: "2026-10-15", desk: [{ kind: "talker", ref: {} }] }),
+    ).rejects.toThrow("carries a conversation of its own");
+  } finally {
+    off();
+  }
 });

@@ -63,11 +63,6 @@ import { useBookLesson, type LessonTopic } from "../lesson/use-book-lesson";
 import { deleteThreadTree, loadThreads } from "../../../../platform/app/threads";
 import { logEvent } from "../../../../platform/app/events";
 import { deleteThreadImages } from "../../../../platform/app/thread-images";
-import type { ReaderMode } from "../../../../reading/issue";
-import { markExcerpt } from "../../../../reading/turn/reopen";
-import { askCompanion, publishOpenIssue } from "../../companion/issue-context";
-import { jumpInBook } from "../lesson/epub-lesson";
-import { useExperiment } from "../../common/use-experiment";
 
 const markDeleteIo: MarkDeleteIo = {
   loadThreads,
@@ -105,8 +100,6 @@ export default function PhoneReader(props: {
   io?: PhoneBookIo;
   // A conversation to open over the page once the book is up (a box card followed).
   threadId?: string;
-  // A brief opens without Learn, and its Ask goes to the companion (reading/issue.ts).
-  mode?: ReaderMode;
 }) {
   const t = useT();
   const { Pane, bookId, name, topicId, path } = props;
@@ -283,46 +276,6 @@ export default function PhoneReader(props: {
     [askAboutSelection],
   );
 
-  // In a brief the passage goes to the companion's conversation instead, and no mark is
-  // left for asking (docs/info/88 「简报的对话」).
-  const issue = props.mode === "issue";
-  // With the companion experiment off there is no one to ask in a brief, so its
-  // menus offer no Ask (platform/experiments).
-  const companionOn = useExperiment("companion");
-  const noAsk = issue && !companionOn;
-  const askCompanionAboutSelection = useCallback(() => {
-    const text = selection?.selection.text ?? "";
-    viewRef.current?.clearSelection();
-    setSelection(null);
-    askCompanion({ text });
-  }, [selection]);
-  const askCompanionAboutMark = useCallback((id: string) => {
-    setPopup(null);
-    askCompanion({ text: markExcerpt(marksRef.current.find((a) => a.id === id)) });
-  }, []);
-
-  // Published while the brief is open: the companion's conversation comes up with it,
-  // lays it on the desk and jumps to what it cites (companion/issue-context.ts).
-  const statsRef = useRef<ViewStats | null>(null);
-  statsRef.current = stats;
-  useEffect(() => {
-    if (!issue || !book) return;
-    const text = book.fulltext ?? Promise.resolve(null);
-    return publishOpenIssue({
-      bookId,
-      title: name,
-      where: () => {
-        const s = statsRef.current;
-        return { page: s ? s.pageIndex + 1 : null, pageCount: s?.pagesCount ?? null };
-      },
-      fulltext: () => text,
-      marks: () => marksRef.current,
-      jump: (pageIndex, quote) =>
-        gate.run((view) => void jumpInBook(view, quote ? { pageIndex, quote } : { pageIndex }, text)),
-    });
-  }, [issue, book, bookId, name, gate]);
-
-
   const openConversation = useCallback(
     (id: string) => {
       const mark = marksRef.current.find((a) => a.id === id);
@@ -444,7 +397,7 @@ export default function PhoneReader(props: {
             viewRef.current?.saveSelection({ stroke: "highlight", color: HIGHLIGHT_COLOR });
             setSelection(null);
           }}
-          {...(noAsk ? {} : { onAsk: issue ? askCompanionAboutSelection : askAboutSelection })}
+          onAsk={askAboutSelection}
         />
       )}
 
@@ -454,7 +407,7 @@ export default function PhoneReader(props: {
           frame={popup.frame}
           onClose={() => setPopup(null)}
           onDelete={askRemoveMark}
-          {...(noAsk ? {} : { onAsk: issue ? askCompanionAboutMark : askAboutMark })}
+          onAsk={askAboutMark}
           onOpen={openConversation}
         />
       )}
@@ -470,7 +423,6 @@ export default function PhoneReader(props: {
         {...(book ? { onLearn: lesson.learn } : {})}
         learnDot={lesson.dot}
         covered={covered}
-        noLearn={issue}
       />
 
 

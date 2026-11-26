@@ -29,9 +29,7 @@
 // The body is kept twice inside that file: `text` for the AI path, `html` for
 // reading it today. The html keeps its external image URLs — they render
 // through the img: proxy (docs/pitfall/30) — but any data: image is stripped,
-// since a base64 body would dominate the file. Same rule and same function as
-// the bodies the collector publishes (info/boxes/publish.ts), so an article
-// read from the briefing and the copy kept from it hold the same markup.
+// since a base64 body would dominate the file.
 //
 // Un-keeping the last record that points at a body deletes the body, here and
 // in Drive (removeSavedArticle). The remote half is a purge request because

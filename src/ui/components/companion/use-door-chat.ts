@@ -26,7 +26,7 @@ import { topicFiledNote } from "../chat/call/topic-filed";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import { createTopic, listTopics } from "../../../platform/app/topics";
 import { loadSettings } from "../../../platform/app/settings";
-import { doorTurnNote, extractLinks, linksToTake } from "../../../reading/ingest/take-link-tool";
+import { doorTurnNote, extractLinks, linksToTake, noteOnLastLine } from "../../../reading/ingest/take-link-tool";
 import { chooseIntakeTopic, readIntake } from "../../../reading/ingest/topic-intake";
 import { readingDurable } from "../../../reading/turn/durable-runtime";
 import type { CallRow } from "../../../reading/turn/call-state";
@@ -49,9 +49,7 @@ import {
 import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools, doorToolsPrompt } from "./door-tools";
-import { getOpenIssue, issueDoorTurn, noteOnLastLine, type IssueQuote } from "./issue-context";
 import { listenToThread, withArrivedRow } from "./door-arrivals";
-import { quotedQuestion } from "../chat/quoted-question";
 import { BACKGROUND_STATUS_RULE } from "../../../legion/status/tool";
 import {
   INTAKE_CHOOSE_OP,
@@ -68,8 +66,8 @@ export interface DoorChat {
   /** The day's thread is loaded and a line can be sent. */
   ready: boolean;
   streaming: boolean;
-  /** Say a line; with a quote, a question about that passage of the open brief. */
-  send(text: string, quote?: IssueQuote): Promise<void>;
+  /** Say a line. */
+  send(text: string): Promise<void>;
   stop(): void;
   onCardAction(cardId: string, action: CardAction): void;
 }
@@ -167,10 +165,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           m.parts?.some((part) => part.type === "card" && part.card.kind === "link-intake"),
         );
         const topics = latestLinks.length > 0 ? await listTopics().catch(() => []) : [];
-        // With a brief open, the brief is on the desk and where the reader is
-        // in it rides the same note (issue-context.ts, docs/info/88).
-        const issue = await issueDoorTurn(getOpenIssue(), latest?.role === "user" ? latest.text : "");
-        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) + issue.note : "";
+        const note = latest?.role === "user" ? doorTurnNote(latestLinks, topics, holdsIntake) : "";
         const sent = noteOnLastLine(history, note);
         // The door's own tools, beside the soul's (door-tools.ts).
         const tools = doorTools({
@@ -184,7 +179,6 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           threadId: id,
           date,
           history: replayableHistory(sent),
-          ...(issue.desk.length > 0 ? { desk: issue.desk } : {}),
           signal,
           tools,
           topic: { onCard: (payload) => raiseCardRef.current("topic", payload) },
@@ -261,10 +255,8 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
 
 
   const say = useCallback(
-    async (typed: string, quote?: IssueQuote) => {
-      if (!typed.trim() || !threadId) return;
-      // A question about a passage carries the passage above it (quoted-question.ts).
-      const text = quote ? quotedQuestion(quote.text, typed) : typed;
+    async (text: string) => {
+      if (!text.trim() || !threadId) return;
       await lookingRef.current;
       const session = sessionRef.current;
       if (!session) return;
@@ -277,7 +269,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
     },
     [key, threadId, setMessages, stamp],
   );
-  const send = useCallback((typed: string, quote?: IssueQuote) => say(typed, quote), [say]);
+  const send = useCallback((text: string) => say(text), [say]);
 
   const stop = useCallback(() => sessionRef.current?.stop(), []);
 

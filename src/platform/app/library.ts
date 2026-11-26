@@ -63,8 +63,9 @@ export function documentPath(hash: string, fileName: string): string {
 // that is never migrated in place — the same rule `format` follows above.
 // A book and an article are the same document to the reader (docs/67): the only
 // difference is that an article has no cover and knows where it came from.
-// An issue is one night's brief (docs/info/88 「简报书」): filed on no reading
-// topic, listed on the info shelf (info/issue) instead.
+// An issue is one night's brief (docs/info/88 「简报书」). Intel was removed
+// in 2026-11; the entries it wrote stay in library.json, and no shelf draws
+// them (isIssueEntry).
 export type LibraryKind = "book" | "article" | "issue";
 
 export interface LibraryEntry {
@@ -91,6 +92,12 @@ export interface LibraryEntry {
 // nothing has to remember that an absent `kind` means book.
 export function isArticleEntry(entry: LibraryEntry | null | undefined): boolean {
   return entry?.kind === "article";
+}
+
+// Pure: whether this entry is an old brief (Intel, removed 2026-11). Shelves
+// leave these out; the entry and its file stay where they are.
+export function isIssueEntry(entry: LibraryEntry | null | undefined): boolean {
+  return entry?.kind === "issue";
 }
 
 // Pure: the host an article came from, for the line under its title — "www." is

@@ -45,9 +45,7 @@ import { MealsHost } from "./ui/components/meals/MealsHost";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
-import { displaySource, getLibraryEntry, readLibraryBook, type BookFormat } from "./platform/app/library";
-import { readerModeOf, type ReaderMode } from "./reading/issue";
-import { askCompanion, publishOpenIssue } from "./ui/components/companion/issue-context";
+import { displaySource, readLibraryBook, type BookFormat } from "./platform/app/library";
 import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -71,7 +69,7 @@ import PrepPanel from "./ui/components/reader/PrepPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
 import { escapeTarget } from "./ui/components/reader/escape";
-import { mouseSelectsText, readerTool } from "./ui/components/reader/reader-tool";
+import { readerTool } from "./ui/components/reader/reader-tool";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/call/CallBubble";
 import CallView from "./ui/components/chat/call/CallView";
@@ -196,9 +194,6 @@ export default function App() {
   // Which document is on screen, as something that renders: the Outline lights
   // the row the reader is in. A ref cannot do that.
   const [docId, setDocId] = useState<string | null>(null);
-  // A brief opens without the lesson and the reader's own conversation; the companion
-  // talks about it in the door (reading/issue.ts, docs/info/88).
-  const [readerMode, setReaderMode] = useState<ReaderMode>("book");
 
   // The current book's full text, extracted fire-and-forget on open. A call's
   // context assembly awaits this so the AI can see the page even if extraction
@@ -658,26 +653,6 @@ export default function App() {
     await viewRef.current?.highlightQuote(pageIndex, { searchText, displayText: quote });
   }, []);
 
-  // The brief open in this reader, for the companion's conversation (companion/issue-context.ts):
-  // published while it is open, which also brings the conversation up.
-  const issueBookId = readerMode === "issue" && docId !== null ? bookIdRef.current : null;
-  useEffect(() => {
-    if (!issueBookId) return;
-    return publishOpenIssue({
-      bookId: issueBookId,
-      title: bookTitle,
-      where: () => {
-        const s = statsRef.current;
-        return { page: s ? s.pageIndex + 1 : null, pageCount: s?.pagesCount ?? null };
-      },
-      fulltext: () => currentFulltextRef.current ?? Promise.resolve(null),
-      marks: () => [...annsRef.current.values()],
-      jump: (pageIndex, quote) => {
-        if (quote) void jumpToQuote(pageIndex, quote);
-        else viewRef.current?.navigate({ pageIndex });
-      },
-    });
-  }, [issueBookId, bookTitle, jumpToQuote, annsRef]);
 
 
   // A clicked citation chip in a chat reply. Survey pages jump the reader (and
@@ -827,7 +802,6 @@ export default function App() {
         setDocId(null);
         setSupplements([]);
         setBookTitle("");
-        setReaderMode("book");
         viewRef.current = null;
         pageDwellRef.current = null;
       },
@@ -893,7 +867,6 @@ export default function App() {
     async (bookId: string, name: string, bytes: Uint8Array) => {
       setBookTitle(name);
       setSupplements([]);
-      setReaderMode(readerModeOf(await getLibraryEntry(bookId).catch(() => null)));
       await openBook(readerShell, { bookId, name, bytes });
       await refreshSupplements();
     },
@@ -1252,14 +1225,6 @@ export default function App() {
         if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
       },
       openAnnotation: openThreadForAnnotation,
-      // The briefing is gone (Intel, removed 2026-11): an old card from it lands
-      // on Today. The book is closed first when one is open: the reader covers
-      // the home screen, so setting it underneath would be a card that does
-      // nothing visible and still counts itself told.
-      goToBriefing: () => {
-        if (inReader) closeReader();
-        setHomeScreen("vestibule");
-      },
       goToMeals: () => {
         if (inReader) closeReader();
         setHomeScreen(reachableScreen("meals", { meals: mealsOnRef.current }));
@@ -1468,7 +1433,6 @@ export default function App() {
             onToggleCompanion={toggleCompanion}
             companionAvailable={gates.companion}
             onOpenBookThread={openBookThread}
-            mode={readerMode}
             onOpenSettings={openSettings}
             settingsAlert={syncReport.alert !== "none"}
           />
@@ -1572,7 +1536,6 @@ export default function App() {
               onSetAnnotationPopup={onSetAnnotationPopup}
               onQuoteHighlightChange={setQuoteHlActive}
               onSelection={onFingerSelection}
-              mouseSelects={mouseSelectsText(readerMode)}
             />
           )}
           {embedDoc && fingerSel && (
@@ -1581,15 +1544,7 @@ export default function App() {
               frame={fingerSel.frame}
               onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
               onHighlight={highlightSelection}
-              // A brief's Ask is the companion's: with it switched off the menu has only Highlight.
-              {...(readerMode === "issue" && !gates.companion ? {} : { onAsk: () => {
-                // In a brief the passage goes to the companion's conversation (docs/info/88).
-                if (readerMode === "issue") {
-                  askCompanion({ text: fingerSel.selection.text });
-                  viewRef.current?.clearSelection();
-                  setFingerSel(null);
-                  return;
-                }
+              onAsk={() => {
                 // Inside a side conversation no new one opens: the AI pen's rule
                 // (reading/turn/call-state.ts), said the way the rack says it.
                 if (gate.aiPen !== null) {
@@ -1598,7 +1553,7 @@ export default function App() {
                 }
                 const last = fingerSel.selection.rects[fingerSel.selection.rects.length - 1];
                 askAboutSelection({ x: last.left + last.width / 2, y: last.top + last.height });
-              } })}
+              }}
             />
           )}
         </div>

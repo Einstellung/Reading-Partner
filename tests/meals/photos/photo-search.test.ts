@@ -3,7 +3,7 @@
 // The fixture is a real response, stripped to its result anchors: Bing answers
 // curl with the right page and decoy pictures (坑 372), so what is asserted
 // here is the shape of the anchors and never the pictures themselves.
-// Run: scripts/t.sh tests/info/dinner
+// Run: scripts/t.sh tests/meals/photos
 
 import { expect, test } from "bun:test";
 import {

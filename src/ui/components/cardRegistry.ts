@@ -6,7 +6,7 @@
 // compile error here (the CardRegistry annotation below), which is where a new
 // card kind is meant to be noticed.
 //
-// It sits above chat/, info/ and reader/ rather than inside chat/, because
+// It sits above chat/, meals/ and reader/ rather than inside chat/, because
 // gathering means importing all three and chat is what the other two import for
 // the card protocol. It reaches a chat through CardRegistryProvider, which is
 // what a shell mounts.

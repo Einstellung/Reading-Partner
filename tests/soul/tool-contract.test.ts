@@ -174,7 +174,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[]; safe?: strin
     ], safe: ["read_talk_outline"],
   },
   {
-    where: "info/sources/read-page-tool",
+    where: "sources/read-page-tool",
     tools: [buildReadPageTool(any({ fetchFn: async () => new Response("") }))],
     names: ["read_page"], safe: ["read_page"],
   },

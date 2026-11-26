@@ -149,9 +149,8 @@ const LAYER: Record<string, Layer> = {
   "legion/durable": "capability",
   memory: "capability",
   // The nightly pass that turns observations into statements. A capability like
-  // the rest of memory: the collector election that decides which machine runs
-  // it lives in info/, and the call goes that way round — info calls dream,
-  // dream never reaches for info.
+  // the rest of memory: whatever decides when it runs calls dream, and dream
+  // never reaches back.
   // Which conversations are raw material for a distillation pass, and what the
   // sweep owes each of them (docs/58). A capability with a registry in it: the
   // domains register their own kinds at startup, so nothing here reaches up into

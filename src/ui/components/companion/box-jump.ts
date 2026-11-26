@@ -26,7 +26,6 @@ export type JumpStep =
   | { step: "go-to-page"; page: number }
   | { step: "open-annotation"; annotationId: string }
   | { step: "open-thread"; bookId: string; threadId: string }
-  | { step: "go-to-briefing"; date: string }
   | { step: "go-to-meals" }
   // The phone: the book's conversation, in the lesson for a paper and over the
   // page for an EPUB (PhoneApp.tsx decides which).
@@ -105,8 +104,10 @@ export function planJump(origin: BoxOrigin, place: Place): Jump {
     // page draws it.
     case "door":
       return { steps: [{ step: "open-door-chat", date: origin.date }], unreachable: null };
+    // The briefing is gone (Intel, removed 2026-11); its cards are not drawn
+    // (shownBoxItems), and one that is followed anyway goes nowhere.
     case "briefing":
-      return { steps: [{ step: "go-to-briefing", date: origin.date }], unreachable: null };
+      return { steps: [], unreachable: null };
     case "meals":
       return { steps: [{ step: "go-to-meals" }], unreachable: null };
     case "talk":
@@ -154,10 +155,10 @@ export function stateAfterFollow(item: Pick<BoxItem, "kind" | "body">): BoxItemS
 
 /**
  * The cards of a line whose experiment is off are not drawn (platform/experiments):
- * one from the meals page while meals is hidden, a brief's while intel is. They
- * stay in the box untouched and come back with the switch.
+ * one from the meals page while meals is hidden. They stay in the box untouched
+ * and come back with the switch. The briefing's (Intel, removed 2026-11), by
+ * origin or as a brief's issue, are never drawn; they stay in the box untouched.
  */
-// A brief's issue (Intel, removed 2026-11): any still in the box is not drawn.
 const BRIEF_ISSUE_KIND = "brief-issue";
 
 export function shownBoxItems<T extends Pick<BoxItem, "origin" | "kind" | "body">>(
@@ -166,6 +167,8 @@ export function shownBoxItems<T extends Pick<BoxItem, "origin" | "kind" | "body"
 ): T[] {
   return items.filter(
     (item) =>
-      (gates.meals || item.origin.place !== "meals") && item.kind !== BRIEF_ISSUE_KIND,
+      (gates.meals || item.origin.place !== "meals") &&
+      item.origin.place !== "briefing" &&
+      item.kind !== BRIEF_ISSUE_KIND,
   );
 }

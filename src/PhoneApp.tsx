@@ -1,12 +1,7 @@
-// The phone shell (docs/22), beside App.tsx. Info only: today's briefing, the
-// articles it produced, the ones kept out of it, the companion chat over any of
-// them, and settings. No reader, no annotations, no notes — the phone never
-// opens a book, so none of App's reading state exists here.
-//
-// The briefing pipeline, the article cache and the info call stay in InfoHome,
-// which both shells mount; this file owns where the reader is — a navigation
-// stack (nav-stack.ts) whose floor is home — plus the kept articles, settings
-// and sync.
+// The phone shell (docs/22), beside App.tsx: home, the shelf, the EPUB reader
+// and the paper lesson, meals, the companion, and settings. This file owns
+// where the reader is — a navigation stack (nav-stack.ts) whose floor is home —
+// plus settings and sync.
 //
 // Back has one definition, `goBack`, and three things reach it: the top bar
 // button on every screen, the left-edge swipe, and the Android system button.
@@ -15,7 +10,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType }
 import { bindSystemBack } from "./platform/app/back-button";
 import { listTopics, onFiledElsewhere, type Topic } from "./platform/app/topics";
 import { listLibraryEntries, type LibraryEntry } from "./platform/app/library";
-import { readerModeOf } from "./reading/issue";
 import {
   libraryFilePath,
   openIn,
@@ -115,7 +109,7 @@ export default function PhoneApp({
   const companionShown = useCompanionShown() && gates.companion;
   // Where it stands. Every conversation on this shell is the whole screen, so
   // any composer that reports itself is one sitting on the bottom edge, and the
-  // corner rises above it (companion/corner-placement.ts) — the briefing's call, the
+  // corner rises above it (companion/corner-placement.ts) — the meals call, the
   // lesson and the lesson's aside alike. On the screens that hold no
   // conversation nothing is measured and the corner keeps the corner.
   const { composerRef: composerSlot, placement: companion } = useCornerLift(companionShown, true);
@@ -336,7 +330,7 @@ export default function PhoneApp({
             one above them would cost a phone a line of reading height for
             nothing. */}
         <main className="relative min-h-0 flex-1">
-          {/* The chat card table (docs/17's probe cards, the briefing card).
+          {/* The chat card table.
               chat/ reads it from a context, so it never imports the domains that
               fill it, and a shell that leaves this out renders no card at all. */}
           <CardRegistryProvider>
@@ -445,7 +439,6 @@ export default function PhoneApp({
               onOverlayChange={onOverlayChange}
               onBack={goBack}
               {...(openedBook.threadId ? { threadId: openedBook.threadId } : {})}
-              mode={readerModeOf(entries[openedBook.bookId])}
               onSwitchBook={(bookId, name) => {
                 setOpenedBook({ bookId, name, topicId: openedBook.topicId, path: "" });
                 setStack((s) => [...s.slice(0, -1), { kind: "reader", bookId, name }]);
@@ -503,12 +496,6 @@ export default function PhoneApp({
         // would stand, so the companion stands down for that screen (docs/74).
         stoodDown={base.kind === "lesson"}
         targets={{
-          // A brief (docs/info/88): on no topic, opened straight in the reader.
-          openBook: (bookId) => {
-            const entry = entries[bookId];
-            if (entry) openReader({ bookId, name: entry.title, topicId: "", path: "" });
-          },
-          goToBriefing: () => onNavigate("vestibule"),
           goToMeals: () => onNavigate("meals"),
           // A book's conversation: a paper's lesson, or an EPUB's thread over its page.
           openBookConversation: (bookId, threadId) => {

@@ -83,7 +83,7 @@ function tool(name: string) {
   return { name, description: "", parameters: {}, execute: async () => "" } as never;
 }
 
-// The live companion set by name (info/briefer/companion-tools.ts).
+// The live companion set by name.
 // statement_write is not in it: the soul mounts that one, on every turn.
 const COMPANION = [
   "probe_source",

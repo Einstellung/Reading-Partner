@@ -6,9 +6,8 @@
 // box-cards.ts, and where a card jumps to is box-jump.ts.
 //
 // One body, bottom right, 72px, in both shells and on every screen including
-// the open reader. It does not grow and it does not re-centre — that was the
-// mistake the briefing's corner was built to correct (info/VoiceOrbEntry), and
-// a body that threw itself across an open book would be worse.
+// the open reader. It does not grow and it does not re-centre: a body that
+// threw itself across an open book would be in the way.
 //
 // Beside a book it is still: `still` stops the loop dead, and the resting pose
 // the custom-property defaults paint is what stands there. The one thing that
@@ -41,14 +40,12 @@
 // composition.
 //
 // The call is built here, so it outlives the screen it was opened from and the
-// conversation it was started in, and can be hung up from anywhere. Where it is
-// held is read when it starts: on the briefing where that page has published
-// its day (voice-context.ts), at the door everywhere else.
+// conversation it was started in, and can be hung up from anywhere. It is held
+// at the door.
 //
 // A call that never got going says so. iOS can refuse the microphone outright,
 // so a failure with nothing on screen is a tap that swallowed the gesture. The
-// one line stacks over the body the way the briefing's layer drew it
-// (ErrorLine), and takes no presses.
+// one line stacks over the body (ErrorLine), and takes no presses.
 
 import { CallResultCard } from "./CallResultCard";
 import {
@@ -89,16 +86,14 @@ import { useCaseMotion } from "./use-case-motion";
 import { useCornerDrag } from "./use-corner-drag";
 import { doorFocusKey, planItemJump, stateAfterFollow, staysUntilDecided, type DoorFocus, type Place, type Shell } from "./box-jump";
 import type { IntakeOpenDocument } from "./intake-view";
-import { getOpenIssue, opensDoor, subscribeAskCompanion, subscribeOpenIssue, type IssueQuote } from "./issue-context";
 
 /** What the shell can do about a card, in the shell's own terms. */
 export interface CompanionJumpTargets {
-	/** Open a book in the reader. The phone has it only for a brief; a book's conversation opens in one step there (openBookConversation). */
+	/** Desktop only: open a book in the reader. On the phone a book's conversation opens in one step (openBookConversation). */
 	openBook?: (bookId: string) => void | Promise<void>;
 	goToPage?: (page: number) => void;
 	openThread?: (bookId: string, threadId: string) => void;
 	openAnnotation?: (annotationId: string) => void;
-	goToBriefing: (date: string) => void;
 	goToMeals: () => void;
 	/** Phone only: a book's conversation, in the lesson or over the page. */
 	openBookConversation?: (bookId: string, threadId: string) => void | Promise<void>;
@@ -113,8 +108,6 @@ export interface CompanionJumpTargets {
 interface DoorOpen {
 	date?: string;
 	focus?: DoorFocus;
-	/** The brief whose opening brought it up (issue-context.ts). */
-	issue?: string;
 }
 
 export function CompanionCorner({
@@ -166,13 +159,9 @@ export function CompanionCorner({
 	// (use-case-motion.ts).
 	const motion = useCaseMotion(count);
 
-	// What a call would talk about, as whichever screen holds it publishes it.
-
 	// Built unconditionally and held for the life of the shell. A call that
 	// belonged to the screen would die the moment the reader walked away from
 	// it, and there would be no way to hang up from where they landed.
-	// Where the call is held is read when it starts: the briefing where that
-	// page is up, the door everywhere else (voice-call-mode.ts).
 	const call = useVoiceCall({ inReader });
 	const live = call.phase !== "idle";
 	// A host that cannot speak has no call to have — the whole audio path is
@@ -194,38 +183,6 @@ export function CompanionCorner({
 	const liveRef = useRef(live);
 	liveRef.current = live;
 
-	// A brief opened in the reader brings the conversation up with it, whether
-	// or not the companion is shown (docs/info/88 「简报的对话」); the same brief
-	// published again does not. An Ask on a passage in it brings today's
-	// conversation up with the passage above the composer.
-	const [quote, setQuote] = useState<IssueQuote | null>(null);
-	const shownForRef = useRef<string | null>(null);
-	useEffect(() => {
-		const opened = () => {
-			const issue = getOpenIssue();
-			if (opensDoor(shownForRef.current, issue)) {
-				shownForRef.current = issue!.bookId;
-				setNote(null);
-				setFull(false);
-				setDoor({ issue: issue!.bookId });
-			} else if (!issue) {
-				shownForRef.current = null;
-				setQuote(null);
-			}
-		};
-		opened();
-		const offIssue = subscribeOpenIssue(opened);
-		const offAsk = subscribeAskCompanion((asked) => {
-			setNote(null);
-			setQuote(asked);
-			setDoor((open) => (open && !open.date ? open : {}));
-		});
-		return () => {
-			offIssue();
-			offAsk();
-		};
-	}, []);
-
 	const openDoor = useCallback(() => {
 		setNote(null);
 		setDoor((open) => open ?? {});
@@ -234,7 +191,6 @@ export function CompanionCorner({
 		setDoor(null);
 		setFull(false);
 		setNote(null);
-		setQuote(null);
 	}, []);
 
 	// Voice chat, from the door's button: the call starts and the conversation
@@ -254,7 +210,7 @@ export function CompanionCorner({
 	// A card that wants the reader's tap, arriving while a call is up, brings the
 	// conversation up on it; the call carries on. Two ways one arrives: a new
 	// item in the box (drawn there as a card), or a card appended to today's
-	// conversation (an intake's topic choice, a brief's questions).
+	// conversation (an intake's topic choice).
 	const seenRef = useRef<Set<string> | null>(null);
 	useEffect(() => {
 		const arrived = seenRef.current && live ? arrivedItem(seenRef.current, box.items) : null;
@@ -335,9 +291,6 @@ export function CompanionCorner({
 					case "open-annotation":
 						targets.openAnnotation?.(step.annotationId);
 						break;
-					case "go-to-briefing":
-						targets.goToBriefing(step.date);
-						break;
 					case "go-to-meals":
 						targets.goToMeals();
 						break;
@@ -388,22 +341,19 @@ export function CompanionCorner({
 	const asSheet = shell === "phone";
 	const doorChat = door && (
 		<DoorChat
-			key={`${door.date ?? "today"}:${doorFocusKey(door.focus)}:${door.issue ?? ""}`}
+			key={`${door.date ?? "today"}:${doorFocusKey(door.focus)}`}
 			form={asSheet ? "sheet" : "panel"}
 			{...(asSheet ? {} : { liftPx: drag.bottomPx, mirrored, full, onToggleFull: () => setFull((f) => !f) })}
 			{...(door.date ? { date: door.date } : {})}
 			{...(door.focus ? { focus: door.focus } : {})}
-			{...(door.issue ? { openedFor: door.issue } : {})}
-			quote={quote}
-			onQuoteDone={() => setQuote(null)}
 			box={doorBox}
 			onOpenDocument={openDocument}
 			voice={{ live, phase: call.phase, entry, onStart: startVoice, onEnd: endVoice }}
 			onClose={closeDoor}
 		/>
 	);
-	// Hidden is hidden: no body and no case, and no tool in their place. The
-	// conversation still comes up for a brief (docs/68), on its own.
+	// Hidden is hidden: no body and no case, and no tool in their place. A
+	// conversation opened from elsewhere still comes up, on its own.
 	if (!shown) return <>{doorChat}</>;
 
 	// The panel stands on the keyboard while one is up, over where the companion would be

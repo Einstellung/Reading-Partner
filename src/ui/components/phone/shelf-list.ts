@@ -25,6 +25,7 @@ import type { TableChapter } from "../../../reading/chapters/table";
 import {
   bookFormatOfPath,
   isArticleEntry,
+  isIssueEntry,
   type LibraryEntry,
 } from "../../../platform/app/library";
 import { mostRecentlyOpened, type FileRef, type Topic } from "../../../platform/app/topics";
@@ -66,14 +67,16 @@ export interface ShelfMaterial {
  * `onDevice` is the set of book ids whose blob is in the library directory; a
  * file with no book id has never been imported, so it is not on the device
  * either. Order is the order the files arrive in (topics.sortedFiles: most
- * recently opened first), the same order the desk's shelf uses.
+ * recently opened first), the same order the desk's shelf uses. An old brief
+ * (isIssueEntry) is left out, as the desk's shelf leaves it out.
  */
 export function shelfMaterials(
   files: readonly FileRef[],
   entries: Record<string, LibraryEntry>,
   onDevice: ReadonlySet<string>,
 ): ShelfMaterial[] {
-  return files.map((file) => {
+  const shown = files.filter((file) => !isIssueEntry(file.hash ? entries[file.hash] : undefined));
+  return shown.map((file) => {
     const entry = file.hash ? entries[file.hash] : undefined;
     return {
       file,
@@ -119,7 +122,9 @@ export function continueReading(
 ): ContinueBook | null {
   const readable = topics.map((topic) => ({
     ...topic,
-    files: topic.files.filter((f) => f.hash !== undefined && entries[f.hash]?.format === "epub"),
+    files: topic.files.filter(
+      (f) => f.hash !== undefined && entries[f.hash]?.format === "epub" && !isIssueEntry(entries[f.hash]),
+    ),
   }));
   const recent = mostRecentlyOpened(readable);
   if (!recent || !recent.file.hash) return null;
