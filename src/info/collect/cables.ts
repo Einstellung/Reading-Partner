@@ -9,7 +9,7 @@
 // Pure: the file is cable/store.ts, the run is the pipeline's.
 
 import { CABLES_VERSION, type Cable, type CableDay } from "../cable/types";
-import type { InfoItem } from "../sources/item";
+import type { InfoItem } from "../../sources/item";
 import { keepVerdict, type ScreenVerdict } from "./screen";
 
 // The cable's own summary, per cable/types.ts. Long enough to say what happened,

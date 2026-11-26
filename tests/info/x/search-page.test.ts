@@ -16,7 +16,7 @@ import {
   SEARCH_PAGE_SCRIPT,
   xSearchUrl,
   type XSearchRead,
-} from "../../../src/info/x/search-page";
+} from "../../../src/reading/ingest/x/search-page";
 
 const FIXTURE = readFileSync(join(import.meta.dir, "fixtures/search-live-ai-for-science.html"), "utf8");
 

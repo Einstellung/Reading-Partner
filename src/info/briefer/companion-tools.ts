@@ -19,7 +19,7 @@ import {
   type SignInSite,
 } from "../sources/site-session";
 import type { SessionStatus, SignInOutcome } from "../../workshop/extract/webview-session";
-import { buildReadPageTool } from "../sources/read-page-tool";
+import { buildReadPageTool } from "../../sources/read-page-tool";
 import { buildArchiveLabTool, buildProposeLabTool, type LabToolDeps } from "./lab-tool";
 import { errMsg } from "../../platform/std/errors";
 import { t } from "../../i18n";
@@ -160,7 +160,7 @@ export function buildGenerateBriefingTool(
   };
 }
 
-// read_page is the extractor's own tool now (info/sources/read-page-tool.ts): a
+// read_page is the extractor's own tool now (sources/read-page-tool.ts): a
 // tasking run mounts the same one, and the two agents have to read a page the
 // same way. Re-exported here because this is where its only caller was.
 export { buildReadPageTool };

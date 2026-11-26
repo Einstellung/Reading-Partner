@@ -5,15 +5,15 @@
 
 import { expect, test } from "bun:test";
 import { MaterialRegistry } from "../../../src/info/dossier/registry";
-import type { InfoItem } from "../../../src/info/sources/item";
-import { parseArxivAtom } from "../../../src/info/sources/plugins/arxiv-client";
-import { parseS2ArxivId, s2DoiUrl } from "../../../src/info/sources/plugins/s2-client";
+import type { InfoItem } from "../../../src/sources/item";
+import { parseArxivAtom } from "../../../src/sources/plugins/arxiv-client";
+import { parseS2ArxivId, s2DoiUrl } from "../../../src/sources/plugins/s2-client";
 import { readOriginals, targetsOf, type Draft } from "../../../src/info/topic-search/build-result";
 import { doiArxiv, heldDois, poolDois, type DoiLookup } from "../../../src/info/topic-search/doi-arxiv";
 import { numberPool, rankEvents, scorePool, type ArxivFound, type Candidate, type RerankAnswer } from "../../../src/info/topic-search/rank-pool";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
 import type { FetchText, SourceDeps } from "../../../src/info/topic-search/verify";
-import type { XSearchPost } from "../../../src/info/x/search-page";
+import type { XSearchPost } from "../../../src/reading/ingest/x/search-page";
 
 const signal = new AbortController().signal;
 const DOI = "10.1103/physrevx.16.041001";

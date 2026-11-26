@@ -3,8 +3,8 @@
 
 import { describe, expect, test } from "bun:test";
 import type { BrowseEval, BrowseLoad, BrowseOpen, BrowseScroll, BrowseSession } from "../../../src/workshop/extract/webview-browse";
-import { PERMALINK_SCRIPT } from "../../../src/info/x/permalink";
-import { PAGE_CHROME_SCRIPT, SEARCH_PAGE_SCRIPT } from "../../../src/info/x/search-page";
+import { PERMALINK_SCRIPT } from "../../../src/reading/ingest/x/permalink";
+import { PAGE_CHROME_SCRIPT, SEARCH_PAGE_SCRIPT } from "../../../src/reading/ingest/x/search-page";
 import { X_CAPTURE_DRAIN, X_CAPTURE_SCRIPT } from "../../../src/info/x/search-capture";
 import { CAPTURE_MIN_POSTS, readXSearch, type XReadDeps, type XReadInput } from "../../../src/info/topic-search/x-reader";
 import { replay, tallySteps, xReadNote, type XStep } from "../../../src/info/topic-search/x-progress";

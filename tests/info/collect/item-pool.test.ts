@@ -20,8 +20,8 @@ import {
   unstockedSources,
   type Pool,
 } from "../../../src/info/collect/item-pool";
-import { DEFAULT_POLL_MINUTES, type SourceDescriptor } from "../../../src/info/sources/descriptor";
-import type { InfoItem } from "../../../src/info/sources/item";
+import { DEFAULT_POLL_MINUTES, type SourceDescriptor } from "../../../src/sources/descriptor";
+import type { InfoItem } from "../../../src/sources/item";
 import type { ScreenVerdict } from "../../../src/info/collect/screen";
 
 const MIN = 60_000;

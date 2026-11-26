@@ -4,7 +4,7 @@
 // (info/sources/source-tools.ts), the tasking sub-agent's progress labels
 // (info/tasking/), the page-reading tool's label (info/sources/
 // read-page-tool.ts), and the errors a source plugin can surface into a
-// source's health (info/sources/plugins/). The source every other locale is
+// source's health (sources/plugins/). The source every other locale is
 // typed against.
 
 export default {

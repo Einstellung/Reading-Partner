@@ -22,7 +22,7 @@ import { arxivEventKey, currentEventKey, eventKeyOfUrl, type EventCluster } from
 import { isShortLink, paperKeyOfUrl, unwrapLink } from "../rank/link-identity";
 import { RERANK_CLIFF } from "../rank/score";
 import { mentionsAnchor } from "../rank/score";
-import type { RepoLookup } from "../sources/plugins/github-lookup";
+import type { RepoLookup } from "../../sources/plugins/github-lookup";
 import { runArxivLadder, type ArxivLadder, type ArxivSearch } from "./arxiv-ladder";
 import { readPaperQueries, type ArxivRead, type PaperReadFiles } from "./arxiv-read";
 import { doiArxiv, heldDois, poolDois, type DoiLookup } from "./doi-arxiv";

@@ -3,7 +3,7 @@
 // buttons or in words as the model reports it. Pure.
 
 import { asString, asStrings } from "../../platform/std/json";
-import { normalizeTitle } from "../sources/plugins/match";
+import { normalizeTitle } from "../../sources/plugins/match";
 import type { ProposedSeed, StudySeedCandidate, StudySeedsCardData } from "./cards";
 import { arxivIdIn } from "./seed-lookup";
 

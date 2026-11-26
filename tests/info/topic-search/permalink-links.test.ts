@@ -9,8 +9,8 @@
 import { describe, expect, test } from "bun:test";
 import { MaterialRegistry } from "../../../src/info/dossier/registry";
 import type { BrowseEval, BrowseLoad, BrowseOpen, BrowseSession } from "../../../src/workshop/extract/webview-browse";
-import { PERMALINK_SCRIPT } from "../../../src/info/x/permalink";
-import { PAGE_CHROME_SCRIPT, SEARCH_PAGE_SCRIPT, type XSearchPost } from "../../../src/info/x/search-page";
+import { PERMALINK_SCRIPT } from "../../../src/reading/ingest/x/permalink";
+import { PAGE_CHROME_SCRIPT, SEARCH_PAGE_SCRIPT, type XSearchPost } from "../../../src/reading/ingest/x/search-page";
 import { linksInText, postLinksOut } from "../../../src/info/x/text-links";
 import { readOriginals } from "../../../src/info/topic-search/build-result";
 import { gatherCandidates } from "../../../src/info/topic-search/rank-pool";

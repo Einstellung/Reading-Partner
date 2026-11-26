@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { HostCoolingDownError } from "../../../src/platform/http/host-gate";
 import {
   evaluateFold,

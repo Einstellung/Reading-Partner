@@ -8,7 +8,7 @@ import { MaterialRegistry } from "../../../src/info/dossier/registry";
 import { readOriginals, targetsOf, type Draft } from "../../../src/info/topic-search/build-result";
 import { openOriginal } from "../../../src/info/topic-search/open-link";
 import { readSource, type FetchText, type OpenLink, type SourceDeps } from "../../../src/info/topic-search/verify";
-import type { XSearchPost } from "../../../src/info/x/search-page";
+import type { XSearchPost } from "../../../src/reading/ingest/x/search-page";
 import type { ExtractReadable } from "../../../src/workshop/extract/readable-select";
 import { htmlToText } from "../../../src/workshop/extract/sanitize";
 

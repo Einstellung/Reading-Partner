@@ -11,8 +11,8 @@
 // …) and the model answers by number only; an answer naming a number that does
 // not exist is dropped.
 
-import type { InfoItem } from "../sources/item";
-import { normalizeArxivId } from "../sources/plugins/arxiv-client";
+import type { InfoItem } from "../../sources/item";
+import { normalizeArxivId } from "../../sources/plugins/arxiv-client";
 import type { ArxivLadder } from "./arxiv-ladder";
 import { xEngagement } from "../rank/engagement";
 import { arxivEventKey, eventKeyOfUrl, mergeIntoEvents, xEventKey, type EventCluster, type EventMember } from "../rank/events";
@@ -20,7 +20,7 @@ import { weightedRrf, type Stream } from "../rank/fusion";
 import { localRelevance, prepareQuery, RELEVANCE_FLOOR } from "../rank/relevance";
 import { finalScore } from "../rank/score";
 const DAY_MS = 86_400_000;
-import type { XSearchPost } from "../x/search-page";
+import type { XSearchPost } from "../../reading/ingest/x/search-page";
 import { postLinksOut } from "../x/text-links";
 import { cut, letter, material, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
 import { RETRIED_OUTCOMES, type GraphRead, type GraphStream } from "./graph-read";

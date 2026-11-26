@@ -18,7 +18,7 @@
 import { beforeEach, expect, test } from "bun:test";
 import { CORRUPT_SUFFIX, createFakeAppData, type FakeAppData } from "../../support/guarded-appdata";
 import { BUILTIN_SOURCES } from "../../../src/info/sources/builtins";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import {
   SOURCES_FILE,
   addSource,

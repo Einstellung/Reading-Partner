@@ -11,7 +11,7 @@
 import { asString, isObject } from "../../platform/std/json";
 import type { CableDay } from "../cable/types";
 import type { LabOutcome } from "../collect/run-state";
-import type { InfoItem } from "../sources/item";
+import type { InfoItem } from "../../sources/item";
 import {
   BRIEFING_VERSION,
   type Briefing,

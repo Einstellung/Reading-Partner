@@ -15,7 +15,7 @@ import {
 } from "../../../src/info/briefer/companion-tools";
 import { signInSites } from "../../../src/info/sources/site-session";
 import { SECRETARY_WRITES } from "../../../src/info/briefer/role";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import type { ExtractReadable } from "../../../src/workshop/extract/readable-select";
 import type { SessionStatus, SignInOutcome } from "../../../src/workshop/extract/webview-session";
 import type { RunStart } from "../../../src/info/boxes/pipeline";

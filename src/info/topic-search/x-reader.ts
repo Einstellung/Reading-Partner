@@ -41,7 +41,7 @@
 import type { BrowseOpen, BrowseSession } from "../../workshop/extract/webview-browse";
 import { localRelevance, prepareQuery, RELEVANCE_FLOOR, type PreparedQuery } from "../rank/relevance";
 import type { XCapturedPost } from "../x/graphql-post";
-import { bodyText, focalPost, outboundLinks, parsePermalinkResult, PERMALINK_SCRIPT, postBodyLines } from "../x/permalink";
+import { bodyText, focalPost, outboundLinks, parsePermalinkResult, PERMALINK_SCRIPT, postBodyLines } from "../../reading/ingest/x/permalink";
 import {
   noResults,
   PAGE_CHROME_SCRIPT,
@@ -55,7 +55,7 @@ import {
   type XLinkOut,
   type XSearchLineSpec,
   type XSearchPost,
-} from "../x/search-page";
+} from "../../reading/ingest/x/search-page";
 import { captureMismatch, mergeLinks, parseCaptureDrain, withCaptured, X_CAPTURE_DRAIN, X_CAPTURE_SCRIPT } from "../x/search-capture";
 import { draw, drawInt, fitViewport, screenStayMs, scrollSteps, X_PACE, type XPace } from "./x-pace";
 import {
@@ -145,7 +145,7 @@ export interface XReadDeps {
   open(viewport: { width: number; height: number }, opts?: { initScript?: string }): Promise<BrowseOpen>;
   progress: XProgressLog;
   memory: XReaderStore;
-  /** Where a t.co link goes, read off its redirect (info/x/outbound.ts), or null. */
+  /** Where a t.co link goes, read off its redirect (reading/ingest/x/outbound.ts), or null. */
   expandLink(tco: string): Promise<string | null>;
   /** The run stopped on X's say-so. Called once; the caller writes it to the collector's state file. */
   onHalt(halt: XHalt): Promise<void>;

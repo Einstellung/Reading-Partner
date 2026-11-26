@@ -5,8 +5,8 @@
 
 import { expect, test } from "bun:test";
 import { MaterialRegistry } from "../../../src/info/dossier/registry";
-import type { LinkReader } from "../../../src/info/links/readers";
-import type { XSearchPost } from "../../../src/info/x/search-page";
+import type { LinkReader } from "../../../src/reading/ingest/links/readers";
+import type { XSearchPost } from "../../../src/reading/ingest/x/search-page";
 import type { ExtractReadable } from "../../../src/workshop/extract/readable-select";
 import { readOriginals, targetsOf, type Draft } from "../../../src/info/topic-search/build-result";
 import { composePrompt, ITEM_MATERIAL_CHARS, SECTION_CHARS } from "../../../src/info/topic-search/compose";

@@ -20,7 +20,7 @@ import {
   wpJsonPosts,
 } from "../../../src/info/sources/probe";
 import { parseFeed } from "../../../src/info/sources/feed";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 
 function res(body: string, contentType = "text/xml", status = 200): Response {
   return new Response(body, { status, headers: { "content-type": contentType } });

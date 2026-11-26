@@ -20,7 +20,7 @@ import { loadSettings, type Settings } from "../../platform/app/settings";
 import { doorKey, openDoorThread, openDoorTurn, type AssembledTurn, type DoorTurnInput } from "../../soul";
 import { registerThinkDesk, type ThinkDesk, type ThinkDeskLaid } from "../../soul/think";
 import { liveDoorMaterial, type DoorCallMaterial } from "../../soul/voice/live/door-material";
-import { buildReadPageTool } from "../../info/sources/read-page-tool";
+import { buildReadPageTool } from "../../sources/read-page-tool";
 import { liveWebSearchTools } from "../../websearch/tool";
 import { infoFetch } from "../../workshop/extract/http";
 

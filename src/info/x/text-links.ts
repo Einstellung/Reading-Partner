@@ -5,7 +5,7 @@
 // Pure; nothing is fetched. A short link is passed on as it is: the page read
 // that opens it follows its redirect.
 
-import type { XLinkOut, XSearchPost } from "./search-page";
+import type { XLinkOut, XSearchPost } from "../../reading/ingest/x/search-page";
 
 // X writes a t.co link as the URL it stands for and an ellipsis when the page
 // shows only its start; read with its hidden parts ("https://" is one), the

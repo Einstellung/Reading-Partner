@@ -2,8 +2,8 @@
 // streams, ids, the window, exclusions, OpenAlex's related works, the cache.
 
 import { describe, expect, test } from "bun:test";
-import type { OpenAlexHit } from "../../../src/info/sources/plugins/openalex-client";
-import type { S2Hit } from "../../../src/info/sources/plugins/s2-client";
+import type { OpenAlexHit } from "../../../src/sources/plugins/openalex-client";
+import type { S2Hit } from "../../../src/sources/plugins/s2-client";
 import {
   CACHE_TTL_MS,
   cachedStream,

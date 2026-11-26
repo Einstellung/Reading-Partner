@@ -12,7 +12,7 @@
 // stored is below; the calls that change it are in
 // workshop/extract/webview-session.ts.
 
-import type { SourceDescriptor } from "./descriptor";
+import type { SourceDescriptor } from "../../sources/descriptor";
 import { X_SEARCH_SOURCE } from "./x-search";
 import { t } from "../../i18n";
 

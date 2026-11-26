@@ -24,7 +24,7 @@ import {
   type InfoRunState,
   type RunSeed,
 } from "../../../src/info/collect/run-state";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 
 // An expectation names only the counters it is about.
 function progress(over: Partial<CollectProgress>): CollectProgress {

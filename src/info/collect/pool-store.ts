@@ -28,7 +28,7 @@ import { appData } from "../../platform/app/appdata";
 import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { emptyPool, POOL_VERSION, type Pool, type PoolMark } from "./item-pool";
 import { listFileNames } from "./list-files";
-import type { InfoItem } from "../sources/item";
+import type { InfoItem } from "../../sources/item";
 
 const MARKS_FILE = "info-pool-marks.json";
 const POLLED_FILE = "info-pool-polled.json";

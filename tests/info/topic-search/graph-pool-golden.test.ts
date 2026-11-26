@@ -12,7 +12,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResultArgs } from "../../../src/info/topic-search/build-result";
 import { emptyGraphRead, GRAPH_READ_FILE, withStream, type GraphPaper } from "../../../src/info/topic-search/graph-read";
 import type { TopicModelCall } from "../../../src/info/topic-search/model-io";

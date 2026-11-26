@@ -21,7 +21,7 @@ import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
 import { RESEARCH_PROMPT } from "./papers/research-agent";
 import { liveWebSearchTools } from "../websearch/tool";
 import { webSearchPrompt } from "../websearch/prompt";
-import { buildReadPageTool } from "../info/sources/read-page-tool";
+import { buildReadPageTool } from "../sources/read-page-tool";
 import { infoFetch } from "../workshop/extract/http";
 
 export interface BookSideToolDeps {

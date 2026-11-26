@@ -10,7 +10,7 @@
 
 import { Type } from "typebox";
 import type { AgentTool } from "../../legion/durable/contract";
-import { buildReadPageTool } from "../sources/read-page-tool";
+import { buildReadPageTool } from "../../sources/read-page-tool";
 import { listCableDates, loadCableDay } from "../cable/store";
 import type { Cable, CableDay } from "../cable/types";
 import { CABLE_DAYS, loadArticle, type CachedArticle } from "../collect/store";

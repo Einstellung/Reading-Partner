@@ -11,7 +11,7 @@ import {
   type AccountRow,
 } from "../../../src/info/sources/accounts";
 import { BUILTIN_SOURCES } from "../../../src/info/sources/builtins";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import { X_SIGN_IN_URL } from "../../../src/info/sources/x-search";
 
 const BLOOMBERG = BUILTIN_SOURCES.filter((s) => s.id.startsWith("bloomberg-"));

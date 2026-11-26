@@ -27,8 +27,8 @@
 // found nothing.
 
 import { HttpStatusError, isHostCoolingDown, isRateLimitError } from "../../platform/http/throttled-fetch";
-import type { InfoItem } from "../sources/item";
-import { arxivQueryTerms } from "../sources/plugins/arxiv-client";
+import type { InfoItem } from "../../sources/item";
+import { arxivQueryTerms } from "../../sources/plugins/arxiv-client";
 import { addDays } from "./windows";
 
 /** Searchable words the first step ANDs at most. */

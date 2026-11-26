@@ -8,7 +8,7 @@ import {
   addSourceFromCard,
   type AddSourcePorts,
 } from "../../../src/info/briefer/card-actions";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
 
 const DESCRIPTOR = { id: "s1", name: "量子位", enabled: true } as unknown as SourceDescriptor;

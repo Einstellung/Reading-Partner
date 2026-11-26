@@ -21,7 +21,7 @@ import type { CableHit } from "../cable/types";
 import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
 import type { Picture } from "../picture/types";
-import { formatSignals, type InfoItem } from "../sources/item";
+import { formatSignals, type InfoItem } from "../../sources/item";
 
 // Items per screening call. Big enough that a few hundred items are a handful
 // of calls, small enough that one bad reply costs little and that the model

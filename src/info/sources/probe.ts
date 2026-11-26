@@ -16,8 +16,8 @@ import { parseFeed, type FeedEntry } from "./feed";
 import { htmlToText } from "../../workshop/extract/sanitize";
 import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
 import type { FetchFn } from "../../workshop/extract/http";
-import type { Fulltext, SourceDescriptor } from "./descriptor";
-import { pluginOf } from "./plugin";
+import type { Fulltext, SourceDescriptor } from "../../sources/descriptor";
+import { pluginOf } from "../../sources/plugin";
 import { t } from "../../i18n";
 
 // The feed paths tried in order, most common first. wp-json is last: it is a full

@@ -4,7 +4,7 @@
 // every search and model answer is scripted.
 
 import { describe, expect, test } from "bun:test";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResultArgs } from "../../../src/info/topic-search/build-result";
 import type { TopicModelCall } from "../../../src/info/topic-search/model-io";
 import type { ArxivFound, Numbered, RerankAnswer } from "../../../src/info/topic-search/rank-pool";

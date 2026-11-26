@@ -15,7 +15,7 @@ import {
   type LabToolDeps,
 } from "../../../src/info/briefer/lab-tool";
 import type { Lab } from "../../../src/info/labs/types";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import type { LabArchiveCardData, LabProposalCardData } from "../../../src/info/boxes/cards";
 import { toolText } from "../../support/tool-text";
 

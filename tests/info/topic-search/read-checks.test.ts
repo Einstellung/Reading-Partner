@@ -5,7 +5,7 @@
 
 import { expect, test } from "bun:test";
 import { MaterialRegistry } from "../../../src/info/dossier/registry";
-import type { LinkReader } from "../../../src/info/links/readers";
+import type { LinkReader } from "../../../src/reading/ingest/links/readers";
 import { readOriginals } from "../../../src/info/topic-search/build-result";
 import { composePrompt } from "../../../src/info/topic-search/compose";
 import { openOriginal } from "../../../src/info/topic-search/open-link";

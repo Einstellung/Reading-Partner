@@ -26,8 +26,8 @@
 // is collector.ts's.
 
 import { daysBetween } from "../../platform/std/day";
-import { pollIntervalMs, type SourceDescriptor } from "../sources/descriptor";
-import type { InfoItem } from "../sources/item";
+import { pollIntervalMs, type SourceDescriptor } from "../../sources/descriptor";
+import type { InfoItem } from "../../sources/item";
 import { keepVerdict, type ScreenVerdict } from "./screen";
 
 export const POOL_VERSION = 1 as const;

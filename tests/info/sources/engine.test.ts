@@ -13,7 +13,7 @@ import {
   type SourceSettled,
 } from "../../../src/info/sources/engine";
 import type { ExtractReadable } from "../../../src/workshop/extract/readable-select";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import type { WebviewArticle } from "../../../src/workshop/extract/webview-article";
 import { textResponse } from "../../support/fetch";
 

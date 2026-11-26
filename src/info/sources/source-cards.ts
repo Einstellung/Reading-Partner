@@ -4,7 +4,7 @@
 // the InfoCard union it renders. Both the tools and the card components import
 // this one definition, matching the components -> info dependency direction.
 
-import type { SourceDescriptor } from "./descriptor";
+import type { SourceDescriptor } from "../../sources/descriptor";
 
 export interface TrialSample {
   title: string;

@@ -7,7 +7,7 @@
 // no network, no model.
 
 import { describe, expect, test } from "bun:test";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { normalizeRrf } from "../../../src/info/rank/fusion";
 import { RELEVANCE_FLOOR } from "../../../src/info/rank/relevance";
 import { finalScore } from "../../../src/info/rank/score";

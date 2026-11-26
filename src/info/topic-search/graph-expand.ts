@@ -11,10 +11,10 @@
 // another version's date, or another paper (docs/pitfall/668).
 
 import { arxivIdOfDoi } from "../rank/link-identity";
-import { normalizeArxivId } from "../sources/plugins/arxiv-client";
-import { paperDay } from "../sources/plugins/huggingface";
-import { openAlexArxivHandle, OA_MAX_OR_IDS, type OpenAlexHit } from "../sources/plugins/openalex-client";
-import type { S2Hit } from "../sources/plugins/s2-client";
+import { normalizeArxivId } from "../../sources/plugins/arxiv-client";
+import { paperDay } from "../../sources/plugins/huggingface";
+import { openAlexArxivHandle, OA_MAX_OR_IDS, type OpenAlexHit } from "../../sources/plugins/openalex-client";
+import type { S2Hit } from "../../sources/plugins/s2-client";
 import {
   graphStreamId,
   RETRIED_OUTCOMES,

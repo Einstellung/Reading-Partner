@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Run } from "../../../src/legion/run/types";
 import type { Delegated, DelegateInput } from "../../../src/legion/runner/worker";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { lookUpPinned, makeResultBuilder, type BuildResultDeps, type BuildTopicSearchResultArgs } from "../../../src/info/topic-search/build-result";
 import { skippedQueries } from "../../../src/info/topic-search/build-update";
 import type { TopicLabel } from "../../../src/info/topic-search/labels";

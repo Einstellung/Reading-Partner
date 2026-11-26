@@ -6,8 +6,8 @@
 import type { FetchBytes } from "../../workshop/bindery";
 import { manuscriptText } from "../../workshop/bindery/manuscript";
 import type { ExtractReadable } from "../../workshop/extract/readable-select";
-import type { LinkReader } from "../links/readers";
-import { LinkSession } from "../links/session";
+import type { LinkReader } from "../../reading/ingest/links/readers";
+import { LinkSession } from "../../reading/ingest/links/session";
 import { arxivIdOfPageMeta } from "../rank/link-identity";
 import { codeOfRejection } from "./read-failure";
 import { linksOut, type OpenedLink } from "./verify";

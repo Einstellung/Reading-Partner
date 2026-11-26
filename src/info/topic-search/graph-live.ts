@@ -26,16 +26,16 @@ import {
   type FetchFn,
 } from "../../platform/http/throttled-fetch";
 import { infoFetch } from "../../workshop/extract/http";
-import { normalizeArxivId, parseArxivAtom, type ArxivEntry } from "../sources/plugins/arxiv-client";
-import { pickByTitle } from "../sources/plugins/match";
+import { normalizeArxivId, parseArxivAtom, type ArxivEntry } from "../../sources/plugins/arxiv-client";
+import { pickByTitle } from "../../sources/plugins/match";
 import {
   fetchOpenAlexCitedBy,
   fetchOpenAlexWork,
   fetchOpenAlexWorksByArxiv,
   fetchOpenAlexWorksByIds,
   OA_MAX_OR_IDS,
-} from "../sources/plugins/openalex-client";
-import { fetchS2Batch, fetchS2EdgePage, fetchS2Recommendations } from "../sources/plugins/s2-client";
+} from "../../sources/plugins/openalex-client";
+import { fetchS2Batch, fetchS2EdgePage, fetchS2Recommendations } from "../../sources/plugins/s2-client";
 import {
   ABSTRACT_BATCH,
   ARXIV_ABSTRACT_REQUESTS,

@@ -9,7 +9,7 @@ import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { dayNumber, localDate } from "../../platform/std/day";
 import type { GarbageMarker, Mark } from "../../housekeeper";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
-import type { InfoItem } from "../sources/item";
+import type { InfoItem } from "../../sources/item";
 
 // The full article body kept per item, split out of the briefing so the briefing
 // file stays small and the article view / chat load bodies on demand.

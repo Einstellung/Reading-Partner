@@ -11,7 +11,7 @@
 //
 // A read that ends without a halt clears the record. Pure.
 
-import type { XHalt, XHaltKind } from "../x/search-page";
+import type { XHalt, XHaltKind } from "../../reading/ingest/x/search-page";
 import { nightsBetween } from "./nightly";
 
 export interface XHaltRecord {

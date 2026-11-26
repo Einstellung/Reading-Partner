@@ -14,8 +14,8 @@ import {
 } from "../../../src/info/collect/collector";
 import { emptyPool, type Pool } from "../../../src/info/collect/item-pool";
 import type { CachedArticle } from "../../../src/info/collect/store";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
+import type { InfoItem } from "../../../src/sources/item";
 
 const MIN = 60_000;
 

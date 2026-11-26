@@ -4,10 +4,10 @@
 import { loadSettings } from "../../platform/app/settings";
 import { fetchWithRetry, interactiveRetry } from "../../platform/http/throttled-fetch";
 import { infoFetch } from "../../workshop/extract/http";
-import { arxivPlugin } from "../sources/plugins/arxiv";
-import { arxivIdUrl, parseArxivAtom } from "../sources/plugins/arxiv-client";
-import { huggingfacePlugin } from "../sources/plugins/huggingface";
-import { searchS2Topic } from "../sources/plugins/s2-client";
+import { arxivPlugin } from "../../sources/plugins/arxiv";
+import { arxivIdUrl, parseArxivAtom } from "../../sources/plugins/arxiv-client";
+import { huggingfacePlugin } from "../../sources/plugins/huggingface";
+import { searchS2Topic } from "../../sources/plugins/s2-client";
 import { itemPaper, type SeedSearches } from "./seed-lookup";
 import { localDay } from "./windows";
 

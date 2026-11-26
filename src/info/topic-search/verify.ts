@@ -30,10 +30,10 @@
 import { inspectFetchedPage } from "../../workshop/bindery/gate";
 import { htmlToText } from "../../workshop/extract/sanitize";
 import { htmlSections, markdownSections, type MaterialInput, type MaterialReader, type MaterialRegistry } from "../dossier/registry";
-import { arxivIdUrl, arxivPdfUrl, parseArxivAtom } from "../sources/plugins/arxiv-client";
-import { REQUEST_TIMEOUT_MS, type RepoLookup } from "../sources/plugins/github-lookup";
-import { isXHost } from "../x/post";
-import type { XSearchPost } from "../x/search-page";
+import { arxivIdUrl, arxivPdfUrl, parseArxivAtom } from "../../sources/plugins/arxiv-client";
+import { REQUEST_TIMEOUT_MS, type RepoLookup } from "../../sources/plugins/github-lookup";
+import { isXHost } from "../../reading/ingest/x/post";
+import type { XSearchPost } from "../../reading/ingest/x/search-page";
 import { linkKey, postLinksOut } from "../x/text-links";
 import { cut, material, missingNumbers, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
 import type { PaperInfo } from "./rank-pool";

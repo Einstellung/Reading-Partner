@@ -17,7 +17,7 @@
 // not a site somebody has to keep reading. arXiv cs.RO is back as a query, not
 // as the RSS feed that went.
 
-import type { SourceDescriptor } from "./descriptor";
+import type { SourceDescriptor } from "../../sources/descriptor";
 
 // A plain browser UA is forced by the http wrapper; only sources needing a
 // different identity set `userAgent`. None here do.

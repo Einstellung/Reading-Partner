@@ -6,8 +6,8 @@
 
 import { expect, test } from "bun:test";
 import { BUILTIN_SOURCES, builtinCaveat } from "../../../src/info/sources/builtins";
-import { pollIntervalMs, validateDescriptor } from "../../../src/info/sources/descriptor";
-import { arxivQueryTerms } from "../../../src/info/sources/plugins/arxiv-client";
+import { pollIntervalMs, validateDescriptor } from "../../../src/sources/descriptor";
+import { arxivQueryTerms } from "../../../src/sources/plugins/arxiv-client";
 
 test("builtin ids are unique and every descriptor validates", () => {
   const ids = BUILTIN_SOURCES.map((s) => s.id);

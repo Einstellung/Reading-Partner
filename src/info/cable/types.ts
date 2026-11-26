@@ -7,7 +7,7 @@
 // pruned with the day; the cable record survives, so a judgment made in March
 // still says what it was made on.
 
-import type { ItemSignals } from "../sources/item";
+import type { ItemSignals } from "../../sources/item";
 
 export interface CableHit {
   labId: string;

@@ -6,7 +6,7 @@
 // Pure string assembly, like chat.ts / triage.ts.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import { DESCRIPTOR_GUIDE } from "./descriptor";
+import { DESCRIPTOR_GUIDE } from "../../sources/descriptor";
 
 const RULES = [
   "How you work:",

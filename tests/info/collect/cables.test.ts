@@ -8,7 +8,7 @@ import {
   cableText,
 } from "../../../src/info/collect/cables";
 import type { ScreenVerdict } from "../../../src/info/collect/screen";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 
 function item(id: string, over: Partial<InfoItem> = {}): InfoItem {
   return {

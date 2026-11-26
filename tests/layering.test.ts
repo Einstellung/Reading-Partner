@@ -267,12 +267,14 @@ const LAYER: Record<string, Layer> = {
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",
-  // The source plugins (docs/69): one file per library (arXiv, GitHub, Hugging
-  // Face, Semantic Scholar, OpenAlex, PubMed) plus each library's client. Under
-  // sources because a source is the bureau's (docs/63); a directory of its own
-  // because each plugin knows one API. reading/papers queries the libraries
-  // through here too — info is reading's inlet, and the import runs that way.
-  "info/sources/plugins": "domain",
+  // The libraries the app looks things up in (docs/69): each library's client
+  // (arXiv, Semantic Scholar, OpenAlex, PubMed) and the site adapters the
+  // bindery reads a library's own links with (arXiv, GitHub, Hugging Face,
+  // Drive), plus read_page. reading/papers and reading's link intake reach
+  // them here.
+  sources: "domain",
+  // One file per library; a directory of its own because each plugin knows one API.
+  "sources/plugins": "domain",
   // A question the briefing did not answer, handed to a legion run (docs/63).
   // It reads what the rest of info already filed — the cables, the article
   // bodies, a room's picture — and the briefer only names its kind, so the edge
@@ -281,13 +283,6 @@ const LAYER: Record<string, Layer> = {
   // Topic searches (docs/info/88): the config, the drafting card and the door
   // tools' logic. Mounted at the door by ui/components/companion/door-tools.ts.
   "info/topic-search": "domain",
-  // AI-driven link intake (docs/86): the link agent's prompt, tools, candidate
-  // table and caps, the reader registry, the receipt and the source records.
-  // Knows no site and no reader: info/x registers into it, reading files for it.
-  "info/links": "domain",
-  // An X link read (docs/84): the embed endpoint, the permalink page in the
-  // hidden webview, and the post's record; registered as a reader of
-  // info/links, and still the rule-based fan-out until the switch (docs/86).
   "info/x": "domain",
   // A topic search's scoring (docs/88): local relevance, weighted RRF, X
   // engagement, the final score, events and their clusters, and the 30-day
@@ -360,6 +355,15 @@ const LAYER: Record<string, Layer> = {
   // around it — it reaches for workshop/extract, the library and the topic
   // store, and reading/epub reaches for none of them.
   "reading/ingest": "domain",
+  // AI-driven link intake (docs/86): the link agent's prompt, tools, candidate
+  // table and caps, the reader registry, the receipt and the source records.
+  // Knows no site and no reader: reading/ingest/x registers into it, and
+  // reading/ingest files for it.
+  "reading/ingest/links": "domain",
+  // An X link read (docs/84): the embed endpoint, the permalink page in the
+  // hidden webview, and the post's record; registered as a reader of
+  // reading/ingest/links.
+  "reading/ingest/x": "domain",
   "reading/lecture": "domain",
   // The phone's lesson (docs/71): a PDF taught in text, with no reader under
   // it. A domain of its own rather than a corner of reading/lecture — that

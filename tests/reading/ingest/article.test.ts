@@ -20,9 +20,9 @@ import { parseEpub } from "../../../src/reading/epub/file/parse";
 import type { Extraction } from "../../../src/workshop/extract/readable-select";
 import { buildArticleEpub } from "../../../src/workshop/bindery/build-article";
 import { registerSiteAdapter } from "../../../src/workshop/bindery";
-import { arxivSiteAdapter } from "../../../src/info/sources/plugins/arxiv";
+import { arxivSiteAdapter } from "../../../src/sources/plugins/arxiv";
 import { PNG } from "../epub/fixture";
-import { apiUrl, ATTENTION_ATOM, pdfUrl, PDF_HEAD } from "../../info/sources/plugins/arxiv-fixtures";
+import { apiUrl, ATTENTION_ATOM, pdfUrl, PDF_HEAD } from "../../sources/plugins/arxiv-fixtures";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 const PAGE_URL = "https://example.com/posts/how-a-web-page-becomes-a-book";

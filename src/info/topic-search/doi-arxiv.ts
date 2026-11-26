@@ -9,7 +9,7 @@
 // a page, so nothing is asked twice. A failed or skipped lookup is a miss: the
 // link stays a DOI page.
 
-import { normalizeArxivId } from "../sources/plugins/arxiv-client";
+import { normalizeArxivId } from "../../sources/plugins/arxiv-client";
 import { eventKeyOfUrl } from "../rank/events";
 import { normalizeDoi } from "../rank/link-identity";
 import type { ArxivFound } from "./rank-pool";

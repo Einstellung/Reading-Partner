@@ -19,7 +19,7 @@
 // when X changes the answer, the reader falls back to the DOM.
 
 import { isObject } from "../../platform/std/json";
-import type { XCounts } from "./search-page";
+import type { XCounts } from "../../reading/ingest/x/search-page";
 
 /** A link out of a post, as the answer gives it. */
 export interface XCapturedLink {

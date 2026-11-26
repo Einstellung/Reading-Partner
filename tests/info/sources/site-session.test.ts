@@ -16,7 +16,7 @@ import {
 } from "../../../src/info/sources/site-session";
 import { BUILTIN_SOURCES } from "../../../src/info/sources/builtins";
 import { X_SIGN_IN_URL } from "../../../src/info/sources/x-search";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 
 const BLOOMBERG = BUILTIN_SOURCES.filter((s) => s.id.startsWith("bloomberg-"));
 

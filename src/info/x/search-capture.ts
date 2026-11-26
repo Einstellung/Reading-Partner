@@ -20,8 +20,8 @@
 
 import { isObject } from "../../platform/std/json";
 import { postsOfAnswer, X_CAPTURED_OPERATIONS, type XCapturedPost } from "./graphql-post";
-import type { XLinkOut, XQuoted, XSearchPost } from "./search-page";
-import { snowflakeTime } from "./snowflake";
+import type { XLinkOut, XQuoted, XSearchPost } from "../../reading/ingest/x/search-page";
+import { snowflakeTime } from "../../reading/ingest/x/snowflake";
 import { linkKey } from "./text-links";
 
 /** The global the page script hands the copies over through. */

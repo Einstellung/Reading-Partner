@@ -92,7 +92,7 @@ import {
 import type { PoolRecord } from "../collect/item-pool";
 import { boxBriefing } from "./briefing";
 import type { Briefing } from "./types";
-import type { InfoItem } from "../sources/item";
+import type { InfoItem } from "../../sources/item";
 import { errMsg } from "../../platform/std/errors";
 import { t } from "../../i18n";
 

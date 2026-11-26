@@ -1,8 +1,8 @@
-Third-party code ported into src/info/rank/ and src/info/x/snowflake.ts.
+Third-party code ported into src/info/rank/ and src/reading/ingest/x/snowflake.ts.
 
 == last30days-skill (https://github.com/mvanhorn/last30days-skill) ==
 Ported into tokens.ts, relevance.ts, fusion.ts, engagement.ts, score.ts,
-similarity.ts, events.ts (the greedy clustering) and info/x/snowflake.ts.
+similarity.ts, events.ts (the greedy clustering) and reading/ingest/x/snowflake.ts.
 
 MIT License
 

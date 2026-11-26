@@ -7,8 +7,8 @@
 
 import { expect, test } from "bun:test";
 import { MaterialRegistry } from "../../../src/info/dossier/registry";
-import type { InfoItem } from "../../../src/info/sources/item";
-import type { RepoLookup } from "../../../src/info/sources/plugins/github-lookup";
+import type { InfoItem } from "../../../src/sources/item";
+import type { RepoLookup } from "../../../src/sources/plugins/github-lookup";
 import { makeResultBuilder, targetsOf, type Draft } from "../../../src/info/topic-search/build-result";
 import { checkWritten, composePrompt, type ComposeInput } from "../../../src/info/topic-search/compose";
 import { HUB_RULE, hubLine, hubLines, hubSummaryLine, repoName } from "../../../src/info/topic-search/hub-line";

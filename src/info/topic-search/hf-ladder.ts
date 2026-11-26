@@ -21,8 +21,8 @@
 // the injected search.
 
 import { HttpStatusError, isHostCoolingDown, isRateLimitError } from "../../platform/http/throttled-fetch";
-import type { InfoItem } from "../sources/item";
-import { arxivQueryTerms } from "../sources/plugins/arxiv-client";
+import type { InfoItem } from "../../sources/item";
+import { arxivQueryTerms } from "../../sources/plugins/arxiv-client";
 import { ARXIV_ENOUGH, ARXIV_WIDEN_DAYS, bySpecificity, GENERIC_WORDS, type ArxivLadderResult, type ArxivStep } from "./arxiv-ladder";
 import { addDays } from "./windows";
 

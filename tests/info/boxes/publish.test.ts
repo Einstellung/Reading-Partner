@@ -13,7 +13,7 @@ import {
 } from "../../../src/info/boxes/publish";
 import type { CachedArticle } from "../../../src/info/collect/store";
 import type { Briefing } from "../../../src/info/boxes/types";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 
 function meta(id: string) {
   return {

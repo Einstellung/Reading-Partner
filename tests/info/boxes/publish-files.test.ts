@@ -25,7 +25,7 @@ import {
 } from "../../../src/info/boxes/publish";
 import type { CachedArticle } from "../../../src/info/collect/store";
 import type { Briefing } from "../../../src/info/boxes/types";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 let disk: FakeDisk;

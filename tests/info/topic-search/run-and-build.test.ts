@@ -15,8 +15,8 @@ import { join } from "node:path";
 import { Window } from "happy-dom";
 import { registerProgramTask, runProgramTask } from "../../../src/legion/durable/program-task";
 import type { SourceHealth } from "../../../src/info/sources/engine";
-import { PAGE_CHROME_SCRIPT, SEARCH_PAGE_SCRIPT } from "../../../src/info/x/search-page";
-import { PERMALINK_SCRIPT } from "../../../src/info/x/permalink";
+import { PAGE_CHROME_SCRIPT, SEARCH_PAGE_SCRIPT } from "../../../src/reading/ingest/x/search-page";
+import { PERMALINK_SCRIPT } from "../../../src/reading/ingest/x/permalink";
 import { makeResultBuilder, SOURCE_HEALTH_FILE, type BuildResultDeps } from "../../../src/info/topic-search/build-result";
 import type { TopicModelCall } from "../../../src/info/topic-search/model-io";
 import { QUESTIONS_FILE, parseQuestionsFile } from "../../../src/info/topic-search/questions";
@@ -49,7 +49,7 @@ import { buildSectionedEpub } from "../../../src/workshop/bindery/build-article"
 import { nightEndAt } from "../../../src/info/topic-search/nightly";
 import { planRetry } from "../../../src/info/topic-search/retry";
 import type { TopicSearchBrief } from "../../../src/info/topic-search/run";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { assembleIssue } from "../../../src/info/issue/assemble";
 
 const FIXTURE = readFileSync(join(import.meta.dir, "../x/fixtures/search-live-ai-for-science.html"), "utf8");

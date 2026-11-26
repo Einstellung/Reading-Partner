@@ -17,7 +17,7 @@ import {
   relevanceCollapse,
   type XReadResult,
 } from "../../../src/info/topic-search/x-reader";
-import type { XSearchPost } from "../../../src/info/x/search-page";
+import type { XSearchPost } from "../../../src/reading/ingest/x/search-page";
 
 const QUERY: TopicQuery = {
   id: "q2",

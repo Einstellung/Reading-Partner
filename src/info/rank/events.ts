@@ -11,9 +11,9 @@
 // Portions Copyright (c) 2026 Matt Van Horn, under the MIT License; the full
 // notice is in third-party-licenses.txt here.
 
-import { normalizeArxivId } from "../sources/plugins/arxiv-client";
-import { githubRepoOfUrl } from "../sources/plugins/github-site";
-import { xPostOfUrl } from "../x/post";
+import { normalizeArxivId } from "../../sources/plugins/arxiv-client";
+import { githubRepoOfUrl } from "../../sources/plugins/github-site";
+import { xPostOfUrl } from "../../reading/ingest/x/post";
 import { canonicalizeUrl } from "./canonical-url";
 import { paperKeyOfUrl, unwrapLink } from "./link-identity";
 import { hybridSimilarity, prepareText, type PreparedText } from "./similarity";

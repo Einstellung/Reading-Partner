@@ -18,7 +18,7 @@ import type { ParseTally } from "../../platform/app/structured-output";
 import type { Lab } from "../labs/types";
 import { pictureSummary } from "../picture/picture";
 import type { Confidence, Likelihood, Picture, PictureDelta } from "../picture/types";
-import { formatSignals } from "../sources/item";
+import { formatSignals } from "../../sources/item";
 import { asArray, asText, isObject, readObject } from "../../platform/std/json";
 import type { AnalystCable, AnalystInput, AnalystOutput, ParseOutcome } from "./types";
 

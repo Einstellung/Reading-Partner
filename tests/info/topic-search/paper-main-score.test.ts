@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
 import { finalScore } from "../../../src/info/rank/score";
 import { numberPool, rankEvents, scorePool, type Candidate, type RerankAnswer } from "../../../src/info/topic-search/rank-pool";
 import type { TopicSearch } from "../../../src/info/topic-search/types";
-import type { XSearchPost } from "../../../src/info/x/search-page";
+import type { XSearchPost } from "../../../src/reading/ingest/x/search-page";
 
 const topic = {
   id: "ts-1",

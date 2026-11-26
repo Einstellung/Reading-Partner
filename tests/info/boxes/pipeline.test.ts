@@ -22,7 +22,7 @@ import type { Lab } from "../../../src/info/labs/types";
 import { emptyPicture } from "../../../src/info/picture/picture";
 import type { Picture } from "../../../src/info/picture/types";
 import type { AnalystInput, LabRunResult } from "../../../src/info/analysis/types";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 
 const TODAY = "2026-07-22";
 

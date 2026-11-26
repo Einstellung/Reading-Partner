@@ -18,8 +18,8 @@ import { keepArticle, type KeepDeps } from "./keep";
 import { loadExtractReadable } from "../../workshop/extract/readable-lazy";
 import { fetchWithRetry } from "../../platform/http/throttled-fetch";
 import { runBackgroundTurn } from "../../legion/durable/background";
-import { xPostOfUrl } from "../../info/x/post";
-import { saveLinkRecord } from "../../info/links/store";
+import { xPostOfUrl } from "./x/post";
+import { saveLinkRecord } from "./links/store";
 import { takeLinkInFiled, type IngestBatch } from "./link-intake";
 import {
   ingestArticleUrl,

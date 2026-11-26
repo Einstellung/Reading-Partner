@@ -36,7 +36,7 @@ import { buildRetellTools } from "../../src/reading/retell/tools";
 import { buildArrangeTools } from "../../src/reading/talk/tools";
 import { buildSourceTools } from "../../src/info/sources/source-tools";
 import { buildCompanionTools } from "../../src/info/briefer/companion-tools";
-import { buildReadPageTool } from "../../src/info/sources/read-page-tool";
+import { buildReadPageTool } from "../../src/sources/read-page-tool";
 import { buildTaskingTools } from "../../src/info/tasking/tools";
 import { subagentTool } from "../../src/legion/subagent/tool";
 import { buildTakeLinkTool } from "../../src/reading/ingest/take-link-tool";

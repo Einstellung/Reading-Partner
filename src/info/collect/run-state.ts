@@ -17,7 +17,7 @@ import {
   type Selection,
 } from "./screen";
 import type { LabCover, MustRead, OneLiner } from "../analysis/types";
-import type { InfoItem } from "../sources/item";
+import type { InfoItem } from "../../sources/item";
 
 // Bumped whenever a checkpoint stops being readable by the code that resumes it.
 // Version 1 was the two-phase run with no verdicts at all; version 2 held

@@ -23,7 +23,7 @@ import {
 import { emptyPicture } from "../../../src/info/picture/picture";
 import type { Observable, Picture } from "../../../src/info/picture/types";
 import type { Lab } from "../../../src/info/labs/types";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 
 function item(id: string, over: Partial<InfoItem> = {}): InfoItem {
   return {

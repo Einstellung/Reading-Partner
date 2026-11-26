@@ -9,7 +9,7 @@
 //
 // The tables are our own, written from the sites' URL shapes.
 
-import { arxivPaperOfUrl, normalizeArxivId } from "../sources/plugins/arxiv-client";
+import { arxivPaperOfUrl, normalizeArxivId } from "../../sources/plugins/arxiv-client";
 
 /** The paper a link names, as a key: "arxiv:<id>", "doi:<lowercased doi>", "openreview:<id>", "acl:<id>", "ieee:<n>". */
 export type PaperKey = `${"arxiv" | "doi" | "openreview" | "acl" | "ieee"}:${string}`;

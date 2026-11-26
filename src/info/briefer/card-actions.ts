@@ -8,7 +8,7 @@
 // the rules ("already added is a no-op", "a failed write changes nothing on
 // screen") are testable without React and without a filesystem.
 
-import type { SourceDescriptor } from "../sources/descriptor";
+import type { SourceDescriptor } from "../../sources/descriptor";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { LabArchiveCardData, LabProposalCardData } from "../boxes/cards";
 import { newLabId } from "../labs/labs";

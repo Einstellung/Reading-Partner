@@ -6,7 +6,7 @@
 
 import { expect, test } from "bun:test";
 import { HostCoolingDownError, HttpStatusError, RateLimitError } from "../../../src/platform/http/throttled-fetch";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { HF_KEEP, hfQueryWords, runHfLadder, type HfSearch } from "../../../src/info/topic-search/hf-ladder";
 import { gatherCandidates, streamKey, type ArxivFound } from "../../../src/info/topic-search/rank-pool";
 import { sourceHealth } from "../../../src/info/topic-search/build-result";

@@ -8,7 +8,7 @@
 // `key` and `keys`, both as currentEventKey spells them today. A result's rank
 // is the item's place by final score among the items listed, best first.
 
-import { normalizeArxivId } from "../sources/plugins/arxiv-client";
+import { normalizeArxivId } from "../../sources/plugins/arxiv-client";
 import { arxivEventKey, currentEventKey, eventKeyOfUrl, xEventKey } from "../rank/events";
 import { arxivIdOfDoi, normalizeDoi } from "../rank/link-identity";
 import { postLinksOut } from "../x/text-links";

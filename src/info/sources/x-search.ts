@@ -9,7 +9,7 @@
 // the login window, check the session, sign out — on the same cookie jar the
 // browse window reads through.
 
-import type { SourceDescriptor } from "./descriptor";
+import type { SourceDescriptor } from "../../sources/descriptor";
 
 /** X's own login page. The reader signs in there, in a window of X's. */
 export const X_SIGN_IN_URL = "https://x.com/i/flow/login";

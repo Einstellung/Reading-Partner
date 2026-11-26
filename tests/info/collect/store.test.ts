@@ -12,7 +12,7 @@ import {
   staleDailyFiles,
   todayLocal,
 } from "../../../src/info/collect/store";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 
 test("localDateString is local YYYY-MM-DD, zero-padded", () => {
   // Construct with local-time components so the assertion is timezone-agnostic.

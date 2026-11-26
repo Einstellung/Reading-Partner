@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SourceHealth } from "../../../src/info/sources/engine";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { HostCoolingDownError, HttpStatusError, RateLimitError } from "../../../src/platform/http/throttled-fetch";
 import {
   ARXIV_ENOUGH,

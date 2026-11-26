@@ -14,7 +14,7 @@
 // `arxiv-read-2.json`, `hf-read-2.json`, `judge-2.json`), so a resumed build
 // skips what is on file.
 
-import { arxivQueryTerms, normalizeArxivId } from "../sources/plugins/arxiv-client";
+import { arxivQueryTerms, normalizeArxivId } from "../../sources/plugins/arxiv-client";
 import { cut, material, parseJsonReply, UNTRUSTED_RULE } from "./model-io";
 import { LABEL_BOUNDARY } from "./questions";
 import { mergeVia, plainQuery, type ArxivFound, type Candidate, type Numbered, type RerankAnswer } from "./rank-pool";

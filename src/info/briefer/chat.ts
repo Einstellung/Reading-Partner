@@ -10,7 +10,7 @@
 // string assembly, so it is testable without a provider.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
+import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../../sources/descriptor";
 import { allSignInSites, signInSiteLine } from "../sources/site-session";
 import { labGuidance } from "./lab-tool";
 import type { Lab } from "../labs/types";

@@ -16,7 +16,7 @@ import type { AgentTool } from "../../legion/durable/contract";
 import { asStrings } from "../../platform/std/json";
 import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
-import type { SourceDescriptor } from "../sources/descriptor";
+import type { SourceDescriptor } from "../../sources/descriptor";
 import type { LabArchiveCardData, LabProposalCardData } from "../boxes/cards";
 import { t } from "../../i18n";
 

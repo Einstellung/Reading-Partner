@@ -19,7 +19,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openBrowse } from "../src/workshop/extract/webview-browse";
-import { tcoTarget } from "../src/info/x/outbound";
+import { tcoTarget } from "../src/reading/ingest/x/outbound";
 import { readXSearch, type XReadLine } from "../src/info/topic-search/x-reader";
 import { PROBE_PACE, X_PACE, type XPace } from "../src/info/topic-search/x-pace";
 import type { XReaderMemory, XStep } from "../src/info/topic-search/x-progress";

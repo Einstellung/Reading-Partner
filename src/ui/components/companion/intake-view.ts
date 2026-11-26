@@ -102,9 +102,9 @@ export function documentMeta(doc: IntakeDocument): string {
   return parts.join(" · ");
 }
 
-// The backend's reasons are the program's English sentences (info/links
-// receipt.ts, info/x/read-post.ts, intake-store.ts, the site adapters under
-// info/sources/plugins), some of them inside a sentence of the ingest's own in
+// The backend's reasons are the program's English sentences (reading/ingest/links
+// receipt.ts, reading/ingest/x/read-post.ts, intake-store.ts, the site adapters under
+// sources/plugins), some of them inside a sentence of the ingest's own in
 // the language the app had when it failed (reader.ingest.unreadable). The ones
 // whose kind is known are said in the reader's language, matched on the English
 // wherever it sits.

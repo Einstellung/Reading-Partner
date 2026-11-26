@@ -4,8 +4,8 @@
 
 import { describe, expect, test } from "bun:test";
 import type { BrowseEval, BrowseLoad, BrowseOpen, BrowseScroll, BrowseSession } from "../../../src/workshop/extract/webview-browse";
-import { PERMALINK_SCRIPT } from "../../../src/info/x/permalink";
-import { PAGE_CHROME_SCRIPT, SEARCH_PAGE_SCRIPT, type XHalt } from "../../../src/info/x/search-page";
+import { PERMALINK_SCRIPT } from "../../../src/reading/ingest/x/permalink";
+import { PAGE_CHROME_SCRIPT, SEARCH_PAGE_SCRIPT, type XHalt } from "../../../src/reading/ingest/x/search-page";
 import { readXSearch, type XReadDeps, type XReadInput, type XReadLine } from "../../../src/info/topic-search/x-reader";
 import { fitViewport, PROBE_PACE, screenStayMs, scrollSteps, X_PACE } from "../../../src/info/topic-search/x-pace";
 import { markAfter, type XReaderMemory, type XStep } from "../../../src/info/topic-search/x-progress";

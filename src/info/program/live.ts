@@ -32,7 +32,7 @@ import { newTally, reportParse } from "../../platform/app/structured-output";
 import { observeAppExit, observeAppLifecycle } from "../../platform/app/lifecycle";
 import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/wake-lock";
 import { collectAll, fetchBodies as fetchArticleBodies } from "../sources/engine";
-import { registerAllSourcePlugins } from "../sources/plugins/all";
+import { registerAllSourcePlugins } from "../../sources/plugins/all";
 import { fetchArticleViaWebview } from "../../workshop/extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { setTrayStatus } from "../../platform/app/tray";
@@ -101,9 +101,9 @@ import {
   savePoolMarks,
   savePoolPolled,
 } from "../collect/pool-store";
-import type { SourceDescriptor } from "../sources/descriptor";
+import type { SourceDescriptor } from "../../sources/descriptor";
 import type { Briefing } from "../boxes/types";
-import type { InfoItem } from "../sources/item";
+import type { InfoItem } from "../../sources/item";
 
 // One room's day (docs/63 加工): the analyst call and the synthesis call, with
 // the two prompts, the parse and the one in-band retry in analysis/run.ts. Both

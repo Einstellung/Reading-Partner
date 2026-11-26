@@ -28,7 +28,7 @@ import { SECRETARY_ROLE_ID, registerSecretaryRole } from "../../../src/info/brie
 import { DEFAULT_SETTINGS } from "../../../src/platform/app/settings";
 import { rebuildThreadStoreForTests } from "../../../src/platform/app/threads";
 import { installAppData } from "../../support/appdata-fake";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import type { Briefing } from "../../../src/info/boxes/types";
 import type { Lab } from "../../../src/info/labs/types";
 import { languageInstruction } from "../../../src/platform/app/settings";

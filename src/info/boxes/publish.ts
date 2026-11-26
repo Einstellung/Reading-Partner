@@ -38,7 +38,7 @@ import { loadArticles, loadItems, type CachedArticle } from "../collect/store";
 import { parseBriefing } from "./briefing";
 import { loadLatestBriefing } from "./store";
 import type { Briefing } from "./types";
-import type { InfoItem } from "../sources/item";
+import type { InfoItem } from "../../sources/item";
 
 export const PUBLISHED_BRIEFING_FILE = "info-briefing.json";
 export const PUBLISHED_BODIES_FILE = "info-bodies.json";

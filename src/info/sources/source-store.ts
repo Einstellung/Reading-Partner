@@ -24,7 +24,7 @@ import {
   type GuardedFileIo,
 } from "../../platform/app/guarded-file";
 import type { PullMatcher } from "../../platform/sync/pull-routes";
-import { validateDescriptor, type SourceDescriptor } from "./descriptor";
+import { validateDescriptor, type SourceDescriptor } from "../../sources/descriptor";
 import { parseSiteSessions, type SiteSessions } from "./site-session";
 import type { SourceHealth } from "./engine";
 

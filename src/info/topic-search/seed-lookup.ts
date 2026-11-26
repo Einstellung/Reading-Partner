@@ -11,8 +11,8 @@
 // down refuses at once, and that is reported, not waited out.
 // Pure: the searches are injected.
 
-import { normalizeArxivId } from "../sources/plugins/arxiv-client";
-import { normalizeTitle } from "../sources/plugins/match";
+import { normalizeArxivId } from "../../sources/plugins/arxiv-client";
+import { normalizeTitle } from "../../sources/plugins/match";
 import { isHostCoolingDown } from "../../platform/http/host-gate";
 import { normalizeDoi } from "../rank/link-identity";
 import type { StudySeedCandidate } from "./cards";

@@ -32,9 +32,9 @@ import {
   type FieldPath,
   type JsonApiDiscovery,
   type SourceDescriptor,
-} from "./descriptor";
-import { pluginOf } from "./plugin";
-import type { InfoItem } from "./item";
+} from "../../sources/descriptor";
+import { pluginOf } from "../../sources/plugin";
+import type { InfoItem } from "../../sources/item";
 import { errMsg } from "../../platform/std/errors";
 
 // Render one article in a hidden webview and hand back what its DOM held

@@ -64,7 +64,7 @@ import { defineTask, type Task, type TaskRuntime } from "@earendil-works/pi-dura
 import { StoppedError } from "../../legion/stop";
 import type { KeepAwakeLock } from "../../platform/app/keep-awake";
 import type { BrowseOpen } from "../../workshop/extract/webview-browse";
-import type { XHalt } from "../x/search-page";
+import type { XHalt } from "../../reading/ingest/x/search-page";
 import type { ArxivSearch } from "./arxiv-ladder";
 import { arxivProgressLine, readArxiv, type ArxivRead } from "./arxiv-read";
 import type { BuildTopicSearchResult, BuildTopicSearchResultOutput, XPageBudget } from "./build-result";

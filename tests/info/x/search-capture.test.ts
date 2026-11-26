@@ -12,7 +12,7 @@ import {
   X_CAPTURE_SCRIPT,
   xCaptureScript,
 } from "../../../src/info/x/search-capture";
-import type { XSearchPost } from "../../../src/info/x/search-page";
+import type { XSearchPost } from "../../../src/reading/ingest/x/search-page";
 import { entry, searchTimeline, tweet } from "./graphql-fixtures";
 
 const SEARCH = "https://x.com/i/api/graphql/Q1/SearchTimeline?variables=%7B%7D";

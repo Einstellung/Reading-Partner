@@ -12,8 +12,8 @@
 import { isHostCoolingDown, isRateLimitError, RateLimitError } from "../../platform/http/host-gate";
 import type { FetchFn } from "../../platform/http/throttled-fetch";
 import { arxivIdOfDoi } from "../rank/link-identity";
-import { normalizeArxivId } from "../sources/plugins/arxiv-client";
-import { fetchS2Batch, fetchS2EdgePage, fetchS2Recommendations, type S2Hit } from "../sources/plugins/s2-client";
+import { normalizeArxivId } from "../../sources/plugins/arxiv-client";
+import { fetchS2Batch, fetchS2EdgePage, fetchS2Recommendations, type S2Hit } from "../../sources/plugins/s2-client";
 import {
   emptyGraphRead,
   graphStreamId,

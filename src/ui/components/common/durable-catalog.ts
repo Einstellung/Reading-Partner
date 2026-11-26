@@ -32,7 +32,7 @@ import { buildRetellTools } from "../../../reading/retell/tools";
 import { buildArrangeTools } from "../../../reading/talk/tools";
 import { buildSourceTools } from "../../../info/sources/source-tools";
 import { buildCompanionTools } from "../../../info/briefer/companion-tools";
-import { buildReadPageTool } from "../../../info/sources/read-page-tool";
+import { buildReadPageTool } from "../../../sources/read-page-tool";
 import { buildTaskingTools } from "../../../info/tasking/tools";
 import { buildResearchAgent } from "../../../reading/papers/research-agent";
 import { subagentTool } from "../../../legion/subagent/tool";

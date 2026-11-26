@@ -1,0 +1,257 @@
+// arXiv export API client. Pure parts (id normalization, query URLs, Atom
+// parsing, title matching) are exported for tests; fetchFromArxiv wires them to
+// a FetchFn. The Atom parsing is a small regex reader rather than DOMParser so
+// it runs in bun tests and the webview alike — arXiv's feed shape is stable and
+// we only need five fields per entry.
+
+import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../platform/http/throttled-fetch";
+import { decodeEntities } from "../../workshop/extract/sanitize";
+import { pickByTitle } from "./match";
+
+export interface ArxivEntry {
+  id: string; // normalized, e.g. "2303.12345"
+  title: string;
+  summary: string;
+  authors: string[];
+  pdfUrl: string;
+  // Submission date as the feed gives it (ISO 8601), or "" when absent. Only the
+  // topic search reads it (to show the year); the title lookup ignores it.
+  published: string;
+  // <arxiv:primary_category term="cs.RO"/>, when the entry carries one. The
+  // index provider (info/sources/index/arxiv) tags items with it.
+  primaryCategory?: string;
+  // <arxiv:doi>, the published version's DOI, when the authors gave one.
+  doi?: string;
+}
+
+// "arXiv:2303.12345v2" / a full abs URL / bare id -> "2303.12345". Old-style
+// ids (cs/0112017) pass through. Null when it doesn't look like an arXiv id.
+export function normalizeArxivId(raw: string): string | null {
+  let s = raw.trim();
+  s = s.replace(/^https?:\/\/(www\.|export\.)?arxiv\.org\/(abs|pdf)\//i, "");
+  s = s.replace(/^arxiv:\s*/i, "");
+  s = s.replace(/\.pdf$/i, "");
+  s = s.replace(/v\d+$/i, "");
+  if (/^\d{4}\.\d{4,5}$/.test(s)) return s;
+  if (/^[a-z-]+(\.[A-Z]{2})?\/\d{7}$/.test(s)) return s;
+  return null;
+}
+
+/** An arXiv paper a link points at: its id, and the version when the link names one. */
+export interface ArxivPaperRef {
+  id: string;
+  /** "v2", or absent for the latest. */
+  version?: string;
+}
+
+// arxiv.org itself, and the mirrors that keep its path shape: alphaXiv
+// (/abs, /overview, /pdf) and ar5iv (/abs, /html).
+const ARXIV_LINK =
+  /^(?:www\.|export\.)?arxiv\.org$|^(?:www\.)?alphaxiv\.org$|^ar5iv(?:\.labs\.arxiv)?\.org$/i;
+const PAPER_PATH = /^\/(?:abs|pdf|overview|html)\/(.+?)(?:\.pdf)?\/?$/i;
+const PAPER_ID = /^(\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(v\d+)?$/;
+
+// The paper an arXiv abstract or PDF link points at, or null for any other
+// link: "https://arxiv.org/abs/2505.06708v2" -> { id: "2505.06708", version: "v2" },
+// "https://arxiv.org/pdf/hep-th/9901001" -> { id: "hep-th/9901001" }.
+export function arxivPaperOfUrl(url: string): ArxivPaperRef | null {
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  if (!/^https?:$/.test(u.protocol) || !ARXIV_LINK.test(u.hostname)) return null;
+  const path = PAPER_PATH.exec(decodeURIComponent(u.pathname));
+  const m = path ? PAPER_ID.exec(path[1]) : null;
+  if (!m) return null;
+  return m[2] ? { id: m[1], version: m[2] } : { id: m[1] };
+}
+
+export function arxivPdfUrl(id: string): string {
+  return `https://arxiv.org/pdf/${id}`;
+}
+
+export function arxivIdUrl(id: string): string {
+  return `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}&max_results=1`;
+}
+
+export function arxivTitleSearchUrl(title: string, maxResults = 5): string {
+  // The export API's ti: field wants quoted phrases; strip quotes from the
+  // title itself so the query stays well-formed.
+  const phrase = title.replace(/"/g, " ").replace(/\s+/g, " ").trim();
+  const q = encodeURIComponent(`ti:"${phrase}"`);
+  return `https://export.arxiv.org/api/query?search_query=${q}&max_results=${maxResults}`;
+}
+
+function tagText(xml: string, tag: string): string {
+  const m = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`).exec(xml);
+  return m ? decodeEntities(m[1]).replace(/\s+/g, " ").trim() : "";
+}
+
+// Parse an arXiv Atom feed into entries. Entries whose id doesn't normalize are
+// dropped (never seen in practice; guards the regex reader).
+export function parseArxivAtom(xml: string): ArxivEntry[] {
+  const out: ArxivEntry[] = [];
+  const entryRe = /<entry>([\s\S]*?)<\/entry>/g;
+  let m: RegExpExecArray | null;
+  while ((m = entryRe.exec(xml))) {
+    const entry = m[1];
+    const rawId = tagText(entry, "id"); // e.g. http://arxiv.org/abs/2303.12345v2
+    const id = normalizeArxivId(rawId);
+    if (!id) continue;
+    const authors: string[] = [];
+    const authorRe = /<author>[\s\S]*?<name>([\s\S]*?)<\/name>[\s\S]*?<\/author>/g;
+    let a: RegExpExecArray | null;
+    while ((a = authorRe.exec(entry))) authors.push(decodeEntities(a[1]).trim());
+    const primary = /<arxiv:primary_category\b[^>]*\bterm="([^"]+)"/.exec(entry);
+    const doi = tagText(entry, "arxiv:doi");
+    out.push({
+      id,
+      title: tagText(entry, "title"),
+      summary: tagText(entry, "summary"),
+      authors,
+      pdfUrl: arxivPdfUrl(id),
+      published: tagText(entry, "published"),
+      ...(primary ? { primaryCategory: primary[1] } : {}),
+      ...(doi ? { doi } : {}),
+    });
+  }
+  return out;
+}
+
+export function pickArxivMatch(entries: ArxivEntry[], title: string): ArxivEntry | null {
+  return pickByTitle(entries, title, (e) => e.title);
+}
+
+// --- topic search (docs/24: what is the latest work on X) ---
+
+// Words that carry no retrieval signal in an `all:` term. Deliberately short:
+// only function words and the phrasing a question drags in. Domain words the
+// reader might actually mean ("study", "review") are left alone.
+const STOPWORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "into", "is", "it",
+  "its", "latest", "new", "of", "on", "or", "recent", "that", "the", "their", "there", "to", "was",
+  "what", "when", "where", "which", "who", "why", "with",
+]);
+
+// Terms at most, so a long question cannot AND itself down to zero hits.
+const MAX_TERMS = 6;
+
+// A natural-language query reduced to the terms an `all:` search can use. The
+// export API's parser has no notion of a free-text query: a bare string with
+// spaces is read as an implicit boolean over undeclared fields and returns
+// nonsense, so every term is prefixed and ANDed explicitly.
+export function arxivQueryTerms(query: string): string[] {
+  const words = query
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}\s-]+/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+  return [...new Set(words)].slice(0, MAX_TERMS);
+}
+
+export interface ArxivTopicOptions {
+  limit?: number;
+  // Only papers submitted in or after this year. Recency is a filter rather than
+  // a sort on every library here: sorting by date returns the newest match
+  // instead of the best one, and on arXiv `sortBy=submittedDate` does not answer
+  // at all (docs/pitfall/72).
+  sinceYear?: number | null;
+  // A window of submission days, "YYYY-MM-DD" UTC, both inclusive. Either end
+  // may be left open; `since` takes over from `sinceYear` when both are given.
+  since?: string;
+  until?: string;
+  signal?: AbortSignal;
+}
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// The submittedDate clause for a query's window, or null when it has none.
+// Throws on a malformed day or an inverted window: the caller built it, and a
+// silently dropped bound would widen the search.
+export function arxivSubmittedRange(opts: ArxivTopicOptions): string | null {
+  for (const day of [opts.since, opts.until]) {
+    if (day !== undefined && (!DAY_RE.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`)))) {
+      throw new Error(`not a YYYY-MM-DD day: ${day}`);
+    }
+  }
+  if (opts.since !== undefined && opts.until !== undefined && opts.since > opts.until) {
+    throw new Error(`the window ends (${opts.until}) before it starts (${opts.since})`);
+  }
+  const from = opts.since !== undefined ? `${opts.since.replace(/-/g, "")}0000` : opts.sinceYear ? `${opts.sinceYear}01010000` : null;
+  const to = opts.until !== undefined ? `${opts.until.replace(/-/g, "")}2359` : null;
+  if (from === null && to === null) return null;
+  return `submittedDate:[${from ?? "199101010000"} TO ${to ?? "210001010000"}]`;
+}
+
+// The export API's date field wants a closed range of minute-precision stamps,
+// so an open end gets a bound no submission falls outside: 1991 (arXiv's first
+// year) below, 2100 above.
+export function arxivTopicSearchUrl(query: string, opts: ArxivTopicOptions = {}): string {
+  const terms = arxivQueryTerms(query);
+  const clauses = (terms.length ? terms : [query.trim()]).map((t) => `all:${t}`);
+  const range = arxivSubmittedRange(opts);
+  if (range) clauses.push(range);
+  const q = encodeURIComponent(clauses.join(" AND "));
+  return `https://export.arxiv.org/api/query?search_query=${q}&max_results=${opts.limit ?? 5}`;
+}
+
+// Search arXiv by topic. Returns [] when arXiv has nothing; throws on a bad
+// status or exhausted retries (a terminal 429 is a RateLimitError), so the caller
+// can report which library did not answer instead of showing an empty result as
+// "no such research exists". arXiv's limiter is strict — six requests in a row
+// were enough to earn a 429 — so the live transports hold every arXiv request to
+// the host gate's spacing and cooldown (platform/http/host-gate.ts).
+export async function searchArxivTopic(
+  query: string,
+  opts: ArxivTopicOptions = {},
+  fetchFn?: FetchFn,
+): Promise<ArxivEntry[]> {
+  const init = opts.signal ? { signal: opts.signal } : undefined;
+  const res = await fetchWithRetry(arxivTopicSearchUrl(query, opts), init, interactiveRetry(fetchFn));
+  if (!res.ok) throw new HttpStatusError(res.status, "export.arxiv.org");
+  return parseArxivAtom(await res.text());
+}
+
+export interface ArxivResult {
+  arxivId: string;
+  abstract: string;
+  pdfBytes: ArrayBuffer | null;
+}
+
+// Look a paper up on arXiv (by id when known, else title search) and download
+// its PDF. Returns null when arXiv doesn't have it; throws only on repeated
+// network failure (fetchWithRetry exhausted).
+export async function fetchFromArxiv(
+  paper: { title: string; arxivId: string | null },
+  fetchFn?: FetchFn,
+): Promise<ArxivResult | null> {
+  const opts = fetchFn ? { fetchFn } : undefined;
+  const id = paper.arxivId ? normalizeArxivId(paper.arxivId) : null;
+  const url = id ? arxivIdUrl(id) : arxivTitleSearchUrl(paper.title);
+  const res = await fetchWithRetry(url, undefined, opts);
+  if (!res.ok) return null;
+  const entries = parseArxivAtom(await res.text());
+  let entry = id ? entries[0] ?? null : pickArxivMatch(entries, paper.title);
+  // Titles like "RT-1: Robotics Transformer ..." often carry a subtitle the
+  // exact phrase search won't match. Retry once on the pre-colon part; the
+  // contains-matching in pickArxivMatch keeps a wrong hit from slipping through.
+  if (!entry && !id && paper.title.includes(":")) {
+    const head = paper.title.slice(0, paper.title.indexOf(":")).trim();
+    if (head) {
+      const retry = await fetchWithRetry(arxivTitleSearchUrl(head), undefined, opts);
+      if (retry.ok) entry = pickArxivMatch(parseArxivAtom(await retry.text()), paper.title);
+    }
+  }
+  if (!entry) return null;
+
+  let pdfBytes: ArrayBuffer | null = null;
+  try {
+    const pdfRes = await fetchWithRetry(entry.pdfUrl, undefined, opts);
+    if (pdfRes.ok) pdfBytes = await pdfRes.arrayBuffer();
+  } catch {
+    // Metadata without the PDF still yields an abstract-only note.
+  }
+  return { arxivId: entry.id, abstract: entry.summary, pdfBytes };
+}

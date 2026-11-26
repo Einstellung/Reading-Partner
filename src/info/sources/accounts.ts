@@ -15,7 +15,7 @@
 
 import { t } from "../../i18n";
 import { BLOOMBERG_SIGN_IN_URL } from "./builtins";
-import type { SourceDescriptor } from "./descriptor";
+import type { SourceDescriptor } from "../../sources/descriptor";
 import {
 	allSignInSites,
 	sessionLabel,

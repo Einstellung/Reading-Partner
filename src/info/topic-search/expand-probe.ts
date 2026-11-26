@@ -9,7 +9,7 @@
 
 import { weightedRrf } from "../rank/fusion";
 import { arxivEventKey, currentEventKey } from "../rank/events";
-import { paperDay } from "../sources/plugins/huggingface";
+import { paperDay } from "../../sources/plugins/huggingface";
 import type { GraphRead, GraphStreamKind, GraphWhy } from "./graph-read";
 import { routeFinds, type RunReads } from "./label-replay";
 import { latestLabels, type TopicLabel, type TopicLabelKind } from "./labels";

@@ -3,7 +3,7 @@
 // and the device's daily allowance of X pages. Pure shapes and folds; where the
 // files live is the caller's.
 
-import type { XHalt, XLinkOut, XSearchPost } from "../x/search-page";
+import type { XHalt, XLinkOut, XSearchPost } from "../../reading/ingest/x/search-page";
 import { linkKey } from "../x/text-links";
 
 /** Why a line stopped being read. */

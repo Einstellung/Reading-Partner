@@ -10,7 +10,7 @@ import {
   type LabArchivePorts,
   type LabProposalPorts,
 } from "../../../src/info/briefer/card-actions";
-import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
+import type { SourceDescriptor } from "../../../src/sources/descriptor";
 import type { LabArchiveCardData, LabProposalCardData } from "../../../src/info/boxes/cards";
 
 function source(id: string): SourceDescriptor {

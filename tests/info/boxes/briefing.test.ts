@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
 import { boxBriefing, briefingOverview, parseBriefing } from "../../../src/info/boxes/briefing";
 import type { CableDay } from "../../../src/info/cable/types";
 import type { LabOutcome } from "../../../src/info/collect/run-state";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 
 const DATE = "2026-09-09";
 

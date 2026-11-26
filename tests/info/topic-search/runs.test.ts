@@ -45,7 +45,7 @@ import { unread } from "../../../src/info/topic-search/run";
 import type { BrowseOpen } from "../../../src/workshop/extract/webview-browse";
 import type { ArxivRead } from "../../../src/info/topic-search/arxiv-read";
 import type { XReadResult } from "../../../src/info/topic-search/x-reader";
-import type { InfoItem } from "../../../src/info/sources/item";
+import type { InfoItem } from "../../../src/sources/item";
 import { AbortError } from "../../../src/platform/app/abort";
 import { HostCoolingDownError, HttpStatusError } from "../../../src/platform/http/throttled-fetch";
 import { openTestRuntime } from "../../legion/durable/support/runtime";

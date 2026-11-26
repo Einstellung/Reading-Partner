@@ -39,8 +39,8 @@ import {
 } from "./item-pool";
 import type { RunSeed } from "./run-state";
 import type { CachedArticle } from "./store";
-import type { SourceDescriptor } from "../sources/descriptor";
-import type { InfoItem } from "../sources/item";
+import type { SourceDescriptor } from "../../sources/descriptor";
+import type { InfoItem } from "../../sources/item";
 import { pad2 } from "../../platform/std/text";
 
 // The band a scheduled wake is held to. The floor keeps a source whose interval
