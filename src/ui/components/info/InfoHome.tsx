@@ -36,7 +36,7 @@ import { useMeals } from "../meals/use-meals";
 import { usePrepSteps } from "../meals/use-prep-steps";
 import { writtenMinutes } from "../../../meals/screen/prep-timeline";
 import { recordPrepSessionEvent, startPrepSession, type PrepSteps } from "../../../meals/prep-session";
-import { putMealsPrepCard } from "../../../info/briefer/meals-call";
+import { putMealsPrepCard } from "../../../meals/conversation/call";
 import { runFor } from "../../../meals/timeline/view";
 import { usePrepVoice } from "../meals/use-prep-voice";
 import { kitchenFor } from "../../../meals/timeline/schedule";

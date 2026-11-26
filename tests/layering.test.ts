@@ -264,6 +264,9 @@ const LAYER: Record<string, Layer> = {
   // The prep session's timeline (docs/671 时间线与语音): the steps, the
   // scheduler, the running state and the words read out.
   "meals/timeline": "domain",
+  // The meals conversation (docs/73): its standing thread's anchor and the
+  // prep's voice call.
+  "meals/conversation": "domain",
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",

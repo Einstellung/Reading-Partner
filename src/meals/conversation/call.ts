@@ -4,16 +4,15 @@
 // the call's focus: its steps and tools are laid on the call by the screen while
 // the run lasts (soul/voice/live/call-host.ts), whichever call is open.
 //
-// Here and not in meals because the thread's ids are the briefer's
-// (anchors.ts), as the meals delivery is (deliver.ts).
+// The thread is the meals conversation's own (anchor.ts).
 
 import { aiLanguageName } from "../../platform/app/settings";
 import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage, type PersistedPart } from "../../platform/app/threads";
-import type { MealsPrepCardData } from "../../meals/cards";
+import type { MealsPrepCardData } from "../cards";
 import { createLiveCall, type LiveCallHooks, type LiveCallSpec } from "../../soul/voice/live/call";
 import type { CallThread } from "../../soul/voice/live/call-transcript";
 import type { VoiceCall } from "../../soul/voice/voice-call";
-import { MEALS_BOOK_ID, MEALS_THREAD_ID } from "./anchors";
+import { MEALS_BOOK_ID, MEALS_THREAD_ID } from "./anchor";
 
 export const MEALS_CALL_PLACE = "In the meals conversation, about what they eat this week.";
 

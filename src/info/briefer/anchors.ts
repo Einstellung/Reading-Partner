@@ -9,10 +9,8 @@
 // decidable from its inputs.
 
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND, type FileArticle } from "./desk";
-import { INFO_MEALS_KIND } from "../../meals/desk";
-import type { MealsFocus } from "../../meals/tools";
 import type { MealsState } from "../../meals/plan/types";
-import { leftToBuy } from "../../meals/plan/shopping";
+import { MEALS_THREAD_ID, mealsPosition } from "../../meals/conversation/anchor";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
 import { briefingOverview } from "../boxes/briefing";
@@ -206,48 +204,11 @@ export function onboardingAnchor(aiLanguage?: AiLanguage): InfoCallAnchor {
   };
 }
 
-// --- dinner ------------------------------------------------------------------
+// --- meals ------------------------------------------------------------------
 //
-// One thread per household, not one per week (docs/73): planning next week is
-// the same conversation as saying last night went differently. So it has a book
-// of its own rather than the day's, which also keeps its thread id unique
-// across every thread file (docs/pitfall/209) instead of repeating it in each
-// day's.
+// The meals conversation's anchor is the meals line's own (meals/conversation).
 
-/** The standing dinner thread, and the file it lives in. */
-export const MEALS_THREAD_ID = "meals";
-export const MEALS_BOOK_ID = "info-meals";
-
-/** What the screen's button says to start a week off. */
-export function mealsKickoff(): string {
-  return t("info.anchor.mealsKickoff");
-}
-
-/** The dinner conversation: the household, the week, and the tools for both. */
-export function mealsAnchor(
-  state: MealsState,
-  today: string,
-  // `focus` is which of the three screens the reader pressed Ask on. It rides
-  // on the desk rather than forking the thread: one standing conversation,
-  // whatever they are looking at (docs/73).
-  opts?: { kickoff?: string; focus?: MealsFocus },
-): InfoCallAnchor {
-  return {
-    threadId: MEALS_THREAD_ID,
-    bookKey: MEALS_BOOK_ID,
-    emptyTitle: t("info.anchor.mealsTitle"),
-    placeholder: t("info.anchor.mealsPlaceholder"),
-    desk: [
-      { kind: INFO_MEALS_KIND, ref: { state, today, ...(opts?.focus ? { focus: opts.focus } : {}) } },
-    ],
-    position: mealsPosition(state),
-    ...(opts?.kickoff ? { kickoff: opts.kickoff } : {}),
-  };
-}
-
-function mealsPosition(state: MealsState): InfoCallAnchor["position"] {
-  return { title: t("info.anchor.mealsTitle"), line: mealsLine(state) };
-}
+export { MEALS_BOOK_ID, MEALS_THREAD_ID, mealsAnchor, mealsKickoff } from "../../meals/conversation/anchor";
 
 /**
  * The corner position card as it stands now. It follows what the conversation
@@ -261,12 +222,6 @@ export function livePosition(
 ): InfoCallAnchor["position"] {
   if (anchor.threadId === MEALS_THREAD_ID && meals) return mealsPosition(meals);
   return anchor.position;
-}
-
-function mealsLine(state: MealsState): string | null {
-  if (!state.plan) return t("info.anchor.mealsNoPlan");
-  const left = leftToBuy(state.shopping);
-  return left ? t("info.anchor.mealsLeftToBuy", { count: left }) : t("info.anchor.mealsThisWeek");
 }
 
 // The day's briefing on the desk. One place because two anchors put it there —

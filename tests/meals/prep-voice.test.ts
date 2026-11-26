@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { getLocale, setLocale, type Locale } from "../../src/i18n";
-import { putMealsPrepCard, type PrepCardThreads } from "../../src/info/briefer/meals-call";
+import { putMealsPrepCard, type PrepCardThreads } from "../../src/meals/conversation/call";
 import type { MealsPrepCardData } from "../../src/meals/cards";
 import type { MealsState, PrepRun } from "../../src/meals/plan/types";
 import type { PrepProgressPorts } from "../../src/meals/prep-progress";

@@ -66,7 +66,7 @@ import { draftCardId, type MealsCard, type MealsDraftCardData } from "../../../m
 import { buildLiveMealsTools, liveMealsPorts } from "../../../meals/live";
 import { loadMeals } from "../../../meals/plan/store";
 import { startPrepFromChat } from "../../../meals/prep-session";
-import { putMealsPrepCard } from "../../../info/briefer/meals-call";
+import { putMealsPrepCard } from "../../../meals/conversation/call";
 import { requestPrepVoice } from "../meals/use-prep-voice";
 import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";

@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
-import { createMealsPrepCall, putMealsPrepCard } from "../../../info/briefer/meals-call";
+import { createMealsPrepCall, putMealsPrepCard } from "../../../meals/conversation/call";
 import type { PrepRun } from "../../../meals/plan/types";
 import type { PrepProgressPorts } from "../../../meals/prep-progress";
 import { recordPrepSessionEvent, type PrepSteps, type PrepVoiceStart } from "../../../meals/prep-session";
