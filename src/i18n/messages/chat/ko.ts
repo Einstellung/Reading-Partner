@@ -115,4 +115,8 @@ export default {
   "call.deleteConversation": "대화 삭제",
   "call.deleteTitle": "이 대화를 삭제할까요?",
   "call.deleteDescription": "대화와 함께 대화를 연 표시도 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": "이 대화를 「{name}」에 정리했습니다.",
+  "errors.noProvider": "AI 제공자가 설정되지 않았습니다 (설정에서 확인).",
 } satisfies Translation<typeof en>;

@@ -36,7 +36,7 @@ export const MEALS_BOOK_ID = "info-meals";
 
 /** What the screen's button says to start a week off. */
 export function mealsKickoff(): string {
-  return t("info.anchor.mealsKickoff");
+  return t("meals.anchor.kickoff");
 }
 
 /** The meals conversation: the household, the week, and the tools for both. */
@@ -51,8 +51,8 @@ export function mealsAnchor(
   return {
     threadId: MEALS_THREAD_ID,
     bookKey: MEALS_BOOK_ID,
-    emptyTitle: t("info.anchor.mealsTitle"),
-    placeholder: t("info.anchor.mealsPlaceholder"),
+    emptyTitle: t("meals.anchor.title"),
+    placeholder: t("meals.anchor.placeholder"),
     desk: [{ kind: INFO_MEALS_KIND, ref: { state, today, ...(opts?.focus ? { focus: opts.focus } : {}) } }],
     position: mealsPosition(state),
     ...(opts?.kickoff ? { kickoff: opts.kickoff } : {}),
@@ -65,11 +65,11 @@ export function mealsAnchor(
  * than from the anchor's copy.
  */
 export function mealsPosition(state: MealsState): MealsCallAnchor["position"] {
-  return { title: t("info.anchor.mealsTitle"), line: mealsLine(state) };
+  return { title: t("meals.anchor.title"), line: mealsLine(state) };
 }
 
 function mealsLine(state: MealsState): string | null {
-  if (!state.plan) return t("info.anchor.mealsNoPlan");
+  if (!state.plan) return t("meals.anchor.noPlan");
   const left = leftToBuy(state.shopping);
-  return left ? t("info.anchor.mealsLeftToBuy", { count: left }) : t("info.anchor.mealsThisWeek");
+  return left ? t("meals.anchor.leftToBuy", { count: left }) : t("meals.anchor.thisWeek");
 }

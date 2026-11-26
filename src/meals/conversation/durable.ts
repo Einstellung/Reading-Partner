@@ -221,7 +221,7 @@ export type MealsTurnPrepared =
  */
 export async function prepareMealsTurn(input: Omit<MealsTurnInput, "settings">): Promise<MealsTurnPrepared> {
   const settings = await loadSettings();
-  if (!settings.defaultProviderId || !settings.defaultModelId) return { kind: "failed", message: t("info.errors.noProvider") };
+  if (!settings.defaultProviderId || !settings.defaultModelId) return { kind: "failed", message: t("meals.errors.noProvider") };
   let assembled: MealsTurn;
   try {
     assembled = await assembleMealsTurn({ ...input, settings });
@@ -229,7 +229,7 @@ export async function prepareMealsTurn(input: Omit<MealsTurnInput, "settings">):
     // A chunk the desk loads can fail to fetch (a 404 after a redeploy, a
     // dropped connection). The next send tries again.
     console.error("failed to lay the meals desk", e);
-    return { kind: "failed", message: t("info.errors.extractorFailed") };
+    return { kind: "failed", message: t("meals.errors.extractorFailed") };
   }
   const { turn, items } = assembled;
   if (!turn) return { kind: "aborted" };

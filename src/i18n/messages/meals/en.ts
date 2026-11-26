@@ -580,4 +580,20 @@ export default {
   "finish.tonightThaw": "Move the {food} for tomorrow's {meal} from the freezer to the fridge tonight.",
   "finish.tonightSoyMilk": "Load the soy milk maker with {foods} and water tonight, set for tomorrow's breakfast.",
   "finish.prepSession": "prep session",
+
+  // The meals conversation
+  "anchor.kickoff": "Plan this week.",
+  "anchor.title": "Meals",
+  "anchor.placeholder": "Ask about meals…",
+  "anchor.noPlan": "No week planned yet",
+  "anchor.thisWeek": "This week's meals",
+  "anchor.leftToBuy": { one: "This week's meals · {count} still to buy", other: "This week's meals · {count} still to buy" },
+  "ask.aboutMeals": "Ask about meals",
+  "ask.aboutNumbers": "Ask about the numbers",
+  "ask.aboutShopping": "Ask about shopping",
+  "ask.aboutToday": "Ask about today",
+  "ask.aboutWeekday": "Ask about {weekday}",
+  "ask.aboutPlan": "Ask about the plan",
+  "errors.noProvider": "No AI provider configured (Settings).",
+  "errors.extractorFailed": "The article extractor could not be loaded. Try again.",
 } as const;

@@ -115,4 +115,8 @@ export default {
   "call.deleteConversation": "会話を削除",
   "call.deleteTitle": "この会話を削除しますか？",
   "call.deleteDescription": "会話と、それを開いたマークが削除されます。この操作は取り消せません。",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": "この会話を「{name}」に整理しました。",
+  "errors.noProvider": "AI プロバイダーが設定されていません（設定を確認してください）。",
 } satisfies Translation<typeof en>;

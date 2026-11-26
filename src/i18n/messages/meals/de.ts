@@ -550,4 +550,20 @@ export default {
   "finish.tonightThaw": "Heute Abend {food} für morgen ({meal}) aus dem Gefrierfach in den Kühlschrank legen.",
   "finish.tonightSoyMilk": "Heute Abend den Sojamilchbereiter mit {foods} und Wasser füllen und für das Frühstück morgen stellen.",
   "finish.prepSession": "Meal Prep",
+
+  // The meals conversation
+  "anchor.kickoff": "Plane diese Woche.",
+  "anchor.title": "Mahlzeiten",
+  "anchor.placeholder": "Zu den Mahlzeiten fragen…",
+  "anchor.noPlan": "Für diese Woche gibt es noch keinen Plan",
+  "anchor.thisWeek": "Die Mahlzeiten dieser Woche",
+  "anchor.leftToBuy": { one: "Die Mahlzeiten dieser Woche · noch {count} zu kaufen", other: "Die Mahlzeiten dieser Woche · noch {count} zu kaufen" },
+  "ask.aboutMeals": "Zu den Mahlzeiten fragen",
+  "ask.aboutNumbers": "Zu diesen Zahlen fragen",
+  "ask.aboutShopping": "Zum Einkauf fragen",
+  "ask.aboutToday": "Zu heute fragen",
+  "ask.aboutWeekday": "Zu {weekday} fragen",
+  "ask.aboutPlan": "Zum Plan fragen",
+  "errors.noProvider": "Kein KI-Anbieter eingerichtet (Einstellungen).",
+  "errors.extractorFailed": "Der Artikel-Extraktor konnte nicht geladen werden. Versuche es erneut.",
 } satisfies Translation<typeof en>;

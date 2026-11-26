@@ -113,7 +113,7 @@ export function MealsHost(props: {
     if (screen === "meals-onboarding" || (screen === "meals" && meals.state && !meals.state.charter)) {
       const replay = screen === "meals-onboarding";
       shown = replay ? "onboarding-replay" : "onboarding";
-      ask = { label: t("info.ask.aboutMeals"), onAsk: () => openChat({ kind: "week" }) };
+      ask = { label: t("meals.ask.aboutMeals"), onAsk: () => openChat({ kind: "week" }) };
       inner = (
         <MealsOnboarding
           key={replay ? "replay" : "first"}
@@ -124,11 +124,11 @@ export function MealsHost(props: {
       );
     } else if (screen === "meals-method") {
       shown = "method";
-      ask = { label: t("info.ask.aboutNumbers"), onAsk: () => openChat({ kind: "week" }) };
+      ask = { label: t("meals.ask.aboutNumbers"), onAsk: () => openChat({ kind: "week" }) };
       inner = <MealsMethod state={meals.state} onBack={backFromSide} />;
     } else if (screen === "meals-shopping") {
       shown = "shopping";
-      ask = { label: t("info.ask.aboutShopping"), onAsk: () => openChat({ kind: "shopping" }) };
+      ask = { label: t("meals.ask.aboutShopping"), onAsk: () => openChat({ kind: "shopping" }) };
       inner = (
         <MealsShopping
           state={meals.state}
@@ -155,7 +155,7 @@ export function MealsHost(props: {
           </div>
         );
       }
-      const label = day === meals.today ? t("info.ask.aboutToday") : t("info.ask.aboutWeekday", { weekday: weekdayName(day) });
+      const label = day === meals.today ? t("meals.ask.aboutToday") : t("meals.ask.aboutWeekday", { weekday: weekdayName(day) });
       ask = { label, onAsk: () => openChat({ kind: "day", date: day }) };
       inner = (
         <MealsDay
@@ -192,7 +192,7 @@ export function MealsHost(props: {
       );
     } else {
       shown = "home";
-      ask = { label: t("info.ask.aboutPlan"), onAsk: () => openChat({ kind: "week" }) };
+      ask = { label: t("meals.ask.aboutPlan"), onAsk: () => openChat({ kind: "week" }) };
       inner = (
         <MealsHome
           state={meals.state}

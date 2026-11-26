@@ -115,4 +115,8 @@ export default {
   "call.deleteConversation": "删除对话",
   "call.deleteTitle": "删除这段对话？",
   "call.deleteDescription": "对话会被删除，打开它的那处标记也一起删除。此操作无法撤销。",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": "已把这段对话归档到「{name}」。",
+  "errors.noProvider": "未配置 AI 服务商（请在设置中配置）。",
 } satisfies Translation<typeof en>;

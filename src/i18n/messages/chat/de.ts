@@ -115,4 +115,8 @@ export default {
   "call.deleteConversation": "Unterhaltung löschen",
   "call.deleteTitle": "Diese Unterhaltung löschen?",
   "call.deleteDescription": "Die Unterhaltung wird gelöscht, zusammen mit der Markierung, von der aus sie geöffnet wurde. Das kann nicht rückgängig gemacht werden.",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": 'Dieses Gespräch wurde unter „{name}" abgelegt.',
+  "errors.noProvider": "Kein KI-Anbieter eingerichtet (Einstellungen).",
 } satisfies Translation<typeof en>;

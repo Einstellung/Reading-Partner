@@ -115,4 +115,8 @@ export default {
   "call.deleteConversation": "Eliminar conversación",
   "call.deleteTitle": "¿Eliminar esta conversación?",
   "call.deleteDescription": "Se eliminarán la conversación y la marca desde la que se abrió. Esta acción no se puede deshacer.",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": 'Archivé esta conversación en "{name}".',
+  "errors.noProvider": "No hay ningún proveedor de IA configurado (Ajustes).",
 } satisfies Translation<typeof en>;

@@ -1,12 +1,9 @@
 // The decisions the meals host makes that need no React: which screens are the
 // meals line's, where the conversation's scroll position is kept, how the call
-// gets out of the way of a plan just applied, and what the model is told when
-// the reader files the conversation.
+// gets out of the way of a plan just applied.
 
 import type { HomeScreen } from "../base/shell-nav";
 import { navigateAway } from "../chat/call/call-layout";
-import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
-import { t } from "../../../i18n";
 import { mealsPosition, type MealsCallAnchor } from "../../../meals/conversation/anchor";
 import type { MealsState } from "../../../meals/plan/types";
 
@@ -56,12 +53,4 @@ export function leaveForAppliedPlan(
  */
 export function mealsCallPosition(anchor: MealsCallAnchor, state: MealsState | null): MealsCallAnchor["position"] {
   return state ? mealsPosition(state) : anchor.position;
-}
-
-/**
- * Filed under the topic the conversation proposed. Said in the reader's voice,
- * because it is their gesture the AI is being told about.
- */
-export function topicFiledNote(card: TopicProposalCardData): string {
-  return t("info.call.note.topicFiled", { name: proposedTopicName(card.topic) });
 }

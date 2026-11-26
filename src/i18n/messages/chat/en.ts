@@ -119,4 +119,8 @@ export default {
   "call.deleteConversation": "Delete conversation",
   "call.deleteTitle": "Delete this conversation?",
   "call.deleteDescription": "The conversation goes, and with it the mark it was opened from. This cannot be undone.",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": 'Filed this conversation under "{name}".',
+  "errors.noProvider": "No AI provider configured (Settings).",
 } as const;

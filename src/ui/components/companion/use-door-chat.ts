@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { applyTopicProposal } from "../../../memory";
 import { doorDate, doorKey, doorOrigin, doorThreadKey, openDoorThread, prepareDoorTurn, setDoorWatching } from "../../../soul";
 import { t } from "../../../i18n";
-import { topicFiledNote } from "../../../info/briefer/call";
+import { topicFiledNote } from "../chat/call/topic-filed";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import { createTopic, listTopics } from "../../../platform/app/topics";
 import { loadSettings } from "../../../platform/app/settings";
@@ -278,7 +278,7 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
           // work is going; when to search the web.
           prompt: `${await loadTopicSearchGuidance()}\n\n${BACKGROUND_STATUS_RULE}\n\n${doorToolsPrompt(tools)}`,
         });
-        if (prepared.kind === "no-provider") return { kind: "failed", message: t("info.errors.noProvider") };
+        if (prepared.kind === "no-provider") return { kind: "failed", message: t("chat.errors.noProvider") };
         if (prepared.kind === "refused") return { kind: "refused", message: prepared.text };
         if (prepared.kind === "aborted") return { kind: "aborted" };
         return {

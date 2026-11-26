@@ -115,4 +115,8 @@ export default {
   "call.deleteConversation": "Удалить разговор",
   "call.deleteTitle": "Удалить этот разговор?",
   "call.deleteDescription": "Разговор будет удалён вместе с пометкой, из которой он был открыт. Это действие нельзя отменить.",
+
+  // Said in a conversation outside a book (the door, meals)
+  "call.note.topicFiled": "Этот разговор отнесён к теме «{name}».",
+  "errors.noProvider": "Провайдер ИИ не настроен (Настройки).",
 } satisfies Translation<typeof en>;
