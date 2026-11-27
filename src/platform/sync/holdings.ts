@@ -1,6 +1,6 @@
 // What one device holds, as a tree snapshot it publishes for the others
 // (docs/59). One file per device, written by that device alone and never
-// merged — the same shape as info-collector-<id>.json, and deliberately not the
+// merged — the same shape as dream-runs/<deviceId>.json, and deliberately not the
 // single global index that driveBackend.ts already had to take apart.
 //
 //   Drive: data/holdings-<deviceId>.json   what I hold, for the others to read

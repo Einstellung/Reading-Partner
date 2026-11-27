@@ -57,7 +57,7 @@ housekeeper 管宫里的东西：本文是何时扔，AI 怎么改数据（副�
 | `info-daily-files` | `info-cables`、`info-daily-{briefing,articles,items,run}` | 今天以外的日切文件；cables 30 天 |
 | `info-issue-expiry` | `info-shelf` | 只在采集端：日期早于 30 天的简报期。动作是 `flow`：marker 自己的 `carryOut` 走 `deleteBook` 再删索引行，索引文件本身不删（[88](../info/88-主题搜索.md)） |
 
-ledger 折叠写 ledger 行，不是纯 marker：它是 legion 自己的夜间任务 `LEDGER_FOLD_JOB`，同一时刻注册在 housekeeper 之前，折完当晚 run 文件就被 marker 标走。info 生成前的 prune 和阅读机启动时的 prune 都删了，重新分诊从来不 prune 的缺口也随之不存在。`info-daily-pool` 仍由 collector 的 `removePoolDays` 即时处理。
+ledger 折叠写 ledger 行，不是纯 marker：它是 legion 自己的夜间任务 `LEDGER_FOLD_JOB`，同一时刻注册在 housekeeper 之前，折完当晚 run 文件就被 marker 标走。info 生成前的 prune 和阅读机启动时的 prune 都删了，重新分诊从来不 prune 的缺口也随之不存在。`info-daily-pool` 原由 collector 的 `removePoolDays` 即时处理，info 删除（2026-11）后已没有这个文件。
 
 没回收、行上写 `never` 的：
 

@@ -357,10 +357,10 @@ export function useShellBootstrap({
       })
       .catch(() => {})
       .finally(() => markAnswered("settings"));
-    // This machine's own file (docs/36). Read once here: it decides the role,
-    // and everything the role decides waits on it. A failure leaves `device`
-    // null, which is what a shell already treats as "not a collector" — the role
-    // is not guessed from a read that did not happen.
+    // This machine's own file (docs/36). Read once here: it gives the device its
+    // id, and the settings screen draws the machine's own switches from it. A
+    // failure leaves `device` null, and those switches stay hidden rather than
+    // drawn on a guess.
     initDeviceSettings()
       .then(setDevice)
       .catch((e) => console.warn("failed to read device settings", e))

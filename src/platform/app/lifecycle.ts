@@ -15,9 +15,9 @@
 // focused, and only a change of that state is reported. Minimising fires blur
 // and visibilitychange together; the caller hears about it once.
 //
-// Counting blur as leaving is right for a reader and wrong for a collector, so
-// the way out has a second, much narrower subscription: observeAppExit, at the
-// bottom of this file.
+// Counting blur as leaving is right for the reader's view and wrong for work
+// that must stop only when the app goes away, so the way out has a second, much
+// narrower subscription: observeAppExit, at the bottom of this file.
 
 export interface AppLifecycleHandlers {
   // Visible and focused again, after being one or the other.

@@ -148,8 +148,8 @@ export async function readGuardedJson<T>(
 }
 
 /**
- * Read a JSON file the app can rebuild or do without — a cache, a pool, what a
- * collector published. A file that is not there yet reads as null and says
+ * Read a JSON file the app can rebuild or do without — a cache, a pool, what
+ * another device published. A file that is not there yet reads as null and says
  * nothing: that is the first-run case. Everything else — an IO error, bytes
  * that will not parse, a shape `validate` turns down — also reads as null, but
  * warns, so a caller carrying on with nothing is not the only trace left.

@@ -3,7 +3,7 @@
 // readable.ts is the only module that touches Readability and defuddle, and
 // those two are ~355 kB minified. Every static import of it put them in the
 // chunk both shells load before they draw anything, for a capability that only
-// runs when the collector turns a fetched page into an article. The dynamic
+// runs when a fetched page is turned into an article. The dynamic
 // import here is what gives rollup a chunk key to hang them on, so they arrive
 // on first extraction instead. Nothing else may import readable.ts statically —
 // one static edge anywhere folds the chunk back into its importer, which is

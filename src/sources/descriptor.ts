@@ -165,9 +165,9 @@ export interface SourceDescriptor {
   // Max items pulled per run (each fetch-page/detail item is a request).
   limit?: number;
   // Minutes between background polls of this source's discovery layer (docs/35).
-  // How often the collector polls this source's discovery layer (docs/36: one
-  // machine does the polling, and every other device reads what it published,
-  // so this is read on exactly one device).
+  // How often a background poll of this source's discovery layer runs. Intel's
+  // collector was the one poller (docs/36) and was removed 2026-11; nothing
+  // polls today.
   //
   // Per source because feeds differ by an order of magnitude in how much of the
   // day they hold: a Bloomberg section feed keeps 20 items covering 6 to 22

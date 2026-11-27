@@ -1,6 +1,6 @@
 // Keep the machine from sleeping on idle for the length of a long unattended
-// run (docs/info/88: the collector's nightly reading), from this side
-// (src-tauri/src/keep_awake.rs).
+// run, from this side (src-tauri/src/keep_awake.rs). Its one caller was Intel's
+// nightly reading (docs/info/88), removed 2026-11; nothing calls it now.
 //
 // Linux takes a logind `sleep:idle` inhibitor, macOS an IOKit
 // PreventUserIdleSystemSleep assertion. Closing the lid or choosing Sleep still
