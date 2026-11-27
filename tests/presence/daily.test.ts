@@ -7,6 +7,7 @@ import {
   readerIdle,
   type DailyRoundDeps,
 } from "../../src/presence/daily";
+import { createFirstPassWatch } from "../../src/platform/sync/first-pass";
 
 interface World {
   owed: boolean;
@@ -114,6 +115,69 @@ describe("the daily round", () => {
     expect(h.calls.sweep).toBe(1);
     h.exit();
     expect(h.calls.cancelled).toBe(1);
+  });
+});
+
+// Most readers never sign in to sync. initSync still sets graceSince and
+// announces a status with no engine (platform/sync/index.ts), and the
+// first-pass watch reads that as nothing to wait for — on the way up and on
+// every return to the front — so the night is held only by the reader.
+describe("a device that does not sync", () => {
+  test("runs the night once the reader has stopped", async () => {
+    let clock = 1_800_000_000_000;
+    const watch = createFirstPassWatch(() => clock);
+    let lastStartAt: number | null = clock;
+    let owed = true;
+    let dreams = 0;
+    const timers: (() => void)[] = [];
+    let foreground: (() => void) | null = null;
+    const round = createDailyRound({
+      edge: () => watch.edge(),
+      synced: () => watch.settled(),
+      idle: () => readerIdle({ live: 0, lastStartAt }, clock),
+      dreamOwed: async () => owed,
+      dream: async () => {
+        dreams += 1;
+        owed = false;
+      },
+      sweep: async () => {},
+      setTimer: (_ms, cb) => {
+        timers.push(cb);
+        return () => {};
+      },
+      onForeground: (cb) => {
+        foreground = cb;
+      },
+      onExit: () => {},
+    });
+
+    // The round's first check can land before initSync has read its state.
+    watch.status({ graceSince: null, engineStarted: false, running: false, lastSyncAt: null });
+    round.start();
+    await settle();
+    expect(dreams).toBe(0);
+
+    // initSync, signed out: no engine, nothing to wait for.
+    watch.status({ graceSince: clock, engineStarted: false, running: false, lastSyncAt: null });
+    expect(watch.settled()).toBe(true);
+    // The reader asked something a minute ago.
+    clock += 60_000;
+    last(timers)();
+    await settle();
+    expect(dreams).toBe(0);
+
+    clock += DREAM_IDLE_MS;
+    last(timers)();
+    await settle();
+    expect(dreams).toBe(1);
+
+    // The next night, after a return to the front: the edge does not hold it.
+    owed = true;
+    lastStartAt = null;
+    clock += 24 * 3_600_000;
+    foreground!();
+    await settle();
+    expect(dreams).toBe(2);
   });
 });
 
