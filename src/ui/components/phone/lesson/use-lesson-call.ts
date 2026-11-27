@@ -39,12 +39,15 @@ import { chapterOfReadChapterLabel } from "../../../../reading/lecture/tools";
 import { resolveBookThread } from "../../../../reading/session/book-thread";
 import {
   afterStall,
+  askAgainUnseen,
   driveBookTurn,
   resumedBookTurn,
+  type BeginTurn,
   type BookTurnEnd,
   type DrivenBookTurn,
   type ResumedBookTurn,
 } from "../../../../reading/turn/book-turn-rows";
+import { boxUnseenTurn } from "../../../../reading/turn/turn-box";
 import { bookThreadKey, splitAssembled, type BookOrigin } from "../../../../reading/turn/durable-book";
 import { holdDetached, holdStarting, releaseDetached } from "../../../../reading/turn/detached-turns";
 import { withPlaceTurnRows } from "../../../../reading/turn/place-session";
@@ -86,6 +89,8 @@ interface LessonTurn {
   // Being started: says when the runtime holds it, for a lesson opened
   // meanwhile (detached-turns.ts holdStarting).
   begun?: () => void;
+  // Starts the turn's request again, for a stall once the lesson has closed.
+  again?: BeginTurn;
 }
 
 const isCardRow = (m: ThreadMessage) => m.parts?.some((part) => part.type === "card") ?? false;
@@ -336,7 +341,16 @@ export function useLessonCall(book: LessonBook): LessonCall {
           (a, b) => a.ts - b.ts,
         );
         const filed = fileLines(id, owed);
-        if (live.gone) return;
+        if (live.gone) {
+          // Nothing landed and nobody is looking: asked again all the same, and a
+          // second stall leaves the failure's box card (docs/pitfall/709).
+          if (end.kind === "stalled") {
+            askAgainUnseen(bookThreadKey({ home: bookId, threadId: id }), attempt, live.again, (message) => {
+              void boxUnseenTurn({ threadId: id, ts: placeholder.ts, bookId, outcome: { kind: "error", message } });
+            });
+          }
+          return;
+        }
         liveRef.current = null;
         setStreaming(false);
         readFocus();
@@ -473,7 +487,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
             ...(turn.origin?.place === "book" ? turn.origin : { place: "book" as const, bookId, threadId: id }),
             home: bookId,
           };
-          const driven = await driveBookTurn(
+          live.again = (rows) => driveBookTurn(
             durable,
             {
               origin,
@@ -492,8 +506,9 @@ export function useLessonCall(book: LessonBook): LessonCall {
                 };
               },
             },
-            onRows,
+            rows,
           );
+          const driven = await live.again(onRows);
           live.begun?.();
           await hold(driven);
         } catch (e) {

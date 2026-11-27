@@ -3,18 +3,31 @@
 // keeps following it to its end, to file what the reader said into it. When
 // the conversation is opened again and the new view joins the turn, the closed
 // one lets go — no stall watch, nothing filed — so a stall is cut and asked
-// again once and a withdrawn line is filed once (docs/pitfall/540).
+// again once and a withdrawn line is filed once (docs/pitfall/540). Letting go
+// hands over how the turn would be asked again and which attempt it is: the
+// view that joined it may close too, and a stall then asks again out of sight
+// with what the first view assembled (docs/pitfall/709).
 
-const detached = new Map<string, () => void>();
+import type { BeginTurn } from "./book-turn-rows";
+
+/** What a closed view hands the view that joins its turn. */
+export interface DetachedHandover {
+  /** The turn's attempt: 0, or 1 once it was asked again after a stall. */
+  attempt: number;
+  /** Starts the turn's request again; absent for a turn this process did not assemble. */
+  again?: BeginTurn;
+}
+
+const detached = new Map<string, () => DetachedHandover | void>();
 
 /**
  * A closed view still follows the turn on `key`; `release` is how it lets go.
  * The returned function says the turn has settled and there is nothing to let go of.
  */
-export function holdDetached(key: string, release: () => void): () => void {
+export function holdDetached(key: string, release: () => DetachedHandover | void): () => void {
   const entry = () => {
     if (detached.get(key) === entry) detached.delete(key);
-    release();
+    return release();
   };
   detached.set(key, entry);
   return () => {
@@ -22,9 +35,9 @@ export function holdDetached(key: string, release: () => void): () => void {
   };
 }
 
-/** A view has joined the turn on `key`: the closed view following it lets go. */
-export function releaseDetached(key: string): void {
-  detached.get(key)?.();
+/** A view has joined the turn on `key`: the closed view following it lets go, handing over what it knows of the turn. */
+export function releaseDetached(key: string): DetachedHandover | undefined {
+  return detached.get(key)?.() ?? undefined;
 }
 
 // A turn is started in two steps that take time: it is assembled, then the

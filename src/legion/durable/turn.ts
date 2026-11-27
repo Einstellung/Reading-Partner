@@ -59,6 +59,13 @@ export type LandedTurn = {
   status: "done" | "unanswered";
   rows: LandedRow[];
   refusal?: string;
+  /**
+   * A turn that gave up with nothing landed and nobody looking (a second
+   * stall, docs/pitfall/709): no row is written, and the place's box card
+   * carries `message` under the turn's `ts`. Landed by the session that gave
+   * up on it, not by `rp.turn`.
+   */
+  failure?: { ts: number; message: string };
   /** The bell this turn answered, when a bell started it. */
   bell?: TurnBell;
 };
