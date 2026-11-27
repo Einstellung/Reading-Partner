@@ -27,6 +27,7 @@ import {
   lineCollection,
   mergeCollection,
   readCollection,
+  recencyFor,
   recordShape,
   writeCollection,
   type SettleRecord,
@@ -95,7 +96,7 @@ export function mergeFile(input: MergeInput): MergeOutput {
   const strategy = strategyFor(input.path);
   const merged =
     strategy === "records"
-      ? mergeRecordFile(input)
+      ? mergeRecordFile(input, recencyFor(input.path))
       : strategy === "messages"
         ? mergeRecordFile(input, mergeThread)
         : strategy === "topics"

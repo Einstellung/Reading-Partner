@@ -1,7 +1,8 @@
 // The sync engine: one pass reconciles the data channel (pull remote-newer
 // files, push local changes, merge what both sides changed) then the books
 // channel (upload local-only book blobs, download remote-only ones). A single
-// pass runs at a time; overlapping triggers are dropped, and a failure (offline)
+// pass runs at a time; overlapping triggers are dropped (leaving the app instead
+// asks for one more pass, see onBackground), and a failure (offline)
 // is kept as lastError for the UI and retried on the next tick.
 //
 // What counts as changed is the file's content hash, never its mtime
@@ -248,6 +249,11 @@ export class SyncEngine {
   // the whole of "there is nothing to send"; see the top of this file for why
   // that is allowed to be wrong and what catches it when it is.
   private dirty = new Set<string>();
+  // The app went away while a pass was running. That pass claimed the dirty set
+  // when it started, so whatever changed since (the position the reader was on
+  // when they switched away, say) is in no pass at all; the running one answers
+  // for it by starting one more when it ends.
+  private passAfterThis = false;
   // Writes this engine has on the wire right now, by path. A pull and a merge
   // land through the same atomic writer every store uses, so they announce
   // themselves exactly like a user's edit; this is what tells the two apart.
@@ -379,8 +385,15 @@ export class SyncEngine {
   // is nothing to send is the dirty set and nothing else. Deliberately not a
   // sweep point: an edit no broadcast covered waits for the next return to the
   // front, which is the earliest moment its absence could be noticed anyway.
+  //
+  // A pass already running is not enough: it can be minutes into mirroring a
+  // book, and it took its dirty set before the reader moved. It is asked to run
+  // one more pass when it ends, still only if there is something to send.
   async onBackground(): Promise<void> {
-    if (this.running) return;
+    if (this.running) {
+      this.passAfterThis = true;
+      return;
+    }
     if (this.dirty.size === 0) return;
     await this.runPass();
   }
@@ -937,6 +950,10 @@ export class SyncEngine {
       this.passDone?.();
       this.passDone = null;
       this.emitStatus();
+      if (this.passAfterThis) {
+        this.passAfterThis = false;
+        if (this.dirty.size > 0) void this.runPass();
+      }
     }
   }
 

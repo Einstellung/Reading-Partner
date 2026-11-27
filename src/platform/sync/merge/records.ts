@@ -196,6 +196,27 @@ export function mergeCollection(
   return { ids, byId, dropped, contested };
 }
 
+// A record both sides edited goes to whichever says it was written later, by the
+// row's newerBy field (palace/kinds.ts). The time is data inside the record, so
+// both devices read the same two numbers and keep the same version. Null when
+// either side has no time there or the two are equal: the content tie-break
+// then decides, as it does for every record file without the field.
+export function newerWins(field: string): SettleRecord {
+  return (id, _base, local, remote) => {
+    const l = isPlainObject(local) ? local[field] : undefined;
+    const r = isPlainObject(remote) ? remote[field] : undefined;
+    if (typeof l !== "number" || typeof r !== "number" || l === r) return null;
+    const [winner, loser] = l > r ? [local, remote] : [remote, local];
+    return { value: winner, dropped: [{ id, record: loser }], contested: true };
+  };
+}
+
+// The settle rule a plain records file's row asks for, if any.
+export function recencyFor(path: string): SettleRecord | undefined {
+  const field = resolvePalace(path)?.row.newerBy;
+  return field === undefined ? undefined : newerWins(field);
+}
+
 // Rebuild the file around the merged records, keeping the wrapper's own keys —
 // merged as fields — and the base's key order.
 export function writeCollection(
