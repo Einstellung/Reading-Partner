@@ -18,7 +18,6 @@
 
 import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/runner/worker";
 import { writeRunOutput } from "../../legion/runner/outputs";
-import { WEBVIEW_FETCH } from "../../legion/claim";
 import { StoppedError } from "../../legion/stop";
 import { appData } from "../../platform/app/appdata";
 import { hasWebviewFetch } from "../../platform/app/platform";
@@ -133,11 +132,9 @@ export function mealsPhotosWorker(deps: MealsPhotosWorkerDeps = {}) {
  * Hand legion the meals-photos kind. Called once at startup; deps are for tests.
  *
  * `local`, which means the machine that delegates the run is the machine that
- * executes it, at once and without an election. `requires` is therefore not
- * what picks the machine — a local run never goes to the vote — it is the
- * statement of which machine may start one, and the only thing that reads it
- * for this kind is photo-sweep.ts, which starts the run on the machine whose
- * own claim carries the tag. The worker refuses to run without it anyway.
+ * executes it, at once. Only a machine with a hidden webview may start one:
+ * photo-sweep.ts asks hasWebviewFetch before it delegates, and the worker
+ * refuses to search without it anyway.
  *
  * Not `delegable` — the ask is a plan and a list of queries, which is not
  * something the model could write as a brief; the sweep writes it itself.
@@ -146,7 +143,6 @@ export function registerMealsPhotosWorker(deps: MealsPhotosWorkerDeps = {}): voi
   registerWorker({
     kind: MEALS_PHOTOS_KIND,
     tier: "local",
-    requires: [WEBVIEW_FETCH],
     run: mealsPhotosWorker(deps),
   });
 }

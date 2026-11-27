@@ -1237,18 +1237,18 @@ export const PALACE = [
     note: "dishes the seed library does not have (docs/platform/687, docs/671 菜库), each past the same intake check as a seed dish and keyed by its id, which is never a seed dish's; records-merged per id, so a dish added on one device and another changed on the other both survive a crossing sync",
   },
   {
-    kind: "claim",
-    domain: "memory",
+    kind: "claim-legacy",
+    domain: "legacy",
     match: keyed(/^legion\/claim\/(.+)\.json$/),
-    pathFor: (id: string) => `legion/claim/${id}.json`,
     samples: ["legion/claim/4d9f1b0a.json"],
     id: "deviceId",
     refs: [],
-    sync: "data",
-    merge: "opaque",
+    // Off the channel: nothing reads it any more, so carrying it between
+    // devices is a request per pass spent on a file nobody opens.
+    sync: "local",
     deleteWith: "never",
     retention: NEVER,
-    note: "what a device says it is and what it can do (src/legion/claim, docs/55). One per device and written by that device alone, so there is never a merge to do",
+    note: "orphan: what a device said it could do, for the election that picked one machine for the dream and the synced runs (docs/55). Removed 2026-11 when every device took that work; an older build still writes one",
   },
   {
     kind: "info-collector-legacy",

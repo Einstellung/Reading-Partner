@@ -17,10 +17,9 @@ export const BACKGROUND_STATUS_RULE =
   "off), call background_status first and answer from it. Conversation search is not a source for " +
   "run state. Say the state, elapsed time and progress it gives; never promise when a run will finish.";
 
-export type BackgroundStatusDeps = Omit<StatusInput, "runs" | "claims" | "deviceId" | "now" | "lastSyncAt" | "syncing"> & {
+export type BackgroundStatusDeps = Omit<StatusInput, "runs" | "deviceId" | "now" | "lastSyncAt" | "syncing"> & {
   deviceId: () => string;
   runs: () => Promise<StatusInput["runs"]>;
-  claims: () => Promise<StatusInput["claims"]>;
   now: () => number;
   sync: () => { lastSyncAt: number | null; syncing: boolean };
 };
@@ -51,9 +50,9 @@ export function buildBackgroundStatusTool(deps: BackgroundStatusDeps): AgentTool
       const which = typeof args.which === "string" && WHICH.has(args.which as StatusWhich) ? (args.which as StatusWhich) : "recent";
       const kind = typeof args.kind === "string" && args.kind.trim() ? args.kind.trim() : undefined;
       const about = typeof args.about === "string" && args.about.trim() ? args.about.trim() : undefined;
-      const [runs, claims] = await Promise.all([deps.runs(), deps.claims().catch(() => [])]);
+      const runs = await deps.runs();
       return backgroundStatusText(
-        { ...deps, runs, claims, deviceId: deps.deviceId(), now: deps.now(), ...deps.sync() },
+        { ...deps, runs, deviceId: deps.deviceId(), now: deps.now(), ...deps.sync() },
         { which, ...(kind ? { kind } : {}), ...(about ? { about } : {}) },
       );
     },

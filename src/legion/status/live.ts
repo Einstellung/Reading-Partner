@@ -1,8 +1,7 @@
-// background_status on this device: the runner's runs (synced and local), the
-// claim files, this device's id and sync, and the registered describers.
+// background_status on this device: the runner's runs (synced and local), this
+// device's id and sync, and the registered describers.
 
 import type { AgentTool } from "../durable/contract";
-import { appClaims, capabilitiesFor } from "../claim";
 import { appRunner } from "../runner/runner";
 import { currentDeviceId } from "../../platform/app/device";
 import { subscribeSyncStatus } from "../../platform/sync";
@@ -22,11 +21,9 @@ function syncNow(): { lastSyncAt: number | null; syncing: boolean } {
 export function liveBackgroundStatusTool(): AgentTool {
   return buildBackgroundStatusTool({
     runs: () => appRunner().list(),
-    claims: () => appClaims().readAll(),
     deviceId: currentDeviceId,
     now: () => Date.now(),
     sync: syncNow,
     describer: describerFor,
-    requires: capabilitiesFor,
   });
 }

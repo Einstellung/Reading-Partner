@@ -13,13 +13,11 @@
 // worker is not registered on this device is a kind this device cannot run, and
 // that is the correct answer rather than a state to migrate.
 //
-// Registering a worker also declares what the kind needs of a machine, in the
-// same call, because the two are never separately true: the device holding the
-// worker is the device that would run it, and whether it may is the election's
-// answer over the tags (claim/capabilities.ts). Both devices ship the same
-// bundle and so register the same kinds; the tags are what tell them apart.
+// The device holding the worker is a device that may run the kind. Every device
+// ships the same bundle and registers the same kinds; a kind that needs
+// something only some machines have (a hidden webview) says so in its own
+// worker and sweep, not here.
 
-import { registerKindCapabilities } from "../claim";
 import type { Delegator, Run, RunTier } from "../run/types";
 
 /** What a worker says when it is finished. Everything in it is a reference. */
@@ -83,8 +81,6 @@ export interface WorkerRegistration {
   run: Worker;
   /** `local` runs in this process and never reaches a file. Defaults to `synced`. */
   tier?: RunTier;
-  /** The capability tags a machine needs to run this kind. Declared to claim/. */
-  requires?: readonly string[];
   /** There is a model inside it. An agent worker may not delegate. */
   agent?: boolean;
   /**
@@ -148,7 +144,6 @@ const workers = new Map<string, WorkerRegistration>();
  */
 export function registerWorker(registration: WorkerRegistration): void {
   workers.set(registration.kind, { ...registration });
-  registerKindCapabilities(registration.kind, registration.requires ?? []);
 }
 
 export const workerFor: WorkerTable = (kind) => workers.get(kind) ?? null;

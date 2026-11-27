@@ -115,12 +115,8 @@ const LAYER: Record<string, Layer> = {
   // from it: legion calls ai to send a turn, ai never calls legion.
   legion: "capability",
   "legion/bell": "capability",
-  // Which devices are here, what each can do, and which one runs a kind
-  // (docs/55). Pure functions of the claim files and the clock, so every device
-  // reaches the same answer without anything being said between them.
-  "legion/claim": "capability",
-  // When something is owed and which machine owes it (docs/55). Pure rules over
-  // the runs and the claims, and one side effect: the wake bell.
+  // When something is owed (docs/55). Pure rules over the runs and the clock,
+  // and one side effect: the wake bell.
   "legion/schedule": "capability",
   // The cold layer a finished run folds into, and the tombstone that lets the
   // hot file be deleted on both devices (docs/55). Pure rules plus a store, the
@@ -254,10 +250,9 @@ const LAYER: Record<string, Layer> = {
   // Drive), plus read_page. reading/papers and reading's link intake reach
   // them here.
   sources: "domain",
-  // This device's presence among the reader's machines: the claim it writes
-  // (legion/claim) and the daily round a claiming machine runs, which carries
-  // memory's dream where the election says and the prose conflict sweep
-  // everywhere the round runs. Before Intel was removed it was the collector's.
+  // The daily round every device runs: memory's dream on whichever device
+  // finds it owed first, and the prose conflict sweep. Before Intel was removed
+  // it was the collector's.
   presence: "domain",
   // One file per library; a directory of its own because each plugin knows one API.
   "sources/plugins": "domain",

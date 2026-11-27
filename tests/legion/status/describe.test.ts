@@ -8,7 +8,6 @@ import {
 } from "../../../src/legion/status/describe";
 import type { RunDescriber } from "../../../src/legion/status/registry";
 import { buildBackgroundStatusTool } from "../../../src/legion/status/tool";
-import type { DeviceClaim } from "../../../src/legion/claim";
 import type { Run } from "../../../src/legion/run";
 
 const NOW = new Date(2026, 9, 17, 10, 46).getTime();
@@ -29,25 +28,14 @@ function run(over: Partial<Run> = {}): Run {
   };
 }
 
-const desk: DeviceClaim = {
-  deviceId: "dev-desk",
-  deviceName: "kestrel",
-  platform: "linux",
-  claimedAt: NOW - 5 * 60 * MIN,
-  heartbeatAt: NOW - 20 * MIN,
-  capabilities: ["webview-fetch"],
-};
-
 function input(over: Partial<StatusInput> = {}): StatusInput {
   return {
     runs: [],
-    claims: [desk],
     deviceId: "dev-phone",
     now: NOW,
     lastSyncAt: NOW - 1 * MIN,
     syncing: true,
     describer: () => null,
-    requires: () => ["webview-fetch"],
     ...over,
   };
 }
@@ -64,15 +52,12 @@ test("times are said relative to now and as a local clock time", () => {
   expect(whenText(new Date(2026, 9, 14, 9, 5).getTime(), NOW)).toBe("2026-10-14 09:05");
 });
 
-test("a queued run says no device picked it up, and whether one that can is on", async () => {
-  const on = await backgroundStatusText(input({ runs: [run()] }));
-  expect(on).toContain("State: queued, asked 4 min ago (today 10:42).");
-  expect(on).toContain('no device has picked it up yet. "kestrel", which can run it, last checked in 20 min ago');
-  const off = await backgroundStatusText(
-    input({ runs: [run()], claims: [{ ...desk, heartbeatAt: NOW - 5 * 60 * MIN }] }),
+test("a queued run says no device picked it up, and that the first one open takes it", async () => {
+  const text = await backgroundStatusText(input({ runs: [run()] }));
+  expect(text).toContain("State: queued, asked 4 min ago (today 10:42).");
+  expect(text).toContain(
+    "Queued: no device has picked it up yet. The first device that has synced it and is open takes it; this device last synced 1 min ago.",
   );
-  expect(off).toContain("no device that can run it has checked in in the last 2 hours");
-  expect(off).toContain('"kestrel" last checked in 5 h ago');
 });
 
 test("a run on another device is told as its synced record, with how old it is", async () => {
@@ -85,9 +70,9 @@ test("a run on another device is told as its synced record, with how old it is",
     progress: "reading X: query 2 of 3",
   });
   const text = await backgroundStatusText(input({ runs: [running] }));
-  expect(text).toContain('State: running on "kestrel", started 3 min ago (today 10:43), running for 3 min.');
+  expect(text).toContain("State: running on another device (dev-desk), started 3 min ago (today 10:43), running for 3 min.");
   expect(text).toContain('Last report, 1 min ago: "reading X: query 2 of 3".');
-  expect(text).toContain("This device cannot see \"kestrel\"'s progress directly");
+  expect(text).toContain("This device cannot see the progress on another device (dev-desk) directly");
   expect(text).toContain("this device last synced 1 min ago");
   expect(text).not.toContain("may be asleep");
 
@@ -105,7 +90,7 @@ test("a run on this device is not told as out of sight", async () => {
     lastProgressAt: NOW - 30_000,
   });
   const text = await backgroundStatusText(input({ runs: [here], deviceId: "dev-desk" }));
-  expect(text).toContain("running on this device (kestrel)");
+  expect(text).toContain("running on this device,");
   expect(text).toContain("attempt 2 of 3");
   expect(text).not.toContain("cannot see");
 });
@@ -113,7 +98,7 @@ test("a run on this device is not told as out of sight", async () => {
 test("finished runs: failed with its reason, skipped by the describer, done with its line", async () => {
   const ended = { claimant: { deviceId: "dev-desk", startedAt: NOW - 30 * MIN }, startedAt: NOW - 30 * MIN, endedAt: NOW - 10 * MIN };
   const failed = await backgroundStatusText(input({ runs: [run({ ...ended, state: "failed", progress: "no builder" })] }));
-  expect(failed).toContain('State: failed 10 min ago (today 10:36) on "kestrel", after 20 min. Reason or last report: "no builder".');
+  expect(failed).toContain('State: failed 10 min ago (today 10:36) on another device (dev-desk), after 20 min. Reason or last report: "no builder".');
 
   const describer: RunDescriber = {
     kind: "collect",
@@ -122,11 +107,11 @@ test("finished runs: failed with its reason, skipped by the describer, done with
   };
   const skipped = await backgroundStatusText(input({ runs: [run({ ...ended, state: "done" })], describer: () => describer }));
   expect(skipped).toContain("- today's briefing [collect]");
-  expect(skipped).toContain("State: skipped 10 min ago (today 10:36) on \"kestrel\": signed out of X.");
+  expect(skipped).toContain("State: skipped 10 min ago (today 10:36) on another device (dev-desk): signed out of X.");
   expect(skipped).toContain("detail here=false");
 
   const done = await backgroundStatusText(input({ runs: [run({ ...ended, state: "done", progress: "5 items delivered" })] }));
-  expect(done).toContain('State: done 10 min ago (today 10:36) on "kestrel", after 20 min. Its last line: "5 items delivered".');
+  expect(done).toContain('State: done 10 min ago (today 10:36) on another device (dev-desk), after 20 min. Its last line: "5 items delivered".');
   expect(done).toContain("Never say when a run will finish.");
 });
 
@@ -167,14 +152,10 @@ test("a device that does not sync says it sees only its own work", async () => {
 test("the tool reads now, parses its arguments and is a safe read", async () => {
   const tool = buildBackgroundStatusTool({
     runs: async () => [run()],
-    claims: async () => {
-      throw new Error("no claims");
-    },
     deviceId: () => "dev-phone",
     now: () => NOW,
     sync: () => ({ lastSyncAt: NOW - MIN, syncing: true }),
     describer: () => null,
-    requires: () => [],
   });
   expect(tool.effect).toBe("read");
   expect(tool.replay).toBe("safe");

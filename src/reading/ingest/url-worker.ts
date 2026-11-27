@@ -282,7 +282,6 @@ export function registerIngestUrlWorker(deps: IngestUrlWorkerDeps = {}): void {
   registerWorker({
     kind: INGEST_URL_KIND,
     tier: "local",
-    requires: [],
     agent: true,
     run: ingestUrlWorker(deps),
   });

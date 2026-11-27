@@ -50,8 +50,8 @@ test("core user-data files are in range", () => {
     // index is the record per article; the bodies are one immutable file each.
     "saved-articles.json",
     "article-bodies/0123456789abcdef0123456789abcdef.json",
-    // What a device says it is and can do, left for the others (docs/55).
-    "legion/claim/4d9f1b0a.json",
+    // When a device last ran the nightly dream, left for the others (docs/48).
+    "dream-runs/4d9f1b0a.json",
     // The standing meals conversation (docs/73): one thread file with a fixed
     // name, written on whichever device the reader plans dinner on.
     "threads-info-meals.json",

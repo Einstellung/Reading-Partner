@@ -1,5 +1,5 @@
 // The background_status text (tool.ts): which runs to show and the generic
-// entry of each, from the run records, the claims and this device's sync. Pure
+// entry of each, from the run records and this device's sync. Pure
 // but for the describers it is handed. Every time is said relative to now and
 // as a local clock time, worked out here, so the model never subtracts.
 //
@@ -9,13 +9,10 @@
 // "nothing is happening".
 
 import { MAX_ATTEMPTS, isTerminal, type Run } from "../run";
-import type { DeviceClaim } from "../claim";
 import type { RunAbout, RunDescriber, RunView } from "./registry";
 
 /** A running run whose last report is older than this may be stalled or out of sight (the runner's own stall test). */
 export const QUIET_MS = 15 * 60_000;
-/** A claim heartbeat this recent means the device is on (claims beat hourly). */
-export const DEVICE_ON_MS = 2 * 60 * 60_000;
 /** Finished runs older than this are left out unless the query names a kind or a subject. */
 export const RECENT_MS = 48 * 60 * 60_000;
 export const MAX_ENTRIES = 8;
@@ -66,7 +63,6 @@ export interface StatusQuery {
 
 export interface StatusInput {
   runs: readonly Run[];
-  claims: readonly DeviceClaim[];
   deviceId: string;
   now: number;
   /** When this device last synced; null when it never has. */
@@ -74,8 +70,6 @@ export interface StatusInput {
   /** Whether this device syncs at all. */
   syncing: boolean;
   describer(kind: string): RunDescriber | null;
-  /** The capabilities a kind needs, null when no worker for it is known here. */
-  requires(kind: string): readonly string[] | null;
 }
 
 const unfinished = (run: Run) => !isTerminal(run.state);
@@ -92,10 +86,8 @@ async function aboutOf(run: Run, describer: RunDescriber | null): Promise<RunAbo
   return { title: `${run.kind} run`, subjects: [run.kind] };
 }
 
-function nameOf(deviceId: string, claims: readonly DeviceClaim[], me: string): string {
-  const claim = claims.find((c) => c.deviceId === deviceId);
-  const name = claim?.deviceName ? `"${claim.deviceName}"` : `another device (${deviceId.slice(0, 8)})`;
-  return deviceId === me ? `this device${claim?.deviceName ? ` (${claim.deviceName})` : ""}` : name;
+function nameOf(deviceId: string, me: string): string {
+  return deviceId === me ? "this device" : `another device (${deviceId.slice(0, 8)})`;
 }
 
 function syncLine(input: StatusInput): string {
@@ -104,23 +96,11 @@ function syncLine(input: StatusInput): string {
   return `this device last synced ${agoText(input.lastSyncAt, input.now)}`;
 }
 
-/** Who could pick up a queued run, by the claims this device sees. */
-function queuedLine(run: Run, input: StatusInput): string {
-  const needs = input.requires(run.kind);
-  const able = input.claims.filter((c) => c.claimedAt !== null && (needs ?? []).every((n) => c.capabilities.includes(n)));
-  const on = able.filter((c) => input.now - c.heartbeatAt <= DEVICE_ON_MS).sort((a, b) => b.heartbeatAt - a.heartbeatAt);
-  if (on.length) {
-    const c = on[0];
-    return (
-      `Queued: no device has picked it up yet. ${nameOf(c.deviceId, input.claims, input.deviceId)}, which can run it, ` +
-      `last checked in ${agoText(c.heartbeatAt, input.now)}.`
-    );
-  }
-  const last = [...able].sort((a, b) => b.heartbeatAt - a.heartbeatAt)[0];
+/** A queued run is taken by whichever device that can run it looks first (legion/schedule due.ts). */
+function queuedLine(input: StatusInput): string {
   return (
-    "Queued: no device has picked it up yet, and no device that can run it has checked in in the last 2 hours" +
-    (last ? ` (${nameOf(last.deviceId, input.claims, input.deviceId)} last checked in ${agoText(last.heartbeatAt, input.now)})` : "") +
-    "; it starts when one is on."
+    "Queued: no device has picked it up yet. The first device that has synced it and is open takes it" +
+    `; ${syncLine(input)}.`
   );
 }
 
@@ -128,8 +108,8 @@ function stateLines(run: Run, about: RunAbout, input: StatusInput, here: boolean
   const { now } = input;
   const asked = `asked ${agoText(run.createdAt, now)} (${whenText(run.createdAt, now)})`;
   const report = run.progress ? `"${run.progress}"` : null;
-  if (run.state === "pending") return [`State: queued, ${asked}.`, queuedLine(run, input)];
-  const where = run.claimant ? nameOf(run.claimant.deviceId, input.claims, input.deviceId) : "an unknown device";
+  if (run.state === "pending") return [`State: queued, ${asked}.`, queuedLine(input)];
+  const where = run.claimant ? nameOf(run.claimant.deviceId, input.deviceId) : "an unknown device";
   const started = `started ${agoText(startOf(run), now)} (${whenText(startOf(run), now)})`;
   if (run.state === "running") {
     const attempt = run.attempts > 1 ? `; attempt ${run.attempts} of ${MAX_ATTEMPTS}` : "";
@@ -138,11 +118,11 @@ function stateLines(run: Run, about: RunAbout, input: StatusInput, here: boolean
     if (report) out.push(`Last report, ${agoText(lastAt, now)}: ${report}.`);
     if (!here) {
       out.push(
-        `This device cannot see ${where}'s progress directly, only the run record as last synced (${syncLine(input)}).`,
+        `This device cannot see the progress on ${where} directly, only the run record as last synced (${syncLine(input)}).`,
       );
       if (now - lastAt > QUIET_MS) {
         out.push(
-          `Its last report reached this device ${agoText(lastAt, now)}: that computer may be asleep or off, or this ` +
+          `Its last report reached this device ${agoText(lastAt, now)}: that device may be asleep or off, or this ` +
             "device's copy is behind. Say so; do not say nothing is happening.",
         );
       }
@@ -182,10 +162,7 @@ export async function backgroundStatusText(input: StatusInput, query: StatusQuer
     .sort((a, b) => Number(unfinished(b.run)) - Number(unfinished(a.run)) || startOf(b.run) - startOf(a.run));
   const shown = picked.slice(0, MAX_ENTRIES);
 
-  const me = input.claims.find((c) => c.deviceId === input.deviceId);
-  const head =
-    `Background work as of ${whenText(now, now)}, seen from this device${me?.deviceName ? ` (${me.deviceName})` : ""}; ` +
-    `${syncLine(input)}.`;
+  const head = `Background work as of ${whenText(now, now)}, seen from this device; ${syncLine(input)}.`;
   const filter = [
     which === "running" ? "queued or running" : named ? "" : "queued, running or finished in the last 48 h",
     query.kind ? `kind ${query.kind}` : "",
@@ -206,8 +183,6 @@ export async function backgroundStatusText(input: StatusInput, query: StatusQuer
       run,
       now,
       here,
-      claimant: run.claimant ? (input.claims.find((c) => c.deviceId === run.claimant!.deviceId) ?? null) : null,
-      claims: input.claims,
       deviceId: input.deviceId,
       ago: (at) => agoText(at, now),
       when: (at) => whenText(at, now),

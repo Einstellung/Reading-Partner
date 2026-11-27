@@ -265,7 +265,6 @@ export function registerTranslateBookWorker(deps: TranslateWorkerDeps = {}): voi
     // local and so is the shelf the document is on; the cross-device half of
     // docs/55 step 11 is not done.
     tier: "local",
-    requires: [],
     // Not `delegable`: the task book is JSON a program writes — which document,
     // which topic, which model — and a model asked to delegate this would write
     // prose the worker cannot read. The entrance is translate_document and

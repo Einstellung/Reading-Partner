@@ -58,7 +58,6 @@ export function registerProseAdjudicateWorker(depsFor: AdjudicateDepsFor = liveD
   registerWorker({
     kind: ADJUDICATE_KIND,
     tier: "synced",
-    requires: [],
     agent: true,
     run: adjudicateWorker(depsFor),
   });

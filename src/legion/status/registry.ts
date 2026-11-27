@@ -6,7 +6,6 @@
 // else about the work, and a kind with no describer still gets the generic
 // entry.
 
-import type { DeviceClaim } from "../claim";
 import type { Run } from "../run";
 
 /** What a run is about, for its headline and for the tool's `about` filter. */
@@ -25,10 +24,6 @@ export interface RunView {
   now: number;
   /** This device executes (or executed) the run, so its local files are the run's own. */
   here: boolean;
-  /** The claim of the device executing it, as this device last synced it; null when unknown or not claimed. */
-  claimant: DeviceClaim | null;
-  /** The claims this device sees, its own included. */
-  claims: readonly DeviceClaim[];
   /** This device's id. */
   deviceId: string;
   /** "4 min ago", "2 h 5 min ago": never hand the model a timestamp to subtract. */
