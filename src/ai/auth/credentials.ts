@@ -31,6 +31,16 @@ export interface ApiKeyCredential {
 	key: string;
 }
 
+// The custom OpenAI-compatible endpoint: the key plus where it goes and which
+// model it runs. Stored only after a test request with a tool came back with a
+// tool call, so a stored one is one that can run a turn.
+export interface CustomEndpointCredential {
+	type: "custom";
+	key: string;
+	baseUrl: string;
+	modelId: string;
+}
+
 // Narrows a stored credential to the OAuth shape. A legacy OpenAI API-key
 // credential (from before subscription-only auth) fails this and is ignored.
 export function isOAuthCredential(cred: unknown): cred is OAuthCredential {
@@ -47,7 +57,7 @@ export function isOAuthCredential(cred: unknown): cred is OAuthCredential {
 // providers, an API key for the rest. Anthropic and OpenAI are declared with the
 // union too rather than narrowly, because on-disk data may carry a legacy
 // OpenAI apiKey credential; the OAuth paths narrow with isOAuthCredential.
-export type ProviderCredential = OAuthCredential | ApiKeyCredential;
+export type ProviderCredential = OAuthCredential | ApiKeyCredential | CustomEndpointCredential;
 
 export type CredentialStore = Partial<Record<ProviderCredentialId, ProviderCredential>> & {
 	// Speech-to-text key for voice input (docs/15). A credential, not a setting,

@@ -18,6 +18,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { ConversationId } from "@earendil-works/pi-durable";
 import { createAppModels } from "../../ai/durable-models";
+import { restoreCustomProvider } from "../../ai/providers";
 import { recordModelCall, type ModelCallReport, type ModelCaller } from "../../ai/model-usage";
 import {
   recordCacheTurn,
@@ -176,6 +177,9 @@ export async function openDeviceDurable(options: DeviceDurableOptions): Promise<
   const placeOf = (origin: ThreadOrigin) => places.get(origin.place);
   const listeners = new Set<(event: SettledEvent) => void>();
   const turnLog = new DurableTurnLog(options.log ?? appTurnLog, now);
+  // The custom endpoint's model lives in credentials.json; it has to be in the
+  // provider before a turn resumed after a restart looks its model up.
+  if (!options.models) await restoreCustomProvider().catch(() => {});
   const runtime = await openDurable({
     host: options.host ?? appDurableHost(),
     models: options.models ?? createAppModels(),

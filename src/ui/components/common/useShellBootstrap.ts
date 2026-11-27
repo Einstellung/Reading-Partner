@@ -38,6 +38,7 @@ import {
   deviceModelFromAccount,
   enforceKnownModel,
   listProviders,
+  restoreCustomProvider,
   signedInProvider,
   type ProviderId,
   type ProviderInfo,
@@ -116,7 +117,12 @@ export interface SettingsAccess {
 }
 
 const SETTINGS_STORE: SettingsAccess = {
-  load: loadSettings,
+  // The custom endpoint's model is read from credentials.json first, so the
+  // known-model check below finds it instead of replacing it.
+  load: async () => {
+    await restoreCustomProvider().catch(() => {});
+    return loadSettings();
+  },
   save: saveSettings,
   flush: flushSettings,
   deviceOwned: settingsDeviceOwned,

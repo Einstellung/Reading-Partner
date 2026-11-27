@@ -15,6 +15,8 @@ const AUTH_KIND_TABLE = {
 	// Anthropic Console key: pi's anthropic models under an id of their own, so
 	// the key sits beside the subscription sign-in rather than replacing it.
 	"anthropic-api": "apiKey",
+	// Gemini on an AI Studio key (GEMINI_API_KEY), over pi's google-generative-ai api.
+	google: "apiKey",
 	deepseek: "apiKey",
 	opencode: "apiKey",
 	"opencode-go": "apiKey",
@@ -41,6 +43,10 @@ const AUTH_KIND_TABLE = {
 	minimax: "apiKey",
 	"minimax-cn": "apiKey",
 	xai: "apiKey",
+	// One OpenAI-compatible endpoint the user configures: a base URL and a model
+	// as well as a key (src/ai/custom-provider.ts). Its own kind, because a key
+	// alone does not make it usable.
+	custom: "custom",
 } as const;
 
 export type ProviderId = keyof typeof AUTH_KIND_TABLE;
