@@ -1230,6 +1230,14 @@ const CASES: Case[] = [
     identified: false,
   },
   {
+    name: "a reading position each device moved, both stamped with when",
+    path: "reading-state.json",
+    base: json({ states: { b1: { pageIndex: 1, scale: "auto", scrollMode: 0, readAt: 100 } } }),
+    local: json({ states: { b1: { pageIndex: 12, scale: "auto", scrollMode: 0, readAt: 300 } } }),
+    remote: json({ states: { b1: { pageIndex: 40, scale: "auto", scrollMode: 0, readAt: 200 } } }),
+    identified: false,
+  },
+  {
     name: "a kept-article list one side renamed an article in",
     path: "saved-articles.json",
     base: json([{ id: "a", topicId: "t1", title: "A", savedAt: 1 }]),

@@ -1101,6 +1101,94 @@ test("going away with nothing to send makes no requests", async () => {
   expect(lists()).toBe(0);
 });
 
+// A pass that has already started claimed the dirty set before the reader moved
+// on, so leaving the app while it runs cannot just stand down: on an iPad that
+// pass can be minutes into mirroring a book.
+function stalledUpload(be: ReturnType<typeof makeBackend>) {
+  const upload = be.backend.upload;
+  let onTheWire!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((r) => (onTheWire = r));
+  const stalled = new Promise<void>((r) => (release = r));
+  let first = true;
+  be.backend.upload = async (name, bytes, meta) => {
+    if (first) {
+      first = false;
+      onTheWire();
+      await stalled;
+    }
+    return upload(name, bytes, meta);
+  };
+  return { started, release };
+}
+
+// Resolves once `n` passes have ended, counted off the status the engine emits.
+function passEnds(n: number) {
+  let ended = 0;
+  let done!: () => void;
+  const all = new Promise<void>((r) => (done = r));
+  const onStatus = (s: { running: boolean }) => {
+    if (!s.running && ++ended === n) done();
+  };
+  return { onStatus, all, ended: () => ended };
+}
+
+test("going away during a pass runs one more pass when it ends", async () => {
+  const be = makeBackend();
+  const w = makeWatch();
+  const { fs, files } = makeFs({ "settings.json": { text: "v1", mtime: 500 } });
+  const gate = stalledUpload(be);
+  const ends = passEnds(2);
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    onStatus: ends.onStatus,
+    now: () => 1000,
+  });
+
+  const first = engine.syncNow();
+  await gate.started;
+  // The reader moves on and switches away while the first pass is on the wire.
+  files.set("settings.json", { bytes: enc("v2"), mtime: 600 });
+  w.emit("settings.json");
+  await engine.onBackground();
+  gate.release();
+  await first;
+  await ends.all;
+
+  expect(be.ensureLayoutCalls()).toBe(2);
+  expect(dec(be.data.get("settings.json")!)).toBe("v2");
+});
+
+test("going away during a pass with nothing new to send runs no second pass", async () => {
+  const be = makeBackend();
+  const w = makeWatch();
+  const { fs } = makeFs({ "settings.json": { text: "v1", mtime: 500 } });
+  const gate = stalledUpload(be);
+  const ends = passEnds(1);
+  const { engine } = makeEngine({
+    backend: be.backend,
+    fs,
+    snapshot: {},
+    watchLocal: w.watchLocal,
+    onStatus: ends.onStatus,
+    now: () => 1000,
+  });
+
+  const first = engine.syncNow();
+  await gate.started;
+  await engine.onBackground();
+  gate.release();
+  await first;
+  await new Promise((r) => setTimeout(r, 0));
+
+  expect(ends.ended()).toBe(1);
+  expect(be.ensureLayoutCalls()).toBe(1);
+  expect(dec(be.data.get("settings.json")!)).toBe("v1");
+});
+
 // --- what wakes a pass ------------------------------------------------------
 //
 // The tick used to answer "has anything changed?" by stat-ing all 273 data

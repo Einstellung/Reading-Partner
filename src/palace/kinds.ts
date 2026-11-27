@@ -154,6 +154,10 @@ export interface PalaceRow {
   // and what identifies one, read off the writer rather than guessed.
   shape?: RecordShape;
   fieldGroups?: FieldGroups;
+  // When merge is "records" and each record says when it was written: the field
+  // holding that time, epoch ms. A record both sides edited goes to the later
+  // one; equal or absent on either side, the ordinary content tie-break decides.
+  newerBy?: string;
   // A tree comparison may never conclude this path was deleted (docs/59 §8.8):
   // it is a cursor or an append-only log, and losing it either re-reads every
   // conversation from zero or brings back a deletion that already travelled.
@@ -298,6 +302,9 @@ export const PALACE = [
     sync: "data",
     merge: "records",
     shape: { kind: "map", container: "states", idField: null },
+    // A position is only worth what its time says: one device's stale position
+    // must not win over the other's newer one by a coin toss on content.
+    newerBy: "readAt",
     deleteWith: "never",
     retention: NEVER,
   },
