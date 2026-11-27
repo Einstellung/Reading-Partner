@@ -172,6 +172,7 @@
 - [15-plugin-http-forced-origin](./network/15-plugin-http-forced-origin.md) — Tauri http 插件强制补 Origin，Anthropic 视其为 CORS 请求
 - [26-plugin-http-abort-resource-id-leak](./network/26-plugin-http-abort-resource-id-leak.md) — http 插件 abort 后 fire-and-forget 取消，泄漏 "resource id N is invalid" 未捕获拒绝
 - [28-http-scope-is-unix-glob](./network/28-http-scope-is-unix-glob.md) — Tauri http scope 是 UNIX glob 不是 URLPattern，"任意 https 主机"写 `https://*`
+- [704-http-scope-wildcard-does-not-cover-a-port](./network/704-http-scope-wildcard-does-not-cover-a-port.md) — `https://*` 不放行带显式端口的 URL（`https://host:8443/...` 报 url not allowed on the configured scope），要另加 `https://*:*`；自定义 OpenAI 兼容接口常带端口
 - [29-voice-stt-fetch-and-ipc-bytes](./network/29-voice-stt-fetch-and-ipc-bytes.md) — 跨源请求必须走 cleanTauriFetch（CSP + CORS 双杀直连）；Rust 返回 Vec<u8> 到 JS 是数字数组
 - [30-webview-csp-coep-block-external-img](./network/30-webview-csp-coep-block-external-img.md) — webview 的 CSP + COEP 双杀外链图片，文章图片要走 Rust 侧 `img:` 自定义 scheme 代理并回 CORP 头；代理还得带文章自己的 URL 作 Referer，否则 CDN 防盗链回 403
 - [372-bing-images-serves-curl-a-decoy-page](./network/372-bing-images-serves-curl-a-decoy-page.md) — Bing 图片搜索对 curl 回 200、标题正确、`a.iusc` 结构完整，内容却是缓存里的无关结果（"mapo tofu" 出 cat memes），换个空格编码结果又不一样；解析器只能验形状，搜索本身必须在隐藏 webview 里跑，解析放页内脚本

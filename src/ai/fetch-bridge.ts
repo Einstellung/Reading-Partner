@@ -7,6 +7,7 @@
 
 import { isTauri } from "../platform/app/host";
 import { cleanTauriFetch } from "../platform/app/tauri-fetch";
+import { isCustomHost } from "./custom-provider";
 import { bridgedHosts } from "./providers";
 
 // The hosts the two OAuth flows reach: the authorize pages, the token endpoints,
@@ -70,7 +71,9 @@ export function installFetchBridge(): void {
 	window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 		try {
 			const host = new URL(requestUrl(input), window.location.href).hostname;
-			if (bridged.has(host)) {
+			// The custom endpoint's host is configured at runtime, after this set
+			// was taken, so it is asked about per request.
+			if (bridged.has(host) || isCustomHost(host)) {
 				const bridgedInit: RequestInit = { ...init, headers: bridgedHeaders(init, input) };
 				return cleanTauriFetch(input, bridgedInit);
 			}

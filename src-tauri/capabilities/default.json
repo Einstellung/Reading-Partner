@@ -61,7 +61,8 @@
         { "url": "https://arxiv.org/*" },
         { "url": "https://api.openalex.org/*" },
         { "url": "https://api.semanticscholar.org/*" },
-        { "url": "https://*" }
+        { "url": "https://*" },
+        { "url": "https://*:*" }
       ]
     },
     {

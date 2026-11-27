@@ -27,16 +27,20 @@ test("the id list and the provider table hold the same providers", () => {
 	}
 });
 
-test("only anthropic and openai authenticate by OAuth; the rest take a key", () => {
+test("only anthropic and openai authenticate by OAuth; custom is its own kind; the rest take a key", () => {
 	const oauth = PROVIDER_IDS.filter((id) => AUTH_KIND[id] === "oauth");
 	expect(oauth).toEqual(["anthropic", "openai"]);
+	expect(PROVIDER_IDS.filter((id) => AUTH_KIND[id] === "custom")).toEqual(["custom"]);
 	expect(API_KEY_PROVIDER_IDS).toEqual(PROVIDER_IDS.filter((id) => isApiKeyProvider(id)));
 	// The card the key list drives is worth having.
-	expect(API_KEY_PROVIDER_IDS.length).toBe(27);
+	expect(API_KEY_PROVIDER_IDS.length).toBe(28);
+	expect(API_KEY_PROVIDER_IDS).toContain("google");
 });
 
 test("every provider offers at least one model and a default to land on", () => {
-	for (const id of PROVIDER_IDS) {
+	// The custom endpoint has models only once one is configured
+	// (custom-provider.test.ts).
+	for (const id of PROVIDER_IDS.filter((p) => p !== "custom")) {
 		expect(getModels(id).length).toBeGreaterThan(0);
 		const fallback = defaultModelFor(id);
 		expect(fallback).not.toBeNull();

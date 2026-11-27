@@ -20,6 +20,8 @@ export type { DeviceCodeState } from "./auth/device-code";
 export {
 	listProviders,
 	setApiKey,
+	restoreCustomProvider,
+	saveCustomEndpoint,
 	getModels,
 	defaultModelFor,
 	nextDefaultsForActive,
@@ -46,5 +48,14 @@ export {
 	type StreamChatOptions,
 	type StreamOutcome,
 } from "./providers";
+export {
+	checkBaseUrl,
+	currentCustomEndpoint,
+	fetchCustomModels,
+	probeToolCalls,
+	type BaseUrlCheck,
+	type CustomEndpoint,
+	type ToolProbeVerdict,
+} from "./custom-provider";
 export { formatContextWindow, modelChoiceLabel } from "./model-label";
 export { enforceKnownModel } from "./model-call";

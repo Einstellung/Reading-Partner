@@ -1,29 +1,39 @@
 // The one card for every provider that takes a pasted key: pick the provider,
-// paste, save. All 27 are on the card at once, as chips, rather than behind a
-// dropdown — a list this long is scrolled past rather than read, and the
-// regional variants (Moonshot AI / Moonshot AI CN, the three Xiaomi token plans)
-// are exactly the rows that need to be seen next to each other.
+// paste, save. Four providers are on the card as chips; the rest, and the custom
+// OpenAI-compatible endpoint, sit behind "More providers", which opens by itself
+// when the connected choice is one of them (key-card-choices.ts).
 //
 // The model is not chosen here — the Default conversation card below lists the
-// catalog of whichever provider ends up connected.
+// catalog of whichever provider ends up connected. The custom endpoint is the
+// exception: its model is part of what is configured.
 
-import { useState } from "react";
-import { setApiKey, type ApiKeyProviderId, type ProviderInfo } from "../../../ai";
+import { useId, useState } from "react";
+import { setApiKey, type ProviderId, type ProviderInfo } from "../../../ai";
 import { useT } from "../../../i18n";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { CARD } from "./cardStyles";
-import { initialKeyProviderId, keyProviderChips } from "./key-card-choices";
+import CustomEndpointForm from "./CustomEndpointForm";
+import {
+  foldedChips,
+  initialKeyProviderId,
+  moreProvidersOpen,
+  primaryChips,
+  type KeyCardChoice,
+  type ProviderChip,
+} from "./key-card-choices";
 
 export default function KeyCard({
   providers,
   onActivated,
 }: {
   providers: ProviderInfo[];
-  onActivated: (id: ApiKeyProviderId) => void;
+  onActivated: (id: ProviderId) => void;
 }) {
   const t = useT();
-  const [picked, setPicked] = useState<ApiKeyProviderId | undefined>(undefined);
+  const moreId = useId();
+  const [picked, setPicked] = useState<KeyCardChoice | undefined>(undefined);
+  const [toggled, setToggled] = useState<boolean | undefined>(undefined);
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -34,9 +44,10 @@ export default function KeyCard({
   const selected = picked ?? connected;
   // The selected provider is the one holding a key right now.
   const isConnected = connected !== undefined && selected === connected;
+  const open = moreProvidersOpen(toggled, selected);
 
   const save = async () => {
-    if (!selected) return;
+    if (!selected || selected === "custom") return;
     setBusy(true);
     try {
       await setApiKey(selected, key);
@@ -47,42 +58,68 @@ export default function KeyCard({
     }
   };
 
+  const chipButton = (id: KeyCardChoice, label: string) => (
+    <Button
+      key={id}
+      type="button"
+      size="chip"
+      variant={id === selected ? "default" : "outline"}
+      aria-pressed={id === selected}
+      onClick={() => setPicked(id)}
+    >
+      {label}
+    </Button>
+  );
+  const chips = (list: ProviderChip[]) => list.map((c) => chipButton(c.id, c.label));
+
   return (
     <div className={CARD}>
       <div className="flex items-center justify-between">
         <span className="font-medium">{t("settings.apiKey")}</span>
         {isConnected && <span className="text-xs text-[#5fb236]">{t("settings.connected")}</span>}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {keyProviderChips().map((chip) => (
-          <Button
-            key={chip.id}
-            type="button"
-            size="chip"
-            variant={chip.id === selected ? "default" : "outline"}
-            aria-pressed={chip.id === selected}
-            onClick={() => setPicked(chip.id)}
-          >
-            {chip.label}
-          </Button>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <Input
-          type="password"
-          placeholder={isConnected ? t("settings.key.replace") : t("settings.apiKey")}
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-        />
+      <div className="flex flex-wrap gap-2">{chips(primaryChips())}</div>
+      <div>
         <Button
           type="button"
-          variant="outline"
-          disabled={busy || !selected || !key.trim()}
-          onClick={save}
+          variant="ghost"
+          size="sm"
+          aria-expanded={open}
+          aria-controls={moreId}
+          onClick={() => setToggled(!open)}
         >
-          {t("settings.save")}
+          <span aria-hidden className={open ? "inline-block rotate-90" : "inline-block"}>
+            ›
+          </span>
+          {t("settings.key.more")}
         </Button>
       </div>
+      {open && (
+        <div id={moreId} className="flex flex-wrap gap-2">
+          {chips(foldedChips())}
+          {chipButton("custom", t("settings.custom.title"))}
+        </div>
+      )}
+      {selected === "custom" ? (
+        <CustomEndpointForm connected={isConnected} onActivated={() => onActivated("custom")} />
+      ) : (
+        <div className="flex gap-2">
+          <Input
+            type="password"
+            placeholder={isConnected ? t("settings.key.replace") : t("settings.apiKey")}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || !selected || !key.trim()}
+            onClick={save}
+          >
+            {t("settings.save")}
+          </Button>
+        </div>
+      )}
       <p className="m-0 text-xs text-faint-foreground">{t("settings.key.signsOutOthers")}</p>
     </div>
   );

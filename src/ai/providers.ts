@@ -42,6 +42,8 @@ import { kimiCodingProvider } from "@earendil-works/pi-ai/providers/kimi-coding"
 import { minimaxProvider } from "@earendil-works/pi-ai/providers/minimax";
 import { minimaxCnProvider } from "@earendil-works/pi-ai/providers/minimax-cn";
 import { xaiProvider } from "@earendil-works/pi-ai/providers/xai";
+import { googleProvider } from "@earendil-works/pi-ai/providers/google";
+import { configureCustomProvider, customProvider, type CustomEndpoint } from "./custom-provider";
 import type {
 	Api,
 	AssistantMessage,
@@ -60,7 +62,12 @@ import type {
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { getValidAnthropicAuth } from "./auth/anthropic-oauth";
 import { getValidOpenAIAuth } from "./auth/openai-oauth";
-import { activeProviderId, loadCredentials, setActiveCredential } from "./auth/credentials";
+import {
+	activeProviderId,
+	loadCredentials,
+	setActiveCredential,
+	type CredentialStore,
+} from "./auth/credentials";
 import { cacheKeySetup, providerCallSetup } from "./call-setup";
 import {
 	API_KEY_PROVIDER_IDS,
@@ -238,6 +245,10 @@ export const providers: Record<ProviderId, Provider> = {
 	minimax: minimaxProvider(),
 	"minimax-cn": minimaxCnProvider(),
 	xai: xaiProvider(),
+	// pi names it "Google"; the card and the model picker call it what the
+	// product is called.
+	google: { ...googleProvider(), name: "Gemini" },
+	custom: customProvider,
 };
 
 // Every hostname the providers talk to: the provider's own baseUrl plus each
@@ -259,6 +270,9 @@ export function bridgedHosts(): Set<string> {
 		}
 		if (host) hosts.add(host);
 	};
+	// The custom endpoint is included when one is configured, but the fetch
+	// bridge reads this set once at startup, so it also asks custom-provider.ts
+	// per request (isCustomHost).
 	for (const id of PROVIDER_IDS) {
 		const provider = providers[id];
 		add(provider.baseUrl);
@@ -276,8 +290,31 @@ export function transportFor(providerId: ProviderId): Transport | undefined {
 	return providerId === "openai" ? "sse" : undefined;
 }
 
+// The custom endpoint's models come from credentials.json, not from pi. Every
+// read below that hands out provider state applies the stored endpoint first,
+// and startup calls restoreCustomProvider before the first model lookup (the
+// settings load and the durable device), so a restart finds the model again.
+function applyCustomEndpoint(creds: CredentialStore): void {
+	const cred = creds.custom;
+	configureCustomProvider(
+		cred?.type === "custom" ? { baseUrl: cred.baseUrl, modelId: cred.modelId } : null,
+	);
+}
+
+export async function restoreCustomProvider(): Promise<void> {
+	applyCustomEndpoint(await loadCredentials());
+}
+
+// Store a custom endpoint that passed the tool-call probe and make it the
+// active provider (single-active, like a saved key).
+export async function saveCustomEndpoint(endpoint: CustomEndpoint, key: string): Promise<void> {
+	await setActiveCredential("custom", { type: "custom", key, ...endpoint });
+	configureCustomProvider(endpoint);
+}
+
 export async function listProviders(): Promise<ProviderInfo[]> {
 	const creds = await loadCredentials();
+	applyCustomEndpoint(creds);
 	// Single-active: exactly one provider (or none) reports configured, even if a
 	// legacy file carries several — activeProviderId picks the deterministic one.
 	const active = activeProviderId(creds);
@@ -327,7 +364,12 @@ export function isSelectableModel(id: ProviderId, modelId: string | null): boole
 // lands on a 128k model without having asked for it. Null only when the provider
 // lists no models at all, which callers must handle rather than assume away.
 // A provider's default when it is not simply the largest context window.
-const PREFERRED_MODEL: Partial<Record<ProviderId, string>> = { openai: "gpt-6.1-terra" };
+// Gemini's widest window is shared by every model since 2.5, so the rule alone
+// would land on the oldest of them; the alias follows Google's current Pro.
+const PREFERRED_MODEL: Partial<Record<ProviderId, string>> = {
+	openai: "gpt-6.1-terra",
+	google: "gemini-pro-latest",
+};
 
 export function defaultModelFor(id: ProviderId): string | null {
 	const models = providers[id].getModels();
@@ -376,7 +418,9 @@ export function deviceModelFromAccount(
 
 // The provider this device holds a live credential for, or null.
 export async function signedInProvider(): Promise<ProviderId | null> {
-	return activeProviderId(await loadCredentials());
+	const creds = await loadCredentials();
+	applyCustomEndpoint(creds);
+	return activeProviderId(creds);
 }
 
 export async function resolveApiKey(id: ProviderId): Promise<string> {
@@ -392,6 +436,7 @@ export async function resolveApiKey(id: ProviderId): Promise<string> {
 	}
 	const creds = await loadCredentials();
 	const cred = creds[id];
+	if (id === "custom" && cred?.type === "custom") return cred.key;
 	if (!cred || cred.type !== "apiKey")
 		throw new Error(`${providers[id].name} is not connected. Open Settings to add an API key.`);
 	return cred.key;
