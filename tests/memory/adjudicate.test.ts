@@ -35,7 +35,6 @@ import { createRunner } from "../../src/legion/runner/runner";
 import { registerWorker } from "../../src/legion/runner/worker";
 import { createBellStore } from "../../src/legion/bell";
 import { createRunStore, deriveRunId, type Run } from "../../src/legion/run";
-import type { DeviceClaim } from "../../src/legion/claim";
 import { mapDisk } from "../support/map-disk";
 import { makeFakeFs } from "./fakefs";
 
@@ -243,14 +242,10 @@ test("not confident: nothing is written, the copy stays, and the run fails on it
   const kind = `${ADJUDICATE_KIND}-test`;
   registerWorker({ kind, tier: "synced", agent: true, run: adjudicateWorker(() => deps(device.fs, reply, calls)) });
   const runs = createRunStore(mapDisk());
-  const claims: DeviceClaim[] = [
-    { deviceId: "desk", deviceName: "desk", platform: "linux", claimedAt: 0, heartbeatAt: Date.now(), capabilities: [] },
-  ];
   const runner = createRunner({
     deviceId: () => "desk",
     runs,
     bells: createBellStore(mapDisk()),
-    claims: async () => claims,
   });
   const asked = await runner.delegate({
     kind,

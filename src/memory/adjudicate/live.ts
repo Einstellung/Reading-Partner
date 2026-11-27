@@ -1,6 +1,5 @@
 // Live wiring of prose adjudication (docs/59 §6): the worker legion runs, and
-// the sweep the daily round (src/presence/daily.ts) calls on every device that
-// runs it.
+// the sweep the daily round (src/presence/daily.ts) calls on every device.
 //
 // The model call is background work nobody is waiting on, so it runs on the
 // everyday tier ("prep") and is accounted as the nightly pass's is — the plan
@@ -50,10 +49,10 @@ const liveDeps: AdjudicateDepsFor = (signal): AdjudicateDeps => ({
 });
 
 /**
- * Hand legion the adjudicate-prose kind. Synced, so the run file is what two
- * devices share and the election picks the one that executes it; no tags,
- * because any device that can call the model can do this. Not delegable: the
- * brief is a path the sweep writes, not something the soul would.
+ * Hand legion the adjudicate-prose kind. Synced, so the run file is what the
+ * devices share: whichever device's runner sees it pending first takes it, and
+ * the others see it `running` once that is synced. Not delegable: the brief is
+ * a path the sweep writes, not something the soul would.
  */
 export function registerProseAdjudicateWorker(depsFor: AdjudicateDepsFor = liveDeps): void {
   registerWorker({

@@ -61,6 +61,7 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
     "what was said on one pass is read when that pass's row is opened, and the file is " +
     "written once under the run's own id, so a pull can add one but never change the one on screen",
   "statements.json": "the statement store reads the file on every call and holds nothing",
+  "dream-runs/": "read from disk at every check of the daily round, and nothing holds it between",
   "legion/claim/": "a device's claim is read from disk each time one is wanted, an election or a capability check, and nothing holds it between",
   // Listed above "observations" so a claim reports this reason rather than the
   // observation store's, which is about a different file entirely.

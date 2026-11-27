@@ -7,7 +7,26 @@
 // screen. That is not a rule to keep only in live.ts, where the only way to
 // reach it is a real model call.
 
-import { selectDistillJob, type DistillJob, type TopicArrears } from "../observations/arrears";
+import { SWEEP_INTERVAL_MS, selectDistillJob, type DistillJob, type TopicArrears } from "../observations/arrears";
+import type { Shell } from "../../platform/app/shell";
+
+/** How a shell paces the timer half of the sweep. */
+export interface SweepCadence {
+  intervalMs: number;
+  /** Skip a timer tick while the app is not in front. */
+  foregroundOnly: boolean;
+}
+
+/**
+ * The desktop sweeps every SWEEP_INTERVAL_MS whatever the window is doing. The
+ * phone sweeps only while it is in front, and half as often: a backgrounded
+ * phone gets seconds of runtime, and the return to the front sweeps anyway.
+ */
+export function sweepCadence(form: Shell): SweepCadence {
+  return form === "phone"
+    ? { intervalMs: 2 * SWEEP_INTERVAL_MS, foregroundOnly: true }
+    : { intervalMs: SWEEP_INTERVAL_MS, foregroundOnly: false };
+}
 
 // What set a pass going. Recorded on the event so a log can be read back — a
 // topic whose observations only ever come from "hangup" is a topic the sweep is

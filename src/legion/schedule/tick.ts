@@ -8,17 +8,20 @@
 
 import { observeAppLifecycle, type LifecycleTarget } from "../../platform/app/lifecycle";
 import { appBells, type BellStore } from "../bell";
-import { appClaims, type DeviceClaim } from "../claim";
 import { appFired, type FiredStore } from "./fired";
 import { dueJobs, jobFiredKey, registeredNightlyJobs, type NightlyJob } from "./jobs";
 import { dueSchedules, registeredSchedules, type DueSchedule, type Schedule } from "./schedule";
 
 export interface ScheduleTickDeps {
-  deviceId: string;
   now?: number;
   /** Defaults to everything registered. */
   schedules?: readonly Schedule[];
-  claims?: () => Promise<DeviceClaim[]>;
+  /**
+   * Whether this device has heard from the others since it came up or came
+   * back. The nightly jobs wait for it: they would otherwise compete with the
+   * reader's first question for the disk and the network. Defaults to true.
+   */
+  ready?: () => boolean;
   fired?: FiredStore;
   bells?: BellStore;
   /** Defaults to every nightly job registered (jobs.ts). */
@@ -46,9 +49,11 @@ export async function runScheduleTick(deps: ScheduleTickDeps): Promise<DueSchedu
 export const SCHEDULE_TICK_MS = 5 * 60_000;
 
 export interface ScheduleClockDeps {
-  /** Asked on every tick: the device id is not known until device.json is read. */
-  deviceId: () => string;
   intervalMs: number;
+  /** Passed to every tick (ScheduleTickDeps.ready). */
+  ready?: () => boolean;
+  /** The app came back to the front: called before that edge's tick. */
+  edge?: () => void;
   /** The window, for the foreground edge. */
   target: LifecycleTarget;
   /** The tick itself; a test hands its own. */
@@ -61,21 +66,26 @@ export interface ScheduleClockDeps {
  * Ask the clock now, every `intervalMs`, and whenever the app comes back to
  * the foreground. Every device and shell starts this (the shell's background
  * services), because the nightly jobs are owed by every device for its own
- * disk; the wake bells are still only rung where the election says. The
- * interval is a hint: a suspended webview runs no timers, which is what the
+ * disk. The interval is a hint: a suspended webview runs no timers, which is what the
  * foreground edge is for. Returns the stop.
  */
 export function startScheduleClock(deps: ScheduleClockDeps): () => void {
   const tick = deps.tick ?? runScheduleTick;
   const run = (): void => {
-    void tick({ deviceId: deps.deviceId() }).catch((e) =>
+    void tick({ ready: deps.ready }).catch((e) =>
       console.warn("the schedule check failed", e),
     );
   };
   const set = deps.setInterval ?? ((fn, ms) => setInterval(fn, ms));
   const clear = deps.clearInterval ?? ((h) => clearInterval(h as ReturnType<typeof setInterval>));
   const handle = set(run, deps.intervalMs);
-  const unobserve = observeAppLifecycle(deps.target, { onForeground: run, onBackground: () => {} });
+  const unobserve = observeAppLifecycle(deps.target, {
+    onForeground: () => {
+      deps.edge?.();
+      run();
+    },
+    onBackground: () => {},
+  });
   run();
   return () => {
     clear(handle);
@@ -87,10 +97,7 @@ async function ringSchedules(deps: ScheduleTickDeps, now: number): Promise<DueSc
   const schedules = deps.schedules ?? registeredSchedules();
   if (schedules.length === 0) return [];
   const fired = deps.fired ?? appFired();
-  const claims = await (deps.claims ?? (() => appClaims().readAll()))().catch(
-    () => [] as DeviceClaim[],
-  );
-  const due = dueSchedules(schedules, await fired.read(), claims, now, deps.deviceId);
+  const due = dueSchedules(schedules, await fired.read(), now);
   const bells = deps.bells ?? appBells();
   for (const item of due) {
     if (item.action === "fire") {
@@ -118,6 +125,8 @@ async function ringSchedules(deps: ScheduleTickDeps, now: number): Promise<DueSc
 const runningJobs = new Set<string>();
 
 async function runNightlyJobs(deps: ScheduleTickDeps, now: number): Promise<void> {
+  // Not armed or written down either: the anchor stays owed for the next tick.
+  if (deps.ready && !deps.ready()) return;
   const jobs = (deps.jobs ?? registeredNightlyJobs()).filter((j) => !runningJobs.has(j.id));
   if (jobs.length === 0) return;
   for (const job of jobs) runningJobs.add(job.id);

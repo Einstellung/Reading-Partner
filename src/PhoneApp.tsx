@@ -60,6 +60,8 @@ import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import { KeyboardShell } from "./ui/components/common/KeyboardShell";
 import { useBackgroundServices } from "./ui/components/common/useBackgroundServices";
+import { startDistillSweeps } from "./memory";
+import { stallWatches } from "./legion/durable/stall";
 
 // The home screen a stack entry is, for MealsHost, or null on the ones that are
 // none of its business.
@@ -200,6 +202,12 @@ export default function PhoneApp({
   const onShelfPulled = useCallback(() => void refreshShelf(), [refreshShelf]);
   // The background services both shells start (useBackgroundServices.ts).
   useBackgroundServices({ form: "phone", settingsRef, onShelfPulled });
+
+  // Pay down whatever the observations still owe, as the desktop shell does, but
+  // only while the phone is in front (memory/live/sweeps.ts sweepCadence). The
+  // phone's conversations do not say which thread is answering, so any turn
+  // streaming keeps the sweep off every thread.
+  useEffect(() => startDistillSweeps(() => stallWatches().activity().live > 0, "phone"), []);
 
   // The Android button, bound only while back has somewhere to go: with nothing
   // to close and nothing to pop it belongs to the system, which leaves the app

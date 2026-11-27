@@ -49,13 +49,27 @@ test("the tick runs a due job on every device, once per night", async () => {
   const fired = memFired();
   const day = new Date(2026, 8, 27, 10, 0).getTime();
   const tick = (now: number) =>
-    runScheduleTick({ deviceId: "d", now, schedules: [], jobs: [job(runs)], fired });
+    runScheduleTick({ now, schedules: [], jobs: [job(runs)], fired });
 
   await tick(day);
   expect(runs).toHaveLength(0);
   await tick(day + 86_400_000);
   expect(runs).toHaveLength(1);
   await tick(day + 86_400_000 + 60_000);
+  expect(runs).toHaveLength(1);
+});
+
+test("the nightly jobs wait for the first sync pass, and stay owed until it lands", async () => {
+  const runs: number[] = [];
+  const fired = memFired();
+  const day = new Date(2026, 8, 27, 10, 0).getTime();
+  await fired.record(jobFiredKey("sweep"), 0);
+  let ready = false;
+  const tick = () => runScheduleTick({ now: day, schedules: [], jobs: [job(runs)], fired, ready: () => ready });
+  await tick();
+  expect(runs).toHaveLength(0);
+  ready = true;
+  await tick();
   expect(runs).toHaveLength(1);
 });
 
@@ -72,8 +86,8 @@ test("a job that throws is late by a night, not retried on the next tick", async
   };
   const day = new Date(2026, 8, 27, 10, 0).getTime();
   await fired.record(jobFiredKey("boom"), 0);
-  await runScheduleTick({ deviceId: "d", now: day, schedules: [], jobs: [failing], fired });
-  await runScheduleTick({ deviceId: "d", now: day + 60_000, schedules: [], jobs: [failing], fired });
+  await runScheduleTick({ now: day, schedules: [], jobs: [failing], fired });
+  await runScheduleTick({ now: day + 60_000, schedules: [], jobs: [failing], fired });
   expect(calls).toBe(1);
 });
 
@@ -87,13 +101,15 @@ test("the schedule clock asks at start, on every interval and on the way back to
   const asked: string[] = [];
   let interval: (() => void) | null = null;
   let cleared = false;
-  let id = "";
+  let edges = 0;
   const stop = startScheduleClock({
-    deviceId: () => id,
     intervalMs: 1_000,
     target,
-    tick: async (deps) => {
-      asked.push(deps.deviceId);
+    edge: () => {
+      edges += 1;
+    },
+    tick: async () => {
+      asked.push(`edges=${edges}`);
     },
     setInterval: (fn) => {
       interval = fn;
@@ -103,13 +119,13 @@ test("the schedule clock asks at start, on every interval and on the way back to
       cleared = true;
     },
   });
-  expect(asked).toEqual([""]);
-  id = "d-1";
+  expect(asked).toEqual(["edges=0"]);
   (interval as unknown as () => void)();
-  expect(asked).toEqual(["", "d-1"]);
+  expect(asked).toEqual(["edges=0", "edges=0"]);
   listeners.get("blur")?.();
   listeners.get("focus")?.();
-  expect(asked).toEqual(["", "d-1", "d-1"]);
+  // The sync edge is marked before the foreground tick asks.
+  expect(asked).toEqual(["edges=0", "edges=0", "edges=1"]);
   stop();
   expect(cleared).toBe(true);
   expect(listeners.size).toBe(0);

@@ -170,7 +170,6 @@ function world() {
   const runner = createRunner({
     runs: createRunStore(disk()),
     bells: createBellStore(disk()),
-    claims: async () => [],
     deviceId: () => "desk",
     now: () => clock,
     // The table is handed in rather than registered: a kind in the module

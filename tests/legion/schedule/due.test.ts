@@ -5,113 +5,76 @@
 
 import { expect, test } from "bun:test";
 import {
+  ABANDONED_MS,
   dueRuns,
   reclaimAfterRestart,
   type ScheduledRun,
 } from "../../../src/legion/schedule";
-import { registerKindCapabilities, type DeviceClaim } from "../../../src/legion/claim";
 
 const NOW = 1_800_000_000_000;
 const MIN = 60_000;
-const STALL = { stallMs: 15 * MIN };
-
-// Registered at import and never cleared: the registry is one map for the
-// process (tests/legion/claim/elect.test.ts says the same).
 const KIND = "test-translate-book";
-registerKindCapabilities(KIND, []);
-
-function claim(deviceId: string, over: Partial<DeviceClaim> = {}): DeviceClaim {
-  return {
-    deviceId,
-    deviceName: deviceId,
-    platform: "linux",
-    claimedAt: NOW - 86_400_000,
-    heartbeatAt: NOW,
-    capabilities: [],
-    ...over,
-  };
-}
+const OPTS = { stallMs: 15 * MIN, canRun: (kind: string) => kind === KIND };
 
 function run(over: Partial<ScheduledRun> = {}): ScheduledRun {
   return { id: "r1", kind: KIND, state: "pending", attempts: 0, ...over };
 }
 
-test("the elected device takes a pending run", () => {
-  const due = dueRuns([run()], [claim("desk")], NOW, "desk", STALL);
-  expect(due).toEqual([
-    { run: run(), action: "take", reason: "elected" },
-  ]);
-});
-
-test("a device that did not win the kind takes nothing", () => {
-  const claims = [claim("desk", { claimedAt: NOW - 86_400_000 }), claim("laptop", { claimedAt: NOW })];
-  expect(dueRuns([run()], claims, NOW, "laptop", STALL)).toEqual([]);
-  expect(dueRuns([run()], claims, NOW, "desk", STALL)).toHaveLength(1);
-});
-
-test("a run of this device's own that has stopped reporting is taken over again", () => {
-  const stuck = run({
+function running(holder: string, quietFor: number, over: Partial<ScheduledRun> = {}): ScheduledRun {
+  return run({
     state: "running",
-    claimant: { deviceId: "desk", startedAt: NOW - 60 * MIN },
-    lastProgressAt: NOW - 20 * MIN,
-    attempts: 1,
+    claimant: { deviceId: holder, startedAt: NOW - quietFor },
+    lastProgressAt: NOW - quietFor,
+    ...over,
   });
-  const due = dueRuns([stuck], [claim("desk")], NOW, "desk", STALL);
-  expect(due).toEqual([{ run: stuck, action: "retake", reason: "stalled" }]);
+}
+
+test("a pending run goes to whichever device looks, with no election", () => {
+  expect(dueRuns([run()], NOW, "ipad", OPTS)).toEqual([{ run: run(), action: "take", reason: "pending" }]);
+  expect(dueRuns([run()], NOW, "phone", OPTS)).toHaveLength(1);
 });
 
-// Slow is not stuck: the judgement is the last report, and a worker that
-// reported a minute ago is working.
-test("a run that is still reporting is left alone", () => {
-  const busy = run({
+test("a run of a kind this device has no worker for is left alone", () => {
+  expect(dueRuns([run({ kind: "nobody-here" })], NOW, "ipad", OPTS)).toEqual([]);
+  expect(dueRuns([running("desk", ABANDONED_MS + MIN, { kind: "nobody-here" })], NOW, "ipad", OPTS)).toEqual([]);
+});
+
+test("a run another device already took is left alone while it is making progress", () => {
+  expect(dueRuns([running("desk", 5 * MIN)], NOW, "ipad", OPTS)).toEqual([]);
+  // Quiet for longer than this device's own stall threshold, but somebody else's.
+  expect(dueRuns([running("desk", 60 * MIN)], NOW, "ipad", OPTS)).toEqual([]);
+});
+
+test("another device's run that has said nothing for a day is taken over", () => {
+  const stale = running("desk", ABANDONED_MS + MIN);
+  expect(dueRuns([stale], NOW, "ipad", OPTS)).toEqual([{ run: stale, action: "retake", reason: "abandoned" }]);
+});
+
+test("a take-over a moment ago is not abandoned because of the previous claimant's progress time", () => {
+  const taken = run({
     state: "running",
-    claimant: { deviceId: "desk", startedAt: NOW - 60 * MIN },
-    lastProgressAt: NOW - MIN,
+    claimant: { deviceId: "desk", startedAt: NOW - MIN },
+    lastProgressAt: NOW - 2 * ABANDONED_MS,
   });
-  expect(dueRuns([busy], [claim("desk")], NOW, "desk", STALL)).toEqual([]);
+  expect(dueRuns([taken], NOW, "ipad", OPTS)).toEqual([]);
 });
 
-test("a run held by a device that forfeited is taken over by the one that won the kind", () => {
-  const theirs = run({
-    state: "running",
-    claimant: { deviceId: "laptop", startedAt: NOW - 2 * 86_400_000 },
-    lastProgressAt: NOW - 2 * 86_400_000,
-  });
-  const claims = [
-    claim("desk", { claimedAt: NOW - MIN }),
-    claim("laptop", { heartbeatAt: NOW - 2 * 86_400_000 }),
-  ];
-  const due = dueRuns([theirs], claims, NOW, "desk", STALL);
-  // Taken over rather than handed back: the run stays `running` and gets a new
-  // claimant, because a state never descends.
-  expect(due).toEqual([{ run: theirs, action: "retake", reason: "forfeited" }]);
+test("this device's own run is retaken once it stalls", () => {
+  expect(dueRuns([running("ipad", 10 * MIN)], NOW, "ipad", OPTS)).toEqual([]);
+  const stuck = running("ipad", 20 * MIN);
+  expect(dueRuns([stuck], NOW, "ipad", OPTS)).toEqual([{ run: stuck, action: "retake", reason: "stalled" }]);
 });
 
-test("a run held by a device that is still alive is left where it is", () => {
-  const theirs = run({
-    state: "running",
-    claimant: { deviceId: "laptop", startedAt: NOW - MIN },
-    lastProgressAt: NOW - MIN,
-  });
-  const claims = [claim("desk", { claimedAt: NOW - MIN }), claim("laptop")];
-  // laptop has been up longer, so it holds the kind and desk stands by.
-  expect(dueRuns([theirs], claims, NOW, "desk", STALL)).toEqual([]);
+test("terminal runs are never picked up", () => {
+  for (const state of ["done", "failed", "cancelled"] as const) {
+    expect(dueRuns([run({ state })], NOW, "ipad", OPTS)).toEqual([]);
+  }
 });
 
-test("terminal runs are nobody's business", () => {
-  const runs: ScheduledRun[] = [
-    run({ id: "a", state: "done" }),
-    run({ id: "b", state: "failed" }),
-    run({ id: "c", state: "cancelled" }),
-  ];
-  expect(dueRuns(runs, [claim("desk")], NOW, "desk", STALL)).toEqual([]);
-});
-
-test("a restart takes this device's own running runs over again, and nobody else's", () => {
-  const mine = run({ id: "a", state: "running", claimant: { deviceId: "desk", startedAt: NOW - MIN } });
-  const theirs = run({ id: "b", state: "running", claimant: { deviceId: "laptop", startedAt: NOW - MIN } });
-  const pending = run({ id: "c" });
-  expect(reclaimAfterRestart([mine, theirs, pending], "desk")).toEqual([
+test("a restart takes back exactly this device's running runs", () => {
+  const mine = running("ipad", MIN, { id: "a" });
+  const theirs = running("desk", MIN, { id: "b" });
+  expect(reclaimAfterRestart([mine, theirs, run({ id: "c" })], "ipad")).toEqual([
     { run: mine, action: "retake", reason: "restarted" },
   ]);
 });

@@ -1,20 +1,22 @@
 // What this device should do about the runs on disk, right now (docs/55).
 //
-// A pure function of the run files, the claims and the clock: no worker is
-// started here, nothing is written, and nothing is read. The caller acts on
-// what comes back — which is what makes the three handover rules testable at
-// all, since none of them can be reproduced by hand.
+// A pure function of the run files and the clock: no worker is started here,
+// nothing is written, and nothing is read. The caller acts on what comes back —
+// which is what makes the handover rules testable at all, since none of them
+// can be reproduced by hand.
 //
 // The rules (docs/55, "指派、接手与取消"):
 //
-//   take       a `pending` run of a kind this device won the election for.
+//   take       a `pending` run of a kind this device has a worker for. Whoever
+//              sees it first takes it; the runner only looks once this
+//              device's first sync pass has landed, so a run another device
+//              already took arrives as `running` rather than as `pending`.
 //   stalled    a `running` run of this device's own whose last progress is
 //              older than the threshold. Taken over here, one more attempt.
 //              The judgement is `lastProgressAt` and never the wall clock: a
 //              worker that is slow is not a worker that is stuck.
-//   forfeited  a `running` run held by a device whose claim has expired, when
-//              this device is the one that has since won its kind. Taken over
-//              here, one more attempt.
+//   abandoned  a `running` run held by another device that has said nothing
+//              about it for ABANDONED_MS. Taken over here, one more attempt.
 //
 // Nothing goes back to `pending`: a run's state only ever climbs the chain
 // (run/types.ts), so a take-over writes `running` again under a new claimant
@@ -27,7 +29,6 @@
 // Re-running is the safety net under all of it: a run that goes twice and has
 // its two results merged comes out where one run would have left it.
 
-import { electFor, isCandidate, type DeviceClaim } from "../claim";
 import type { Run } from "../run/types";
 
 /**
@@ -40,7 +41,7 @@ export type ScheduledRun = Pick<
 >;
 
 /** Why a run is being picked up. */
-export type DueReason = "elected" | "stalled" | "forfeited" | "restarted";
+export type DueReason = "pending" | "stalled" | "abandoned" | "restarted";
 
 export interface DueRun {
   run: ScheduledRun;
@@ -54,64 +55,62 @@ export interface DueRun {
 // that bounced between devices without the count moving would never reach the
 // limit it is supposed to stop at.
 
+/**
+ * How long another device's `running` run may go without progress before this
+ * one takes it over. A day: long enough that a phone put away mid-run, or a
+ * laptop shut for the evening, comes back to its own run rather than finding it
+ * taken; short enough that a device the reader stopped using does not hold the
+ * run for good.
+ */
+export const ABANDONED_MS = 24 * 60 * 60_000;
+
 /** How long a `running` run may go without progress before it is stuck. */
 export interface DueOptions {
   stallMs: number;
+  /** Whether this device has a worker for the kind. */
+  canRun(kind: string): boolean;
 }
 
 function heldBy(run: ScheduledRun): string | null {
   return run.claimant?.deviceId ?? null;
 }
 
-// Whether the device holding this run has given its claim up: either its claim
-// file has gone, or its heartbeat stopped long enough ago to count as forfeit.
-function hasForfeited(deviceId: string, claims: readonly DeviceClaim[], now: number): boolean {
-  const claim = claims.find((c) => c.deviceId === deviceId);
-  return !claim || !isCandidate(claim, now);
+// The later of the last report and the moment this claimant picked the run up:
+// a run taken over a moment ago carries the previous claimant's progress time,
+// and reading that alone would call it stuck immediately.
+function quietSince(run: ScheduledRun): number {
+  return Math.max(run.lastProgressAt ?? 0, run.claimant?.startedAt ?? 0);
 }
 
 /**
  * The runs this device should act on. Runs in a terminal state, runs of a kind
- * another device won, and runs still making progress are all left alone.
+ * this device has no worker for, and runs still making progress are all left
+ * alone.
  */
 export function dueRuns(
   runs: readonly ScheduledRun[],
-  claims: readonly DeviceClaim[],
   now: number,
   deviceId: string,
   opts: DueOptions,
 ): DueRun[] {
   const out: DueRun[] = [];
-  // One election per kind, not per run: the answer is the same for every run of
-  // a kind and reading it again per run would only cost time.
-  const winners = new Map<string, string | null>();
-  const winner = (kind: string): string | null => {
-    if (!winners.has(kind)) winners.set(kind, electFor(kind, claims, now));
-    return winners.get(kind) ?? null;
-  };
-
   for (const run of runs) {
-    const mine = winner(run.kind) === deviceId;
+    if (!opts.canRun(run.kind)) continue;
     if (run.state === "pending") {
-      if (mine) out.push({ run, action: "take", reason: "elected" });
+      out.push({ run, action: "take", reason: "pending" });
       continue;
     }
     if (run.state !== "running") continue;
     const holder = heldBy(run);
+    const since = quietSince(run);
     if (holder === deviceId) {
-      // The later of the last report and the moment this claimant picked the
-      // run up: a run taken over a moment ago carries the previous claimant's
-      // progress time, and reading that alone would call it stuck immediately.
-      const since = Math.max(run.lastProgressAt ?? 0, run.claimant?.startedAt ?? 0);
       if (since > 0 && now - since > opts.stallMs) {
         out.push({ run, action: "retake", reason: "stalled" });
       }
       continue;
     }
-    // Somebody else's. Only the device that has since won the kind takes it
-    // over, and only once the holder has actually forfeited.
-    if (mine && holder !== null && hasForfeited(holder, claims, now)) {
-      out.push({ run, action: "retake", reason: "forfeited" });
+    if (holder !== null && since > 0 && now - since > ABANDONED_MS) {
+      out.push({ run, action: "retake", reason: "abandoned" });
     }
   }
   return out;
@@ -123,7 +122,7 @@ export function dueRuns(
  * be running in a process that has only just started.
  *
  * This device's own judgement, made without a clock and without reading anybody
- * else's claim — a machine whose clock is wrong still knows it restarted.
+ * else's — a machine whose clock is wrong still knows it restarted.
  */
 export function reclaimAfterRestart(
   runs: readonly ScheduledRun[],

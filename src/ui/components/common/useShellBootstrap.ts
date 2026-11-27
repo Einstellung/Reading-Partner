@@ -272,8 +272,7 @@ export function bootDomains(): void {
   // old soul sessions recover.ts finishes.
   registerMealsBell();
   // Settling a prose file sync parked a conflict copy of, with a model (docs/59
-  // §6). Registered on every device: the election picks the executor among
-  // the devices that hold the worker.
+  // §6). Registered on every device: whichever sees the run first executes it.
   registerProseAdjudicateWorker();
   // Removing a supplement deletes the document when nothing else lists it, and
   // a translation retires the original; both paths are reached from here rather

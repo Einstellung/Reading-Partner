@@ -130,6 +130,12 @@ export interface StallWatches {
    * unless it says something within STALL_GRACE_MS.
    */
   back(at: number): void;
+  /**
+   * How many turns are streaming now, and when the latest one started (null
+   * before any has). What the daily round reads to wait for the reader to stop
+   * (presence/daily.ts).
+   */
+  activity(): { live: number; lastStartAt: number | null };
 }
 
 interface Entry {
@@ -148,10 +154,13 @@ interface Entry {
 export function createStallWatches(defaults: { timers?: StallTimers } = {}): StallWatches {
   const live = new Set<Entry>();
   let awaySince: number | null = null;
+  let lastStartAt: number | null = null;
 
   return {
+    activity: () => ({ live: live.size, lastStartAt }),
     watch(options) {
       const timers = options.timers ?? defaults.timers ?? realStallTimers;
+      lastStartAt = timers.now();
       const stallMs = options.stallMs ?? TURN_STALL_MS;
       const awayMs = options.awayMs ?? AWAY_STALL_MS;
       const tickMs = options.tickMs ?? STALL_TICK_MS;

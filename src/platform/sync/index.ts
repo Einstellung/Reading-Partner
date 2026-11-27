@@ -43,6 +43,7 @@ import {
   signIn,
   signOut,
 } from "./auth";
+import { createFirstPassWatch } from "./first-pass";
 import { nextGraceSince, syncStartAction } from "./health";
 import {
   emptyState,
@@ -123,9 +124,32 @@ function buildStatus(): SyncStatus {
   };
 }
 
+// The first pass since the start or the last return to the front (first-pass.ts).
+// Created with the module, which is the process's own start.
+const firstPass = createFirstPassWatch(() => Date.now());
+
 function notify(): void {
   const s = buildStatus();
+  firstPass.status(s);
   for (const l of statusListeners) l(s);
+}
+
+/**
+ * The app came back to the front: the first pass starts over. Called from the
+ * engine's own foreground hook, and by anything that acts on the same edge and
+ * may hear of it first (presence, the schedule clock). Idempotent.
+ */
+export function markSyncEdge(): void {
+  firstPass.status(buildStatus());
+  firstPass.edge();
+}
+
+/**
+ * Whether the first sync pass since this start or the last return to the front
+ * has finished, in error or not, or there is no sync to wait for.
+ */
+export function firstSyncPassSettled(): boolean {
+  return firstPass.settled();
 }
 
 // Everything the engine is handed, as a value the test can hold: the pass is
@@ -211,7 +235,10 @@ function startEngine(): void {
   ensureEngine().start();
   engineStarted = true;
   unobserveLifecycle ??= observeAppLifecycle(window, {
-    onForeground: () => void engine?.onForeground(),
+    onForeground: () => {
+      markSyncEdge();
+      void engine?.onForeground();
+    },
     onBackground: () => void engine?.onBackground(),
   });
 }

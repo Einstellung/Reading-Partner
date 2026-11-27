@@ -1,5 +1,6 @@
 // What has to be true before a night starts: no other run is already in flight,
-// and this process has not already finished one today.
+// and this process has not already finished one for this night (the day of the
+// 3 a.m. it answers, schedule.ts dreamNight).
 //
 // Pure, so it is testable. live.ts holds one gate for the process.
 //

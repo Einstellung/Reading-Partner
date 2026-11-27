@@ -16,23 +16,11 @@ import {
 } from "../../../src/legion/runner/worker";
 import { createBellStore, type Bell } from "../../../src/legion/bell";
 import { createRunStore, mergeRun, type Run } from "../../../src/legion/run";
-import type { DeviceClaim } from "../../../src/legion/claim";
 import { mapDisk as disk } from "../../support/map-disk";
 
 const NOW = 1_800_000_000_000;
 const ME = "desk";
 
-function claim(deviceId: string, over: Partial<DeviceClaim> = {}): DeviceClaim {
-  return {
-    deviceId,
-    deviceName: deviceId,
-    platform: "linux",
-    claimedAt: NOW - 86_400_000,
-    heartbeatAt: NOW,
-    capabilities: [],
-    ...over,
-  };
-}
 
 function deferred<T>(): {
   promise: Promise<T>;
@@ -50,19 +38,17 @@ function deferred<T>(): {
 
 // One test's world: two Maps, a clock that only moves when a test moves it, and
 // a runner over both. The device holds every kind, so what is due is decided by
-// the rules rather than by the election.
+// the rules alone.
 function world(over: { perKind?: number; stallMs?: number } = {}) {
   const runDisk = disk();
   const bellDisk = disk();
   const runs = createRunStore(runDisk);
   const bells = createBellStore(bellDisk);
   let clock = NOW;
-  const claims: DeviceClaim[] = [claim(ME)];
   const runner = createRunner({
     deviceId: () => ME,
     runs,
     bells,
-    claims: async () => claims,
     now: () => clock,
     ...over,
   });
@@ -70,7 +56,6 @@ function world(over: { perKind?: number; stallMs?: number } = {}) {
     runs,
     bells,
     runner,
-    claims,
     runDisk,
     at: () => clock,
     tick: (ms: number) => {
@@ -315,12 +300,11 @@ test("cancelling a parent cascades to its batch", async () => {
   expect(await w.rung()).toHaveLength(0);
 });
 
-test("a run under a forfeited claimant is taken over, and the stale copy merges away", async () => {
+test("a run another device left quiet for a day is taken over, and the stale copy merges away", async () => {
   const w = world();
   const k = kind("forfeited");
   const done = deferred<{ output: string }>();
   registerWorker({ kind: k, run: () => ({ cancel: () => {}, done: done.promise }) });
-  w.claims.push(claim("laptop", { heartbeatAt: NOW - 2 * 86_400_000 }));
 
   const asked = await w.runner.delegate({
     kind: k,

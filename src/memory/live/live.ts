@@ -11,10 +11,10 @@ import { runBackgroundTurn } from "../../legion/durable/background";
 import { StoppedError } from "../../legion/durable/watchdog";
 import { logEvent } from "../../platform/app/events";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
+import type { Shell } from "../../platform/app/shell";
 import { listTopics } from "../../platform/app/topics";
 import { FileObservationAdapter, type ObservationAdapter } from "../observations/adapter";
 import {
-  SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
   type DistillJob,
   type SourceArrears,
@@ -50,7 +50,9 @@ import { addContradiction, addEvidence, listStatements } from "./statements";
 import {
   createDistillGate,
   createSweeps,
+  sweepCadence,
   type DistillTrigger,
+  type SweepCadence,
   type Sweeps,
 } from "./sweeps";
 
@@ -557,10 +559,13 @@ function runDistillJob(job: DistillJob, trigger: DistillTrigger): Promise<void> 
   return distillSourceUnit(job.topicId, job.topicName, job.unit, trigger);
 }
 
+// How the shell that started the sweeps paces them (sweeps.ts sweepCadence).
+let cadence: SweepCadence = sweepCadence("desktop");
+
 // The sweeps, bound to the real clock, the real passes and the app's own timer:
-// every half hour, and again whenever the app comes back to the front (a laptop
-// shut for a week wakes with a timer that has not fired). The rules about when
-// they may run are in sweeps.ts.
+// on the shell's cadence, and again whenever the app comes back to the front (a
+// laptop shut for a week wakes with a timer that has not fired). The rules about
+// when they may run are in sweeps.ts.
 function liveSweeps(): Sweeps {
   return createSweeps({
     gate,
@@ -568,7 +573,10 @@ function liveSweeps(): Sweeps {
     distill: runDistillJob,
     now: Date.now,
     schedule: (tick) => {
-      const timer = setInterval(() => tick("timer"), SWEEP_INTERVAL_MS);
+      const timer = setInterval(() => {
+        if (cadence.foregroundOnly && document.visibilityState !== "visible") return;
+        tick("timer");
+      }, cadence.intervalMs);
       const unobserve = observeAppLifecycle(window, {
         onForeground: () => tick("foreground"),
         onBackground: () => {},
@@ -589,8 +597,12 @@ export function sweepDistillation(trigger: DistillTrigger): Promise<void> {
 }
 
 // Bind the sweep for the life of the app: once now, and on every tick after
-// that. Returns the undo.
-export function startDistillSweeps(isThreadBusy: (threadId: string) => boolean): () => void {
+// that. Both shells call it, each with its own form. Returns the undo.
+export function startDistillSweeps(
+  isThreadBusy: (threadId: string) => boolean,
+  form: Shell = "desktop",
+): () => void {
+  cadence = sweepCadence(form);
   return sweeps.start(isThreadBusy);
 }
 

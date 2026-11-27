@@ -1,6 +1,5 @@
 // The times of day something is owed (src/legion/schedule, docs/55): which
-// anchor has gone by, which machine acts on it, and how one hour makes one
-// bell. Run: bun test.
+// anchor has gone by, and how one hour makes one bell on a device. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -13,12 +12,6 @@ import {
 } from "../../../src/legion/schedule";
 import { createFiredStore } from "../../../src/legion/schedule/fired";
 import { createBellStore, type Bell } from "../../../src/legion/bell";
-import { registerKindCapabilities, type DeviceClaim } from "../../../src/legion/claim";
-
-const KIND = "test-nightly";
-registerKindCapabilities(KIND, []);
-const NEEDS_GPU = "test-nightly-gpu";
-registerKindCapabilities(NEEDS_GPU, []);
 
 // A Tuesday, 09:00 local.
 const NOW = new Date(2026, 8, 15, 9, 0, 0, 0).getTime();
@@ -26,22 +19,10 @@ const at5 = (day = 0): number => new Date(2026, 8, 15 - day, 5, 0, 0, 0).getTime
 
 const nightly: Schedule = {
   id: "test-round",
-  kind: KIND,
   at: { daily: { hour: 5 } },
   brief: "the morning round is due",
 };
 
-function claim(deviceId: string, over: Partial<DeviceClaim> = {}): DeviceClaim {
-  return {
-    deviceId,
-    deviceName: deviceId,
-    platform: "linux",
-    claimedAt: NOW - 86_400_000,
-    heartbeatAt: NOW,
-    capabilities: [],
-    ...over,
-  };
-}
 
 function ids(due: DueSchedule[]): string[] {
   return due.map((d) => `${d.schedule.id}:${d.action}`);
@@ -66,36 +47,26 @@ test("the cron subset reads, and anything outside it never comes due", () => {
 // A machine meeting the schedule for the first time owes nothing for an hour
 // that went by before it could know there was one.
 test("the first time a device sees a schedule it arms rather than fires", () => {
-  const due = dueSchedules([nightly], {}, [claim("desk")], NOW, "desk");
+  const due = dueSchedules([nightly], {}, NOW);
   expect(ids(due)).toEqual(["test-round:arm"]);
   expect(due[0].anchor).toBe(at5());
 });
 
-test("only the elected device fires, and the same anchor fires once", () => {
-  // desk has been up longer, so it holds the kind.
-  const claims = [claim("desk"), claim("laptop", { claimedAt: NOW - 60_000 })];
+test("a device that has fired for an earlier hour fires, and the same anchor fires once", () => {
   const fired = { "test-round": at5(1) };
-  expect(ids(dueSchedules([nightly], fired, claims, NOW, "desk"))).toEqual(["test-round:fire"]);
-  expect(ids(dueSchedules([nightly], fired, claims, NOW, "laptop"))).toEqual([]);
+  expect(ids(dueSchedules([nightly], fired, NOW))).toEqual(["test-round:fire"]);
   // Written down, the same hour is over.
   const after = { "test-round": at5() };
-  expect(dueSchedules([nightly], after, claims, NOW, "desk")).toEqual([]);
+  expect(dueSchedules([nightly], after, NOW)).toEqual([]);
 });
 
 test("the next day comes due again", () => {
   const tomorrow = NOW + 86_400_000;
-  const due = dueSchedules([nightly], { "test-round": at5() }, [claim("desk")], tomorrow, "desk");
+  const due = dueSchedules([nightly], { "test-round": at5() }, tomorrow);
   expect(ids(due)).toEqual(["test-round:fire"]);
   expect(due[0].anchor).toBe(new Date(2026, 8, 16, 5, 0, 0, 0).getTime());
 });
 
-test("a schedule that needs more of a machine than its kind does skips the machine without it", () => {
-  const gpu: Schedule = { ...nightly, id: "test-gpu", kind: NEEDS_GPU, requires: ["gpu"] };
-  const claims = [claim("desk"), claim("box", { claimedAt: NOW - 60_000, capabilities: ["gpu"] })];
-  const fired = { "test-gpu": at5(1) };
-  expect(ids(dueSchedules([gpu], fired, claims, NOW, "desk"))).toEqual([]);
-  expect(ids(dueSchedules([gpu], fired, claims, NOW, "box"))).toEqual(["test-gpu:fire"]);
-});
 
 // --- the tick ---------------------------------------------------------------
 
@@ -118,8 +89,7 @@ function fakes() {
   return { bells, bellStore, fired, firedState: () => firedText };
 }
 
-test("two devices both past the hour ring one bell between them", async () => {
-  const claims = [claim("desk"), claim("laptop", { claimedAt: NOW - 60_000 })];
+test("each device past the hour rings under the same bell id, and once", async () => {
   const anchor = at5();
   const desk = fakes();
   const laptop = fakes();
@@ -127,20 +97,15 @@ test("two devices both past the hour ring one bell between them", async () => {
   await desk.fired.record(nightly.id, at5(1));
   await laptop.fired.record(nightly.id, at5(1));
 
-  const shared = { schedules: [nightly], jobs: [], claims: async () => claims, now: NOW };
-  await runScheduleTick({ ...shared, deviceId: "desk", fired: desk.fired, bells: desk.bellStore });
-  await runScheduleTick({
-    ...shared,
-    deviceId: "laptop",
-    fired: laptop.fired,
-    bells: laptop.bellStore,
-  });
+  const shared = { schedules: [nightly], jobs: [], now: NOW };
+  await runScheduleTick({ ...shared, fired: desk.fired, bells: desk.bellStore });
+  await runScheduleTick({ ...shared, fired: laptop.fired, bells: laptop.bellStore });
 
   expect([...desk.bells.keys()]).toEqual([`${wakeBellId(nightly.id, anchor)}.json`]);
-  expect([...laptop.bells.keys()]).toEqual([]);
+  expect([...laptop.bells.keys()]).toEqual([`${wakeBellId(nightly.id, anchor)}.json`]);
 
-  // And the winner ringing again for the same hour leaves the one bell.
-  await runScheduleTick({ ...shared, deviceId: "desk", fired: desk.fired, bells: desk.bellStore });
+  // Ringing again for the same hour leaves the one bell.
+  await runScheduleTick({ ...shared, fired: desk.fired, bells: desk.bellStore });
   expect([...desk.bells.keys()]).toHaveLength(1);
 });
 
@@ -151,9 +116,7 @@ test("the bell carries the schedule and its brief", async () => {
     schedules: [nightly],
     // Only the schedules: the shell tests register the real nightly jobs globally.
     jobs: [],
-    claims: async () => [claim("desk")],
     now: NOW,
-    deviceId: "desk",
     fired: h.fired,
     bells: h.bellStore,
   });
@@ -171,9 +134,7 @@ test("arming writes the anchor down and rings nothing", async () => {
   await runScheduleTick({
     schedules: [nightly],
     jobs: [],
-    claims: async () => [claim("desk")],
     now: NOW,
-    deviceId: "desk",
     fired: h.fired,
     bells: h.bellStore,
   });

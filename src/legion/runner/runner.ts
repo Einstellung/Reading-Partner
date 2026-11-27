@@ -14,7 +14,9 @@
 // synced folder — it has a store of its own over a Map, which is the whole of
 // the difference, so nothing below branches on the tier again. A `synced` run
 // is polled: on every sync tick this device asks legion/schedule what is due for
-// it and starts that.
+// it and starts that. Any device with a worker for the kind may take a pending
+// run, whichever looks first; the poll waits for this start's or this return's
+// first sync pass, so a run another device already took arrives as `running`.
 //
 // One run of a kind at a time on this device. A second run of the same kind
 // waits for the next poll: the kinds that cost anything are the heavy ones, and
@@ -25,7 +27,6 @@
 // what the files say, because the other device's copy arrives the same way.
 
 import { appBells, type BellStore } from "../bell";
-import { appClaims, type DeviceClaim } from "../claim";
 import {
   MAX_ATTEMPTS,
   appRuns,
@@ -64,7 +65,12 @@ export interface RunnerDeps {
   deviceId?: () => string;
   runs?: RunStore;
   bells?: BellStore;
-  claims?: () => Promise<DeviceClaim[]>;
+  /**
+   * Whether this device has heard from the others since it came up or came
+   * back (platform/sync firstSyncPassSettled). Asked on every poll; the poll
+   * does nothing until it is true. Always true unless a caller says.
+   */
+  ready?: () => boolean;
   now?: () => number;
   stallMs?: number;
   perKind?: number;
@@ -176,7 +182,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
   const stallMs = deps.stallMs ?? DEFAULT_STALL_MS;
   const perKind = deps.perKind ?? DEFAULT_PER_KIND;
   const deviceId = deps.deviceId ?? currentDeviceId;
-  const readClaims = deps.claims ?? (() => appClaims().readAll());
+  const ready = deps.ready ?? (() => true);
   // A registry nobody filled means there is nothing this device could run, and
   // the poll should not cost a directory listing to find that out again.
   const idle = deps.workers ? () => false : () => registeredWorkerKinds().length === 0;
@@ -439,14 +445,13 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
 
   return {
     async tick() {
-      if (stopped || ticking || idle()) return;
+      if (stopped || ticking || idle() || !ready()) return;
       const me = deviceId();
       if (!me) return;
       ticking = true;
       try {
         await noticeCancellations();
         const all = await runs.list();
-        const claims = await readClaims().catch(() => [] as DeviceClaim[]);
         const at = now();
         const due: DueRun[] = [];
         const seen = new Set<string>(active.keys());
@@ -461,7 +466,8 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
           reclaimed = true;
           for (const item of reclaimAfterRestart(all, me)) add(item);
         }
-        for (const item of dueRuns(all, claims, at, me, { stallMs })) add(item);
+        const canRun = (kind: string): boolean => table(kind) !== null;
+        for (const item of dueRuns(all, at, me, { stallMs, canRun })) add(item);
         for (const item of due) await start(item, me);
       } finally {
         ticking = false;

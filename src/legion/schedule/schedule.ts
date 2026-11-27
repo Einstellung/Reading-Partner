@@ -1,17 +1,17 @@
-// The times of day something is owed, and which machine owes it (docs/55).
+// The times of day something is owed (docs/55).
 //
 // What a schedule produces when it comes due is a `wake` bell, never a run:
 // what to do about the hour is the soul's decision, and legion only knows that
-// the hour has gone by and whose hour it is.
+// the hour has gone by.
 //
 // Registered in code, like a kind's capabilities: the domain that owns the
 // nightly work registers its schedule at startup. There is no schedule file,
 // so nothing has to be migrated when a time changes.
 //
-// Two devices both reaching the hour produce one bell, by two things together:
-// the election narrows it to the machine that won the schedule's kind, and the
-// anchor it last fired for — kept on disk, per device (fired.ts) — keeps that
-// machine from firing twice for the same hour.
+// The anchor a device last fired for — kept on disk, per device (fired.ts) —
+// keeps it from firing twice for the same hour. Nothing picks one device among
+// several: each device that is up at the hour rings, under the same bell id.
+// No schedule is registered today.
 //
 // The judgement is deliberately not "is it five o'clock now". A machine that
 // was asleep at five, or whose timers a backgrounded webview never ran, has to
@@ -20,8 +20,6 @@
 // which anchor has most recently gone by, and whether this device has fired for
 // that one yet. A missed anchor becomes a late bell, a long sleep becomes one
 // bell on the way out, and a clock that jumps cannot produce two.
-
-import { capabilitiesFor, electAmong, type DeviceClaim } from "../claim";
 
 /** A daily time, local to the machine. */
 export interface DailyAt {
@@ -41,20 +39,9 @@ export type ScheduleAt = DailyAt | CronAt;
 
 export interface Schedule {
   id: string;
-  /**
-   * The kind whose election decides which machine acts on this hour. The
-   * schedule does not create a run of that kind — it is how "one machine, not
-   * both" is answered without a second rule.
-   */
-  kind: string;
   at: ScheduleAt;
   /** The brief the wake bell carries: a reference, as everything else is. */
   brief: string;
-  /**
-   * Capabilities beyond what the kind already asks for, for an hour that needs
-   * more of a machine than the work usually does.
-   */
-  requires?: readonly string[];
 }
 
 const registry = new Map<string, Schedule>();
@@ -117,22 +104,6 @@ export function lastAnchor(at: ScheduleAt, now: number): number | null {
   return null;
 }
 
-// --- who ----------------------------------------------------------------
-
-/** The device that acts on this schedule, or null when no machine can. */
-export function electForSchedule(
-  schedule: Schedule,
-  claims: readonly DeviceClaim[],
-  now: number,
-): string | null {
-  const kindNeeds = capabilitiesFor(schedule.kind);
-  // A kind nobody registered has no machine that may run it, and an hour whose
-  // work nothing claims is an hour nobody acts on.
-  if (kindNeeds === null) return null;
-  const needs = [...new Set([...kindNeeds, ...(schedule.requires ?? [])])];
-  return electAmong(needs, claims, now)?.deviceId ?? null;
-}
-
 // --- due ----------------------------------------------------------------
 
 export interface DueSchedule {
@@ -149,18 +120,11 @@ export interface DueSchedule {
   action: "fire" | "arm";
 }
 
-/**
- * What this device should do about the schedules, now. Arming does not ask who
- * won: the record is this device's own, and a machine that wrote nothing down
- * while another one was firing would fire for an hour long past the first time
- * it took over.
- */
+/** What this device should do about the schedules, now. */
 export function dueSchedules(
   schedules: readonly Schedule[],
   lastFiredAt: Readonly<Record<string, number>>,
-  claims: readonly DeviceClaim[],
   now: number,
-  deviceId: string,
 ): DueSchedule[] {
   const out: DueSchedule[] = [];
   for (const schedule of schedules) {
@@ -176,7 +140,6 @@ export function dueSchedules(
     // an hour that has not happened, and the honest reading of that is one bell
     // now, at the time the machine currently believes in.
     if (fired === anchor) continue;
-    if (electForSchedule(schedule, claims, now) !== deviceId) continue;
     out.push({ schedule, anchor, action: "fire" });
   }
   return out;

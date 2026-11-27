@@ -1,16 +1,17 @@
 // Finding the parked copies and asking for a run for each (docs/59 §6).
 //
-// Every device sweeps. The run is keyed by the conflict's content
-// (conflicts.ts), so two devices asking for the same one reach the same run
-// file, and which of them executes it is the election's answer (docs/55). The
-// sweep only ever creates pending runs; it never calls the model.
+// Every device sweeps, on its daily round. The run is keyed by the conflict's
+// content (conflicts.ts), so two devices asking for the same one reach the same
+// run file, and whichever device's runner sees it pending first executes it
+// (legion/schedule due.ts). The sweep only ever creates pending runs; it never
+// calls the model.
 //
 // Two rules are pure functions here, so both devices reach the same answer:
 //
 //   duplicates   two runs under one key but different ids — a file written
 //                before the id was derived from the key, or by hand — keep the
 //                lexicographically smaller id; the other is cancelled with a
-//                line naming the winner. The same tie-break the claim uses.
+//                line naming the winner.
 //   loop guard   a conflict where both sides were themselves written by an
 //                adjudication is never adjudicated again. An observation
 //                carries `resolvedBy` in its frontmatter; any other file is

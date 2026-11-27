@@ -2,6 +2,7 @@
 // about the runs on disk (docs/55).
 
 export {
+  ABANDONED_MS,
   dueRuns,
   reclaimAfterRestart,
   type DueOptions,
@@ -28,7 +29,6 @@ export {
 } from "./jobs";
 export {
   dueSchedules,
-  electForSchedule,
   lastAnchor,
   registerSchedule,
   registeredSchedules,

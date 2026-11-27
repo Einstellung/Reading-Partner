@@ -1087,6 +1087,20 @@ export const PALACE = [
     deleteWith: "never",
     retention: NEVER,
   },
+  {
+    kind: "dream-run",
+    domain: "memory",
+    match: keyed(/^dream-runs\/(.+)\.json$/),
+    pathFor: (id: string) => `dream-runs/${id}.json`,
+    samples: ["dream-runs/4d9f1b0a.json"],
+    id: "deviceId",
+    refs: [],
+    sync: "data",
+    merge: "opaque",
+    deleteWith: "never",
+    retention: NEVER,
+    note: "when a device last started the nightly dream (src/memory/dream/runs.ts, docs/48), read by every device before it starts one. One per device and written by that device alone, so there is never a merge to do",
+  },
 
   // -- info -----------------------------------------------------------------
   {

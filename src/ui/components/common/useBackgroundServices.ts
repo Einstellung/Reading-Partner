@@ -1,16 +1,17 @@
 // The process-level services both shells (App, PhoneApp) start once they are
 // up: account sync and the shelf's pull route, the soul's inbox, legion's
-// runner, the soul's session, and the stall watch. Beside useShellBootstrap
+// runner, the schedule's clock, the daily round, the soul's session, and the
+// stall watch. Beside useShellBootstrap
 // rather than inside it because these start later, once the shell has the
 // shelf refresh the pull route calls.
 //
-// What stays in the shells: the desktop's info collector and distillation
-// sweeps, which the phone does not run, and the phone's kept-articles route.
+// What stays in the shells: the distillation sweeps, which need the shell's own
+// answer to which thread is still being written.
 
 import { useEffect } from "react";
 import type { Shell } from "../../../platform/app/shell";
 import type { Settings } from "../../../platform/app/settings";
-import { initSync, TICK_MS } from "../../../platform/sync";
+import { firstSyncPassSettled, initSync, markSyncEdge, TICK_MS } from "../../../platform/sync";
 import { registerPullRoute } from "../../../platform/sync/pull-routes";
 import { doorPlace, startBellWatch } from "../../../soul";
 import { removeOldSessions } from "../../../legion/durable/harness";
@@ -21,7 +22,7 @@ import { appToolCatalog } from "./durable-catalog";
 import { mealsPlace } from "../../../meals/conversation/durable";
 import { startRunner } from "../../../legion/runner/runner";
 import { SCHEDULE_TICK_MS, startScheduleClock } from "../../../legion/schedule";
-import { currentDeviceId } from "../../../platform/app/device";
+import { startDailyRound } from "../../../presence/live";
 import { watchAppAwayForStalls } from "../../../legion/durable/stall";
 import { purgeLegacyChapterNotes } from "../../../reading/prep/chapters/purge";
 import { settleDeletions } from "../../../reading/delete/settle";
@@ -81,20 +82,29 @@ export function useBackgroundServices({
 
   // What legion owes, on the same beat (docs/55). The poll looks at the table
   // before it looks at the disk, so a device with no worker for anything pays
-  // nothing. The phone wins the election for nothing heavy, so this is how a
-  // run it delegated is seen to finish, and how a local run of its own is
-  // picked up at all.
-  useEffect(() => startRunner({ intervalMs: TICK_MS }), []);
+  // nothing. A pending synced run goes to whichever device looks first, and the
+  // poll waits for this start's or this return's first sync pass so that a run
+  // another device already took is seen as taken.
+  useEffect(() => startRunner({ intervalMs: TICK_MS, ready: firstSyncPassSettled }), []);
 
-  // The schedule's clock (docs/55, docs/80): the wake bells, rung only where the
-  // election says, and the nightly jobs every device owes its own disk — the
-  // ledger fold and the housekeeper. Here rather than on the info pipeline,
-  // which only a collecting device ever builds.
+  // The schedule's clock (docs/55, docs/80): the wake bells and the nightly jobs
+  // every device owes its own disk — the ledger fold and the housekeeper. The
+  // jobs wait for the first sync pass, so they never compete with the reader's
+  // first question.
   useEffect(
     () =>
-      startScheduleClock({ deviceId: currentDeviceId, intervalMs: SCHEDULE_TICK_MS, target: window }),
+      startScheduleClock({
+        intervalMs: SCHEDULE_TICK_MS,
+        target: window,
+        ready: firstSyncPassSettled,
+        edge: markSyncEdge,
+      }),
     [],
   );
+
+  // The daily round (src/presence): the nightly dream on whichever device finds
+  // it owed first, and the prose conflict sweep. Every device runs it.
+  useEffect(() => startDailyRound(), []);
 
   // The old runtime's session directory goes on the first start after the
   // upgrade (docs/soul/87, phase 4).

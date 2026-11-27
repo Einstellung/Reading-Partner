@@ -1,12 +1,9 @@
-// When a night is due (src/memory/dream/schedule.ts). Run: bun test.
+// When a night is owed, and which device's record answers it
+// (src/memory/dream/schedule.ts, runs.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  DREAM_HOUR,
-  EMPTY_DREAM_STATE,
-  isDreamDue,
-  type DreamState,
-} from "../../src/memory/dream/schedule";
+import { isDreamDue, lastDreamAnchor, dreamNight } from "../../src/memory/dream/schedule";
+import { latestDreamRun, parseDreamRun } from "../../src/memory/dream/runs";
 
 // Local time, because the gate is local: 3 a.m. is 3 a.m. where the reader is.
 function at(day: string, hour: number, minute = 0): number {
@@ -14,42 +11,52 @@ function at(day: string, hour: number, minute = 0): number {
   return new Date(y, m - 1, d, hour, minute).getTime();
 }
 
-function state(over: Partial<DreamState> = {}): DreamState {
-  return { ...EMPTY_DREAM_STATE, ...over };
-}
-
-test("a machine that has never run is due once 3 has passed", () => {
-  expect(isDreamDue(state(), at("2026-09-05", DREAM_HOUR))).toBe(true);
+test("a device that has never run, with no other device's record, owes a night", () => {
+  expect(isDreamDue(null, at("2026-09-05", 3))).toBe(true);
+  expect(isDreamDue(null, at("2026-09-05", 1))).toBe(true);
 });
 
-test("before 3 nothing is due, however long it has been", () => {
-  expect(isDreamDue(state(), at("2026-09-05", 2, 59))).toBe(false);
-  expect(isDreamDue(state({ lastRunDay: "2026-08-01" }), at("2026-09-05", 0, 1))).toBe(false);
+test("a run since the most recent 3 a.m. answers for the rest of that night", () => {
+  expect(isDreamDue(at("2026-09-05", 3, 1), at("2026-09-05", 23, 59))).toBe(false);
+  expect(isDreamDue(at("2026-09-05", 3, 1), at("2026-09-06", 2, 59))).toBe(false);
+  expect(isDreamDue(at("2026-09-05", 3, 1), at("2026-09-06", 3, 0))).toBe(true);
 });
 
-test("having run yesterday does not stop today's night", () => {
-  expect(isDreamDue(state({ lastRunDay: "2026-09-04" }), at("2026-09-05", 3, 1))).toBe(true);
+test("a reader who only opens the app between midnight and 3 still gets a night", () => {
+  // Last ran at 01:00 on the 5th, for the night of the 4th. Opened again at 01:00
+  // on the 6th: the 5th's 3 a.m. has gone by since, so one is owed.
+  expect(isDreamDue(at("2026-09-05", 1), at("2026-09-06", 1))).toBe(true);
+  // And the run at 01:00 on the 6th answers until the 6th's 3 a.m.
+  expect(isDreamDue(at("2026-09-06", 1), at("2026-09-06", 2, 30))).toBe(false);
 });
 
-test("having run today stops it for the rest of the day", () => {
-  expect(isDreamDue(state({ lastRunDay: "2026-09-05" }), at("2026-09-05", 3, 1))).toBe(false);
-  expect(isDreamDue(state({ lastRunDay: "2026-09-05" }), at("2026-09-05", 23, 59))).toBe(false);
+test("a night missed for weeks is one run, not one per day", () => {
+  expect(isDreamDue(at("2026-08-20", 9), at("2026-09-05", 9))).toBe(true);
+  expect(isDreamDue(at("2026-09-05", 9), at("2026-09-05", 9, 1))).toBe(false);
 });
 
-test("a night missed at 3 runs at the first opportunity after it", () => {
-  expect(isDreamDue(state({ lastRunDay: "2026-09-04" }), at("2026-09-05", 14))).toBe(true);
+test("the night is named for the day of the 3 a.m. it answers", () => {
+  expect(lastDreamAnchor(at("2026-09-06", 1))).toBe(at("2026-09-05", 3));
+  expect(lastDreamAnchor(at("2026-09-06", 3))).toBe(at("2026-09-06", 3));
+  expect(dreamNight(at("2026-09-06", 1))).toBe("2026-09-05");
+  expect(dreamNight(at("2026-09-06", 14))).toBe("2026-09-06");
 });
 
-test("days the machine was off are not made up one by one", () => {
-  const missed = state({ lastRunDay: "2026-08-20" });
-  expect(isDreamDue(missed, at("2026-09-05", 9))).toBe(true);
-  // One run answers for all of them: the run stamps today, and today is then
-  // done whatever happened before it.
-  expect(isDreamDue(state({ lastRunDay: "2026-09-05" }), at("2026-09-05", 9))).toBe(false);
+test("another device's record from tonight means this device does not run", () => {
+  const records = [
+    { deviceId: "desk", lastRunAt: at("2026-09-04", 9) },
+    { deviceId: "ipad", lastRunAt: at("2026-09-05", 8) },
+  ];
+  // This phone last ran two days ago; the iPad ran this morning.
+  const latest = latestDreamRun(at("2026-09-03", 9), records);
+  expect(latest).toBe(at("2026-09-05", 8));
+  expect(isDreamDue(latest, at("2026-09-05", 12))).toBe(false);
+  // With only yesterday's records the night is still owed.
+  expect(isDreamDue(latestDreamRun(null, records.slice(0, 1)), at("2026-09-05", 12))).toBe(true);
 });
 
-test("the small hours after a run belong to the day that ran, not to the next night", () => {
-  // 00:30 on the 6th, having run on the 5th: the 6th's 3 a.m. has not arrived.
-  expect(isDreamDue(state({ lastRunDay: "2026-09-05" }), at("2026-09-06", 0, 30))).toBe(false);
-  expect(isDreamDue(state({ lastRunDay: "2026-09-05" }), at("2026-09-06", 3, 0))).toBe(true);
+test("a record file that is not one reads as nothing", () => {
+  expect(parseDreamRun('{"deviceId":"d","lastRunAt":5}')).toEqual({ deviceId: "d", lastRunAt: 5 });
+  expect(parseDreamRun('{"deviceId":"d"}')).toBeNull();
+  expect(parseDreamRun("not json")).toBeNull();
 });
