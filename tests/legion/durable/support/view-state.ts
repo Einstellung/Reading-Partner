@@ -2,7 +2,7 @@
 // (`Conversation.viewState()`): the active transcript and the built-in
 // documents, its current value and a subscription, on followActiveView.
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Conversation } from "@earendil-works/pi-durable";
 import { followActiveView, type ActiveView } from "../../../../src/legion/durable/follow-view";
 

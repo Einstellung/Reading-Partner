@@ -6,8 +6,7 @@
 // Nothing here knows a place: the history reader, the usage recorder, the
 // landing step and the refusal path are handed in when the Harness opens.
 
-import type { Context } from "@earendil-works/chord";
-import { awaitWithContext } from "@earendil-works/chord/context";
+import { awaitWithContext, type Context } from "@earendil-works/chord/context";
 import type { AssistantMessage, ImageContent, Message, TextContent, Tool } from "@earendil-works/pi-ai";
 import {
   AgentDoc,

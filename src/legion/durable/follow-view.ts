@@ -7,7 +7,7 @@
 // window starts at the active transcript's first entry and is wide enough that
 // one turn never slides out of it.
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Conversation, EntryId, EntryRecord } from "@earendil-works/pi-durable";
 
 /** A view value as the followers read it: the active transcript and the built-in documents. */

@@ -10,7 +10,7 @@
 //
 // Every start counts an attempt in rp.recovery; the second gives up (abort).
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { LiveDoc, type ConversationId, type SubmissionId } from "@earendil-works/pi-durable";
 import { isBackground } from "./background";
 import { childState, SubagentDoc } from "./child";

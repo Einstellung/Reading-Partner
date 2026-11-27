@@ -6,7 +6,7 @@
 // document whose thread file the conversation is written to (the book's, or a
 // supplement's for a mark drawn on one, docs/67).
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { BoxOrigin } from "../../box";
 import { toPiMessages } from "../../ai/providers";

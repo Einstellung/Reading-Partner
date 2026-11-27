@@ -16,7 +16,7 @@
 //
 // No React here: the session hands `onView` the projected rows and draws them.
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { LiveDoc, type Conversation, type ModelRef } from "@earendil-works/pi-durable";
 import type { ThreadOrigin, TurnBell, TurnContent, TurnResult } from "../../legion/durable/extension";

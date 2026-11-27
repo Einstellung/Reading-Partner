@@ -11,8 +11,7 @@
 // retried, or started again after a restart), the live task there is waited on
 // rather than a second one created, and a completed one is handed back.
 
-import type { Context } from "@earendil-works/chord";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT, type Context } from "@earendil-works/chord/context";
 import { defineExtension, type AnyTask, type Extension, type Task, type TaskId, type TaskOutcome } from "@earendil-works/pi-durable";
 import type { DurableRuntime } from "./harness";
 

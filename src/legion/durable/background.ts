@@ -17,8 +17,7 @@
 // next time its trigger fires — the distillation cursor, the prep note not yet
 // written.
 
-import type { Context } from "@earendil-works/chord";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT, type Context } from "@earendil-works/chord/context";
 import type { ModelThinkingLevel, ThinkingLevel } from "@earendil-works/pi-ai";
 import { defineExtension, type Conversation, type EntryRecord, type ToolRegistration } from "@earendil-works/pi-durable";
 import { followActiveView } from "./follow-view";

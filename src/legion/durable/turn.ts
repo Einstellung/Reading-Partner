@@ -7,7 +7,7 @@
 // steers, and hands the rows to the lander registered for the thread's place,
 // which writes the file and skips a message whose timestamp is already there.
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { AssistantMessage, ModelThinkingLevel, ToolResultMessage } from "@earendil-works/pi-ai";
 import {
   configure,

@@ -8,7 +8,7 @@
 // conversation is free again. Input meant for a busy conversation waits for it
 // rather than being queued in pi-durable as a follow-up.
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { AgentTool } from "../../legion/durable/contract";
 import type { TurnLogSink } from "../../legion/durable/turn-log-sink";

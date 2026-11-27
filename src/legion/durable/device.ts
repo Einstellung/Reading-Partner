@@ -12,8 +12,7 @@
 // The places are handed in by whoever opens the runtime (the shell), so this
 // file knows no domain.
 
-import type { Context } from "@earendil-works/chord";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT, type Context } from "@earendil-works/chord/context";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { Models } from "@earendil-works/pi-ai/models";
 import type { ConversationId } from "@earendil-works/pi-durable";

@@ -16,7 +16,7 @@
 // stays as it was: the thread file `info-meals`, the thread `meals`, the key
 // `meals:meals`, the box origin `{ place: "meals" }`, the caller `meals-chat`.
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { appBox, type BoxOrigin } from "../../box";
 import { toPiMessages } from "../../ai/providers";
 import { modelIdFor } from "../../ai/model-tier";

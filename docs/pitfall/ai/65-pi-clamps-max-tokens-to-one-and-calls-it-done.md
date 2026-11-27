@@ -37,3 +37,5 @@ estimate = model.contextWindow - clampMaxTokensToContext(model, ctx, MAX_SAFE_IN
 在它之上按字符类别再估一遍（CJK 按 1 字符/token），取两者的大值——pi 的数负责和 pi 保持一致，字符类别的数负责中文。
 
 算出 `允许输出 = 窗口 - 估算 - 4096`，低于按用途分档的下限（聊天 4k、章节笔记 4k、digest 8k、overview 16k、plan 16k）就不发，先走 `src/budget/ladder.ts` 的压缩阶梯，压不动就明说处理不了。
+
+pi-ai 1.6 起夹紧算式变了，上面的反解不成立，现行做法见坑 702。

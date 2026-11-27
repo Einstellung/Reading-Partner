@@ -9,7 +9,7 @@
 // door's desk again, without the surface's tools: nobody is there to draw
 // their cards.
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { appBox } from "../box";
 import { toPiMessages } from "../ai/providers";
 import type { DeskMessage } from "../desk";
