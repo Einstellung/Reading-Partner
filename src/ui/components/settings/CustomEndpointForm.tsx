@@ -16,7 +16,7 @@ import { useT } from "../../../i18n";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { ChoiceField, FieldGrid } from "./ChoiceField";
+import { ChoiceField } from "./ChoiceField";
 import { modelListRequest, urlProblem, verdictMessage, type VerdictMessage } from "./custom-endpoint-form";
 
 export default function CustomEndpointForm({
@@ -111,11 +111,7 @@ export default function CustomEndpointForm({
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
-      </div>
-      {problem && <p className="m-0 text-xs text-destructive">{t(`settings.${problem}`)}</p>}
-      {listed === null && <p className="m-0 text-xs text-faint-foreground">{t("settings.custom.loadingModels")}</p>}
-      {listed && listed.length > 0 ? (
-        <FieldGrid>
+        {listed && listed.length > 0 ? (
           <ChoiceField
             label={t("settings.custom.model")}
             placeholder={t("settings.account.select")}
@@ -123,22 +119,25 @@ export default function CustomEndpointForm({
             choices={listed.map((id) => ({ value: id, label: id }))}
             onChange={setModel}
           />
-        </FieldGrid>
-      ) : (
-        listed !== null && (
-          <div className="flex flex-col gap-1">
+        ) : (
+          <>
+            {fieldLabel(t("settings.custom.model"), "custom-endpoint-model")}
             <Input
-              aria-label={t("settings.custom.model")}
+              id="custom-endpoint-model"
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
-              placeholder={t("settings.custom.modelPlaceholder")}
+              disabled={listed === null}
+              placeholder={listed === null ? t("settings.custom.loadingModels") : t("settings.custom.modelPlaceholder")}
               value={model}
               onChange={(e) => setModel(e.target.value)}
             />
-            {listed && <p className="m-0 text-xs text-faint-foreground">{t("settings.custom.noModelList")}</p>}
-          </div>
-        )
+          </>
+        )}
+      </div>
+      {problem && <p className="m-0 text-xs text-destructive">{t(`settings.${problem}`)}</p>}
+      {listed && listed.length === 0 && (
+        <p className="m-0 text-xs text-faint-foreground">{t("settings.custom.noModelList")}</p>
       )}
       <div className="flex items-center gap-2">
         <Button type="button" variant="outline" disabled={!canSave} onClick={save}>
