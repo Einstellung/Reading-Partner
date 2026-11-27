@@ -1,9 +1,9 @@
 // How many tokens an assembled call occupies, and how many the provider will
 // then let the model emit. Pure: no network, no credentials, no provider lookup.
 //
-// Why this module exists. pi clamps maxTokens on every request to
-// `contextWindow - its own estimate of the context - 4096`, floored at 1. A
-// floored clamp is silent: the model emits one token, stops with stopReason
+// Why this module exists. pi clamps maxTokens on every request to what the
+// context window leaves after its own estimate of the context and a safety
+// margin (see outputAllowance), floored at 1. A floored clamp is silent: the model emits one token, stops with stopReason
 // "length", and the stream still ends with a normal `done` event. In chat that
 // reads as a one-word reply; anywhere a JSON answer is parsed it reads as a
 // formatting error. Nothing in the failure names the context window. The only
@@ -11,7 +11,7 @@
 //
 // Two estimates, and we plan against the larger:
 //
-//   - pi's own, reverse-solved out of clampMaxTokensToContext (see piBudget).
+//   - pi's own: the estimateContextTokens its clamp starts from (see piBudget).
 //     Using pi's number means we can never be in the position of thinking a call
 //     fits while pi thinks it does not.
 //   - a script-aware one. pi charges chars/3.5 for every script, which under-counts
@@ -19,13 +19,18 @@
 //     back. estimateTextTokens charges dense scripts by the character.
 
 import { clampMaxTokensToContext } from "@earendil-works/pi-ai/api/simple-options";
+import { estimateContextTokens as piEstimateContextTokens } from "@earendil-works/pi-ai/utils/estimate";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import type { Api, Context, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
 
-// The window pi reserves on every request (its CONTEXT_SAFETY_TOKENS). Mirrored
-// rather than imported because pi does not export it; tests/budget/estimate.test.ts
-// pins the mirror, so a pi upgrade that moves the margin turns that test red.
+// The margin pi's clamp keeps (pi-ai 1.6): max(CONTEXT_SAFETY_TOKENS, 15% of
+// the input), unless that leaves under 32768 of output; then only the fixed
+// margin, with output capped at 32768. Mirrored rather than imported because pi
+// does not export them; tests/budget/estimate.test.ts pins outputAllowance
+// against the clamp itself, so a pi upgrade that moves the margin turns it red.
 export const PI_CONTEXT_SAFETY_TOKENS = 4096;
+const PI_CONTEXT_SAFETY_RATIO = 0.15;
+const PI_MIN_OUTPUT_WITH_RATIO_MARGIN = 32768;
 
 // pi's floor for the clamp. An allowance of exactly this means "pi's estimate has
 // already reached the window", not "one token is genuinely left".
@@ -121,40 +126,52 @@ export function estimateContextTokens(ctx: Context): number {
 }
 
 export interface PiBudget {
-  // pi's own estimate of the context, in tokens.
+  // pi's own estimate of the context, in tokens, held at the most the clamp can
+  // tell apart (contextWindow - 4096 - 1).
   tokens: number;
-  // What pi will clamp maxTokens to: contextWindow - tokens - 4096, floored at 1.
+  // What pi will clamp maxTokens to (outputAllowance of `tokens`), floored at 1.
   allowedOutput: number;
   // The clamp bottomed out, so `tokens` is only a lower bound and the request as
   // it stands would come back one token long with no error attached.
   saturated: boolean;
 }
 
-// pi's estimate, read back out of the only public function that exposes it.
-// clampMaxTokensToContext returns `max(1, contextWindow - estimate - 4096)`
-// capped by the requested maxTokens, so asking for MAX_SAFE_INTEGER leaves the
-// estimate as the only unknown. Models with no declared window (contextWindow
-// <= 0) are exempt from pi's clamp entirely, and reported as unbounded here.
-// So is a model whose metadata carries no number at all: the arithmetic would
-// otherwise be NaN, and NaN compares false against every floor, which would read
-// as "nothing fits" rather than as "there is nothing to measure against".
+// pi's estimate and the clamp it feeds, both read from pi itself. The estimate
+// is held where pi's clamp saturates, as it was when it was reverse-solved out
+// of the clamp (pi-ai 1.5): the ladder subtracts script-aware savings from it,
+// and an uncapped chars/3.5 count of an over-long Latin context would refuse
+// calls that fit once trimmed. Models with no
+// declared window (contextWindow <= 0) are exempt from pi's clamp entirely, and
+// reported as unbounded here. So is a model whose metadata carries no number at
+// all: the arithmetic would otherwise be NaN, and NaN compares false against
+// every floor, which would read as "nothing fits" rather than as "there is
+// nothing to measure against".
 export function piBudget(model: Model<Api>, ctx: Context): PiBudget {
   if (!(model.contextWindow > 0)) {
     return { tokens: 0, allowedOutput: Number.MAX_SAFE_INTEGER, saturated: false };
   }
-  const allowedOutput = clampMaxTokensToContext(model, normalizeContext(ctx), Number.MAX_SAFE_INTEGER);
+  const normalized = normalizeContext(ctx);
+  const allowedOutput = clampMaxTokensToContext(model, normalized, Number.MAX_SAFE_INTEGER);
   return {
-    tokens: model.contextWindow - allowedOutput - PI_CONTEXT_SAFETY_TOKENS,
+    tokens: Math.min(
+      piEstimateContextTokens(normalized).tokens,
+      model.contextWindow - PI_CONTEXT_SAFETY_TOKENS - PI_MIN_MAX_TOKENS,
+    ),
     allowedOutput,
     saturated: allowedOutput <= PI_MIN_MAX_TOKENS,
   };
 }
 
-// Output tokens left for a context of `used` tokens, after pi's safety margin.
-// Never negative; a model with no declared window is unbounded.
+// Output tokens pi leaves for a context of `used` tokens: its clamp's arithmetic,
+// floored at 0 rather than at pi's 1. A model with no declared window is unbounded.
 export function outputAllowance(contextWindow: number, used: number): number {
   if (!(contextWindow > 0)) return Number.MAX_SAFE_INTEGER;
-  return Math.max(0, contextWindow - used - PI_CONTEXT_SAFETY_TOKENS);
+  const margin = Math.max(PI_CONTEXT_SAFETY_TOKENS, Math.ceil(used * PI_CONTEXT_SAFETY_RATIO));
+  let room = contextWindow - used - margin;
+  if (room < PI_MIN_OUTPUT_WITH_RATIO_MARGIN) {
+    room = Math.min(PI_MIN_OUTPUT_WITH_RATIO_MARGIN, contextWindow - used - PI_CONTEXT_SAFETY_TOKENS);
+  }
+  return Math.max(0, room);
 }
 
 export interface ContextBudget {

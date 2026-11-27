@@ -12,8 +12,7 @@
 // extension of its own (`rp-agent-<name>`) whose calls look the conversation's
 // tools up in `ChildDesks`, filled by whoever drives the child.
 
-import type { Context } from "@earendil-works/chord";
-import { awaitWithContext } from "@earendil-works/chord/context";
+import { awaitWithContext, type Context } from "@earendil-works/chord/context";
 import type { AssistantMessage, ModelThinkingLevel, ToolResultMessage } from "@earendil-works/pi-ai";
 import {
   configure,

@@ -8,7 +8,7 @@
 // the retell's desk again from disk: the decisions and the talk outline still
 // write, and the cards they raise have nobody to draw them.
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { PlaceFactory } from "../../legion/durable/device";
 import type { AgentTool } from "../../legion/durable/contract";
 import { loadSettings, toReasoning, type Settings } from "../../platform/app/settings";

@@ -28,13 +28,12 @@ function user(text: string): Context["messages"][number] {
   return { role: "user", content: text, timestamp: 0 };
 }
 
-// This is the load-bearing assumption of the whole module: pi's estimate is
-// readable only through its clamp, and the clamp is
-//   max(1, contextWindow - estimate - CONTEXT_SAFETY_TOKENS).
-// The relationship is not documented. Pinning it here means a pi upgrade that
-// moves the safety margin, the chars-per-token heuristic or the floor fails
-// loudly instead of quietly making every budget wrong.
-test("pi's context estimate is exactly recoverable from clampMaxTokensToContext", () => {
+// This is the load-bearing assumption of the whole module: outputAllowance does
+// the clamp's arithmetic on pi's own estimate. The clamp is not documented.
+// Pinning it here means a pi upgrade that moves the safety margin, the
+// chars-per-token heuristic or the floor fails loudly instead of quietly making
+// every budget wrong.
+test("pi's estimate and clamp match piBudget and outputAllowance", () => {
   const m = model(200_000);
   // 35,000 ASCII chars of system prompt + 350 of user text: pi charges
   // chars/3.5, so 10,000 + 100 tokens.
@@ -47,6 +46,23 @@ test("pi's context estimate is exactly recoverable from clampMaxTokensToContext"
   expect(pi.tokens).toBe(10_100);
   expect(pi.allowedOutput).toBe(allowed);
   expect(pi.saturated).toBe(false);
+
+  // Every branch of the clamp: the fixed margin, the 15% one, and the 32768 cap
+  // when 15% would leave less than that.
+  for (const [window, tokens] of [
+    [200_000, 10_000],
+    [200_000, 100_000],
+    [200_000, 150_000],
+    [200_000, 190_000],
+    [1_000_000, 900_000],
+    [131_072, 120_000],
+  ]) {
+    const big = ctx({ systemPrompt: "x".repeat(3.5 * tokens) });
+    expect(piBudget(model(window), big).tokens).toBe(tokens);
+    expect(outputAllowance(window, tokens)).toBe(
+      clampMaxTokensToContext(model(window), normalizeContext(big), Number.MAX_SAFE_INTEGER),
+    );
+  }
 });
 
 test("piBudget reports saturation when the clamp bottoms out", () => {
@@ -106,7 +122,8 @@ test("contextBudget plans against the larger of the two estimates", () => {
   const cjk = contextBudget(m, ctx({ systemPrompt: "张".repeat(52_500) }));
   expect(cjk.pi.tokens).toBe(15_000);
   expect(cjk.used).toBe(52_500);
-  expect(cjk.allowedOutput).toBe(200_000 - 52_500 - PI_CONTEXT_SAFETY_TOKENS);
+  // pi keeps 15% of the input as margin here: 7,875 tokens.
+  expect(cjk.allowedOutput).toBe(200_000 - 52_500 - 7_875);
 });
 
 test("tool schemas and images are part of the estimate", () => {

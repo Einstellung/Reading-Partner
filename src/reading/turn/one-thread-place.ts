@@ -11,7 +11,7 @@
 // session's detach): a reply that lands with nobody looking puts the companion's box
 // card, which opens the view again (companion/box-jump.ts).
 
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { appBox, type BoxOrigin, type BoxStore } from "../../box";
 import { coverOf } from "../../soul/bell";
 import { toPiMessages } from "../../ai/providers";

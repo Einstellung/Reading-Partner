@@ -4,8 +4,7 @@
 // (the tools today's build*Tools made for that book or place) through the
 // resolver registered for its place, cached per conversation in memory.
 
-import type { Context } from "@earendil-works/chord";
-import { awaitWithContext } from "@earendil-works/chord/context";
+import { awaitWithContext, type Context } from "@earendil-works/chord/context";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import type { ConversationId, JsonObject, ToolExecutionApi, ToolExecutionResult, ToolRegistration } from "@earendil-works/pi-durable";
 import type { AgentTool } from "./contract";

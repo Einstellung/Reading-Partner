@@ -12,8 +12,7 @@
 //
 // Opening does not resume: run recoverBeforeResume (recover.ts) next.
 
-import type { Context } from "@earendil-works/chord";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT, type Context } from "@earendil-works/chord/context";
 import type { Models } from "@earendil-works/pi-ai/models";
 import {
   createRegistry,

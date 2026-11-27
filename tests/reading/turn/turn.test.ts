@@ -756,13 +756,13 @@ test("the book-level thread carries no marked passage", async () => {
 const small: Settings = { ...settings, defaultModelId: "claude-opus-4-5" };
 
 // A 128k text-only model, the narrowest window mainstream providers list
-// (pi-ai 1.5 dropped gpt-5.3-codex-spark, OpenAI's 128k one). Reachable since
-// the picker stopped hiding models under a floor, so the ladder has to hold
-// there too.
+// (pi-ai 1.5 dropped gpt-5.3-codex-spark, OpenAI's 128k one; 1.6 dropped
+// Groq's Llama 3.3). Reachable since the picker stopped hiding models under a
+// floor, so the ladder has to hold there too.
 const tiny: Settings = {
   ...settings,
   defaultProviderId: "groq",
-  defaultModelId: "llama-3.3-70b-versatile",
+  defaultModelId: "openai/gpt-oss-120b",
 };
 
 // A Chinese survey, the shape that actually overflows: pi prices it at chars/3.5

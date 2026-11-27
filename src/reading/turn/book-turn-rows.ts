@@ -7,8 +7,7 @@
 // into the turn, the rows they split, and the half sentence a stop keeps are
 // all the runtime's; this only maps them and reports the ending.
 
-import type { Context } from "@earendil-works/chord";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT, type Context } from "@earendil-works/chord/context";
 import type { Receipt, ToolStatus } from "../../ai/turn-view/tool-status";
 import type { TurnResult } from "../../legion/durable/extension";
 import type { WithdrawnSteer } from "../../legion/durable/turn";
