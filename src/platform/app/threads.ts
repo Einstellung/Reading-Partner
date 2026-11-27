@@ -272,7 +272,8 @@ export interface ThreadIo {
   onCorrupt?: (report: CorruptFileReport) => void;
   timer?: WriterTimer;
   exit?: (onExit: () => void) => void;
-  // A message was appended to a thread under this key. Called synchronously,
+  // A message was appended to a thread under this key, here or by a sync pull
+  // the store adopted (load's `pulled`). Called synchronously,
   // with the message as it was stored — the id included, which is what tells a
   // listener its own append apart from someone else's.
   onAppend?: (append: ThreadAppend) => void;
@@ -346,6 +347,20 @@ export interface ThreadStore {
   setFocusChapter: (bookId: string, threadId: string, chapter: number | null) => void;
   setTopic: (bookId: string, threadId: string, topicId: string | null) => void;
   flush: () => Promise<void>;
+}
+
+// A message's identity as the sync merge reads it (platform/sync/merge/
+// messages.ts): its id, else the stamp and role.
+function storedMessageKey(message: ThreadMessage): string {
+  return message.id ?? `${message.ts}:${message.role}`;
+}
+
+function heldMessageKeys(threads: ThreadMap): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const [id, thread] of Object.entries(threads)) {
+    out.set(id, new Set(thread.messages.map(storedMessageKey)));
+  }
+  return out;
 }
 
 function parseThreads(text: string): ThreadMap {
@@ -523,7 +538,13 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   // of starting a second conversation. Nothing is quarantined here: a file the
   // user still has is worth a sentence, and the writer moves it aside only when
   // it would otherwise be stuck refusing writes forever.
-  async function load(bookId: string): Promise<ThreadMap> {
+  //
+  // `pulled` is the sync pull's re-read (drop): every message it adopts into a
+  // thread this process already held is announced the way a local append is, so
+  // a conversation on screen shows what the other device wrote. Only when the
+  // file is adopted — a busy entry keeps its own copy of every thread it holds,
+  // so nothing of the file reaches the screen and nothing is drawn twice.
+  async function load(bookId: string, pulled = false): Promise<ThreadMap> {
     const before = cache.get(bookId)?.gen;
     const text = await io.read(threadFileName(bookId));
     const onDisk = text === null ? {} : parseThreads(text);
@@ -539,10 +560,29 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     // Adopt it: a thread another device deleted goes away here. The entry object
     // itself is kept rather than replaced — a write in the air holds it — and
     // this process's own deletions still outrank the file until they are paid.
+    const held = current && pulled ? heldMessageKeys(entry.threads) : null;
     if (current) for (const id of Object.keys(entry.threads)) delete entry.threads[id];
     addMissing(entry, onDisk);
     entry.reconciled = true;
+    if (held) announcePulled(bookId, held, entry.threads);
     return entry.threads;
+  }
+
+  // A thread that was not held is one no view can be showing — a view loads
+  // before it draws — so only the threads held before the re-read are compared.
+  function announcePulled(key: string, held: Map<string, Set<string>>, now: ThreadMap): void {
+    for (const [threadId, keys] of held) {
+      const thread = now[threadId];
+      if (!thread) continue;
+      for (const message of thread.messages) {
+        if (keys.has(storedMessageKey(message))) continue;
+        try {
+          io.onAppend?.({ key, threadId, message });
+        } catch (e) {
+          console.error(`thread append listener failed for ${key}`, e);
+        }
+      }
+    }
   }
 
   // The on-disk threads of a book, without touching the cache — the sweep's read
@@ -647,7 +687,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   }
 
   return {
-    load,
+    load: (bookId) => load(bookId),
     peek,
     // A sync pull replaced the file under us. Re-read it rather than throw the
     // cached copy away: an absent entry reads as "this book has no threads",
@@ -657,7 +697,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     // keeps the file safe — the writer's merge is — and because load applies
     // what comes back to the live entry instead of installing it over one.
     drop: (bookId) => {
-      void load(bookId).catch((e: unknown) => io.onError?.(e));
+      void load(bookId, true).catch((e: unknown) => io.onError?.(e));
     },
     get: (bookId, threadId) => cache.get(bookId)?.threads[threadId],
     // Every thread this process holds for a book. The read behind anything that
@@ -838,8 +878,9 @@ const appendListeners = new Set<(append: ThreadAppend) => void>();
  * Hear about every message appended through this module's appendMessage, after
  * it is in the thread. Returns the undo.
  *
- * Local appends only. A message that arrives by sync is a new version of the
- * whole file and comes through the sync engine's own route, not this one.
+ * Also every message a sync pull adds to a thread this process holds, once the
+ * pulled file is adopted (the store's drop): the same announcement, so a view
+ * does not need to know which device wrote it.
  */
 export function onThreadMessage(listener: (append: ThreadAppend) => void): () => void {
   appendListeners.add(listener);
