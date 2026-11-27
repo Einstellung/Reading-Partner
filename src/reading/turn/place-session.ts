@@ -9,7 +9,10 @@
 // says while it runs goes into it as a steer; what no run took is filed when
 // it ends and, after an answer or a stop, opens the next turn. A stop keeps the
 // half sentence and the receipts (the runtime lands them). A stall cuts the
-// turn, which lands nothing, and it is asked again once. A turn in flight when
+// turn, which lands nothing, and it is asked again once — also once the
+// conversation is closed: out of sight, with the request the turn was started
+// with, and a second stall then leaves the place's box card instead of a row
+// (docs/pitfall/709). A turn in flight when
 // the conversation is opened — after a restart, the one recovery resumed — is
 // followed the same way. Closing the conversation does not stop its turn
 // (detach): it runs on out of sight and lands, and nothing more is drawn; the
@@ -30,9 +33,17 @@
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { applyRowChange } from "../../ai/turn-view/turn-rows";
-import { catalogDescribe, type DeviceDurable } from "../../legion/durable/device";
+import { catalogDescribe, landUnseenFailure, type DeviceDurable } from "../../legion/durable/device";
+import { STALL_MESSAGE } from "../../legion/durable/stall";
 import type { AiSurface } from "../../platform/app/cache-telemetry";
-import { afterStall, drivePlaceTurn, resumedPlaceRows, type BookTurnEnd, type DrivenBookTurn } from "./book-turn-rows";
+import {
+  afterStall,
+  drivePlaceTurn,
+  resumedPlaceRows,
+  type BeginTurn,
+  type BookTurnEnd,
+  type DrivenBookTurn,
+} from "./book-turn-rows";
 import { mergeTurnRows, type CallRow } from "./call-state";
 import { holdDetached, holdStarting, releaseDetached } from "./detached-turns";
 import type { PlaceTurnRequest, StallOptions } from "./durable-turn";
@@ -140,6 +151,10 @@ interface Live {
   /** Steers on their way into the run: a stop waits for them, or it would read the inbox before they are in it (docs/pitfall/528). */
   steering: Promise<void>[];
   driven?: DrivenBookTurn;
+  /** 0, or 1 once it was asked again after a stall. */
+  attempt: number;
+  /** Starts the turn's request again, for a stall with nobody looking; absent for a turn this process did not assemble. */
+  again?: BeginTurn;
   settled: boolean;
   gone: boolean;
   /** Detached, and another session joined the turn: it watches and files for it. */
@@ -176,6 +191,8 @@ function failureRow(kind: "refusal" | "error", message: string, ts: number): Cal
 export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
   const now = deps.now ?? Date.now;
   let live: Live | null = null;
+  // The surface has closed (detach): a turn opened from here on, asked again after a stall, is drawn nowhere.
+  let away = false;
   const waiters = new Set<() => void>();
   const notifyIdle = () => {
     if (live) return;
@@ -236,7 +253,11 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     );
     if (owed.length > 0) deps.file(owed);
     if (live === turn) live = null;
-    if (turn.gone) return;
+    if (turn.gone) {
+      // Nothing landed and nobody is looking: asked again all the same (docs/pitfall/709).
+      if (end.kind === "stalled" && !turn.bell) unseenStall(turn, attempt);
+      return;
+    }
     deps.streaming(false);
     const lines = plain(owed);
 
@@ -284,6 +305,25 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     draw(turn, [...kept, failureRow(end.kind === "refused" ? "refusal" : "error", end.message, at), ...tail]);
   };
 
+  // A stall on a closed conversation: the same request again, out of sight,
+  // landing with the box card a reply nobody saw gets. A second stall, or a
+  // turn there is no request for, puts that card with the failure instead.
+  const unseenStall = (turn: Live, attempt: number) => {
+    const next = afterStall(attempt);
+    if (next.askAgain && turn.again) {
+      const again = open(turn.after);
+      again.again = turn.again;
+      again.begun = holdStarting(deps.key);
+      follow(again, attempt + 1, undefined, turn.again);
+      return;
+    }
+    const failure = { ts: turn.placeholder.ts, message: STALL_MESSAGE };
+    void deps
+      .durable()
+      ?.then((durable) => landUnseenFailure(durable, deps.key, failure, BACKGROUND_CONTEXT))
+      .catch((e: unknown) => console.warn("a turn gave up unseen but its box item would not write", e));
+  };
+
   const open = (after: number, line?: CallRow): Live => {
     const turn: Live = {
       after,
@@ -293,12 +333,13 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       rows: [],
       unsent: [],
       steering: [],
+      attempt: 0,
       settled: false,
-      gone: false,
+      gone: away,
       released: false,
     };
     live = turn;
-    deps.streaming(true);
+    if (!away) deps.streaming(true);
     drawLive(turn);
     return turn;
   };
@@ -309,6 +350,7 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     notice: string | undefined,
     begin: (onRows: (rows: CallRow[]) => void) => Promise<DrivenBookTurn>,
   ) => {
+    turn.attempt = attempt;
     const onRows = (rows: CallRow[]) => {
       if (live !== turn) return;
       turn.rows = rows;
@@ -368,7 +410,8 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
     }
     const runtime = await durable;
     const request = { ...assembled.request, describe: catalogDescribe(assembled.request.tools), ...deps.stall };
-    follow(turn, attempt, assembled.notice, (onRows) => drivePlaceTurn(runtime, request, onRows));
+    turn.again = (onRows) => drivePlaceTurn(runtime, request, onRows);
+    follow(turn, attempt, assembled.notice, turn.again);
     return true;
   };
 
@@ -442,13 +485,19 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       notifyIdle();
     },
     detach() {
+      away = true;
       const turn = live;
       if (!turn) return;
       turn.gone = true;
-      // Another session joining the turn takes over its stall watch and filing (docs/pitfall/540).
+      // Another session joining the turn takes over its stall watch and filing
+      // (docs/pitfall/540), and how to ask it again: the turn running here then,
+      // the one detached or the one asked again after it stalled.
       const settled = holdDetached(deps.key, () => {
-        turn.released = true;
-        turn.driven?.unwatch();
+        const now = live;
+        if (!now) return;
+        now.released = true;
+        now.driven?.unwatch();
+        return { attempt: now.attempt, ...(now.again ? { again: now.again } : {}) };
       });
       void session.idle().then(settled);
     },
@@ -458,9 +507,10 @@ export function createPlaceSession(deps: PlaceSessionDeps): PlaceSession {
       if (!durable) return false;
       const found = await resumedPlaceRows(await durable, deps.key, deps.surface, BACKGROUND_CONTEXT, deps.stall);
       if (!found || live) return false;
-      releaseDetached(deps.key);
+      const handed = releaseDetached(deps.key);
       const turn = open(found.after);
-      follow(turn, 0, undefined, (onRows) => found.follow(onRows));
+      if (handed?.again) turn.again = handed.again;
+      follow(turn, handed?.attempt ?? 0, undefined, (onRows) => found.follow(onRows));
       return true;
     },
     running: () => live !== null,

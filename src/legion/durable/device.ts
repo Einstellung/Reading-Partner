@@ -30,7 +30,7 @@ import type { AgentTool } from "./contract";
 import { toolLabel } from "./tool-result";
 import { appTurnLog, type TurnLogSink } from "./turn-log-sink";
 import { BACKGROUND_PLACE, backgroundPlace, type BackgroundHost } from "./background";
-import { ThreadDoc, type HistoryReader, type ThreadOrigin, type TurnResult } from "./extension";
+import { ConversationsDoc, ThreadDoc, type HistoryReader, type ThreadOrigin, type TurnResult } from "./extension";
 import { appDurableHost, openDurable, type DurableHost, type DurableRuntime } from "./harness";
 import { recoverBeforeResume, type Recovered } from "./recover";
 import { fileSteers, type Describe, type ThreadAddress, type ThreadFiles } from "./thread-files";
@@ -99,6 +99,26 @@ export interface DeviceDurable {
   describe: Describe;
   places: ReadonlyMap<string, Place>;
   onTurnSettled(listener: (event: SettledEvent) => void): () => void;
+}
+
+/**
+ * A turn on the conversation `key` gave up with nothing landed and nobody
+ * there (docs/pitfall/709): its place's lander puts the box card a reply
+ * nobody saw gets, carrying why, unless the reader is looking by then.
+ */
+export async function landUnseenFailure(
+  durable: DeviceDurable,
+  key: string,
+  failure: { ts: number; message: string },
+  context: Context,
+): Promise<void> {
+  const { harness } = durable.runtime;
+  const id = (await harness.snapshot(ConversationsDoc, context))?.threads[key] as ConversationId | undefined;
+  if (id === undefined) return;
+  const origin = (await harness.snapshot(ThreadDoc, id, context))?.origin;
+  const place = origin ? durable.places.get(origin.place) : undefined;
+  if (!origin || !place) return;
+  await place.land(origin, { conversationId: id, status: "unanswered", rows: [], failure }, context);
 }
 
 /** A tool call's reader-facing label and whether it is quiet, from the catalog. */

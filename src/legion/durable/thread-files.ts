@@ -86,6 +86,9 @@ export interface ThreadLanding<O> {
  * written: it is the app talking, shown on the row and never replayed as the
  * model's words.
  *
+ * A turn that gave up unseen (`failure`) writes nothing and puts the same
+ * card, carrying why.
+ *
  * A bell's turn puts no card here: the bell puts the run's own (soul/bell.ts).
  * Its replies before the reader said anything are stamped with the run they
  * answer, as soul/landing.ts stamps a bell's reply.
@@ -111,6 +114,10 @@ export function threadLander<O>(deps: ThreadLanding<O>): Lander {
     }
     if (wrote) await deps.threads.flush();
     if (turn.refusal !== undefined || turn.bell || deps.watching(origin)) return;
+    if (turn.failure) {
+      await deps.card(origin, turn.failure.ts, turn.failure.message);
+      return;
+    }
     const reply = [...turn.rows].reverse().find((row) => row.role === "assistant");
     if (!reply) return;
     await deps.card(origin, reply.ts, reply.text);

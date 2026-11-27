@@ -28,6 +28,7 @@ import {
   type StallOptions,
 } from "./durable-turn";
 import type { TurnView } from "./durable-view";
+import { holdDetached, holdStarting } from "./detached-turns";
 
 export type BookTurnEnd =
   | { kind: "answered"; rows: CallRow[] }
@@ -47,9 +48,53 @@ export interface DrivenBookTurn {
   unwatch(): void;
 }
 
+/** Starts a turn and follows it as rows: what a turn was asked with, kept to ask it again. */
+export type BeginTurn = (onRows: (rows: CallRow[]) => void) => Promise<DrivenBookTurn>;
+
 /** A stalled turn is asked again once (docs/pitfall/390); a second stall is shown as a failure. */
 export function afterStall(attempt: number): { askAgain: true } | { askAgain: false; message: string } {
   return attempt === 0 ? { askAgain: true } : { askAgain: false, message: STALL_MESSAGE };
+}
+
+/**
+ * A turn whose view has closed stalled (docs/pitfall/709): asked again once,
+ * out of sight, with the request it was started with (`again`), so it lands
+ * with the box card a reply nobody saw gets. A second stall, or a turn there
+ * is no request for, ends in `failed`. A view that opens the conversation
+ * meanwhile joins the turn and takes it over (detached-turns.ts).
+ */
+export function askAgainUnseen(
+  key: string,
+  attempt: number,
+  again: BeginTurn | undefined,
+  failed: (message: string) => void,
+): void {
+  if (!afterStall(attempt).askAgain || !again) {
+    failed(STALL_MESSAGE);
+    return;
+  }
+  const begun = holdStarting(key);
+  let driven: DrivenBookTurn | undefined;
+  let released = false;
+  const settled = holdDetached(key, () => {
+    released = true;
+    driven?.unwatch();
+    return { attempt: attempt + 1, again };
+  });
+  again(() => {})
+    .then(async (turn) => {
+      driven = turn;
+      begun();
+      if (released) turn.unwatch();
+      const end = await turn.ended;
+      settled();
+      if (!released && end.kind === "stalled") askAgainUnseen(key, attempt + 1, again, failed);
+    })
+    .catch((e: unknown) => {
+      begun();
+      settled();
+      console.warn("a turn asked again out of sight did not start", e);
+    });
 }
 
 function toolStatus(tool: TurnView["rows"][number] & { role: "ai" }): ToolStatus[] {
