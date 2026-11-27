@@ -247,7 +247,7 @@
 - [692-the-meals-state-copy-without-its-version-reads-as-empty](./storage/692-the-meals-state-copy-without-its-version-reads-as-empty.md) — `info-meals` 的副本是读出的状态、不带文件的 `version`，`parseMealsFile` 把它当旧版读成空的，检查看不到计划；`parse` 前补回 `MEALS_VERSION`
 - [484-a-slow-first-read-overwrites-a-newer-write](./storage/484-a-slow-first-read-overwrites-a-newer-write.md) — `createFiredStore` 的 `read()` 先查缓存再 await 读盘，冷启动两拍同时读，慢的那次在 `record()` 之后落地，把旧副本赋回缓存，下一次写盘丢掉夜间任务的锚点。缓存读盘的 promise，写盘排成一条链
 - [691-a-boot-read-that-rejects-fails-an-unrelated-test](./storage/691-a-boot-read-that-rejects-fails-an-unrelated-test.md) — `bootDomains` 里 `void` 掉的读盘在测试环境必抛（没有 Tauri 文件系统），未处理的 rejection 记到正在跑的那条测试头上，红的是 `store-errors.test.ts` 这种无关测试。启动时不等的读一律接 `.catch(console.warn)`
-- [712-a-pull-into-a-busy-thread-file-is-written-over](./storage/712-a-pull-into-a-busy-thread-file-is-written-over.md) — 本机对某本书的对话文件有待写的消息时 pull 落地，`load` 不采用文件，`writeMerged` 按线程用缓存整条盖文件，另一台设备写进同一文件任何已持有线程的新消息被写掉，下一趟同步当删除传出去。未修，要改成按消息合并并记消息级删除
+- [712-a-pull-into-a-busy-thread-file-is-written-over](./storage/712-a-pull-into-a-busy-thread-file-is-written-over.md) — 本机对某本书的对话文件有待写的消息时 pull 落地，`load` 不采用文件，`writeMerged` 按线程用缓存整条盖文件，另一台设备写进同一文件任何已持有线程的新消息被写掉，下一趟同步当删除传出去。改成两边都有的线程按消息合并，本机 patch 和删除过的消息记账到写盘成功，读盘期间 gen 变了不并；已有消息被换成文件版本带 `update` 通知界面
 
 ## 提取（壳侧 pdf.js）
 

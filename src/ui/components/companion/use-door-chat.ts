@@ -49,7 +49,7 @@ import {
 import type { ThreadMessage as UiMessage } from "../chat/types";
 import { forgetScroll } from "../common/scroll-memory";
 import { doorTools, doorToolsPrompt } from "./door-tools";
-import { listenToThread, withArrivedRow } from "./door-arrivals";
+import { listenToThread, withArrivedRow, withUpdatedRow } from "./door-arrivals";
 import { BACKGROUND_STATUS_RULE } from "../../../legion/status/tool";
 import {
   INTAKE_CHOOSE_OP,
@@ -148,10 +148,11 @@ export function useDoorChat(options: DoorChatOptions = {}): DoorChat {
       setMessages(thread.messages.map(rehydrateMessage));
       // Every append through the store is announced, this view's own and the
       // runtime's landing included; a row already on screen under that role and
-      // timestamp is skipped. Heard from here on (door-arrivals.ts).
-      const unlisten = listenToThread(key, id, (message) => {
+      // timestamp is skipped. A later version of one pulled from another device
+      // replaces it where it stands. Heard from here on (door-arrivals.ts).
+      const unlisten = listenToThread(key, id, (message, update) => {
         const row = rehydrateMessage(message);
-        setMessages((prev) => withArrivedRow(prev, row));
+        setMessages((prev) => (update ? withUpdatedRow(prev, row) : withArrivedRow(prev, row)));
       });
       const assemble = async (signal: AbortSignal): Promise<PlaceAssembled> => {
         const history = messagesRef.current.filter((m) => !m.streaming && !m.queued);

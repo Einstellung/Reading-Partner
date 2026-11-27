@@ -12,14 +12,31 @@ export function withArrivedRow<T extends { ts: number; role: string }>(rows: T[]
   return rows.some((m) => m.ts === row.ts && m.role === row.role) ? rows : [...rows, row];
 }
 
-/** Hear the messages appended to one thread under `key`. Returns the undo. */
+/**
+ * The rows on screen with the one under this row's role and timestamp swapped
+ * for it: a later version of a message already drawn, pulled from another
+ * device. Every other row is kept as the object it was, and a row that is not
+ * on screen stays off it.
+ */
+export function withUpdatedRow<T extends { ts: number; role: string }>(rows: T[], row: T): T[] {
+  const i = rows.findIndex((m) => m.ts === row.ts && m.role === row.role);
+  if (i < 0) return rows;
+  const next = rows.slice();
+  next[i] = row;
+  return next;
+}
+
+/**
+ * Hear the messages appended to one thread under `key`, and with `update` the
+ * later versions of messages it already held (ThreadAppend). Returns the undo.
+ */
 export function listenToThread(
   key: string,
   threadId: string,
-  arrived: (message: ThreadMessage) => void,
+  arrived: (message: ThreadMessage, update: boolean) => void,
   listen: typeof onThreadMessage = onThreadMessage,
 ): () => void {
   return listen((append) => {
-    if (append.key === key && append.threadId === threadId) arrived(append.message);
+    if (append.key === key && append.threadId === threadId) arrived(append.message, append.update === true);
   });
 }

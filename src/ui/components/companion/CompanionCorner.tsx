@@ -220,6 +220,8 @@ export function CompanionCorner({
 	useEffect(
 		() =>
 			onThreadMessage((append) => {
+				// An appended card, not a later version of one already there.
+				if (append.update) return;
 				if (liveRef.current && append.key === doorKey(doorDate()) && carriesCard(append.message)) openDoor();
 			}),
 		[openDoor],

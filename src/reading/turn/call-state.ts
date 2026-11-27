@@ -127,6 +127,10 @@ export type CallAction<M extends CallRow> =
   // delegated run the soul answered into the thread it was sent from (docs/68).
   // The view's own writes never come through here (reading/thread-arrivals.ts).
   | { type: "row-arrived"; threadId: string; row: M }
+  // A row on screen that came from outside the view was replaced in the file
+  // by a later version of it — another device's reply, pulled while it was
+  // still being written and pulled again longer (the store's `update`).
+  | { type: "row-updated"; threadId: string; row: M }
   // A turn stopped before writing anything, so its row is not a row.
   | { type: "row-dropped"; threadId: string; ts: number }
   // A durable turn's rows after the reader's line at `after`, as its view
@@ -266,6 +270,19 @@ export function callReducer<M extends CallRow>(
       if (id !== undefined && state.messages.some((m) => m.id === id)) return state;
       if (state.messages.some((m) => m.id === undefined && m.role === role && m.ts === ts)) return state;
       return { ...state, messages: [...state.messages, action.row] };
+    }
+    case "row-updated": {
+      // Found the way `row-arrived` tells a row it has already drawn: by id, or
+      // by role and stamp for one with none. Swapped where it stands, every
+      // other row kept as the object it was; a row not on screen stays off it.
+      const { id, role, ts } = action.row;
+      const i = state.messages.findIndex((m) =>
+        id !== undefined ? m.id === id : m.id === undefined && m.role === role && m.ts === ts,
+      );
+      if (i < 0) return state;
+      const messages = state.messages.slice();
+      messages[i] = action.row;
+      return { ...state, messages };
     }
     case "row-dropped":
       return {
