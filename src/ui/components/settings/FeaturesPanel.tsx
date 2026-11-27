@@ -1,16 +1,15 @@
 // Settings, second tab: what the app does with a book once a provider is
 // connected. Grouped by where the switch is felt — everywhere, in the reader,
-// in the briefing — with plain headings rather than another layer of folds.
+// on this computer — with plain headings rather than another layer of folds.
 //
 // Three kinds of setting share this panel, and the difference is where each is
 // written. The account's travel between devices (settings.json); this device's
 // do not (device.json, docs/36) and are drawn only where they mean something —
-// the role and the login item on a desktop, the collection switch on a
-// collector; and the paper background is neither, because it has to be readable
+// the login item on a desktop; and the paper background is neither, because it has to be readable
 // before the first frame is painted (base/paper-tint.ts).
 
 import { hasAutostart } from "../../../platform/app/autostart";
-import { roleIsChoosable, type DeviceRole, type DeviceSettings } from "../../../platform/app/device";
+import type { DeviceSettings } from "../../../platform/app/device";
 import { AI_LANGUAGE_OPTIONS, companionNameOf, type AiLanguage, type Settings } from "../../../platform/app/settings";
 import { useT } from "../../../i18n";
 import { setPaperTint, usePaperTint } from "../base/usePaperTint";
@@ -51,10 +50,6 @@ export default function FeaturesPanel({
     value: o.value,
     label: o.value === "auto" ? t("settings.features.languageAuto") : o.label,
   }));
-  const roleChoices = [
-    { value: "collector", label: t("settings.features.roleCollector") },
-    { value: "reader", label: t("settings.features.roleReader") },
-  ];
 
   return (
     <div className={SETTINGS_PANEL}>
@@ -92,42 +87,10 @@ export default function FeaturesPanel({
         <CompanionNameField settings={settings} onSettingsChange={onSettingsChange} />
       </SettingsSection>
 
-      {/* Whether this computer stands for the nightly dream and the sync
-          conflict runs (presence/live.ts). A reader never does. */}
-      {device?.role === "collector" && (
-        <SettingsSection title={t("settings.features.briefing")}>
-          <div className={CARD}>
-            <Label>
-              <Checkbox
-                checked={device.backgroundCollect}
-                onCheckedChange={(v) =>
-                  onDeviceChange({ ...device, backgroundCollect: v === true })
-                }
-              />
-              {t("settings.features.collect")}
-            </Label>
-            <p className="m-0 text-xs text-faint-foreground">{t("settings.features.collectHint")}</p>
-          </div>
-        </SettingsSection>
-      )}
-
       {/* Nothing here syncs, and none of it exists on a phone. */}
-      {device && (roleIsChoosable() || hasAutostart()) && (
+      {device && hasAutostart() && (
         <SettingsSection title={t("settings.features.thisComputer")}>
-          {roleIsChoosable() && (
-            <div className={CARD}>
-              <FieldGrid>
-                <ChoiceField
-                  label={t("settings.features.role")}
-                  value={device.role}
-                  choices={roleChoices}
-                  onChange={(v) => onDeviceChange({ ...device, role: v as DeviceRole })}
-                />
-              </FieldGrid>
-              <p className="m-0 text-xs text-faint-foreground">{t("settings.features.roleHint")}</p>
-            </div>
-          )}
-          {hasAutostart() && <AutostartCard device={device} onDeviceChange={onDeviceChange} />}
+          <AutostartCard device={device} onDeviceChange={onDeviceChange} />
         </SettingsSection>
       )}
     </div>

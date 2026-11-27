@@ -107,16 +107,7 @@ export default {
   "features.companionShowHint":
     "{name} se tient dans le coin de chaque écran, lecteur compris. Désactivé, le coin reste vide ; le bouton de la barre latérale, de l'écran d'accueil du téléphone et du menu Plus du lecteur ramène {name}. Ce choix reste sur cet appareil.",
   "features.companionName": "Nom du compagnon",
-  "features.briefing": "Tâches de fond",
-  "features.collect": "Assurer les tâches de fond sur cet ordinateur",
-  "features.collectHint":
-    "Cet ordinateur range votre mémoire pendant la nuit et règle les conflits de synchronisation. Désactivé, un autre de vos ordinateurs, si vous en avez un, prend le relais.",
   "features.thisComputer": "Cet ordinateur",
-  "features.role": "Cette machine est un",
-  "features.roleCollector": "Collecteur — peut prendre en charge les tâches de fond",
-  "features.roleReader": "Lecteur — laisse les tâches de fond à d'autres ordinateurs",
-  "features.roleHint":
-    "Un collecteur peut prendre en charge les tâches de fond : ranger votre mémoire la nuit et régler les conflits de synchronisation. Un lecteur ne le fait jamais. Les téléphones et tablettes sont toujours lecteurs. Si deux collecteurs sont volontaires, celui qui tourne depuis le plus longtemps fait le travail.",
   "features.autostart": "Ouvrir Reading Partner au démarrage de cet ordinateur",
   "features.autostartHint":
     "Désactivé par défaut. Activez-le sur la machine qui doit collecter vos sources toute la journée : avec l'icône de la barre système, vos bulletins se préparent que vous ayez ouvert l'app ou non. Ce réglage appartient à cet ordinateur et n'est pas transmis à vos autres appareils.",

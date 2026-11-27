@@ -2,8 +2,7 @@
 // this file is the machine's and does not.
 //
 // The distinction is not a filing convenience. One machine starting with the
-// computer says nothing about another, the same way one machine's role as the
-// collector says nothing about another's. A synced value would carry a laptop's
+// computer says nothing about another. A synced value would carry a laptop's
 // answer onto a desktop it is wrong for, and there is no merge that fixes that —
 // the two devices genuinely disagree.
 //
@@ -11,29 +10,24 @@
 // the range is a whitelist, and nothing here is on it. There is a test.
 
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
-import { isMobilePlatform } from "./platform";
 
 const DEVICE_FILE = "device.json";
 
-// What this machine is for (docs/36). A collector runs the four phases against
-// the subscribed sites all day and publishes the briefing; a reader consumes
-// what a collector published and sends no request to a subscribed site.
-export type DeviceRole = "collector" | "reader";
-
 export interface DeviceSettings {
   // This machine's identity, generated once on first run. It names the files a
-  // device writes for the others to read (info-collector-<id>.json,
-  // info-ask-<id>.json), which is why it has to survive restarts and why two
-  // machines must never end up sharing one.
+  // device writes for the others to read (dream-runs/<id>.json, its holdings
+  // tree), which is why it has to survive restarts and why two machines must
+  // never end up sharing one.
+  //
+  // role and backgroundCollect used to be here: whether this machine collected
+  // for the briefing, and later whether it stood for the nightly work. Intel is
+  // gone and every device does that work now. An old file still carrying the
+  // keys rides through load/save as unknown keys; nothing reads them.
   deviceId: string;
-  role: DeviceRole;
   // Start the app when the machine starts. Off unless the user says otherwise:
   // a program that installs itself into the login sequence uninvited is a
   // program people uninstall.
   autostart: boolean;
-  // Whether this collector is collecting at all: docs/35 for what collection is,
-  // docs/36 for why the switch belongs to the machine. A reader never reads it.
-  backgroundCollect: boolean;
   // How large the maximized chat window sets its content, as a multiplier on the
   // body size (ui/components/base/chat-scale.ts). Per-device because a 4K
   // desktop and an iPad held at arm's length do not have the same answer, and a
@@ -71,54 +65,25 @@ export interface DeviceSettings {
 
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   deviceId: "",
-  role: "collector",
   autostart: false,
-  backgroundCollect: true,
   chatScale: 1,
   lessonIntroSeen: false,
 };
 
-// The role this device actually has, whatever the file says. iOS and Android are
-// readers and nothing else: collecting one article body takes tens of seconds of
-// live webview and a backgrounded phone gets seconds of runtime (docs/36). The
-// stored value is consulted only where there is a choice, and the settings
-// screen offers the choice only there.
-export function deviceRoleFor(stored: DeviceRole | undefined, mobile: boolean): DeviceRole {
-  if (mobile) return "reader";
-  return stored === "reader" ? "reader" : "collector";
-}
-
-// Whether this platform lets the user pick a role at all.
-export function roleIsChoosable(): boolean {
-  return !isMobilePlatform();
-}
-
-// What a first run on a new build has to fill in: an identity, and the setting
-// that used to live in settings.json. The old key is copied once as
-// the initial value and never read again — a device already on the new build has
-// its own answer, and the account-level copy is one machine's opinion carried
-// onto another's (docs/36). They are not deleted from settings.json: a device
-// still on the old build reads its own copy from there, and a fields merge that
-// saw one side drop a key would carry the deletion across.
+// What a first run has to fill in: an identity. Everything else is defaulted,
+// with no clause of its own.
 //
-// Pure, so the migration is testable; the id source is injected.
+// Pure, so it is testable; the id source is injected.
 export function initialDeviceSettings(
   stored: Partial<DeviceSettings>,
-  legacy: { backgroundCollect?: boolean },
   newId: () => string,
 ): { settings: DeviceSettings; changed: boolean } {
   const settings: DeviceSettings = {
     ...DEFAULT_DEVICE_SETTINGS,
     ...stored,
     deviceId: stored.deviceId || newId(),
-    backgroundCollect:
-      stored.backgroundCollect ??
-      legacy.backgroundCollect ??
-      DEFAULT_DEVICE_SETTINGS.backgroundCollect,
   };
-  const changed =
-    settings.deviceId !== stored.deviceId || settings.backgroundCollect !== stored.backgroundCollect;
-  return { settings, changed };
+  return { settings, changed: settings.deviceId !== stored.deviceId };
 }
 
 function parseStored(raw: unknown): Partial<DeviceSettings> | null {
@@ -126,22 +91,16 @@ function parseStored(raw: unknown): Partial<DeviceSettings> | null {
 }
 
 // Everything the store reaches outside itself, passed in rather than imported,
-// so a test can run the real store against its own file and its own answer to
-// "is this a phone".
+// so a test can run the real store against its own file.
 export interface DeviceIo {
   read: () => Promise<GuardedRead<Partial<DeviceSettings>>>;
   write: (contents: string) => Promise<void>;
-  // The account's old file, read once by the migration below. Anything it
-  // throws means there is nothing to inherit.
-  legacy: () => Promise<unknown>;
   newId: () => string;
-  isMobile: () => boolean;
 }
 
 export interface DeviceStore {
   load: () => Promise<DeviceSettings>;
   init: () => Promise<DeviceSettings>;
-  role: () => DeviceRole;
   id: () => string;
   save: (settings: DeviceSettings) => Promise<void>;
   patch: (patch: Partial<DeviceSettings>) => Promise<void>;
@@ -152,7 +111,7 @@ export interface DeviceStore {
 }
 
 export function createDeviceStore(io: DeviceIo): DeviceStore {
-  // The one in-memory copy, so the role can be answered without a read on every
+  // The one in-memory copy, so the id can be answered without a read on every
   // call. Filled by init and kept in step by save.
   let cached: DeviceSettings | null = null;
   const listeners = new Set<() => void>();
@@ -161,14 +120,10 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
     for (const listener of [...listeners]) listener();
   }
 
-  function withRole(settings: DeviceSettings): DeviceSettings {
-    return { ...settings, role: deviceRoleFor(settings.role, io.isMobile()) };
-  }
-
   // Written straight through, not debounced: these change when a user flips a
   // switch, which is rare enough that a write per flip costs nothing.
   function save(settings: DeviceSettings): Promise<void> {
-    setCached(withRole(settings));
+    setCached(settings);
     return io.write(JSON.stringify(settings, null, 2));
   }
 
@@ -180,7 +135,7 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
   async function load(): Promise<DeviceSettings> {
     const read = await io.read();
     const stored = read.status === "ok" ? read.value : {};
-    const settings = withRole({ ...DEFAULT_DEVICE_SETTINGS, ...stored });
+    const settings = { ...DEFAULT_DEVICE_SETTINGS, ...stored };
     setCached(settings);
     return settings;
   }
@@ -188,37 +143,15 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
   return {
     load,
     // The first read of the session: give a machine that has never had one an
-    // identity, and take over the setting that used to be the account's.
-    // Called once at startup, before anything asks for the role.
+    // identity. Called once at startup, before anything asks for the id.
     init: async () => {
       const read = await io.read();
       const stored = read.status === "ok" ? read.value : {};
-      let legacy: { backgroundCollect?: boolean } = {};
-      if (stored.backgroundCollect === undefined) {
-        try {
-          // The key is gone from the Settings type and still on disk, which is
-          // exactly the shape a one-time migration reads.
-          const old = (await io.legacy()) as { backgroundCollect?: unknown };
-          legacy = {
-            backgroundCollect:
-              typeof old.backgroundCollect === "boolean" ? old.backgroundCollect : undefined,
-          };
-        } catch {
-          // Nothing to inherit; the defaults stand.
-        }
-      }
-      const { settings, changed } = initialDeviceSettings(stored, legacy, io.newId);
-      const next = withRole(settings);
-      setCached(next);
+      const { settings, changed } = initialDeviceSettings(stored, io.newId);
+      setCached(settings);
       if (changed) await save(settings).catch(() => {});
-      return next;
+      return settings;
     },
-    // The role, for callers that cannot wait for a read: the shells resolve it
-    // once at startup and everything after reads this. "reader" until it is
-    // known, so a collector's singletons are never constructed by accident on a
-    // device that turns out to be a reader — that is the expensive mistake, not
-    // its reverse.
-    role: () => (cached ? cached.role : "reader"),
     id: () => cached?.deviceId ?? "",
     save,
     // One field, without the caller having to hold the rest of the file. A
@@ -242,16 +175,7 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
 const store = createDeviceStore({
   read: () => readGuardedJson<Partial<DeviceSettings>>(DEVICE_FILE, parseStored),
   write: (contents) => writeTextAtomic(DEVICE_FILE, contents),
-  // Raw, not loadSettings: that joins this file's own values in, and importing
-  // it would make the two stores import each other.
-  legacy: async () => {
-    const read = await readGuardedJson<Record<string, unknown>>("settings.json", (raw) =>
-      raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null,
-    );
-    return read.status === "ok" ? read.value : {};
-  },
   newId: () => crypto.randomUUID(),
-  isMobile: isMobilePlatform,
 });
 
 export function loadDeviceSettings(): Promise<DeviceSettings> {
@@ -260,10 +184,6 @@ export function loadDeviceSettings(): Promise<DeviceSettings> {
 
 export function initDeviceSettings(): Promise<DeviceSettings> {
   return store.init();
-}
-
-export function currentDeviceRole(): DeviceRole {
-  return store.role();
 }
 
 export function currentDeviceId(): string {

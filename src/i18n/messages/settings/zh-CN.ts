@@ -104,16 +104,7 @@ export default {
   "features.companionShowHint":
     "{name} 站在每个界面的角落，阅读时也在。关掉后角落空着；侧栏、手机首页和阅读器「更多」菜单里的 {name} 按钮可以再叫它出来。这个选择只留在这台设备上。",
   "features.companionName": "伙伴的名字",
-  "features.briefing": "后台任务",
-  "features.collect": "让这台电脑承担后台任务",
-  "features.collectHint":
-    "这台电脑负责夜间整理记忆、处理同步冲突。关闭后由你的另一台电脑接手（如果有）。",
   "features.thisComputer": "这台电脑",
-  "features.role": "这台机器是",
-  "features.roleCollector": "收集机——可以承担后台任务",
-  "features.roleReader": "阅读机——后台任务交给别的电脑",
-  "features.roleHint":
-    "收集机可以承担后台任务：夜间整理记忆、处理同步冲突；阅读机从不承担。手机和平板始终是阅读机。如果有两台收集机愿意承担，由运行时间最长的那台工作。",
   "features.autostart": "开机时启动 Reading Partner",
   "features.autostartHint":
     "默认关闭。在你希望全天收集来源的那台机器上打开——配合托盘图标，无论你是否打开应用，简报都会在后台生成。该设置属于这台电脑，不会同步到你的其他设备。",

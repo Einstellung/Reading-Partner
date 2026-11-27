@@ -107,16 +107,7 @@ export default {
   "features.companionShowHint":
     "{name} está en la esquina de cada pantalla, también en el lector. Desactivado, la esquina queda vacía; el botón de {name} en la barra lateral, en la pantalla de inicio del móvil y en el menú Más del lector hace que reaparezca. La elección se queda en este dispositivo.",
   "features.companionName": "Nombre del acompañante",
-  "features.briefing": "Trabajo en segundo plano",
-  "features.collect": "Hacer el trabajo en segundo plano en este ordenador",
-  "features.collectHint":
-    "Este ordenador ordena tu memoria por la noche y resuelve los conflictos de sincronización. Desactivado, otro de tus ordenadores, si lo tienes, toma el relevo.",
   "features.thisComputer": "Este ordenador",
-  "features.role": "Este equipo es un",
-  "features.roleCollector": "Recopilador: puede encargarse del trabajo en segundo plano",
-  "features.roleReader": "Lector: deja el trabajo en segundo plano a otros equipos",
-  "features.roleHint":
-    "Un recopilador puede encargarse del trabajo en segundo plano: ordenar tu memoria por la noche y resolver los conflictos de sincronización. Un lector nunca lo hace. Los teléfonos y las tabletas son siempre lectores. Si dos recopiladores están dispuestos, trabaja el que lleva más tiempo en marcha.",
   "features.autostart": "Abrir Reading Partner al iniciar este ordenador",
   "features.autostartHint":
     "Desactivado de forma predeterminada. Actívalo en el equipo que quieras que recopile tus fuentes todo el día: junto con el icono de la bandeja, tus boletines se preparan tanto si abres la app como si no. Este ajuste es de este ordenador y no pasa a tus otros dispositivos.",

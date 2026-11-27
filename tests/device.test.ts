@@ -1,38 +1,21 @@
-// Per-device settings (src/platform/app/device.ts): the role a machine has and
-// the one-time migration that moved two settings out of the account's file
-// (docs/36). Both are pure; the file access around them is not tested here.
+// Per-device settings (src/platform/app/device.ts): the identity a first run
+// gives a machine, and the store's in-memory copy. Pure; the file access around
+// them is not tested here.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   DEFAULT_DEVICE_SETTINGS,
   createDeviceStore,
-  deviceRoleFor,
   initialDeviceSettings,
   type DeviceIo,
   type DeviceSettings,
 } from "../src/platform/app/device";
 
-test("a phone or tablet is a reader whatever the file says", () => {
-  expect(deviceRoleFor(undefined, true)).toBe("reader");
-  expect(deviceRoleFor("reader", true)).toBe("reader");
-  // The stored value is not obeyed on mobile: collecting one article body needs
-  // tens of seconds of live webview and iOS gives a backgrounded app seconds.
-  expect(deviceRoleFor("collector", true)).toBe("reader");
-});
-
-test("a desktop collects unless it was told otherwise", () => {
-  expect(deviceRoleFor(undefined, false)).toBe("collector");
-  expect(deviceRoleFor("collector", false)).toBe("collector");
-  expect(deviceRoleFor("reader", false)).toBe("reader");
-});
-
-test("a machine with no file gets an identity and the migrated defaults", () => {
-  const { settings, changed } = initialDeviceSettings({}, {}, () => "id-1");
+test("a machine with no file gets an identity and the defaults", () => {
+  const { settings, changed } = initialDeviceSettings({}, () => "id-1");
   expect(changed).toBe(true);
   expect(settings.deviceId).toBe("id-1");
-  expect(settings.role).toBe(DEFAULT_DEVICE_SETTINGS.role);
-  expect(settings.backgroundCollect).toBe(true);
   expect(settings.chatScale).toBe(DEFAULT_DEVICE_SETTINGS.chatScale);
 });
 
@@ -40,54 +23,39 @@ test("a machine with no file gets an identity and the migrated defaults", () => 
 // of its own: a field the first run dropped would come back as 1x on a machine
 // whose reader had already sized the type.
 test("a field with no migration behind it still survives the first run", () => {
-  const { settings } = initialDeviceSettings({ deviceId: "id-1", chatScale: 1.4 }, {}, () => "unused");
+  const { settings } = initialDeviceSettings({ deviceId: "id-1", chatScale: 1.4 }, () => "unused");
   expect(settings.chatScale).toBe(1.4);
 });
 
-// The migration reads settings.json once. What was on the account's file is the
-// initial value here, so a machine that had collection turned off does not
-// silently start collecting on the first run of the new build.
-test("the account's old values are taken over on the first run", () => {
-  const { settings, changed } = initialDeviceSettings(
-    { deviceId: "id-1" },
-    { backgroundCollect: false },
-    () => "unused",
-  );
-  expect(changed).toBe(true);
-  expect(settings.backgroundCollect).toBe(false);
-});
-
-// fingerDraw was a device setting until a finger marked only by a hold
-// (docs/82). A file that still has it opens, and the key is carried, not read.
-test("an old file's fingerDraw is harmless", () => {
-  const stored = { deviceId: "id-1", backgroundCollect: true, fingerDraw: true } as Partial<DeviceSettings>;
-  const { settings, changed } = initialDeviceSettings(stored, {}, () => "unused");
+// fingerDraw, role and backgroundCollect were device settings once. A file that
+// still has them opens, and the keys are carried, not read.
+test("an old file's retired keys are harmless", () => {
+  const stored = {
+    deviceId: "id-1",
+    role: "reader",
+    backgroundCollect: false,
+    fingerDraw: true,
+  } as Partial<DeviceSettings>;
+  const { settings, changed } = initialDeviceSettings(stored, () => "unused");
   expect(changed).toBe(false);
-  expect(settings.backgroundCollect).toBe(true);
+  expect(settings.deviceId).toBe("id-1");
 });
 
 test("a device that already answered keeps its answer and is not rewritten", () => {
   const stored: DeviceSettings = {
     deviceId: "id-9",
-    role: "reader",
     autostart: true,
-    backgroundCollect: false,
     chatScale: 1.4,
     lessonIntroSeen: true,
   };
-  const { settings, changed } = initialDeviceSettings(
-    stored,
-    // A stale account-level copy must not win over this device's own answer.
-    { backgroundCollect: true },
-    () => "new-id",
-  );
+  const { settings, changed } = initialDeviceSettings(stored, () => "new-id");
   expect(changed).toBe(false);
   expect(settings).toEqual(stored);
 });
 
 test("an identity survives across runs", () => {
-  const first = initialDeviceSettings({}, {}, () => "id-1").settings;
-  const second = initialDeviceSettings(first, {}, () => "id-2").settings;
+  const first = initialDeviceSettings({}, () => "id-1").settings;
+  const second = initialDeviceSettings(first, () => "id-2").settings;
   expect(second.deviceId).toBe("id-1");
 });
 
@@ -96,7 +64,7 @@ test("an identity survives across runs", () => {
 // It was a module-level `let`, so every test file sharing the worker shared one
 // machine's answer. A file that loaded a device file left its identity behind,
 // and currentDeviceId() then named that machine for every file after it — which
-// is the name a collector writes its published files under. The patch below is
+// is the name a device files its own records under. The patch below is
 // the same leak doing damage: a patch merges onto the live copy, so the wrong
 // live copy writes another machine's settings into this one's file.
 
@@ -114,9 +82,7 @@ function storeOver(stored: Partial<DeviceSettings> | null): {
     write: async (contents: string) => {
       text = contents;
     },
-    legacy: async () => ({}),
     newId: () => "generated",
-    isMobile: () => false,
   };
   return {
     store: createDeviceStore(io),
@@ -125,7 +91,7 @@ function storeOver(stored: Partial<DeviceSettings> | null): {
 }
 
 test("a second store does not answer with the first store's identity", async () => {
-  const first = storeOver({ deviceId: "id-9", role: "reader" });
+  const first = storeOver({ deviceId: "id-9", autostart: true });
   await first.store.load();
   expect(first.store.id()).toBe("id-9");
 

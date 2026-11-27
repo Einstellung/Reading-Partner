@@ -83,9 +83,7 @@ function storeOver(stored: Partial<DeviceSettings> | null) {
     write: async (contents: string) => {
       text = contents;
     },
-    legacy: async () => ({}),
     newId: () => "generated",
-    isMobile: () => false,
   };
   return {
     store: createDeviceStore(io),

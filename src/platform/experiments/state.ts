@@ -1,5 +1,5 @@
 // This device's experiment switches (registry.ts), read synchronously after
-// initDeviceSettings, the same as currentDeviceRole. Before that every one is
+// initDeviceSettings, the same as currentDeviceId. Before that every one is
 // off: a feature that is not shown until the file is read is the safe mistake.
 
 import {

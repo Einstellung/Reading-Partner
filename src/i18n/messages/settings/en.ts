@@ -107,16 +107,7 @@ export default {
   "features.companionShowHint":
     "{name} stands in the corner of every screen, the reader included. Off, the corner is empty; the {name} button in the sidebar, on the phone's home screen and in the reader's More menu brings it back. The choice stays on this device.",
   "features.companionName": "Companion name",
-  "features.briefing": "Background work",
-  "features.collect": "Take on background work on this computer",
-  "features.collectHint":
-    "This computer tidies your memory overnight and settles sync conflicts. Off, another computer of yours takes this on, if you have one.",
   "features.thisComputer": "This computer",
-  "features.role": "This machine is a",
-  "features.roleCollector": "Collector — can take on background work",
-  "features.roleReader": "Reader — leaves background work to other computers",
-  "features.roleHint":
-    "A collector can take on background work: tidying your memory overnight and settling sync conflicts. A reader never does. Phones and tablets are always readers. If two collectors are willing, the one that has been running longest does the work.",
   "features.autostart": "Start Reading Partner when this computer starts",
   "features.autostartHint":
     "Off by default. Turn it on for the machine you want collecting your sources all day — together with the tray, it means your briefs are being built whether or not you opened the app. This setting belongs to this computer and is not carried to your other devices.",

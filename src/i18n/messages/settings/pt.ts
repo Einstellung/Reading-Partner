@@ -108,16 +108,7 @@ export default {
   "features.companionShowHint":
     "{name} fica no canto de todas as telas, inclusive no leitor. Desativado, o canto fica vazio; o botão na barra lateral, na tela inicial do celular e no menu Mais do leitor traz {name} de volta. A escolha fica neste dispositivo.",
   "features.companionName": "Nome do companheiro",
-  "features.briefing": "Trabalho em segundo plano",
-  "features.collect": "Fazer o trabalho em segundo plano neste computador",
-  "features.collectHint":
-    "Este computador organiza sua memória durante a noite e resolve conflitos de sincronização. Desativado, outro computador seu assume, se você tiver.",
   "features.thisComputer": "Este computador",
-  "features.role": "Esta máquina é um",
-  "features.roleCollector": "Coletor — pode assumir o trabalho em segundo plano",
-  "features.roleReader": "Leitor — deixa o trabalho em segundo plano para outros computadores",
-  "features.roleHint":
-    "Um coletor pode assumir o trabalho em segundo plano: organizar sua memória durante a noite e resolver conflitos de sincronização. Um leitor nunca faz isso. Celulares e tablets são sempre leitores. Se dois coletores estiverem dispostos, trabalha o que está ligado há mais tempo.",
   "features.autostart": "Abrir o Reading Partner quando este computador iniciar",
   "features.autostartHint":
     "Desativado por padrão. Ative na máquina que você quer que colete suas fontes o dia todo: junto com o ícone da bandeja, os seus boletins são montados quer você abra o app ou não. Este ajuste pertence a este computador e não vai para os seus outros dispositivos.",

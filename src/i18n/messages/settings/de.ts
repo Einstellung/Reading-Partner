@@ -107,16 +107,7 @@ export default {
   "features.companionShowHint":
     "{name} steht in der Ecke jedes Bildschirms, auch im Reader. Aus bleibt die Ecke leer; der Knopf in der Seitenleiste, auf dem Startbildschirm des Handys und im Mehr-Menü des Readers holt {name} zurück. Die Wahl bleibt auf diesem Gerät.",
   "features.companionName": "Name des Begleiters",
-  "features.briefing": "Hintergrundarbeit",
-  "features.collect": "Hintergrundarbeit auf diesem Computer übernehmen",
-  "features.collectHint":
-    "Dieser Computer räumt nachts dein Gedächtnis auf und löst Synchronisierungskonflikte. Aus: Ein anderer deiner Computer übernimmt, falls vorhanden.",
   "features.thisComputer": "Dieser Computer",
-  "features.role": "Dieser Rechner ist ein",
-  "features.roleCollector": "Sammler – kann Hintergrundarbeit übernehmen",
-  "features.roleReader": "Leser – überlässt Hintergrundarbeit anderen Rechnern",
-  "features.roleHint":
-    "Ein Sammler kann Hintergrundarbeit übernehmen: nachts dein Gedächtnis aufräumen und Synchronisationskonflikte klären. Ein Leser tut das nie. Smartphones und Tablets sind immer Leser. Wenn zwei Sammler bereit sind, arbeitet der, der am längsten läuft.",
   "features.autostart": "Reading Partner beim Start dieses Computers öffnen",
   "features.autostartHint":
     "Standardmäßig aus. Schalte es auf dem Rechner ein, der deine Quellen den ganzen Tag sammeln soll – zusammen mit dem Symbol in der Menüleiste bzw. im Infobereich entstehen deine Briefs, ob du die App geöffnet hast oder nicht. Diese Einstellung gehört zu diesem Computer und wird nicht auf deine anderen Geräte übertragen.",

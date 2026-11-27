@@ -106,16 +106,7 @@ export default {
   "features.companionShowHint":
     "{name}: 리더를 포함한 모든 화면의 모서리에 있습니다. 끄면 모서리가 비고, 사이드바, 휴대폰 홈 화면, 리더의 더 보기 메뉴에 있는 {name} 버튼으로 다시 불러올 수 있습니다. 이 설정은 이 기기에만 저장됩니다.",
   "features.companionName": "동반자 이름",
-  "features.briefing": "백그라운드 작업",
-  "features.collect": "이 컴퓨터에서 백그라운드 작업 맡기",
-  "features.collectHint":
-    "이 컴퓨터가 밤사이 기억을 정리하고 동기화 충돌을 처리합니다. 끄면 다른 컴퓨터가 있을 경우 그 컴퓨터가 이어받습니다.",
   "features.thisComputer": "이 컴퓨터",
-  "features.role": "이 컴퓨터의 역할",
-  "features.roleCollector": "수집 — 백그라운드 작업을 맡을 수 있음",
-  "features.roleReader": "읽기 — 백그라운드 작업은 다른 컴퓨터에 맡김",
-  "features.roleHint":
-    "수집 기기는 백그라운드 작업을 맡을 수 있습니다: 밤사이 기억 정리와 동기화 충돌 처리. 읽기 기기는 맡지 않습니다. 휴대폰과 태블릿은 항상 읽기 기기입니다. 맡겠다는 수집 기기가 둘이면 가장 오래 실행 중인 쪽이 작업합니다.",
   "features.autostart": "컴퓨터가 시작될 때 Reading Partner 실행",
   "features.autostartHint":
     "기본값은 끔입니다. 하루 종일 소스를 수집할 컴퓨터에서 켜세요. 트레이와 함께라면 앱을 열었든 안 열었든 브리프가 만들어집니다. 이 설정은 이 컴퓨터에 속하며 다른 기기로 옮겨지지 않습니다.",
