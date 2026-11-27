@@ -108,17 +108,16 @@ soul 随时能读 run 文件的 `progress` 回答「跑到哪了」，不必等�
 
 ## 指派、接手与取消
 
-重活只在 PC 跑，移动端只划线、聊天和派活。run 的执行方由 `kind` 决定：claim 里声明能跑这个 kind 的设备。一个 kind 通常只有一台设备能跑，没有竞争认领，也就没有租约——租约是在没有原子取走的介质上模拟取走，执行方唯一时它没有东西可模拟。
+不假设有常开的电脑（2026-11 定）：`synced` 档的 run 由第一个看到它 `pending` 的设备执行，桌面、iPad、手机都可以，只要本机注册了这个 kind 的 worker。runner 的轮询等本次启动或回前台后的第一个同步 pass 拉完才动，这样别的设备已经接走的 run 到这里时已是 `running`。两台设备在同步之前都看到 `pending`、都接了，就各跑一遍，结果按 run 的合并规则收敛；这个竞态接受，不加租约。
 
-同一 kind 有两台设备都能跑时，沿用 claim 的选举（连续在线最久者，`claimedAt` 相同按 deviceId 破平，24 小时没心跳算弃权），按 kind 算，设备级不是 run 级。输的那台站着不动。
 
 接手不退回 `pending`：状态只升不降，接手是就地再写一份 `running`——换 `claimant`（deviceId + 开始时刻）、`attempts` 加一、`revision` 加一。两份都是 `running`，状态格打平，`revision` 裁决，新接手的那份赢。
 
-三条：执行设备自己重启后接手名下的 `running`，本机自己判断，不依赖别人的时钟；执行设备弃权后，同 kind 新当选的设备接手它名下的 `running`；本机名下 `running` 而 `lastProgressAt` 与本次 claimant 开始时刻里较晚的那个超过阈值的，本机自己接手。三条都算一次尝试——接手就是开工，不记数的话一个在两台设备间弹来弹去的 run 永远到不了上限。worker 失败但没到上限时也是这个写法，原设备就地重试；到上限 runner 写 `failed`。创建之后没有人再写 `pending`。
+三条：执行设备自己重启后接手名下的 `running`，本机自己判断，不依赖别人的时钟；别的设备名下的 `running` 一天（`ABANDONED_MS`，按 `lastProgressAt` 与 claimant 开始时刻里较晚的那个算）没有动静，看到的设备接手；本机名下 `running` 而 `lastProgressAt` 与本次 claimant 开始时刻里较晚的那个超过阈值的，本机自己接手。三条都算一次尝试——接手就是开工，不记数的话一个在两台设备间弹来弹去的 run 永远到不了上限。worker 失败但没到上限时也是这个写法，原设备就地重试；到上限 runner 写 `failed`。创建之后没有人再写 `pending`。
 
 正确性兜底是重跑无害：一个 run 跑两遍、两份结果合并后与跑一遍相同。
 
-移动端派活就是写一个 `pending` run，PC 下次 pull 捡起来跑；移动端要看的只有 PC 上次在线时刻，来自 claim 心跳。
+派活就是写一个 `pending` run，第一个同步到它、开着的设备捡起来跑。
 
 取消写进 run 文件的 `cancelRequested`，不是喊一声。执行设备下次 pull 读到就调 worker 的 `cancel()`；本机委托、本机执行的 run 直接调 `cancel()`，不经过文件；没有执行者的 `pending` run 直接进 `cancelled`。
 
@@ -174,7 +173,9 @@ ledger 目录自己也进 `NEVER_INFER_DELETE`：丢一行就等于把它删掉�
 
 bell 不是 Red Box。Red Box（[60](../info/60-info：白宫与Red Boxes.md)、[68](../companion/68-Lumen与盒子的交互.md)）是给用户的交付物，bell 是「活干完了」的通知。采集经理跑完，程序层把 cable 装进 Red Box，同时一条 `run-done` 进 bell。答铃之后也是程序层往盒里放一项，指回 soul 刚写进去的那条回复；失败或拿不准的标「要你定」。
 
-## claim
+## claim（2026-11 已删）
+
+`legion/claim`（每设备一份 claim 文件、按连续在线最久选执行设备、能力标签）随「不假设常开电脑」整个删掉：dream、冲突扫描、裁决 run、schedule 都不再选机器，三餐配图是 `local` 档、自己查 `hasWebviewFetch`，没有用到能力标签。`legion/claim/<deviceId>.json` 的 palace 行改为 legacy、下了同步通道。下面三段是删之前的记录。
 
 `legion/claim`，每台设备一份 claim 文件，声明在线时刻和本机能跑的 kind。它是今天 info 那份 claim 文件（「我是采集端」）的泛化，选举算法从 `info/program/presence.ts` 和 `info/briefer/handoff.ts` 泛化。
 
@@ -186,7 +187,7 @@ bell 不是 Red Box。Red Box（[60](../info/60-info：白宫与Red Boxes.md)、
 
 `legion/schedule`，提供时点窗口、FIFO 和每资源串行。
 
-schedule 的产物是一条 `wake` 铃，不是直接起 run；派什么由 soul 决定。挂在夜间时点上的 run 按 `kind` 走 claim 选举，只有当选的那台创建，两台都到点也只跑一遍。
+schedule 的产物是一条 `wake` 铃，不是直接起 run；派什么由 soul 决定。schedule 不选机器：每台到点的设备各自摇一次，铃的 id 是 schedule 加 anchor，本机靠 `fired.json` 不重复摇。nightly job（ledger fold、housekeeper）每台设备给自己的盘跑，等本次启动或回前台后的第一个同步 pass 拉完才跑。
 
 夜间那个时点是共用的：memory 的 dream 挂在上面，各领域自己的 housekeeping（info 日切缓存、退役设备的残留文件、run 折 ledger）也挂在上面。schedule 只提供时点和串行，不知道挂上来的是什么。
 
@@ -196,7 +197,7 @@ schedule 的产物是一条 `wake` 铃，不是直接起 run；派什么由 soul
 
 worker 的签名是 `run(brief, ctx) → { cancel, done }`，runner 在 `legion/runner`（`runner.ts`、`worker.ts`、`outputs.ts`）。
 
-runner 是 `kind` → worker 的注册表加一圈外壳：取走 → 写 `running` → 跑 → 写终态 → 投一条铃。注册一个 worker 的同一次调用里声明这个 kind 要哪些能力标签——有 worker 的设备才可能跑它，能不能跑由标签选举答，两件事从不分开成立。`ctx` 里有 `report(text)`，和给 agent worker 的 `reportTool(工具名, 轮数)`：回合是 worker 自己跑的，措辞是 runner 的。子 run 只从 `ctx.delegate` 出，agent worker 调它直接被拒。runner 还管三件闸：`delegator` 深度超两层的创建请求拒绝，带 `batchId` + `step` 的创建先查已有的那一份，取消按 `batchId` 级联一层。
+runner 是 `kind` → worker 的注册表加一圈外壳：取走 → 写 `running` → 跑 → 写终态 → 投一条铃。有 worker 的设备就可能跑它；只有某些机器能做的活（隐藏 webview）由领域自己的 worker 和扫描判断。`ctx` 里有 `report(text)`，和给 agent worker 的 `reportTool(工具名, 轮数)`：回合是 worker 自己跑的，措辞是 runner 的。子 run 只从 `ctx.delegate` 出，agent worker 调它直接被拒。runner 还管三件闸：`delegator` 深度超两层的创建请求拒绝，带 `batchId` + `step` 的创建先查已有的那一份，取消按 `batchId` 级联一层。
 
 轮询挂在 sync 的 15 秒 tick 上，每拍问 `dueRuns` 要本机该动的 run。同一 kind 本机同时只跑一个：贵的都是重活，一台设备同时跑两个就是别的 kind 排不上队；不同 kind 并排跑不拦。`local` 档不落同步文件夹——runner 内部给它一份 Map 上的 run store，delegate 当场起、当场把 `done` 交回去，别处不再分档。
 
@@ -218,7 +219,7 @@ pi-agent-core 时代的 session 仓（AppData 的 `session/`、palace 的 `sessi
 
 2026-10-17 定。用户问后台的活回来没有、做完没有、在不在跑，卢明先调 `background_status`（`legion/status/tool.ts`，只读，不用确认），不靠搜对话。工具读本机能看到的全部 run 文件（同步的和本进程的），可按 `which`（`running` 只看排队和在跑的，默认 `recent` 再加 48 小时内结束的）、`kind`、`about`（描述器给的主题 id 或名字；带了 kind 或 about 就不限 48 小时）筛，最多 8 条，未结束的在前。每条：标题、kind、状态（排队等哪台认领 / 在哪台跑 / 完成 / 失败带原因 / 跳过带原因 / 取消）、问起和开始是几分钟前、跑了多久、第几次尝试、最后一行汇报。时间全由程序算成「4 min ago (today 10:42)」，不给模型时间戳去减。
 
-看不见的要说看不见：run 不在本机跑时，只能看到同步过来的 run 文件，工具写明「本机看不到那台的进度，只有上次同步的记录」和本机多久前同步过；在跑的 run 最后一次汇报超过 15 分钟，写明可能是那台睡了或关了、也可能本机这份落后，不许说成没在做。排队没人认领时，按 claim 心跳说能跑它的那台是否两小时内在线。
+看不见的要说看不见：run 不在本机跑时，只能看到同步过来的 run 文件，工具写明「本机看不到那台的进度，只有上次同步的记录」和本机多久前同步过；在跑的 run 最后一次汇报超过 15 分钟，写明可能是那台睡了或关了、也可能本机这份落后，不许说成没在做。排队没人认领时，说第一台同步到它、开着的设备会接走，并给出本机多久前同步过；别的设备只按 deviceId 前 8 位称呼。
 
 kind 自己的细节由描述器给（`legion/status/registry.ts` `registerRunDescriber`，领域启动时和 worker 一起登记）：`about` 给标题、可筛的主题、跳过原因，`detail` 给细节行，只许程序算出的计数和结论，不给模型原始日志或抓来的正文。没登记描述器的 kind 照样有通用那几行；以后加 kind 不改工具。第一个描述器是主题搜索（[88](../info/88-主题搜索.md)「进度」）。
 
@@ -228,7 +229,6 @@ kind 自己的细节由描述器给（`legion/status/registry.ts` `registerRunDe
 legion/
   run/        run 文件的读写、状态格、指派、折叠
   bell/       ring / read / ack，三种铃
-  claim/      每设备声明与选举
   schedule/   时点窗口、FIFO、每资源串行
   ledger/     终态 run 的折叠行
   runner/     worker 契约与 runner、产出落盘
