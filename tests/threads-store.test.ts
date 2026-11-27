@@ -249,11 +249,12 @@ test("a message appended to a thread the file does not know is merged in", async
   store.append("book1", "t2", { role: "ai", text: "answered", ts: 9 });
   await advance(500);
 
-  // Their conversation is kept as it is; the one this process is editing is
-  // written from the cache (per-thread LWW, where the whole file used to lose).
+  // Their conversation is kept as it is; the one this process is editing keeps
+  // what it says and what the file says besides (per message, where the whole
+  // file used to lose and then the whole thread did — pitfall 712).
   expect(onDisk()).toEqual(["t1", "t2", "theirs"]);
   const parsed = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
-  expect(parsed.threads.t2.messages.map((m) => m.text)).toEqual(["answered"]);
+  expect(parsed.threads.t2.messages.map((m) => m.text)).toEqual(["said in t2", "answered"]);
   expect(parsed.threads.theirs.messages.map((m) => m.text)).toEqual(["said in theirs"]);
 });
 

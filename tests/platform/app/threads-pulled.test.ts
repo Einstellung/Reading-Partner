@@ -116,13 +116,39 @@ test("the announcement is the one a local append of the same message makes", asy
   expect(heard).toEqual(local);
 });
 
-test("a message the thread already holds is not announced again, grown or not", async () => {
+test("a message the thread already holds is not announced again", async () => {
   writeFile([thread("t1", [msg("m1", "user", 10, "hi"), msg("m2", "ai", 11, "hel")])]);
   await store.load("book1");
-  writeFile([thread("t1", [msg("m1", "user", 10, "hi"), msg("m2", "ai", 11, "hello")])]);
+  // The same bytes again, keys in another order.
+  files.set(
+    FILE,
+    JSON.stringify({
+      threads: {
+        t1: {
+          ...thread("t1", []),
+          messages: [
+            { text: "hi", ts: 10, role: "user", id: "m1" },
+            { ts: 11, text: "hel", id: "m2", role: "ai" },
+          ],
+        },
+      },
+    }),
+  );
   await pull();
 
   expect(heard).toEqual([]);
+});
+
+test("a held message pulled longer is announced as an update to it", async () => {
+  // The other device's reply, pulled while it was still being written.
+  writeFile([thread("t1", [msg("m1", "user", 10, "hi"), msg("m2", "ai", 11, "hel")])]);
+  await store.load("book1");
+  const grown = msg("m2", "ai", 11, "hello");
+  writeFile([thread("t1", [msg("m1", "user", 10, "hi"), grown])]);
+  await pull();
+
+  expect(heard).toEqual([{ key: "book1", threadId: "t1", message: grown, update: true }]);
+  expect(store.get("book1", "t1")?.messages.map((m) => m.text)).toEqual(["hi", "hello"]);
 });
 
 test("a message with no id is told apart by its stamp and role", async () => {
@@ -155,17 +181,18 @@ test("a thread new to this process announces nothing", async () => {
   expect(store.get("book1", "t2")).toBeDefined();
 });
 
-test("a thread with a write on its way keeps its own copy, and its reply is not drawn twice", async () => {
+test("a thread with a write on its way takes the pulled message, and its own reply is not drawn twice", async () => {
   writeFile([thread("t1", [msg("m1", "user", 10, "hi")])]);
   await store.load("book1");
   // The reply being written here, still in the debounce when the pull lands.
   store.append("book1", "t1", msg("m2", "ai", 11, "hel"));
   heard.length = 0;
-  writeFile([thread("t1", [msg("m1", "user", 10, "hi"), msg("m2", "ai", 11, "hel"), msg("m3", "user", 12, "x")])]);
+  const theirs = msg("m3", "user", 12, "x");
+  writeFile([thread("t1", [msg("m1", "user", 10, "hi"), msg("m2", "ai", 11, "hel"), theirs])]);
   await pull();
 
-  expect(heard).toEqual([]);
-  expect(store.get("book1", "t1")?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+  expect(heard).toEqual([{ key: "book1", threadId: "t1", message: theirs }]);
+  expect(store.get("book1", "t1")?.messages.map((m) => m.id)).toEqual(["m1", "m2", "m3"]);
 });
 
 test("a local append is still announced once", async () => {

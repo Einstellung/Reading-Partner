@@ -377,7 +377,10 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         );
         if (!message) return;
         const row = shapes.current.toDisplay([message])[0];
-        if (row) dispatch({ type: "row-arrived", threadId: append.threadId, row });
+        if (!row) return;
+        // A later version of a row already drawn replaces it in place.
+        const type = append.update ? "row-updated" : "row-arrived";
+        dispatch({ type, threadId: append.threadId, row });
       }),
     [homeOf],
   );

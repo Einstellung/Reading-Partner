@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { listenToThread, withArrivedRow } from "../../../../src/ui/components/companion/door-arrivals";
+import { listenToThread, withArrivedRow, withUpdatedRow } from "../../../../src/ui/components/companion/door-arrivals";
 import type { ThreadAppend, ThreadMessage } from "../../../../src/platform/app/threads";
 
 function fakeBus() {
@@ -48,5 +48,28 @@ describe("withArrivedRow", () => {
     const rows = [{ role: "user", ts: 1 }];
     expect(withArrivedRow(rows, { role: "ai", ts: 1 })).toHaveLength(2);
     expect(withArrivedRow(rows, { role: "user", ts: 1 })).toBe(rows);
+  });
+});
+
+describe("an update", () => {
+  test("reaches the listener marked as one", () => {
+    const bus = fakeBus();
+    const heard: [string, boolean][] = [];
+    listenToThread("door-2026-10-15", "t1", (m, update) => heard.push([m.text, update]), bus.listen);
+    bus.append({ key: "door-2026-10-15", threadId: "t1", message: msg(1, "hel") });
+    bus.append({ key: "door-2026-10-15", threadId: "t1", message: msg(1, "hello"), update: true });
+    expect(heard).toEqual([
+      ["hel", false],
+      ["hello", true],
+    ]);
+  });
+
+  test("replaces the row under its role and timestamp, and nothing else", () => {
+    const first = { role: "user", ts: 1, text: "q" };
+    const rows = [first, { role: "ai", ts: 1, text: "hel" }];
+    const next = withUpdatedRow(rows, { role: "ai", ts: 1, text: "hello" });
+    expect(next.map((r) => r.text)).toEqual(["q", "hello"]);
+    expect(next[0]).toBe(first);
+    expect(withUpdatedRow(rows, { role: "ai", ts: 2, text: "elsewhere" })).toBe(rows);
   });
 });

@@ -438,6 +438,31 @@ test("a landed row the view already drew is not drawn again", () => {
   expect(reduce(filed, { type: "row-arrived", threadId: "t1", row: ai(2, "done", { id: "t-two" }) })?.messages).toHaveLength(2);
 });
 
+test("a later version of a row that arrived replaces it where it stands", () => {
+  // Another device's reply, pulled half-written and then pulled again longer.
+  const first = user(1, "why?");
+  const after = user(3, "and?");
+  const open = call({ messages: [first, ai(2, "becau", { id: "t-theirs" }), after] });
+  const next = reduce(open, { type: "row-updated", threadId: "t1", row: ai(2, "because", { id: "t-theirs" }) });
+
+  expect(next?.messages.map((m) => m.text)).toEqual(["why?", "because", "and?"]);
+  // Only that row is a new object.
+  expect(next?.messages[0]).toBe(first);
+  expect(next?.messages[2]).toBe(after);
+  // A row with no id is found by its role and stamp, as row-arrived finds it.
+  const idless = call({ messages: [first, ai(2, "becau")] });
+  expect(reduce(idless, { type: "row-updated", threadId: "t1", row: ai(2, "because") })?.messages[1].text).toBe(
+    "because",
+  );
+});
+
+test("an update to a row that is not on screen changes nothing", () => {
+  const open = call({ messages: [user(1, "why?"), ai(2, "because", { id: "t-mine" })] });
+
+  expect(reduce(open, { type: "row-updated", threadId: "t1", row: ai(2, "because!", { id: "t-other" }) })).toBe(open);
+  expect(reduce(open, { type: "row-updated", threadId: "other", row: ai(2, "because!", { id: "t-mine" }) })).toBe(open);
+});
+
 test("the stop button keeps the half sentence as a finished row", () => {
   const open = call({
     messages: [ai(1, "half a sen", { streaming: true, tools: [{ name: "s", label: "S", state: "running" }] })],

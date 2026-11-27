@@ -14,6 +14,14 @@
 // when it was possible is in tests/threads-store.test.ts, and why it is written
 // down at all is in docs/13.
 //
+// Inside a thread both hold, "merges" means one message at a time, under the
+// sync merge's identity for a message (platform/sync/merge/messages.ts): what
+// this process changed and has not written yet is its own, and everything else
+// the file has is the file's. Writing the cached thread whole is how another
+// device's messages, pulled while this book had a write on its way — which
+// during a streamed reply is always — were erased and then synced away as a
+// deletion (pitfall 712).
+//
 // The second rule follows from the first, because every write now spans two
 // awaits with the user still typing across them: nothing computed before an
 // await is ever assigned back over the cache afterwards. What comes back is
@@ -273,9 +281,11 @@ export interface ThreadIo {
   timer?: WriterTimer;
   exit?: (onExit: () => void) => void;
   // A message was appended to a thread under this key, here or by a sync pull
-  // the store adopted (load's `pulled`). Called synchronously,
-  // with the message as it was stored — the id included, which is what tells a
-  // listener its own append apart from someone else's.
+  // the store took in (load's `pulled`, and the merge every write makes) — or,
+  // with `update`, a message the thread already held was replaced by the file's
+  // version of it. Called synchronously, with the message as it was stored —
+  // the id included, which is what tells a listener its own append apart from
+  // someone else's.
   onAppend?: (append: ThreadAppend) => void;
 }
 
@@ -286,6 +296,12 @@ export interface ThreadAppend {
   key: string;
   threadId: string;
   message: ThreadMessage;
+  // Not a new message: the file's version of one the thread already held
+  // replaced it — another device's reply, pulled while it was still being
+  // written and pulled again longer. Its identity (the id, else the stamp and
+  // role) is the one already on screen, and a view swaps that row for this
+  // one. Absent on every append.
+  update?: true;
 }
 
 // What the store holds for one file.
@@ -297,6 +313,13 @@ interface Entry {
   // before a delete and answered after it from resurrecting the thread, and a
   // set of ids the user deleted in one session costs nothing to keep.
   removed: Set<string>;
+  // The same debt one message at a time, inside threads the entry still holds:
+  // every message this process patched or took out, by thread and message key,
+  // with the gen of the change. Each outranks the file — its version of the
+  // message, or for one taken out the file's copy of it — until a write that
+  // carries the change lands, and is forgotten then. An appended message is not
+  // named: it is new, so no file holds another version of it.
+  owed: Map<string, Map<string, number>>;
   // Whether this entry has ever been reconciled with the file — set by a load
   // and by every write that merged the file in. Only a reconciled entry may be
   // written without reading first, which is what the way out of the app does.
@@ -349,16 +372,111 @@ export interface ThreadStore {
   flush: () => Promise<void>;
 }
 
-// A message's identity as the sync merge reads it (platform/sync/merge/
-// messages.ts): its id, else the stamp and role.
-function storedMessageKey(message: ThreadMessage): string {
-  return message.id ?? `${message.ts}:${message.role}`;
+// A message's identity within its thread, as the sync merge reads it: its id,
+// else the thread, stamp and role. platform/sync/merge/messages.ts's messageKey,
+// spelled again because this directory imports nothing;
+// tests/platform/app/threads-busy-pull.test.ts holds the two together.
+function messageKey(threadId: string, message: ThreadMessage): string {
+  return typeof message.id === "string" && message.id !== ""
+    ? message.id
+    : `${threadId}:${message.ts}:${message.role}`;
 }
 
-function heldMessageKeys(threads: ThreadMap): Map<string, Set<string>> {
-  const out = new Map<string, Set<string>>();
+// The order the sync merge puts a merged thread in (messages.ts
+// compareMessages): stamp, then a user turn before the reply appended in the
+// same millisecond, then key.
+function compareMessages(threadId: string): (a: ThreadMessage, b: ThreadMessage) => number {
+  const rank = (role: string): number => (role === "user" ? 0 : role === "ai" ? 1 : 2);
+  return (a, b) => {
+    const ta = typeof a.ts === "number" ? a.ts : Number.POSITIVE_INFINITY;
+    const tb = typeof b.ts === "number" ? b.ts : Number.POSITIVE_INFINITY;
+    if (ta !== tb) return ta < tb ? -1 : 1;
+    const r = rank(a.role) - rank(b.role);
+    if (r !== 0) return r;
+    const ka = messageKey(threadId, a);
+    const kb = messageKey(threadId, b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  };
+}
+
+// Key order and absent keys left out: a message read back off the file is the
+// same message as the object it was written from.
+function canonical(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  const object = value as Record<string, unknown>;
+  const keys = Object.keys(object)
+    .filter((k) => object[k] !== undefined)
+    .sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonical(object[k])}`).join(",")}}`;
+}
+
+function sameMessage(a: ThreadMessage, b: ThreadMessage): boolean {
+  return a === b || canonical(a) === canonical(b);
+}
+
+// A thread's messages by key. Null when the list is not one, or when two
+// messages share a key: the thread is then not merged message by message, the
+// same refusal as messages.ts makes.
+function byKey(
+  threadId: string,
+  messages: readonly ThreadMessage[] | undefined,
+): Map<string, ThreadMessage> | null {
+  if (!Array.isArray(messages)) return null;
+  const out = new Map<string, ThreadMessage>();
+  for (const message of messages) {
+    const key = messageKey(threadId, message);
+    if (out.has(key)) return null;
+    out.set(key, message);
+  }
+  return out;
+}
+
+/**
+ * One thread's messages as this process holds them with the file's merged in,
+ * or null when that changes nothing. A message named in `owed` is this
+ * process's — its version, or its absence. Every other message the file has is
+ * the file's: added where the thread lacks it, put over the held copy where the
+ * two differ. Nothing the file lacks is taken out: a deletion cannot be told
+ * from a message the file has not been given yet without a base, which only the
+ * sync merge has.
+ */
+function mergeMessages(
+  threadId: string,
+  held: readonly ThreadMessage[],
+  file: readonly ThreadMessage[] | undefined,
+  owed: ReadonlyMap<string, number> | undefined,
+): ThreadMessage[] | null {
+  const mine = byKey(threadId, held);
+  const theirs = byKey(threadId, file);
+  if (mine === null || theirs === null) return null;
+  let changed = false;
+  const out = held.map((message) => {
+    const key = messageKey(threadId, message);
+    const other = theirs.get(key);
+    if (other === undefined || owed?.has(key) || sameMessage(message, other)) return message;
+    changed = true;
+    return other;
+  });
+  let added = false;
+  for (const [key, message] of theirs) {
+    if (mine.has(key) || owed?.has(key)) continue;
+    out.push(message);
+    added = true;
+  }
+  if (added) out.sort(compareMessages(threadId));
+  return changed || added ? out : null;
+}
+
+// What the held threads said before a merge, message by message, so that what
+// the merge changed in them can be announced. A thread that was not held is one
+// no view can be showing — a view loads before it draws — so only these count.
+type HeldMessages = Map<string, Map<string, ThreadMessage>>;
+
+function heldMessages(threads: ThreadMap): HeldMessages {
+  const out: HeldMessages = new Map();
   for (const [id, thread] of Object.entries(threads)) {
-    out.set(id, new Set(thread.messages.map(storedMessageKey)));
+    out.set(id, new Map(thread.messages.map((m) => [messageKey(id, m), m])));
   }
   return out;
 }
@@ -374,7 +492,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   function entryFor(key: string): Entry {
     const held = cache.get(key);
     if (held) return held;
-    const fresh: Entry = { threads: {}, removed: new Set(), reconciled: false, gen: 0 };
+    const fresh: Entry = { threads: {}, removed: new Set(), owed: new Map(), reconciled: false, gen: 0 };
     cache.set(key, fresh);
     return fresh;
   }
@@ -401,6 +519,54 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
         continue;
       }
       entry.threads[id] = thread;
+    }
+  }
+
+  // The same rule inside a thread the entry holds and the file has too, one
+  // message at a time (mergeMessages). In place: whoever holds the thread sees
+  // what came in.
+  function mergeIn(entry: Entry, from: ThreadMap): void {
+    for (const [id, thread] of Object.entries(entry.threads)) {
+      const theirs = from[id];
+      if (!theirs) continue;
+      const next = mergeMessages(id, thread.messages, theirs.messages, entry.owed.get(id));
+      if (next) thread.messages.splice(0, thread.messages.length, ...next);
+    }
+  }
+
+  function owe(entry: Entry, threadId: string, message: ThreadMessage): void {
+    let keys = entry.owed.get(threadId);
+    if (!keys) entry.owed.set(threadId, (keys = new Map()));
+    keys.set(messageKey(threadId, message), entry.gen);
+  }
+
+  // A write that landed paid every change it carried: every one made at or
+  // before `sealed`, the gen its bytes were taken at. A change made while they
+  // were in the air is newer than what they say, and stays owed.
+  function settle(entry: Entry, sealed: number): void {
+    for (const [threadId, keys] of entry.owed) {
+      for (const [key, gen] of keys) if (gen <= sealed) keys.delete(key);
+      if (keys.size === 0) entry.owed.delete(threadId);
+    }
+  }
+
+  // Every message a merge added to a thread that was held before it, or put
+  // over the held copy, told to the channel the way a local append is — so a
+  // conversation on screen shows what the other device wrote. A message the
+  // merge kept is the object it was, so it is not told twice.
+  function announceMerged(key: string, held: HeldMessages, now: ThreadMap): void {
+    for (const [threadId, before] of held) {
+      const thread = now[threadId];
+      if (!thread) continue;
+      for (const message of thread.messages) {
+        const was = before.get(messageKey(threadId, message));
+        if (was && sameMessage(was, message)) continue;
+        try {
+          io.onAppend?.({ key, threadId, message, ...(was ? { update: true as const } : {}) });
+        } catch (e) {
+          console.error(`thread append listener failed for ${key}`, e);
+        }
+      }
     }
   }
 
@@ -441,10 +607,12 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   // resolved, then writes an empty map over the file. Re-reading costs one IPC
   // round-trip per debounce window and removes the whole class.
   //
-  // Cache wins per thread: the copy this process is editing is the newer one for
-  // the threads it holds. A thread only the file has (another device's, pulled
-  // under us) is kept as it is rather than erased, which is what v1 per-file LWW
-  // used to do to it.
+  // A thread only the file has (another device's, pulled under us) is kept as it
+  // is rather than erased, which is what v1 per-file LWW used to do to it. A
+  // thread both have is this process's copy with the file's messages merged in
+  // (mergeMessages): its own fields, the messages it changed, and every message
+  // the file has besides — the ones another device wrote into it while this one
+  // had the thread open, which writing the cached thread whole used to erase.
   async function writeMerged(key: string): Promise<void> {
     const entry = cache.get(key);
     // Nothing held for this key: there is nothing to say about the file, and
@@ -452,12 +620,21 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     if (!entry) return;
     writing.add(key);
     entry.gen++;
+    let landed = false;
+    let sealed = entry.gen;
     try {
       const onDisk = await readForWrite(key);
       // Taken here, with no await between this and the write: everything the
       // entry holds at the moment the bytes are handed over goes out with them,
       // including a thread created while the file was being read.
+      sealed = entry.gen;
       const merged: ThreadMap = { ...onDisk, ...entry.threads };
+      for (const [id, thread] of Object.entries(entry.threads)) {
+        const theirs = onDisk[id];
+        if (!theirs) continue;
+        const messages = mergeMessages(id, thread.messages, theirs.messages, entry.owed.get(id));
+        if (messages) merged[id] = { ...thread, messages };
+      }
       for (const id of entry.removed) delete merged[id];
       // Same cascade, applied to the bytes about to go out: an aside the file
       // still has whose parent this process deleted goes with it, and is named
@@ -480,8 +657,14 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       // created while the bytes were in the air belongs to the live entry, and
       // assigning `merged` over it is how the top-bar button ended up holding a
       // thread the store did not have and every message typed into it was lost.
+      // Merged before the debt is settled, so a message taken out while the
+      // bytes were in the air is not read back in from the file they replaced.
+      const held = heldMessages(entry.threads);
+      mergeIn(entry, onDisk);
       addMissing(entry, onDisk);
       entry.reconciled = true;
+      landed = true;
+      announceMerged(key, held, entry.threads);
     } finally {
       // The other half of the bump at the top, and the reason a read cannot
       // outlive this write unnoticed: `writing` stops being true here, so this
@@ -489,7 +672,12 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       // the write ended — one that threw leaves the entry holding the only copy
       // of what it was carrying, and adopting the file over that loses it just
       // the same.
+      //
+      // The debt is paid in the same step: a read that began before this write
+      // and answers after it holds the bytes this write replaced, and the gen it
+      // took no longer matches, so it is never merged against a debt that is gone.
       entry.gen++;
+      if (landed) settle(entry, sealed);
       writing.delete(key);
     }
   }
@@ -539,50 +727,38 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   // user still has is worth a sentence, and the writer moves it aside only when
   // it would otherwise be stuck refusing writes forever.
   //
-  // `pulled` is the sync pull's re-read (drop): every message it adopts into a
-  // thread this process already held is announced the way a local append is, so
-  // a conversation on screen shows what the other device wrote. Only when the
-  // file is adopted — a busy entry keeps its own copy of every thread it holds,
-  // so nothing of the file reaches the screen and nothing is drawn twice.
+  // `pulled` is the sync pull's re-read (drop): every message it brings into a
+  // thread this process already held, and every held message it replaces with a
+  // longer or edited version, is announced (announceMerged). A message this
+  // process is still writing is its own copy, so it is neither announced nor
+  // put back to what the file last had of it.
   async function load(bookId: string, pulled = false): Promise<ThreadMap> {
     const before = cache.get(bookId)?.gen;
     const text = await io.read(threadFileName(bookId));
     const onDisk = text === null ? {} : parseThreads(text);
     const entry = entryFor(bookId);
-    // The file is this book's whole truth only when nothing happened to the
-    // entry while it was being read and nothing of the entry is still on its way
-    // to disk. `isPending` and `writing` are the two halves of "on its way";
-    // `gen` catches the third case both of them answer "no" to — a read slower
-    // than a whole debounce-and-write cycle, whose answer is a file that no
-    // longer exists by the time it arrives.
-    const current =
-      entry.gen === (before ?? 0) && !writer.isPending(bookId) && !writing.has(bookId);
+    // Nothing happened to the entry while the file was being read: what came
+    // back describes the entry it is about to be applied to. A changed `gen`
+    // catches a read slower than a whole debounce-and-write cycle, whose answer
+    // is a file that no longer exists by the time it arrives — and whose
+    // messages are no newer than the ones that write read, merged and kept.
+    const quiet = entry.gen === (before ?? 0);
+    // The file is this book's whole truth only when nothing of the entry is
+    // still on its way to disk either. `isPending` and `writing` are the two
+    // halves of "on its way".
+    const current = quiet && !writer.isPending(bookId) && !writing.has(bookId);
+    const held = pulled ? heldMessages(entry.threads) : null;
     // Adopt it: a thread another device deleted goes away here. The entry object
     // itself is kept rather than replaced — a write in the air holds it — and
     // this process's own deletions still outrank the file until they are paid.
-    const held = current && pulled ? heldMessageKeys(entry.threads) : null;
     if (current) for (const id of Object.keys(entry.threads)) delete entry.threads[id];
+    // Busy, and still describing it: the threads the entry holds keep their own
+    // copy and take the file's messages besides (pitfall 712).
+    else if (quiet) mergeIn(entry, onDisk);
     addMissing(entry, onDisk);
     entry.reconciled = true;
-    if (held) announcePulled(bookId, held, entry.threads);
+    if (held) announceMerged(bookId, held, entry.threads);
     return entry.threads;
-  }
-
-  // A thread that was not held is one no view can be showing — a view loads
-  // before it draws — so only the threads held before the re-read are compared.
-  function announcePulled(key: string, held: Map<string, Set<string>>, now: ThreadMap): void {
-    for (const [threadId, keys] of held) {
-      const thread = now[threadId];
-      if (!thread) continue;
-      for (const message of thread.messages) {
-        if (keys.has(storedMessageKey(message))) continue;
-        try {
-          io.onAppend?.({ key, threadId, message });
-        } catch (e) {
-          console.error(`thread append listener failed for ${key}`, e);
-        }
-      }
-    }
   }
 
   // The on-disk threads of a book, without touching the cache — the sweep's read
@@ -813,6 +989,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       if (i < 0) return;
       thread.messages[i] = { ...thread.messages[i], ...patch };
       entry.gen++;
+      owe(entry, threadId, thread.messages[i]);
       schedule(bookId);
     },
     // Take one message out of a conversation, found by its stamp as patch finds
@@ -824,8 +1001,10 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       if (!entry || !thread) return;
       const i = thread.messages.findIndex((m) => m.ts === ts);
       if (i < 0) return;
-      thread.messages.splice(i, 1);
+      const [gone] = thread.messages.splice(i, 1);
       entry.gen++;
+      // Named, or the next merge reads it straight back in off the file.
+      owe(entry, threadId, gone);
       schedule(bookId);
     },
     // Park the conversation on a chapter, or clear it (docs/09). Written on the
@@ -878,9 +1057,10 @@ const appendListeners = new Set<(append: ThreadAppend) => void>();
  * Hear about every message appended through this module's appendMessage, after
  * it is in the thread. Returns the undo.
  *
- * Also every message a sync pull adds to a thread this process holds, once the
- * pulled file is adopted (the store's drop): the same announcement, so a view
- * does not need to know which device wrote it.
+ * Also every message a sync pull adds to a thread this process holds (the
+ * store's drop, and the merge each write makes): the same announcement, so a
+ * view does not need to know which device wrote it. A pulled version of a
+ * message the thread already held comes the same way, marked `update`.
  */
 export function onThreadMessage(listener: (append: ThreadAppend) => void): () => void {
   appendListeners.add(listener);
