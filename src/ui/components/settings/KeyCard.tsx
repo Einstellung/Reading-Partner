@@ -1,5 +1,5 @@
 // The one card for every provider that takes a pasted key: pick the provider,
-// paste, save. Four providers are on the card as chips; the rest, and the custom
+// paste, save. Five providers are on the card as chips; the rest, and the custom
 // OpenAI-compatible endpoint, sit behind "More providers", which opens by itself
 // when the connected choice is one of them (key-card-choices.ts).
 //

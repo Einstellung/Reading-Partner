@@ -15,6 +15,7 @@ const AUTH_KIND_TABLE = {
 	// Anthropic Console key: pi's anthropic models under an id of their own, so
 	// the key sits beside the subscription sign-in rather than replacing it.
 	"anthropic-api": "apiKey",
+	"openai-api": "apiKey",
 	// Gemini on an AI Studio key (GEMINI_API_KEY), over pi's google-generative-ai api.
 	google: "apiKey",
 	deepseek: "apiKey",

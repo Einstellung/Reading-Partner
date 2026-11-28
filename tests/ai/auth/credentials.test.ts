@@ -34,6 +34,23 @@ test("activating openai drops anthropic and deepseek", () => {
 	expect(after.deepseek).toBeUndefined();
 });
 
+test("the OpenAI platform key and ChatGPT sign-in round trip as separate active providers", async () => {
+	let bytes = JSON.stringify({ openai: oauth, voiceStt: key("stt") });
+	const create = () => createCredentialsStore({
+		read: async () => ({ status: "ok", value: JSON.parse(bytes) as CredentialStore }),
+		write: async (contents) => { bytes = contents; },
+	});
+	const platformKey = key("sk-test-openai");
+	await create().update((store) => withActiveCredential(store, "openai-api", platformKey));
+	const platform = await create().load();
+	expect(activeProviderId(platform)).toBe("openai-api");
+	expect(platform).toEqual({ "openai-api": platformKey, voiceStt: key("stt") });
+	await create().update((store) => withActiveCredential(store, "openai", oauth));
+	const chatgpt = await create().load();
+	expect(activeProviderId(chatgpt)).toBe("openai");
+	expect(chatgpt).toEqual({ openai: oauth, voiceStt: key("stt") });
+});
+
 test("activating deepseek drops anthropic and openai", () => {
 	const before: CredentialStore = { anthropic: oauth, openai: oauth };
 	const after = withActiveCredential(before, "deepseek", key("dk"));
@@ -116,6 +133,7 @@ test("a legacy OpenAI api-key credential is not treated as active", () => {
 	expect(activeProviderId({ openai: key("sk-legacy") })).toBeNull();
 	// but it does not block a real credential of another provider
 	expect(activeProviderId({ openai: key("sk-legacy"), deepseek: key("dk") })).toBe("deepseek");
+	expect(activeProviderId({ openai: key("sk-legacy"), "openai-api": key("sk-platform") })).toBe("openai-api");
 });
 
 // --- default-conversation chain follow -------------------------------------
