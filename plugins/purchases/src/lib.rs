@@ -1,9 +1,5 @@
 // The lifetime unlock (docs/platform/713): a non-consumable in-app purchase on
-// iOS, bought and restored through RevenueCat so the purchase is tied to the
-// Supabase account rather than to one device.
-//
-// Three commands and no events. Everything real is in Swift, under ios/; off
-// iOS every command answers `ok: false, error: "unavailable"`.
+// iOS and Android. RevenueCat ties it to the user's Supabase account.
 
 use tauri::{
     plugin::{Builder, TauriPlugin},
@@ -12,20 +8,18 @@ use tauri::{
 
 pub use models::*;
 
-// Split by target_os rather than by tauri's desktop/mobile cfg: Android is
-// mobile and has no implementation here either.
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod fallback;
-#[cfg(target_os = "ios")]
-mod ios;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+mod mobile;
 
 mod commands;
 mod models;
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use fallback::Purchases;
-#[cfg(target_os = "ios")]
-use ios::Purchases;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use mobile::Purchases;
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to
 /// access the purchases API.
@@ -42,7 +36,7 @@ impl<R: Runtime, T: Manager<R>> crate::PurchasesExt<R> for T {
 /// Initializes the plugin.
 ///
 /// The name given here is what makes the invoke prefix `plugin:purchases|` and
-/// the Swift registration name `purchases`; it has to agree with `links` in
+/// the native registration name `purchases`; it has to agree with `links` in
 /// Cargo.toml, which is what names the ACL namespace, and nothing checks that
 /// at compile time.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
@@ -53,9 +47,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::restore
         ])
         .setup(|app, api| {
-            #[cfg(target_os = "ios")]
-            let purchases = ios::init(app, api)?;
-            #[cfg(not(target_os = "ios"))]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            let purchases = mobile::init(api)?;
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             let purchases = fallback::init(app, api);
             app.manage(purchases);
             Ok(())

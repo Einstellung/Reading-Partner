@@ -1,6 +1,4 @@
-// Everywhere that is not iOS: Android has no Google Play Billing yet and the
-// desktop has no store at all. The plugin still registers, so the commands
-// answer "unavailable" instead of failing the invoke with "command not found".
+// The plugin registers on desktop so its commands can answer "unavailable".
 
 use serde::de::DeserializeOwned;
 use tauri::{plugin::PluginApi, AppHandle, Runtime};

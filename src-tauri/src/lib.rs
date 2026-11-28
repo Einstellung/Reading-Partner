@@ -64,7 +64,7 @@ pub fn run() {
         // availability probe with false and the control is never drawn.
         .plugin(tauri_plugin_openin::init())
         // Ours, out of plugins/purchases: the lifetime unlock through RevenueCat
-        // on iOS (docs/platform/713). Elsewhere it answers "unavailable".
+        // on iOS and Android (docs/platform/713). Desktop answers "unavailable".
         .plugin(tauri_plugin_purchases::init())
         // Ours, out of plugins/apple-sign-in: the native Sign in with Apple
         // sheet (docs/platform/713). Off iOS it answers "unavailable".

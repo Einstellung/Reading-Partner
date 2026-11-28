@@ -1,10 +1,6 @@
 // The lifetime unlock (docs/platform/713): a non-consumable in-app purchase on
-// iOS, bought and restored through RevenueCat under the Supabase user id.
-//
-// Native half: plugins/purchases (Swift on iOS; Android and desktop answer
-// "unavailable"). Off until REVENUECAT_IOS_API_KEY is filled in: with the key
-// empty nothing here reaches the plugin. No function throws; every failure is
-// `ok: false` with a sentence in `error`.
+// iOS and Android, bought and restored through RevenueCat under the Supabase
+// user id. Each store stays off until its public API key is configured.
 
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { platform as osPlatform } from "@tauri-apps/plugin-os";
@@ -12,7 +8,10 @@ import { platform as osPlatform } from "@tauri-apps/plugin-os";
 /** The RevenueCat public iOS key (`appl_…`). Empty keeps purchases off. */
 export const REVENUECAT_IOS_API_KEY = "";
 
-/** The App Store product id of the 9.99 USD non-consumable. */
+/** The RevenueCat public Android key (`goog_…`). Empty keeps purchases off. */
+export const REVENUECAT_ANDROID_API_KEY = "";
+
+/** The App Store and Google Play product id of the 9.99 USD non-consumable. */
 export const LIFETIME_PRODUCT_ID = "lumen.lifetime";
 
 /** The RevenueCat entitlement the lifetime product grants. */
@@ -37,7 +36,9 @@ type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>
 
 /** What the wrapper depends on, injectable for tests. */
 export interface PurchasesHost {
+  /** The public iOS key. */
   apiKey: string;
+  androidApiKey?: string;
   /** The OS name as plugin-os reports it; throws outside Tauri. */
   platform: () => string;
   invoke: Invoke;
@@ -52,42 +53,42 @@ export interface Purchases {
 
 /** The wrapper over a given host. The app uses the exports below. */
 export function createPurchases(host: PurchasesHost): Purchases {
-  const onIOS = (): boolean => {
+  function store(): { apiKey: string } | { error: string } {
+    const iosApiKey = host.apiKey.trim();
+    const androidApiKey = host.androidApiKey?.trim() ?? "";
+    if (!iosApiKey && !androidApiKey) return { error: NOT_CONFIGURED };
+
+    let platform: string;
     try {
-      return host.platform() === "ios";
+      platform = host.platform();
     } catch {
-      // Not under Tauri (unit tests, plain-browser dev).
-      return false;
+      // Outside Tauri, plugin-os cannot report a platform.
+      return { error: UNAVAILABLE };
     }
-  };
-  const hasKey = (): boolean => host.apiKey.trim() !== "";
-  // Why a call is not made, or null when it may be.
-  const blocked = (): string | null => {
-    if (!hasKey()) return NOT_CONFIGURED;
-    if (!onIOS()) return UNAVAILABLE;
-    return null;
-  };
+
+    if (platform !== "ios" && platform !== "android") return { error: UNAVAILABLE };
+    const apiKey = platform === "ios" ? iosApiKey : androidApiKey;
+    return apiKey ? { apiKey } : { error: NOT_CONFIGURED };
+  }
 
   return {
-    purchasesAvailable: () => hasKey() && onIOS(),
+    purchasesAvailable: () => "apiKey" in store(),
 
     // Resolves either way. A configure that failed shows up as "not configured"
     // from the next buy or restore, which is where a caller can show it.
     async configurePurchases(appUserId) {
-      if (blocked()) return;
+      const config = store();
+      if ("error" in config) return;
       try {
-        await host.invoke("plugin:purchases|configure", {
-          apiKey: host.apiKey.trim(),
-          appUserId,
-        });
+        await host.invoke("plugin:purchases|configure", { apiKey: config.apiKey, appUserId });
       } catch {
         // Same as above: nothing to report until a purchase is attempted.
       }
     },
 
     async buyLifetime() {
-      const reason = blocked();
-      if (reason) return { ok: false, error: reason };
+      const config = store();
+      if ("error" in config) return { ok: false, error: config.error };
       try {
         const answer = await host.invoke<PurchaseResult>("plugin:purchases|buy_lifetime", {
           productId: LIFETIME_PRODUCT_ID,
@@ -99,8 +100,8 @@ export function createPurchases(host: PurchasesHost): Purchases {
     },
 
     async restorePurchases() {
-      const reason = blocked();
-      if (reason) return { ok: false, active: false, error: reason };
+      const config = store();
+      if ("error" in config) return { ok: false, active: false, error: config.error };
       try {
         const answer = await host.invoke<RestoreResult>("plugin:purchases|restore", {
           entitlementId: LIFETIME_ENTITLEMENT_ID,
@@ -135,11 +136,12 @@ function message(e: unknown): string {
 
 const app = createPurchases({
   apiKey: REVENUECAT_IOS_API_KEY,
+  androidApiKey: REVENUECAT_ANDROID_API_KEY,
   platform: () => osPlatform(),
   invoke: tauriInvoke,
 });
 
-/** True only on iOS with a RevenueCat key set. */
+/** True on iOS or Android when the platform's RevenueCat key is set. */
 export function purchasesAvailable(): boolean {
   return app.purchasesAvailable();
 }
@@ -149,7 +151,7 @@ export async function configurePurchases(appUserId: string): Promise<void> {
   return app.configurePurchases(appUserId);
 }
 
-/** Buy the lifetime unlock. A closed App Store sheet is `cancelled: true`. */
+/** Buy the lifetime unlock. A dismissed purchase sheet returns `cancelled: true`. */
 export async function buyLifetime(): Promise<PurchaseResult> {
   return app.buyLifetime();
 }
