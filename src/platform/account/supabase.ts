@@ -1,5 +1,5 @@
 // The three Supabase calls the registration makes (docs/platform/665): trade a
-// Google id_token for a Supabase session, refresh that session, and report this
+// Google or Apple id_token for a Supabase session, refresh that session, and report this
 // device through the report_device function. Plain fetch, no SDK. The fetch is
 // injected so the requests and the parsing are tested without a network.
 
@@ -121,15 +121,33 @@ async function grant(
   return parseSession(await res.json(), now);
 }
 
-// The Google sign-in's id_token for a Supabase session. The user is created on
-// the first exchange.
+export type IdTokenProvider = "google" | "apple";
+
+export interface IdTokenOptions {
+  // Google when omitted.
+  provider?: IdTokenProvider;
+  // The raw nonce whose SHA-256 went into the sign-in request. Apple's token
+  // carries the hash and Supabase checks it against this; Google's carries none.
+  nonce?: string;
+}
+
+// The id_token grant's body.
+export function idTokenBody(idToken: string, options: IdTokenOptions = {}): Record<string, string> {
+  const body: Record<string, string> = { provider: options.provider ?? "google", id_token: idToken };
+  if (options.nonce !== undefined) body.nonce = options.nonce;
+  return body;
+}
+
+// A Google or Apple sign-in's id_token for a Supabase session. The user is
+// created on the first exchange.
 export function exchangeIdToken(
   backend: SupabaseBackend,
   idToken: string,
   fetch: FetchLike,
   now: number,
+  options: IdTokenOptions = {},
 ): Promise<SupabaseSession> {
-  return grant(backend, "id_token", { provider: "google", id_token: idToken }, fetch, now);
+  return grant(backend, "id_token", idTokenBody(idToken, options), fetch, now);
 }
 
 export function refreshSession(

@@ -73,6 +73,10 @@ tauri-plugin-openin = { path = "../plugins/openin" }
 # RevenueCat (docs/platform/713). Dormant until a RevenueCat key is set in
 # src/platform/app/purchases.ts; off iOS every command answers "unavailable".
 tauri-plugin-purchases = { path = "../plugins/purchases" }
+# Ours (plugins/apple-sign-in): native Sign in with Apple on iOS (docs/platform/713).
+# Registered everywhere and answers "unavailable" off iOS; dormant until the
+# frontend's APPLE_SIGN_IN_ENABLED is turned on.
+tauri-plugin-apple-sign-in = { path = "../plugins/apple-sign-in" }
 # SQLite under pi-durable's storage (src/durable_sqlite.rs). bundled: the same
 # SQLite on every target, no system library to find on iOS or Android.
 rusqlite = { version = "0.40.2", features = ["bundled"] }

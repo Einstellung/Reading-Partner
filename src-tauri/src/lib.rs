@@ -65,7 +65,10 @@ pub fn run() {
         .plugin(tauri_plugin_openin::init())
         // Ours, out of plugins/purchases: the lifetime unlock through RevenueCat
         // on iOS (docs/platform/713). Elsewhere it answers "unavailable".
-        .plugin(tauri_plugin_purchases::init());
+        .plugin(tauri_plugin_purchases::init())
+        // Ours, out of plugins/apple-sign-in: the native Sign in with Apple
+        // sheet (docs/platform/713). Off iOS it answers "unavailable".
+        .plugin(tauri_plugin_apple_sign_in::init());
 
     // The voice commands and their state only exist on desktop (see the module
     // note above); everything else is registered on both.

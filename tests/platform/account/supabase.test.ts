@@ -4,6 +4,7 @@
 import { expect, test } from "bun:test";
 import {
   exchangeIdToken,
+  idTokenBody,
   parseSession,
   parseStoredSession,
   refreshSession,
@@ -55,6 +56,26 @@ test("the id_token exchange sends the key and a google provider body, and return
   expect(init.method).toBe("POST");
   expect(init.headers).toEqual({ apikey: "sb_publishable_x", "Content-Type": "application/json" });
   expect(JSON.parse(init.body as string)).toEqual({ provider: "google", id_token: "gid" });
+});
+
+test("an Apple id_token exchange sends the apple provider and the raw nonce", async () => {
+  const r = recorder(200, GRANT);
+  const session = await exchangeIdToken(BACKEND, "aid", r.fetch, NOW, { provider: "apple", nonce: "raw-nonce" });
+  expect(session.userId).toBe("user-1");
+  const { url, init } = r.calls[0];
+  expect(url).toBe("https://ref.supabase.co/auth/v1/token?grant_type=id_token");
+  expect(init.headers).toEqual({ apikey: "sb_publishable_x", "Content-Type": "application/json" });
+  expect(JSON.parse(init.body as string)).toEqual({ provider: "apple", id_token: "aid", nonce: "raw-nonce" });
+});
+
+test("the id_token body carries a nonce only when one is given", () => {
+  expect(idTokenBody("gid")).toEqual({ provider: "google", id_token: "gid" });
+  expect(idTokenBody("aid", { provider: "apple" })).toEqual({ provider: "apple", id_token: "aid" });
+  expect(idTokenBody("aid", { provider: "apple", nonce: "n" })).toEqual({
+    provider: "apple",
+    id_token: "aid",
+    nonce: "n",
+  });
 });
 
 test("a refresh sends the refresh token and returns the rotated one", async () => {
