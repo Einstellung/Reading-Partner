@@ -54,6 +54,7 @@ import {
 import { useEdgeBack } from "./ui/components/phone/gesture/useEdgeBack";
 import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
+import { LicenseGate } from "./ui/components/license/LicenseGate";
 import { useT } from "./i18n";
 import { alreadyInLine } from "./ui/components/shelf/move-to";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
@@ -450,6 +451,8 @@ export default function PhoneApp({
         </main>
 
         <Toast toasts={toasts} onDismiss={dismissToast} />
+        {/* Sign-in and lock screens (docs/platform/713); nothing while licensing is off. */}
+        <LicenseGate />
 
         {/* The count only. The phone shell has no open-a-file door of its own,
             so the reader goes back to the shelf and finds the translation there. */}

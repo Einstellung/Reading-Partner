@@ -29,12 +29,28 @@ export interface DeviceInfo {
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
+// The backend answered, and the answer was not a success. Anything else thrown
+// from these calls means the backend was not reached at all.
+export class SupabaseHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 function base(backend: SupabaseBackend): string {
   return backend.url.replace(/\/+$/, "");
 }
 
 export function tokenUrl(backend: SupabaseBackend, grant: "id_token" | "refresh_token"): string {
   return `${base(backend)}/auth/v1/token?grant_type=${grant}`;
+}
+
+// An Edge Function under supabase/functions/.
+export function functionUrl(backend: SupabaseBackend, name: string): string {
+  return `${base(backend)}/functions/v1/${name}`;
 }
 
 export function reportDeviceUrl(backend: SupabaseBackend): string {
@@ -101,7 +117,7 @@ async function grant(
     headers: { apikey: backend.key, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`supabase: token ${kind} ${res.status}`);
+  if (!res.ok) throw new SupabaseHttpError(`supabase: token ${kind} ${res.status}`, res.status);
   return parseSession(await res.json(), now);
 }
 
@@ -140,5 +156,5 @@ export async function reportDevice(
     },
     body: JSON.stringify(reportDeviceBody(device)),
   });
-  if (!res.ok) throw new Error(`supabase: report_device ${res.status}`);
+  if (!res.ok) throw new SupabaseHttpError(`supabase: report_device ${res.status}`, res.status);
 }

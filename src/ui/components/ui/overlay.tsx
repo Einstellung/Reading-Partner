@@ -85,6 +85,12 @@ export const OVERLAY_Z = {
   // Anchored to a trigger: Select and DropdownMenu. Above the whole scale,
   // because a trigger can sit on any surface in it.
   anchored: "z-[1100]",
+  // The license gate's screens (docs/platform/713): a full-screen page that
+  // blocks the whole app, so above everything the app can have open, anchored
+  // overlays included.
+  lock: "z-[1200]",
+  // The confirm raised over that page (Delete account).
+  lockDialog: "z-[1250]",
 } as const;
 
 // Which rung the surface a dialog is opened from stands on.
@@ -97,11 +103,12 @@ export const OVERLAY_Z = {
 // (docs/pitfall/211). So the surface says which rung it is on, and every dialog
 // inside it — now and later — reads that off the context rather than each call
 // site remembering to raise itself.
-export type OverlaySurfaceLayer = "base" | "floating";
+export type OverlaySurfaceLayer = "base" | "floating" | "lock";
 
 const DIALOG_LAYER: Record<OverlaySurfaceLayer, string> = {
   base: OVERLAY_Z.dialog,
   floating: OVERLAY_Z.floatingDialog,
+  lock: OVERLAY_Z.lockDialog,
 };
 
 const OverlaySurfaceContext = createContext<OverlaySurfaceLayer>("base");

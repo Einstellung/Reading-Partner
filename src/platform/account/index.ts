@@ -1,7 +1,9 @@
 // The account registration bound to the host (docs/platform/665): account.json
 // in AppData, this device's identity and description, and the http plugin.
 // platform/sync calls the two report functions and clears the session on
-// sign-out; a consent screen would call setAccountConsent.
+// sign-out; a consent screen would call setAccountConsent; the license check
+// (platform/license, docs/platform/713) asks for a session through
+// accountSession.
 
 import { invoke } from "@tauri-apps/api/core";
 import { version as osVersion } from "@tauri-apps/plugin-os";
@@ -21,6 +23,12 @@ import {
   type DeviceInfo,
   type ReportDeps,
 } from "./report";
+import { ensureSession, type SessionOutcome } from "./session";
+import type { SupabaseSession } from "./supabase";
+
+export { ACCOUNT_BACKEND } from "./endpoint";
+export { functionUrl, type FetchLike, type SupabaseBackend, type SupabaseSession } from "./supabase";
+export type { SessionOutcome } from "./session";
 
 const ACCOUNT_FILE = "account.json";
 
@@ -91,6 +99,30 @@ export function reportAfterSignIn(idToken: string | null): Promise<boolean> {
 
 export function reportOnStartup(idToken: () => Promise<string | null>): Promise<boolean> {
   return reportOnStartupWith(idToken, deps);
+}
+
+async function storeSession(session: SupabaseSession): Promise<void> {
+  await saveState({ ...(await loadState()), session });
+}
+
+// A usable Supabase session regardless of consent (session.ts). `idToken` is
+// platform/sync's freshIdToken, handed in because sync imports this directory.
+// Never throws.
+export function accountSession(
+  idToken: () => Promise<string | null>,
+  opts: { forceRefresh?: boolean } = {},
+): Promise<SessionOutcome> {
+  return ensureSession(
+    {
+      backend: ACCOUNT_BACKEND,
+      loadSession: async () => (await loadState()).session,
+      storeSession,
+      idToken,
+      fetch: deps.fetch,
+      now: deps.now,
+    },
+    opts,
+  );
 }
 
 // Drops the stored Supabase session. Never throws.
