@@ -106,7 +106,7 @@
 - [560 iOS开发验收环境](./platform/560-iOS开发验收环境.md) — Mac mini 与 Linux+CI+USB 真机两套 iOS 构建验收环境的搭法、日常循环和能验范围，云 Mac 重建步骤
 - [665 账号登记](./platform/665-账号登记.md) — Google 登录后换 Supabase 会话，把账号和设备登记到自己的后端（supabase/）
 - [687 housekeeper：AI 写入与护栏](./platform/687-housekeeper：AI 写入与护栏.md) — AI 在沙盒里改数据副本，housekeeper 比对改动、过五类护栏再落盘，留上一版可撤；三餐先接
-- [713 试用与买断](./platform/713-试用与买断.md) — 3 个月全功能试用后一次性买断 4.99 美元；强制登录、Supabase 后端、RevenueCat、离线宽限 7 天
+- [713 试用与买断](./platform/713-试用与买断.md) — 3 个月全功能试用后一次性买断 9.99 美元；强制登录、Supabase 后端、RevenueCat、离线宽限 7 天
 
 ## pitfall
 

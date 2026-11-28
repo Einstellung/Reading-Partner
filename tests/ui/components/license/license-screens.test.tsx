@@ -49,7 +49,7 @@ const buttons = () =>
 test("an ended trial shows exactly the four actions", () => {
   render(<LockScreen reason="expired" gate={fakeGate().gate} />);
   expect(document.body.textContent).toContain("Your free trial has ended");
-  expect(buttons()).toEqual(["Buy · US$4.99", "Restore purchases", "Delete account", "Sign out"]);
+  expect(buttons()).toEqual(["Buy · US$9.99", "Restore purchases", "Delete account", "Sign out"]);
 });
 
 test("a suspended account shows delete and sign out", () => {
@@ -89,7 +89,7 @@ test("delete asks first, on the rung above the lock page, then deletes", async (
 test("buy reports an unavailable store in words", async () => {
   const { gate, pressed } = fakeGate({ ok: false, error: "unavailable" });
   render(<LockScreen reason="expired" gate={gate} />);
-  fireEvent.click([...document.querySelectorAll("button")].find((b) => b.textContent === "Buy · US$4.99")!);
+  fireEvent.click([...document.querySelectorAll("button")].find((b) => b.textContent === "Buy · US$9.99")!);
   await waitFor(() =>
     expect(document.body.textContent).toContain("Purchases aren't available on this device yet."),
   );

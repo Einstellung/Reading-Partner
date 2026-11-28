@@ -12,7 +12,7 @@ import { platform as osPlatform } from "@tauri-apps/plugin-os";
 /** The RevenueCat public iOS key (`appl_…`). Empty keeps purchases off. */
 export const REVENUECAT_IOS_API_KEY = "";
 
-/** The App Store product id of the 4.99 USD non-consumable. */
+/** The App Store product id of the 9.99 USD non-consumable. */
 export const LIFETIME_PRODUCT_ID = "lumen.lifetime";
 
 /** The RevenueCat entitlement the lifetime product grants. */

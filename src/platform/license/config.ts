@@ -18,7 +18,7 @@ export const LICENSE_PUBLIC_KEY: JsonWebKey | null = null;
 export const APPLE_SIGN_IN_AVAILABLE = false;
 
 // The one-time purchase as the lock screen states it.
-export const LIFETIME_PRICE = "US$4.99";
+export const LIFETIME_PRICE = "US$9.99";
 
 // How long a verified answer stands in for the server when it cannot be
 // reached, counted from the time the server issued it.
