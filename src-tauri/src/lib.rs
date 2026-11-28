@@ -62,7 +62,10 @@ pub fn run() {
         // Ours, out of plugins/openin: the iOS share sheet for one file, so a
         // reader can open a book in another app. Off iOS it answers the
         // availability probe with false and the control is never drawn.
-        .plugin(tauri_plugin_openin::init());
+        .plugin(tauri_plugin_openin::init())
+        // Ours, out of plugins/apple-sign-in: the native Sign in with Apple
+        // sheet (docs/platform/713). Off iOS it answers "unavailable".
+        .plugin(tauri_plugin_apple_sign_in::init());
 
     // The voice commands and their state only exist on desktop (see the module
     // note above); everything else is registered on both.

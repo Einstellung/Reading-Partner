@@ -69,6 +69,10 @@ tauri-plugin-voice = { path = "../plugins/voice" }
 # the same reason voice is — off iOS `is_available` answers false, which is what
 # hides the control instead of leaving a command that does not exist.
 tauri-plugin-openin = { path = "../plugins/openin" }
+# Ours (plugins/apple-sign-in): native Sign in with Apple on iOS (docs/platform/713).
+# Registered everywhere and answers "unavailable" off iOS; dormant until the
+# frontend's APPLE_SIGN_IN_ENABLED is turned on.
+tauri-plugin-apple-sign-in = { path = "../plugins/apple-sign-in" }
 # SQLite under pi-durable's storage (src/durable_sqlite.rs). bundled: the same
 # SQLite on every target, no system library to find on iOS or Android.
 rusqlite = { version = "0.40.2", features = ["bundled"] }

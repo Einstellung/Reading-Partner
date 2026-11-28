@@ -1,0 +1,3 @@
+[default]
+description = "Ask whether this host has native Sign in with Apple, and run it."
+permissions = ["allow-is-available", "allow-sign-in"]

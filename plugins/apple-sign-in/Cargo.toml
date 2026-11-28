@@ -1,0 +1,20 @@
+[package]
+name = "tauri-plugin-apple-sign-in"
+version = "0.1.0"
+authors = ["Reading-Partner"]
+description = "Native Sign in with Apple on iOS: an Apple identity token for the Supabase id_token exchange"
+edition = "2021"
+rust-version = "1.77.2"
+exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
+# Names the DEP_TAURI_PLUGIN_APPLE_SIGN_IN_* variables tauri-build reads to find
+# `ios/` and `permissions/`, and the ACL namespace (`apple-sign-in:`). It has to
+# agree with the name passed to Builder::new in lib.rs.
+links = "tauri-plugin-apple-sign-in"
+
+[dependencies]
+tauri = { version = "2" }
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2"
+
+[build-dependencies]
+tauri-plugin = { version = "2.6.3", features = ["build"] }
