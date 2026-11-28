@@ -68,6 +68,11 @@ const LAYER: Record<string, Layer> = {
   // sign-in and at startup, and it never reaches back for sync.
   "platform/account": "platform",
   "platform/http": "platform",
+  // Trial and purchase (docs/platform/713): the signed status from the
+  // license-status function, the offline grace and the gate the shells mount.
+  // Reads platform/account for the Supabase session and platform/sync for the
+  // Google sign-in; neither reaches back.
+  "platform/license": "platform",
   // The standard library the app lacks: pure helpers that import nothing.
   "platform/std": "platform",
   // Settings › Experiments (docs/reading/688): the registry and this device's
@@ -366,6 +371,8 @@ const LAYER: Record<string, Layer> = {
   "ui/components/lib": "ui",
   // The companion: its body, its motion maths and its two raster layers.
   "ui/components/companion": "ui",
+  // The license gate's sign-in and lock screens (docs/platform/713).
+  "ui/components/license": "ui",
   "ui/components/library": "ui",
   "ui/components/library/topic": "ui",
   "ui/components/markdown": "ui",

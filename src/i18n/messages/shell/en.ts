@@ -178,4 +178,28 @@ export default {
   "today.pageOf": "p. {page} of {pages}",
   "today.page": "p. {page}",
   "today.marks": { one: "{count} mark", other: "{count} marks" },
+
+  // The license gate (ui/components/license, docs/platform/713): the
+  // sign-in screen, the lock screen and its delete confirmation.
+  "license.signIn.title": "Sign in to use Lumen",
+  "license.signIn.body": "Lumen needs an account. Your books and conversations stay in your own Google Drive.",
+  "license.signIn.google": "Continue with Google",
+  "license.signIn.apple": "Continue with Apple",
+  "license.signIn.inBrowser": "Finish signing in in your browser…",
+  "license.lock.expiredTitle": "Your free trial has ended",
+  "license.lock.expiredBody": "Buy Lumen once to keep using it. Your books are in your Google Drive.",
+  "license.lock.bannedTitle": "This account is suspended",
+  "license.lock.bannedBody": "Your books are in your Google Drive.",
+  "license.lock.offlineTitle": "Lumen can't check your account",
+  "license.lock.offlineBody": "It hasn't reached the server for more than 7 days. Connect to the internet and try again.",
+  "license.buy": "Buy · {price}",
+  "license.restore": "Restore purchases",
+  "license.deleteAccount": "Delete account",
+  "license.signOut": "Sign out",
+  "license.retry": "Try again",
+  "license.delete.title": "Delete your account?",
+  "license.delete.body": "This deletes your Lumen account. Your books in Google Drive stay where they are.",
+  "license.error.unavailable": "Purchases aren't available on this device yet.",
+  "license.error.failed": "That didn't work. Try again.",
+  "license.error.pending": "Purchase received. It can take a minute to unlock.",
 } as const;

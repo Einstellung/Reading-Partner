@@ -110,6 +110,7 @@ import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
 import LibraryScreen, { type StudyOpen } from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
+import { LicenseGate } from "./ui/components/license/LicenseGate";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
 import { CompanionCorner } from "./ui/components/companion/CompanionCorner";
@@ -1816,6 +1817,8 @@ export default function App() {
       </main>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
+      {/* Sign-in and lock screens (docs/platform/713); nothing while licensing is off. */}
+      <LicenseGate />
 
       {/* The running translation's count, and the hand-off onto the document it
           produced: the original is off the shelf by then (reading/translate). */}
