@@ -172,9 +172,13 @@ export default {
   "license.deleteAccount": "Eliminar cuenta",
   "license.signOut": "Cerrar sesión",
   "license.retry": "Reintentar",
+  "license.refresh": "Actualizar",
+  "license.buyElsewhere": "Compra Lumen en iPhone, iPad o Android con la misma cuenta y luego actualiza.",
+  "license.checkoutOpened": "Termina el pago en el navegador y luego actualiza.",
   "license.delete.title": "¿Eliminar tu cuenta?",
   "license.delete.body": "Se eliminará tu cuenta de Lumen. Tus libros en Google Drive se quedan donde están.",
   "license.error.unavailable": "Las compras aún no están disponibles en este dispositivo.",
   "license.error.failed": "No ha funcionado. Vuelve a intentarlo.",
   "license.error.pending": "Compra recibida. El desbloqueo puede tardar un minuto.",
+  "license.error.notYet": "Esta cuenta aún no tiene ninguna compra. Si acabas de pagar, espera un minuto y actualiza.",
 } satisfies Translation<typeof en>;

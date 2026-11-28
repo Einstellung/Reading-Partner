@@ -169,9 +169,13 @@ export default {
   "license.deleteAccount": "계정 삭제",
   "license.signOut": "로그아웃",
   "license.retry": "다시 시도",
+  "license.refresh": "새로고침",
+  "license.buyElsewhere": "iPhone, iPad 또는 Android의 Lumen에서 같은 계정으로 구매한 뒤 새로고침하세요.",
+  "license.checkoutOpened": "브라우저에서 결제를 마친 뒤 새로고침하세요.",
   "license.delete.title": "계정을 삭제할까요?",
   "license.delete.body": "Lumen 계정이 삭제됩니다. Google Drive의 책은 그대로 남습니다.",
   "license.error.unavailable": "이 기기에서는 아직 구매할 수 없습니다.",
   "license.error.failed": "실패했습니다. 다시 시도하세요.",
   "license.error.pending": "구매가 접수되었습니다. 잠금 해제까지 잠시 걸릴 수 있습니다.",
+  "license.error.notYet": "이 계정에는 아직 구매 내역이 없습니다. 방금 결제했다면 잠시 후 새로고침하세요.",
 } satisfies Translation<typeof en>;

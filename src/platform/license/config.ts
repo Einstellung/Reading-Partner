@@ -33,3 +33,15 @@ export const RECHECK_AFTER_MS = 6 * 60 * 60 * 1000;
 
 // A status request that has not answered by then counts as unreachable.
 export const STATUS_TIMEOUT_MS = 10_000;
+
+// The Stripe Payment Link for the lifetime unlock on devices without a store
+// purchase: the desktop and the Android APK from GitHub. Empty keeps web
+// checkout off; those devices then send the buyer to a phone or tablet.
+export const WEB_CHECKOUT_URL = "";
+
+// How this Android build is distributed. "direct" (the APK on GitHub) does not
+// sell through Google Play, so it uses web checkout; a Play build is made with
+// VITE_ANDROID_DISTRIBUTION=play and buys in the store. Ignored off Android.
+export type AndroidDistribution = "play" | "direct";
+export const ANDROID_DISTRIBUTION: AndroidDistribution =
+  import.meta.env.VITE_ANDROID_DISTRIBUTION === "play" ? "play" : "direct";

@@ -123,3 +123,15 @@ test("the lock screen's actions", () => {
   expect(lockActions("banned")).toEqual(["delete-account", "sign-out"]);
   expect(lockActions("offline")).toEqual(["retry", "sign-out"]);
 });
+
+test("an ended trial buys the way the device can", () => {
+  expect(lockActions("expired", "store")).toEqual(["buy", "restore", "delete-account", "sign-out"]);
+  expect(lockActions("expired", "web")).toEqual(["buy", "delete-account", "sign-out"]);
+  expect(lockActions("expired", "web", true)).toEqual(["buy", "refresh", "delete-account", "sign-out"]);
+  expect(lockActions("expired", "none")).toEqual(["refresh", "delete-account", "sign-out"]);
+  // The path does not touch the other locks.
+  for (const path of ["store", "web", "none"] as const) {
+    expect(lockActions("banned", path, true)).toEqual(["delete-account", "sign-out"]);
+    expect(lockActions("offline", path, true)).toEqual(["retry", "sign-out"]);
+  }
+});

@@ -4,11 +4,20 @@
 
 import { expect, test } from "bun:test";
 import { checkLicense, type CheckDeps } from "../../../src/platform/license/check";
-import { LICENSING_ENABLED } from "../../../src/platform/license/config";
+import {
+  ANDROID_DISTRIBUTION,
+  LICENSING_ENABLED,
+  WEB_CHECKOUT_URL,
+} from "../../../src/platform/license/config";
 import { createLicenseGate } from "../../../src/platform/license/gate";
 
 test("licensing ships switched off", () => {
   expect(LICENSING_ENABLED).toBe(false);
+});
+
+test("web checkout ships switched off, and the GitHub APK counts as direct", () => {
+  expect(WEB_CHECKOUT_URL).toBe("");
+  expect(ANDROID_DISTRIBUTION).toBe("direct");
 });
 
 function touched() {
@@ -82,11 +91,17 @@ test("with the switch as shipped, the gate never checks or listens", async () =>
         return { ok: true };
       },
     },
+    purchasePath: () => "web",
+    openCheckout: async () => {
+      calls.push("openCheckout");
+      return true;
+    },
   });
   gate.start()();
   expect(await gate.recheck()).toEqual({ view: "open" });
   expect(gate.get()).toEqual({ view: "open" });
   expect((await gate.buy()).ok).toBe(false);
+  expect((await gate.refresh()).ok).toBe(false);
   expect((await gate.deleteAccount()).ok).toBe(false);
   expect(calls).toEqual([]);
 });
@@ -99,4 +114,5 @@ test("the live gate the shells mount is created with the shipped switch", async 
   ).text();
   expect(source).toContain("enabled: LICENSING_ENABLED,");
   expect(source).toContain("checkLicense(checkDeps)");
+  expect(source).toContain("purchasePath: devicePurchasePath,");
 });

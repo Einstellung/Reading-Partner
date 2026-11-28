@@ -5,6 +5,7 @@
 // never checks and stays open.
 
 import { OPEN, shouldRecheck, type GateView } from "./decide";
+import type { PurchasePath } from "./purchase-path";
 
 export type PurchaseResult = { ok: true } | { ok: false; error: string };
 
@@ -16,8 +17,9 @@ export interface PurchaseHandlers {
 }
 
 // What a button's press came to, for the screen to say. "pending": the store
-// took the purchase but the server does not show it yet.
-export type ActionError = "unavailable" | "cancelled" | "failed" | "pending";
+// took the purchase but the server does not show it yet. "not-yet": Refresh
+// found no purchase on the account.
+export type ActionError = "unavailable" | "cancelled" | "failed" | "pending" | "not-yet";
 export type ActionResult = { ok: true } | { ok: false; error: ActionError };
 
 export interface GateDeps {
@@ -33,10 +35,16 @@ export interface GateDeps {
   // True when the server deleted the account.
   deleteAccount: () => Promise<boolean>;
   purchases: PurchaseHandlers;
+  // How this device buys (purchase-path.ts). Asked when needed, not at start.
+  purchasePath: () => PurchasePath;
+  // Opens the web checkout for this user in the system browser; false when
+  // there is no link to open.
+  openCheckout: (userId: string) => Promise<boolean>;
 }
 
 export interface LicenseGate {
   get: () => GateView;
+  purchasePath: () => PurchasePath;
   subscribe: (listener: () => void) => () => void;
   // Starts the checks; returns the undo. A no-op while disabled.
   start: () => () => void;
@@ -46,8 +54,12 @@ export interface LicenseGate {
   signIn: () => Promise<ActionResult>;
   signOut: () => Promise<ActionResult>;
   deleteAccount: () => Promise<ActionResult>;
+  // Store path: the purchase, then a re-check. Web path: opens the checkout
+  // and answers ok once it is open; the purchase shows up on Refresh.
   buy: () => Promise<ActionResult>;
   restore: () => Promise<ActionResult>;
+  // A re-check that says "not-yet" when the account is still locked.
+  refresh: () => Promise<ActionResult>;
 }
 
 function storeError(error: string): ActionError {
@@ -100,6 +112,7 @@ export function createLicenseGate(deps: GateDeps): LicenseGate {
 
   return {
     get: () => view,
+    purchasePath: deps.purchasePath,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -145,13 +158,26 @@ export function createLicenseGate(deps: GateDeps): LicenseGate {
       guarded(async () => {
         const id = userId();
         if (!id) return { ok: false, error: "failed" };
-        return afterStore(await deps.purchases.buy(id));
+        switch (deps.purchasePath()) {
+          case "store":
+            return afterStore(await deps.purchases.buy(id));
+          case "web":
+            return (await deps.openCheckout(id)) ? { ok: true } : { ok: false, error: "unavailable" };
+          case "none":
+            return { ok: false, error: "unavailable" };
+        }
       }),
     restore: () =>
       guarded(async () => {
         const id = userId();
         if (!id) return { ok: false, error: "failed" };
+        if (deps.purchasePath() !== "store") return { ok: false, error: "unavailable" };
         return afterStore(await deps.purchases.restore(id));
+      }),
+    refresh: () =>
+      guarded(async () => {
+        const next = await recheck();
+        return next.view === "open" ? { ok: true } : { ok: false, error: "not-yet" };
       }),
   };
 }

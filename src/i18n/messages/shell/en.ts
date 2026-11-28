@@ -197,9 +197,13 @@ export default {
   "license.deleteAccount": "Delete account",
   "license.signOut": "Sign out",
   "license.retry": "Try again",
+  "license.refresh": "Refresh",
+  "license.buyElsewhere": "Buy in Lumen on iPhone, iPad or Android with the same account, then refresh.",
+  "license.checkoutOpened": "Finish paying in your browser, then refresh.",
   "license.delete.title": "Delete your account?",
   "license.delete.body": "This deletes your Lumen account. Your books in Google Drive stay where they are.",
   "license.error.unavailable": "Purchases aren't available on this device yet.",
   "license.error.failed": "That didn't work. Try again.",
   "license.error.pending": "Purchase received. It can take a minute to unlock.",
+  "license.error.notYet": "No purchase on this account yet. If you just paid, wait a minute and refresh.",
 } as const;

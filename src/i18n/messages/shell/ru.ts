@@ -176,9 +176,13 @@ export default {
   "license.deleteAccount": "Удалить аккаунт",
   "license.signOut": "Выйти",
   "license.retry": "Повторить",
+  "license.refresh": "Обновить",
+  "license.buyElsewhere": "Купите Lumen на iPhone, iPad или Android с тем же аккаунтом, затем обновите.",
+  "license.checkoutOpened": "Завершите оплату в браузере, затем обновите.",
   "license.delete.title": "Удалить аккаунт?",
   "license.delete.body": "Ваш аккаунт Lumen будет удалён. Книги в Google Диске останутся на месте.",
   "license.error.unavailable": "Покупки на этом устройстве пока недоступны.",
   "license.error.failed": "Не получилось. Попробуйте ещё раз.",
   "license.error.pending": "Покупка получена. Разблокировка может занять минуту.",
+  "license.error.notYet": "На этом аккаунте пока нет покупки. Если вы только что оплатили, подождите минуту и обновите.",
 } satisfies Translation<typeof en>;

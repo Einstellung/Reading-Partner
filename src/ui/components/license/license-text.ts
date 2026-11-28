@@ -3,6 +3,7 @@
 import type { MessageKey } from "../../../i18n";
 import type { LockAction, LockReason } from "../../../platform/license/decide";
 import type { ActionError } from "../../../platform/license/gate";
+import type { PurchasePath } from "../../../platform/license/purchase-path";
 
 // The gate's sentences that take no parameter: every one but Buy's.
 type LicenseKey = Exclude<Extract<MessageKey, `shell.license.${string}`>, "shell.license.buy">;
@@ -40,7 +41,22 @@ export function actionErrorKey(error: ActionError): LicenseKey | null {
       return "shell.license.error.pending";
     case "failed":
       return "shell.license.error.failed";
+    case "not-yet":
+      return "shell.license.error.notYet";
   }
+}
+
+// The plain line above an ended trial's buttons: where to buy when this device
+// cannot, or what to do once the web checkout is open. Null for none.
+export function lockNoteKey(
+  reason: LockReason,
+  path: PurchasePath,
+  checkoutOpened: boolean,
+): LicenseKey | null {
+  if (reason !== "expired") return null;
+  if (path === "none") return "shell.license.buyElsewhere";
+  if (path === "web" && checkoutOpened) return "shell.license.checkoutOpened";
+  return null;
 }
 
 // The label of every action but Buy, which carries the price.
@@ -48,6 +64,8 @@ export function actionLabelKey(action: Exclude<LockAction, "buy">): LicenseKey {
   switch (action) {
     case "restore":
       return "shell.license.restore";
+    case "refresh":
+      return "shell.license.refresh";
     case "delete-account":
       return "shell.license.deleteAccount";
     case "sign-out":
