@@ -34,7 +34,7 @@ import { currentDeviceId } from "../app/device";
 import { currentPlatform } from "../app/platform";
 import { currentAppVersion } from "../app/version";
 import { isGoogleConfigured } from "./googleConfig";
-import { reportAfterSignIn, reportOnStartup } from "../account";
+import { clearAccountSession, reportAfterSignIn, reportOnStartup } from "../account";
 import {
   currentEmail,
   freshIdToken,
@@ -301,6 +301,7 @@ export async function signOutOfGoogle(): Promise<void> {
   stopEngine();
   engine = null;
   await signOut();
+  await clearAccountSession();
   signedOutState(state, email);
   signedIn = false;
   email = null;

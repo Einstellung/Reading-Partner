@@ -1,7 +1,7 @@
 // The account registration bound to the host (docs/platform/665): account.json
 // in AppData, this device's identity and description, and the http plugin.
-// platform/sync calls the two report functions; the consent screen calls
-// setAccountConsent.
+// platform/sync calls the two report functions and clears the session on
+// sign-out; a consent screen would call setAccountConsent.
 
 import { invoke } from "@tauri-apps/api/core";
 import { version as osVersion } from "@tauri-apps/plugin-os";
@@ -11,8 +11,9 @@ import { currentDeviceId } from "../app/device";
 import { currentPlatform } from "../app/platform";
 import { cleanTauriFetch } from "../app/tauri-fetch";
 import { readAppVersion } from "../app/version";
-import { ACCOUNT_ENDPOINT } from "./endpoint";
+import { ACCOUNT_BACKEND } from "./endpoint";
 import {
+  clearSession,
   parseAccountState,
   reportAfterSignIn as reportAfterSignInWith,
   reportOnStartup as reportOnStartupWith,
@@ -67,16 +68,11 @@ async function deviceInfo(): Promise<DeviceInfo | null> {
 }
 
 const deps: ReportDeps = {
-  endpoint: ACCOUNT_ENDPOINT,
+  backend: ACCOUNT_BACKEND,
   loadState,
   saveState,
   deviceInfo,
-  post: (url, body) =>
-    cleanTauriFetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    }),
+  fetch: (url, init) => cleanTauriFetch(url, init),
   now: Date.now,
 };
 
@@ -84,8 +80,7 @@ export async function hasAccountConsent(): Promise<boolean> {
   return (await loadState()).consent;
 }
 
-// Whether the user has agreed to the privacy policy that covers the
-// registration. Nothing is reported until this has been set to true.
+// Whether the registration may run. On unless this has been set to false.
 export async function setAccountConsent(consent: boolean): Promise<void> {
   await saveState({ ...(await loadState()), consent });
 }
@@ -96,4 +91,9 @@ export function reportAfterSignIn(idToken: string | null): Promise<boolean> {
 
 export function reportOnStartup(idToken: () => Promise<string | null>): Promise<boolean> {
   return reportOnStartupWith(idToken, deps);
+}
+
+// Drops the stored Supabase session. Never throws.
+export async function clearAccountSession(): Promise<void> {
+  await clearSession(deps).catch(() => {});
 }

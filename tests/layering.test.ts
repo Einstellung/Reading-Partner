@@ -63,7 +63,7 @@ const LAYER: Record<string, Layer> = {
   "i18n/messages/sources": "platform",
   platform: "platform",
   "platform/app": "platform",
-  // Registering the Google account and this device with our server
+  // Registering the Google account and this device with our backend
   // (docs/platform/665). Reads platform/app; platform/sync calls it after a
   // sign-in and at startup, and it never reaches back for sync.
   "platform/account": "platform",
