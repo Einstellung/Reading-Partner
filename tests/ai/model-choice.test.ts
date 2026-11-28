@@ -1,7 +1,7 @@
 // What the model picker offers (src/ai/providers.ts) checked against the live
 // pi-ai catalog: every model is offered, whatever its context window, and the
-// default lands on the widest one rather than wherever the catalog happens to
-// start. Plus the boundary that decides whether the app survives its own
+// default lands on the provider's preferred model or the widest one. Plus the
+// boundary that decides whether the app survives its own
 // settings file: a stored default the catalog no longer carries. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -65,9 +65,18 @@ test("each offered model carries its own context window, for the picker to show"
 	}
 });
 
-test("the default is the widest window the provider offers, not the first listed", () => {
+test("the default is the preferred model or a model with the widest window", () => {
+	const preferred: Partial<Record<ProviderId, string>> = {
+		openai: "gpt-6.1-terra",
+		"openai-api": "gpt-6.1-terra",
+		google: "gemini-pro-latest",
+	};
 	for (const id of PROVIDER_IDS) {
 		const picked = defaultModelFor(id);
+		if (preferred[id]) {
+			expect(picked).toBe(preferred[id]);
+			continue;
+		}
 		if (picked === null) {
 			expect(getModels(id)).toEqual([]);
 			continue;

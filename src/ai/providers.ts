@@ -3,8 +3,8 @@
 // injected as StreamOptions.apiKey — for Anthropic pi switches to Bearer +
 // Claude Code headers, for OpenAI (Codex backend) pi decodes the account id out
 // of the token and sets the chatgpt-account-id header. Every other provider
-// takes an API key and reaches its endpoint over pi's openai-completions (or,
-// for MiniMax and Claude on a Console key, anthropic-messages) API.
+// takes an API key and uses its own pi client (OpenAI Responses, Anthropic
+// Messages, Gemini or another compatible API).
 //
 // The factories are imported one file at a time. pi ships a
 // providers/all barrel, but it statically imports the AWS SDK and other
@@ -15,6 +15,7 @@
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { createProvider } from "@earendil-works/pi-ai/models";
+import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import { opencodeProvider } from "@earendil-works/pi-ai/providers/opencode";
@@ -212,6 +213,25 @@ const anthropicApiKey: Provider = createProvider({
 	api: anthropicMessagesApi(),
 });
 
+const openaiPlatform = openaiProvider();
+
+// The durable registry reserves "openai" for the ChatGPT sign-in. The platform
+// catalog has its own app id, but pi's Responses client uses its native id to
+// interpret tool call IDs and reasoning when it replays the transcript.
+const openaiApiKey = createProvider({
+	id: "openai-api",
+	name: "OpenAI API",
+	baseUrl: openaiPlatform.baseUrl,
+	auth: { apiKey: openaiPlatform.auth.apiKey },
+	models: openaiPlatform.getModels().map((model) => ({ ...model, provider: "openai-api" })),
+	api: {
+		stream: (model, context, options) =>
+			openaiPlatform.stream({ ...model, api: "openai-responses", provider: openaiPlatform.id }, context, options),
+		streamSimple: (model, context, options) =>
+			openaiPlatform.streamSimple({ ...model, api: "openai-responses", provider: openaiPlatform.id }, context, options),
+	},
+});
+
 // Exported so the agent turn (src/legion/durable) reuses the exact same provider
 // instances, model lookup, and OAuth/api-key resolution as streamChat. The keys
 // are this app's ids, not pi's: our "openai" is pi's openai-codex.
@@ -219,6 +239,7 @@ export const providers: Record<ProviderId, Provider> = {
 	anthropic,
 	openai: openaiCodex,
 	"anthropic-api": anthropicApiKey,
+	"openai-api": openaiApiKey,
 	deepseek: deepseekProvider(),
 	opencode: opencodeProvider(),
 	"opencode-go": opencodeGoProvider(),
@@ -284,8 +305,8 @@ export function bridgedHosts(): Set<string> {
 // The Codex backend defaults to a WebSocket transport, which a webview cannot
 // use: the browser WebSocket API can't attach the Authorization /
 // chatgpt-account-id headers pi sets, and the CSP forbids wss anyway. Force SSE
-// (routed through the Tauri http bridge) for OpenAI. Other providers keep pi's
-// default.
+// (routed through the Tauri http bridge) for ChatGPT sign-in. Other providers
+// keep pi's default.
 export function transportFor(providerId: ProviderId): Transport | undefined {
 	return providerId === "openai" ? "sse" : undefined;
 }
@@ -368,6 +389,7 @@ export function isSelectableModel(id: ProviderId, modelId: string | null): boole
 // would land on the oldest of them; the alias follows Google's current Pro.
 const PREFERRED_MODEL: Partial<Record<ProviderId, string>> = {
 	openai: "gpt-6.1-terra",
+	"openai-api": "gpt-6.1-terra",
 	google: "gemini-pro-latest",
 };
 

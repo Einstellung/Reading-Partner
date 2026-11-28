@@ -18,8 +18,8 @@ export interface ProviderChip {
 // OpenAI-compatible endpoint, which takes a URL and a model as well as a key.
 export type KeyCardChoice = ApiKeyProviderId | "custom";
 
-// The four shown before anything is unfolded, in this order.
-const PRIMARY: ApiKeyProviderId[] = ["anthropic-api", "google", "openrouter", "deepseek"];
+// The providers shown before anything is unfolded, in this order.
+const PRIMARY: ApiKeyProviderId[] = ["anthropic-api", "openai-api", "google", "openrouter", "deepseek"];
 
 // The order of everything else: the gateways that reach many models, then the
 // providers with their own, then the regional variants of a service already
@@ -30,6 +30,7 @@ const CHIP_ORDER: ApiKeyProviderId[] = [
   "opencode",
   "openrouter",
   "anthropic-api",
+  "openai-api",
   "google",
   "deepseek",
   "vercel-ai-gateway",
@@ -59,7 +60,7 @@ const CHIP_ORDER: ApiKeyProviderId[] = [
 
 const chip = (id: ApiKeyProviderId): ProviderChip => ({ id, label: providers[id].name });
 
-// Every provider that authenticates with a pasted key: the four primary ones
+// Every provider that authenticates with a pasted key: the primary ones
 // first, then the rest in chip order.
 export function keyProviderChips(): ProviderChip[] {
   return [...primaryChips(), ...foldedChips()];

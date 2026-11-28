@@ -33,8 +33,22 @@ test("only anthropic and openai authenticate by OAuth; custom is its own kind; t
 	expect(PROVIDER_IDS.filter((id) => AUTH_KIND[id] === "custom")).toEqual(["custom"]);
 	expect(API_KEY_PROVIDER_IDS).toEqual(PROVIDER_IDS.filter((id) => isApiKeyProvider(id)));
 	// The card the key list drives is worth having.
-	expect(API_KEY_PROVIDER_IDS.length).toBe(28);
+	expect(API_KEY_PROVIDER_IDS.length).toBe(29);
+	expect(API_KEY_PROVIDER_IDS).toContain("openai-api");
 	expect(API_KEY_PROVIDER_IDS).toContain("google");
+});
+
+test("OpenAI API uses the platform Responses catalog and bridge", () => {
+	const provider = providers["openai-api"];
+	expect(provider.id).toBe("openai-api");
+	expect(provider.baseUrl).toBe("https://api.openai.com/v1");
+	expect(provider.auth.oauth).toBeUndefined();
+	for (const model of provider.getModels()) {
+		expect(model.provider).toBe("openai-api");
+		expect(model.api).toBe("openai-responses");
+	}
+	expect(bridgedHosts()).toContain("api.openai.com");
+	expect(bridgedFetchHosts()).toContain("api.openai.com");
 });
 
 test("every provider offers at least one model and a default to land on", () => {
@@ -90,7 +104,6 @@ test("the fetch bridge adds the OAuth hosts the provider table never names", () 
 		"api.anthropic.com",
 		"platform.claude.com",
 		"claude.ai",
-		"api.openai.com",
 		"auth.openai.com",
 		"chatgpt.com",
 	]) {

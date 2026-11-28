@@ -11,14 +11,13 @@ import { isCustomHost } from "./custom-provider";
 import { bridgedHosts } from "./providers";
 
 // The hosts the two OAuth flows reach: the authorize pages, the token endpoints,
-// and the inference hosts. The four that are not any provider's baseUrl
-// (platform.claude.com, claude.ai, api.openai.com, auth.openai.com) are why this
+// and the inference hosts. The three that are not any provider's baseUrl
+// (platform.claude.com, claude.ai, auth.openai.com) are why this
 // list exists at all. All CORS-free, and none may see the webview origin.
 const OAUTH_HOSTS = [
 	"api.anthropic.com",
 	"platform.claude.com",
 	"claude.ai",
-	"api.openai.com",
 	"auth.openai.com",
 	"chatgpt.com",
 ];

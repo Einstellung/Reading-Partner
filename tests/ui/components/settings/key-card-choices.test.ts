@@ -37,8 +37,8 @@ test("the card offers every key provider, once each, and no OAuth one", () => {
   expect(ids as string[]).not.toContain("custom");
 });
 
-test("four providers are shown unfolded, in this order", () => {
-  expect(primaryChips().map((c) => c.label)).toEqual(["Anthropic API", "Gemini", "OpenRouter", "DeepSeek"]);
+test("five providers are shown unfolded, in this order", () => {
+  expect(primaryChips().map((c) => c.label)).toEqual(["Anthropic API", "OpenAI API", "Gemini", "OpenRouter", "DeepSeek"]);
 });
 
 test("the folded chips are the rest, in the card's own order, not the provider table's", () => {
@@ -76,6 +76,7 @@ test("the folded chips are the rest, in the card's own order, not the provider t
 
 test("More providers starts open exactly when the selection is inside it", () => {
   expect(moreProvidersOpen(undefined, undefined)).toBe(false);
+  expect(moreProvidersOpen(undefined, "openai-api")).toBe(false);
   expect(moreProvidersOpen(undefined, "google")).toBe(false);
   expect(moreProvidersOpen(undefined, "deepseek")).toBe(false);
   expect(moreProvidersOpen(undefined, "groq")).toBe(true);
@@ -107,6 +108,7 @@ test("a provider and its regional variant are told apart by their labels alone",
 });
 
 test("the card starts on the connected provider when a key is what connected it", () => {
+  expect(initialKeyProviderId(all("openai-api"))).toBe("openai-api");
   expect(initialKeyProviderId(all("deepseek"))).toBe("deepseek");
   expect(initialKeyProviderId(all("groq"))).toBe("groq");
   expect(initialKeyProviderId(all("xiaomi-token-plan-sgp"))).toBe("xiaomi-token-plan-sgp");
