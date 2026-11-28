@@ -62,7 +62,10 @@ pub fn run() {
         // Ours, out of plugins/openin: the iOS share sheet for one file, so a
         // reader can open a book in another app. Off iOS it answers the
         // availability probe with false and the control is never drawn.
-        .plugin(tauri_plugin_openin::init());
+        .plugin(tauri_plugin_openin::init())
+        // Ours, out of plugins/purchases: the lifetime unlock through RevenueCat
+        // on iOS (docs/platform/713). Elsewhere it answers "unavailable".
+        .plugin(tauri_plugin_purchases::init());
 
     // The voice commands and their state only exist on desktop (see the module
     // note above); everything else is registered on both.

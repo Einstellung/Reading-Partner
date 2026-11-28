@@ -69,6 +69,10 @@ tauri-plugin-voice = { path = "../plugins/voice" }
 # the same reason voice is — off iOS `is_available` answers false, which is what
 # hides the control instead of leaving a command that does not exist.
 tauri-plugin-openin = { path = "../plugins/openin" }
+# Ours (plugins/purchases): the lifetime unlock as an iOS in-app purchase through
+# RevenueCat (docs/platform/713). Dormant until a RevenueCat key is set in
+# src/platform/app/purchases.ts; off iOS every command answers "unavailable".
+tauri-plugin-purchases = { path = "../plugins/purchases" }
 # SQLite under pi-durable's storage (src/durable_sqlite.rs). bundled: the same
 # SQLite on every target, no system library to find on iOS or Android.
 rusqlite = { version = "0.40.2", features = ["bundled"] }
