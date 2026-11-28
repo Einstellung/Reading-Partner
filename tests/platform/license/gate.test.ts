@@ -53,6 +53,11 @@ function harness(answers: GateView[], over: Partial<GateDeps> = {}) {
         return { ok: true };
       },
     },
+    purchasePath: () => "store",
+    openCheckout: async (id) => {
+      log.push(`checkout:${id}`);
+      return true;
+    },
     ...over,
   };
   const gate = createLicenseGate(deps);
@@ -197,4 +202,38 @@ test("retry re-checks", async () => {
   const h = harness([]);
   expect(await h.gate.retry()).toEqual({ ok: true });
   expect(h.log).toEqual(["check"]);
+});
+
+test("on the web path, buy opens the checkout for the locked user and does not re-check", async () => {
+  const h = harness([EXPIRED], { purchasePath: () => "web" });
+  await h.gate.recheck();
+  expect(h.gate.purchasePath()).toBe("web");
+  expect(await h.gate.buy()).toEqual({ ok: true });
+  expect(h.log).toEqual(["check", "checkout:u1"]);
+  expect(h.gate.get()).toEqual(EXPIRED);
+});
+
+test("a checkout with no link to open is unavailable", async () => {
+  const h = harness([EXPIRED], { purchasePath: () => "web", openCheckout: async () => false });
+  await h.gate.recheck();
+  expect(await h.gate.buy()).toEqual({ ok: false, error: "unavailable" });
+});
+
+test("off the store path, the store is never called", async () => {
+  for (const path of ["web", "none"] as const) {
+    const h = harness([EXPIRED], { purchasePath: () => path });
+    await h.gate.recheck();
+    expect(await h.gate.restore()).toEqual({ ok: false, error: "unavailable" });
+    if (path === "none") expect(await h.gate.buy()).toEqual({ ok: false, error: "unavailable" });
+    expect(h.log.filter((l) => l.startsWith("buy") || l.startsWith("restore"))).toEqual([]);
+  }
+});
+
+test("refresh unlocks when the server shows the purchase, and says not yet otherwise", async () => {
+  const h = harness([EXPIRED, EXPIRED, { view: "open" }], { purchasePath: () => "web" });
+  await h.gate.recheck();
+  expect(await h.gate.refresh()).toEqual({ ok: false, error: "not-yet" });
+  expect(await h.gate.refresh()).toEqual({ ok: true });
+  expect(h.log).toEqual(["check", "check", "check"]);
+  expect(h.gate.get()).toEqual({ view: "open" });
 });

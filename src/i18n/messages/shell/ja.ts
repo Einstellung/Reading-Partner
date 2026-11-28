@@ -169,9 +169,13 @@ export default {
   "license.deleteAccount": "アカウントを削除",
   "license.signOut": "サインアウト",
   "license.retry": "再試行",
+  "license.refresh": "更新",
+  "license.buyElsewhere": "iPhone、iPad または Android の Lumen で同じアカウントで購入してから、更新してください。",
+  "license.checkoutOpened": "ブラウザで支払いを済ませてから、更新してください。",
   "license.delete.title": "アカウントを削除しますか？",
   "license.delete.body": "Lumen のアカウントを削除します。Google ドライブの本はそのまま残ります。",
   "license.error.unavailable": "このデバイスではまだ購入できません。",
   "license.error.failed": "うまくいきませんでした。もう一度お試しください。",
   "license.error.pending": "購入を受け付けました。ロック解除まで少しかかることがあります。",
+  "license.error.notYet": "このアカウントにはまだ購入がありません。支払ったばかりなら、少し待ってから更新してください。",
 } satisfies Translation<typeof en>;

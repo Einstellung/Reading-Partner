@@ -19,6 +19,7 @@ import { checkLicense, requestAccountDeletion, type CheckDeps } from "./check";
 import { LICENSE_PUBLIC_KEY, LICENSING_ENABLED } from "./config";
 import { createLicenseGate } from "./gate";
 import { purchaseHandlers } from "./store-handlers";
+import { devicePurchasePath, openWebCheckout } from "./web-checkout";
 
 export { APPLE_SIGN_IN_AVAILABLE, LIFETIME_PRICE, LICENSING_ENABLED } from "./config";
 export { lockActions, type GateView, type LockAction, type LockReason } from "./decide";
@@ -62,4 +63,6 @@ export const licenseGate = createLicenseGate({
   },
   deleteAccount: () => requestAccountDeletion(checkDeps),
   purchases: purchaseHandlers,
+  purchasePath: devicePurchasePath,
+  openCheckout: openWebCheckout,
 });

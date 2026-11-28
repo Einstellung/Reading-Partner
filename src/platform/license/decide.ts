@@ -2,6 +2,7 @@
 // Pure: the clock and every answer are arguments.
 
 import { CLOCK_SKEW_MS, OFFLINE_GRACE_MS, RECHECK_AFTER_MS } from "./config";
+import type { PurchasePath } from "./purchase-path";
 import type { LicensePayload } from "./signed";
 
 export type LockReason = "expired" | "banned" | "offline";
@@ -78,13 +79,29 @@ export function shouldRecheck(view: GateView, lastCheckAt: number | null, now: n
 }
 
 // The lock screen's actions for a reason. A suspended account gets no Buy or
-// Restore: a purchase would not lift the suspension.
-export type LockAction = "buy" | "restore" | "delete-account" | "sign-out" | "retry";
+// Restore: a purchase would not lift the suspension. An ended trial buys the
+// way the device can (purchase-path.ts): the store with Buy and Restore; web
+// checkout with Buy, then Refresh once the checkout has been opened; neither,
+// only Refresh, for a purchase made on another device.
+export type LockAction = "buy" | "restore" | "refresh" | "delete-account" | "sign-out" | "retry";
 
-export function lockActions(reason: LockReason): LockAction[] {
+export function lockActions(
+  reason: LockReason,
+  path: PurchasePath = "store",
+  checkoutOpened = false,
+): LockAction[] {
   switch (reason) {
-    case "expired":
-      return ["buy", "restore", "delete-account", "sign-out"];
+    case "expired": {
+      const buying: LockAction[] =
+        path === "store"
+          ? ["buy", "restore"]
+          : path === "web"
+            ? checkoutOpened
+              ? ["buy", "refresh"]
+              : ["buy"]
+            : ["refresh"];
+      return [...buying, "delete-account", "sign-out"];
+    }
     case "banned":
       return ["delete-account", "sign-out"];
     case "offline":

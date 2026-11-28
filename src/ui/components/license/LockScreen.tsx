@@ -1,6 +1,7 @@
 // The lock screen (docs/platform/713): the trial has ended, the account is
 // suspended, or the server has been out of reach past the grace period. Only
-// the actions lockActions() names for the reason; no way into the app.
+// the actions lockActions() names for the reason and the device's purchase
+// path; no way into the app.
 
 import { useState } from "react";
 import { useT } from "../../../i18n";
@@ -23,14 +24,24 @@ import {
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { LicensePage } from "./LicensePage";
-import { actionErrorKey, actionLabelKey, lockBodyKey, lockTitleKey } from "./license-text";
+import {
+  actionErrorKey,
+  actionLabelKey,
+  lockBodyKey,
+  lockNoteKey,
+  lockTitleKey,
+} from "./license-text";
 
 export function LockScreen({ reason, gate }: { reason: LockReason; gate: LicenseGate }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [path] = useState(gate.purchasePath);
+  // The web checkout has been opened in the browser: Refresh shows from then on.
+  const [checkoutOpened, setCheckoutOpened] = useState(false);
+  const note = lockNoteKey(reason, path, checkoutOpened);
 
-  const run = async (action: () => Promise<ActionResult>) => {
+  const run = async (action: () => Promise<ActionResult>): Promise<ActionResult> => {
     setBusy(true);
     setError(null);
     const result = await action();
@@ -39,16 +50,29 @@ export function LockScreen({ reason, gate }: { reason: LockReason; gate: License
       const key = actionErrorKey(result.error);
       if (key) setError(t(key));
     }
+    return result;
+  };
+
+  const buy = async () => {
+    const result = await run(gate.buy);
+    if (result.ok && path === "web") setCheckoutOpened(true);
   };
 
   return (
     <LicensePage title={t(lockTitleKey(reason))} body={t(lockBodyKey(reason))}>
-      {lockActions(reason).map((action) => {
+      {note && <p className="m-0 text-sm">{t(note)}</p>}
+      {lockActions(reason, path, checkoutOpened).map((action) => {
         switch (action) {
           case "buy":
             return (
-              <Button key={action} size="lg" disabled={busy} onClick={() => run(gate.buy)}>
+              <Button key={action} size="lg" disabled={busy} onClick={buy}>
                 {t("shell.license.buy", { price: LIFETIME_PRICE })}
+              </Button>
+            );
+          case "refresh":
+            return (
+              <Button key={action} size="lg" variant="outline" disabled={busy} onClick={() => run(gate.refresh)}>
+                {t(actionLabelKey(action))}
               </Button>
             );
           case "retry":

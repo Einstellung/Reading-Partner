@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { useDom } from "../../../support/dom";
 import type { ActionResult, LicenseGate } from "../../../../src/platform/license/gate";
+import type { PurchasePath } from "../../../../src/platform/license/purchase-path";
 
 // After the window, for the reason tests/ui/components/ui/overlay-z.test.tsx
 // gives: Radix's portal pulls react-dom's client bundle.
@@ -22,7 +23,7 @@ const { actionErrorKey, lockBodyKey, lockTitleKey } = await import(
   "../../../../src/ui/components/license/license-text"
 );
 
-function fakeGate(result: ActionResult = { ok: true }) {
+function fakeGate(result: ActionResult = { ok: true }, path: PurchasePath = "store") {
   const pressed: string[] = [];
   const action = (name: string) => async () => {
     pressed.push(name);
@@ -30,6 +31,8 @@ function fakeGate(result: ActionResult = { ok: true }) {
   };
   const gate: LicenseGate = {
     get: () => ({ view: "open" }),
+    purchasePath: () => path,
+    refresh: action("refresh"),
     subscribe: () => () => {},
     start: () => () => {},
     recheck: async () => ({ view: "open" }),
@@ -94,6 +97,45 @@ test("buy reports an unavailable store in words", async () => {
     expect(document.body.textContent).toContain("Purchases aren't available on this device yet."),
   );
   expect(pressed).toEqual(["buy"]);
+});
+
+const press = (label: string) =>
+  fireEvent.click([...document.querySelectorAll("button")].find((b) => b.textContent === label)!);
+
+test("web checkout: Buy opens the checkout, then Refresh and the browser note appear", async () => {
+  const { gate, pressed } = fakeGate({ ok: true }, "web");
+  render(<LockScreen reason="expired" gate={gate} />);
+  expect(buttons()).toEqual(["Buy · US$9.99", "Delete account", "Sign out"]);
+  press("Buy · US$9.99");
+  await waitFor(() =>
+    expect(buttons()).toEqual(["Buy · US$9.99", "Refresh", "Delete account", "Sign out"]),
+  );
+  expect(document.body.textContent).toContain("Finish paying in your browser, then refresh.");
+  press("Refresh");
+  await waitFor(() => expect(pressed).toEqual(["buy", "refresh"]));
+});
+
+test("a Refresh that finds no purchase says so", async () => {
+  const { gate } = fakeGate({ ok: false, error: "not-yet" }, "none");
+  render(<LockScreen reason="expired" gate={gate} />);
+  press("Refresh");
+  await waitFor(() =>
+    expect(document.body.textContent).toContain("No purchase on this account yet."),
+  );
+});
+
+test("no way to buy here: one line and Refresh in place of Buy and Restore", () => {
+  render(<LockScreen reason="expired" gate={fakeGate({ ok: true }, "none").gate} />);
+  expect(document.body.textContent).toContain(
+    "Buy in Lumen on iPhone, iPad or Android with the same account, then refresh.",
+  );
+  expect(buttons()).toEqual(["Refresh", "Delete account", "Sign out"]);
+});
+
+test("the store path has no note and no Refresh", () => {
+  render(<LockScreen reason="expired" gate={fakeGate().gate} />);
+  expect(document.body.textContent).not.toContain("then refresh");
+  expect(buttons()).not.toContain("Refresh");
 });
 
 test("the sign-in screen offers Google, and Apple only when available", () => {

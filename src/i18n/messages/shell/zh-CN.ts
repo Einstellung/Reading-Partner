@@ -168,9 +168,13 @@ export default {
   "license.deleteAccount": "删除账号",
   "license.signOut": "退出登录",
   "license.retry": "重试",
+  "license.refresh": "刷新",
+  "license.buyElsewhere": "请在 iPhone、iPad 或 Android 上的 Lumen 里用同一个账号购买，然后刷新。",
+  "license.checkoutOpened": "在浏览器里完成付款后点刷新。",
   "license.delete.title": "删除你的账号？",
   "license.delete.body": "这会删除你的 Lumen 账号。Google Drive 里的书不受影响。",
   "license.error.unavailable": "这台设备暂时还不能购买。",
   "license.error.failed": "没有成功，请重试。",
   "license.error.pending": "已收到购买，解锁可能要一分钟。",
+  "license.error.notYet": "这个账号还没有购买记录。如果刚付完款，请等一分钟再刷新。",
 } satisfies Translation<typeof en>;
