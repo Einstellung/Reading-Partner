@@ -80,7 +80,7 @@ jobs:
         run: bun run wasm
 
       - name: Initialize the Android project
-        run: bun tauri android init --ci
+        run: scripts/android-init.sh
 
       # Universal debug APK containing both ABIs. No --split-per-abi => one APK.
       - name: Build the smoke debug APK

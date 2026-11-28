@@ -4,11 +4,11 @@
 // the ACL before it reaches Rust. Those files are written into the source tree,
 // not OUT_DIR, so a change here has to be committed along with them —
 // permissions/default.toml is hand-written and has to be edited by hand.
-//
-// No android_path: there is no Google Play Billing yet, and Android gets the
-// same "unavailable" answers as the desktop (src/fallback.rs).
 const COMMANDS: &[&str] = &["configure", "buy_lifetime", "restore"];
 
 fn main() {
-    tauri_plugin::Builder::new(COMMANDS).ios_path("ios").build();
+    tauri_plugin::Builder::new(COMMANDS)
+        .ios_path("ios")
+        .android_path("android")
+        .build();
 }

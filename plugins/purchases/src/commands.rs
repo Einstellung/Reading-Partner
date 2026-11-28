@@ -1,5 +1,4 @@
-// The frontend-facing commands. Thin forwarders that always resolve; the store
-// itself is in Swift, under ios/.
+// The frontend-facing commands forward to the platform's store.
 
 use tauri::{command, AppHandle, Runtime};
 
@@ -17,7 +16,7 @@ pub(crate) async fn configure<R: Runtime>(
     app.purchases().configure(api_key, app_user_id).await
 }
 
-/// Buy the non-consumable lifetime unlock. Resolves when the App Store sheet
+/// Buy the non-consumable lifetime unlock. Resolves when the store sheet
 /// is done with; a buyer who closed it is `cancelled: true`, not an error.
 #[command]
 pub(crate) async fn buy_lifetime<R: Runtime>(

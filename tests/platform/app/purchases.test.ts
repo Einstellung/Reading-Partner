@@ -9,6 +9,7 @@ import { expect, test } from "bun:test";
 import {
   LIFETIME_ENTITLEMENT_ID,
   LIFETIME_PRODUCT_ID,
+  REVENUECAT_ANDROID_API_KEY,
   REVENUECAT_IOS_API_KEY,
   buyLifetime,
   configurePurchases,
@@ -19,10 +20,16 @@ import {
 
 type Call = { command: string; args?: Record<string, unknown> };
 
-function host(opts: { apiKey?: string; platform?: string | null; answer?: () => unknown }) {
+function host(opts: {
+  apiKey?: string;
+  androidApiKey?: string;
+  platform?: string | null;
+  answer?: () => unknown;
+}) {
   const calls: Call[] = [];
   const purchases = createPurchases({
     apiKey: opts.apiKey ?? "appl_test",
+    androidApiKey: opts.androidApiKey,
     platform: () => {
       if (opts.platform === null) throw new Error("not under Tauri");
       return opts.platform ?? "ios";
@@ -37,15 +44,21 @@ function host(opts: { apiKey?: string; platform?: string | null; answer?: () => 
 
 test("the shipped build has no key, so purchases are off and nothing is invoked", async () => {
   expect(REVENUECAT_IOS_API_KEY).toBe("");
+  expect(REVENUECAT_ANDROID_API_KEY).toBe("");
   expect(purchasesAvailable()).toBe(false);
   expect(await configurePurchases("user-1")).toBeUndefined();
   expect(await buyLifetime()).toEqual({ ok: false, error: "not configured" });
   expect(await restorePurchases()).toEqual({ ok: false, active: false, error: "not configured" });
 });
 
-test("an empty or blank key keeps every call away from the plugin, on iOS too", async () => {
-  for (const apiKey of ["", "  "]) {
-    const { calls, purchases } = host({ apiKey });
+test("a mobile store with an empty or blank key never invokes the plugin", async () => {
+  for (const opts of [
+    { platform: "ios", apiKey: "" },
+    { platform: "ios", apiKey: "  ", androidApiKey: "goog_test" },
+    { platform: "android" },
+    { platform: "android", androidApiKey: "  " },
+  ]) {
+    const { calls, purchases } = host(opts);
     expect(purchases.purchasesAvailable()).toBe(false);
     await purchases.configurePurchases("user-1");
     expect(await purchases.buyLifetime()).toEqual({ ok: false, error: "not configured" });
@@ -58,9 +71,9 @@ test("an empty or blank key keeps every call away from the plugin, on iOS too", 
   }
 });
 
-test("off iOS a key does not make purchases available", async () => {
-  for (const platform of ["android", "macos", "windows", "linux", null]) {
-    const { calls, purchases } = host({ platform });
+test("on desktop or outside Tauri purchases are unavailable even with store keys", async () => {
+  for (const platform of ["macos", "windows", "linux", null]) {
+    const { calls, purchases } = host({ platform, androidApiKey: "goog_test" });
     expect(purchases.purchasesAvailable()).toBe(false);
     await purchases.configurePurchases("user-1");
     expect(await purchases.buyLifetime()).toEqual({ ok: false, error: "unavailable" });
@@ -73,18 +86,25 @@ test("off iOS a key does not make purchases available", async () => {
   }
 });
 
-test("on iOS with a key each call reaches its command with its arguments", async () => {
-  const { calls, purchases } = host({});
-  expect(purchases.purchasesAvailable()).toBe(true);
-  await purchases.configurePurchases("user-1");
-  await purchases.buyLifetime();
-  await purchases.restorePurchases();
-  expect(calls).toEqual([
-    { command: "plugin:purchases|configure", args: { apiKey: "appl_test", appUserId: "user-1" } },
-    { command: "plugin:purchases|buy_lifetime", args: { productId: LIFETIME_PRODUCT_ID } },
-    { command: "plugin:purchases|restore", args: { entitlementId: LIFETIME_ENTITLEMENT_ID } },
-  ]);
+test("iOS and Android use their own keys and the same product and entitlement", async () => {
   expect(LIFETIME_PRODUCT_ID).toBe("lumen.lifetime");
+  expect(LIFETIME_ENTITLEMENT_ID).toBe("lifetime");
+  for (const [platform, apiKey, expected] of [
+    ["ios", "  appl_test  ", "appl_test"],
+    ["android", "  appl_test  ", "goog_test"],
+    ["android", "", "goog_test"],
+  ]) {
+    const { calls, purchases } = host({ platform, apiKey, androidApiKey: "  goog_test  " });
+    expect(purchases.purchasesAvailable()).toBe(true);
+    await purchases.configurePurchases("user-1");
+    await purchases.buyLifetime();
+    await purchases.restorePurchases();
+    expect(calls).toEqual([
+      { command: "plugin:purchases|configure", args: { apiKey: expected, appUserId: "user-1" } },
+      { command: "plugin:purchases|buy_lifetime", args: { productId: LIFETIME_PRODUCT_ID } },
+      { command: "plugin:purchases|restore", args: { entitlementId: LIFETIME_ENTITLEMENT_ID } },
+    ]);
+  }
 });
 
 test("a cancelled purchase comes back as cancelled, not as an error", async () => {

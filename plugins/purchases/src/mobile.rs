@@ -1,28 +1,26 @@
-// iOS: hand each command to the Swift plugin, which talks to RevenueCat.
-//
-// The async variant of run_mobile_plugin, as in plugins/openin: the blocking
-// one parks the calling thread until Swift resolves, and Swift resolves
-// `buy_lifetime` only once the buyer has finished with the App Store sheet.
-//
-// Swift resolves every command with an outcome and never rejects; a rejection
-// that still arrives (the payload did not decode, the plugin is missing) is
-// folded into the same `ok: false` shape so the frontend has one thing to read.
+// Forward to the native RevenueCat bridge asynchronously while the store sheet
+// is open. Fold bridge failures into the same outcome as store failures.
 
 use serde::de::DeserializeOwned;
 use tauri::{
     plugin::{mobile::PluginInvokeError, PluginApi, PluginHandle},
-    AppHandle, Runtime,
+    Runtime,
 };
 
 use crate::models::{BuyArgs, ConfigureArgs, PurchaseOutcome, RestoreArgs, RestoreOutcome};
 
+#[cfg(target_os = "ios")]
 tauri::ios_plugin_binding!(init_plugin_purchases);
 
 pub fn init<R: Runtime, C: DeserializeOwned>(
-    _app: &AppHandle<R>,
     api: PluginApi<R, C>,
 ) -> Result<Purchases<R>, PluginInvokeError> {
+    #[cfg(target_os = "android")]
+    let handle =
+        api.register_android_plugin("com.xinyuan.readingpartner.purchases", "PurchasesPlugin")?;
+    #[cfg(target_os = "ios")]
     let handle = api.register_ios_plugin(init_plugin_purchases)?;
+
     Ok(Purchases(handle))
 }
 
@@ -32,7 +30,13 @@ pub struct Purchases<R: Runtime>(PluginHandle<R>);
 impl<R: Runtime> Purchases<R> {
     pub async fn configure(&self, api_key: String, app_user_id: String) -> PurchaseOutcome {
         self.0
-            .run_mobile_plugin_async("configure", ConfigureArgs { api_key, app_user_id })
+            .run_mobile_plugin_async(
+                "configure",
+                ConfigureArgs {
+                    api_key,
+                    app_user_id,
+                },
+            )
             .await
             .unwrap_or_else(|e| PurchaseOutcome::failed(e.to_string()))
     }

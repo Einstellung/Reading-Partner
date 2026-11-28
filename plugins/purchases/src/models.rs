@@ -1,6 +1,4 @@
-// The shapes that cross to Swift and back. Swift decodes and encodes them with
-// a plain JSONDecoder/JSONEncoder and no key strategy, so the property names
-// have to be exactly what serde writes.
+// The camelCase payloads shared by the native purchase bridges.
 
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +11,7 @@ pub struct ConfigureArgs {
     pub app_user_id: String,
 }
 
-/// Arguments of `buy_lifetime`: the App Store product id of the unlock.
+/// Arguments of `buy_lifetime`: the store product id of the unlock.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BuyArgs {

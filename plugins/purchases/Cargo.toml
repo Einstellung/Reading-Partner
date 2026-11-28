@@ -2,13 +2,13 @@
 name = "tauri-plugin-purchases"
 version = "0.1.0"
 authors = ["Reading-Partner"]
-description = "The lifetime unlock as an iOS in-app purchase, through RevenueCat (docs/platform/713)"
+description = "The lifetime unlock as a mobile in-app purchase through RevenueCat (docs/platform/713)"
 edition = "2021"
 rust-version = "1.77.2"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 # Cargo turns the `cargo:<key>=<value>` lines this crate's build script prints
 # into DEP_TAURI_PLUGIN_PURCHASES_<KEY> for the build script of whoever depends
-# on it, which is how tauri-build finds `ios/` and `permissions/`. The key has
+# on it, which is how tauri-build finds the native modules and permissions. The key has
 # to be unique across the dependency graph, hence the crate name.
 links = "tauri-plugin-purchases"
 

@@ -5,10 +5,9 @@ import { expect, test } from "bun:test";
 import {
   authorized,
   mapRevenueCatEvent,
-  purchaseSource,
 } from "../../supabase/functions/_shared/revenuecat.ts";
 
-const PRODUCT = "lumen_lifetime";
+const PRODUCT = "lumen.lifetime";
 const USER = "0b6f3a52-6a8e-4c43-9a43-8b2d3f3b1c11";
 const AT = Date.UTC(2027, 1, 1, 12);
 
@@ -38,14 +37,29 @@ test("a purchase of the lifetime product grants", () => {
   }
 });
 
-test("a sandbox purchase says so in the source", () => {
-  expect(purchaseSource({ store: "PLAY_STORE", environment: "SANDBOX" })).toBe("play_store (sandbox)");
+test("a Google Play lifetime purchase grants with its store and environment", () => {
+  for (const [environment, source] of [
+    ["PRODUCTION", "play_store"],
+    ["SANDBOX", "play_store (sandbox)"],
+  ]) {
+    expect(mapRevenueCatEvent(body({ store: "PLAY_STORE", environment }), PRODUCT)).toEqual({
+      kind: "grant",
+      userId: USER,
+      purchasedAt: new Date(AT).toISOString(),
+      source,
+    });
+  }
 });
 
 test("a refund or cancellation of it revokes", () => {
   for (const type of ["REFUND", "CANCELLATION"]) {
     expect(mapRevenueCatEvent(body({ type }), PRODUCT)).toEqual({ kind: "revoke", userId: USER });
   }
+});
+
+test("a Google Play lifetime cancellation revokes", () => {
+  const event = body({ type: "CANCELLATION", store: "PLAY_STORE", cancel_reason: "CUSTOMER_SUPPORT" });
+  expect(mapRevenueCatEvent(event, PRODUCT)).toEqual({ kind: "revoke", userId: USER });
 });
 
 test("everything else is ignored", () => {
